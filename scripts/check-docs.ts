@@ -20,24 +20,25 @@
 import { readdirSync, readFileSync, existsSync, statSync } from "node:fs";
 import { join, dirname, resolve, relative, sep } from "node:path";
 import { findCodeRabbitInstructionViolations } from "../lib/testing/coderabbit-review-command";
+import { findSliceRecordProblems } from "../lib/docs/slice-records";
 
 const repoRoot = resolve(import.meta.dir, "..");
 const docsRoot = join(repoRoot, "docs");
 
-function collectMarkdownFiles(dir: string): string[] {
+function collectFiles(dir: string): string[] {
   const collected: string[] = [];
   for (const entry of readdirSync(dir)) {
     const fullPath = join(dir, entry);
     if (statSync(fullPath).isDirectory()) {
-      collected.push(...collectMarkdownFiles(fullPath));
-    } else if (entry.endsWith(".md")) {
+      collected.push(...collectFiles(fullPath));
+    } else {
       collected.push(fullPath);
     }
   }
   return collected;
 }
 
-const docFiles = collectMarkdownFiles(docsRoot);
+const docFiles = collectFiles(docsRoot).filter((file) => file.endsWith(".md"));
 const problems: string[] = [];
 
 // 1. Index coverage
@@ -106,13 +107,19 @@ if (existsSync(claudeSkillsRoot) && existsSync(agentsSkillsRoot)) {
       }
       continue;
     }
-    const claudeFiles = collectMarkdownFiles(join(claudeSkillsRoot, skillName));
+    const claudeFiles = collectFiles(join(claudeSkillsRoot, skillName));
     for (const claudeFile of claudeFiles) {
       const mirrorFile = join(agentsSkillsRoot, skillName, relative(join(claudeSkillsRoot, skillName), claudeFile));
       if (!existsSync(mirrorFile)) {
         problems.push(`skills: ${skillName}/${relative(join(claudeSkillsRoot, skillName), claudeFile)} missing from .agents/skills mirror`);
-      } else if (readFileSync(claudeFile, "utf8") !== readFileSync(mirrorFile, "utf8")) {
+      } else if (!readFileSync(claudeFile).equals(readFileSync(mirrorFile))) {
         problems.push(`skills: ${skillName} drifted between .claude/skills and .agents/skills — re-sync the mirror`);
+      }
+    }
+    for (const agentsFile of collectFiles(join(agentsSkillsRoot, skillName))) {
+      const relativePath = relative(join(agentsSkillsRoot, skillName), agentsFile);
+      if (!existsSync(join(claudeSkillsRoot, skillName, relativePath))) {
+        problems.push(`skills: ${skillName}/${relativePath} exists only in .agents/skills; mirror it in .claude/skills`);
       }
     }
   }
@@ -171,7 +178,6 @@ const pointerStubStatusPattern = /^Status: pointer stub — .+$/;
 function readDocStatus(file: string): { kind: "living" | "closed" | "accepted" | "pointer stub"; date: string | null } | null {
   const lines = readFileSync(file, "utf8").split("\n");
   const relFile = relative(repoRoot, file).split(sep).join("/");
-  if (relFile === "docs/README.md") return null;
   if (!lines[0]?.startsWith("# ")) {
     problems.push(`status: ${relFile} must start with an H1 on line 1`);
     return null;
@@ -286,6 +292,9 @@ for (const [id, row] of sliceRows) {
     problems.push(`roadmap: complete row ${id} does not link its slice record under slices/`);
     continue;
   }
+  if (!recordMatch[1].startsWith(`slices/${id.toLowerCase()}-`)) {
+    problems.push(`roadmap: ${id} must link its own slice record; found ${recordMatch[1]}`);
+  }
   const recordStatus = docStatuses.get(`plans/phase-1/${recordMatch[1]}`);
   const rowDate = row.exitEvidence.match(/Accepted `?complete`? (\d{4}-\d{2}-\d{2})/)?.[1];
   if (recordStatus?.kind !== "closed") {
@@ -299,19 +308,10 @@ for (const [id, row] of sliceRows) {
 //     eight slices had grown a second "implementation plan" file that overlapped their record):
 //     a per-slice file (named p1-XX-*) may exist only under plans/phase-1/slices/, and nothing
 //     there is named an implementation plan. Cross-slice plans such as the Inventory V1 plan are unaffected.
-for (const file of docFiles) {
-  const relPath = relative(docsRoot, file).split(sep).join("/");
-  const fileName = relPath.split("/").pop() ?? "";
-  const isSliceNamed = /^p1-\d{2}a?-/.test(fileName);
-  const isImplementationPlan = /implementation-plan/.test(fileName);
-  if (relPath.startsWith("plans/phase-1/slices/")) {
-    if (isImplementationPlan) problems.push(`slices: docs/${relPath} is named as an implementation plan; the slice record is the only per-slice document`);
-    continue;
-  }
-  if (isSliceNamed) {
-    problems.push(`slices: docs/${relPath} is a per-slice document outside plans/phase-1/slices/; fold it into the slice record (protocol.md step 7)`);
-  }
-}
+problems.push(...findSliceRecordProblems({
+  paths: docFiles.map((file) => relative(docsRoot, file).split(sep).join("/")),
+  sliceIds: new Set([...sliceRows.keys()].map((id) => id.toUpperCase())),
+}).map((problem) => `slices: ${problem}`));
 
 // 10. User-flow catalog: slice sections in ID order, flow IDs unique and sequential per slice,
 //     and the acceptance-invariant count equal to the section's flow count.

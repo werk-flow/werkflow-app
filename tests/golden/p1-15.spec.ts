@@ -6,7 +6,7 @@ import {
   getWorkArtifactState,
   getWorkLifecycleState,
 } from './support/db';
-import { closeWorkArtifactDialog } from './support/spec-helpers/work-artifact-dialog';
+import { closeWorkArtifactDialog, workArtifactsSection } from './support/spec-helpers/work-artifact-dialog';
 import { createJob, typeIntoDatePickerById, typeIntoDateTimeField } from './support/steps';
 
 test.describe.configure({ mode: 'serial' });
@@ -30,7 +30,7 @@ async function selectOption(page: Page, trigger: Locator, name: string): Promise
 }
 
 async function openNew(page: Page, kind: string, title: string): Promise<Locator> {
-  await page.getByTestId('work-artifacts-section').getByRole('button', { name: 'Neu' }).click();
+  await workArtifactsSection(page).getByRole('button', { name: 'Neu' }).click();
   const dialog = page.getByRole('dialog');
   await selectOption(
     page,
@@ -75,11 +75,10 @@ test.describe('P1-15 structured site evidence @P1-15', () => {
       .toBe(1);
 
     await adminPage.goto(`/auftraege/${jobNumber}?golden=${Date.now()}`);
-    await expect(adminPage.getByTestId('work-artifacts-section')).toContainText(title, {
+    await expect(workArtifactsSection(adminPage)).toContainText(title, {
       timeout: 30_000,
     });
-    await adminPage
-      .getByTestId('work-artifacts-section')
+    await workArtifactsSection(adminPage)
       .getByRole('button')
       .filter({ hasText: title })
       .click();

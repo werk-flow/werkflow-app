@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 
 import { expect, test } from './support/fixtures';
-import { ARTIFACTS_DIR } from './support/world';
+import { artifactsDirectory } from './support/world';
 import { getCustomerRelationshipState, getVisibleCustomerRelationshipStateAs } from './support/db';
 import {
   addContactOnCustomerDetail,
@@ -76,12 +76,12 @@ test.describe('P1-10 customer relationships @P1-10', () => {
     await uploadDocumentOnJobPage(
       adminPage,
       `AUF-${world.runId}-P110-1`,
-      resolve(ARTIFACTS_DIR, 'upload-fixture.pdf'),
+      resolve(artifactsDirectory(), 'upload-fixture.pdf'),
       'upload-fixture'
     );
     await openCustomerDetail(adminPage, customer);
 
-    const timeline = adminPage.getByTestId('customer-timeline');
+    const timeline = adminPage.getByRole('main').getByTestId('customer-timeline');
     await expect(timeline.getByText('Kunde angelegt')).toBeVisible();
     await expect(
       timeline.getByText('Ansprechpartner angelegt').filter({ visible: true })
@@ -102,7 +102,7 @@ test.describe('P1-10 customer relationships @P1-10', () => {
 
     await adminPage.getByRole('button', { name: 'Arbeit', exact: true }).click();
     await expect(timeline.getByText(jobTitle)).toBeVisible();
-    await expect(timeline.getByText(`Anna Ansprechpartnerin ${world.runId}`)).toHaveCount(0);
+    await expect(adminPage.getByTestId('customer-timeline').getByText(`Anna Ansprechpartnerin ${world.runId}`)).toHaveCount(0);
 
     await adminPage.getByRole('button', { name: 'Dokumente', exact: true }).click();
     const documentEntry = timeline
@@ -201,7 +201,7 @@ test.describe('P1-10 customer relationships @P1-10', () => {
       .toContain('exception_acknowledged');
   });
 
-  test('Realtime updates open follow-ups for a second office user', async ({
+  test('Realtime updates open follow-ups for a second office user @FRESHNESS', async ({
     adminPage,
     bueroPage,
     world,
@@ -212,12 +212,14 @@ test.describe('P1-10 customer relationships @P1-10', () => {
       openCustomerDetail(adminPage, customer),
       openCustomerDetail(bueroPage, customer),
     ]);
-    await createFollowUpOnCustomerDetail(adminPage, {
+    await expectLiveWithin(visibleText(bueroPage, title), {
+      label: "p1-10 follow-up cross-session",
+      mutation: (beforeSubmit) =>
+        createFollowUpOnCustomerDetail(adminPage, {
       title,
       dueAtLocal: berlinDateTime(2, 10),
-    });
-    await expectLiveWithin(visibleText(bueroPage, title), {
-      label: 'p1-10 follow-up cross-session',
+          beforeSubmit,
+        }),
     });
   });
 

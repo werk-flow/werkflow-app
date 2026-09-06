@@ -6,9 +6,9 @@ import {
   getPublicHolidaysForYear,
 } from './holidays';
 
-// These assertions mirror the officially published holiday lists. If a state
-// changes its holiday law, this test must fail so the dataset is updated
-// deliberately (owner decision: in-code dataset with CI drift detection).
+// These fixed reference lists catch changes to the in-code calculation.
+// They do not detect legislative changes; review official sources before
+// updating both the holiday dataset and its expected lists.
 
 describe('getEasterSunday', () => {
   test('matches the published Easter dates', () => {

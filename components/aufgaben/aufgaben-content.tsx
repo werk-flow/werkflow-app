@@ -514,7 +514,7 @@ export function AufgabenContent() {
                         // employee-record IDs for personnel without a login.
                         <Link
                           href={`/mitarbeiter/${notification.employeeRecordId}`}
-                          className="mt-0.5 inline-block text-xs text-primary hover:underline"
+                          className="mt-0.5 inline-block text-xs text-primary-text hover:underline"
                         >
                           Qualifikation ansehen
                         </Link>
@@ -556,7 +556,7 @@ export function AufgabenContent() {
           </h2>
           <Link
             href="/zeiterfassung"
-            className="text-sm text-primary hover:underline"
+            className="text-sm text-primary-text hover:underline"
           >
             Zur Zeiterfassung
           </Link>

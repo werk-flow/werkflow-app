@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactElement } from 'react';
+import { useEffect, useId, useRef, useState, type ReactElement } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ClipboardList, Download, Loader2, Plus, Trash2 } from 'lucide-react';
 
@@ -243,6 +243,7 @@ function WorkArtifactDialog({
   readOnly: boolean;
 }) {
   const { showBanner } = useBanner();
+  const artifactFormId = useId();
   const [detail, setDetail] = useState<WorkArtifactDetail | null>(null);
   const [loading, setLoading] = useState(Boolean(artifactId));
   const [editing, setEditing] = useState(!artifactId && !readOnly);
@@ -533,14 +534,37 @@ function WorkArtifactDialog({
               <Skeleton className="h-9 w-full" />
               <Skeleton className="h-24 w-full" />
             </div>
-          ) : editing ? (
-            <ArtifactForm kind={kind} setKind={setKind} lockedKind={Boolean(detail)} visibility={visibility}
-              setVisibility={setVisibility} title={title} setTitle={setTitle} capturedAt={capturedAt}
-              setCapturedAt={setCapturedAt} content={content} patchContent={patchContent}
-              measurementLines={measurementLines} setMeasurementLines={(lines) => patchContent({ measurementLines: lines })}
-              instructionOptions={instructionOptions}
-              requiresCorrectionReason={requiresCorrectionReason} correctionReason={correctionReason}
-              setCorrectionReason={setCorrectionReason} />
+          ) : !readOnly && editing ? (
+            <form
+              id={artifactFormId}
+              onSubmit={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (anyBusy || loading || readOnly || !editing) return;
+                save(true);
+              }}
+              noValidate
+            >
+              <ArtifactForm
+                kind={kind}
+                setKind={setKind}
+                lockedKind={Boolean(detail)}
+                visibility={visibility}
+                setVisibility={setVisibility}
+                title={title}
+                setTitle={setTitle}
+                capturedAt={capturedAt}
+                setCapturedAt={setCapturedAt}
+                content={content}
+                patchContent={patchContent}
+                measurementLines={measurementLines}
+                setMeasurementLines={(lines) => patchContent({ measurementLines: lines })}
+                instructionOptions={instructionOptions}
+                requiresCorrectionReason={requiresCorrectionReason}
+                correctionReason={correctionReason}
+                setCorrectionReason={setCorrectionReason}
+              />
+            </form>
           ) : detail && currentRevision ? (
             <ArtifactDetail detail={detail} currentRevision={currentRevision} currentUserId={currentUserId} />
           ) : null}
@@ -612,7 +636,7 @@ function WorkArtifactDialog({
         </DialogBody>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={requestClose} disabled={anyBusy}>{isBusy('close') && <Loader2 className="size-4 animate-spin" />}Schließen</Button>
-          {!readOnly && editing && <><Button type="button" variant="outline" onClick={() => save(false)} disabled={anyBusy}>{isBusy('draft') && <Loader2 className="size-4 animate-spin" />}Als Entwurf speichern</Button><Button type="button" onClick={() => save(true)} disabled={anyBusy}>{isBusy('submit') && <Loader2 className="size-4 animate-spin" />}Zur Prüfung einreichen</Button></>}
+          {!readOnly && editing && <><Button type="button" variant="outline" onClick={() => save(false)} disabled={anyBusy}>{isBusy('draft') && <Loader2 className="size-4 animate-spin" />}Als Entwurf speichern</Button><Button type="submit" form={artifactFormId} disabled={anyBusy || loading}>{isBusy('submit') && <Loader2 className="size-4 animate-spin" />}Zur Prüfung einreichen</Button></>}
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -1,6 +1,6 @@
 # Technical Architecture
 
-Status: living — last reviewed 2026-09-03
+Status: living — last reviewed 2026-09-05
 
 This document describes the current high-level architecture of WerkFlow. It intentionally avoids duplicating exact database schema details; for exact schema, inspect the live Supabase project and `lib/supabase/database.types.ts`. Coding standards, including the implementation-simplicity rules, live in `AGENTS.md` and are not repeated here.
 
@@ -12,8 +12,8 @@ The product goal is to become the digital operations backbone for a business: jo
 
 ## Runtime And Framework
 
-- Next.js `16.0.10`
-- React `19.2.3`
+- Next.js App Router
+- React
 - TypeScript
 - Tailwind CSS v4
 - shadcn/Radix-style UI primitives
@@ -35,7 +35,7 @@ The accepted stack and its rationale live in [decision 0001 — infrastructure s
 
 - **Vercel** hosts the Next.js app. `vercel.json` pins functions to Frankfurt (`fra1`), next to the Supabase EU database.
 - **Supabase (EU)** provides Postgres (operational source of truth), Auth, and Realtime. Authorization is enforced primarily in server code; RLS is defense in depth, not the sole barrier.
-- **Cloudflare R2 (EU jurisdiction)** stores all document file bytes via direct signed uploads/downloads (`lib/storage/r2.ts`, implemented in slice `P1-00a`). File bytes must not pass through Vercel Functions or Server Actions: Vercel enforces a ~4.5 MB request-body limit in production, and routing bytes through app servers adds avoidable egress cost. Postgres keeps all file metadata. Profile avatars are the one file surface outside private R2: `lib/profile-avatar.ts` stores them in the public `profile-avatars` Supabase Storage bucket, and the URL it builds from the object path needs no authentication.
+- **Cloudflare R2 (EU jurisdiction)** stores document bytes. Browser uploads and downloads use signed URLs from `lib/storage/r2.ts`, avoiding the Server Action request-body limit and application-server egress. Server-generated artifact HTML, handover HTML, and payroll ZIP files use `putStorageObject` directly. Postgres keeps file metadata. Profile avatars use the public `profile-avatars` Supabase Storage bucket through `lib/profile-avatar.ts`; their URLs need no authentication. The local test stack substitutes its own S3-compatible storage endpoint, as described in [environments.md](environments.md).
 - **A separate S3 bucket with Object Lock (compliance mode)** will hold retention-relevant document copies (designed in slice `P1-45`); R2 alone is not a compliance archive.
 - **Railway** is the designated home for future long-running workers (OCR, imports/exports, queues, connector sync). It is added when the first such workload exists, not before.
 - **Phase 2 AI** uses external model provider APIs (Anthropic/OpenAI/OpenRouter) with server-side keys. No self-hosted models or GPU infrastructure.
@@ -61,7 +61,17 @@ Since 2026-09-03 every authenticated page renders one column: `PageShell` → `P
 
 Tailwind v4 scans an explicit application boundary from `app/globals.css`: `@import 'tailwindcss' source(none)` followed by `@source` entries for `app`, `components`, `hooks`, `lib`, and `proxy.ts`. This keeps repository-local build backups, retained browser evidence, and other generated trees out of candidate discovery. `lib/ui/tailwind-source.test.ts` pins that boundary; add a source entry there when a new product-code root starts emitting Tailwind classes.
 
-Lists follow the same one-source rule for their loading state. A list component declares its column definition once, renders header cells and `SkeletonRows` (`components/ui/skeleton-table.tsx`) from it, and exports one skeleton component that its `loading.tsx` renders; hover is a property of `TableRow`/`ListRow` (`interactive`), never a class on a call site. ESLint bans the hover literal outside `components/ui`, and `lib/ui/skeleton-pairing.test.ts` rejects loading files that build rows of their own. A loaded list never turns back into a skeleton: the list components carry no loading prop, a manual refresh spins the `RefreshButton` (`components/ui/refresh-button.tsx`, the one home of a router transition) while the rows stay, and `useTransition` is lint-banned in product code; pending state comes from `useServerAction`, `useBusyIds` and the optimistic-list hook, with `useSettleOnChange` as the settle read for props-driven lists.
+Lists share their column definitions between headers and `SkeletonRows` (`components/ui/skeleton-table.tsx`). Grid lists share their header and row layout with an exported skeleton, as the maintenance due list does. `TableRow` and `ListRow` own hover through `interactive`. The skeleton-pairing and row-contract tests check composition, live/loading interaction parity, and every product table's desktop-only containment. The phone audit also checks visible tables and their nested scroll containers; document width alone cannot detect a table that scrolls inside its own wrapper. Period results have mobile cards retaining all metrics. Visual fidelity and conditional layouts still require browser evidence.
+
+Refresh controls retain loaded rows. `RefreshButton` owns the router transition; `useServerAction`, `useBusyIds`, and `useOptimisticList` own mutation feedback. For props-driven lists, `useSettleOnChange` waits for the supplied value to change. A timeout shows a refresh error and releases settlement; unmount cancels quietly. The timeout does not reclassify an accepted mutation as failed. Effective ESLint configuration tests ensure that named exceptions preserve unrelated restrictions.
+
+### Shared control contracts
+
+`Field` owns stable label, description, error, and required-description IDs. Registered controls consume that context. Inputs and comboboxes expose supported required/invalid semantics. Custom date and time groups reference their errors and hidden required text through `aria-describedby`, keeping the field name unchanged. Their visual invalid state uses `data-invalid`.
+
+Searchable controls expose named listboxes with selected options and shared keyboard navigation. Search, clear, and inline-create actions remain keyboard-reachable. Mobile record navigation includes a semantic link or button. `RowActionsMenu` restores trigger focus before selection, preserves a newly opened dialog's focus, and supports Tab traversal out of the menu.
+
+These shared owners provide Tier 1 behavior. Lint probes, rendered field tests, enum-bound checks, and isolated component browser contracts provide Tier 2 regression detection. Domain meaning, visual balance, and feedback-policy exceptions still require Tier 3 review and the relevant application proofs. [Testing](testing.md) owns execution procedures; the [current reconciliation](../plans/uiux-and-test-reliability-2026-09.md) records coverage and acceptance limits.
 
 ### Request-edge routing
 
@@ -79,15 +89,13 @@ The app has five Supabase client factories, one per trust boundary:
 - `lib/supabase/implicit-client.ts`: a browser client with `flowType: 'implicit'`. Only the forgot-password form uses it, because the client that sends the recovery email decides which flow the link opens.
 - `lib/supabase/transient-client.ts`: a browser client that persists no session. The password-change card uses it to re-verify the current password without replacing the signed-in session.
 
-Server code that uses the admin client must establish identity and authorization first. `getAuthenticatedUser()` in `lib/data/cached.ts` is the identity read: it calls `auth.getUser()`, a network round trip, never `getSession()`, and React `cache()` memoizes it per request. `authenticateAndAuthorize()` in `lib/jobs/auth.ts` is the shared authorization gate for server actions: it resolves the user, the active organization from the cookie, and the membership role, and returns a typed `AuthContext` or a typed failure. Feature modules keep their server-only entry points in `lib/<feature>/server.ts`, and those files start with `import 'server-only'` as `lib/supabase/admin.ts` does.
+Server code that uses the admin client must establish identity and authorization first. `getAuthenticatedUser()` in `lib/data/cached.ts` calls `auth.getUser()` and React `cache()` memoizes the result per request. Many feature actions use `authenticateAndAuthorize()` in `lib/jobs/auth.ts`; it returns a typed `AuthContext` or failure using the active organization and `getCachedMemberships()`. Other actions resolve authorization separately, and newer business RPCs reauthorize inside the transaction. These paths do not all provide the same freshness guarantee. In particular, the shared helper consumes cross-request membership candidates. Audit each privileged entry point before relying on immediate role or access revocation. Server-only domain readers live in `lib/<feature>/server.ts`; Server Actions commonly live in `actions.ts`.
 
 Supabase environment values are read only through `lib/env/public.ts` for the URL and publishable key and `lib/env/server.ts` for the secret key and site URL; the server file is itself `server-only`. The R2 credentials are the recorded exception, read directly in `lib/storage/r2.ts`.
 
 P1-21 time transitions follow the stricter transactional form of that boundary: a narrow authenticated Server Action validates the discriminated request, then calls a versioned database RPC. The RPC reauthorizes the actor, locks the organization-member boundary, validates tenant references and writes the session, segment, append-only event and idempotency receipt in one transaction. Browser clients retain SELECT-only access through RLS; they cannot write the canonical time tables directly.
 
-Since 2026-08-18 WerkFlow runs two Supabase projects (decision [0003](../decisions/0003-dev-prod-environment-split.md)): production `jbgaqpdjauzoocplgdsn` and the dedicated dev project `mbkkzuqjbdvzelqvuzcn`, which serves `.env.local` and the test harness. The committed migration history in `supabase/migrations/` is the schema workflow: every change is a migration file applied dev-first, prod-second, and `lib/supabase/database.types.ts` is generated from dev. Live Supabase inspection remains the source of truth for platform state; see [environments.md](environments.md).
-
-The historical Free-Plan exception for the leaked-password advisory is resolved: since the Pro upgrade (2026-08-21), leaked-password protection (HaveIBeenPwned check) is ENABLED on both projects (2026-08-23), together with a server-side minimum password length of 8 (matching the app's own validation) and SSL enforcement on direct database connections. There is no standing advisor exception anymore — inspect and disposition every Supabase Security and Performance Advisor finding normally, on both projects. The full auth/security configuration posture lives in [environments.md](environments.md).
+Production and cloud dev are separate Supabase projects, and the default browser batteries use a local stack. [Environments](environments.md) owns project identities, configuration posture, target selection, and the dev-first migration workflow. Generated types come from dev. Inspect the requested backend for current state; shared migration intent does not establish live parity.
 
 ## Authentication And Organization Context
 
@@ -133,7 +141,7 @@ The product principle is fast initial load with fresh operational data. Avoid ad
 
 Supabase Realtime is centralized through `components/realtime/realtime-provider.tsx`.
 
-The published table list has one home: `REALTIME_TABLES` in `lib/realtime/tables.ts`. The provider generates one organization-filtered binding per entry (`bun run realtime:check` diffs the list against the database's publication and replica-identity state), debounces events centrally, and owns the focus/visibility catch-up. Immutable ledgers stay unpublished and refetch behind their root row's signal. `eslint.config.mjs` bans `onAuthStateChange` outside the provider; the recorded exception is the password-recovery form at `app/**/reset-password-form.tsx`, which must react to the `PASSWORD_RECOVERY` event.
+The published table list has one home: `REALTIME_TABLES` in `lib/realtime/tables.ts`. The provider generates its bindings, including organization filters except for `profiles`, debounces events centrally, and owns focus/visibility catch-up. Most immutable ledgers refetch behind a root signal; ordinary documents and attention retain published history tables. `bun run realtime:check` verifies publication and replica-identity configuration, not cross-tenant delivery guarantees. The [transport reference](realtime-and-caching.md) owns that distinction. ESLint bans `onAuthStateChange` outside the provider, with a named exception for the password-recovery form.
 
 Surfaces consume through the live-view family: `hooks/use-live-view.ts` for client refetch views (shared debounce, generation guards, keep-last-known, dialog suspension, catch-up) and `hooks/use-realtime-router-refresh.ts` for route refreshes. Pending state on server actions comes from `hooks/use-server-action.ts`. The full freshness and latency contract lives in [realtime-and-caching.md](realtime-and-caching.md).
 

@@ -1,4 +1,6 @@
 import { resolve } from 'node:path';
+import { checkpointValue, saveCheckpoint } from "./support/checkpoints";
+import { requireChainedValue } from "./support/preconditions";
 
 import { expect, test } from './support/fixtures';
 import { getRequestConversionState } from './support/db';
@@ -16,7 +18,7 @@ import {
   visibleText,
   textInDom,
 } from './support/steps';
-import { ARTIFACTS_DIR } from './support/world';
+import { artifactsDirectory } from './support/world';
 
 // GG-01 — Customer Request To Work (@GG-01)
 // Roadmap scenario: create a commercial customer with multiple contacts/sites,
@@ -26,9 +28,14 @@ import { ARTIFACTS_DIR } from './support/world';
 
 test.describe.configure({ mode: 'serial' });
 
-// The first request's id, captured on creation for the direct-URL
-// authorization checks at the end of the serial suite.
-let firstRequestId = '';
+function requireFirstRequestId(): string {
+  return requireChainedValue(checkpointValue("gg-01.firstRequestId"), {
+    test: "GG-01 request visibility boundaries",
+    needs: "the exact first request captured by the intake stage",
+    grep: "@GG-01",
+    suite: "golden",
+  });
+}
 
 test.describe('GG-01 Anfrage zu Auftrag @GG-01', () => {
   test('Admin legt einen Gewerbekunden mit Ansprechpartnern und Einsatzorten an', async ({
@@ -64,8 +71,18 @@ test.describe('GG-01 Anfrage zu Auftrag @GG-01', () => {
     });
   });
 
-  test('Büro erfasst eine Anfrage während des Anrufs mit Anhang', async ({ bueroPage, world }) => {
-    firstRequestId = await createRequestViaDialog(bueroPage, {
+  test('Büro erfasst eine Anfrage während des Anrufs mit Anhang',
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "Admin legt einen Gewerbekunden mit Ansprechpartnern und Einsatzorten an",
+        },
+      ],
+    },
+    async ({ bueroPage, world }) => {
+      const firstRequestId = await createRequestViaDialog(bueroPage, {
       summary: 'Durchlauferhitzer in der Backstube ausgefallen',
       requestNumber: `ANF-${world.runId}-1`,
       clientName: `Bäckerei Brotmann ${world.runId}`,
@@ -74,6 +91,7 @@ test.describe('GG-01 Anfrage zu Auftrag @GG-01', () => {
       categoryLabel: 'Störung / Reparatur',
       urgencyLabel: 'Hoch',
     });
+      saveCheckpoint("gg-01.firstRequestId", firstRequestId);
 
     // The request detail shows the linked customer identity, not copies.
     await expect(visibleText(bueroPage, `Bäckerei Brotmann ${world.runId}`)).toBeVisible();
@@ -82,12 +100,21 @@ test.describe('GG-01 Anfrage zu Auftrag @GG-01', () => {
 
     await uploadDocumentOnRequestDetail(
       bueroPage,
-      resolve(ARTIFACTS_DIR, 'upload-fixture.pdf'),
+      resolve(artifactsDirectory(), 'upload-fixture.pdf'),
       'upload-fixture'
     );
   });
 
-  test('Büro wandelt die Anfrage genau einmal in einen Auftrag um', async ({
+  test('Büro wandelt die Anfrage genau einmal in einen Auftrag um',
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "Büro erfasst eine Anfrage während des Anrufs mit Anhang",
+        },
+      ],
+    }, async ({
     bueroPage,
     world,
   }) => {
@@ -175,7 +202,17 @@ test.describe('GG-01 Anfrage zu Auftrag @GG-01', () => {
     await expect(visibleText(bueroPage, `ANF-${world.runId}-3`)).toBeVisible();
   });
 
-  test('Direkter Folgeauftrag funktioniert weiterhin ohne künstliche Anfrage', async ({
+  test('Direkter Folgeauftrag funktioniert weiterhin ohne künstliche Anfrage',
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "Admin legt einen Gewerbekunden mit Ansprechpartnern und Einsatzorten an",
+        },
+      ],
+    },
+    async ({
     adminPage,
     world,
   }) => {
@@ -195,8 +232,19 @@ test.describe('GG-01 Anfrage zu Auftrag @GG-01', () => {
     await expect(textInDom(adminPage, 'Filterwechsel Filiale Zentrum')).toHaveCount(0);
   });
 
-  test('Mitarbeiter hat keinen Zugriff auf Anfragen', async ({ employeePage }) => {
-    await expectRedirectedAway(employeePage, '/anfragen');
+  test('Mitarbeiter hat keinen Zugriff auf Anfragen',
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "Büro erfasst eine Anfrage während des Anrufs mit Anhang",
+        },
+      ],
+    },
+    async ({ employeePage }) => {
+      const firstRequestId = requireFirstRequestId();
+      await expectRedirectedAway(employeePage, '/anfragen');
     // The direct detail URL is equally protected.
     await expectRedirectedAway(employeePage, `/anfragen/${firstRequestId}`);
     await expect(
@@ -206,8 +254,19 @@ test.describe('GG-01 Anfrage zu Auftrag @GG-01', () => {
     await expect(employeePage.getByRole('link', { name: 'Anfragen' })).toHaveCount(0);
   });
 
-  test('Fremde Organisation sieht keine Anfragen', async ({ outsiderPage, world }) => {
-    await outsiderPage.goto('/anfragen');
+  test('Fremde Organisation sieht keine Anfragen',
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "Büro erfasst eine Anfrage während des Anrufs mit Anhang",
+        },
+      ],
+    },
+    async ({ outsiderPage, world }) => {
+      const firstRequestId = requireFirstRequestId();
+      await outsiderPage.goto('/anfragen');
     await outsiderPage.getByRole('tab', { name: 'Alle' }).click();
     await expect(textInDom(outsiderPage, `ANF-${world.runId}-1`)).toHaveCount(0);
     await expect(

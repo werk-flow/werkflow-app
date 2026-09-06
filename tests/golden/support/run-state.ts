@@ -9,7 +9,7 @@ import {
   readdirSync,
   rmSync,
 } from "node:fs";
-import { basename, resolve } from "node:path";
+import { resolve } from "node:path";
 
 import {
   PLAYWRIGHT_LANES,
@@ -25,9 +25,15 @@ import {
   withFileLock,
   writeJsonAtomically,
 } from "../../../lib/testing/file-lock";
+import { assertWorldSeedComplete } from "../../../lib/testing/seed-world-plan";
+import { browserRunPaths, configuredRunKey, manifestActiveStateDirectory } from "../../../lib/testing/run-paths";
 import type { SessionRole } from "./sessions";
+import { mirrorOwnedStateFiles, readRetainedWorldState } from "../../../lib/testing/archive-state";
+import { backendOriginFromUrl, validateDiagnosticProvenance, type BackendProvenance, type TestOutcomeEvidence } from "../../../lib/testing/test-evidence";
+import { assertRetainedBusinessDate } from '../../../lib/testing/business-date';
+import { assertInterruptedRecoveryOwnership, archiveRecoveryActiveState, recoverInterruptedEvidence, type InterruptionRecovery } from '../../../lib/testing/interrupted-run-recovery';
 import {
-  ARTIFACTS_DIR,
+  artifactsDirectory,
   loadWorld,
   storageStatePath,
   type TestWorld,
@@ -49,10 +55,14 @@ export type RunFailure = {
   title: string;
   file: string | null;
   message: string;
+  testId?: string;
 };
 
 export type RunManifest = {
   version: 1;
+  artifactLayout?: "run-owned-v1";
+  groupId?: string;
+  groupFingerprint?: string;
   runKey: string;
   sourceRunKey: string | null;
   lane: PlaywrightLane;
@@ -67,6 +77,7 @@ export type RunManifest = {
   completedAt: string | null;
   gitHead: string;
   sourceFingerprint: string;
+  candidateFingerprint?: string;
   buildId: string | null;
   baseUrl: string;
   projectRef: string;
@@ -88,6 +99,17 @@ export type RunManifest = {
   rootCause: string | null;
   prevention: string | null;
   rerunOverrideReason: string | null;
+  campaignId?: string;
+  rerunGrantId?: string | null;
+  backendProvenance?: BackendProvenance;
+  selectedTestIds?: string[];
+  outcomes?: TestOutcomeEvidence[];
+  currentTestId?: string | null;
+  currentTestStartedAt?: string | null;
+  interruptionRecovery?: InterruptionRecovery;
+  businessDate?: string;
+  auditGroup?: string;
+  completedAuditGroups?: Array<{ group: string; runId: string; organizationIds: string[]; cleanedAt: string }>;
 };
 
 const REPOSITORY_ROOT = resolve(__dirname, "../../..");
@@ -95,8 +117,18 @@ export const RUN_ARCHIVE_ROOT = resolve(
   REPOSITORY_ROOT,
   ".agent-logs/playwright-runs",
 );
-const FAILURE_MARKER_PATH = resolve(ARTIFACTS_DIR, "run-failed.json");
-const ACTIVE_MANIFEST_PATH = resolve(ARTIFACTS_DIR, "run-manifest.json");
+function failureMarkerPath(): string {
+  return resolve(artifactsDirectory(), "run-failed.json");
+}
+
+function activeManifestPath(runKey = currentRunKey()): string {
+  return resolve(artifactsDirectory(runKey), "run-manifest.json");
+}
+
+/** Only old manifests may read the retired shared directory. Current runs never fall back to it. */
+function ownedStateDirectory(manifest: RunManifest): string {
+  return manifestActiveStateDirectory(REPOSITORY_ROOT, manifest);
+}
 const SESSION_ROLES = [
   "admin",
   "buero",
@@ -131,20 +163,11 @@ export function configureRunEnvironment(suite: PlaywrightSuite): void {
 }
 
 export function currentRunKey(): string {
-  const runKey = process.env.WERKFLOW_RUN_KEY;
-  if (!runKey) throw new Error("WERKFLOW_RUN_KEY was not configured.");
-  return runKey;
+  return configuredRunKey();
 }
 
 export function runDirectory(runKey: string): string {
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(runKey) || runKey.includes("..")) {
-    throw new Error(`Invalid run key: ${runKey}`);
-  }
-  const directory = resolve(RUN_ARCHIVE_ROOT, runKey);
-  if (resolve(directory, "..") !== RUN_ARCHIVE_ROOT) {
-    throw new Error(`Invalid run key: ${runKey}`);
-  }
-  return directory;
+  return browserRunPaths(REPOSITORY_ROOT, runKey).directory;
 }
 
 export function manifestPath(runKey: string): string {
@@ -201,6 +224,11 @@ export function createRunManifest(input?: {
   command?: string;
   grep?: string | null;
   rerunOverrideReason?: string | null;
+  campaignId?: string;
+  rerunGrantId?: string | null;
+  selectedTestIds?: string[];
+  candidateFingerprint?: string;
+  groupFingerprint?: string;
 }): RunManifest {
   const runKey = currentRunKey();
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
@@ -212,6 +240,9 @@ export function createRunManifest(input?: {
   );
   const manifest: RunManifest = {
     version: 1,
+    artifactLayout: "run-owned-v1",
+    groupId: process.env.WERKFLOW_TEST_GROUP,
+    groupFingerprint: input?.groupFingerprint,
     runKey,
     sourceRunKey: process.env.WERKFLOW_REUSE_RUN_KEY || null,
     lane: parseEnvironmentValue(
@@ -237,6 +268,7 @@ export function createRunManifest(input?: {
     completedAt: null,
     gitHead: commandOutput("git", ["rev-parse", "HEAD"]),
     sourceFingerprint: calculateSourceFingerprint(),
+    candidateFingerprint: input?.candidateFingerprint,
     buildId: readOptionalFile(resolve(REPOSITORY_ROOT, ".next/BUILD_ID")),
     baseUrl: process.env.GOLDEN_BASE_URL ?? "http://localhost:3000",
     projectRef: projectRefFromUrl(supabaseUrl),
@@ -254,10 +286,16 @@ export function createRunManifest(input?: {
     rootCause: null,
     prevention: null,
     rerunOverrideReason: input?.rerunOverrideReason ?? null,
+    campaignId: input?.campaignId,
+    rerunGrantId: input?.rerunGrantId ?? null,
+    backendProvenance: currentBackendProvenance(suite),
+    selectedTestIds: input?.selectedTestIds,
+    outcomes: [],
+    businessDate: process.env.WERKFLOW_TEST_BUSINESS_DATE,
   };
   mkdirSync(runDirectory(runKey), { recursive: true });
   writeJsonAtomically(manifestPath(runKey), manifest);
-  writeJsonAtomically(ACTIVE_MANIFEST_PATH, manifest);
+  writeJsonAtomically(activeManifestPath(), manifest);
   return manifest;
 }
 
@@ -283,8 +321,44 @@ export function updateRunManifest(
     const next = { ...current, ...patch };
     writeJsonAtomically(path, next);
     if (runKey === process.env.WERKFLOW_RUN_KEY)
-      writeJsonAtomically(ACTIVE_MANIFEST_PATH, next);
+      writeJsonAtomically(activeManifestPath(), next);
     return next;
+  });
+}
+
+/** Archive-only recovery: never reseed, clean, or replace another run's active state. */
+export function recoverInterruptedRun(runKey: string, reason: string): RunManifest {
+  assertInterruptedRecoveryOwnership(REPOSITORY_ROOT);
+  const manifest = readRunManifest(runKey);
+  if (manifest.runKey !== runKey) throw new Error('Recovery manifest identity does not match the requested run.');
+  const recoveryStateDirectory = ownedStateDirectory(manifest);
+  const recoveryManifestPath = resolve(recoveryStateDirectory, "run-manifest.json");
+  let active: RunManifest | null = null;
+  let activeIdentityVerified = false;
+  return recoverInterruptedEvidence({
+    manifest,
+    reason,
+    persist: (patch) => withFileLock(`${manifestPath(runKey)}.lock`, () => {
+      const next = { ...readRunManifest(runKey), ...patch };
+      writeJsonAtomically(manifestPath(runKey), next);
+      // Do not use an inherited WERKFLOW_RUN_KEY to overwrite another run's active state.
+      if (activeIdentityVerified) writeJsonAtomically(recoveryManifestPath, next);
+      return next;
+    }),
+    archiveAndVerify: (recovered) => {
+      active = existsSync(recoveryManifestPath)
+        ? JSON.parse(readFileSync(recoveryManifestPath, 'utf8')) as RunManifest : null;
+      if (recovered.world && !recovered.cleanedAt) {
+        if (active?.runKey === runKey) {
+          const world = JSON.parse(readFileSync(resolve(recoveryStateDirectory, "world.json"), 'utf8')) as TestWorld;
+          archiveRecoveryActiveState(recovered, active, world, () => {
+            activeIdentityVerified = true;
+            archiveRunOutputs(runKey);
+          });
+        }
+        readRetainedWorldState(recovered, resolve(runDirectory(runKey), 'state/world.json'));
+      }
+    },
   });
 }
 
@@ -299,41 +373,55 @@ export function attachWorldToRun(world: TestWorld): void {
 }
 
 export function clearActiveRunState(): void {
-  mkdirSync(ARTIFACTS_DIR, { recursive: true });
-  rmSync(FAILURE_MARKER_PATH, { force: true });
-  rmSync(ACTIVE_MANIFEST_PATH, { force: true });
+  mkdirSync(artifactsDirectory(), { recursive: true });
+  rmSync(failureMarkerPath(), { force: true });
+  rmSync(activeManifestPath(), { force: true });
   rmSync(worldFilePath(), { force: true });
+  rmSync(resolve(artifactsDirectory(), "checkpoints.json"), { force: true });
   for (const role of SESSION_ROLES)
     rmSync(storageStatePath(role), { force: true });
 }
 
 export function markRunFailed(failure: RunFailure): void {
-  mkdirSync(ARTIFACTS_DIR, { recursive: true });
-  writeJsonAtomically(FAILURE_MARKER_PATH, failure);
+  mkdirSync(artifactsDirectory(), { recursive: true });
+  writeJsonAtomically(failureMarkerPath(), failure);
 }
 
 export function activeRunFailed(): boolean {
-  return existsSync(FAILURE_MARKER_PATH);
+  return existsSync(failureMarkerPath());
 }
 
 export function archiveActiveState(runKey = currentRunKey()): void {
-  const target = resolve(runDirectory(runKey), "state");
-  mkdirSync(target, { recursive: true });
-  for (const source of [
-    worldFilePath(),
-    ...SESSION_ROLES.map((role) => storageStatePath(role)),
-  ]) {
-    if (existsSync(source))
-      copyFileSync(source, resolve(target, basename(source)));
+  const manifest = readRunManifest(runKey);
+  const source = ownedStateDirectory(manifest);
+  const activePath = resolve(source, "run-manifest.json");
+  if (existsSync(activePath)) {
+    const active = JSON.parse(readFileSync(activePath, "utf8")) as RunManifest;
+    if (active.runKey !== runKey) throw new Error("Active state belongs to another run. Refusing to archive it.");
+  } else if (manifest.world && !manifest.cleanedAt) {
+    throw new Error("Owned world has no active ownership manifest. Refusing to archive unverified state.");
   }
+  if (manifest.world && !manifest.cleanedAt) {
+    readRetainedWorldState(manifest, resolve(source, "world.json"));
+  }
+  mirrorOwnedStateFiles([
+    resolve(source, "world.json"),
+    resolve(source, "checkpoints.json"),
+    ...SESSION_ROLES.map((role) => resolve(source, `${role}.json`)),
+  ], resolve(runDirectory(runKey), "state"));
 }
 
 export function restoreArchivedState(sourceRunKey: string): TestWorld {
   const sourceManifest = readRunManifest(sourceRunKey);
+  const problems = validateDiagnosticProvenance(sourceManifest.backendProvenance, currentBackendProvenance());
+  assertRetainedBusinessDate(sourceManifest.businessDate, process.env.WERKFLOW_TEST_BUSINESS_DATE);
+  if (problems.length) throw new Error(problems.join("\n"));
   if (!sourceManifest.retainedAt || sourceManifest.cleanedAt) {
     throw new Error(`Run ${sourceRunKey} has no live retained world.`);
   }
   const stateDirectory = resolve(runDirectory(sourceRunKey), "state");
+  const retainedWorld = readRetainedWorldState(sourceManifest, resolve(stateDirectory, "world.json"));
+  assertWorldSeedComplete(retainedWorld);
   const sources = [
     "world.json",
     ...SESSION_ROLES.map((role) => `${role}.json`),
@@ -344,10 +432,24 @@ export function restoreArchivedState(sourceRunKey: string): TestWorld {
     return { source, fileName };
   });
   clearActiveRunState();
+  writeJsonAtomically(activeManifestPath(), readRunManifest(currentRunKey()));
   for (const { source, fileName } of sources) {
-    copyFileSync(source, resolve(ARTIFACTS_DIR, fileName));
+    copyFileSync(source, resolve(artifactsDirectory(), fileName));
   }
+  const checkpoints = resolve(stateDirectory, "checkpoints.json");
+  if (existsSync(checkpoints)) copyFileSync(checkpoints, resolve(artifactsDirectory(), "checkpoints.json"));
   return loadWorld();
+}
+
+export function currentBackendProvenance(suite?: PlaywrightSuite): BackendProvenance {
+  const currentSuite = suite ?? parseEnvironmentValue(process.env.WERKFLOW_TEST_SUITE, PLAYWRIGHT_SUITES, "golden", "WERKFLOW_TEST_SUITE");
+  return {
+    suite: currentSuite,
+    target: parseEnvironmentValue(process.env.WERKFLOW_TEST_TARGET, PLAYWRIGHT_TARGETS, defaultTargetForSuite(currentSuite), "WERKFLOW_TEST_TARGET"),
+    backendOrigin: backendOriginFromUrl(process.env.NEXT_PUBLIC_SUPABASE_URL),
+    r2Bucket: process.env.R2_BUCKET_NAME ?? "missing",
+    storageEndpoint: process.env.R2_ENDPOINT?.trim() || null,
+  };
 }
 
 const SUITE_SOURCE_ROOTS: Record<PlaywrightSuite, string> = {
@@ -361,7 +463,7 @@ export function archiveRunOutputs(runKey = currentRunKey()): void {
   const sourceRoot = SUITE_SOURCE_ROOTS[manifest.suite];
   const target = resolve(runDirectory(runKey), "playwright");
   mkdirSync(target, { recursive: true });
-  for (const directoryName of [".results", ".report"]) {
+  for (const directoryName of manifest.artifactLayout === "run-owned-v1" ? [] : [".results", ".report"]) {
     const source = resolve(REPOSITORY_ROOT, sourceRoot, directoryName);
     if (existsSync(source)) {
       cpSync(source, resolve(target, directoryName.slice(1)), {
@@ -388,8 +490,7 @@ export function listRetainedWorlds(): TestWorld[] {
   for (const manifest of listRunManifests()) {
     if (!manifest.retainedAt || manifest.cleanedAt) continue;
     const path = resolve(runDirectory(manifest.runKey), "state/world.json");
-    if (!existsSync(path)) continue;
-    const world = JSON.parse(readFileSync(path, "utf8")) as TestWorld;
+    const world = readRetainedWorldState(manifest, path);
     worlds.set(world.orgId, world);
   }
   return [...worlds.values()];

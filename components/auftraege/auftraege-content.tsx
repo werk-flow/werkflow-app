@@ -688,14 +688,14 @@ export function AuftraegeContent({
               className={cn(
                 'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
                 activeStatusFilter === opt.value
-                  ? 'border-primary bg-primary/10 text-primary'
+                  ? 'border-primary bg-primary/10 text-primary-text'
                   : 'border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground'
               )}
             >
               {opt.label}
               <span className={cn(
                 'tabular-nums',
-                activeStatusFilter === opt.value ? 'text-primary' : 'text-muted-foreground/70'
+                activeStatusFilter === opt.value ? 'text-primary-text' : 'text-muted-foreground/70'
               )}>
                 {activeStatusCounts[opt.value] || 0}
               </span>

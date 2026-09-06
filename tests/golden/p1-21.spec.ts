@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { checkpointValue, saveCheckpoint } from "./support/checkpoints";
 
 import { expect, test } from "./support/fixtures";
 import { getTimeCaptureState, seedLegacyOpenTimeEntry } from "./support/db";
@@ -6,9 +7,8 @@ import { clockInOnJob, clockOut, createJob } from "./support/steps";
 
 test.describe.configure({ mode: "serial" });
 
-let canonicalSessionId: string;
-
 function requireCanonicalSessionId(): string {
+  const canonicalSessionId = checkpointValue("p1-21.canonicalSessionId");
   if (!canonicalSessionId) {
     throw new Error("Run the P1-21 start stage first; it creates the canonical session.");
   }
@@ -49,7 +49,8 @@ test.describe("P1-21 explicit time activities @P1-21", () => {
     const state = await getTimeCaptureState(world.orgId, world.users.employee.id);
     const session = state.sessions.at(-1);
     expect(session).toMatchObject({ status: "open", version: 1 });
-    canonicalSessionId = session!.id;
+    const canonicalSessionId = session!.id;
+    saveCheckpoint("p1-21.canonicalSessionId", canonicalSessionId);
     const segments = state.segments.filter((segment) => segment.session_id === canonicalSessionId);
     expect(segments).toHaveLength(1);
     expect(segments[0]).toMatchObject({
@@ -60,7 +61,16 @@ test.describe("P1-21 explicit time activities @P1-21", () => {
     expect(state.operations.filter((operation) => operation.resulting_session_id === canonicalSessionId)).toHaveLength(1);
   });
 
-  test("switches through travel, break, standby, call-out, and internal work atomically @P1-21-stage-switch", async ({
+  test("switches through travel, break, standby, call-out, and internal work atomically @P1-21-stage-switch",
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "starts one stable job-linked work session and the job lifecycle @P1-21-stage-start",
+        },
+      ],
+    }, async ({
     employeePage,
     world,
   }) => {
@@ -85,7 +95,17 @@ test.describe("P1-21 explicit time activities @P1-21", () => {
     expect(state.operations.filter((operation) => operation.resulting_session_id === sessionId)).toHaveLength(6);
   });
 
-  test("ends once and preserves the append-only event chain @P1-21-stage-end", async ({ employeePage, world }) => {
+  test("ends once and preserves the append-only event chain @P1-21-stage-end",
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "switches through travel, break, standby, call-out, and internal work atomically @P1-21-stage-switch",
+        },
+      ],
+    },
+    async ({ employeePage, world }) => {
     const sessionId = requireCanonicalSessionId();
     await clockOut(employeePage);
     const state = await getTimeCaptureState(world.orgId, world.users.employee.id);
@@ -98,7 +118,16 @@ test.describe("P1-21 explicit time activities @P1-21", () => {
     expect(events.at(-1)?.event_type).toBe("session_ended");
   });
 
-  test("continues an open legacy clock into the canonical model without backfill @P1-21-stage-legacy", async ({
+  test("continues an open legacy clock into the canonical model without backfill @P1-21-stage-legacy",
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "ends once and preserves the append-only event chain @P1-21-stage-end",
+        },
+      ],
+    }, async ({
     employeePage,
     world,
   }) => {

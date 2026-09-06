@@ -341,7 +341,7 @@ test.describe('GG-02 Zeitplan, Urlaub, Freigabe und Aufmerksamkeit @P1-07 @GG-02
     await employeePage.waitForURL('**/zeiterfassung?tab=approvals', {
       timeout: 20_000,
     });
-    await expect(employeePage.getByTestId('pending-approvals-panel')).toHaveAttribute(
+    await expect(employeePage.getByRole('main').getByTestId('pending-approvals-panel')).toHaveAttribute(
       'data-loaded',
       'true',
       { timeout: 15_000 }

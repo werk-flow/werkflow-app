@@ -435,7 +435,7 @@ export function CustomerRelationshipWorkspace({
                       {followUp.note && <p className="mt-2 text-sm text-muted-foreground">{followUp.note}</p>}
                       {followUp.sourceLabel && (
                         followUp.sourceHref ? (
-                          <Link href={followUp.sourceHref} className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                          <Link href={followUp.sourceHref} className="mt-2 inline-flex items-center gap-1 text-xs text-primary-text hover:underline">
                             Quelle: {followUp.sourceLabel}
                             <ExternalLink className="size-3" />
                           </Link>
@@ -553,14 +553,14 @@ export function CustomerRelationshipWorkspace({
                     </p>
                     <div className="mt-2 flex flex-wrap gap-3">
                       {item.sourceHref && item.sourceAvailable ? (
-                        <Link href={item.sourceHref} className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                        <Link href={item.sourceHref} className="inline-flex items-center gap-1 text-xs text-primary-text hover:underline">
                           Quelle öffnen <ExternalLink className="size-3" />
                         </Link>
                       ) : (
                         <span className="text-xs text-muted-foreground">Quelle nicht mehr verfügbar</span>
                       )}
                       {followUpSource && (
-                        <button type="button" className="text-xs text-primary hover:underline" onClick={() => openNewFollowUp(followUpSource)}>
+                        <button type="button" className="text-xs text-primary-text hover:underline" onClick={() => openNewFollowUp(followUpSource)}>
                           Hierzu nachfassen
                         </button>
                       )}

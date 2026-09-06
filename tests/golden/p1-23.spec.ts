@@ -1,4 +1,5 @@
 import { expect, test } from "./support/fixtures";
+import { previousTestBusinessMonth } from "../../lib/testing/business-date";
 import {
   getEmployeeRecordStateByUser,
   getLatestResponsibilityConfigurationState,
@@ -12,25 +13,11 @@ import { typeIntoDatePicker, visibleText } from "./support/steps";
 
 test.describe.configure({ mode: "serial" });
 
-function previousBerlinMonth(): { month: string; start: string } {
-  const formatter = new Intl.DateTimeFormat("sv-SE", {
-    timeZone: "Europe/Berlin",
-    year: "numeric",
-    month: "2-digit",
-  });
-  const currentMonth = formatter.format(new Date());
-  const date = new Date(`${currentMonth}-15T12:00:00Z`);
-  date.setUTCMonth(date.getUTCMonth() - 1);
-  const month = date.toISOString().slice(0, 7);
-  return { month, start: `${month}-01` };
-}
-
 function toDatePickerDigits(dateIso: string): string {
   return `${dateIso.slice(8, 10)}${dateIso.slice(5, 7)}${dateIso.slice(0, 4)}`;
 }
 
-let periodId: string;
-const period = previousBerlinMonth();
+const period = previousTestBusinessMonth();
 
 test.describe("P1-23 time accounts and payroll handoff @P1-23 @GG-07", () => {
   test("configures a dated policy, explicit opening balances and payroll mapping @P1-23-stage-configure", async ({
@@ -101,7 +88,17 @@ test.describe("P1-23 time accounts and payroll handoff @P1-23 @GG-07", () => {
     expect(state.mappings).toHaveLength(1);
   });
 
-  test("prepares the complete workforce, closes one immutable version and creates the ZIP @P1-23-stage-close", async ({
+  test("prepares the complete workforce, closes one immutable version and creates the ZIP @P1-23-stage-close",
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "configures a dated policy, explicit opening balances and payroll mapping @P1-23-stage-configure",
+        },
+      ],
+    },
+    async ({
     adminPage,
     world,
   }) => {
@@ -132,7 +129,7 @@ test.describe("P1-23 time accounts and payroll handoff @P1-23 @GG-07", () => {
       )
       .map((finding) => finding.id);
     for (const findingId of approvalFindingIds) {
-      await adminPage.getByTestId(`approve-finding-${findingId}`).click();
+      await adminPage.getByRole("main").getByTestId(`approve-finding-${findingId}`).click();
       await expect(
         adminPage.getByTestId(`approve-finding-${findingId}`),
       ).toHaveCount(0);
@@ -149,8 +146,7 @@ test.describe("P1-23 time accounts and payroll handoff @P1-23 @GG-07", () => {
     const state = await getP123State(world.orgId);
     expect(state.periods).toHaveLength(1);
     expect(state.periods[0]?.state).toBe("closed");
-    periodId = state.periods[0]!.id;
-    expect(
+      expect(
       state.results.filter(
         (result) => result.calculation_id === state.periods[0]!.current_calculation_id,
       ),
@@ -160,7 +156,21 @@ test.describe("P1-23 time accounts and payroll handoff @P1-23 @GG-07", () => {
     expect(state.exports[0]).toMatchObject({ state: "ready", version: 1 });
   });
 
-  test("shows the employee account with responsibility-aware navigation and keeps outsider reads empty @P1-23-stage-visibility", async ({
+  test("shows the employee account with responsibility-aware navigation and keeps outsider reads empty @P1-23-stage-visibility",
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "configures a dated policy, explicit opening balances and payroll mapping @P1-23-stage-configure",
+        },
+        {
+          type: "requires-test",
+          description:
+            "prepares the complete workforce, closes one immutable version and creates the ZIP @P1-23-stage-close",
+        },
+      ],
+    }, async ({
     employeePage,
     world,
   }) => {
@@ -194,15 +204,39 @@ test.describe("P1-23 time accounts and payroll handoff @P1-23 @GG-07", () => {
     });
   });
 
-  test("reopens with a reason while retaining close and export history @P1-23-stage-reopen", async ({
+  test("reopens with a reason while retaining close and export history @P1-23-stage-reopen",
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "configures a dated policy, explicit opening balances and payroll mapping @P1-23-stage-configure",
+        },
+        {
+          type: "requires-test",
+          description:
+            "prepares the complete workforce, closes one immutable version and creates the ZIP @P1-23-stage-close",
+        },
+        {
+          type: "requires-test",
+          description:
+            "shows the employee account with responsibility-aware navigation and keeps outsider reads empty @P1-23-stage-visibility",
+        },
+      ],
+    },
+    async ({
     adminPage,
     world,
   }) => {
-    if (!periodId) {
       const retained = await getP123State(world.orgId);
-      periodId = retained.periods[0]?.id ?? "";
-    }
-    await adminPage.goto(`/zeiterfassung/perioden/${periodId}`);
+      const periodId = retained.periods.find(
+        (candidate) => candidate.period_start_date === period.start,
+      )?.id;
+      if (!periodId)
+        throw new Error(
+          "Run the P1-23 close stage for the anchored business month first.",
+        );
+      await adminPage.goto(`/zeiterfassung/perioden/${periodId}`);
     await requireVisiblePrecondition(visibleText(adminPage, "Abgeschlossen"), {
       test: "P1-23-stage-reopen",
       needs: "the closed and exported period from the preceding P1-23 stages",

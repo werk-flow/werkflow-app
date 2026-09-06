@@ -2,7 +2,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Page } from '@playwright/test';
 
 import { VACATION_STATUS_LABELS } from '../../../lib/vacation/types';
-import { expect, test } from '../../golden/support/fixtures';
+import { expect, test } from "../support/fixtures";
 import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
 import { requireEnv } from '../../golden/support/env';
 import {
@@ -33,6 +33,7 @@ import {
   createPlannedCalendarEntry,
   createRequestViaDialog,
   createTeamViaManagement,
+  dragPlanningMonthEvent,
   markAllAttentionNotificationsReadViaButton,
   markAttentionNotificationReadViaButton,
   openAufgaben,
@@ -386,7 +387,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     await adminPage.waitForURL('**/anfragen/**', { timeout: 20_000 });
     await closeRequestViaDialog(adminPage, 'Anderweitig gelöst');
     await adminPage.goto('/zeiterfassung?tab=approvals');
-    await expect(adminPage.getByTestId('pending-approvals-panel')).toHaveAttribute(
+    await expect(adminPage.getByRole('main').getByTestId('pending-approvals-panel')).toHaveAttribute(
       'data-loaded',
       'true',
       { timeout: 15_000 }
@@ -444,7 +445,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     // added inline and verified against the persisted membership row.
     await adminPage.goto('/mitarbeiter');
     await adminPage.getByRole('tab', { name: 'Teams', exact: true }).click();
-    const teamCard = adminPage.getByTestId('team-card').filter({ hasText: teamName });
+    const teamCard = adminPage.getByRole('main').getByTestId('team-card').filter({ hasText: teamName });
     await expect(teamCard).toBeVisible({ timeout: 15_000 });
     await selectFromSearchable(
       adminPage,
@@ -474,7 +475,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     // Date-effectiveness in the management view: the future member is not a
     // current member row.
     await expect(
-      teamCard.getByTestId('team-member-row').filter({ hasText: bueroName })
+      adminPage.getByTestId('team-card').filter({ hasText: teamName }).getByTestId('team-member-row').filter({ hasText: bueroName })
     ).toHaveCount(0);
 
     // Job-dialog expansion: one click selects all CURRENTLY ACTIVE members;
@@ -533,8 +534,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     expect(stateBefore.memberships).toHaveLength(3);
     await adminPage.goto('/mitarbeiter');
     await adminPage.getByRole('tab', { name: 'Teams', exact: true }).click();
-    await adminPage
-      .getByTestId('team-card')
+    await adminPage.getByRole('main').getByTestId('team-card')
       .filter({ hasText: teamName })
       .getByRole('button', { name: 'Auflösen' })
       .click();
@@ -880,7 +880,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     const dragWarning = adminPage.getByRole('dialog').filter({
       has: adminPage.getByRole('heading', { name: 'Planungshinweise prüfen' }),
     });
-    await jobEvent.dragTo(calendarDayCell(adminPage, dragTargetIso));
+    await dragPlanningMonthEvent(adminPage, { title: `A5 Qualifikationsmatrix ${world.runId}`, sourceDate: plannedDateIso, targetDate: dragTargetIso });
     await expect(dragWarning).toBeVisible({ timeout: 20_000 });
     await dragWarning.getByRole('button', { name: 'Änderung zurücknehmen' }).click();
     await expect(dragWarning).toHaveCount(0, { timeout: 15_000 });
@@ -897,7 +897,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
 
     // The same drag with a reason persists: the drag path re-evaluates and
     // documents the deliberate exception.
-    await jobEvent.dragTo(calendarDayCell(adminPage, dragTargetIso));
+    await dragPlanningMonthEvent(adminPage, { title: `A5 Qualifikationsmatrix ${world.runId}`, sourceDate: plannedDateIso, targetDate: dragTargetIso });
     await expect(dragWarning).toBeVisible({ timeout: 20_000 });
     await dragWarning
       .locator('#planning-warning-reason')

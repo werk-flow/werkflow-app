@@ -216,6 +216,18 @@ const registrySelectors = [
   },
 ];
 
+// JSX expression literals carry the same static meaning as quoted attributes.
+// Keep one restriction definition so adding a native type covers every spelling.
+registrySelectors.push(...registrySelectors.flatMap((restriction) => {
+  const match = restriction.selector.match(/^JSXAttribute\[name\.name="([^"]+)"\]\[value\.value="([^"]+)"\]$/);
+  if (!match) return [];
+  const [, attribute, value] = match;
+  return [
+    { ...restriction, selector: `JSXAttribute[name.name="${attribute}"] > JSXExpressionContainer > Literal[value="${value}"]` },
+    { ...restriction, selector: `JSXAttribute[name.name="${attribute}"] > JSXExpressionContainer > TemplateLiteral[expressions.length=0] > TemplateElement[value.raw="${value}"]` },
+  ];
+}));
+
 // Styling canon (werkflow-design skill): the radius scale stops at rounded-lg
 // (rounded-full stays legitimate for avatars/dots), colors come from tokens in
 // app/globals.css, and gradients use the Tailwind v4 syntax if ever sanctioned.
@@ -225,12 +237,12 @@ const registrySelectors = [
 // (UI/UX hardening, 2026-09-03).
 const shellSelectors = [
   {
-    selector: "Literal[value=/\bh-full (min-w-0 )?flex-col overflow-hidden\b/]",
+    selector: "Literal[value=/\\bh-full (min-w-0 )?flex-col overflow-hidden\\b/]",
     message:
       "Hand-rolled page column. Render PageShell → PageHeader → PageBody from components/shared/page-shell (design canon, Density and layout).",
   },
   {
-    selector: "Literal[value=/\bflex-1 overflow-(y-)?auto p-4 sm:p-6\b/]",
+    selector: "Literal[value=/\\bflex-1 overflow-(y-)?auto p-4 sm:p-6\\b/]",
     message:
       "Hand-rolled page scroll region. Render PageBody from components/shared/page-shell (design canon, Density and layout).",
   },
@@ -401,6 +413,23 @@ const transitionExemptFiles = [
   "components/dokumente/document-library-content.tsx",
 ];
 
+// Every exception subtracts only its named permission from a complete scope.
+// Flat-config replacement can no longer omit an unrelated newly added selector.
+function productRestrictions({ jsx = false, allow = [] } = {}) {
+  const allowed = new Set(allow);
+  return [
+    "error",
+    ...[
+      ...alwaysOnSelectors,
+      ...prodRefSelectors,
+      ...realtimeSelectors,
+      ...stylingSelectors,
+      ...transitionSelectors,
+      ...(jsx ? [...shellSelectors, ...registrySelectors, ...hoverSelectors] : []),
+    ].filter((restriction) => !allowed.has(restriction)),
+  ];
+}
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
@@ -468,14 +497,7 @@ const eslintConfig = defineConfig([
       // console.log signals leftover debugging; deliberate diagnostics use
       // info/warn/error (the Realtime provider's dev-gated logs are info).
       "no-console": ["error", { allow: ["warn", "error", "info"] }],
-      "no-restricted-syntax": [
-        "error",
-        ...alwaysOnSelectors,
-        ...prodRefSelectors,
-        ...realtimeSelectors,
-        ...stylingSelectors,
-        ...transitionSelectors,
-      ],
+      "no-restricted-syntax": productRestrictions(),
       "no-restricted-imports": ["error", { paths: [sonnerImportPath] }],
     },
   },
@@ -487,17 +509,7 @@ const eslintConfig = defineConfig([
     plugins: { ui: uiRules },
     rules: {
       "ui/label-in-spaced-container": "error",
-      "no-restricted-syntax": [
-        "error",
-        ...alwaysOnSelectors,
-        ...prodRefSelectors,
-        ...realtimeSelectors,
-        ...stylingSelectors,
-        ...shellSelectors,
-        ...registrySelectors,
-        ...hoverSelectors,
-        ...transitionSelectors,
-      ],
+      "no-restricted-syntax": productRestrictions({ jsx: true }),
     },
   },
   // The named router-transition homes keep every other product rule. The
@@ -506,28 +518,13 @@ const eslintConfig = defineConfig([
   {
     files: ["components/ui/refresh-button.tsx"],
     rules: {
-      "no-restricted-syntax": [
-        "error",
-        ...alwaysOnSelectors,
-        ...prodRefSelectors,
-        ...realtimeSelectors,
-        ...stylingSelectors,
-      ],
+      "no-restricted-syntax": productRestrictions({ allow: transitionSelectors }),
     },
   },
   {
     files: transitionExemptFiles.filter((file) => !file.startsWith("components/ui/")),
     rules: {
-      "no-restricted-syntax": [
-        "error",
-        ...alwaysOnSelectors,
-        ...prodRefSelectors,
-        ...realtimeSelectors,
-        ...stylingSelectors,
-        ...shellSelectors,
-        ...registrySelectors,
-        ...hoverSelectors,
-      ],
+      "no-restricted-syntax": productRestrictions({ jsx: true, allow: transitionSelectors }),
     },
   },
   // The page-shell primitive is the one home of the column literals the
@@ -535,14 +532,7 @@ const eslintConfig = defineConfig([
   {
     files: ["components/shared/page-shell.tsx"],
     rules: {
-      "no-restricted-syntax": [
-        "error",
-        ...alwaysOnSelectors,
-        ...prodRefSelectors,
-        ...realtimeSelectors,
-        ...stylingSelectors,
-        ...registrySelectors,
-      ],
+      "no-restricted-syntax": productRestrictions({ jsx: true, allow: shellSelectors }),
     },
   },
   // The Stage B consolidation ended the frozen visibility/focus allowlist at
@@ -551,50 +541,21 @@ const eslintConfig = defineConfig([
   {
     files: ["hooks/use-business-day-refresh.ts"],
     rules: {
-      "no-restricted-syntax": [
-        "error",
-        ...alwaysOnSelectors,
-        ...prodRefSelectors,
-        channelSelector,
-        authListenerSelector,
-        visibilitySelector,
-        focusSelector,
-        ...asyncTransitionSelectors,
-        ...stylingSelectors,
-      ],
+      "no-restricted-syntax": productRestrictions({ allow: pollingSelectors }),
     },
   },
   // The provider itself owns channels, auth listeners, and catch-up.
   {
     files: ["components/realtime/realtime-provider.tsx"],
     rules: {
-      "no-restricted-syntax": [
-        "error",
-        ...alwaysOnSelectors,
-        ...prodRefSelectors,
-        ...asyncTransitionSelectors,
-        ...pollingSelectors,
-        ...stylingSelectors,
-        ...registrySelectors,
-      ],
+      "no-restricted-syntax": productRestrictions({ jsx: true, allow: [channelSelector, authListenerSelector, visibilitySelector, focusSelector] }),
     },
   },
   // Deliberate exception: the recovery form must react to PASSWORD_RECOVERY.
   {
     files: ["app/**/reset-password-form.tsx"],
     rules: {
-      "no-restricted-syntax": [
-        "error",
-        ...alwaysOnSelectors,
-        ...prodRefSelectors,
-        channelSelector,
-        visibilitySelector,
-        focusSelector,
-        ...asyncTransitionSelectors,
-        ...pollingSelectors,
-        ...stylingSelectors,
-        ...registrySelectors,
-      ],
+      "no-restricted-syntax": productRestrictions({ jsx: true, allow: [authListenerSelector] }),
     },
   },
   // Surfaces consume Realtime through the live-view family, not the raw

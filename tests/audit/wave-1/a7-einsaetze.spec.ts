@@ -1,7 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Locator, Page } from '@playwright/test';
 
-import { expect, test } from '../../golden/support/fixtures';
+import { expect, test } from "../support/fixtures";
 import { requireEnv } from '../../golden/support/env';
 import {
   getCommitmentState,
@@ -10,6 +10,7 @@ import {
   getParkingState,
 } from '../../golden/support/db';
 import {
+  workLifecycleCard,
   acknowledgeDispatchOnJobPage,
   addSiteOnCustomerDetail,
   createCustomer,
@@ -19,6 +20,7 @@ import {
   dispatchOccurrenceRow,
   editPlannedCalendarOccurrence,
   issueDispatchForOccurrence,
+  jobDispatchSection,
   openAufgaben,
   openCustomerDetail,
   openDispatchPanel,
@@ -356,7 +358,7 @@ async function addAssigneeInEditDialog(
     .filter({ hasText: /Mitarbeiter/ })
     .click();
   await page.getByPlaceholder(/Mitarbeiter suchen/).fill(searchText);
-  await page.getByRole('listbox').getByRole('button').filter({ hasText: searchText }).click();
+  await page.getByRole('listbox').getByRole("option").filter({ hasText: searchText }).click();
   await dialog.getByRole('heading', { name: 'Geplanten Termin bearbeiten' }).click();
 }
 
@@ -390,15 +392,11 @@ async function saveOccurrenceEditWithOverride(
   await expect(dialog).toHaveCount(0, { timeout: 30_000 });
 }
 
-function jobDispatchSection(page: Page): Locator {
-  return page.getByTestId('job-dispatch-section');
-}
-
 // The /aufgaben deep link is the catalog's second confirmation path — no
 // direct goto to the job page here, the task link IS the navigation.
 async function openJobViaDispatchTask(page: Page, title: string): Promise<void> {
   await openAufgaben(page);
-  const taskGroup = page.getByTestId('attention-dispatch-tasks');
+  const taskGroup = page.getByRole('main').getByTestId('attention-dispatch-tasks');
   await expect(taskGroup).toBeVisible({ timeout: 20_000 });
   await taskGroup
     .getByRole('link', { name: `Einsatz für ${title} bestätigen`, exact: true })
@@ -431,14 +429,19 @@ async function inheritedDispatchState(
 // Shared across the serial A7 tests: the organization-wide actual-time count
 // captured before any A7 dispatch exists (acknowledging must never create
 // time).
-let organizationTimeBaseline: number | null = null;
+import { auditCheckpoint, saveAuditCheckpoint } from "../support/checkpoints";
 
 test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
   test('A7-T1: Das Bereitschaftsbild ist ehrlich — sechs Dimensionen, Material nie reserviert, Unbekanntes nie grün [P1-12-F02]', async ({
     adminPage,
     world,
   }) => {
-    organizationTimeBaseline = await getOrganizationTimeEntryCount(world.orgId);
+    if (auditCheckpoint("a7.organizationTimeBaseline") === undefined) {
+      saveAuditCheckpoint(
+        "a7.organizationTimeBaseline",
+        await getOrganizationTimeEntryCount(world.orgId),
+      );
+    }
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
     const customerName = `A7 Kundin ${world.runId}`;
     const mainTitle = `A7 Einsatzbesuch ${world.runId}`;
@@ -552,12 +555,23 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     expect(notes[0].note).toBe(MAIN_NOTE);
   });
 
-  test('A7-T2: Belegbare Fahrzeit warnt; die Mein-Einsatz-Karte trägt Termin, Ort und Hinweis; Bestätigen läuft über /aufgaben [P1-12-F02/P1-12-F03/P1-12-F07]', async ({
+  test('A7-T2: Belegbare Fahrzeit warnt; die Mein-Einsatz-Karte trägt Termin, Ort und Hinweis; Bestätigen läuft über /aufgaben [P1-12-F02/P1-12-F03/P1-12-F07]',
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "A7-T1: Das Bereitschaftsbild ist ehrlich — sechs Dimensionen, Material nie reserviert, Unbekanntes nie grün [P1-12-F02]",
+        },
+      ],
+    },
+    async ({
     adminPage,
     employeePage,
     world,
   }) => {
-    const organizationTimeStart = requireChainedValue(organizationTimeBaseline, {
+    const organizationTimeStart = requireChainedValue(
+        auditCheckpoint("a7.organizationTimeBaseline"), {
       test: 'A7-T2',
       needs: 'the organization time-entry baseline captured before A7 dispatches',
       grep: 'A7-T1|A7-T2',
@@ -634,7 +648,22 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     expect(await getCommitmentState(world.orgId, `A7-MAIN-${world.runId}`)).toHaveLength(0);
   });
 
-  test('A7-T3: Empfängerstände — Übernommen bei reiner Empfängeränderung, „nicht möglich" ohne Login, nie automatisch bestätigt [P1-12-F01/P1-12-F04]', async ({
+  test('A7-T3: Empfängerstände — Übernommen bei reiner Empfängeränderung, „nicht möglich" ohne Login, nie automatisch bestätigt [P1-12-F01/P1-12-F04]',
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "A7-T1: Das Bereitschaftsbild ist ehrlich — sechs Dimensionen, Material nie reserviert, Unbekanntes nie grün [P1-12-F02]",
+        },
+        {
+          type: "requires-test",
+          description:
+            "A7-T2: Belegbare Fahrzeit warnt; die Mein-Einsatz-Karte trägt Termin, Ort und Hinweis; Bestätigen läuft über /aufgaben [P1-12-F02/P1-12-F03/P1-12-F07]",
+        },
+      ],
+    },
+    async ({
     adminPage,
     world,
   }) => {
@@ -702,7 +731,26 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     );
   });
 
-  test('A7-T4: Rückfrage über /aufgaben wird Manager-Aufgabe; die Plananpassung erzeugt automatisch den neuen Stand; ein geänderter Ort macht Bestätigungen ungültig [P1-12-F03/P1-12-F04/P1-12-F05]', async ({
+  test('A7-T4: Rückfrage über /aufgaben wird Manager-Aufgabe; die Plananpassung erzeugt automatisch den neuen Stand; ein geänderter Ort macht Bestätigungen ungültig [P1-12-F03/P1-12-F04/P1-12-F05]',
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "A7-T1: Das Bereitschaftsbild ist ehrlich — sechs Dimensionen, Material nie reserviert, Unbekanntes nie grün [P1-12-F02]",
+        },
+        {
+          type: "requires-test",
+          description:
+            "A7-T2: Belegbare Fahrzeit warnt; die Mein-Einsatz-Karte trägt Termin, Ort und Hinweis; Bestätigen läuft über /aufgaben [P1-12-F02/P1-12-F03/P1-12-F07]",
+        },
+        {
+          type: "requires-test",
+          description:
+            'A7-T3: Empfängerstände — Übernommen bei reiner Empfängeränderung, „nicht möglich" ohne Login, nie automatisch bestätigt [P1-12-F01/P1-12-F04]',
+        },
+      ],
+    }, async ({
     adminPage,
     bueroPage,
     world,
@@ -735,7 +783,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
 
     // The open challenge is a manager task AND visible in the panel.
     await openAufgaben(adminPage);
-    const challengeGroup = adminPage.getByTestId('attention-dispatch-challenge-tasks');
+    const challengeGroup = adminPage.getByRole('main').getByTestId('attention-dispatch-challenge-tasks');
     await expect(challengeGroup).toBeVisible({ timeout: 20_000 });
     const challengeTask = challengeGroup.getByRole('link', {
       name: `Rückfrage von ${brunoName} zu ${mainTitle} öffnen`,
@@ -833,7 +881,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       assignEmployeeName: world.users.employee.firstName,
     });
     await adminPage.goto(`/auftraege/A7-PARK-${world.runId}`);
-    const lifecycle = adminPage.getByTestId('work-lifecycle-card');
+    const lifecycle = workLifecycleCard(adminPage);
     await lifecycle.getByRole('button', { name: 'Parken', exact: true }).click();
     const parkingDialog = adminPage.getByRole('dialog');
     await selectFromSearchable(adminPage, parkingDialog.locator('#work-blocker-reason'), 'Kapazität');
@@ -991,7 +1039,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     // The reason picker is a searchable listbox (ten options); its rows are buttons.
     await contextDialog.locator('#parking-reason').click();
     const reasonListbox = adminPage.getByRole('listbox');
-    await expect(reasonListbox.getByRole('button')).toHaveCount(10);
+    await expect(reasonListbox.getByRole("option")).toHaveCount(10);
     for (const label of [
       'Kunde',
       'Material',
@@ -1004,9 +1052,9 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       'Interne Klärung',
       'Sonstiges',
     ]) {
-      await expect(reasonListbox.getByRole('button', { name: label, exact: true })).toBeVisible();
+      await expect(reasonListbox.getByRole("option", { name: label, exact: true })).toBeVisible();
     }
-    await reasonListbox.getByRole('button', { name: 'Freigabe', exact: true }).click();
+    await reasonListbox.getByRole("option", { name: 'Freigabe', exact: true }).click();
     await contextDialog.locator('#parking-note').fill('A7 Freigabe des Eigentümers steht aus.');
     await selectFromSearchable(
       adminPage,
@@ -1041,7 +1089,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
 
     // The overdue Wiedervorlage is a task for the responsible person.
     await openAufgaben(bueroPage);
-    const reviewGroup = bueroPage.getByTestId('attention-parking-review-tasks');
+    const reviewGroup = bueroPage.getByRole('main').getByTestId('attention-parking-review-tasks');
     await expect(reviewGroup).toBeVisible({ timeout: 20_000 });
     const reviewTask = reviewGroup.getByRole('link', {
       name: `Wiedervorlage für ${schedTitle} öffnen`,
@@ -1225,11 +1273,22 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     expect(alldayOccurrences[0].startDate).toBe(ALLDAY_DATE);
   });
 
-  test('A7-T9: Batch mit neuer Uhrzeit — Vorschau je Termin alt und neu, Konflikte nur mit Grund, Serientermine werden Einzel-Ausnahmen [P1-12-F15/P1-12-F16/P1-12-F17]', async ({
+  test('A7-T9: Batch mit neuer Uhrzeit — Vorschau je Termin alt und neu, Konflikte nur mit Grund, Serientermine werden Einzel-Ausnahmen [P1-12-F15/P1-12-F16/P1-12-F17]',
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "A7-T1: Das Bereitschaftsbild ist ehrlich — sechs Dimensionen, Material nie reserviert, Unbekanntes nie grün [P1-12-F02]",
+        },
+      ],
+    },
+    async ({
     adminPage,
     world,
   }) => {
-    const organizationTimeStart = requireChainedValue(organizationTimeBaseline, {
+    const organizationTimeStart = requireChainedValue(
+        auditCheckpoint("a7.organizationTimeBaseline"), {
       test: 'A7-T9',
       needs: 'the organization time-entry baseline captured before A7 dispatches',
       grep: 'A7-T1|A7-T9',

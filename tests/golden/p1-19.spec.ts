@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 
-import { closeWorkArtifactDialog } from "./support/spec-helpers/work-artifact-dialog";
+import { closeWorkArtifactDialog, workArtifactsSection } from "./support/spec-helpers/work-artifact-dialog";
 import { expect, test } from "./support/fixtures";
 import {
   getServiceCaseCountsAs,
@@ -62,8 +62,7 @@ async function beginWorkReport(
   page: Page,
   title: string,
 ): Promise<Locator> {
-  await page
-    .getByTestId("work-artifacts-section")
+  await workArtifactsSection(page)
     .getByRole("button", { name: "Neu" })
     .click();
   const dialog = page.getByRole("dialog");
@@ -193,7 +192,7 @@ test.describe("P1-19 reactive service vertical slice @P1-19 @GG-05", () => {
     });
     await expect(visibleText(adminPage, fixture.jobNumber)).toBeVisible({ timeout: 20_000 });
 
-    const relations = adminPage.getByTestId("service-case-relations");
+    const relations = adminPage.getByRole("main").getByTestId("service-case-relations");
     await relations.getByRole("button", { name: "Verknüpfen" }).click();
     const relationDialog = adminPage.getByRole("dialog");
     await selectFromSearchable(
@@ -277,7 +276,7 @@ test.describe("P1-19 reactive service vertical slice @P1-19 @GG-05", () => {
     await closeWorkArtifactDialog(workReport);
 
     await adminPage.goto(`/service/faelle/${caseNumber}`);
-    const evidenceSection = adminPage.getByTestId("service-case-evidence");
+    const evidenceSection = adminPage.getByRole("main").getByTestId("service-case-evidence");
     await evidenceSection.getByRole("button", { name: "Verknüpfen" }).click();
     const evidenceDialog = adminPage.getByRole("dialog");
     await selectFromSearchable(
@@ -288,8 +287,7 @@ test.describe("P1-19 reactive service vertical slice @P1-19 @GG-05", () => {
     await evidenceDialog.getByRole("button", { name: "Verknüpfen" }).click();
     await expect(evidenceSection).toContainText(fixture.evidenceTitle, { timeout: 20_000 });
 
-    await adminPage
-      .getByTestId("service-case-follow-up")
+    await adminPage.getByRole("main").getByTestId("service-case-follow-up")
       .getByRole("button", { name: "Nachfassaktion anlegen" })
       .click();
     const followUpDialog = adminPage.getByRole("dialog");
@@ -307,7 +305,7 @@ test.describe("P1-19 reactive service vertical slice @P1-19 @GG-05", () => {
     });
   });
 
-  test("refreshes managers across sessions @P1-19-stage-realtime", async ({
+  test("refreshes managers across sessions @P1-19-stage-realtime @FRESHNESS", async ({
     adminPage,
     bueroPage,
     world,
@@ -324,13 +322,16 @@ test.describe("P1-19 reactive service vertical slice @P1-19 @GG-05", () => {
     );
     await adminPage.goto(`/service/faelle/${caseNumber}`);
     await bueroPage.goto(`/service/faelle/${caseNumber}`);
-    await updateServiceCaseViaDialog(adminPage, {
-      summary: fixture.liveSummary,
-      reason: "Kurzbeschreibung nach Rückmeldung berichtigt",
-    });
     await expectLiveWithin(
       bueroPage.getByRole("heading", { name: fixture.liveSummary }),
-      { label: "P1-19 service case cross-session refresh" },
+      { label: "P1-19 service case cross-session refresh",
+        mutation: (beforeSubmit) =>
+          updateServiceCaseViaDialog(adminPage, {
+            summary: fixture.liveSummary,
+            reason: "Kurzbeschreibung nach Rückmeldung berichtigt",
+            beforeSubmit,
+          }),
+      },
     );
   });
 

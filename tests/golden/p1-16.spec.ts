@@ -8,7 +8,7 @@ import {
   getWorkArtifactState,
   getWorkLifecycleState,
 } from './support/db';
-import { closeWorkArtifactDialog } from './support/spec-helpers/work-artifact-dialog';
+import { closeWorkArtifactDialog, workArtifactsSection } from './support/spec-helpers/work-artifact-dialog';
 import {
   addContactOnCustomerDetail,
   addSiteOnCustomerDetail,
@@ -25,7 +25,7 @@ import {
   transitionWorkOnJobPage,
   uploadDocumentOnJobPage,
 } from './support/steps';
-import { ARTIFACTS_DIR, type TestWorld } from './support/world';
+import { artifactsDirectory, type TestWorld } from './support/world';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -157,12 +157,11 @@ test.describe('P1-16 focused field work pack @P1-16', () => {
     await uploadDocumentOnJobPage(
       employeePage,
       fixture.jobNumber,
-      resolve(ARTIFACTS_DIR, 'upload-fixture.pdf'),
+      resolve(artifactsDirectory(), 'upload-fixture.pdf'),
       'upload-fixture'
     );
 
-    await employeePage
-      .getByTestId('work-artifacts-section')
+    await workArtifactsSection(employeePage)
       .getByRole('button', { name: 'Neu' })
       .click();
     const artifactDialog = employeePage.getByRole('dialog');

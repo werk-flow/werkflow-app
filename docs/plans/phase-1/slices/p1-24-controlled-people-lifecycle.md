@@ -19,7 +19,7 @@ Protected personnel documents, bounded onboarding requirements and acknowledgeme
 - Clean local `main` at `96467b7c504620c1acba886895a69156c7745305` matches `origin/partner-preview`; `origin/main` remains at `cdfa47f69e1fe933366f6fae05bc78ccc8cd824c`.
 - `P1-23` is accepted complete. All P1-24 direct dependencies are complete, so P1-24 is next in roadmap order; P1-25 is also dependency-ready.
 - Documentation checks pass and the retained-world inventory is empty.
-- Code, generated types, migration history, and live DEV/PROD database state are being inspected before implementation.
+- Code, generated types, migration history, and live DEV/PROD database state were inspected before implementation.
 - P1-24 owns Wave 2 audit offsets `+125 … +129`.
 
 ## Scope boundaries
@@ -27,7 +27,7 @@ Protected personnel documents, bounded onboarding requirements and acknowledgeme
 - P1-24 must consume the existing personnel, invitation, document, responsibility, attention, qualification, job, time, and Realtime owners instead of duplicating them.
 - P1-25 exclusively owns inventory catalog and supplier master data. P1-32 owns asset custody and return. P1-33 owns full offboarding, physical return closure, final time/leave settlement, and replacement of destructive member removal. P1-45 owns immutable retention, legal hold, category-specific retention, external sharing, and complete organization portability.
 - No external account, provider, paid resource, storage bucket, delivery channel, generic permission system, workflow engine, HR platform, payroll system, legal claim, or inferred production transition belongs to this slice.
-- Product code, schema, migrations, CodeRabbit review, tests, and browser worlds remain paused until the product owner confirms the pre-implementation report.
+- Product code, schema, migrations, CodeRabbit review, tests, and browser worlds were paused until the product owner confirmed the pre-implementation report on 2026-09-02.
 
 ## Parallel ownership
 
@@ -148,7 +148,7 @@ The audit reviewed every P1-24 runner manifest, retained-world classification an
 
 ### Canonical enforcement index
 
-This table is the long-term map for the prevention added during P1-24. Future changes to personnel lifecycle, protected documents, membership access, or the named tests must preserve these controls or update this record with the replacement.
+This table records the prevention added at P1-24 acceptance. Current code and automated checks own those controls. If a later change replaces one, preserve the dated evidence here and record the replacement in the later change's owning record.
 
 | Tier | Enforced rule | Code owner | Automated proof |
 | --- | --- | --- | --- |

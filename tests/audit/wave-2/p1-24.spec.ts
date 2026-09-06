@@ -1,4 +1,4 @@
-import { expect, test } from "../../golden/support/fixtures";
+import { expect, test } from "../support/fixtures";
 import { getP124CountsAs, getP124NoLoginRecordId, getP124State } from "../../golden/support/db";
 import { ownedBerlinDateAtOffset } from "../../golden/support/date-ownership";
 import {
@@ -12,7 +12,6 @@ import {
 test.describe.configure({ mode: "serial" });
 
 const entryDate = ownedBerlinDateAtOffset("p1-24", 125);
-let noLoginRecordId = "";
 
 function dateDigits(isoDate: string): string {
   return `${isoDate.slice(8, 10)}${isoDate.slice(5, 7)}${isoDate.slice(0, 4)}`;
@@ -26,7 +25,7 @@ async function uploadProtectedFile(
     accessClass?: "admin_restricted" | "health_evidence";
   },
 ): Promise<void> {
-  const lifecycle = page.getByTestId("personnel-lifecycle");
+  const lifecycle = page.getByRole("main").getByTestId("personnel-lifecycle");
   await lifecycle.getByRole("button", { name: "Datei", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Geschützte Personalunterlage" });
   await dialog.getByLabel("Datei").setInputFiles({
@@ -57,24 +56,25 @@ test.describe("P1-24 lifecycle audit @AUDIT-W2-P1-24 @AUDIT-W2", () => {
   // by this role boundary, RLS helpers, SQL assertions and closure evidence.
   test("keeps a future starter usable without login and separates protected classes", async ({ adminPage, bueroPage, world }) => {
     const lastName = `Lebenslauf-${world.runId}`;
-    noLoginRecordId = await getP124NoLoginRecordId(world.orgId, lastName) ??
-      await createPersonnelRecordViaDialog(adminPage, {
+    const noLoginRecordId =
+      (await getP124NoLoginRecordId(world.orgId, lastName)) ??
+      (await createPersonnelRecordViaDialog(adminPage, {
         firstName: "Lina",
         lastName,
         entryDateDigits: dateDigits(entryDate),
-      });
+      }));
     await adminPage.goto(`/mitarbeiter/${noLoginRecordId}`);
-    const lifecycle = adminPage.getByTestId("personnel-lifecycle");
+    const lifecycle = adminPage.getByRole("main").getByTestId("personnel-lifecycle");
     await expect(visibleText(lifecycle, "Noch keine kontrollierte Zugangsregel.")).toBeVisible();
     await expect(visibleText(lifecycle, "Nicht eingerichtet. Es wurde kein Plan aus Bestandsdaten abgeleitet.")).toBeVisible();
 
-    if (await visibleText(lifecycle, "personal-standard.txt").count() === 0) {
+    if ((await visibleText(lifecycle, "personal-standard.txt").count()) === 0) {
       await uploadProtectedFile(adminPage, {
         fileName: "personal-standard.txt",
         documentType: "Personalstammunterlage",
       });
     }
-    if (await visibleText(lifecycle, "admin-vertraulich.txt").count() === 0) {
+    if ((await visibleText(lifecycle, "admin-vertraulich.txt").count()) === 0) {
       await uploadProtectedFile(adminPage, {
         fileName: "admin-vertraulich.txt",
         documentType: "Vertrauliche Vereinbarung",
@@ -89,10 +89,10 @@ test.describe("P1-24 lifecycle audit @AUDIT-W2-P1-24 @AUDIT-W2", () => {
     ).toBeDisabled();
 
     await bueroPage.goto(`/mitarbeiter/${noLoginRecordId}`);
-    const bueroLifecycle = bueroPage.getByTestId("personnel-lifecycle");
+    const bueroLifecycle = bueroPage.getByRole("main").getByTestId("personnel-lifecycle");
     await expect(visibleText(bueroLifecycle, "personal-standard.txt")).toBeVisible();
     await expect(textInDom(bueroPage, "admin-vertraulich.txt")).toHaveCount(0);
-    await expect(bueroLifecycle.getByRole("button", { name: "Zugang steuern" })).toHaveCount(0);
+    await expect(bueroPage.getByTestId("personnel-lifecycle").getByRole("button", { name: "Zugang steuern" })).toHaveCount(0);
 
     const state = await getP124State(world.orgId);
     expect(state.protectedDocuments.filter((item) => item.employee_record_id === noLoginRecordId)).toHaveLength(2);
@@ -100,10 +100,12 @@ test.describe("P1-24 lifecycle audit @AUDIT-W2-P1-24 @AUDIT-W2", () => {
   });
 
   test("records a planned employment transition and enforces organization isolation", async ({ adminPage, outsiderPage, world }) => {
-    noLoginRecordId = await getP124NoLoginRecordId(world.orgId, `Lebenslauf-${world.runId}`) ?? "";
+    const noLoginRecordId =
+      (await getP124NoLoginRecordId(world.orgId, `Lebenslauf-${world.runId}`,
+      )) ?? "";
     expect(noLoginRecordId).not.toBe("");
     await adminPage.goto(`/mitarbeiter/${noLoginRecordId}`);
-    const lifecycle = adminPage.getByTestId("personnel-lifecycle");
+    const lifecycle = adminPage.getByRole("main").getByTestId("personnel-lifecycle");
     await lifecycle.getByRole("button", { name: "Übergang erfassen" }).click();
     const dialog = adminPage.getByRole("dialog", { name: "Beschäftigungsübergang erfassen" });
     await selectFromSearchable(

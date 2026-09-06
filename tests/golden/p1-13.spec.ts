@@ -66,8 +66,7 @@ test.describe('P1-13 versioned work templates @P1-13', () => {
     expect(state.planningOccurrences).toHaveLength(0);
 
     await employeePage.goto(`/auftraege/${jobNumber}`);
-    const instructionItem = employeePage
-      .getByTestId('job-instruction-item')
+    const instructionItem = employeePage.getByRole('main').getByTestId('job-instruction-item')
       .filter({ hasText: 'Anlage prüfen' });
     await expect(instructionItem.getByText('Anlage prüfen', { exact: true })).toBeVisible();
     await expect(visibleText(employeePage, 'Nachweis erwartet: Foto der Messwerte')).toBeVisible();
@@ -81,8 +80,7 @@ test.describe('P1-13 versioned work templates @P1-13', () => {
       )
       .toBe(true);
     await employeePage.reload();
-    const completedInstruction = employeePage
-      .getByTestId('job-instruction-item')
+    const completedInstruction = employeePage.getByRole('main').getByTestId('job-instruction-item')
       .filter({ hasText: 'Anlage prüfen' });
     await expect(
       completedInstruction.getByRole('button', {

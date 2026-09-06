@@ -34,7 +34,7 @@ export function notificationRow(page: Page, sourceId: string): Locator {
 export function visibleSearchResult(page: Page, personName: string): Locator {
   // Search results may contain a mirrored option during popover transitions.
   // Keep the original positional choice inside support.
-  return page.getByRole('listbox').getByRole('button').filter({ hasText: personName }).first();
+  return page.getByRole('listbox').getByRole("option").filter({ hasText: personName }).first();
 }
 
 export function qualificationWarningGapRow(dialog: Locator, capabilityName: string): Locator {

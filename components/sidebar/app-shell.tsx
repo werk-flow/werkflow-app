@@ -312,7 +312,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                       <span
                         aria-hidden="true"
                         data-testid="sidebar-badge"
-                        className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/15 px-1.5 text-[10px] font-semibold text-primary"
+                        className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/15 px-1.5 text-[10px] font-semibold text-primary-text"
                       >
                         {badgeCount}
                       </span>

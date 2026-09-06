@@ -132,7 +132,7 @@ export default async function LoginPage({
           Noch kein Konto?{' '}
           <Link
             href={inviteCode ? `/signup?invite_code=${inviteCode}` : '/signup'}
-            className="text-primary underline-offset-4 hover:underline"
+            className="text-primary-text underline-offset-4 hover:underline"
           >
             Registrieren
           </Link>

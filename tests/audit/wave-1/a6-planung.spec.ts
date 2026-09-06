@@ -1,7 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Locator, Page } from '@playwright/test';
 
-import { expect, test } from '../../golden/support/fixtures';
+import { expect, test } from "../support/fixtures";
 import { requireEnv } from '../../golden/support/env';
 import { getOrganizationTimeEntryCount, getPlanningState } from '../../golden/support/db';
 import {
@@ -65,7 +65,8 @@ function formatGermanDate(dateIso: string): string {
 
 // Stored original_start_local values carry seconds ('T06:00:00'); minute
 // precision is the honest comparison unit for series identities.
-function originalStartMinute(occurrence: { originalStartLocal: string | null }): string {
+function originalStartMinute(occurrence: { originalStartLocal: string | null;
+}): string {
   return occurrence.originalStartLocal?.slice(0, 16) ?? '';
 }
 
@@ -202,7 +203,7 @@ async function fillInternalPlanningDraft(
     await page.getByPlaceholder(/Mitarbeiter suchen/).fill(options.assignEmployeeName);
     await page
       .getByRole('listbox')
-      .getByRole('button')
+      .getByRole("option")
       .filter({ hasText: options.assignEmployeeName })
       .click();
     await dialog.getByRole('heading', { name: 'Kalendereintrag erstellen' }).click();
@@ -272,7 +273,7 @@ async function markAllOwnNotificationsRead(page: Page): Promise<void> {
 
 // Shared across the serial A6 tests: the organization-wide actual-time count
 // captured before any A6 planning exists (planning must never create time).
-let organizationTimeBaseline: number | null = null;
+import { auditCheckpoint, saveAuditCheckpoint } from "../support/checkpoints";
 
 // The Berlin base date and the weekday allocation are frozen at module load so
 // every serial test shares identical dates even when a battery run crosses
@@ -286,7 +287,12 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     bueroPage,
     world,
   }) => {
-    organizationTimeBaseline = await getOrganizationTimeEntryCount(world.orgId);
+    if (auditCheckpoint("a6.organizationTimeBaseline") === undefined) {
+      saveAuditCheckpoint(
+        "a6.organizationTimeBaseline",
+        await getOrganizationTimeEntryCount(world.orgId),
+      );
+    }
 
     // The four internal entry types are offered with their exact German labels.
     const labelDialog = await openPlanningCreationDialog(adminPage);
@@ -898,13 +904,29 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     await markAllOwnNotificationsRead(employeePage);
   });
 
-  test('A6-T7: Personal ohne Login ist manager-sichtbar verplant; Handwerker sehen genau ihre Termine ohne Ist-Zeit [P1-11-F05]', async ({
+  test('A6-T7: Personal ohne Login ist manager-sichtbar verplant; Handwerker sehen genau ihre Termine ohne Ist-Zeit [P1-11-F05]',
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "A6-T1: Ganztägige Besuche und alle vier internen Terminarten, auch durch das Büro geplant [P1-11-F01]",
+        },
+        {
+          type: "requires-test",
+          description:
+            "A6-T5: Schwebende Urlaubsanträge warnen mit Person und Datum; geänderte Fakten erzwingen eine neue Entscheidung [P1-11-F04]",
+        },
+      ],
+    },
+    async ({
     adminPage,
     employeePage,
     world,
   }) => {
     const { pendingOffset } = A6_OFFSETS;
-    const organizationTimeStart = requireChainedValue(organizationTimeBaseline, {
+    const organizationTimeStart = requireChainedValue(
+        auditCheckpoint("a6.organizationTimeBaseline"), {
       test: 'A6-T7',
       needs: 'the organization time-entry baseline captured before A6 planning',
       grep: 'A6-T1|A6-T5|A6-T7',
@@ -957,7 +979,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     await adminPage.getByPlaceholder(/Mitarbeiter suchen/).fill('Nora');
     const noLoginOption = adminPage
       .getByRole('listbox')
-      .getByRole('button')
+      .getByRole("option")
       .filter({ hasText: noLoginName });
     await expect(noLoginOption).toBeVisible({ timeout: 15_000 });
     await expect(noLoginOption.getByText('Ohne App-Zugang')).toBeVisible();

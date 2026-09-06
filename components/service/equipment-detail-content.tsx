@@ -34,7 +34,7 @@ import { ListRow } from "@/components/ui/list-row";
 import { SectionError } from "@/components/ui/section-error";
 import {
   Dialog,
-  DialogContent,
+  DialogContent, DialogBody,
   DialogDescription,
   DialogFooter,
   DialogHeader,
@@ -486,7 +486,7 @@ export function EquipmentDetailContent({
                               <Link
                                 key={link.id}
                                 href={link.href}
-                                className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                                className="inline-flex items-center gap-1 text-xs font-medium text-primary-text hover:underline"
                               >
                                 {link.label}
                                 <ExternalLink className="size-3" />
@@ -736,60 +736,73 @@ export function EquipmentDetailContent({
               Historie festgehalten.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <Field label="Neuer Zustand" htmlFor="equipment-target-state">
-              <Select
-                value={targetState}
-                onValueChange={(value: EquipmentState) => setTargetState(value)}
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              if (busy.isBusy("state") || reason.trim().length < 3) return;
+              perform(
+                "state",
+                () =>
+                  transitionInstalledEquipment({
+                    equipmentId: item.id,
+                    expectedVersion: item.version,
+                    toState: targetState,
+                    effectiveAt: new Date().toISOString(),
+                    reason,
+                    idempotencyKey: crypto.randomUUID(),
+                  }),
+                () => setStatusOpen(false),
+              );
+            }}
+            noValidate
+            className="flex min-h-0 flex-1 flex-col gap-4"
+          >
+            <DialogBody>
+              <div className="space-y-4">
+                <Field label="Neuer Zustand" htmlFor="equipment-target-state">
+                  <Select
+                    value={targetState}
+                    onValueChange={(value: EquipmentState) => setTargetState(value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {transitionStates.map((state) => (
+                        <SelectItem key={state} value={state}>
+                          {EQUIPMENT_STATE_LABELS[state]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Begründung" htmlFor="equipment-state-reason" required>
+                  <Textarea
+                    value={reason}
+                    onChange={(event) => setReason(event.target.value)}
+                  />
+                </Field>
+              </div>
+              <ErrorText>{errorFor("state")}</ErrorText>
+            </DialogBody>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setStatusOpen(false)}
               >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {transitionStates.map((state) => (
-                    <SelectItem key={state} value={state}>
-                      {EQUIPMENT_STATE_LABELS[state]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="Begründung" htmlFor="equipment-state-reason" required>
-              <Textarea
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-              />
-            </Field>
-          </div>
-          <ErrorText>{errorFor("state")}</ErrorText>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setStatusOpen(false)}>
-              Abbrechen
-            </Button>
-            <Button
-              disabled={busy.isBusy("state") || reason.trim().length < 3}
-              onClick={() =>
-                perform(
-                  "state",
-                  () =>
-                    transitionInstalledEquipment({
-                      equipmentId: item.id,
-                      expectedVersion: item.version,
-                      toState: targetState,
-                      effectiveAt: new Date().toISOString(),
-                      reason,
-                      idempotencyKey: crypto.randomUUID(),
-                    }),
-                  () => setStatusOpen(false),
-                )
-              }
-            >
-              {busy.isBusy("state") && (
-                <Loader2 className="size-4 animate-spin" />
-              )}
-              Änderung speichern
-            </Button>
-          </DialogFooter>
+                Abbrechen
+              </Button>
+              <Button
+                type="submit"
+                disabled={busy.isBusy("state") || reason.trim().length < 3}
+              >
+                {busy.isBusy("state") && <Loader2 className="size-4 animate-spin" />}
+                Änderung speichern
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -803,77 +816,91 @@ export function EquipmentDetailContent({
               Anlagenprojektion im Auftrag.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <Field label="Art" htmlFor="equipment-work-type">
-              <Select
-                value={workTargetType}
-                onValueChange={(value: "job" | "project") => {
-                  setWorkTargetType(value);
-                  setWorkTargetId("");
-                }}
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              if (busy.isBusy("work-link") || !workTargetId) return;
+              perform(
+                "work-link",
+                () =>
+                  setInstalledEquipmentWorkLink({
+                    equipmentId: item.id,
+                    expectedVersion: item.version,
+                    jobId: workTargetType === "job" ? workTargetId : null,
+                    projectId: workTargetType === "project" ? workTargetId : null,
+                    linked: true,
+                    reason: "Arbeitsbezug hinzugefügt",
+                    idempotencyKey: crypto.randomUUID(),
+                  }),
+                () => setWorkLinkOpen(false),
+              );
+            }}
+            noValidate
+            className="flex min-h-0 flex-1 flex-col gap-4"
+          >
+            <DialogBody>
+              <div className="space-y-4">
+                <Field label="Art" htmlFor="equipment-work-type">
+                  <Select
+                    value={workTargetType}
+                    onValueChange={(value: "job" | "project") => {
+                      setWorkTargetType(value);
+                      setWorkTargetId("");
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="job">Auftrag</SelectItem>
+                      <SelectItem value="project">Projekt</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field
+                  label={workTargetType === "job" ? "Auftrag" : "Projekt"}
+                  htmlFor="equipment-work-target"
+                  required
+                >
+                  <SearchableSelect
+                    value={workTargetId}
+                    onChange={setWorkTargetId}
+                    options={(workTargetType === "job" ? jobs : projects)
+                      .filter((target) => target.siteId === item.siteId)
+                      .map((target) => ({
+                        value: target.id,
+                        label:
+                          workTargetType === "job"
+                            ? `${(target as Job).jobNumber ?? "Ohne Nummer"} · ${(target as Job).title}`
+                            : `${(target as ProjectWithDetails).projectNumber ?? "Ohne Nummer"} · ${(target as ProjectWithDetails).name}`,
+                      }))}
+                    placeholder="Auswählen"
+                    searchPlaceholder="Suchen..."
+                  />
+                </Field>
+              </div>
+              <ErrorText>{errorFor("work-link")}</ErrorText>
+            </DialogBody>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setWorkLinkOpen(false)}
               >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="job">Auftrag</SelectItem>
-                  <SelectItem value="project">Projekt</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field
-              label={workTargetType === "job" ? "Auftrag" : "Projekt"}
-              htmlFor="equipment-work-target"
-              required
-            >
-              <SearchableSelect
-                value={workTargetId}
-                onChange={setWorkTargetId}
-                options={(workTargetType === "job" ? jobs : projects)
-                  .filter((target) => target.siteId === item.siteId)
-                  .map((target) => ({
-                    value: target.id,
-                    label:
-                      workTargetType === "job"
-                        ? `${(target as Job).jobNumber ?? "Ohne Nummer"} · ${(target as Job).title}`
-                        : `${(target as ProjectWithDetails).projectNumber ?? "Ohne Nummer"} · ${(target as ProjectWithDetails).name}`,
-                  }))}
-                placeholder="Auswählen"
-                searchPlaceholder="Suchen..."
-              />
-            </Field>
-          </div>
-          <ErrorText>{errorFor("work-link")}</ErrorText>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setWorkLinkOpen(false)}>
-              Abbrechen
-            </Button>
-            <Button
-              disabled={busy.isBusy("work-link") || !workTargetId}
-              onClick={() =>
-                perform(
-                  "work-link",
-                  () =>
-                    setInstalledEquipmentWorkLink({
-                      equipmentId: item.id,
-                      expectedVersion: item.version,
-                      jobId: workTargetType === "job" ? workTargetId : null,
-                      projectId:
-                        workTargetType === "project" ? workTargetId : null,
-                      linked: true,
-                      reason: "Arbeitsbezug hinzugefügt",
-                      idempotencyKey: crypto.randomUUID(),
-                    }),
-                  () => setWorkLinkOpen(false),
-                )
-              }
-            >
-              {busy.isBusy("work-link") && (
-                <Loader2 className="size-4 animate-spin" />
-              )}
-              Verknüpfen
-            </Button>
-          </DialogFooter>
+                Abbrechen
+              </Button>
+              <Button
+                type="submit"
+                disabled={busy.isBusy("work-link") || !workTargetId}
+              >
+                {busy.isBusy("work-link") && (
+                  <Loader2 className="size-4 animate-spin" />
+                )}
+                Verknüpfen
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -887,69 +914,83 @@ export function EquipmentDetailContent({
               unveränderlich in der Historie festgehalten.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <Field label="Nachweis" htmlFor="equipment-source" required>
-              <SearchableSelect
-                value={sourceValue}
-                onChange={setSourceValue}
-                options={sourceOptions.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                  description: option.description,
-                }))}
-                placeholder="Nachweis auswählen"
-                searchPlaceholder="Nachweis suchen..."
-                emptyMessage="Keine passenden Nachweise verfügbar"
-              />
-            </Field>
-            <Field
-              label="Bedeutung des Nachweises"
-              htmlFor="equipment-source-reason"
-              required
-            >
-              <Textarea
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-                placeholder="z. B. Installation laut Übergabestand"
-              />
-            </Field>
-          </div>
-          <ErrorText>{errorFor("source")}</ErrorText>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSourceOpen(false)}>
-              Abbrechen
-            </Button>
-            <Button
-              disabled={
-                busy.isBusy("source") || !sourceValue || reason.trim().length < 3
-              }
-              onClick={() => {
-                const option = sourceOptions.find(
-                  (candidate) => candidate.value === sourceValue,
-                );
-                if (!option) return;
-                perform(
-                  "source",
-                  () =>
-                    linkInstalledEquipmentSource({
-                      equipmentId: item.id,
-                      expectedVersion: item.version,
-                      targetType: option.targetType,
-                      targetId: option.targetId,
-                      documentVersionNumber: option.documentVersionNumber,
-                      reason,
-                      idempotencyKey: crypto.randomUUID(),
-                    }),
-                  () => setSourceOpen(false),
-                );
-              }}
-            >
-              {busy.isBusy("source") && (
-                <Loader2 className="size-4 animate-spin" />
-              )}
-              Verknüpfen
-            </Button>
-          </DialogFooter>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              if (busy.isBusy("source") || !sourceValue || reason.trim().length < 3)
+                return;
+              const option = sourceOptions.find(
+                (candidate) => candidate.value === sourceValue,
+              );
+              if (!option) return;
+              perform(
+                "source",
+                () =>
+                  linkInstalledEquipmentSource({
+                    equipmentId: item.id,
+                    expectedVersion: item.version,
+                    targetType: option.targetType,
+                    targetId: option.targetId,
+                    documentVersionNumber: option.documentVersionNumber,
+                    reason,
+                    idempotencyKey: crypto.randomUUID(),
+                  }),
+                () => setSourceOpen(false),
+              );
+            }}
+            noValidate
+            className="flex min-h-0 flex-1 flex-col gap-4"
+          >
+            <DialogBody>
+              <div className="space-y-4">
+                <Field label="Nachweis" htmlFor="equipment-source" required>
+                  <SearchableSelect
+                    value={sourceValue}
+                    onChange={setSourceValue}
+                    options={sourceOptions.map((option) => ({
+                      value: option.value,
+                      label: option.label,
+                      description: option.description,
+                    }))}
+                    placeholder="Nachweis auswählen"
+                    searchPlaceholder="Nachweis suchen..."
+                    emptyMessage="Keine passenden Nachweise verfügbar"
+                  />
+                </Field>
+                <Field
+                  label="Bedeutung des Nachweises"
+                  htmlFor="equipment-source-reason"
+                  required
+                >
+                  <Textarea
+                    value={reason}
+                    onChange={(event) => setReason(event.target.value)}
+                    placeholder="z. B. Installation laut Übergabestand"
+                  />
+                </Field>
+              </div>
+              <ErrorText>{errorFor("source")}</ErrorText>
+            </DialogBody>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setSourceOpen(false)}
+              >
+                Abbrechen
+              </Button>
+              <Button
+                type="submit"
+                disabled={
+                  busy.isBusy("source") || !sourceValue || reason.trim().length < 3
+                }
+              >
+                {busy.isBusy("source") && <Loader2 className="size-4 animate-spin" />}
+                Verknüpfen
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 

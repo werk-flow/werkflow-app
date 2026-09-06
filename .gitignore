@@ -41,19 +41,19 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Golden-gate test artifacts
+# Historical Golden test artifact paths
 tests/golden/.artifacts/
 tests/golden/.results/
 tests/golden/.report/
 
-# Wave-audit test artifacts (world/auth artifacts are shared under tests/golden/.artifacts)
+# Historical audit result paths
 tests/audit/.results/
 tests/audit/.report/
 
-# Cloud-canary test artifacts (world/auth artifacts are shared under tests/golden/.artifacts)
+# Historical cloud-canary result paths
 tests/canary/.results/
 tests/canary/.report/
 
-# Agent working logs (review transcripts, server logs) — never Playwright-owned
+# Agent logs and run-owned verification archives
 .agent-logs/
 .coderabbit-*.jsonl

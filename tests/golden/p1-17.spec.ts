@@ -14,8 +14,10 @@ import {
 import {
   closeWorkArtifactDialog,
   readPopupBodyText,
+  workArtifactsSection,
 } from './support/spec-helpers/work-artifact-dialog';
 import {
+  workLifecycleCard,
   acknowledgeDispatchOnJobPage,
   addContactOnCustomerDetail,
   addSiteOnCustomerDetail,
@@ -31,6 +33,7 @@ import {
   parkJobOnJobPage,
   planMaterialOnJobPage,
   selectAllHandoverSources,
+  workHandoverSection,
   setInstructionCompletionOnJobPage,
   takeMaterialOnJobPage,
   transitionWorkOnJobPage,
@@ -84,7 +87,7 @@ async function beginArtifact(
   title: string,
   customerFacing = true
 ): Promise<Locator> {
-  await page.getByTestId('work-artifacts-section').getByRole('button', { name: 'Neu' }).click();
+  await workArtifactsSection(page).getByRole('button', { name: 'Neu' }).click();
   const dialog = page.getByRole('dialog');
   await selectOption(
     page,
@@ -118,8 +121,7 @@ async function approveArtifact(page: Page, title: string): Promise<void> {
   // class; first surfaced by the faster local stack). Re-click only while no
   // dialog opened at all.
   for (let attempt = 1; attempt <= 3; attempt += 1) {
-    await page
-      .getByTestId('work-artifacts-section')
+    await workArtifactsSection(page)
       .getByRole('button')
       .filter({ hasText: title })
       .click({ timeout: 10_000 });
@@ -141,8 +143,7 @@ async function approveArtifact(page: Page, title: string): Promise<void> {
 
 async function completeWithManagerOverride(page: Page, jobNumber: string): Promise<void> {
   await page.goto(`/auftraege/${encodeURIComponent(jobNumber)}`);
-  await page
-    .getByTestId('work-lifecycle-card')
+  await workLifecycleCard(page)
     .getByRole('button', { name: 'Ausführung abgeschlossen', exact: true })
     .click();
   const dialog = page.getByRole('dialog');
@@ -160,7 +161,7 @@ async function completeWithManagerOverride(page: Page, jobNumber: string): Promi
 }
 
 async function releaseCurrentDraft(page: Page): Promise<string> {
-  const section = page.getByTestId('work-handover-section');
+  const section = workHandoverSection(page);
   await selectAllHandoverSources(section);
   await section.getByRole('button', { name: 'Entwurf speichern' }).click();
   await expect(section.getByText('Entwurf gespeichert.')).toBeVisible({
@@ -259,8 +260,7 @@ test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
     });
     await acknowledgeDispatchOnJobPage(employeePage, fixture.jobNumber);
     await adminPage.goto(`/auftraege/${fixture.jobNumber}`);
-    await adminPage
-      .getByTestId('work-lifecycle-card')
+    await workLifecycleCard(adminPage)
       .getByRole('button', { name: 'Weiterplanen' })
       .click();
     const unparkDialog = adminPage.getByRole('dialog');
@@ -358,8 +358,7 @@ test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
       await approveArtifact(adminPage, title);
     }
     await employeePage.reload();
-    await employeePage
-      .getByTestId('work-artifacts-section')
+    await workArtifactsSection(employeePage)
       .getByRole('button')
       .filter({ hasText: fixture.reportTitle })
       .click();
@@ -417,10 +416,10 @@ test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
       await completeWithManagerOverride(adminPage, fixture.jobNumber);
     }
     await adminPage.goto(`/auftraege/${fixture.jobNumber}`);
-    const summary = adminPage.getByTestId('work-handover-summary');
+    const summary = adminPage.getByRole('main').getByTestId('work-handover-summary');
     await expect(summary.getByRole('link', { name: 'Übergabe prüfen' })).toBeVisible();
     await summary.getByRole('link', { name: 'Übergabe prüfen' }).click();
-    const section = adminPage.getByTestId('work-handover-section');
+    const section = workHandoverSection(adminPage);
     await expect(section).not.toContainText(fixture.internalTitle);
     const previewText = await releaseCurrentDraft(adminPage);
     expect(previewText).toContain(fixture.customerName);
@@ -464,7 +463,7 @@ test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
     // draft/release, predecessor linkage and preserved lifecycle/package events.
     const fixture = names(world);
     await adminPage.goto(`/auftraege/${fixture.jobNumber}/uebergabe`);
-    const section = adminPage.getByTestId('work-handover-section');
+    const section = workHandoverSection(adminPage);
     await section
       .getByLabel('Grund für die Rücknahme')
       .fill('Seriennummer muss nach dem Termin ergänzt werden.');
@@ -473,7 +472,7 @@ test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
       timeout: 20_000,
     });
     await adminPage.reload();
-    const reopenSection = adminPage.getByTestId('work-handover-section');
+    const reopenSection = workHandoverSection(adminPage);
     await reopenSection
       .getByLabel('Ausführung erneut öffnen')
       .fill('Techniker ergänzt die Seriennummer vor Ort.');
@@ -511,7 +510,7 @@ test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
     // non-reviewer route denial, outsider RLS, history visibility and zero widening.
     const fixture = names(world);
     await bueroPage.goto(`/auftraege/${fixture.jobNumber}/uebergabe`);
-    await expect(bueroPage.getByTestId('work-handover-section')).toContainText(
+    await expect(workHandoverSection(bueroPage)).toContainText(
       'Freigabeverlauf (2)'
     );
     await employeePage.goto(`/auftraege/${fixture.jobNumber}/uebergabe`);

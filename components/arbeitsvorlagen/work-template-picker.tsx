@@ -31,7 +31,7 @@ export function WorkTemplatePicker({ targetType, value, onChange, disabled }: { 
       label="Arbeitsvorlage (optional)"
       htmlFor={`work-template-${targetType}`}
       error={failed ? 'Arbeitsvorlagen konnten nicht geladen werden.' : null}
-      description={failed ? undefined : options?.length === 0 ? <>Noch keine passende Vorlage veröffentlicht. <Link href="/arbeitsvorlagen" className="text-primary underline-offset-2 hover:underline">Arbeitsvorlagen verwalten</Link></> : 'Die Inhalte werden als bearbeitbare Planung übernommen. Bestand und Kalender bleiben unverändert.'}
+      description={failed ? undefined : options?.length === 0 ? <>Noch keine passende Vorlage veröffentlicht. <Link href="/arbeitsvorlagen" className="text-primary-text underline-offset-2 hover:underline">Arbeitsvorlagen verwalten</Link></> : 'Die Inhalte werden als bearbeitbare Planung übernommen. Bestand und Kalender bleiben unverändert.'}
     >
       {options === null ? <Skeleton className="h-9 w-full" /> : <SearchableSelect options={options.map((option) => ({ value: option.versionId, label: option.name, description: `Version ${option.versionNumber}${option.description ? ` · ${option.description}` : ''}` }))} value={value} onChange={onChange} allowNone noneLabel="Ohne Arbeitsvorlage" placeholder="Arbeitsvorlage wählen" searchPlaceholder="Arbeitsvorlagen suchen…" emptyMessage="Keine veröffentlichte Arbeitsvorlage" disabled={disabled} />}
     </Field>

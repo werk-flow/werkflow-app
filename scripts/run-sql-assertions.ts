@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
+import { withWorkspaceTestLock } from '../lib/testing/workspace-test-lock';
 
 const assertionFile = resolve(
   process.cwd(),
@@ -26,6 +27,7 @@ const dockerCommand = [
 const command =
   process.platform === 'win32' ? ['wsl', ...dockerCommand] : dockerCommand;
 
+await withWorkspaceTestLock({ operation: `SQL assertions ${basename(assertionFile)}` }, async () => {
 const child = Bun.spawn(command, {
   stdin: Bun.file(assertionFile),
   stdout: 'inherit',
@@ -37,3 +39,4 @@ if (exitCode !== 0) {
 }
 
 console.log(`[test:sql:${basename(assertionFile, '.sql')}] passed — ${assertionFile}`);
+});

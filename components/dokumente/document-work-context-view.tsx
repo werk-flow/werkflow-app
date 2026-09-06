@@ -501,7 +501,11 @@ function MobileDocumentCard({
             {renderFileIcon(document)}
             <div className="min-w-0">
               <p className="flex items-center gap-2 truncate text-sm font-medium">
-                <span className="truncate">{document.displayName}</span>
+                <button
+                  type="button"
+                  className="truncate rounded-sm text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={(event) => { event.stopPropagation(); handlers.onOpen(); }}
+                >{document.displayName}</button>
                 <InlinePending active={isPending} />
               </p>
               <p className="truncate text-xs text-muted-foreground">

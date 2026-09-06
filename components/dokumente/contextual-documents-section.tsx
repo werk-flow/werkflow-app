@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Field } from "@/components/ui/field";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,6 +37,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogBody,
   DialogDescription,
   DialogFooter,
   DialogHeader,
@@ -48,7 +50,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ErrorText } from "@/components/ui/error-text";
 import { InlinePending } from "@/components/ui/inline-pending";
 import { Input } from "@/components/ui/input";
 import {
@@ -75,6 +76,12 @@ import {
   type DocumentUploadItem,
 } from "./document-upload-dialog";
 import { DocumentViewerDialog } from "./document-viewer-dialog";
+import {
+  ContextualDocumentsFrame,
+  ContextualDocumentRowFrame,
+  CONTEXTUAL_DOCUMENT_LIST_CLASS,
+  CONTEXTUAL_DOCUMENTS_EMPHASIZE_UPLOAD,
+} from "./contextual-documents-layout";
 
 type ContextualDocumentsSectionProps = {
   title: string;
@@ -201,12 +208,7 @@ function DocumentRow({
 }: DocumentRowProps) {
   const contextLink = getContextLink(document, context);
   return (
-    <div
-      className={cn(
-        "flex min-w-0 items-center justify-between gap-3 px-3 py-2.5",
-        indented && "pl-8",
-      )}
-    >
+    <ContextualDocumentRowFrame indented={indented}>
       <button
         type="button"
         onClick={() => onOpen(document)}
@@ -277,7 +279,7 @@ function DocumentRow({
           )}
         </DropdownMenuContent>
       </DropdownMenu>
-    </div>
+    </ContextualDocumentRowFrame>
   );
 }
 
@@ -290,7 +292,7 @@ export function ContextualDocumentsSection({
   contextLabel,
   canUpload,
   canManage,
-  emphasizeUpload = true,
+  emphasizeUpload = CONTEXTUAL_DOCUMENTS_EMPHASIZE_UPLOAD,
   keepUploadedDocumentsVisible = false,
 }: ContextualDocumentsSectionProps): ReactElement {
   const jobId =
@@ -471,9 +473,7 @@ export function ContextualDocumentsSection({
           return;
         }
         setRecentlyUploadedDocuments((current) =>
-          current.filter(
-            (recentDocument) => recentDocument.id !== document.id,
-          ),
+          current.filter((recentDocument) => recentDocument.id !== document.id),
         );
         showFeedback(
           "success",
@@ -557,7 +557,7 @@ export function ContextualDocumentsSection({
 
   function renderFlatList(documentList: OrganizationDocument[]) {
     return (
-      <div className="min-w-0 overflow-hidden rounded-md border">
+      <div className={CONTEXTUAL_DOCUMENT_LIST_CLASS}>
         {documentList.map((document) => (
           <DocumentRow
             key={document.id}
@@ -633,31 +633,13 @@ export function ContextualDocumentsSection({
   }
 
   return (
-    <div
+    <ContextualDocumentsFrame
       data-testid="contextual-documents-section"
-      className={cn(
-        "min-w-0 rounded-lg border bg-card p-4 transition-colors sm:p-5",
-        isDragActive && "border-primary bg-primary/5",
-      )}
-      onDragOver={(event) => {
-        if (!canUpload) return;
-        event.preventDefault();
-        setIsDragActive(true);
-      }}
-      onDragLeave={() => setIsDragActive(false)}
-      onDrop={handleDrop}
-    >
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <h3 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-            <FileText className="size-4" />
-            {title}
-          </h3>
-          <p className="mt-1 text-xs text-muted-foreground">{description}</p>
-        </div>
-
-        {canUpload && (
-          <div className="flex shrink-0 flex-wrap gap-2">
+      title={title}
+      description={description}
+      actions={
+        canUpload ? (
+          <>
             {canManage &&
               (jobId ||
                 projectId ||
@@ -693,10 +675,18 @@ export function ContextualDocumentsSection({
               className="hidden"
               onChange={(event) => handleUpload(event.target.files)}
             />
-          </div>
-        )}
-      </div>
-
+          </>
+        ) : undefined
+      }
+      className={cn(isDragActive && "border-primary bg-primary/5")}
+      onDragOver={(event) => {
+        if (!canUpload) return;
+        event.preventDefault();
+        setIsDragActive(true);
+      }}
+      onDragLeave={() => setIsDragActive(false)}
+      onDrop={handleDrop}
+    >
       {totalDocumentCount === 0 ? (
         <div className="rounded-md border border-dashed bg-muted/20 px-4 py-6 text-center">
           <p className="text-sm font-medium">Noch keine Dokumente vorhanden.</p>
@@ -781,37 +771,45 @@ export function ContextualDocumentsSection({
               gefunden wird.
             </DialogDescription>
           </DialogHeader>
-          <Input
-            value={renameValue}
-            onChange={(event) => setRenameValue(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                handleRenameConfirm();
-              }
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              if (isRenamePending) return;
+              handleRenameConfirm();
             }}
-            placeholder="Dateiname"
-            aria-invalid={renameError ? true : undefined}
-            autoFocus
-          />
-          <ErrorText>{renameError}</ErrorText>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setRenameDocument(null)}
-            >
-              Abbrechen
-            </Button>
-            <Button
-              type="button"
-              onClick={handleRenameConfirm}
-              disabled={isRenamePending}
-            >
-              {isRenamePending && <Loader2 className="size-4 animate-spin" />}
-              Umbenennen
-            </Button>
-          </DialogFooter>
+            noValidate
+            className="flex min-h-0 flex-1 flex-col gap-4"
+          >
+            <DialogBody>
+              <Field
+                label="Dateiname"
+                htmlFor="contextual-document-name"
+                required
+                error={renameError}
+              >
+                <Input
+                  value={renameValue}
+                  onChange={(event) => setRenameValue(event.target.value)}
+                  placeholder="Dateiname"
+                  autoFocus
+                />
+              </Field>
+            </DialogBody>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setRenameDocument(null)}
+              >
+                Abbrechen
+              </Button>
+              <Button type="submit" disabled={isRenamePending}>
+                {isRenamePending && <Loader2 className="size-4 animate-spin" />}
+                Umbenennen
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -833,7 +831,7 @@ export function ContextualDocumentsSection({
           <AlertDialogFooter>
             <AlertDialogCancel>Abbrechen</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              variant="destructive"
               onClick={() => {
                 const target = deleteDocumentTarget;
                 setDeleteDocumentTarget(null);
@@ -888,6 +886,6 @@ export function ContextualDocumentsSection({
             }}
           />
         )}
-    </div>
+    </ContextualDocumentsFrame>
   );
 }

@@ -1,8 +1,10 @@
 # UI/UX Hardening 2026-09
 
-Status: closed (2026-09-04) — all six phases complete
+Status: closed (2026-09-04) — phases 0 through 6 complete
 
 Owner-directed pass between the Wave 2 acceptance and the beta-client handoff. The 2026-08 consolidation ([uiux-consolidation.md](uiux-consolidation.md)) wrote the canon and migrated the surfaces that existed then; sixty-one UI files shipped after it. This ledger records what a fresh audit found on 2026-09-03, whether each finding was missed by the consolidation, a regression against a written rule, or a rule the canon never stated, and what climbed the enforcement ladder ([decision 0005](../decisions/0005-enforcement-ladder.md)). The canon itself lives in the `werkflow-design` skill; this file is the record, not the rule.
+
+Documentation correction, 2026-09-05: the closure covers phases 0 through 6. The retrospective now distinguishes Wave 1's retroactive audit from Wave 2's per-slice coverage and includes the later product findings in its conclusion. Recorded runs and acceptance limitations are unchanged.
 
 ## Owner rulings (2026-09-03)
 
@@ -62,7 +64,7 @@ Golden then found a test-only boundary at 126/142 (`2026-09-04T182505626Z-445923
 
 The Golden harness correction changed the source fingerprint after the complete audit, but did not change application code or the production build. An additional current-source audit-consumer run was attempted for every importer of the changed helper. Its one created world was invalid because the local run served the preceding cloud-target build; it was classified `environment` and cleaned. Two subsequent attempts were refused before world creation as the WSL NAT address changed repeatedly and the local Supabase containers restarted. Closure therefore does not claim a shared final audit/Golden fingerprint: it records full audit evidence for the unchanged product build, final-harness Golden and canary evidence, and the exact environment limitation. Repeating a 149-test audit against a collapsing local backend would have tested availability luck, not UI/UX correctness.
 
-Golden completed comparatively quickly because it is a compact, incrementally maintained critical-path battery: 25 specs, 6,782 lines, 142 tests and a 180-second scenario budget. Audit is a retroactive exhaustive catalog: 20 specs, 14,093 lines, 129 declarations expanded to 149 tests and a 240-second scenario budget. Both are serial and stateful, but audit consumers more often inherit one mutable world's state from distant producer tests. This pass changed form semantics, accessible labels, picker interaction, headings, row navigation and asynchronous settlement across the application. Stale audit contracts therefore surfaced one at a time and often late. The five product findings justified the audit; using the entire audit as the discovery loop did not.
+Golden completed comparatively quickly because it is a compact, incrementally maintained critical-path battery: 25 specs, 6,782 lines, 142 tests and a 180-second scenario budget. Audit covers the exhaustive flow catalog: Wave 1 gained its coverage retroactively, while Wave 2 shipped coverage with each slice. At this checkpoint it had 20 specs, 14,093 lines, 129 declarations expanded to 149 tests and a 240-second scenario budget. Both are serial and stateful, but audit consumers more often inherit one mutable world's state from distant producer tests. This pass changed form semantics, accessible labels, picker interaction, headings, row navigation and asynchronous settlement across the application. Stale audit contracts therefore surfaced one at a time and often late. The product findings justified the audit; using the entire audit as the discovery loop did not.
 
 The stop decision preserves the accepted test model. Nothing in this UI/UX pass removes the three-tier enforcement ladder, Golden/Audit/Canary responsibilities, audit flow IDs, business assertions, fresh production-build rule, local/cloud separation, retained-world evidence or classification discipline. The correction for this pass is narrower:
 

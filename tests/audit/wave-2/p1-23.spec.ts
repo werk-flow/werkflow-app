@@ -1,7 +1,13 @@
-import { expect, test } from "../../golden/support/fixtures";
+import { expect, test } from "../support/fixtures";
+import { previousTestBusinessMonth } from "../../../lib/testing/business-date";
+import { auditCheckpoint, saveAuditCheckpoint } from "../support/checkpoints";
+import { prepareOutsidePeriodCorrection } from "../support/time-correction-fixtures";
+import { captureResponsiveSection } from "../support/visual-evidence";
 import {
   closeP123LegacySequence,
   getP123State,
+  getP123LegacyTransition,
+  getTimeCorrectionState,
   openRemainingP123Accounts,
   prepareP123PersonnelPrerequisites,
   seedP123UnclosedLegacySequence,
@@ -16,23 +22,11 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
-function previousBerlinMonth(): { month: string; start: string } {
-  const formatter = new Intl.DateTimeFormat("sv-SE", {
-    timeZone: "Europe/Berlin",
-    year: "numeric",
-    month: "2-digit",
-  });
-  const date = new Date(`${formatter.format(new Date())}-15T12:00:00Z`);
-  date.setUTCMonth(date.getUTCMonth() - 1);
-  const month = date.toISOString().slice(0, 7);
-  return { month, start: `${month}-01` };
-}
-
 function datePickerDigits(dateIso: string): string {
   return `${dateIso.slice(8, 10)}${dateIso.slice(5, 7)}${dateIso.slice(0, 4)}`;
 }
 
-const period = previousBerlinMonth();
+const period = previousTestBusinessMonth();
 const adjustmentDate = ownedBerlinDateAtOffset("p1-23", 120);
 
 test.describe("P1-23 time-account audit @AUDIT-W2-P1-23 @AUDIT-W2", () => {
@@ -160,10 +154,20 @@ test.describe("P1-23 time-account audit @AUDIT-W2-P1-23 @AUDIT-W2", () => {
     ).toHaveLength(0);
   });
 
-  test("blocks close for an incomplete historical sequence and clears the finding after recalculation", async ({
+  test("blocks close for an incomplete historical sequence and clears the finding after recalculation",
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "assigns an employee exception and keeps a rejected adjustment out of the ledger",
+        },
+      ],
+    },
+    async ({
     adminPage,
     world,
-  }) => {
+  }, testInfo) => {
     await adminPage.goto("/zeiterfassung/einstellungen");
     await requireVisiblePrecondition(
       visibleText(adminPage, "Alle Zeitkonten sind eröffnet."),
@@ -181,7 +185,43 @@ test.describe("P1-23 time-account audit @AUDIT-W2-P1-23 @AUDIT-W2", () => {
       validFrom: period.start,
     })).find((item) => item.userId === world.users.employee.id);
     expect(employee).toBeDefined();
-    await seedP123UnclosedLegacySequence({
+      // Own the foreign-period correction which previously arrived accidentally
+      // from P1-22. It must never close this period's incomplete legacy sequence.
+      const correctionReason = `P123 outside-period correction ${world.runId}`;
+      let correctionState = await getTimeCorrectionState(world.orgId);
+      if (
+        !correctionState.revisions.some(
+          (revision) => revision.reason === correctionReason,
+        )
+      ) {
+        await prepareOutsidePeriodCorrection(world, {
+          date: ownedBerlinDateAtOffset("p1-23", 121),
+          reason: correctionReason,
+        });
+        correctionState = await getTimeCorrectionState(world.orgId);
+      }
+      const outsideCorrection = correctionState.revisions.find(
+        (revision) => revision.reason === correctionReason,
+      );
+      expect(
+        correctionState.applications.filter(
+          (application) =>
+            application.request_id === outsideCorrection?.request_id,
+        ),
+      ).toHaveLength(1);
+      const closedTransition = await getP123LegacyTransition(
+        world.orgId,
+        world.users.employee.id,
+        "clock_out",
+        `${period.start}T08:00:00.000Z`,
+      );
+      if (closedTransition && !auditCheckpoint("p1-23.missingClockObserved")) {
+        throw new Error(
+          "The legacy sequence is already closed without a recorded missing-clock proof. Run the fresh P1-23 audit group.",
+        );
+      }
+      if (!closedTransition) {
+        await seedP123UnclosedLegacySequence({
       organizationId: world.orgId,
       userId: world.users.employee.id,
       startedAt: `${period.start}T06:00:00.000Z`,
@@ -216,12 +256,18 @@ test.describe("P1-23 time-account audit @AUDIT-W2-P1-23 @AUDIT-W2", () => {
     await expect(
       adminPage.getByRole("button", { name: "Monat abschließen" }),
     ).toBeDisabled();
+        saveAuditCheckpoint("p1-23.missingClockObserved", true);
 
-    await closeP123LegacySequence({
+        await closeP123LegacySequence({
       organizationId: world.orgId,
       userId: world.users.employee.id,
       endedAt: `${period.start}T08:00:00.000Z`,
     });
+      }
+      const preparedPeriod = (await getP123State(world.orgId)).periods.find(
+        (candidate) => candidate.period_start_date === period.start,
+      );
+      expect(preparedPeriod).toBeTruthy();
     const calculationCountBeforeRecalculation = (
       await getP123State(world.orgId)
     ).calculations.length;
@@ -236,7 +282,24 @@ test.describe("P1-23 time-account audit @AUDIT-W2-P1-23 @AUDIT-W2", () => {
       .toBeGreaterThan(calculationCountBeforeRecalculation);
     await adminPage.goto(`/zeiterfassung/perioden/${preparedPeriod!.id}`);
     await expect(textInDom(adminPage, "Fehlende Buchung")).toHaveCount(0);
-    const state = await getP123State(world.orgId);
+    const results = adminPage.getByRole('heading', { name: 'Monatswerte', exact: true }).locator('..');
+    const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
+    await captureResponsiveSection(adminPage, testInfo, results, 'p123-monthly-results-populated', async (width) => {
+      if (width >= 768) {
+        await expect(results.locator('table:visible')).toBeVisible();
+        await expect(results.getByRole('row').filter({ hasText: employeeName })).toBeVisible();
+        return;
+      }
+      await expect(results.locator('table:visible')).toHaveCount(0);
+      const mobileResult = results.locator('[data-slot="list-row"]').filter({ hasText: employeeName });
+      await expect(mobileResult).toBeVisible();
+      for (const label of ['Soll', 'Gewertet', 'Differenz', 'Schlusssaldo', 'Sollquelle']) {
+        await expect(mobileResult.locator('dt').filter({ hasText: new RegExp(`^${label}$`) })).toBeVisible();
+      }
+      expect(await results.evaluate((section) => [section, ...section.querySelectorAll<HTMLElement>('*')].filter((element) => element.getClientRects().length > 0 && element.scrollWidth > element.clientWidth + 1).length)).toBe(0);
+      return mobileResult;
+    });
+      const state = await getP123State(world.orgId);
     expect(state.calculations.length).toBeGreaterThanOrEqual(2);
     const recalculatedPeriod = state.periods.find(
       (candidate) => candidate.id === preparedPeriod!.id,

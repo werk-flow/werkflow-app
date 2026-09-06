@@ -1,13 +1,14 @@
 import { loadEnvLocal } from './support/env';
+import { completedWorldCleanup, finishOwnedWorldCleanup, retainUnreadableOwnedWorld } from '../../lib/testing/owned-world-lifecycle';
 import {
   activeRunFailed,
   archiveActiveState,
   currentRunKey,
-  listRetainedWorlds,
+  markRunFailed,
   readRunManifest,
   updateRunManifest,
 } from './support/run-state';
-import { destroyLeftoverTestWorlds, destroyTestWorld } from './support/seed';
+import { destroyTestWorld } from './support/seed';
 import { loadWorld } from './support/world';
 
 export default async function globalTeardown(): Promise<void> {
@@ -15,6 +16,12 @@ export default async function globalTeardown(): Promise<void> {
   const failed = activeRunFailed();
   const diagnostic = Boolean(process.env.WERKFLOW_REUSE_RUN_KEY);
   const keepRequested = process.env.KEEP_WORLD === '1';
+  const recordOwnedFailure = (error: unknown): void => {
+    updateRunManifest(currentRunKey(), {
+      status: 'failed_retained', retainedAt: new Date().toISOString(), cleanedAt: null,
+    });
+    markRunFailed({ title: 'Owned-world cleanup incomplete', file: null, message: error instanceof Error ? error.message : String(error) });
+  };
 
   let world;
   try {
@@ -25,9 +32,9 @@ export default async function globalTeardown(): Promise<void> {
         error instanceof Error ? error.message : String(error)
       }`
     );
-    let manifestHasWorld = false;
+    let manifestWorld;
     try {
-      manifestHasWorld = Boolean(readRunManifest(currentRunKey())?.world);
+      manifestWorld = readRunManifest(currentRunKey()).world;
     } catch (manifestError) {
       console.log(
         `[golden] run manifest unreadable: ${
@@ -36,36 +43,22 @@ export default async function globalTeardown(): Promise<void> {
             : String(manifestError)
         }`
       );
-      manifestHasWorld = false;
+      throw new AggregateError([error, manifestError], 'Active test world and ownership manifest are unreadable. No leftover sweep was attempted.');
     }
-    if ((failed || diagnostic || keepRequested) && manifestHasWorld) {
-      archiveActiveState();
-      updateRunManifest(currentRunKey(), {
-        ...(failed ? { status: 'failed_retained' as const } : {}),
-        retainedAt: new Date().toISOString(),
-      });
-      console.log('[golden] retained the unreadable active world for diagnosis');
-      return;
-    }
-    if (failed || diagnostic || keepRequested) {
-      if (!keepRequested) {
-        const removed = await destroyLeftoverTestWorlds(listRetainedWorlds());
-        console.log(`[golden] destroyed ${removed} unretained leftover test records`);
-      }
-      console.log('[golden] active world loading failed or its manifest has no usable world');
-      return;
-    }
-    const removed = await destroyLeftoverTestWorlds(listRetainedWorlds());
-    console.log(`[golden] destroyed ${removed} unretained leftover test records`);
+    retainUnreadableOwnedWorld(manifestWorld, error, {
+      retain: recordOwnedFailure,
+      archive: archiveActiveState,
+    });
+    console.log('[golden] manifest owns no active world; no unrelated records were swept');
     return;
   }
 
   if (failed || diagnostic || keepRequested) {
-    archiveActiveState();
     updateRunManifest(currentRunKey(), {
       ...(failed ? { status: 'failed_retained' as const } : {}),
       retainedAt: new Date().toISOString(),
     });
+    archiveActiveState();
     console.log(
       `[golden] retained world ${world.runId} for ${
         failed ? 'failure diagnosis' : keepRequested ? 'KEEP_WORLD request' : 'diagnostic reuse'
@@ -74,15 +67,15 @@ export default async function globalTeardown(): Promise<void> {
     return;
   }
 
-  let teardownError: unknown;
-  try {
-    await destroyTestWorld(world);
-    console.log(`[golden] destroyed world ${world.runId}`);
-  } catch (error) {
-    teardownError = error;
-  }
-
-  const removed = await destroyLeftoverTestWorlds(listRetainedWorlds());
-  console.log(`[golden] destroyed ${removed} unretained leftover test records`);
-  if (teardownError) throw teardownError;
+  await finishOwnedWorldCleanup({
+    destroy: () => destroyTestWorld(world),
+    recordCleaned: () => {
+      updateRunManifest(currentRunKey(), (manifest) =>
+        completedWorldCleanup(world, manifest, new Date().toISOString())
+      );
+      console.log(`[golden] destroyed world ${world.runId}`);
+    },
+    retain: recordOwnedFailure,
+    archive: archiveActiveState,
+  });
 }

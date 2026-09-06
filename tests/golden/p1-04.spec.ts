@@ -84,7 +84,13 @@ function expectedWeeklyHours(hoursBeforeToday: number, hoursFromToday: number): 
   return total;
 }
 
-test.describe('P1-04 Arbeitszeitmodelle und Feiertage @P1-04', () => {
+test.describe('P1-04 Arbeitszeitmodelle und Feiertage @P1-04',
+  {
+    annotation: {
+      type: "requires-file",
+      description: "tests/golden/p1-03.spec.ts",
+    },
+  }, () => {
   test('Admin wählt den Feiertagskalender, Büro sieht ihn nur', async ({
     adminPage,
     bueroPage,

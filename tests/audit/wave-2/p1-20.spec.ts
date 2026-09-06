@@ -1,7 +1,9 @@
 import { resolve } from "node:path";
-import type { Locator, Page } from "@playwright/test";
+import type { Locator, Page, Route } from "@playwright/test";
 
-import { expect, test } from "../../golden/support/fixtures";
+import { expect, test } from "../support/fixtures";
+import { auditCheckpoint, saveAuditCheckpoint } from "../support/checkpoints";
+import { captureResponsiveSection } from "../support/visual-evidence";
 import {
   getMaintenanceCountsAs,
   getMaintenanceCoverageStateByReference,
@@ -24,7 +26,7 @@ import {
   typeIntoDatePickerById,
   uploadIntoDocumentsSection,
 } from "../../golden/support/steps";
-import { ARTIFACTS_DIR, type TestWorld } from "../../golden/support/world";
+import { artifactsDirectory, type TestWorld } from "../../golden/support/world";
 
 test.describe.configure({ mode: "serial" });
 
@@ -84,11 +86,91 @@ async function openPlanAction(
 ): Promise<Locator> {
   await page.goto("/service/wartung");
   await page.getByRole("tab", { name: /Pläne/ }).click();
-  const section = page
-    .getByTestId("maintenance-plan-card")
+  const section = page.getByRole("main").getByTestId("maintenance-plan-card")
     .filter({ has: page.getByRole("heading", { name: planNumber }) });
   await section.getByRole("button", { name: actionName, exact: true }).click();
   return page.getByRole("dialog");
+}
+
+async function expectMaintenanceColumns(header: Locator, row: Locator, columns: boolean): Promise<void> {
+  if (columns) await expect(header).toBeVisible();
+  else await expect(header).toBeHidden();
+  const cells = await row.evaluate((element) => Array.from(element.children).map((cell) => {
+    const bounds = cell.getBoundingClientRect();
+    return { x: bounds.x, width: bounds.width, top: bounds.top, bottom: bounds.bottom };
+  }));
+  expect(cells).toHaveLength(4);
+  if (columns) {
+    const headings = await header.evaluate((element) => Array.from(element.children).map((cell) => {
+      const bounds = cell.getBoundingClientRect();
+      return { x: bounds.x, width: bounds.width };
+    }));
+    expect(headings).toHaveLength(4);
+    for (let index = 0; index < cells.length; index += 1) {
+      expect(Math.abs(cells[index].x - headings[index].x), `column ${index + 1} start`).toBeLessThanOrEqual(1);
+      expect(Math.abs(cells[index].width - headings[index].width), `column ${index + 1} width`).toBeLessThanOrEqual(1);
+    }
+  } else {
+    for (let index = 1; index < cells.length; index += 1) {
+      expect(cells[index].top).toBeGreaterThanOrEqual(cells[index - 1].bottom);
+    }
+  }
+  const containment = await row.evaluate((element) => {
+    const action = element.lastElementChild!;
+    const bounds = action.getBoundingClientRect();
+    return {
+      rowOverflow: element.scrollWidth - element.clientWidth,
+      actionOverflow: action.scrollWidth - action.clientWidth,
+      controlsContained: Array.from(action.querySelectorAll('button')).every((button) => {
+        const control = button.getBoundingClientRect();
+        return control.left >= bounds.left - 1 && control.right <= bounds.right + 1;
+      }),
+    };
+  });
+  expect(containment.rowOverflow).toBeLessThanOrEqual(1);
+  expect(containment.actionOverflow).toBeLessThanOrEqual(1);
+  expect(containment.controlsContained).toBe(true);
+}
+
+async function verifyMaintenanceResponsiveRow(page: Page, header: Locator, row: Locator, width: number): Promise<void> {
+  await expectMaintenanceColumns(header, row, width === 1280);
+  if (width !== 1280) return;
+  // Sidebar tablets have too little content width for four useful columns.
+  await page.setViewportSize({ width: 768, height: 900 });
+  try { await expectMaintenanceColumns(header, row, false); }
+  finally { await page.setViewportSize({ width: 1280, height: 900 }); }
+}
+
+type DocumentFrameGeometry = {
+  frameX: number; frameWidth: number;
+  headerX: number; headerY: number; headerWidth: number; headerHeight: number;
+  actionsX: number; actionsY: number; actionsHeight: number;
+  rowHeight: number; metadataWraps: boolean;
+};
+
+async function measureDocumentFrame(dialog: Locator): Promise<DocumentFrameGeometry> {
+  await expect.poll(() => dialog.evaluate((element) => element.getAnimations().filter(
+    (animation) => animation.playState === 'running' || animation.pending,
+  ).length)).toBe(0);
+  return dialog.locator('[data-slot="contextual-documents-frame"]').evaluate((frame) => {
+    const header = frame.querySelector('[data-slot="contextual-documents-header"]');
+    const actions = frame.querySelector('[data-slot="contextual-documents-actions"]');
+    const row = frame.querySelector('[data-slot="list-row"]');
+    if (!header || !actions || !row) throw new Error('Document frame, toolbar and representative row must exist in both loading and loaded states.');
+    const bounds = frame.getBoundingClientRect();
+    const headerBounds = header.getBoundingClientRect();
+    const actionBounds = actions.getBoundingClientRect();
+    const metadata = row.firstElementChild?.lastElementChild;
+    return {
+      frameX: bounds.x, frameWidth: bounds.width,
+      headerX: headerBounds.x - bounds.x, headerY: headerBounds.y - bounds.y,
+      headerWidth: headerBounds.width, headerHeight: headerBounds.height,
+      actionsX: actionBounds.x - bounds.x, actionsY: actionBounds.y - bounds.y,
+      actionsHeight: actionBounds.height,
+      rowHeight: row.getBoundingClientRect().height,
+      metadataWraps: Boolean(metadata && metadata.getBoundingClientRect().height > Number.parseFloat(getComputedStyle(metadata).lineHeight) + 1),
+    };
+  });
 }
 
 test.describe("P1-20 exhaustive maintenance audit @AUDIT-W2-P1-20 @AUDIT-W2", () => {
@@ -187,23 +269,54 @@ test.describe("P1-20 exhaustive maintenance audit @AUDIT-W2-P1-20 @AUDIT-W2", ()
     ).toBe(true);
   });
 
-  test("requires an explicit overlap reason @P1-20-audit-overlap", async ({
+  test("requires an explicit overlap reason @P1-20-audit-overlap",
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "creates bounded exact owners without hidden work @P1-20-audit-setup",
+        },
+      ],
+    },
+    async ({
     adminPage,
     world,
   }) => {
     const fixture = names(world);
-    const dialog = await fillPlanDialog(adminPage, fixture);
+      const existingCoverage = await getMaintenanceCoverageStateByReference(
+        world.orgId,
+        fixture.coverageReference,
+      );
+      const existingPlans = existingCoverage
+        ? await getMaintenancePlanNumbersByClient(
+            world.orgId,
+            existingCoverage.coverage.client_id,
+          )
+        : [];
+      if (
+        existingPlans.length > 1 &&
+        !auditCheckpoint("p1-20.overlapValidationObserved")
+      ) {
+        throw new Error(
+          "An overlapping plan already exists without this stage's validation proof. Run the fresh P1-20 audit group.",
+        );
+      }
+      if (existingPlans.length < 2) {
+        const dialog = await fillPlanDialog(adminPage, fixture);
     await dialog.getByRole("button", { name: "Wartungsplan anlegen" }).click();
     await expect(dialog.getByRole("alert")).toContainText(
       "Begründung erforderlich",
-    );
+        );
+        saveAuditCheckpoint("p1-20.overlapValidationObserved", true);
     await dialog
       .locator("#maintenance-overlap")
       .fill("Zweite Fachwartung deckt einen getrennten Anlagenumfang ab.");
     await dialog.getByRole("button", { name: "Wartungsplan anlegen" }).click();
     await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+      }
 
-    const coverage = requireChainedValue(
+      const coverage = requireChainedValue(
       await getMaintenanceCoverageStateByReference(
         world.orgId,
         fixture.coverageReference,
@@ -235,10 +348,24 @@ test.describe("P1-20 exhaustive maintenance audit @AUDIT-W2-P1-20 @AUDIT-W2", ()
     expect(second.revisions[0]?.overlap_reason).toContain("getrennten");
   });
 
-  test("links exact existing documents, follow-ups, and service context @P1-20-audit-links", async ({
+  test("links exact existing documents, follow-ups, and service context @P1-20-audit-links",
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "creates bounded exact owners without hidden work @P1-20-audit-setup",
+        },
+        {
+          type: "requires-test",
+          description:
+            "requires an explicit overlap reason @P1-20-audit-overlap",
+        },
+      ],
+    }, async ({
     adminPage,
     world,
-  }) => {
+  }, testInfo) => {
     const fixture = names(world);
     const coverage = requireChainedValue(
       await getMaintenanceCoverageStateByReference(
@@ -278,8 +405,7 @@ test.describe("P1-20 exhaustive maintenance audit @AUDIT-W2-P1-20 @AUDIT-W2", ()
 
     await adminPage.goto("/service/wartung");
     await adminPage.getByRole("tab", { name: /Abdeckungen/ }).click();
-    const coverageRow = adminPage
-      .getByTestId("maintenance-coverage-row")
+    const coverageRow = adminPage.getByRole("main").getByTestId("maintenance-coverage-row")
       .filter({ hasText: fixture.coverageReference });
     let dialog;
     if (coverage.followUps.length === 0) {
@@ -299,7 +425,7 @@ test.describe("P1-20 exhaustive maintenance audit @AUDIT-W2-P1-20 @AUDIT-W2", ()
       });
       await uploadIntoDocumentsSection(
         adminPage,
-        resolve(ARTIFACTS_DIR, "upload-fixture.pdf"),
+        resolve(artifactsDirectory(), "upload-fixture.pdf"),
         "upload-fixture",
         { enclosingDialog: dialog },
       );
@@ -308,8 +434,7 @@ test.describe("P1-20 exhaustive maintenance audit @AUDIT-W2-P1-20 @AUDIT-W2", ()
 
     if (existingPlan.serviceCaseLinks.length === 0) {
       await adminPage.goto("/service/wartung");
-      const dueRow = adminPage
-        .getByTestId("maintenance-due-row")
+      const dueRow = adminPage.getByRole("main").getByTestId("maintenance-due-row")
         .filter({ hasText: planNumber })
         .filter({ hasText: FIRST_DUE_LABEL });
       await dueRow.getByRole("button", { name: "Auftrag anlegen" }).click();
@@ -357,9 +482,122 @@ test.describe("P1-20 exhaustive maintenance audit @AUDIT-W2-P1-20 @AUDIT-W2", ()
     );
     expect(plan.serviceCaseLinks).toHaveLength(expectedServiceCaseLinkCount);
     expect(plan.dueWork.every((due) => due.job_id === null)).toBe(true);
+
+    // Capture before the following lifecycle stage suspends/archives these plans.
+    await adminPage.goto("/service/wartung");
+    const populatedDueRow = adminPage.getByRole("main").getByTestId("maintenance-due-row")
+      .filter({ hasText: planNumber }).filter({ hasText: FIRST_DUE_LABEL });
+    await expect(populatedDueRow).toBeVisible();
+    const duePanel = adminPage.getByRole("tabpanel").filter({ has: populatedDueRow });
+    const dueHeader = duePanel.getByTestId("maintenance-due-header");
+    const planRows = duePanel.getByTestId("maintenance-due-row").filter({ hasText: planNumber });
+    const openPlanDue = plan.dueWork.filter((due) => ['open', 'visit_created'].includes(due.status));
+    await expect(planRows).toHaveCount(openPlanDue.length);
+    const lastDue = [...openPlanDue].sort((left, right) => left.due_date.localeCompare(right.due_date)).at(-1);
+    if (!lastDue) throw new Error('Populated maintenance evidence requires an owned open due date.');
+    const lastOwnedDueRow = duePanel.locator(`[data-testid="maintenance-due-row"][data-due-date="${lastDue.due_date}"]`).filter({ hasText: planNumber });
+    await captureResponsiveSection(adminPage, testInfo, duePanel, "p120-maintenance-due-populated", async (width) => {
+      await verifyMaintenanceResponsiveRow(adminPage, dueHeader, populatedDueRow, width);
+      await expectMaintenanceColumns(dueHeader, lastOwnedDueRow, width === 1280);
+      await lastOwnedDueRow.scrollIntoViewIfNeeded();
+      await expect(lastOwnedDueRow).toBeInViewport({ ratio: 1 });
+      if (width === 375) return populatedDueRow;
+      await populatedDueRow.scrollIntoViewIfNeeded();
+    });
+
+    await adminPage.getByRole("tab", { name: /Abdeckungen/ }).click();
+    await expect(coverageRow).toBeVisible();
+    const coveragePanel = adminPage.getByRole("tabpanel").filter({ has: coverageRow });
+    await captureResponsiveSection(adminPage, testInfo, coveragePanel, "p120-maintenance-coverage-populated", async (width) => {
+      await verifyMaintenanceResponsiveRow(adminPage, coveragePanel.getByTestId("maintenance-coverage-header"), coverageRow, width);
+      if (width === 375) return coverageRow;
+    });
+
+    const documentsDialog = adminPage.getByRole("dialog").filter({
+      has: adminPage.getByRole("heading", { name: `Dokumente zu ${coverage.coverage.coverage_number}` }),
+    });
+    let releaseRead: () => void = () => undefined;
+    const readReleased = new Promise<void>((resolveRead) => { releaseRead = resolveRead; });
+    let interceptedRead = false;
+    const heldReads: Promise<void>[] = [];
+    const readUrl = new URL("/service/wartung", adminPage.url()).href;
+    const holdCoverageRead = async (route: Route): Promise<void> => {
+      const request = route.request();
+      if (request.method() !== "POST" || !request.headers()["next-action"] ||
+        !request.postData()?.includes(coverage.coverage.id)) {
+        await route.continue();
+        return;
+      }
+      // The opening effect reads documents for this exact coverage. Keep its real response.
+      interceptedRead = true;
+      const continued = readReleased.then(() => route.continue());
+      heldReads.push(continued);
+      await continued;
+    };
+    await adminPage.route(readUrl, holdCoverageRead);
+    const loadingGeometry = new Map<number, DocumentFrameGeometry>();
+    try {
+      await coverageRow.getByRole("button", { name: "Dokumente" }).click();
+      await expect.poll(() => interceptedRead, { message: "Exact coverage document read was intercepted" }).toBe(true);
+      const loadingStatus = documentsDialog.locator('[role="status"][aria-busy="true"]')
+        .filter({ hasText: "Dokumente werden geladen." });
+      await expect(loadingStatus).toBeVisible();
+      await captureResponsiveSection(adminPage, testInfo, documentsDialog,
+        "p120-maintenance-documents-loading", async (width) => {
+          await expect(loadingStatus).toBeVisible();
+          loadingGeometry.set(width, await measureDocumentFrame(documentsDialog));
+        });
+    } finally {
+      releaseRead();
+      try {
+        await Promise.all(heldReads);
+      } finally {
+        await adminPage.unroute(readUrl, holdCoverageRead);
+      }
+    }
+    const loadedDocument = documentsDialog.getByTestId("contextual-documents-section")
+      .getByText("upload-fixture").filter({ visible: true });
+    await expect(loadedDocument).toBeVisible();
+    await captureResponsiveSection(adminPage, testInfo, documentsDialog,
+      "p120-maintenance-documents-loaded", async (width) => {
+        await expect(loadedDocument).toBeVisible();
+        const loading = loadingGeometry.get(width);
+        if (!loading) throw new Error(`Missing document loading geometry at ${width}px.`);
+        const loaded = await measureDocumentFrame(documentsDialog);
+        for (const property of ['frameX', 'frameWidth', 'headerX', 'headerY', 'headerWidth', 'headerHeight', 'actionsY', 'actionsHeight'] as const) {
+          expect(Math.abs(loaded[property] - loading[property]), `${width}px document ${property}`).toBeLessThanOrEqual(1);
+        }
+        // Placeholder label widths are approximate; toolbar height and its
+        // position within the shared frame still have to match.
+        expect(Math.abs(loaded.actionsX - loading.actionsX), `${width}px document actionsX`).toBeLessThanOrEqual(8);
+        // Long real metadata may wrap on phones. Compare exact row height
+        // only when its text fits the skeleton's single metadata line.
+        if (!loaded.metadataWraps) expect(Math.abs(loaded.rowHeight - loading.rowHeight), `${width}px document row height`).toBeLessThanOrEqual(1);
+      });
+    await documentsDialog.getByRole("button", { name: "Schließen" }).click();
   });
 
-  test("protects lifecycle updates and archives only terminal plans @P1-20-audit-lifecycle", async ({
+  test("protects lifecycle updates and archives only terminal plans @P1-20-audit-lifecycle",
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "creates bounded exact owners without hidden work @P1-20-audit-setup",
+        },
+        {
+          type: "requires-test",
+          description:
+            "requires an explicit overlap reason @P1-20-audit-overlap",
+        },
+        {
+          type: "requires-test",
+          description:
+            "links exact existing documents, follow-ups, and service context @P1-20-audit-links",
+        },
+      ],
+    },
+    async ({
     adminPage,
     bueroPage,
     world,
@@ -456,7 +694,32 @@ test.describe("P1-20 exhaustive maintenance audit @AUDIT-W2-P1-20 @AUDIT-W2", ()
     expect(second.plan.archived_at).not.toBeNull();
   });
 
-  test("enforces manager and organization boundaries @P1-20-audit-boundary", async ({
+  test("enforces manager and organization boundaries @P1-20-audit-boundary",
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "creates bounded exact owners without hidden work @P1-20-audit-setup",
+        },
+        {
+          type: "requires-test",
+          description:
+            "requires an explicit overlap reason @P1-20-audit-overlap",
+        },
+        {
+          type: "requires-test",
+          description:
+            "links exact existing documents, follow-ups, and service context @P1-20-audit-links",
+        },
+        {
+          type: "requires-test",
+          description:
+            "protects lifecycle updates and archives only terminal plans @P1-20-audit-lifecycle",
+        },
+      ],
+    },
+    async ({
     employeePage,
     outsiderPage,
     world,

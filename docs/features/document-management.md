@@ -1,6 +1,6 @@
 # Document Management
 
-Status: living — last reviewed 2026-09-03
+Status: living — last reviewed 2026-09-05
 
 Document management gives SHK businesses a central digital place for job photos, contracts, invoices, offers, reports, and general business files. The goal is to reduce paper folders, scattered files, and disconnected customer/project documentation while staying practical for office staff and extremely simple for field workers.
 
@@ -24,7 +24,7 @@ Before adding more scope, ask WerkFlow's three product questions:
 
 ## Current Product Baseline
 
-As of 2026-09-02, document management is substantially implemented. Admin and Büro organize all organization files in the central library under `/dokumente`; operational records carry a contextual `Dokumente & Bilder` section; field workers upload, view, and download files only on their assigned jobs. File bytes live in private Cloudflare R2 buckets in EU jurisdiction and all metadata in Postgres. The implementation reference lives in [Document storage and access](../technical/document-storage-and-access.md).
+As of 2026-09-02, document management is substantially implemented. Admin and Büro organize ordinary organization files in the central library under `/dokumente`; operational records carry a contextual `Dokumente & Bilder` section. Field workers upload, view, and download ordinary files on assigned jobs. Protected personnel files use the separate access rules below. File bytes live in private Cloudflare R2 buckets in EU jurisdiction and all metadata in Postgres. The implementation reference lives in [Document storage and access](../technical/document-storage-and-access.md).
 
 - **Central library.** Admin and Büro browse a manual folder tree with breadcrumbs, the `Verknüpfungen` overview grouped by linked target, and `Alle Dateien`, with search, category and link filters, sortable columns, and a separate `Papierkorb`. They create, rename, move, copy, and delete folders, and upload single files, batches, or whole folders, including mixed drag and drop. The table supports multi-select, rectangle select, drag-to-folder, batch move, copy, and delete, and one shared row menu.
 - **One file, many links.** A document exists once and is linked by metadata to jobs, projects, customers, employees, requests, installed equipment, service cases, and maintenance coverage ([P1-02](../plans/phase-1/slices/p1-02-client-requests.md), [P1-18](../plans/phase-1/slices/p1-18-installed-equipment.md), [P1-19](../plans/phase-1/slices/p1-19-reactive-service.md), [P1-20](../plans/phase-1/slices/p1-20-maintenance-plans.md)). Links never copy bytes. Converting a request adds a second link from each attachment to the created work. WerkFlow creates no folder when an operational record is created; manual folders and link filters organize the library instead.
@@ -138,7 +138,7 @@ Complete document management needs policy-level clarity:
 - import/migration that preserves meaningful folder and reference information;
 - recoverability and deletion behavior aligned across structured records and stored files.
 
-Infrastructure direction for retention ([decision 0001](../decisions/0001-infrastructure-stack.md), designed in slice `P1-45`): retention-relevant document categories get copies in a separate, independently administered S3 bucket with Object Lock in compliance mode, so not even an administrator can delete them during the retention period. German retention is per category (books/financial statements commonly 10 years, vouchers commonly 8, commercial correspondence commonly 6 — AO §147 / HGB §257 / UStG §14b), so retention policy must be category-aware rather than a blanket lock on every photo.
+The future retention archive follows [decision 0001](../decisions/0001-infrastructure-stack.md). `P1-45` owns its design and delivery; the archive is not implemented. Retention rules must distinguish document categories and receive qualified legal review before implementation or compliance claims.
 
 Claims such as `GoBD-konform`, `revisionssicher`, or legally sufficient electronic signature require qualified validation before they appear in product marketing.
 
@@ -170,7 +170,7 @@ No feature should store a private duplicate merely to display the same file in i
 ## Role And UX Principles
 
 - `admin` and `buero` need the central library, governance, review, bulk organization, and export.
-- `employee` users need only the documents, capture actions, and forms required for assigned work.
+- `employee` users need documents, capture actions, and forms for assigned work, plus their expressly released personnel documents and requested evidence uploads.
 - Personnel, financial, contract, customer, and supplier documents need purpose-specific access rather than one broad `manager` assumption forever.
 - Upload should remain fast; classification, linking, and extraction suggestions must not block simple field evidence.
 - Document status, structured-record status, processing status, and approval status should be visually distinct.

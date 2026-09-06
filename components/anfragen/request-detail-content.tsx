@@ -311,7 +311,7 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
                 {data.convertedLink.href ? (
                   <Link
                     href={data.convertedLink.href}
-                    className="font-medium text-primary underline-offset-4 hover:underline"
+                    className="font-medium text-primary-text underline-offset-4 hover:underline"
                   >
                     {data.convertedLink.label}
                   </Link>
@@ -346,7 +346,7 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
                 <div className="mt-3 space-y-1.5 text-sm">
                   <Link
                     href={`/kunden/${request.clientId}`}
-                    className="font-medium text-primary underline-offset-4 hover:underline"
+                    className="font-medium text-primary-text underline-offset-4 hover:underline"
                   >
                     {data.clientName}
                   </Link>
@@ -365,7 +365,7 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
                           {' · '}
                           <a
                             href={`tel:${data.contactPhone.replace(/[^\d+]/g, '')}`}
-                            className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline"
+                            className="inline-flex items-center gap-1 text-primary-text underline-offset-4 hover:underline"
                           >
                             <Phone className="size-3.5" />
                             {data.contactPhone}

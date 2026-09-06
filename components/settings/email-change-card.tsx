@@ -188,7 +188,7 @@ function StepIndicator({
                   isStepComplete
                     ? 'border-primary bg-primary text-primary-foreground'
                     : isActive
-                      ? 'border-primary bg-primary/10 text-primary'
+                      ? 'border-primary bg-primary/10 text-primary-text'
                       : 'border-border bg-background text-muted-foreground'
                 )}
               >
@@ -669,7 +669,7 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
                         disabled={
                           isResetting || isCurrentOtpResending || currentOtpResendLocked
                         }
-                        className="text-primary underline-offset-4 hover:underline disabled:text-muted-foreground disabled:no-underline"
+                        className="text-primary-text underline-offset-4 hover:underline disabled:text-muted-foreground disabled:no-underline"
                       >
                         {isCurrentOtpResending
                           ? 'Code wird erneut gesendet...'
@@ -873,7 +873,7 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
                         disabled={
                           isResetting || isNewEmailOtpResending || newEmailResendLocked
                         }
-                        className="text-primary underline-offset-4 hover:underline disabled:text-muted-foreground disabled:no-underline"
+                        className="text-primary-text underline-offset-4 hover:underline disabled:text-muted-foreground disabled:no-underline"
                       >
                         {isNewEmailOtpResending
                           ? 'Code wird erneut gesendet...'

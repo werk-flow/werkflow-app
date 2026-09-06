@@ -17,6 +17,8 @@ import { cn } from '@/lib/utils';
 
 interface FieldContextValue {
   controlId: string;
+  labelId: string;
+  requiredDescriptionId: string | undefined;
   describedBy: string | undefined;
   invalid: boolean;
   required: boolean;
@@ -55,16 +57,23 @@ export function Field({
 }: FieldProps) {
   const generatedId = useId();
   const controlId = htmlFor ?? generatedId;
+  const labelId = `${controlId}-label`;
+  const requiredDescriptionId = required ? `${controlId}-required` : undefined;
   const descriptionId = description ? `${controlId}-description` : undefined;
   const errorId = error ? `${controlId}-error` : undefined;
   const describedBy = [errorId, descriptionId].filter(Boolean).join(' ') || undefined;
 
   return (
     <FieldContext.Provider
-      value={{ controlId, describedBy, invalid: Boolean(error), required }}
+      value={{ controlId, labelId, requiredDescriptionId, describedBy, invalid: Boolean(error), required }}
     >
       <div data-slot="field" className={cn('grid gap-2', className)}>
-        <Label htmlFor={controlId} className={cn(hideLabel && 'sr-only')}>
+        <Label
+          id={labelId}
+          htmlFor={controlId}
+          className={cn(hideLabel && 'sr-only')}
+          onClick={() => document.getElementById(controlId)?.focus()}
+        >
           <span>
             {label}
             {required && (
@@ -75,6 +84,7 @@ export function Field({
             )}
           </span>
         </Label>
+        {requiredDescriptionId && <span id={requiredDescriptionId} className="sr-only">Pflichtfeld</span>}
         {children}
         {description && (
           <p id={descriptionId} className="text-xs text-muted-foreground">

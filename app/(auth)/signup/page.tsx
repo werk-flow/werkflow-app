@@ -117,7 +117,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
           Bereits ein Konto?{' '}
           <Link
             href={inviteCode ? `/login?invite_code=${inviteCode}` : '/login'}
-            className="text-primary underline-offset-4 hover:underline"
+            className="text-primary-text underline-offset-4 hover:underline"
           >
             Anmelden
           </Link>

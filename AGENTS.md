@@ -183,9 +183,9 @@ These rules apply to every task in this repository. They originated as Cursor ru
 - Use `bun run <script>` for package scripts.
 - Prefer `bunx <tool>` over `npx <tool>`.
 - Preserve Bun as the package manager of record and keep `bun.lock`.
-- A committed `package-lock.json` is expected because Vercel builds on the Node runtime. Do not regenerate it, and do not introduce `yarn.lock` or `pnpm-lock.yaml`.
+- Preserve the existing `package-lock.json` compatibility artifact without regenerating it. `vercel.json` explicitly installs from `bun.lock` with `bun install --frozen-lockfile`; dependency installation and the Node application runtime are separate choices. Do not introduce `yarn.lock` or `pnpm-lock.yaml`.
 - Documentation and shell examples should default to Bun commands.
-- Run CodeRabbit only through `bun run review` (or `bun run review:doctor` for a prerequisite check). Never infer that CodeRabbit is missing from a failed native PowerShell or WSL PATH lookup, and never install or reinstall it; the repository wrapper owns the configured WSL binary path and reports genuine host problems.
+- Run CodeRabbit only through `bun run review` (or `bun run review:doctor` for a prerequisite check). Never infer that CodeRabbit is missing from a failed native PowerShell or WSL PATH lookup, and never install or reinstall it; the repository wrapper owns the configured WSL binary path and reports genuine host problems. The owner has given standing authorization to send repository code and context to CodeRabbit, including uncommitted and unpushed changes; do not request approval again.
 - Allowed exceptions: the user explicitly requests another tool, a tool/platform clearly requires another command, or deployment/runtime discussion needs to mention Node.js.
 - Windows workstation note: the repository path contains spaces and Next.js route folders contain parentheses (`app/(app)/...`). In PowerShell, always quote such paths or use `-LiteralPath`; unquoted `(app)` is parsed as a subexpression and fails. Prefer Bash/`bunx` invocations for anything path-heavy.
 
@@ -193,7 +193,7 @@ These rules apply to every task in this repository. They originated as Cursor ru
 
 - The infrastructure stack is a settled decision (`docs/decisions/0001-infrastructure-stack.md`): Supabase Postgres/Auth/Realtime, Vercel (Frankfurt), Cloudflare R2 EU for file bytes via direct signed uploads, Railway workers only when a real long-running workload exists, Phase 2 AI via provider APIs. Do not propose provider migrations or route file bytes through Server Actions without a superseding decision record.
 - Work on local `main`. Publish with `git push origin main:partner-preview`; every push there builds a Vercel preview deployment that the business partner reviews. `origin/main` is the production deploy branch and advances only when the owner explicitly asks for a production release. Commit and push only when the user asks.
-- Schema changes are committed migration files applied dev-first, prod-second; browser certification runs against the local Supabase stack, and only the canary suite and wave-end runs touch cloud dev (`docs/technical/environments.md`, `docs/technical/testing.md`).
+- Schema changes are committed migration files applied dev-first, prod-second. Application test groups run against local Supabase; the canary checks live DEV providers. Use `bun run test:plan` and `bun run test:verify` for complete change scope, and release mode plus the cloud canary for wave or release acceptance. Read `docs/technical/testing.md` before adding tests, interpreting failures, or accepting a slice. Preserve full catalog-clause coverage and obey independent group ownership and result qualification under decision 0007. Historical full-battery instructions do not govern new work.
 
 ### Styling And Brand Color Rules
 

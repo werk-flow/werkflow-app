@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { LogOut } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { ErrorText } from '@/components/ui/error-text';
 import { clearEmailChangeChallengeBeforeSignOut } from '@/lib/settings/email-change-actions';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
@@ -20,9 +21,11 @@ export function SignOutAndRedirectButton({
 }: SignOutAndRedirectButtonProps) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSignOutAndRedirect = async () => {
     setIsLoading(true);
+    setError(null);
 
     try {
       try {
@@ -36,7 +39,8 @@ export function SignOutAndRedirectButton({
 
       // Sign out the current user (explicit global preserves the pre-existing
       // default behavior of this flow).
-      await supabase.auth.signOut({ scope: 'global' });
+      const { error: signOutError } = await supabase.auth.signOut({ scope: 'global' });
+      if (signOutError) throw signOutError;
 
       // Redirect based on whether the invited user exists
       if (isExistingUser) {
@@ -53,6 +57,7 @@ export function SignOutAndRedirectButton({
       }
     } catch (error) {
       console.error('Error signing out:', error);
+      setError('Die Abmeldung konnte nicht abgeschlossen werden. Bitte versuche es erneut.');
       setIsLoading(false);
     }
   };
@@ -63,9 +68,12 @@ export function SignOutAndRedirectButton({
     : 'Abmelden & registrieren';
 
   return (
-    <Button onClick={handleSignOutAndRedirect} disabled={isLoading}>
-      <LogOut className="mr-2 size-4" />
-      {isLoading ? 'Wird abgemeldet...' : buttonText}
-    </Button>
+    <div className="grid gap-2">
+      <Button onClick={handleSignOutAndRedirect} disabled={isLoading}>
+        <LogOut className="mr-2 size-4" />
+        {isLoading ? 'Wird abgemeldet...' : buttonText}
+      </Button>
+      <ErrorText>{error}</ErrorText>
+    </div>
   );
 }

@@ -4,7 +4,7 @@ import {
   resolveHolidayRegionOnDate,
 } from '../../../lib/personnel/targets';
 import { formatDuration } from '../../../lib/time-tracking/helpers';
-import { expect, test } from '../../golden/support/fixtures';
+import { expect, test } from "../support/fixtures";
 import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
 import {
   getEmployeeRecordEventStates,
@@ -47,7 +47,7 @@ import {
 
 test.describe.configure({ mode: 'serial' });
 
-let a3PersonnelRecordId = '';
+import { auditCheckpoint, saveAuditCheckpoint } from "../support/checkpoints";
 
 function a3PersonnelName(runId: string): string {
   return `Alina Personal-A3-${runId}`;
@@ -309,7 +309,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
 
     const recordMatch = adminPage.url().match(/\/mitarbeiter\/([0-9a-f-]{36})/);
     if (!recordMatch) throw new Error('Could not read the A3 personnel record id.');
-    a3PersonnelRecordId = recordMatch[1];
+    saveAuditCheckpoint("a3.personnelRecordId", recordMatch[1]);
 
     await editPersonnelTextField(adminPage, 'Telefon', '030 300030');
     await editPersonnelTextField(adminPage, 'Private E-Mail', privateEmail);
@@ -460,11 +460,22 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     await expect(visibleText(adminPage, employeeNumber)).toBeVisible();
   });
 
-  test('A3-R01: Alle Personalzeilen zeigen Beschäftigungs- und Zugangsstatus vollständig', async ({
+  test('A3-R01: Alle Personalzeilen zeigen Beschäftigungs- und Zugangsstatus vollständig',
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "A3-01/A3-03: Vollständige Personalakte, geplante Kondition und nachvollziehbare Werte",
+        },
+      ],
+    },
+    async ({
     adminPage,
     world,
   }) => {
-    const personnelRecordId = requireChainedValue(a3PersonnelRecordId, {
+    const personnelRecordId = requireChainedValue(
+        auditCheckpoint("a3.personnelRecordId"), {
       test: 'A3-R01',
       needs: 'the personnel record created by A3-01',
       grep: 'A3-01|A3-R01',
@@ -511,12 +522,23 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     expect(exitedRecordId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
-  test('A3-06/A3-07: Betriebsruhe respektiert die Datumsgrenze; Feiertagswechsel bleibt historisch', async ({
+  test('A3-06/A3-07: Betriebsruhe respektiert die Datumsgrenze; Feiertagswechsel bleibt historisch',
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "A3-01/A3-03: Vollständige Personalakte, geplante Kondition und nachvollziehbare Werte",
+        },
+      ],
+    },
+    async ({
     adminPage,
     bueroPage,
     world,
   }) => {
-    const personnelRecordId = requireChainedValue(a3PersonnelRecordId, {
+    const personnelRecordId = requireChainedValue(
+        auditCheckpoint("a3.personnelRecordId"), {
       test: 'A3-06',
       needs: 'the personnel record created by A3-01',
       grep: 'A3-01|A3-06',
@@ -766,16 +788,16 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     expect(configuration.holderEmployeeRecordIds).toEqual([adminRecord.id]);
 
     await bueroPage.goto('/einstellungen/mitarbeiter');
-    await expect(bueroPage.getByTestId('responsibility-time_approval')).toContainText(
+    await expect(bueroPage.getByRole('main').getByTestId('responsibility-time_approval')).toContainText(
       'Standardrollen'
     );
-    await expect(bueroPage.getByTestId('responsibility-leave_approval')).toContainText(
+    await expect(bueroPage.getByRole('main').getByTestId('responsibility-leave_approval')).toContainText(
       'Bestimmte Personen'
     );
     await expect(bueroPage.getByRole('button', { name: 'Verantwortung ändern' })).toHaveCount(0);
     await expect(bueroPage.getByRole('button', { name: 'Vertretung eintragen' })).toHaveCount(0);
     for (const responsibility of ['time_approval', 'leave_approval'] as const) {
-      await expect(bueroPage.getByTestId(`responsibility-${responsibility}`)).toContainText(
+      await expect(bueroPage.getByRole("main").getByTestId(`responsibility-${responsibility}`)).toContainText(
         'Du kannst die Regel einsehen. Nur der Admin kann sie ändern.'
       );
     }

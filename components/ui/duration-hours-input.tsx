@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { Minus, Plus } from 'lucide-react';
+import { useFieldContext } from '@/components/ui/field';
 
 import { cn } from '@/lib/utils';
 import {
@@ -23,9 +24,12 @@ export const DurationHoursInput = React.forwardRef<
   HTMLInputElement,
   DurationHoursInputProps
 >(function DurationHoursInput(
-  { className, value, onChange, disabled, onBlur, onKeyDown, ...props },
+  { className, value, onChange, disabled, onBlur, onKeyDown, id,
+    'aria-describedby': ariaDescribedBy, 'aria-invalid': ariaInvalid,
+    'aria-required': ariaRequired, ...props },
   ref
 ) {
+  const field = useFieldContext();
   const adjustByMinutes = (deltaMinutes: number) => {
     const currentMinutes = parseHoursInputToMinutes(value) ?? 0;
     const nextMinutes = Math.max(0, currentMinutes + deltaMinutes);
@@ -44,6 +48,10 @@ export const DurationHoursInput = React.forwardRef<
     >
       <input
         {...props}
+        id={id ?? field?.controlId}
+        aria-describedby={ariaDescribedBy ?? field?.describedBy}
+        aria-invalid={ariaInvalid ?? (field?.invalid || undefined)}
+        aria-required={ariaRequired ?? (field?.required || undefined)}
         ref={ref}
         type="text"
         inputMode="decimal"

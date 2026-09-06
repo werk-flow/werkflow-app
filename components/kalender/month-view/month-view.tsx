@@ -197,7 +197,7 @@ export function MonthView({
 
               {/* Hours summary */}
               {totalMinutes > 0 && (
-                <div className="text-[10px] font-medium text-primary truncate">
+                <div className="text-[10px] font-medium text-primary-text truncate">
                   {formatDuration(totalMinutes)}
                 </div>
               )}

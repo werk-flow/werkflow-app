@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   buildCodeRabbitReviewArguments,
   buildWindowsCodeRabbitCommand,
-  CODERABBIT_UNCOMMITTED_APPROVAL_ARGUMENT,
   CODERABBIT_WSL_BINARY,
   findCodeRabbitInstructionViolations,
 } from "./coderabbit-review-command";
@@ -10,26 +9,22 @@ import {
 describe("CodeRabbit review command", () => {
   test("uses the repository defaults for an uncommitted agent review", () => {
     expect(
-      buildCodeRabbitReviewArguments([
-        CODERABBIT_UNCOMMITTED_APPROVAL_ARGUMENT,
-      ]),
+      buildCodeRabbitReviewArguments([]),
     ).toEqual([
       "review",
       "--agent",
-      "--type",
-      "uncommitted",
+      "--uncommitted",
+      "--include-untracked",
       "-c",
       "AGENTS.md",
     ]);
   });
 
-  test("refuses to send an uncommitted diff without explicit approval", () => {
-    expect(() => buildCodeRabbitReviewArguments([])).toThrow(
-      CODERABBIT_UNCOMMITTED_APPROVAL_ARGUMENT,
-    );
-    expect(() =>
-      buildCodeRabbitReviewArguments(["--type=uncommitted"]),
-    ).toThrow(CODERABBIT_UNCOMMITTED_APPROVAL_ARGUMENT);
+  test("accepts explicit local scope under the owner's standing authorization", () => {
+    expect(buildCodeRabbitReviewArguments(["--type=uncommitted", "--include-untracked"]))
+      .toEqual(["review", "--agent", "-c", "AGENTS.md", "--uncommitted", "--include-untracked"]);
+    expect(buildCodeRabbitReviewArguments(["--approve-uncommitted"]))
+      .toEqual(buildCodeRabbitReviewArguments([]));
   });
 
   test("keeps an explicit scope and context without adding conflicting defaults", () => {
@@ -47,14 +42,46 @@ describe("CodeRabbit review command", () => {
     ).toEqual([
       "review",
       "--agent",
-      "--type",
-      "committed",
+      "--committed",
       "--base-commit",
       "abc123",
       "-c",
       "AGENTS.md",
       ".coderabbit.yaml",
     ]);
+  });
+
+  test("keeps current committed and base scopes without adding local changes", () => {
+    for (const scope of [["--committed"], ["--base", "partner-preview"], ["--base-commit=abc123"]]) {
+      const argumentsForReview = buildCodeRabbitReviewArguments(scope);
+      expect(argumentsForReview).toEqual(["review", "--agent", "-c", "AGENTS.md", ...scope]);
+      expect(argumentsForReview).not.toContain("--uncommitted");
+      expect(argumentsForReview).not.toContain("--include-untracked");
+    }
+  });
+
+  test("includes new files for current and legacy local scopes without duplicating flags", () => {
+    expect(buildCodeRabbitReviewArguments(["--uncommitted"]))
+      .toEqual(["review", "--agent", "--include-untracked", "-c", "AGENTS.md", "--uncommitted"]);
+    expect(buildCodeRabbitReviewArguments(["-t", "uncommitted", "--include-untracked"]))
+      .toEqual(["review", "--agent", "-c", "AGENTS.md", "--uncommitted", "--include-untracked"]);
+    expect(buildCodeRabbitReviewArguments(["--include-untracked"]))
+      .toEqual(["review", "--agent", "--uncommitted", "-c", "AGENTS.md", "--include-untracked"]);
+    expect(buildCodeRabbitReviewArguments(["-t=committed"]))
+      .toEqual(["review", "--agent", "-c", "AGENTS.md", "--committed"]);
+  });
+
+  test("rejects missing or unsupported legacy scopes before sending code", () => {
+    for (const scope of [["--type"], ["--type="], ["-t", "--base", "main"], ["--type=invalid"], ["--type", "all"]]) {
+      expect(() => buildCodeRabbitReviewArguments(scope)).toThrow("Legacy --type/-t requires");
+    }
+  });
+
+  test("passes help through without configuring a review", () => {
+    expect(buildCodeRabbitReviewArguments(["--", "--help"]))
+      .toEqual(["review", "--help"]);
+    expect(buildCodeRabbitReviewArguments(["--show-prompts"]))
+      .toEqual(["review", "--show-prompts"]);
   });
 
   test.each([
@@ -97,7 +124,7 @@ describe("CodeRabbit review command", () => {
   test("allows wrapper commands and ordinary prose", () => {
     expect(
       findCodeRabbitInstructionViolations(
-        "CodeRabbit is installed. Run bun run review -- --approve-uncommitted.",
+        "CodeRabbit is installed. Run bun run review.",
       ),
     ).toEqual([]);
   });

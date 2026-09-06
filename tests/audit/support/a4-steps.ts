@@ -25,9 +25,11 @@ export async function deleteWorkScheduleViaDetail(
         })
         .click({ timeout: 15_000 });
     },
-    interact: async () => {
+    prepare: async () => {
       await menuItem.click({ timeout: 10_000 });
       await confirmDialog.waitFor({ state: 'visible', timeout: 10_000 });
+    },
+    submit: async () => {
       await confirmDialog
         .getByRole('button', { name: 'Löschen', exact: true })
         .click({ timeout: 15_000 });

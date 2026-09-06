@@ -1,5 +1,6 @@
 "use client";
 
+import { ContextualDocumentsSkeleton } from "@/components/dokumente/contextual-documents-layout";
 import type { ReactNode } from "react";
 
 import { SERVICE_CASE_COLUMNS } from "@/components/service/service-case-list-content";
@@ -74,7 +75,18 @@ export function ServiceCaseDetailSkeleton() {
         <Skeleton className="h-4 w-64 max-w-full" />
       </div>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <Skeleton className="h-96 rounded-lg" />
+        <div className="space-y-6">
+          <Skeleton className="h-32 rounded-lg" />
+          <Skeleton className="h-48 rounded-lg" />
+          <ContextualDocumentsSkeleton
+            description="Dokumente werden aus der zentralen Ablage verknüpft. Es entsteht keine Dateikopie."
+            canUpload
+            canAttach
+          />
+          <Skeleton className="h-32 rounded-lg" />
+          <Skeleton className="h-32 rounded-lg" />
+          <Skeleton className="h-48 rounded-lg" />
+        </div>
         <Skeleton className="h-72 rounded-lg" />
       </div>
     </div>

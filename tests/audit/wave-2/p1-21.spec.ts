@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 
-import { expect, test } from "../../golden/support/fixtures";
+import { expect, test } from "../support/fixtures";
 import {
   getTimeCaptureCountsAs,
   getTimeCaptureState,
@@ -10,7 +10,7 @@ import { clockOut, createJob } from "../../golden/support/steps";
 
 test.describe.configure({ mode: "serial" });
 
-let auditJobNumber: string;
+import { auditCheckpoint, saveAuditCheckpoint } from "../support/checkpoints";
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -55,7 +55,7 @@ async function chooseJob(page: Page, dialog: Locator, title: string): Promise<vo
 test.describe("P1-21 exhaustive activity audit @AUDIT-W2-P1-21 @AUDIT-W2", () => {
   test("records travel qualifiers without starting job execution", async ({ adminPage, employeePage, world }) => {
     const jobNumber = `AUF-${world.runId}-P121-AUDIT`;
-    auditJobNumber = jobNumber;
+    saveAuditCheckpoint("p1-21.auditJobNumber", jobNumber);
     const title = `Zeit-Audit ${world.runId}`;
     await createJob(adminPage, {
       jobNumber,
@@ -85,6 +85,7 @@ test.describe("P1-21 exhaustive activity audit @AUDIT-W2-P1-21 @AUDIT-W2", () =>
   });
 
   test("starts execution only on call-out and keeps tenant reads scoped", async ({ employeePage, world }) => {
+    const auditJobNumber = auditCheckpoint("p1-21.auditJobNumber");
     if (!auditJobNumber) {
       throw new Error("Run the travel-qualifier test first; it creates the audit job.");
     }

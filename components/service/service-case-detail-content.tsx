@@ -9,7 +9,7 @@ import { ContextualDocumentsSection } from "@/components/dokumente/contextual-do
 import { useBanner } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
 import { DateTimeField } from "@/components/ui/date-time-field";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogBody, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ErrorText } from "@/components/ui/error-text";
 import { Field } from "@/components/ui/field";
 import { InlinePending } from "@/components/ui/inline-pending";
@@ -99,13 +99,74 @@ function RelationDialog({ workspace, open, onOpenChange, onSaved }: {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader><DialogTitle>Servicefälle verknüpfen</DialogTitle><DialogDescription>Beide Fälle bleiben eigenständig und vollständig nachvollziehbar.</DialogDescription></DialogHeader>
-        <div className="space-y-4 py-2">
-          <Field label="Servicefall" htmlFor="relation-case" required><SearchableSelect value={relatedId} onChange={setRelatedId} options={workspace.relatedCases.map((item) => ({ value: item.id, label: `${item.caseNumber} · ${item.summary}` }))} placeholder="Servicefall suchen" /></Field>
-          <Field label="Beziehung" htmlFor="relation-type"><Select value={relationType} onValueChange={(value) => setRelationType(value as ServiceCaseRelationType)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{SERVICE_CASE_RELATION_TYPES.map((value) => <SelectItem key={value} value={value}>{SERVICE_CASE_RELATION_LABELS[value]}</SelectItem>)}</SelectContent></Select></Field>
-          <Field label="Begründung" htmlFor="relation-reason" required><Input value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
-        </div>
-        <ErrorText>{error}</ErrorText>
-        <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>Abbrechen</Button><Button type="button" onClick={() => void run()} disabled={isPending || !relatedId || reason.trim().length < 3}>{isPending && <Loader2 className="size-4 animate-spin" />}Verknüpfen</Button></DialogFooter>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              if (isPending || !relatedId || reason.trim().length < 3) return;
+              void run();
+            }}
+            noValidate
+            className="flex min-h-0 flex-1 flex-col gap-4"
+          >
+            <DialogBody>
+              <div className="space-y-4 py-2">
+                <Field label="Servicefall" htmlFor="relation-case" required>
+                  <SearchableSelect
+                    value={relatedId}
+                    onChange={setRelatedId}
+                    options={workspace.relatedCases.map((item) => ({
+                      value: item.id,
+                      label: `${item.caseNumber} · ${item.summary}`,
+                    }))}
+                    placeholder="Servicefall suchen"
+                  />
+                </Field>
+                <Field label="Beziehung" htmlFor="relation-type">
+                  <Select
+                    value={relationType}
+                    onValueChange={(value) =>
+                      setRelationType(value as ServiceCaseRelationType)
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SERVICE_CASE_RELATION_TYPES.map((value) => (
+                        <SelectItem key={value} value={value}>
+                          {SERVICE_CASE_RELATION_LABELS[value]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Begründung" htmlFor="relation-reason" required>
+                  <Input
+                    value={reason}
+                    onChange={(event) => setReason(event.target.value)}
+                  />
+                </Field>
+              </div>
+              <ErrorText>{error}</ErrorText>
+            </DialogBody>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={isPending}
+              >
+                Abbrechen
+              </Button>
+              <Button
+                type="submit"
+                disabled={isPending || !relatedId || reason.trim().length < 3}
+              >
+                {isPending && <Loader2 className="size-4 animate-spin" />}Verknüpfen
+              </Button>
+            </DialogFooter>
+          </form>
       </DialogContent>
     </Dialog>
   );
@@ -138,20 +199,50 @@ function EvidenceDialog({ workspace, open, onOpenChange, onSaved }: {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader><DialogTitle>Arbeitsnachweis verknüpfen</DialogTitle><DialogDescription>Verknüpft wird genau diese Version aus dem zugeordneten Auftrag. Der Nachweis wird nicht kopiert.</DialogDescription></DialogHeader>
-        <Field label="Nachweisversion" htmlFor="evidence-revision" required className="py-2">
-          <SearchableSelect
-            value={revisionId}
-            onChange={setRevisionId}
-            options={workspace.evidenceOptions.map((option) => ({
-              value: option.revisionId,
-              label: `${option.title} · ${WORK_ARTIFACT_KIND_LABELS[option.kind]} · Version ${option.revisionNumber}`,
-            }))}
-            placeholder="Arbeitsnachweis suchen"
-            emptyMessage="Keine unverknüpfte Version gefunden"
-          />
-        </Field>
-        <ErrorText>{error}</ErrorText>
-        <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>Abbrechen</Button><Button type="button" onClick={() => void run()} disabled={isPending || !revisionId}>{isPending && <Loader2 className="size-4 animate-spin" />}Verknüpfen</Button></DialogFooter>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              if (isPending || !revisionId) return;
+              void run();
+            }}
+            noValidate
+            className="flex min-h-0 flex-1 flex-col gap-4"
+          >
+            <DialogBody>
+              <Field
+                label="Nachweisversion"
+                htmlFor="evidence-revision"
+                required
+                className="py-2"
+              >
+                <SearchableSelect
+                  value={revisionId}
+                  onChange={setRevisionId}
+                  options={workspace.evidenceOptions.map((option) => ({
+                    value: option.revisionId,
+                    label: `${option.title} · ${WORK_ARTIFACT_KIND_LABELS[option.kind]} · Version ${option.revisionNumber}`,
+                  }))}
+                  placeholder="Arbeitsnachweis suchen"
+                  emptyMessage="Keine unverknüpfte Version gefunden"
+                />
+              </Field>
+              <ErrorText>{error}</ErrorText>
+            </DialogBody>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={isPending}
+              >
+                Abbrechen
+              </Button>
+              <Button type="submit" disabled={isPending || !revisionId}>
+                {isPending && <Loader2 className="size-4 animate-spin" />}Verknüpfen
+              </Button>
+            </DialogFooter>
+          </form>
       </DialogContent>
     </Dialog>
   );
@@ -264,7 +355,7 @@ export function ServiceCaseDetailContent({ initial, documents, documentsLoadFail
             <h2 className="text-base font-semibold">Ursprüngliche Kundenaussage</h2>
             <blockquote className="mt-3 whitespace-pre-wrap border-l-2 border-primary pl-3 text-sm">{item.originalStatement}</blockquote>
             {item.originalDetails && <p className="mt-3 whitespace-pre-wrap text-sm text-muted-foreground">{item.originalDetails}</p>}
-            {item.sourceRequestId && <Link href={`/anfragen/${item.sourceRequestId}`} className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">Ursprüngliche Anfrage öffnen<ExternalLink className="size-3" /></Link>}
+            {item.sourceRequestId && <Link href={`/anfragen/${item.sourceRequestId}`} className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-primary-text hover:underline">Ursprüngliche Anfrage öffnen<ExternalLink className="size-3" /></Link>}
           </section>
           <section className="rounded-lg border p-4 shadow-xs">
             <h2 className="text-base font-semibold">Einschätzung</h2>
@@ -283,7 +374,7 @@ export function ServiceCaseDetailContent({ initial, documents, documentsLoadFail
           <section className="rounded-lg border p-4 shadow-xs"><div className="flex items-center gap-2"><History className="size-4 text-muted-foreground" /><h2 className="text-base font-semibold">Verlauf</h2></div><div className="mt-4 divide-y">{item.events.map((event) => <div key={event.id} className="py-3 first:pt-0 last:pb-0"><div className="flex items-start justify-between gap-3"><span className="text-sm font-medium">{EVENT_LABELS[event.eventType] ?? event.eventType}</span><time className="text-xs text-muted-foreground">{formatDateTime(event.recordedAt)}</time></div><p className="mt-1 text-xs text-muted-foreground">{event.actorName}{event.reason ? ` · ${event.reason}` : ""}</p></div>)}</div></section>
         </main>
         <aside className="space-y-4">
-          <section className="rounded-lg border p-4 shadow-xs"><h2 className="text-base font-semibold">Kunde & Einsatzort</h2><Link href={`/kunden/${item.clientId}`} className="mt-3 block font-medium text-primary hover:underline">{item.clientName}</Link><p className="mt-2 flex items-start gap-2 text-sm text-muted-foreground"><MapPin className="mt-0.5 size-4 shrink-0" /><span>{item.siteName}<br />{item.siteAddress}</span></p>{item.contactName && <p className="mt-2 text-sm">Ansprechpartner: {item.contactName}</p>}</section>
+          <section className="rounded-lg border p-4 shadow-xs"><h2 className="text-base font-semibold">Kunde & Einsatzort</h2><Link href={`/kunden/${item.clientId}`} className="mt-3 block font-medium text-primary-text hover:underline">{item.clientName}</Link><p className="mt-2 flex items-start gap-2 text-sm text-muted-foreground"><MapPin className="mt-0.5 size-4 shrink-0" /><span>{item.siteName}<br />{item.siteAddress}</span></p>{item.contactName && <p className="mt-2 text-sm">Ansprechpartner: {item.contactName}</p>}</section>
           <section className="rounded-lg border p-4 shadow-xs"><h2 className="text-base font-semibold">Betroffene Anlagen</h2>{item.equipment.length ? <div className="mt-3 space-y-2">{item.equipment.map((equipment) => <ListRow key={equipment.id} asChild interactive className="text-sm"><Link href={`/service/anlagen/${equipment.equipmentNumber}`}><span className="min-w-0"><span className="block truncate font-medium">{equipment.name}</span><span className="text-xs text-muted-foreground">{equipment.equipmentNumber}</span></span><Wrench className="size-4 shrink-0" /></Link></ListRow>)}</div> : <p className="mt-2 text-sm text-muted-foreground">Noch keine Anlage zugeordnet.</p>}</section>
           <section className="rounded-lg border p-4 shadow-xs"><h2 className="text-base font-semibold">Operativer Auftrag</h2>{item.jobId ? <Button asChild variant="outline" className="mt-3 w-full"><Link href={`/auftraege/${encodeURIComponent(item.jobNumber ?? item.jobId)}`}>{item.jobNumber ?? "Auftrag öffnen"}<ExternalLink className="size-4" /></Link></Button> : <><p className="mt-2 text-sm text-muted-foreground">Lege den Auftrag im bestehenden Auftragsbereich an und ordne ihn anschließend hier zu.</p><Button asChild variant="outline" className="mt-3 w-full"><Link href="/auftraege/neu">Auftrag anlegen</Link></Button></>}</section>
           <section className="rounded-lg border p-4 shadow-xs" data-testid="service-case-follow-up"><h2 className="text-base font-semibold">Nächster Schritt</h2><p className="mt-2 text-sm text-muted-foreground">Plane eine Büro-, Gewährleistungs- oder Kundenrückfrage als bestehende Nachfassaktion.</p><Button type="button" variant="outline" className="mt-3 w-full" onClick={() => setFollowUpOpen(true)} disabled={live.isStale || workspace.followUpOwners.length === 0}><CalendarClock className="size-4" />Nachfassaktion anlegen</Button></section>

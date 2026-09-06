@@ -1,6 +1,6 @@
 # Jobs And Projects
 
-Status: living — last reviewed 2026-09-03
+Status: living — last reviewed 2026-09-05
 
 Jobs (`Aufträge`) and projects (`Projekte`) are WerkFlow's central operational work objects. A job represents work that a team can plan, perform, document, and complete. A project groups related work when the business needs a larger delivery context, but it must never be required for a simple service visit or small order.
 
@@ -82,7 +82,7 @@ Phase 1 is not an MVP list. It describes the complete high-value operational cap
 ### 4. Status, Readiness, Dependencies, And Exceptions
 
 - The status model distinguishes operationally different situations instead of overloading one generic open state: not yet planned, planned, ready, in progress, interrupted, waiting for customer, waiting for material, blocked, parked, execution complete, handed over, cancelled, and archived where validated.
-- The exact status vocabulary remains a product decision, but every visible status must imply a clear next action and responsible role.
+- `P1-14` settled the execution vocabulary and its separation from planning, readiness, blockers, and parking. The current baseline above defines that model. Every visible state must imply a clear next action and responsible role; additional states require a new product decision.
 - Users can record why work is blocked or interrupted, who must resolve it, and the next review date. A blocked record cannot disappear into a passive status.
 - Dependencies can express that one job, task, approval, delivery, site condition, or external trade must finish before another step starts.
 - Readiness makes missing prerequisites visible before dispatch: confirmed site/access, customer availability, required employee skill, material/tool readiness, approved scope, documents, and safety information.
@@ -256,14 +256,12 @@ Phase 2 should use the structured operational core to reduce coordination work. 
 
 ## Open Product Decisions
 
-- Which job and project status vocabulary best covers service, installation, construction, warranty, and internal work without becoming confusing?
+- Which additional lifecycle cases, if any, do real service, installation, construction, warranty, or internal jobs expose beyond the fixed `P1-14` model?
 - Which blocking reasons and readiness checks are defaults, and which may organizations configure?
 - How deep should project structure go beyond project and job: phases, work packages, tasks, or only tagged/grouped jobs?
 - Can a job belong to more than one site, equipment item, or service case, and how should the primary context be shown?
-- Which project information should an employee assigned to only one child job see?
-- Should field workers be able to change job status directly, and which transitions require a lead or office approval?
 - How do team assignments, lead responsibility, required skills, tools, vehicles, and subcontractors fit without duplicating employee or inventory ownership?
-- Which template elements can be copied safely, and how are template versions and later updates presented?
+- Should applying a newer template to existing work ever offer a reviewed update, beyond the current immutable-version application in `P1-13`?
 - What evidence is mandatory for common SHK work types, and who may override missing evidence?
 - What is the minimum useful structured `Bautagebuch`, `Aufmaß`, defect, and change-work artifact?
 - Which measurement standards and future GAEB/REB/VOB directions are required, for which workflows and versions?

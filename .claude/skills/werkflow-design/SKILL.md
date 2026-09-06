@@ -16,6 +16,9 @@ All theme values live in `app/globals.css` (`:root` tokens + `@theme inline` map
 ## Color
 
 - **Orange (`primary`, `--brand-orange`) is the only attention color.** Use it selectively and functionally: primary/submit buttons, focus rings, selection states, important links, step indicators, "current" markers. If orange stops being rare, it stops working.
+- Bright `primary` is the fill, focus, and decorative-icon color. Filled controls pair it with `primary-foreground` (dark neutral in both themes). Readable orange labels, links, selected options, counts, and initials use `text-primary-text`; shared link variants own the opaque `primary-text-hover` and `primary-text-active` states. Do not use bright `text-primary` for ordinary text on light surfaces. The inverted filter count deliberately uses `bg-primary-foreground text-primary` as the reversed filled-control pair.
+- Destructive filled controls use the shared destructive variant: opaque `destructive`, `destructive-hover`, and `destructive-active` backgrounds paired with `destructive-foreground`. Use `AlertDialogAction variant="destructive"` for irreversible confirmations; do not hand-build red class overrides or restore white labels/translucent dark fills. Inline errors use `text-destructive`.
+- `lib/ui/contrast-contracts.test.ts` checks normal-text contrast from the actual theme tokens, shared control states, and current documented tint combinations (Tier 2). The browser layout audit checks rendered primary button states in both themes. Neither check certifies arbitrary opacity, caller-specific backgrounds, imagery, disabled controls, or non-text contrast; review those in their rendered context.
 - **Purple is a soft, desaturated undertone, never a loud accent.** The `--brand-purple*` scale is deliberately muted (grayish purple) and the neutral tokens (`muted`, `accent`, `secondary`, `border`, `input`) carry only a faint purple cast. Do not reintroduce vivid violet (the old `#7b2cbf` family) in UI — only the logo SVGs keep their vivid purple.
 - Purple is also the semantic hue for parked/planning entities (`geparkt` badges, calendar job blocks, Parkplatz). Keep that coding, always via `brand-purple` tokens.
 - Status colors stay semantic (green success, red destructive, yellow warning) — never rebrand them orange or purple.
@@ -58,7 +61,7 @@ The first question for any control is: **does this list contain entities or a fi
 | Page column, header, scroll body | `PageShell`, `PageHeader`, `PageBody` | `components/shared/page-shell`, `components/shared/page-header` |
 | Route tabs of an area with subpages | `AreaNav` (in the area `layout.tsx`) | `components/shared/area-nav` |
 | Header primary action whose dialog lives in suspended content | `PageActionProvider` + `PageActionButton` + `usePageAction` (share the open flag across the Suspense boundary so the header paints first) | `components/shared/page-action` |
-| Label + control stack (every form field) | `Field` (owns gap, required marker, helper text, `ErrorText`, ARIA wiring; `Input`/`Textarea` read its context) | `components/ui/field` |
+| Label + control stack (every form field) | `Field` (owns gap, required marker, label/error/description IDs; registered controls consume its context) | `components/ui/field` |
 | Table row that reacts to a click | `TableRow interactive` (`"select"` for click-selects, double-click-opens) | `components/ui/table` |
 | Mobile card row of a list, or a row inside a divided card | `ListRow` (`interactive`, `asChild` for links, `skeleton`; `variant="plain"` drops the box for rows inside a `divide-y` container) | `components/ui/list-row` |
 | Action menu on a row that can replace an optimistic draft or remount under Realtime | `RowActionsMenu` (native trigger/items, body portal, keyboard navigation and focus restoration without a composed Radix `asChild` ref) | `components/ui/row-actions-menu` |
@@ -84,7 +87,7 @@ The first question for any control is: **does this list contain entities or a fi
 | Date + time | `DateTimeField` (a `DatePicker` + `TimeInput` pair over one `YYYY-MM-DDTHH:mm` value) | `components/ui/date-time-field` |
 | Duration in hours | `DurationHoursInput` | `components/ui/duration-hours-input` |
 | Quantity / count | `QuantityStepper` | `components/ui/quantity-stepper` |
-| Other numeric field | `Input` with `inputMode="decimal"` + the shared de-DE parser | `components/ui/input`, `lib/ui/search` |
+| Other numeric field | `Input` with `inputMode="decimal"` + the shared de-DE parser | `components/ui/input`, `lib/ui/decimal` |
 | Job picking in clock flows | `JobPickerModal` | `components/job-picker-modal` |
 | Time activity capture and switching | `TimeActivityDialog` | `components/time-activity-dialog` |
 | Document linking | `DocumentLinkDialog` / `AttachDocumentDialog` | `components/dokumente/*` |
@@ -95,7 +98,9 @@ The first question for any control is: **does this list contain entities or a fi
 | Loading placeholders | `Skeleton` + the page skeletons | `components/ui/skeleton`, `components/loading-states/*` |
 | Collapsible form section („Weitere Angaben") | `FormDisclosure` (rotating-chevron pattern) | `components/ui/form-disclosure` |
 
-Hard rules the ESLint config enforces (outside `components/ui/`): no native `type="date"`, `type="time"`, `type="datetime-local"`, `type="month"`, `type="week"`, `type="number"`, `type="range"`, `type="checkbox"`, or `type="radio"` inputs, no raw `role="alert"` (errors render through `ErrorText`, `SectionError`, or `Banner`), no native `<select>`, no sonner imports, no `h-screen`/`min-h-screen`, no hand-rolled page column, no `Label` outside a `Field` or a spaced container, no `hover:bg-accent/50` literal and no cursor or hover classes on `TableRow`/`ListRow` (hover comes from `interactive`). In development, a raw `Select` with more than nine options throws at render.
+ESLint rejects native date/time/month/week/number/range/checkbox/radio inputs, native `<select>`, raw `role="alert"`, and sonner imports outside `components/ui/`. Registered controls and feedback components own those interactions. Static attribute checks cover quoted values and JSX expression literals. The config also rejects static viewport and page-column literals, `Label` + nested or conditional control stacks outside `Field`, and call-site hover/cursor classes on `TableRow`/`ListRow`. Standalone section labels and checkbox labels remain supported. `lib/ui/eslint-contracts.test.mjs` probes the effective flat config, including named exceptions, so an exception cannot silently drop unrelated restrictions.
+
+A raw `Select` throws above nine options in development. `lib/ui/select-registry.test.ts` checks resolvable enum bounds independently of the build mode and names runtime choices that need separate bounds. These are Tier 2 checks. Whether a new choice represents entities remains a Tier 3 review decision; a short entity list still needs search.
 
 Native controls stay out of the web app on every viewport, phones included: the mobile browser is not the native app. A future React Native app uses native pickers because that is its platform; the web app keeps its own components and makes them touch-friendly (44 px targets, `inputMode` for the right keyboard).
 
@@ -103,23 +108,31 @@ Rules the registry components already encode — don't re-implement them per cal
 
 **Extending the registry:** composites built from these primitives are welcome (`DocumentLinkDialog` is the model). A genuinely new interaction pattern is allowed, but design it deliberately and add its registry row here in the same change. Silent one-offs are the defect this canon exists to prevent.
 
+Searchable choices expose `option` roles and selected state inside a named `listbox`. Arrow keys move between options; Home and End reach the boundaries; Enter or Space selects. Search, clear, and inline-create controls remain reachable with Tab, and closing restores a usable focus position. Inline-create and clear-selection actions sit outside the listbox. A clickable record also needs a semantic link or button for its primary action. `RowActionsMenu` restores trigger focus before invoking an action, preserves focus when that action opens a dialog, and lets Tab leave the menu.
+
 ## Interaction canon
 
 ### Forms and Enter
 
 Every non-destructive create/edit dialog renders a real `<form onSubmit={...}>`; the primary button is `type="submit"`. Enter submits — that is the whole convention, no manual `onKeyDown` Enter shims. Textareas keep Enter for newlines natively. Validate at the point of action: field-level problems render `ErrorText` under the field (with `aria-invalid` on the input), submit-level failures render `ErrorText` next to the submit button.
 
-Every field is a `Field`: it renders the label, the `*` for `required` (plus `aria-required`), helper text wired through `aria-describedby`, and the field error. Helper text is `text-xs text-muted-foreground`; `rows` on a textarea is not used (it sizes to content).
+Every field is a `Field`. It owns stable label, description, error, and required-description IDs. Registered inputs and comboboxes inherit their name and supported required/invalid semantics. Date and time controls use a named `group`; their error and hidden `Pflichtfeld` text are referenced by `aria-describedby`, with `data-invalid` for styling. Do not add unsupported `aria-required` or `aria-invalid` to those groups. Keep required text out of the accessible name. Helper text is `text-xs text-muted-foreground`; `rows` on a textarea is not used (it sizes to content).
 
 **The submit button is never disabled as a validation hint.** A disabled button makes the user hunt for what is missing and is skipped by keyboard and screen-reader navigation. It stays enabled; on click the form marks the missing fields with `ErrorText` and focuses the first one. Disable only while the action is pending (double-submit protection). The one exception: forms with at most two obvious required fields (login) may enable on completeness.
 
 **Buttons have six states** (default, hover, focus-visible, pressed, loading, disabled). The `Button` primitive owns the first four (`active:` is the pressed darkening); loading is the spinner inside the button the caller renders while `isPending`; disabled means pending or an obviously unavailable action, nothing else.
 
+Client-only actions must remain unavailable until their event handlers are ready. Entry-history correction buttons use `useHydrated` for this boundary, so server-rendered HTML cannot accept an ineffective first click. Preserve native form behavior where it works before hydration. Do not hide a lost click with sleeps or repeated opening attempts in a test.
+
 A nested dialog form (e.g. a quick-create dialog opened from a select inside another dialog's form) must call `event.stopPropagation()` in its `onSubmit`: React synthetic submit events bubble through portals along the React tree and would otherwise submit the surrounding form too.
+
+Keep the submission boundary specific to the editable mode. A record-view dialog with separate review, delete, or export commands still needs a native form when it switches to a non-destructive editor. A footer submit button may reference its body's form by a stable `form` ID. Native text inputs use implicit Enter submission; textareas keep newlines, and date/time groups or choice widgets keep their own Enter-to-edit or select behavior. Do not add per-dialog key handlers to override those widget contracts.
+
+`lib/ui/dialog-contracts.test.ts` discovers dialog declarations, follows delegated form components, rejects whole-content scrolling, and records explicit command, browser, and destructive-mode exceptions. The application browser checks own actual footer visibility, validation focus, and nested submission behavior.
 
 ### Destructive confirmations
 
-Always `AlertDialog` with `AlertDialogCancel` and `AlertDialogAction` — never a plain `Button` in the footer, never a `<form>` inside, so Enter can never confirm destruction. Wording template: the title names object and verb ("Auftrag „X" löschen?"), the body states the consequence in one sentence, the action button names the outcome ("Endgültig löschen"), destructive styling only when the action is irreversible, "Abbrechen" always present.
+Use `AlertDialog` with `AlertDialogCancel` and `AlertDialogAction`, without a plain footer `Button` or a nested `<form>`. Radix initially focuses Cancel. Enter must not implicitly submit a destructive form; users can deliberately focus and activate the confirmation action with the keyboard. Wording template: the title names object and verb ("Auftrag „X" löschen?"), the body states the consequence in one sentence, the action button names the outcome ("Endgültig löschen"), destructive styling only when the action is irreversible, "Abbrechen" always present.
 
 ### Dialog close and success
 
@@ -133,8 +146,10 @@ One convention: on success the dialog closes and the success banner confirms; on
 
 ### Loading states
 
+Contextual documents share `ContextualDocumentsFrame` and `ContextualDocumentRowFrame` with `ContextualDocumentsSkeleton` in `components/dokumente/contextual-documents-layout.tsx`. Preserve the known title/description, responsive toolbar, and icon/name/metadata/menu geometry while data loads. The row container stays inert because opening a file and its menu are separate controls. Service detail loading states compose this skeleton at the document section's position. `lib/ui/contextual-documents-layout.test.ts` checks shared ownership and current consumers; unknown row counts and variable text still need rendered judgment.
+
 - Every route segment ships a `loading.tsx` skeleton from `components/loading-states/` that mirrors the real layout — structure first, data fills in. New top-level routes also get an entry in the app-shell org-switch skeleton map (`components/sidebar/app-shell.tsx`). In an area with a `layout.tsx`, the subpage `loading.tsx` renders content only; the header and `AreaNav` stay on screen.
-- **A skeleton mirrors the hover of what it loads, exactly.** Hovering a loading row highlights it like the real row will, and never suggests an interaction the loaded row lacks. This is structural, not reviewed: a list component declares its column definition once (`X_COLUMNS: readonly SkeletonColumn[]`), renders its header cells and its `SkeletonRows` from it, and exports one skeleton component (`XTableSkeleton`) that the `loading.tsx` skeletons render instead of building rows of their own; `TableRow`/`ListRow` carry `interactive` for loaded and skeleton rows alike, and hover exists only through that flag. One hover token, owned by the primitives: `hover:bg-accent/50` (the literal is lint-banned outside `components/ui`). Rows that do nothing on click have no hover, and so do their skeletons. `lib/ui/skeleton-pairing.test.ts` pins the pairing: loading files carry no table imports, hand-built rows or hover classes, and every column definition feeds both a header and a skeleton.
+- **A skeleton mirrors the layout and interaction of what it loads.** Table headers and skeleton cells share the list's `X_COLUMNS: readonly SkeletonColumn[]`. A grid list shares its header and row layout with its exported skeleton, as the maintenance due list does. Route loading files render these exports. `TableRow`/`ListRow` own the hover token through `interactive`; live rows and skeleton rows must agree. `lib/ui/skeleton-pairing.test.ts` checks column reuse and loading-file composition. `lib/ui/row-contracts.test.ts` compares interaction flags, inventories every product table, and checks desktop-only containment. Tables need mobile cards that retain their information. Rendered layout, conditional states, and named scroll exceptions still require browser review.
 - A skeleton never stands in for data that exists. After the user's own action the list keeps its rows and shows a `PendingRow` or an inline indicator; a full-list skeleton after a mutation is a defect.
 - Section-level async loads inside a page use a section skeleton, not a centered spinner with text.
 - Inline spinners are only for small contained actions: inside the clicked button or beside the refreshed control.
@@ -177,7 +192,7 @@ No interaction may leave the user wondering whether anything happened, even for 
 | Manual list refresh | `RefreshButton`: the icon spins; rows stay on screen. Never a skeleton over existing data (the list components carry no loading prop) |
 | Direct manipulation with undo (drag, park) | Optimistic move; the success banner fires after persistence, not before |
 
-Pending state binds to the awaited server call (`useServerAction`), never to a router transition: `useTransition` is lint-banned in product code. Its one home is `components/ui/refresh-button.tsx` (`RefreshButton`, `useRouterRefresh` for `SectionError` retries); the two named exceptions track a route change rather than a mutation (the organization switch, the document library's folder navigation). Props-driven lists get their settle read from `useSettleOnChange`. The optimistic echo is reconciled by id and expires by itself when the server list catches up; every optimistic path has a rollback and shows the failure at the point of action.
+Pending state binds to the awaited server call (`useServerAction`), never to a router transition: `useTransition` is lint-banned in product code. Its one home is `components/ui/refresh-button.tsx` (`RefreshButton`, `useRouterRefresh` for `SectionError` retries); the two named exceptions track a route change rather than a mutation (the organization switch, the document library's folder navigation). Props-driven lists get their settle read from `useSettleOnChange`. It resolves when the supplied value changes, reports a refresh failure on timeout, and cancels quietly on unmount. A timeout must not report that the already-accepted mutation failed. The optimistic echo is reconciled by id and expires by itself when the server list catches up; every optimistic path has a rollback and shows the failure at the point of action.
 
 ### No silent failures
 
@@ -189,7 +204,11 @@ Live surfaces consume Realtime through the live-view family, never raw events: `
 
 A refresh landing mid-dialog can remount it and destroy typed input. The dialog primitives (`Dialog`, `AlertDialog`, `Sheet`) register themselves as open in a shared context, and the live-view family suspends while any dialog is open, then fires one catch-up on close. You get this for free by using the primitives — which is the rule: dialogs are built on `components/ui/dialog.tsx` / `alert-dialog.tsx` / `sheet.tsx`, not hand-rolled portals.
 
+When testing loading or freshness, measure from the initiating action through the actual usable or updated control. A visible dialog shell is not a usable form, and an optimistic value is not saved-state evidence. Use the shared readiness and cross-session helpers. Their deadlines, required receiver isolation, and evidence rules live in `docs/technical/realtime-and-caching.md`. A correct but slow result fails responsiveness; an environment failure remains unconfirmed. Tier 2 timing checks cover the named scenarios, so Tier 3 review still identifies missing loading and freshness cases.
+
 ## Checklist before shipping UI
+
+Tier 1 components own shared behavior. Tier 2 checks detect the covered structural and interaction regressions. Tier 3 review still owns natural German, visual balance, domain meaning, and policy exceptions. The isolated component suite proves semantics and focus; the application browser suites prove rendered layouts and business flows. Use the verification procedure in `docs/technical/testing.md`; a static pass alone does not close this checklist.
 
 - [ ] Values come from tokens/primitives, no ad-hoc hex or radius
 - [ ] Page is `PageShell` → `PageHeader` → `PageBody`; an area with subpages has a `layout.tsx` with `AreaNav`

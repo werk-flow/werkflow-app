@@ -1,6 +1,21 @@
-import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { createWriteStream, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { parseRunnerArguments } from '../lib/testing/runner-arguments';
+import { activeCampaign, campaignBudgetProblem, campaignSummary, consumeRerunGrant, grantReferenceRunKey, validatedRerunGrant } from '../lib/testing/run-campaign';
+import { withWorkspaceTestLock } from '../lib/testing/workspace-test-lock';
+import { resolveTestPrerequisites, validateDeclaredPrerequisites, validateDiagnosticProvenance, validateExecutedSelection } from '../lib/testing/test-evidence';
+import { calculateCandidateFingerprint } from '../lib/testing/candidate-identity';
+import { runSessionCommand, withLocalStackLease } from '../lib/testing/local-stack-lease';
+import { resolveBusinessDate } from '../lib/testing/business-date';
+import { runWithLogCleanup } from '../lib/testing/command-log';
+import { z } from 'zod';
+import { getTestGroups, getGroupExecutionFiles, getGroupTimingRequirements } from '../lib/testing/test-groups';
+import { checkLatencyEvidence } from '../lib/testing/latency-evidence';
+import { recoveredEnvironmentRuns } from '../lib/testing/group-recovery';
+import { captureInputSnapshot } from '../lib/testing/group-evidence';
+import { calculateBuildInputs } from '../lib/testing/build-identity';
+import { createGroupQualification, directGroupRetryProblem } from '../lib/testing/group-qualification';
 
 import {
   PLAYWRIGHT_TARGETS,
@@ -9,11 +24,9 @@ import {
   evaluateFullCertificationRerun,
   evaluateRequiredFocusedProofs,
   focusedProofTokenForFailure,
-  parsePlaywrightListOutput,
   requiredFocusedProofsForChangedFiles,
   validateFocusedSelection,
   validateRunRequest,
-  validateSerialSelection,
   type PlaywrightLane,
   type PlaywrightSuite,
   type PlaywrightTarget,
@@ -22,7 +35,8 @@ import { getSpawnFailureDetail } from '../lib/testing/spawn-result';
 import { runPlaywrightPreflight } from './playwright-preflight';
 import { loadEnvLocal } from '../tests/golden/support/env';
 import {
-  calculateSourceFingerprint,
+  archiveRunOutputs,
+  currentBackendProvenance,
   configureRunEnvironment,
   createRunKey,
   createRunManifest,
@@ -38,35 +52,16 @@ const SUITE_CONFIG: Record<PlaywrightSuite, string[]> = {
   audit: ['--config', 'playwright.audit.config.ts'],
   canary: ['--config', 'playwright.canary.config.ts'],
 };
+const discoveredTestSchema = z.object({ id: z.string(), file: z.string(), title: z.string(), annotations: z.array(z.object({ type: z.string(), description: z.string().optional() })) });
 
-function argumentValue(args: string[], name: string): string | null {
-  const inline = args.find((argument) => argument.startsWith(`${name}=`));
-  if (inline) return inline.slice(name.length + 1) || null;
-  const index = args.indexOf(name);
-  if (index < 0) return null;
-  const value = args[index + 1];
-  if (!value || value.startsWith('-'))
-    throw new Error(`${name} requires a value.`);
-  return value;
-}
-
-function removeOption(args: string[], name: string): string[] {
-  const inlineIndex = args.findIndex((argument) =>
-    argument.startsWith(`${name}=`),
-  );
-  if (inlineIndex >= 0) return args.filter((_, index) => index !== inlineIndex);
-  const index = args.indexOf(name);
-  if (index < 0) return args;
-  return [...args.slice(0, index), ...args.slice(index + 2)];
-}
-
-function certificationAttemptsSinceLastPass(suite: PlaywrightSuite) {
+function certificationAttemptsSinceLastPass(suite: PlaywrightSuite, target: PlaywrightTarget) {
   // timedout and interrupted attempts count toward the budget: a Ctrl+C'd or
   // hung full run is still a consumed attempt, not a free retry.
   const attempts = listRunManifests().filter(
     (manifest) =>
       manifest.lane === 'certification' &&
       manifest.suite === suite &&
+      (manifest.target ?? 'cloud') === target &&
       !manifest.grep &&
       [
         'passed',
@@ -91,6 +86,7 @@ function certificationAttemptsSinceLastPass(suite: PlaywrightSuite) {
       classification: manifest.classification,
       classifiedAt: manifest.classifiedAt,
       failedSpecFile: failure?.file ?? null,
+      failedTestId: failure?.testId ?? null,
       focusedGrepToken: focusedProofTokenForFailure({
         suite: manifest.suite,
         failedTitle: failure?.title ?? null,
@@ -100,21 +96,17 @@ function certificationAttemptsSinceLastPass(suite: PlaywrightSuite) {
   });
 }
 
-function normalizedGrep(value: string | null | undefined): string {
-  return value?.trim() ?? '';
-}
-
 function focusedIterationAttemptsSinceLastPass(input: {
   suite: PlaywrightSuite;
   target: PlaywrightTarget;
-  grep: string;
+  selectedTestIds: readonly string[];
 }) {
   const attempts = listRunManifests().filter(
     (manifest) =>
       manifest.lane === 'iteration' &&
       manifest.suite === input.suite &&
       (manifest.target ?? 'cloud') === input.target &&
-      normalizedGrep(manifest.grep) === normalizedGrep(input.grep) &&
+      JSON.stringify([...(manifest.selectedTestIds ?? [])].sort()) === JSON.stringify([...input.selectedTestIds].sort()) &&
       [
         'passed',
         'failed',
@@ -137,7 +129,9 @@ function focusedIterationAttemptsSinceLastPass(input: {
 function discoverPlaywrightSelection(
   suite: PlaywrightSuite,
   playwrightArgs: readonly string[],
+  signal: AbortSignal,
 ) {
+  signal.throwIfAborted();
   const commandArgs = [
     'x',
     'playwright',
@@ -145,20 +139,27 @@ function discoverPlaywrightSelection(
     ...SUITE_CONFIG[suite],
     ...playwrightArgs,
     '--list',
+    '--reporter', './tests/golden/support/discovery-reporter.ts',
   ];
   const result = spawnSync(process.execPath, commandArgs, {
     cwd: resolve(import.meta.dir, '..'),
     encoding: 'utf8',
     maxBuffer: 16 * 1024 * 1024,
+    timeout: 60_000,
     windowsHide: true,
   });
-  if (result.error) throw result.error;
+  signal.throwIfAborted();
+  if (result.error) throw new Error(`Playwright discovery failed or exceeded its 60-second deadline: ${result.error.message}`);
   if (result.status !== 0) {
     throw new Error(
       `Could not discover ${suite} tests: ${getSpawnFailureDetail(result, `Playwright exited ${result.status}`)}`,
     );
   }
-  return parsePlaywrightListOutput(result.stdout);
+  const line = result.stdout.split(/\r?\n/).findLast((candidate) => candidate.startsWith('['));
+  const tests = z.array(discoveredTestSchema).parse(line ? JSON.parse(line) : null);
+  const titles = tests.map((test) => test.id);
+  if (new Set(titles).size !== titles.length) throw new Error('Playwright discovery did not return unique test identities.');
+  return { tests, titles, total: titles.length };
 }
 
 function changedCandidateFiles(): string[] {
@@ -176,11 +177,13 @@ function changedCandidateFiles(): string[] {
   return [...tracked.split('\0'), ...untracked.split('\0')].filter(Boolean);
 }
 
-async function main(): Promise<number> {
+async function main(signal: AbortSignal): Promise<number> {
+  signal.throwIfAborted();
   loadEnvLocal();
+  if (process.env.GOLDEN_BASE_URL && process.env.GOLDEN_BASE_URL !== 'http://localhost:3000') throw new Error('Browser runs require http://localhost:3000. Remove the GOLDEN_BASE_URL override before continuing.');
   const lane = process.argv[2] as PlaywrightLane | undefined;
   const suite = process.argv[3] as PlaywrightSuite | undefined;
-  if (!lane || !['iteration', 'certification', 'diagnostic'].includes(lane)) {
+  if (!lane || !['group', 'iteration', 'certification', 'diagnostic'].includes(lane)) {
     throw new Error(
       'Usage: bun scripts/run-playwright.ts <iteration|certification|diagnostic> <golden|audit|canary> [--target local|cloud] [Playwright args]',
     );
@@ -189,16 +192,17 @@ async function main(): Promise<number> {
     throw new Error('Suite must be golden, audit, or canary.');
   }
 
-  let playwrightArgs = process.argv.slice(4);
-  const reuseRunKey = argumentValue(playwrightArgs, '--reuse-run');
-  const overrideReason = argumentValue(
-    playwrightArgs,
-    '--override-rerun-budget',
-  );
-  const targetArgument = argumentValue(playwrightArgs, '--target');
-  playwrightArgs = removeOption(playwrightArgs, '--reuse-run');
-  playwrightArgs = removeOption(playwrightArgs, '--override-rerun-budget');
-  playwrightArgs = removeOption(playwrightArgs, '--target');
+  const argumentsByName = parseRunnerArguments(lane, process.argv.slice(4));
+  const groupId = argumentsByName['--group'];
+  const groups = groupId ? getTestGroups(resolve(import.meta.dir, '..')) : [];
+  const group = groupId ? groups.find((entry) => entry.id === groupId) : undefined;
+  if (groupId && (!group || group.kind !== suite)) throw new Error(`Group ${groupId} does not belong to suite ${suite}.`);
+  const groupFiles = group ? getGroupExecutionFiles(group, groups) : [];
+  if (groupId) process.env.WERKFLOW_TEST_GROUP = groupId;
+  else delete process.env.WERKFLOW_TEST_GROUP;
+  const reuseRunKey = argumentsByName['--reuse-run'] ?? null;
+  const grantId = argumentsByName['--rerun-grant'] ?? null;
+  const targetArgument = argumentsByName['--target'] ?? null;
   if (
     targetArgument &&
     !PLAYWRIGHT_TARGETS.includes(targetArgument as PlaywrightTarget)
@@ -209,7 +213,8 @@ async function main(): Promise<number> {
   }
   const target =
     (targetArgument as PlaywrightTarget | null) ?? defaultTargetForSuite(suite);
-  const grep = argumentValue(playwrightArgs, '--grep');
+  const grep = argumentsByName['--grep'] ?? null;
+  const playwrightArgs = group ? groupFiles.map((file) => file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$') : grep ? ['--grep', grep] : [];
   const requestErrors = validateRunRequest({
     lane,
     suite,
@@ -219,36 +224,66 @@ async function main(): Promise<number> {
   });
   if (requestErrors.length > 0) throw new Error(requestErrors.join('\n'));
 
+  process.env.WERKFLOW_TEST_SUITE = suite;
+  process.env.WERKFLOW_TEST_TARGET = target;
+  process.env.WERKFLOW_TEST_LANE = lane;
+  const retainedSource = reuseRunKey ? readRunManifest(reuseRunKey) : null;
+  if (retainedSource) {
+    const errors = validateDiagnosticProvenance(retainedSource.backendProvenance, currentBackendProvenance(suite));
+    if (!retainedSource.retainedAt || retainedSource.cleanedAt) errors.push('Diagnostic source has no live retained world.');
+    if (!retainedSource.businessDate) errors.push('Diagnostic source has no recorded business date.');
+    if (errors.length) throw new Error(errors.join('\n'));
+  }
+  const businessDate = resolveBusinessDate(retainedSource?.businessDate);
+  process.env.WERKFLOW_TEST_BUSINESS_DATE = businessDate;
+
   const fullSelection = discoverPlaywrightSelection(
     suite,
-    removeOption(playwrightArgs, '--grep'),
+    [],
+    signal,
   );
-  const requestedSelection = grep
-    ? discoverPlaywrightSelection(suite, playwrightArgs)
+  if (!fullSelection.total) throw new Error(`The ${suite} suite contains no tests. Refusing to create a world.`);
+  const requestedSelection = grep || group
+    ? discoverPlaywrightSelection(suite, playwrightArgs, signal)
     : fullSelection;
+  const declaredTests = resolveTestPrerequisites(fullSelection.tests);
   const selectionErrors = [
+    ...(lane === 'iteration' || lane === 'group' ? validateDeclaredPrerequisites({ selectedTestIds: requestedSelection.titles, tests: declaredTests }) : []),
     ...validateFocusedSelection({
       lane,
       suite,
       selectedTestCount: requestedSelection.total,
       fullSuiteTestCount: fullSelection.total,
     }),
-    ...validateSerialSelection({
-      lane,
-      suite,
-      selectedTitles: requestedSelection.titles,
-    }),
   ];
   if (selectionErrors.length > 0) throw new Error(selectionErrors.join('\n'));
+  if (!requestedSelection.total || (group && requestedSelection.tests.some((test) => !groupFiles.includes(test.file)))) throw new Error('Group discovery did not match its registered files.');
 
-  const sourceFingerprint = calculateSourceFingerprint();
+  const candidateFingerprint = calculateCandidateFingerprint(resolve(import.meta.dir, '..'));
   const manifests = listRunManifests();
+  let groupFingerprint: string | undefined;
+  if (group) {
+    const repositoryRoot = resolve(import.meta.dir, '..');
+    const snapshot = captureInputSnapshot(repositoryRoot, calculateBuildInputs(repositoryRoot).environmentDigest);
+    groupFingerprint = createGroupQualification(repositoryRoot, groups, snapshot).qualify(group).fingerprint;
+    const problem = directGroupRetryProblem({
+      groupId: group.id, target, fingerprint: groupFingerprint, runs: manifests,
+      recoveredRunKeys: recoveredEnvironmentRuns(manifests),
+    });
+    if (problem) throw new Error(problem);
+  }
+  const campaign = activeCampaign();
+  const latestRunKey = grantReferenceRunKey({ attempts: manifests, campaignId: campaign.id, suite, target, lane });
+  const grant = validatedRerunGrant({ campaign, grantId, suite, target, candidateFingerprint, latestRunKey });
+  const overrideReason = grant?.reason ?? null;
+  const summary = campaignSummary(campaign, manifests);
+  console.log(`[werkflow-test] campaign ${campaign.id}: ${summary.fullAttempts} complete attempts / ${summary.fullMinutes.toFixed(1)} min; ${summary.totalMinutes.toFixed(1)} min across all runs, including ${summary.diagnosticMinutes.toFixed(1)} diagnostic min`);
   if (lane === 'iteration' && grep) {
     const policy = evaluateFocusedIterationRerun({
       attemptsSinceLastPass: focusedIterationAttemptsSinceLastPass({
         suite,
         target,
-        grep,
+        selectedTestIds: requestedSelection.titles,
       }),
       overrideReason,
     });
@@ -259,6 +294,8 @@ async function main(): Promise<number> {
   // local-battery campaign ran eight same-class audit certification retries
   // with no mechanical gate because this block was golden-only (2026-08-28).
   if (lane === 'certification' && !grep) {
+    const budgetProblem = campaignBudgetProblem({ campaign, attempts: manifests, suite, target });
+    if (budgetProblem && !grant) throw new Error(budgetProblem);
     const focusedVerifications = manifests
       .filter(
         (manifest) =>
@@ -272,17 +309,21 @@ async function main(): Promise<number> {
             ? ('passed' as const)
             : ('failed' as const),
         startedAt: manifest.startedAt,
-        sourceFingerprint: manifest.sourceFingerprint,
+        candidateFingerprint: manifest.candidateFingerprint ?? '',
         suite: manifest.suite,
         grep: manifest.grep ?? '',
         total: manifest.total,
+        target: manifest.target ?? 'cloud',
+        passedTestIds: (manifest.outcomes ?? []).filter((outcome) => outcome.status === 'passed').map((outcome) => outcome.id),
       }));
     const policy = evaluateFullCertificationRerun({
-      attemptsSinceLastPass: certificationAttemptsSinceLastPass(suite),
+      currentSuite: suite,
+      attemptsSinceLastPass: certificationAttemptsSinceLastPass(suite, target),
       focusedVerifications,
-      currentSourceFingerprint: sourceFingerprint,
+      currentCandidateFingerprint: candidateFingerprint,
       fullSuiteTestCount: fullSelection.total,
       overrideReason,
+      currentTarget: target,
     });
     if (!policy.allowed)
       throw new Error(policy.reason ?? 'Full certification rerun blocked.');
@@ -295,17 +336,20 @@ async function main(): Promise<number> {
             ? ('passed' as const)
             : ('failed' as const),
         startedAt: manifest.startedAt,
-        sourceFingerprint: manifest.sourceFingerprint,
+        candidateFingerprint: manifest.candidateFingerprint ?? '',
         suite: manifest.suite,
         grep: manifest.grep ?? '',
         total: manifest.total,
+        target: manifest.target ?? 'cloud',
+        passedTestIds: (manifest.outcomes ?? []).filter((outcome) => outcome.status === 'passed').map((outcome) => outcome.id),
       }));
     const missingProofs = evaluateRequiredFocusedProofs({
       requirements: requiredFocusedProofsForChangedFiles(
         changedCandidateFiles(),
       ),
       focusedVerifications: allFocusedVerifications,
-      currentSourceFingerprint: sourceFingerprint,
+      currentCandidateFingerprint: candidateFingerprint,
+      currentTarget: target,
     });
     if (missingProofs.length > 0) {
       throw new Error(
@@ -321,7 +365,9 @@ async function main(): Promise<number> {
   }
 
   await runPlaywrightPreflight({ lane, target });
+  signal.throwIfAborted();
   const runKey = createRunKey();
+  if (grant) consumeRerunGrant(campaign.id, grant.id, runKey);
   process.env.WERKFLOW_RUN_KEY = runKey;
   process.env.WERKFLOW_TEST_LANE = lane;
   process.env.WERKFLOW_TEST_SUITE = suite;
@@ -343,6 +389,11 @@ async function main(): Promise<number> {
     command: process.env.WERKFLOW_TEST_COMMAND,
     grep,
     rerunOverrideReason: overrideReason,
+    campaignId: campaign.id,
+    rerunGrantId: grant?.id ?? null,
+    selectedTestIds: requestedSelection.titles,
+    candidateFingerprint,
+    groupFingerprint,
   });
 
   const logPath = resolve(runDirectory(runKey), 'runner.log');
@@ -351,26 +402,25 @@ async function main(): Promise<number> {
   console.log(
     `[werkflow-test] started ${lane} ${suite} run ${runKey} (target ${target}); output: ${logPath}`,
   );
-  const child = spawn(process.execPath, commandArgs, {
-    cwd: resolve(import.meta.dir, '..'),
-    env: process.env,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    windowsHide: true,
-  });
-  child.stdout.pipe(log, { end: false });
-  child.stderr.pipe(log, { end: false });
-  const exitCode = await new Promise<number>((resolveExit, rejectExit) => {
-    child.once('error', (error) => {
-      log.end();
-      rejectExit(error);
-    });
-    child.once('close', (code) => resolveExit(code ?? 1));
-  });
-  await new Promise<void>((resolveLog, rejectLog) => {
-    log.end((error?: Error | null) => {
-      if (error) rejectLog(error);
-      else resolveLog();
-    });
+  const progress = setInterval(() => {
+    try {
+      const current = readRunManifest(runKey);
+      console.log(`[werkflow-test] ${current.passed}/${current.total} passed; ${(Math.max(0, Date.now() - Date.parse(current.startedAt)) / 60_000).toFixed(1)} min; ${current.currentTestId ?? 'setup or teardown'}`);
+    } catch { /* Manifest publication can race the first status tick. */ }
+  }, 60_000);
+  const exitCode = await runWithLogCleanup({
+    command: () => runSessionCommand([process.execPath, ...commandArgs], {
+      signal, cwd: resolve(import.meta.dir, '..'), env: process.env,
+      onStdout: (chunk) => { log.write(chunk); },
+      onStderr: (chunk) => { log.write(chunk); },
+    }),
+    closeLog: async () => {
+      clearInterval(progress);
+      await new Promise<void>((resolveLog, rejectLog) => {
+        log.end((error?: Error | null) => { if (error) rejectLog(error); else resolveLog(); });
+      });
+    },
+    reportSecondaryFailure: (error) => { console.error(`[werkflow-test] Log cleanup also failed: ${error instanceof Error ? error.message : String(error)}`); },
   });
 
   let manifest;
@@ -381,24 +431,15 @@ async function main(): Promise<number> {
       `Playwright exited ${exitCode} without manifest ${manifestPath(runKey)}.`,
     );
   }
-  if (
-    exitCode !== 0 &&
-    !['failed', 'failed_retained', 'timedout', 'interrupted'].includes(
-      manifest.status,
-    )
-  ) {
-    manifest = updateRunManifest(runKey, {
-      status: 'failed',
-      completedAt: new Date().toISOString(),
-      failures: [
-        ...manifest.failures,
-        {
-          title: 'Playwright process',
-          file: null,
-          message: `Process exited with code ${exitCode}.`,
-        },
-      ],
-    });
+  if (['passed', 'diagnostic_passed'].includes(manifest.status)) {
+    const evidenceErrors = validateExecutedSelection({ selectedTestIds: requestedSelection.titles, outcomes: manifest.outcomes ?? [], candidateBefore: candidateFingerprint, candidateAfter: calculateCandidateFingerprint(resolve(import.meta.dir, '..')) });
+    const timing = group ? getGroupTimingRequirements(group, groups, resolve(import.meta.dir, '..')) : { requireFreshness: requestedSelection.titles.some((title) => title.includes('@FRESHNESS')), requireReadiness: requestedSelection.titles.some((title) => title.includes('@READINESS')) };
+    evidenceErrors.push(...checkLatencyEvidence({ directory: runDirectory(runKey), ...timing }).problems);
+    if (evidenceErrors.length) manifest = updateRunManifest(runKey, (current) => ({ status: 'failed', failures: [...current.failures, { title: 'Execution evidence', file: null, message: evidenceErrors.join('\n') }] }));
+  }
+  if (['starting', 'running'].includes(manifest.status) || (exitCode !== 0 && ['passed', 'diagnostic_passed'].includes(manifest.status))) {
+    recordRunnerFailure(new Error(`Playwright exited with code ${exitCode} and run status ${manifest.status}.`));
+    manifest = readRunManifest(runKey);
   }
   console.log(
     `[werkflow-test] ${manifest.status}; ${manifest.passed}/${manifest.total} passed; run ${runKey}`,
@@ -410,27 +451,37 @@ async function main(): Promise<number> {
     : 1;
 }
 
-try {
-  process.exitCode = await main();
-} catch (error) {
+function recordRunnerFailure(error: unknown): void {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(message);
   const runKey = process.env.WERKFLOW_RUN_KEY;
   if (runKey && existsSync(manifestPath(runKey))) {
     try {
       updateRunManifest(runKey, (current) => ({
-        status: 'failed',
+        status: current.world && !current.cleanedAt ? 'failed_retained' : 'failed',
+        retainedAt: current.world && !current.cleanedAt ? current.retainedAt ?? new Date().toISOString() : current.retainedAt,
         completedAt: new Date().toISOString(),
         failures: [
           ...current.failures,
-          { title: 'Test runner', file: 'scripts/run-playwright.ts', message },
+          { title: 'Test runner', file: current.currentTestId?.split(' › ')[0] ?? 'scripts/run-playwright.ts', ...(current.currentTestId ? { testId: current.currentTestId } : {}), message },
         ],
       }));
+      archiveRunOutputs(runKey);
     } catch (manifestError) {
       console.error(
         `Could not record runner failure: ${String(manifestError)}`,
       );
     }
   }
+}
+
+try {
+  const requestedOptions = parseRunnerArguments(process.argv[2] as PlaywrightLane, process.argv.slice(4));
+  const localTarget = process.argv[3] !== 'canary' && requestedOptions['--target'] !== 'cloud';
+  process.exitCode = await withWorkspaceTestLock({ operation: `Playwright ${process.argv.slice(2, 4).join(' ')}` }, async () => {
+    try { return await withLocalStackLease(localTarget, main); }
+    catch (error) { recordRunnerFailure(error); throw error; }
+  });
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 }

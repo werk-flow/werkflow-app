@@ -1,6 +1,6 @@
 # Customers And CRM
 
-Status: living — last reviewed 2026-09-03
+Status: living — last reviewed 2026-09-05
 
 Customer relationship management in WerkFlow means maintaining the operational customer context an SHK business needs to receive requests, plan visits, perform work, communicate reliably, and understand the history of a relationship.
 
@@ -258,11 +258,8 @@ Phase 2 should reduce intake, data-quality, and follow-up work after the operati
 - Which customer classifications are required beyond `privat` and `gewerblich`, and which relationship roles should be separate from customer type?
 - Is the primary private-customer record a person, household, or contractual party, and how are spouses or multiple owners represented?
 - Can one contact belong to multiple customers/sites, and how is authority to approve or receive documents scoped?
-- ~~Which address/site vocabulary is clearest for SHK users?~~ Decided with P1-01: the UI uses `Einsatzort` (with `Ansprechpartner` for contacts); revisit only with real user feedback.
 - How should landlord, tenant, property manager, owner, bill payer, and on-site contact relationships work without duplicate customer records?
 - Can one site have multiple current responsible customers over time, and how is the historical relationship preserved?
-- ~~What is the minimum request lifecycle and which reasons close a request without work?~~ Decided with P1-02: `offen` → optional `in_klaerung` → `umgewandelt` | `geschlossen` with the five closing reasons above and manager reopen; revisit only when the shared attention pattern (`P1-07`) or real usage demands more states.
-- ~~Does WerkFlow need a distinct `lead` object, or is an unqualified request with provisional identity sufficient?~~ Decided with P1-02: no separate lead object — an unqualified request carries provisional caller identity and is matched or promoted to a customer.
 - Which response-time measures matter to real SHK businesses? (Request sources were fixed with P1-02: Telefon, E-Mail, Vor Ort, Sonstiges; extend only with evidence.)
 - What duplicate confidence and evidence require warning, block, or merge review?
 - Who may merge customers, and how can a merge be reversed or corrected?
@@ -271,7 +268,7 @@ Phase 2 should reduce intake, data-quality, and follow-up work after the operati
 - Which operational messages require consent versus another valid basis, and what proof/retention is required?
 - Which contacts and notes can assigned field workers see, correct, or add?
 - Should relationship ownership exist at customer, site, request, or next-action level?
-- Which equipment summary belongs in CRM, and where does the dedicated service/maintenance model begin?
+- Which additional equipment or service summaries would help office users beyond the site projection delivered by `P1-18`? Equipment lifecycle ownership stays with service.
 - What high-level commercial state is useful in CRM without pulling invoice behavior into the customer feature?
 - What are the archive, deletion, anonymization, legal-hold, and data-subject workflows when linked operational/commercial records exist?
 - What is the first useful customer portal scope: request submission, appointment confirmation, document exchange, approvals, service history, or a smaller combination?

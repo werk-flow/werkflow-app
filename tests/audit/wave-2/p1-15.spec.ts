@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 
-import { expect, test } from '../../golden/support/fixtures';
+import { expect, test } from "../support/fixtures";
 import {
   getJobSiteContactState,
   getVisibleWorkArtifactCountsAs,
@@ -8,6 +8,7 @@ import {
   getWorkLifecycleState,
 } from '../../golden/support/db';
 import {
+  workLifecycleCard,
   addSiteOnCustomerDetail,
   clockInOnJob,
   clockOut,
@@ -24,7 +25,7 @@ import {
 } from '../../golden/support/steps';
 import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
 import { requireVisiblePrecondition } from '../../golden/support/preconditions';
-import { closeWorkArtifactDialog } from '../../golden/support/spec-helpers/work-artifact-dialog';
+import { closeWorkArtifactDialog, workArtifactsSection } from '../../golden/support/spec-helpers/work-artifact-dialog';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -58,7 +59,7 @@ async function selectOption(page: Page, trigger: Locator, name: string): Promise
 }
 
 async function beginArtifact(page: Page, kind: ArtifactKind, title: string): Promise<Locator> {
-  const section = page.getByTestId('work-artifacts-section');
+  const section = workArtifactsSection(page);
   await section.getByRole('button', { name: 'Neu', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByRole('heading', { name: 'Arbeitsnachweis erstellen' })).toBeVisible();
@@ -73,12 +74,11 @@ async function beginArtifact(page: Page, kind: ArtifactKind, title: string): Pro
 }
 
 async function finishArtifact(dialog: Locator, submit = true): Promise<void> {
-  await dialog
-    .getByRole('button', {
-      name: submit ? 'Zur Prüfung einreichen' : 'Als Entwurf speichern',
-      exact: true,
-    })
-    .click();
+  if (submit) {
+    await dialog.getByLabel('Titel', { exact: true }).press('Enter');
+  } else {
+    await dialog.getByRole('button', { name: 'Als Entwurf speichern', exact: true }).click();
+  }
   await expect(dialog.getByText(/Version 1/)).toBeVisible({ timeout: 20_000 });
 }
 
@@ -88,7 +88,7 @@ async function closeArtifact(dialog: Locator): Promise<void> {
 }
 
 function artifactRow(page: Page, title: string): Locator {
-  return page.getByTestId('work-artifacts-section').getByRole('button', {
+  return workArtifactsSection(page).getByRole('button', {
     name: new RegExp(`^${escapeRegExp(title)}`),
   });
 }
@@ -158,7 +158,7 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     });
 
     await employeePage.goto(`/auftraege/${jobNumber}`);
-    const section = employeePage.getByTestId('work-artifacts-section');
+    const section = workArtifactsSection(employeePage);
     await expect(section.getByText('Noch keine Arbeitsnachweise erfasst.')).toBeVisible();
     await expect(employeePage.getByRole('link', { name: 'Arbeitsnachweise' })).toHaveCount(0);
 
@@ -529,7 +529,7 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     await clockInOnJob(employeePage, jobTitle);
     await clockOut(employeePage);
     await adminPage.goto(`/auftraege/${jobNumber}`);
-    await expect(adminPage.getByTestId('work-artifacts-section')).toContainText(
+    await expect(workArtifactsSection(adminPage)).toContainText(
       'Noch keine Arbeitsnachweise erfasst.'
     );
     await employeePage.goto(`/auftraege/${jobNumber}`);
@@ -665,7 +665,7 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     // The time-entry picker is a searchable select (registry rule for entity
     // lists): its rows are buttons inside the open listbox.
     await dialog.getByRole('combobox', { name: 'Zeiteintrag auswählen' }).click();
-    const timeEntryOptions = employeePage.getByRole('listbox').getByRole('button');
+    const timeEntryOptions = employeePage.getByRole('listbox').getByRole("option");
     await expect(timeEntryOptions).toHaveCount(1);
     await timeEntryOptions.click();
     await timeEntryDisclosure.getByRole('button', { name: 'Verknüpfen', exact: true }).click();
@@ -724,8 +724,7 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
 
     await employeePage.reload();
     await expect(
-      employeePage
-        .getByTestId('job-instruction-item')
+      employeePage.getByRole('main').getByTestId('job-instruction-item')
         .filter({ hasText: 'Inbetriebnahme dokumentieren' })
         .getByText(/^Nachweis erfüllt:/)
     ).toBeVisible({ timeout: 20_000 });
@@ -766,7 +765,7 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     // approval dependency, shared cache/realtime projections, explicit non-effects,
     // and absence of later-slice modules from this surface.
     await adminPage.goto(`/auftraege/${jobNumber}`);
-    const card = adminPage.getByTestId('work-lifecycle-card');
+    const card = workLifecycleCard(adminPage);
     await card.getByRole('button', { name: 'Abschlussprüfungen und Verlauf' }).click();
     await expect(card.getByText(/formale Freigaben offen/)).toBeVisible();
     const snapshot = (await getWorkLifecycleState(world.orgId, { jobNumber })).snapshot;
@@ -808,7 +807,7 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
       isSatisfied: true,
     });
     expect(lifecycle.dependencies.at(-1)?.artifact_approval_action_id).toBeTruthy();
-    await expect(adminPage.getByTestId('work-artifacts-section')).toBeVisible();
+    await expect(workArtifactsSection(adminPage)).toBeVisible();
     await expect(textInDom(adminPage, 'Arbeitspack')).toHaveCount(0);
     await expect(textInDom(adminPage, 'Geräteakte')).toHaveCount(0);
     await expect(textInDom(adminPage, 'Rechnung erstellen')).toHaveCount(0);

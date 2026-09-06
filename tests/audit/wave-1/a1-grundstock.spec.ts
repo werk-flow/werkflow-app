@@ -1,6 +1,9 @@
 import { resolve } from "node:path";
 
-import { expect, test } from "../../golden/support/fixtures";
+import { auditCheckpoint, saveAuditCheckpoint } from "../support/checkpoints";
+
+import { expect, test } from "../support/fixtures";
+import { expectButtonTextContrast } from "../support/button-contrast";
 import {
   getInventoryLedgerState,
   findLatestManualTimeEntryState,
@@ -11,6 +14,7 @@ import {
   getPendingInviteCode,
 } from "../../golden/support/db";
 import {
+  workLifecycleCard,
   clockInOnJob,
   clockOut,
   createCustomer,
@@ -20,6 +24,7 @@ import {
   createOwnManualTimeEntry,
   createPlannedCalendarEntry,
   createProject,
+  dragPlanningMonthEvent,
   endClockBreak,
   expectVisibleAfterSave,
   editMetadataTextField,
@@ -63,7 +68,6 @@ import {
   bookMaterialDialog,
   calendarDay,
   calendarDayJobEvent,
-  calendarJobEvent,
   calendarTimeline,
   clockInConfirmationButton,
   closeDocumentUploadProgressDialog,
@@ -93,8 +97,6 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
-  let signupOrganizationCode = "";
-
   test("A1-01/A1-07: Konto, erste Organisation und Auto-Ausstempeln beim Abmelden", async ({
     browser,
     world,
@@ -149,8 +151,9 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     await page.getByRole("button", { name: "Organisation erstellen" }).click();
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 30_000 });
     await expect(visibleText(page, organizationName)).toBeVisible();
-    signupOrganizationCode = await readOrganizationCode(page);
+    const signupOrganizationCode = await readOrganizationCode(page);
     expect(signupOrganizationCode).toMatch(/^[A-Z0-9]{6}$/);
+    saveAuditCheckpoint("a1.signupOrganizationCode", signupOrganizationCode);
     await page.goto("/mitarbeiter");
     const ownerRow = page
       .getByRole("row")
@@ -173,12 +176,23 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     await context.close();
   });
 
-  test("A1-02/A1-03: Beitritt per Code, Organisationswechsel und Datentrennung", async ({
+  test("A1-02/A1-03: Beitritt per Code, Organisationswechsel und Datentrennung",
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "A1-01/A1-07: Konto, erste Organisation und Auto-Ausstempeln beim Abmelden",
+        },
+      ],
+    },
+    async ({
     adminPage,
     browser,
     world,
   }) => {
-    const signupCode = requireChainedValue(signupOrganizationCode, {
+    const signupCode = requireChainedValue(
+        auditCheckpoint("a1.signupOrganizationCode"), {
       test: "A1-02/A1-03",
       needs: "the organization code created by A1-01/A1-07",
       grep: "A1-01/A1-07|A1-02/A1-03",
@@ -454,7 +468,22 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     await expect(visibleText(adminPage, world.orgName)).toBeVisible();
   });
 
-  test("A1-05/A1-26/A1-27/A1-28: Live-Status, Pause, Auftragwechsel und Org-Sperre", async ({
+  test("A1-05/A1-26/A1-27/A1-28: Live-Status, Pause, Auftragwechsel und Org-Sperre",
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "A1-01/A1-07: Konto, erste Organisation und Auto-Ausstempeln beim Abmelden",
+        },
+        {
+          type: "requires-test",
+          description:
+            "A1-02/A1-03: Beitritt per Code, Organisationswechsel und Datentrennung",
+        },
+      ],
+    },
+    async ({
     adminPage,
     employeePage,
     world,
@@ -470,7 +499,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     await requireVisiblePrecondition(
       employeePage
         .getByRole("listbox")
-        .getByRole("button")
+        .getByRole("option")
         .filter({ hasText: secondaryOrganizationName }),
       {
         test: "A1-05/A1-26/A1-27/A1-28",
@@ -727,7 +756,17 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     await expect(visibleText(adminPage, inlineCustomer)).toBeVisible();
   });
 
-  test("A1-R01: vollständige Auftragsdaten, Mehrfachzuweisung und Projektableitung [BASE-WORK-F01/F02/F05/F07]", async ({
+  test("A1-R01: vollständige Auftragsdaten, Mehrfachzuweisung und Projektableitung [BASE-WORK-F01/F02/F05/F07]",
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "A1-09/A1-11: Kundendaten inline und Kunde direkt im Arbeitsdialog",
+        },
+      ],
+    },
+    async ({
     adminPage,
     employeePage,
     world,
@@ -787,7 +826,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     await customerSearch.fill(renamedCustomerName);
     const customerOption = adminPage
       .getByRole("listbox")
-      .getByRole("button")
+      .getByRole("option")
       .filter({ hasText: renamedCustomerName });
     await expect(customerOption).toBeVisible({ timeout: 10_000 });
     await customerOption.click();
@@ -808,13 +847,13 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     await adminPage.getByPlaceholder("Mitarbeiter suchen...").fill("Emil");
     await adminPage
       .getByRole("listbox")
-      .getByRole("button")
+      .getByRole("option")
       .filter({ hasText: "Emil" })
       .click();
     await adminPage.getByPlaceholder("Mitarbeiter suchen...").fill("Bruno");
     await adminPage
       .getByRole("listbox")
-      .getByRole("button")
+      .getByRole("option")
       .filter({ hasText: "Bruno" })
       .click();
     await createDialog
@@ -863,7 +902,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     await adminPage.getByPlaceholder("Auftrag suchen...").fill(jobNumber);
     await adminPage
       .getByRole("listbox")
-      .getByRole("button")
+      .getByRole("option")
       .filter({ hasText: jobNumber })
       .click();
     await adminPage.keyboard.press("Escape");
@@ -886,9 +925,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
         .filter({ visible: true }),
     ).not.toHaveCount(0);
 
-    const projectLifecycle = adminPage
-      .getByRole("main")
-      .getByTestId("work-lifecycle-card");
+    const projectLifecycle = workLifecycleCard(adminPage);
     await projectLifecycle
       .getByRole("button", { name: "Storniert", exact: true })
       .click();
@@ -925,7 +962,16 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     await expect(visibleText(adminPage, "100%")).toBeVisible();
   });
 
-  test("A1-10/A1-14: Kunden- und Projektlöschung erhalten die Arbeit", async ({
+  test("A1-10/A1-14: Kunden- und Projektlöschung erhalten die Arbeit",
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "A1-09/A1-11: Kundendaten inline und Kunde direkt im Arbeitsdialog",
+        },
+      ],
+    }, async ({
     adminPage,
     world,
   }) => {
@@ -960,11 +1006,14 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
 
     await openCustomerDetail(adminPage, renamedCustomerName);
     await detailActionsButton(adminPage).click();
-    await adminPage.getByRole("menuitem", { name: "Kunde löschen" }).click();
-    await adminPage
+    const deleteCustomer = adminPage.getByRole("menuitem", { name: "Kunde löschen" });
+    await expect(deleteCustomer).toBeInViewport({ timeout: 5_000 });
+    await deleteCustomer.click();
+    const confirmCustomerDeletion = adminPage
       .getByRole("alertdialog")
-      .getByRole("button", { name: "Löschen" })
-      .click();
+      .getByRole("button", { name: "Löschen" });
+    await expectButtonTextContrast(adminPage, confirmCustomerDeletion);
+    await confirmCustomerDeletion.click();
     await expect(adminPage).toHaveURL(/\/kunden$/, { timeout: 60_000 });
     await adminPage.goto("/auftraege");
     await expect(visibleText(adminPage, linkedProjectNumber)).toBeVisible();
@@ -976,7 +1025,9 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
 
     await adminPage.goto(`/auftraege/projekt/${linkedProjectNumber}`);
     await detailActionsButton(adminPage).click();
-    await adminPage.getByRole("menuitem", { name: "Projekt löschen" }).click();
+    const deleteProject = adminPage.getByRole("menuitem", { name: "Projekt löschen" });
+    await expect(deleteProject).toBeInViewport({ timeout: 5_000 });
+    await deleteProject.click();
     await adminPage
       .getByRole("alertdialog")
       .getByRole("button", { name: "Löschen" })
@@ -1020,7 +1071,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     await employeePicker.click();
     await adminPage
       .getByRole("listbox")
-      .getByRole("button", { name: /Emil/ })
+      .getByRole("option", { name: /Emil/ })
       .click();
     // Close the multi-select popover via its trigger before submitting: the
     // pinned DialogFooter sits underneath it, and Playwright never dispatches
@@ -1094,9 +1145,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
       .getByRole("button", { name: "Datum entfernen" })
       .click();
     await expect(
-      adminPage
-        .getByRole("main")
-        .getByTestId("work-lifecycle-card")
+      workLifecycleCard(adminPage)
         .getByText("Nicht geplant", { exact: true }),
     ).toBeVisible({ timeout: 20_000 });
     await expect(textInDom(adminPage, "Geparkt")).toHaveCount(0);
@@ -1115,9 +1164,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
 
     await adminPage.goto(`/auftraege/projekt/${projectNumber}`);
     await expect(visibleMatchingText(adminPage, /50\s*%/)).toBeVisible();
-    const projectLifecycle = adminPage
-      .getByRole("main")
-      .getByTestId("work-lifecycle-card");
+    const projectLifecycle = workLifecycleCard(adminPage);
     await projectLifecycle
       .getByRole("button", { name: "Parken", exact: true })
       .click();
@@ -1291,7 +1338,26 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     });
   });
 
-  test("A1-19: Auftragsliste sucht, filtert, sortiert, klappt Projekte auf und aktualisiert live [BASE-WORK-F08/P1-00-F01]", async ({
+  test("A1-19: Auftragsliste sucht, filtert, sortiert, klappt Projekte auf und aktualisiert live [BASE-WORK-F08/P1-00-F01]",
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "A1-01/A1-07: Konto, erste Organisation und Auto-Ausstempeln beim Abmelden",
+        },
+        {
+          type: "requires-test",
+          description:
+            "A1-02/A1-03: Beitritt per Code, Organisationswechsel und Datentrennung",
+        },
+        {
+          type: "requires-test",
+          description:
+            "A1-05/A1-26/A1-27/A1-28: Live-Status, Pause, Auftragwechsel und Org-Sperre",
+        },
+      ],
+    }, async ({
     adminPage,
     bueroPage,
     world,
@@ -1341,9 +1407,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
       title: `A1 Parkplatzliste ${world.runId}`,
     });
     await adminPage.goto(`/auftraege/${parkingJobNumber}`);
-    const parkingLifecycle = adminPage
-      .getByRole("main")
-      .getByTestId("work-lifecycle-card");
+    const parkingLifecycle = workLifecycleCard(adminPage);
     await parkingLifecycle
       .getByRole("button", { name: "Parken", exact: true })
       .click();
@@ -1616,9 +1680,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     });
     await adminPage.reload();
     await showPlanningMonth(adminPage, sourceDate);
-    const event = calendarJobEvent(adminPage, title);
-    const targetCell = calendarDay(adminPage, targetDate);
-    await event.dragTo(targetCell);
+    await dragPlanningMonthEvent(adminPage, { title, sourceDate, targetDate });
     const warning = adminPage.getByRole("dialog").filter({
       has: adminPage.getByRole("heading", { name: "Planungshinweise prüfen" }),
     });
@@ -1667,7 +1729,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     await adminPage.getByPlaceholder("Mitarbeiter suchen...").fill("Emil");
     await adminPage
       .getByRole("listbox")
-      .getByRole("button")
+      .getByRole("option")
       .filter({ hasText: "Emil" })
       .click();
     await createDialog
@@ -1859,7 +1921,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
       .fill(manualTimeJobNumber);
     await employeePage
       .getByRole("listbox")
-      .getByRole("button")
+      .getByRole("option")
       .filter({ hasText: manualTimeJobNumber })
       .click();
     await typeIntoDatePicker(dialog, "Datum", digits);
@@ -1889,7 +1951,16 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     });
   });
 
-  test("A1-24/A1-25: Kalender-Zeiteintrag, Blocktrennung, Pending-Dialog, Filter und Realtime [BASE-CALENDAR-F03/F04]", async ({
+  test("A1-24/A1-25: Kalender-Zeiteintrag, Blocktrennung, Pending-Dialog, Filter und Realtime [BASE-CALENDAR-F03/F04]",
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "A1-29: Manuelle Zeiten lehnen falsche Reihenfolge und Überlappung ab",
+        },
+      ],
+    }, async ({
     adminPage,
     bueroPage,
     world,
@@ -1918,8 +1989,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     });
 
     await openTimeApprovals(adminPage);
-    const pendingPair = adminPage
-      .getByTestId(/pending-session-/)
+    const pendingPair = adminPage.getByRole("main").getByTestId(/pending-session-/)
       .filter({ hasText: world.users.employee.firstName });
     await expect(pendingPair).toContainText(/00:00.*00:05/);
     await expect(pendingPair).toContainText(manualTimeJobTitle);
@@ -1938,7 +2008,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     await adminPage.getByPlaceholder("Mitarbeiter suchen...").fill("Bruno");
     await adminPage
       .getByRole("listbox")
-      .getByRole("button")
+      .getByRole("option")
       .filter({ hasText: "Bruno" })
       .click();
     await typeIntoTimeInput(manualDialog, "clockInTime", "0010");
@@ -2035,7 +2105,35 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     await dialog
       .getByRole("button", { name: "Bearbeiten", exact: true })
       .click({ delay: 250 });
+    const originalViewport = adminPage.viewportSize();
+    if (!originalViewport) throw new Error("A1-30 requires a configured viewport.");
+    await adminPage.setViewportSize({ width: 375, height: 568 });
+    const entryBody = dialog.locator('[data-slot="dialog-body"]');
+    const entryHeading = dialog.getByRole("heading", {
+      name: "Eintrag Details",
+      exact: true,
+    });
+    const saveEntry = dialog.getByRole("button", { name: "Speichern", exact: true });
+    await expect(entryHeading).toBeInViewport({ ratio: 1 });
+    await expect(saveEntry).toBeInViewport({ ratio: 1 });
+    const initialSaveBox = await saveEntry.boundingBox();
+    expect(initialSaveBox).not.toBeNull();
+    expect(
+      await entryBody.evaluate((body) => body.scrollHeight > body.clientHeight),
+    ).toBe(true);
+    await entryBody.evaluate((body) => {
+      body.scrollTop = body.scrollHeight;
+    });
+    await expect(entryHeading).toBeInViewport({ ratio: 1 });
+    await expect(saveEntry).toBeInViewport({ ratio: 1 });
+    const scrolledSaveBox = await saveEntry.boundingBox();
+    expect(scrolledSaveBox).not.toBeNull();
+    expect(
+      Math.abs(scrolledSaveBox!.y - initialSaveBox!.y),
+    ).toBeLessThanOrEqual(1);
+    await adminPage.setViewportSize(originalViewport);
     const clockOutTime = clockOutTimeGroup(dialog);
+    await expect(clockOutTime).toBeVisible();
     await clockOutTime.focus();
     await clockOutTime.press("ArrowLeft");
     await clockOutTime.press("Delete");
@@ -2043,9 +2141,13 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     await clockOutTime.press("ArrowRight");
     await clockOutTime.press("Delete");
     await clockOutTime.pressSequentially("30", { delay: 50 });
+    await expect(saveEntry).toHaveAttribute(
+      'form',
+      (await dialog.locator('form').getAttribute('id'))!,
+    );
     await dialog
       .getByRole("button", { name: "Speichern", exact: true })
-      .click();
+      .press("Enter");
     await expect(
       dialog.getByRole("button", { name: "Bearbeiten", exact: true }),
     ).toBeVisible({
@@ -2099,7 +2201,17 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     });
   });
 
-  test("A1-31: Verlauf filtert Zeitraum, Mitarbeiter und Status [BASE-TIME-F06]", async ({
+  test("A1-31: Verlauf filtert Zeitraum, Mitarbeiter und Status [BASE-TIME-F06]",
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "A1-29: Manuelle Zeiten lehnen falsche Reihenfolge und Überlappung ab",
+        },
+      ],
+    },
+    async ({
     adminPage,
     world,
   }) => {
@@ -2129,7 +2241,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     await adminPage.getByPlaceholder("Mitarbeiter suchen...").fill("Emil");
     await adminPage
       .getByRole("listbox")
-      .getByRole("button")
+      .getByRole("option")
       .filter({ hasText: "Emil" })
       .click();
     const todayDigits = berlinDateAtOffset(0).split("-").reverse().join("");
@@ -2435,7 +2547,36 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     });
   });
 
-  test("A1-34/A1-35: Ordner, Verschieben/Kopieren und Arbeitsverknüpfung", async ({
+  test("A1-34/A1-35: Ordner, Verschieben/Kopieren und Arbeitsverknüpfung",
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "A1-01/A1-07: Konto, erste Organisation und Auto-Ausstempeln beim Abmelden",
+        },
+        {
+          type: "requires-test",
+          description:
+            "A1-02/A1-03: Beitritt per Code, Organisationswechsel und Datentrennung",
+        },
+        {
+          type: "requires-test",
+          description:
+            "A1-05/A1-26/A1-27/A1-28: Live-Status, Pause, Auftragwechsel und Org-Sperre",
+        },
+        {
+          type: "requires-test",
+          description:
+            "A1-17/A1-18: Checkliste, Attribution und Abschlussdatum",
+        },
+        {
+          type: "requires-test",
+          description:
+            "A1-19: Auftragsliste sucht, filtert, sortiert, klappt Projekte auf und aktualisiert live [BASE-WORK-F08/P1-00-F01]",
+        },
+      ],
+    }, async ({
     adminPage,
     world,
   }) => {
@@ -3081,7 +3222,17 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     });
   });
 
-  test("A1-41: Zu-/Abgang, Negativsperre und nachvollziehbare Bewegung", async ({
+  test("A1-41: Zu-/Abgang, Negativsperre und nachvollziehbare Bewegung",
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "A1-40/A1-44: Artikel und Lager per UI sowie alle Inventaransichten",
+        },
+      ],
+    },
+    async ({
     adminPage,
     world,
   }) => {
@@ -3198,8 +3349,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     ).toBe(world.inventory.initialQuantity);
 
     await employeePage.goto(`/auftraege/${jobNumber}`);
-    const plannedLine = employeePage
-      .getByTestId("job-material-line")
+    const plannedLine = employeePage.getByRole("main").getByTestId("job-material-line")
       .filter({ hasText: world.inventory.itemName });
     await bookMaterialDialog(
       employeePage,
@@ -3207,8 +3357,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
       "Entnahme buchen",
       "2",
     );
-    const worldMaterialLine = employeePage
-      .getByTestId("job-material-line")
+    const worldMaterialLine = employeePage.getByRole("main").getByTestId("job-material-line")
       .filter({ hasText: world.inventory.itemName });
     await bookMaterialDialog(
       employeePage,

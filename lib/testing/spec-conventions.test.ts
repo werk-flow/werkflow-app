@@ -49,6 +49,19 @@ const NEGATIVE_CHECK_FORMS = [
 ];
 
 describe('browser spec conventions (testing.md)', () => {
+  test('seed cleanup cannot discover users or organizations by a global test marker', () => {
+    const source = readFileSync(join(GOLDEN_DIR, 'support', 'seed.ts'), 'utf8');
+    expect(source).not.toContain('destroyLeftoverTestWorlds');
+    expect(source).not.toMatch(/\.(?:like|ilike)\(\s*['"]email['"]/);
+    const organizationQueries = source.match(/\.from\(['"]organizations['"]\)[^;]+;/g) ?? [];
+    expect(organizationQueries.length).toBeGreaterThan(0);
+    for (const query of organizationQueries) {
+      if (query.includes('name.like.')) {
+        expect(query).toMatch(/\.in\(['"]admin_id['"],\s*userIds\)/);
+      }
+    }
+  });
+
   test('serial-precondition errors carry the exact recovery command', () => {
     expect(() =>
       requireChainedValue('', {

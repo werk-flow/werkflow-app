@@ -1,9 +1,8 @@
 // Fixture-date ownership for the audit battery (Tier 1, Stage C 2026-08-29).
 //
-// A no-grep audit run executes every wave in ONE shared world, so two specs
-// claiming the same run-day offset for a uniqueness-constrained fixture
-// (employment_conditions.valid_from, closure days, vacation/sickness
-// overlaps, planning uniqueness) collide deterministically. The windows
+// Audit spec groups own separate worlds. Date windows still keep integration
+// fixtures explicit where dates affect uniqueness, employment conditions,
+// closure days, absence overlaps, or planning. The windows
 // below encode the partition from docs/plans/wave-1-audit.md (+20…+69,
 // including the R1 reconciliation reserve) and docs/plans/wave-2-audit.md
 // (+70 onward, five days per slice). The module throws on overlapping
@@ -16,6 +15,7 @@
 // below. Other facts, such as expiry horizons, use the unchecked formatter.
 
 import { DISPATCH_OVERVIEW_MAX_OFFSET_DAYS } from "@/lib/dispatch/types";
+import { testBusinessDate } from "../../../lib/testing/business-date";
 
 type OffsetRange = { readonly from: number; readonly to: number };
 
@@ -75,13 +75,7 @@ assertDisjointWindows();
 
 /** Formats run-day + offset as a Berlin-calendar YYYY-MM-DD date. */
 export function berlinDateAtOffset(offsetDays: number): string {
-  const formatter = new Intl.DateTimeFormat("sv-SE", {
-    timeZone: "Europe/Berlin",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  const berlinToday = formatter.format(new Date());
+  const berlinToday = testBusinessDate();
   const date = new Date(`${berlinToday}T12:00:00Z`);
   date.setUTCDate(date.getUTCDate() + offsetDays);
   return date.toISOString().slice(0, 10);

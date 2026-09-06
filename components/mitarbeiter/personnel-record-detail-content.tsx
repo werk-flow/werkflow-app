@@ -113,6 +113,7 @@ export function PersonnelRecordDetailContent({
           <PersonnelQualificationSummary data={qualificationSummary} />
           {lifecycle ? (
             <PersonnelLifecycleSection
+              key={lifecycle.employeeRecordId}
               data={lifecycle}
               canManage={canEdit}
               canAdministerAccess={canAdministerAccess}

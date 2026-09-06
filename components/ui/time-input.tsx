@@ -34,7 +34,9 @@ function EmptySegmentLine() {
  * for consistent cross-browser behavior (especially Safari).
  */
 const TimeInput = React.forwardRef<HTMLDivElement, TimeInputProps>(
-  ({ className, value, onChange, disabled, id: idProp, onBlur, onFocus, onKeyDown, ...props }, ref) => {
+  ({ className, value, onChange, disabled, id: idProp, onBlur, onFocus, onKeyDown,
+    'aria-label': ariaLabel, 'aria-labelledby': ariaLabelledBy,
+    'aria-describedby': ariaDescribedBy, 'aria-invalid': ariaInvalid, ...props }, ref) => {
     const field = useFieldContext();
     const id = idProp ?? field?.controlId;
     const containerRef = React.useRef<HTMLDivElement>(null);
@@ -195,7 +197,11 @@ const TimeInput = React.forwardRef<HTMLDivElement, TimeInputProps>(
       <div
         ref={containerRef}
         role="group"
-        aria-label="Uhrzeit"
+        aria-label={ariaLabel ?? (field ? undefined : 'Uhrzeit')}
+        aria-labelledby={ariaLabelledBy ?? (ariaLabel ? undefined : field?.labelId)}
+        aria-describedby={ariaDescribedBy ?? ([field?.describedBy, field?.requiredDescriptionId].filter(Boolean).join(' ') || undefined)}
+        data-invalid={ariaInvalid ?? (field?.invalid || undefined)}
+        aria-disabled={disabled || undefined}
         tabIndex={disabled ? -1 : 0}
         id={id}
         onFocus={(e) => {

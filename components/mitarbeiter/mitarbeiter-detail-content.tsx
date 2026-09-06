@@ -528,6 +528,7 @@ export function MitarbeiterDetailContent({
 
             {personnel && lifecycle ? (
               <PersonnelLifecycleSection
+                key={lifecycle.employeeRecordId}
                 data={lifecycle}
                 canManage={isAdminOrManager}
                 canAdministerAccess={canAdministerAccess}
@@ -739,7 +740,7 @@ export function MitarbeiterDetailContent({
             <AlertDialogAction
               onClick={handleRemove}
               disabled={isRemoving || Boolean(removalBlockedMessage)}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              variant="destructive"
             >
               {isRemoving ? (
                 <>

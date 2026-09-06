@@ -1,16 +1,13 @@
-import type { Page } from "@playwright/test";
+import { submitMissedTime } from "../support/time-corrections";
+import { prepareSubmittedCorrections } from "../support/time-correction-fixtures";
 
-import { expect, test } from "../../golden/support/fixtures";
+import { expect, test } from "../support/fixtures";
 import {
   getTimeCorrectionCountsAs,
   getTimeCorrectionState,
 } from "../../golden/support/db";
 import { ownedBerlinDateAtOffset } from "../../golden/support/date-ownership";
-import {
-  retryDialogTransaction,
-  selectFromSearchable,
-  typeIntoDateTimeField,
-  visibleText,
+import { visibleText,
 } from "../../golden/support/steps";
 
 test.describe.configure({ mode: "serial" });
@@ -18,38 +15,6 @@ test.describe.configure({ mode: "serial" });
 const DATES = [115, 116, 117, 118, 119].map((offset) =>
   ownedBerlinDateAtOffset("p1-22", offset),
 );
-let clarificationRequestId: string;
-
-async function submitMissedTime(
-  page: Page,
-  input: { date: string; reason: string; personName?: string },
-): Promise<void> {
-  await page.goto("/zeiterfassung?tab=history");
-  const dialog = page.getByRole("dialog").filter({
-    has: page.getByRole("heading", { name: "Zeitkorrektur" }),
-  });
-  await retryDialogTransaction({
-    dialog,
-    open: async () => {
-      await page.getByRole("button", { name: "Zeit nachtragen" }).click({ timeout: 10_000 });
-      await expect(dialog).toBeVisible({ timeout: 5_000 });
-    },
-    interact: async () => {
-      const bounded = { timeout: 5_000 };
-      if (input.personName) {
-        await selectFromSearchable(
-          page,
-          dialog.getByRole("combobox", { name: "Person für Zeitkorrektur" }),
-          input.personName,
-        );
-      }
-      await typeIntoDateTimeField(dialog, "time-correction-start", `${input.date}T07:00`, bounded);
-      await typeIntoDateTimeField(dialog, "time-correction-end", `${input.date}T09:30`, bounded);
-      await dialog.getByLabel("Grund").fill(input.reason, bounded);
-      await dialog.getByRole("button", { name: "Speichern" }).click(bounded);
-    },
-  });
-}
 
 test.describe("P1-22 exhaustive correction audit @AUDIT-W2-P1-22 @AUDIT-W2", () => {
   // Catalog mapping: P1-22-F01…F16 and F25…F29 are exercised here through the
@@ -58,7 +23,7 @@ test.describe("P1-22 exhaustive correction audit @AUDIT-W2-P1-22 @AUDIT-W2", () 
   // self-authority case below; F30…F38 map to immutable lifecycle and replay
   // assertions; F39…F50 map to atomic batch, RLS, grants, Realtime and the
   // connected-reader/closed-scope assertions recorded in the acceptance ledger.
-  test("preserves clarification as a new immutable revision before approval", async ({
+  test("preserves clarification as a new immutable revision before approval @READINESS", async ({
     adminPage,
     employeePage,
     world,
@@ -72,20 +37,20 @@ test.describe("P1-22 exhaustive correction audit @AUDIT-W2-P1-22 @AUDIT-W2", () 
       ),
     );
     expect(request?.status).toBe("submitted");
-    clarificationRequestId = request!.id;
+    const clarificationRequestId = request!.id;
     const originalRevision = submitted.revisions.find((revision) =>
       revision.request_id === clarificationRequestId && revision.revision === 1
     );
     expect(originalRevision).toBeDefined();
 
     await adminPage.goto("/zeiterfassung?tab=approvals");
-    const approvalCard = adminPage.getByTestId(`time-correction-${clarificationRequestId}`);
+    const approvalCard = adminPage.getByRole("main").getByTestId(`time-correction-${clarificationRequestId}`);
     await approvalCard.getByLabel("Kommentar").fill("Bitte den fehlenden Einsatz genauer erläutern.");
     await approvalCard.getByRole("button", { name: "Rückfrage" }).click();
-    await expect(approvalCard).toHaveCount(0);
+    await expect(adminPage.getByTestId(`time-correction-${clarificationRequestId}`)).toHaveCount(0);
 
     await employeePage.goto("/zeiterfassung?tab=history");
-    const responseCard = employeePage.getByTestId(`time-correction-${clarificationRequestId}`);
+    const responseCard = employeePage.getByRole("main").getByTestId(`time-correction-${clarificationRequestId}`);
     await expect(responseCard.getByText("Rückfrage", { exact: true })).toBeVisible();
     await responseCard.getByLabel("Antwort").fill("Notdiensteinsatz beim Kunden; Beginn und Ende geprüft.");
     await responseCard.getByRole("button", { name: "Erneut einreichen" }).click();
@@ -109,7 +74,7 @@ test.describe("P1-22 exhaustive correction audit @AUDIT-W2-P1-22 @AUDIT-W2", () 
     expect(resubmitted.applications.filter((row) => row.request_id === clarificationRequestId)).toHaveLength(0);
   });
 
-  test("applies a manager correction for another employee immediately but never a self bypass", async ({
+  test("applies a manager correction for another employee immediately but never a self bypass @READINESS", async ({
     bueroPage,
     world,
   }) => {
@@ -147,25 +112,34 @@ test.describe("P1-22 exhaustive correction audit @AUDIT-W2-P1-22 @AUDIT-W2", () 
 
   test("reviews selected corrections atomically and keeps tenant reads isolated", async ({
     adminPage,
-    employeePage,
     world,
   }) => {
     const reasons = [
       `Batch A ${world.runId}`,
       `Batch B ${world.runId}`,
     ];
-    await submitMissedTime(employeePage, { date: DATES[2]!, reason: reasons[0]! });
-    await submitMissedTime(employeePage, { date: DATES[3]!, reason: reasons[1]! });
+    // Submission is proved by the first case and Golden. This case starts at
+    // the distinct batch-review behavior with two canonical pending requests.
+    const preparedIds = await prepareSubmittedCorrections(world, [
+      { date: DATES[2]!, reason: reasons[0]! },
+      { date: DATES[3]!, reason: reasons[1]! },
+    ]);
     const before = await getTimeCorrectionState(world.orgId);
     const batchIds = before.revisions
       .filter((revision) => reasons.includes(revision.reason))
       .map((revision) => revision.request_id);
     expect(batchIds).toHaveLength(2);
+    expect(new Set(batchIds)).toEqual(new Set(preparedIds));
 
     await adminPage.goto("/zeiterfassung?tab=approvals");
     for (const requestId of batchIds) {
-      await adminPage.getByTestId(`time-correction-${requestId}`)
-        .getByRole("checkbox").check();
+      const card = adminPage.getByRole("main").getByTestId(`time-correction-${requestId}`);
+      const requestReason = before.revisions.find((revision) => revision.request_id === requestId)!.reason;
+      await expect(card).toContainText(requestReason);
+      await expect(card).toContainText("Kein Eintrag");
+      await expect(card).toContainText("07:00");
+      await expect(card).toContainText("09:30");
+      await card.getByRole("checkbox").check();
     }
     await adminPage.getByRole("button", { name: "Auswahl freigeben" }).click();
     await expect(visibleText(adminPage, "2 Anträge wurden gemeinsam bearbeitet.")).toBeVisible();

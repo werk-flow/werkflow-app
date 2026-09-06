@@ -1,6 +1,6 @@
 # Phase 1 Execution Protocol
 
-Status: living — last reviewed 2026-09-03
+Status: living — last reviewed 2026-09-06
 
 This file holds the durable process rules for Phase 1. It changes only when the process itself changes, and any such change needs an explicit progress-log entry naming the decision. The hot status and slice index live in [roadmap.md](roadmap.md); gate definitions in [gates.md](gates.md); routing matrices in [coverage.md](coverage.md); history in [log.md](log.md); per-slice acceptance evidence in `slices/`.
 
@@ -16,11 +16,15 @@ When sources disagree, use this order:
 3. Current application behavior, generated Supabase types, and live Supabase inspection for implementation facts.
 4. [`product-capability-map.md`](../../product/product-capability-map.md) for product phases, feature ownership, shared objects, and decision gates.
 5. The relevant `docs/features/*.md` specifications for intended feature behavior and cross-feature contracts.
-6. The roadmap entry ([roadmap.md](roadmap.md)) and the slice records under `slices/` for execution order, prerequisites, status, and verification gates.
-7. Slice records (each slice's single document, holding its plan and its acceptance evidence) and decision records.
+6. Accepted decision records for the durable choices they govern. Read their dated amendments before applying an older plan.
+7. The roadmap entry ([roadmap.md](roadmap.md)) for execution order, prerequisites, current status, and verification gates; the slice records under `slices/` for confirmed scope and dated acceptance evidence.
 8. Older technical or implementation plans where they have not been superseded by code or live state.
 
 This ordering does not let implementation drift redefine product intent silently. If current code and the intended feature behavior differ, document the gap and obtain the necessary product decision before changing a consequential workflow.
+
+Testing acceptance follows [decision 0007](../../decisions/0007-independent-test-groups.md) and [testing.md](../../technical/testing.md). They supersede the older full-battery-per-slice and routine full-cloud wave requirements.
+
+Closed slice records preserve the discovery baseline, implementation plan, and evidence from their acceptance date. Their old commands, approval pauses, infrastructure counts, and downstream deferrals describe that work. Use the current checkpoint and living technical docs for a new task; historical publication instructions do not authorize a new commit or push.
 
 ## Required Reading For Phase 1 Tasks
 
@@ -31,7 +35,7 @@ Every Phase 1 implementation agent must read, in order:
 3. [`product-capability-map.md`](../../product/product-capability-map.md), especially the coherent operating loop, shared objects, cross-feature handoff rules, Phase 1 completion criteria, and decision gates.
 4. The target slice's primary feature specification.
 5. Only the connected feature specifications named by the slice and required to understand its handoffs.
-6. Relevant technical documentation, current code paths, generated database types, and live Supabase state.
+6. [Testing.md](../../technical/testing.md), relevant technical documentation, current code paths, generated database types, and live Supabase state.
 7. Any accepted decision record the slice names.
 
 Agents should not load every feature document for every task. The roadmap defines the smallest relevant reading set. When discovery exposes another affected domain, add that document to the slice before implementation.
@@ -91,11 +95,11 @@ These are deliberate warnings for future agents and the product owner, recorded 
 
 1. **Process-to-progress ratio.** The full slice set in [roadmap.md](roadmap.md) with full exit evidence is realistically a multi-year effort for a small team. The discipline exists to prevent an incoherent product, not to become the product. For low-risk slices (no schema migration, no permission change, no money/time/stock semantics), lighter evidence is acceptable — say so explicitly in the slice record instead of silently skipping items. When a slice consistently costs more in ceremony than in implementation, propose splitting or trimming it rather than abandoning the protocol.
 2. **Wave 4 is the risk concentration.** Invoices, controlled number ranges, XRechnung/ZUGFeRD profiles, GoBD-adjacent retention claims, and DATEV handoffs cannot be validated from documentation or competitor behavior. Budget for qualified German tax/legal/accounting review **before** accepting `P1-39`–`P1-43`, and treat its absence as a `decision_blocked` condition, not a footnote.
-3. **Golden-gate rerun cost compounds.** By Wave 3 and later, "rerun all materially affected earlier gates" grows expensive. Sampled or partially automated reruns are acceptable when the gate log records what was rerun, what was skipped, and why. An unrecorded skip is the only wrong option.
+3. **Select and qualify independent groups.** Run `bun run test:plan` before expensive verification. The complete change plan controls slice acceptance; release mode controls wave and release acceptance. Retain passing evidence for unchanged group inputs. Diagnose a failed group without restarting unrelated groups.
 
 ## External Resources And Cost Gates
 
-Recorded 2026-08-23 so external dependencies never surprise a wave mid-flight. Baseline running costs today: Supabase Pro org (~$35/month with both projects on Micro), Cloudflare R2 (within the free tier for years at current volumes), Resend (free tier; invite/auth mail volume is tiny), Vercel. Per wave:
+Recorded 2026-08-23 to identify external dependencies before a wave starts. The amounts below are planning estimates from that date, not current prices or budget approvals. Current environment configuration lives in [environments.md](../../technical/environments.md). Verify provider terms and obtain the required resource approval when a slice reaches one of these boundaries.
 
 - **Wave 2 (`P1-13`–`P1-24`): deliberately zero new external resources.** Every slice is internal product depth. Two look-alikes that are NOT external here: `P1-15` "signatures" means captured signature evidence (drawn/uploaded, versioned) — qualified electronic signature providers are an explicit later decision gate, never an implied dependency; `P1-23` "payroll-ready export" means versioned export FILES an accountant/payroll tool can consume — no DATEV or payroll API connection (that is `P1-43` file handoff and `P1-50` connectors).
 - **Wave 3:** first real external touchpoints, still file-first and free of per-use fees: `P1-25` imports wholesaler catalog/price data (DATANORM files require the customer's own wholesaler accounts — an onboarding prerequisite, not a WerkFlow cost); `P1-34` scopes DATANORM/IDS/UGL/Open Masterdata/SHK Connect acceptance (open trade standards; live wholesaler API access again rides customer accounts). Budget acquisition effort for test fixtures/sample files, not money.
@@ -126,9 +130,9 @@ Rule: a slice that would introduce an external account, API, or per-use cost not
 - Make consequential actions explicit, previewable, attributable, and correctable.
 - Use backward-compatible migrations and preserve historical meaning.
 - Make failures and partial external states visible with a recovery path.
-- Add focused tests at the domain boundary and end-to-end tests for the slice outcome. Concretely: extend the golden-gate harness ([testing.md](../../technical/testing.md)) — add the slice's business actions to `tests/golden/support/steps.ts` and cover the slice outcome in the gate spec named by its slice index row (or a dedicated spec if no gate is due yet). A slice without an automated end-to-end check of its own outcome is not done.
-- Use the browser runner's iteration lane while implementation changes. Every new Golden slice spec ships stage-split: separate greppable stage tests at stable persisted boundaries per the testing conventions ([testing.md](../../technical/testing.md)), each later stage verifying its persisted precondition; one monolithic slice test is a review flag. Failed worlds are retained for focused diagnosis; diagnostic reuse is never substituted for the final clean-world certification.
-- **Ship the slice's audit coverage with the slice**: a spec in `tests/audit/wave-N/` that maps every one of the slice's catalog flow IDs with full clause evidence under testing rule 12, plus the ledger rows in the wave's audit doc ([wave-2-audit.md](../wave-2-audit.md) for Wave 2). Golden gates stay lean cross-slice scenarios; the audit spec is where exhaustive flow coverage lives. The wave-end audit is a thin certification gate, not a discovery phase — discovery already happened here.
+- Cover every promised clause at the real boundary that can prove it. Use domain units for rules, SQL for database permissions and invariants, component browser checks for controls, and application browser groups for connected outcomes and visible role behavior. A slice still needs an automated browser proof of its own outcome. Reuse shared actions where they remove duplication; do not add every helper to one growing file.
+- Use explicit groups during implementation and the complete selected change plan for acceptance. Separate connected journey stages at persisted boundaries. Declare producer prerequisites and verify their actual preconditions. Each independent group owns its world and output files. Retained diagnostics explain failures but do not qualify as fresh acceptance evidence.
+- Ship complete catalog coverage with the slice. Update `lib/testing/coverage-map.json` and the owning executable groups in `lib/testing/test-groups.ts`. Record which assertions prove each observable clause and review their meaning. Audit browser specs cover the clauses that require the running app; other clauses can use domain, SQL, or component evidence. Remove duplicate execution only when its coverage remains explicit. The wave ledger records accepted evidence and links its owners.
 - Keep field-worker paths simpler than office paths and use natural German for user-facing language.
 - Record a decision in `docs/decisions/` when future agents must understand why a durable choice was made.
 
@@ -143,15 +147,15 @@ The slice is not complete until all applicable items are satisfied:
 - Realtime, caching, retry, idempotency, and failure recovery were tested where applicable;
 - accessibility, responsive behavior, German UI language, and role visibility were reviewed;
 - the slice's focused acceptance criteria pass;
-- every golden scenario named in the slice row passes;
+- every Golden outcome named in the slice row has passing evidence in its selected group with all declared producers;
 - the primary feature doc moves implemented behavior into **Current Product Baseline**;
 - [user-flow-catalog.md](../../product/user-flow-catalog.md) gains the slice's complete list of new user-visible flows in German with stable `P1-XX-FNN` IDs (every new action any role can take and what the app does in response — not just the golden-gate flows);
-- the slice's audit spec in `tests/audit/wave-N/` maps **all** of those flow IDs with full clause evidence per testing rule 12, its ledger rows in the wave's audit doc are closed with the `X/X mapped; X/X fully evidenced; 0 partial; 0 unmapped` invariant, and the focused audit spec ran green in the acceptance ladder; every new bullet receives a stable flow ID, existing IDs are never reused, and a material wording change reopens that ID's audit mapping under testing rule 12;
+- the coverage map accounts for every catalog flow and all observable clauses, with current reviewed catalog hashes and executable references; the wave ledger closes with `X/X mapped; X/X fully evidenced; 0 partial; 0 unmapped`; identifiers are never reused, and a material wording change reopens its mapping for assertion review;
 - connected feature contracts and open decisions are updated;
 - conceptual data-model and technical docs are updated if ownership or architecture changed;
 - the slice's acceptance is recorded in its owning files: the slice record under `slices/` closes with the full acceptance evidence, completion date, follow-up work, and any split/superseding slices (the record is the canonical home for the slice's facts); [roadmap.md](roadmap.md) updates the index-row status, the checkpoint table, the accepted counter, and the recomputed `ready` set; [log.md](log.md) gains one short appended entry linking the record;
-- appropriate lint, type, test, and build validation passes — including the slice's focused runner command against the fresh production build, followed by the required certification batteries **against the local stack** plus a green cloud canary run (decision [0006](../../decisions/0006-testing-architecture.md); the full battery runs against the cloud only at wave-end gates and owner-named partner milestones), with the runs recorded in [golden-gate-log.md](../golden-gate-log.md);
-- every failed certification is classified in [test-incident-log.md](../../technical/test-incident-log.md), proven with a focused run on the current source before retry, and cleaned after diagnosis; two consecutive full failures of the same class require investigation and an explicit rerun-budget reason;
+- the complete selected local change plan passes on qualified inputs, including affected browser groups on a recorded production build; provider changes also receive the applicable cloud canary evidence; the slice record and [gate log](../golden-gate-log.md) identify the verification report, selected scope, reused results, and fresh runs;
+- failures have evidence and classification in [test-incident-log.md](../../technical/test-incident-log.md); unresolved selected groups block acceptance, unchanged failed inputs cannot be retried as a substitute for diagnosis, and retained ownership is resolved before release closure;
 - a separate review finds no unresolved correctness, security, data-loss, or documentation issue.
 
 ## Cross-Cutting Invariants
@@ -207,6 +211,8 @@ The slice record uses this minimum structure. Sections fill in as the slice move
 ```md
 # P1-XX — Slice Name
 
+Status: living — last reviewed YYYY-MM-DD; in-progress slice plan
+
 ## Bounded Outcome
 
 ## Primary User And Roles
@@ -237,6 +243,8 @@ The slice record uses this minimum structure. Sections fill in as the slice move
 
 ## Acceptance Criteria
 
+## Clause Coverage And Executable Groups
+
 ## Automated And Manual Verification
 
 ## Documentation Updates
@@ -252,13 +260,13 @@ Use this as a starting point; replace the placeholders with the actual slice row
 >
 > Read `AGENTS.md`, `docs/plans/phase-1/roadmap.md`, `docs/plans/phase-1/protocol.md`, the target slice's record under `docs/plans/phase-1/slices/` (if it exists yet), the relevant sections of `docs/product/product-capability-map.md`, the primary feature specification, and the connected specifications named by the slice index row. Inspect current code, generated Supabase types, migrations, RLS, Realtime/cache behavior, and live Supabase state before making implementation claims.
 >
-> First verify that every direct prerequisite is marked complete with evidence and that the required earlier golden gates pass. If a dependency is absent, stop and explain it; do not create a parallel substitute.
+> First verify that every direct prerequisite is complete with evidence. Review the current selected test plan and required connected Golden outcomes. If a product dependency is absent, explain it and do not create a parallel substitute.
 >
 > Bounded outcome: `[copy the outcome from the slice index row and refine only with confirmed decisions]`.
 >
 > Before coding, report the verified current behavior, affected ownership boundaries, proposed state transitions, permissions, migration/backward-compatibility behavior, failure recovery, acceptance criteria, non-goals, unresolved decisions, **and the slice's proposed user-flow list** (German catalog bullets with provisional `P1-XX-FNN` IDs). Ask for confirmation when a decision would materially change product behavior.
 >
-> After approval, implement the complete slice across data, authorization, backend, UI, audit, tests, and documentation. Preserve existing flows unless the accepted plan migrates them. Update the slice record and index-row status/evidence, primary feature baseline, connected contracts, conceptual data model, technical docs, and the user-flow catalog as applicable. Run the slice's focused tests, the required golden gate, the slice's rule-12 audit spec, and the repository's normal validation.
+> After approval, implement the complete slice across data, authorization, backend, UI, audit, tests, and documentation. Preserve existing flows unless the accepted plan migrates them. Update the slice record, roadmap status, feature contracts, technical docs, and user-flow catalog. Map every flow clause to reviewed evidence in `lib/testing/coverage-map.json` and register its executable groups. Use `bun run test:plan` and `bun run test:verify` for the complete change scope. Record the report, selected groups, exact results, review findings, and remaining limitations. A deliberately narrowed group run alone does not qualify the slice.
 
 ## Roadmap Update Protocol
 
@@ -282,7 +290,7 @@ Status changes touch the files that own them: the index row and checkpoint in [r
 - Change status to `verification`.
 - Record migration identifiers, test commands/results, manual acceptance evidence, and known limitations in the slice record.
 - Update feature docs provisionally but do not describe unaccepted behavior as complete.
-- Run the required golden gate and all earlier gates materially affected by the change.
+- Run the complete selected change plan, including required Golden outcomes and their producers. Use the release plan plus cloud canary at wave end, beta handoff, or production release.
 
 ### When A Slice Completes
 
@@ -309,7 +317,7 @@ Status changes touch the files that own them: the index row and checkpoint in [r
 Phase 1 is complete only when all of the following are true:
 
 1. Every non-superseded roadmap slice is `complete`, or an explicit accepted decision record removes it from Phase 1 without leaving its promised workflow broken.
-2. `GG-00` through `GG-16` pass on the Phase 1 release candidate.
+2. The complete local release plan and cloud canary pass on qualified release inputs, including `GG-00` through `GG-16` in their integrated business journeys.
 3. The capability map's operational, commercial, material, people/planning, and trust/adoption completion criteria are satisfied.
 4. Current feature baselines match actual behavior and no planned capability is described as implemented prematurely.
 5. Major data can be migrated in, searched, corrected, audited, exported, and recovered.

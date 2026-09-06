@@ -5,7 +5,7 @@ import { resolveDailyTargets } from '../../../lib/personnel/targets';
 import { formatDuration } from '../../../lib/time-tracking/helpers';
 import { doesDateConsumeVacation, formatVacationDays } from '../../../lib/vacation/balance';
 import { formatSicknessRange } from '../../../lib/sickness/types';
-import { expect, test } from '../../golden/support/fixtures';
+import { expect, test } from "../support/fixtures";
 import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
 import {
   getEmployeeRecordStateByUser,

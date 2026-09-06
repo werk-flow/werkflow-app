@@ -1,8 +1,8 @@
 import { resolve } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
 
-import { expect, test } from '../../golden/support/fixtures';
-import { ARTIFACTS_DIR } from '../../golden/support/world';
+import { expect, test } from "../support/fixtures";
+import { artifactsDirectory } from '../../golden/support/world';
 import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
 import { requireVisiblePrecondition } from '../../golden/support/preconditions';
 import {
@@ -96,8 +96,7 @@ async function createTimelineFollowUp(
   title: string,
   dueAtLocal: string
 ): Promise<void> {
-  const sourceRow = page
-    .getByTestId('customer-timeline')
+  const sourceRow = page.getByRole('main').getByTestId('customer-timeline')
     .locator('[data-timeline-key]')
     .filter({ hasText: sourceText })
     .filter({ has: page.getByRole('button', { name: 'Hierzu nachfassen' }) });
@@ -196,19 +195,19 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
     await adminPage.getByRole('tab', { name: 'Auftrag erstellen' }).click();
     await adminPage.getByRole('combobox').filter({ hasText: 'Kein Kunde' }).click();
     await adminPage.getByPlaceholder('Kunde suchen...').fill(customer);
-    await adminPage.getByRole('listbox').getByRole('button').filter({ hasText: customer }).click();
+    await adminPage.getByRole('listbox').getByRole("option").filter({ hasText: customer }).click();
     const jobDialog = adminPage.getByRole('dialog');
     await jobDialog.locator('#job-contact').click();
     const contactListbox = adminPage.getByRole('listbox');
     await expect(contactListbox).toBeVisible();
-    await expect(contactListbox.getByRole('button').filter({ hasText: firstContact })).toHaveCount(
+    await expect(contactListbox.getByRole("option").filter({ hasText: firstContact })).toHaveCount(
       0
     );
     // Toggle the popover closed via its trigger; Escape would close the dialog.
     await jobDialog.locator('#job-contact').click();
     await jobDialog.locator('#job-site').click();
     await expect(
-      adminPage.getByRole('listbox').getByRole('button').filter({ hasText: 'A2 Hauptstraße 25' })
+      adminPage.getByRole('listbox').getByRole("option").filter({ hasText: 'A2 Hauptstraße 25' })
     ).toHaveCount(0);
     await jobDialog.locator('#job-site').click();
     await adminPage.keyboard.press('Escape');
@@ -639,8 +638,7 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
     await openCustomerDetail(bueroPage, customer);
     await completeFollowUpOnCustomerDetail(bueroPage, title);
 
-    const rawTimes = await bueroPage
-      .getByTestId('customer-timeline')
+    const rawTimes = await bueroPage.getByRole('main').getByTestId('customer-timeline')
       .locator('time')
       .evaluateAll((elements) => elements.map((element) => element.getAttribute('datetime')));
     expect(rawTimes.length).toBeGreaterThan(2);
@@ -722,10 +720,10 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
     const assigneeListbox = bueroPage.getByRole('listbox');
     await expect(assigneeListbox).toBeVisible();
     await expect(
-      assigneeListbox.getByRole('button').filter({ hasText: 'Niemand zuständig' })
+      assigneeListbox.getByRole("option").filter({ hasText: 'Niemand zuständig' })
     ).toBeVisible();
-    await expect(assigneeListbox.getByRole('button').filter({ hasText: assignee })).toBeVisible();
-    await assigneeListbox.getByRole('button').filter({ hasText: 'Niemand zuständig' }).click();
+    await expect(assigneeListbox.getByRole("option").filter({ hasText: assignee })).toBeVisible();
+    await assigneeListbox.getByRole("option").filter({ hasText: 'Niemand zuständig' }).click();
     await bueroPage.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
 
@@ -778,7 +776,7 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
     });
     await uploadDocumentOnRequestDetail(
       adminPage,
-      resolve(ARTIFACTS_DIR, 'upload-fixture.pdf'),
+      resolve(artifactsDirectory(), 'upload-fixture.pdf'),
       'upload-fixture'
     );
     const fileButton = adminPage.getByRole('button', {
@@ -979,7 +977,7 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
     await uploadDocumentOnJobPage(
       adminPage,
       jobNumber,
-      resolve(ARTIFACTS_DIR, 'upload-fixture.pdf'),
+      resolve(artifactsDirectory(), 'upload-fixture.pdf'),
       'upload-fixture'
     );
     await createProject(adminPage, {
@@ -999,7 +997,7 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
     });
     await openCustomerDetail(adminPage, customer);
 
-    const timeline = adminPage.getByTestId('customer-timeline');
+    const timeline = adminPage.getByRole('main').getByTestId('customer-timeline');
     for (const [label, reference] of [
       ['Anfrage eingegangen', requestSummary],
       ['Anfrage aktualisiert', requestNumber],
@@ -1049,10 +1047,10 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
     await adminPage.getByRole('button', { name: 'Arbeit', exact: true }).click();
     await expect(timeline.getByText(jobTitle)).toBeVisible();
     await expect(timeline.getByText(projectTitle)).toBeVisible();
-    await expect(timeline.getByText(contact)).toHaveCount(0);
+    await expect(adminPage.getByTestId('customer-timeline').getByText(contact)).toHaveCount(0);
     await adminPage.getByRole('button', { name: 'Dokumente', exact: true }).click();
     await expect(timeline.getByText('upload-fixture')).toBeVisible();
-    await expect(timeline.getByText(jobTitle)).toHaveCount(0);
+    await expect(adminPage.getByTestId('customer-timeline').getByText(jobTitle)).toHaveCount(0);
     await adminPage.getByRole('button', { name: 'Intern', exact: true }).click();
     await expect(timeline.getByText(contact)).toBeVisible();
     await expect(timeline.getByText(site)).toBeVisible();

@@ -1235,7 +1235,7 @@ export function JobDetailContent({
                 {job.contact.phone && (
                   <a
                     href={`tel:${job.contact.phone.replace(/(?!^\+)[^\d]/g, '')}`}
-                    className="text-xs text-primary hover:underline"
+                    className="text-xs text-primary-text hover:underline"
                   >
                     {job.contact.phone}
                   </a>
@@ -1328,7 +1328,7 @@ export function JobDetailContent({
             Entstanden aus{' '}
             <Link
               href={originRequest.href}
-              className="font-medium text-primary underline-offset-4 hover:underline"
+              className="font-medium text-primary-text underline-offset-4 hover:underline"
             >
               {originRequest.label}
             </Link>
@@ -1461,7 +1461,7 @@ export function JobDetailContent({
                       <PersonAvatar
                         person={a}
                         className="size-8"
-                        fallbackClassName="bg-primary/10 text-xs font-medium text-primary"
+                        fallbackClassName="bg-primary/10 text-xs font-medium text-primary-text"
                       />
                       <div className="min-w-0 flex-1">
                         <Link
@@ -1672,7 +1672,7 @@ export function JobDetailContent({
                               <PersonAvatar
                                 person={emp.person}
                                 className="size-7"
-                                fallbackClassName="bg-primary/10 text-[10px] font-medium text-primary"
+                                fallbackClassName="bg-primary/10 text-[10px] font-medium text-primary-text"
                               />
                               <span className="truncate font-medium">
                                 {emp.name}
@@ -1723,7 +1723,7 @@ export function JobDetailContent({
                                 <PersonAvatar
                                   person={member}
                                   className="size-7"
-                                  fallbackClassName="bg-primary/10 text-[10px] font-medium text-primary"
+                                  fallbackClassName="bg-primary/10 text-[10px] font-medium text-primary-text"
                                 />
                                 <div className="min-w-0 flex-1">
                                   <p className="truncate text-sm font-medium">
@@ -1803,7 +1803,7 @@ export function JobDetailContent({
                 handleDelete();
               }}
               disabled={isDeleting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              variant="destructive"
             >
               {isDeleting && <Loader2 className="mr-2 size-4 animate-spin" />}
               Löschen

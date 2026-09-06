@@ -309,9 +309,14 @@ begin
       '{"schemaVersion":1,"facts":{}}', '{}'
     );
     raise exception 'application with non-array facts was accepted';
-  exception when others then
-    if sqlerrm not like '%time_correction_target_invalid%' then raise; end if;
+  -- P1-23's period guard rejects malformed snapshots before target validation.
+  exception when sqlstate 'P0001' then
+    if sqlerrm <> 'invalid_correction_snapshot' then raise; end if;
   end;
+  if exists (
+    select 1 from public.time_correction_applications
+    where operation_id = '22000000-0000-0000-0000-000000000044'
+  ) then raise exception 'rejected malformed snapshot left an application'; end if;
   begin
     perform public.decide_time_correction_batch(
       array[v_request_two_id, v_request_three_id],

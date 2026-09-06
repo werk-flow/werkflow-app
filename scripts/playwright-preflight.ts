@@ -11,8 +11,10 @@ import {
 import { getR2Endpoint } from "../lib/storage/r2";
 import { assertDevMigrationHistoryParity } from "../lib/testing/dev-migration-history";
 import { getSpawnFailureDetail } from "../lib/testing/spawn-result";
+import { assertBuildIdentity, calculateBuildInputs, readBuildReceipt } from "../lib/testing/build-identity";
 import { loadEnvLocal, requireEnv } from "../tests/golden/support/env";
-import { listRetainedWorlds } from "../tests/golden/support/run-state";
+import { listRunManifests, runDirectory } from "../tests/golden/support/run-state";
+import { assertNoRetainedManifests } from "../lib/testing/archive-state";
 import { checkRealtimeParity } from "./check-realtime-parity";
 
 const DEV_PROJECT_REF = "mbkkzuqjbdvzelqvuzcn";
@@ -213,37 +215,15 @@ function getWindowsListener(): ListenerDetails | null {
   }
 }
 
-function assertReusableDevelopmentServer(repositoryRoot: string): void {
-  if (process.platform !== "win32") return;
-  const listener = getWindowsListener();
-  if (!listener) return;
-  if (!listener.commandLine) {
-    throw new Error(
-      `Port 3000 PID ${listener.processId} has no inspectable command line. Stop it before an iteration run.`,
-    );
+async function assertReusableServer(repositoryRoot: string): Promise<void> {
+  if (process.platform !== "win32") {
+    throw new Error("Workspace server ownership verification currently requires the configured Windows workstation.");
   }
-  const commandLine = listener.commandLine.toLowerCase();
-  if (!commandLine.includes("next") || !commandLine.includes("werkflow-app")) {
-    throw new Error(
-      `Port 3000 PID ${listener.processId} is not a verified WerkFlow Next.js process. Stop it before an iteration run.`,
-    );
-  }
-  const listenerStartedAt = Date.parse(listener.creationDate);
-  const environmentPath = resolve(repositoryRoot, ".env.local");
-  if (!existsSync(environmentPath)) {
-    throw new Error(
-      "A reusable development server requires .env.local. Create it with `bun run env:local` or `bun run env:dev` before starting Playwright.",
-    );
-  }
-  const environmentChangedAt = statSync(environmentPath).mtimeMs;
-  if (
-    !Number.isFinite(listenerStartedAt) ||
-    listenerStartedAt < environmentChangedAt
-  ) {
-    throw new Error(
-      `Port 3000 PID ${listener.processId} started before .env.local was last switched. Stop it so Playwright starts a server with the current backend routing.`,
-    );
-  }
+  if (!getWindowsListener()) return;
+  // A focused pass must never stamp current-source proof onto an old build.
+  // With no listener, Playwright starts its own development server. Reuse is
+  // reserved for a production server whose receipt and response agree.
+  await assertCertificationServer(repositoryRoot);
 }
 
 async function assertCertificationServer(
@@ -254,6 +234,10 @@ async function assertCertificationServer(
     throw new Error("Certification requires a fresh production build.");
   const buildId = readFileSync(buildIdPath, "utf8").trim();
   if (!buildId) throw new Error(".next/BUILD_ID is empty.");
+  const receipt = readBuildReceipt(repositoryRoot);
+  const inputs = calculateBuildInputs(repositoryRoot);
+  // Validate cheap disk/source/backend evidence before starting network probes.
+  assertBuildIdentity({ receipt, inputs, repositoryRoot, diskBuildId: buildId, servedBuildId: receipt.buildId });
 
   if (process.platform !== "win32") {
     throw new Error(
@@ -263,7 +247,7 @@ async function assertCertificationServer(
   const listener = getWindowsListener();
   if (!listener) {
     throw new Error(
-      "Certification requires a freshly built, workspace-owned `next start` listening on port 3000. Nothing is listening — start the server after `bun run build` (testing rules 7 and 11).",
+      "Certification requires a freshly built, workspace-owned `next start` listening on port 3000. Nothing is listening — start the server after `bun run build:test` (testing rules 7 and 11).",
     );
   }
   // CommandLine is null for processes this user cannot inspect (elevated or
@@ -273,8 +257,9 @@ async function assertCertificationServer(
       `Port 3000 PID ${listener.processId} has no inspectable command line (elevated or protected process). Stop it and start the server from this workspace.`,
     );
   }
-  const commandLine = listener.commandLine.toLowerCase();
-  if (!commandLine.includes("next") || !commandLine.includes("werkflow-app")) {
+  const commandLine = listener.commandLine.toLowerCase().replaceAll("\\", "/");
+  const workspacePath = resolve(repositoryRoot).toLowerCase().replaceAll("\\", "/");
+  if (!commandLine.includes("next") || !commandLine.includes(`${workspacePath}/`)) {
     throw new Error(
       `Port 3000 PID ${listener.processId} is not a verified WerkFlow Next.js process.`,
     );
@@ -305,6 +290,8 @@ async function assertCertificationServer(
     throw new Error(
       `Workspace server health check returned HTTP ${response.status}.`,
     );
+  assertBuildIdentity({ receipt, inputs, repositoryRoot, diskBuildId: buildId, servedBuildId: response.headers.get("x-werkflow-build") });
+  await response.body?.cancel();
 }
 
 // Realtime parity (Stage B, Tier 2): the provider's table list must match
@@ -338,6 +325,12 @@ export async function runPlaywrightPreflight(input: {
 }): Promise<void> {
   const repositoryRoot = input.repositoryRoot ?? resolve(import.meta.dir, "..");
   assertRouting(input.target);
+  if (input.lane === "certification") {
+    assertNoRetainedManifests(listRunManifests(), (runKey) =>
+      existsSync(resolve(runDirectory(runKey), 'state/world.json'))
+    );
+  }
+  if (input.lane === "certification" || input.lane === "group") await assertCertificationServer(repositoryRoot);
   await assertSupabaseReachable(input.target);
   if (input.target === "cloud") {
     await assertDevMigrationHistoryParity(repositoryRoot);
@@ -347,17 +340,10 @@ export async function runPlaywrightPreflight(input: {
     await assertLocalEdgeRuntimeReachable();
     assertRealtimeParity();
   }
-  if (input.lane !== "certification") {
-    assertReusableDevelopmentServer(repositoryRoot);
+  if (input.lane !== "certification" && input.lane !== "group") {
+    await assertReusableServer(repositoryRoot);
     return;
   }
-  const retainedWorlds = listRetainedWorlds();
-  if (retainedWorlds.length > 0) {
-    throw new Error(
-      `Certification requires zero retained worlds; clean ${retainedWorlds.length} retained world(s) first.`,
-    );
-  }
-  await assertCertificationServer(repositoryRoot);
 }
 
 if (import.meta.main) {

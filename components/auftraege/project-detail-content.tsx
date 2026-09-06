@@ -700,7 +700,7 @@ export function ProjectDetailContent({
             Entstanden aus{' '}
             <Link
               href={originRequest.href}
-              className="font-medium text-primary underline-offset-4 hover:underline"
+              className="font-medium text-primary-text underline-offset-4 hover:underline"
             >
               {originRequest.label}
             </Link>
@@ -1119,7 +1119,7 @@ export function ProjectDetailContent({
             <AlertDialogAction
               onClick={handleDelete}
               disabled={isDeleting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              variant="destructive"
             >
               {isDeleting && <Loader2 className="mr-2 size-4 animate-spin" />}
               Löschen

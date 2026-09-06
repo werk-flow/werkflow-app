@@ -179,7 +179,13 @@ function ClientCard({
     <ListRow interactive onClick={() => router.push(`/kunden/${client.id}`)}>
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-center gap-2">
-          <p className="min-w-0 truncate text-sm font-medium">{client.name}</p>
+          <Link
+            href={`/kunden/${client.id}`}
+            className="min-w-0 truncate rounded-sm text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={(event) => event.stopPropagation()}
+          >
+            {client.name}
+          </Link>
           <ClientTypeBadge clientType={client.clientType} compact />
           <InlinePending active={isBusy} />
         </div>

@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { chromium, type FullConfig } from '@playwright/test';
+import { assertWorkspaceTestLock } from "../../lib/testing/workspace-test-lock";
 
 import { loadEnvLocal } from './support/env';
 import {
@@ -10,20 +11,19 @@ import {
   clearActiveRunState,
   currentRunKey,
   ensureRunManifest,
-  listRetainedWorlds,
   markRunFailed,
   restoreArchivedState,
   updateRunManifest,
 } from './support/run-state';
-import { createTestWorld, destroyLeftoverTestWorlds } from './support/seed';
+import { createTestWorld } from './support/seed';
 import { ensureFreshRoleSession, type SessionRole } from './support/sessions';
-import { ARTIFACTS_DIR, saveWorld, type TestWorld } from './support/world';
+import { artifactsDirectory, saveWorld, type TestWorld } from './support/world';
 
 const SESSION_ROLES: SessionRole[] = ['admin', 'buero', 'employee', 'outsider'];
 
 function createUploadFixture(): void {
-  mkdirSync(ARTIFACTS_DIR, { recursive: true });
-  const largePdfPath = resolve(ARTIFACTS_DIR, 'upload-fixture.pdf');
+  mkdirSync(artifactsDirectory(), { recursive: true });
+  const largePdfPath = resolve(artifactsDirectory(), 'upload-fixture.pdf');
   const sixMegabytes = 6 * 1024 * 1024;
   if (existsSync(largePdfPath) && statSync(largePdfPath).size === sixMegabytes) return;
   const buffer = Buffer.alloc(sixMegabytes, 'WerkFlow golden gate upload fixture. ');
@@ -32,6 +32,7 @@ function createUploadFixture(): void {
 }
 
 export default async function globalSetup(config: FullConfig): Promise<void> {
+  assertWorkspaceTestLock();
   loadEnvLocal();
   const baseUrl = config.projects[0]?.use?.baseURL ?? 'http://localhost:3000';
   const reuseRunKey = process.env.WERKFLOW_REUSE_RUN_KEY;
@@ -43,13 +44,14 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
       world = restoreArchivedState(reuseRunKey);
       console.log(`[golden] reusing retained world ${world.runId} from ${reuseRunKey}`);
     } else {
-      const retainedWorlds = listRetainedWorlds();
       clearActiveRunState();
-      const removed = await destroyLeftoverTestWorlds(retainedWorlds);
-      if (removed > 0) {
-        console.log(`[golden] removed ${removed} unretained leftover test records`);
-      }
-      world = await createTestWorld();
+      // Orphan cleanup is explicit. Starting a group must never sweep another group's records.
+      world = await createTestWorld((planned) => {
+        world = planned;
+        saveWorld(planned);
+        attachWorldToRun(planned);
+        archiveActiveState();
+      });
       saveWorld(world);
       console.log(`[golden] seeded world ${world.runId} (org ${world.orgId})`);
     }

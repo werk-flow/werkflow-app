@@ -1,6 +1,6 @@
 # Inventory Management
 
-Status: living — last reviewed 2026-09-03
+Status: living — last reviewed 2026-09-05
 
 Inventory is WerkFlow's operational system for SHK materials, consumables, tools, assets, Lager locations, stock movements, and job material usage.
 
@@ -57,7 +57,7 @@ Phase 1 is the complete expected operational product, not a quick MVP. Individua
 | Transfer | Controlled movement between two locations, including an optional in-transit state | Consumption or a correction |
 | Procurement | Request, approval, supplier order, and commercial commitment to obtain goods | Stock receipt |
 | Receipt | Confirmed quantity physically received and accepted at a location | Supplier invoice approval |
-| Consumption | Quantity actually taken or used for work | Planned demand or a billable suggestion |
+| Consumption | Quantity actually used or installed for work | Material merely taken from stock, planned demand, or a billable suggestion |
 | Return | Unused quantity physically placed back into stock | Supplier return or credit |
 | Billability | Decision about what may be charged to the customer and at which quantity/price | Physical stock or cost valuation |
 | Valuation | Internal cost view of inventory and material use | Customer sale price or formal accounting ledger |

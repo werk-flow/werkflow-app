@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
-import { retryDialogTransaction } from '../../golden/support/steps';
+import { retryDialogTransaction, workLifecycleCard } from '../../golden/support/steps';
 
 export async function bookMaterialDialog(
   page: Page,
@@ -15,7 +15,7 @@ export async function bookMaterialDialog(
   await retryDialogTransaction({
     open: () => openButton.click({ timeout: 15_000 }),
     dialog,
-    interact: async () => {
+    prepare: async () => {
       // These suffix selectors distinguish the generated material controls;
       // every action stays bounded because Realtime can unmount the dialog.
       await dialog.locator('input[id$="-quantity"]').fill(quantity, { timeout: 15_000 });
@@ -26,12 +26,13 @@ export async function bookMaterialDialog(
         timeout: 15_000,
       });
       await listbox
-        .getByRole('button')
+        .getByRole("option")
         .filter({ hasText: 'Hauptlager (Golden)' })
         .first()
         .click({ timeout: 15_000 });
-      await dialog.getByRole('button', { name: submitLabel }).click({ timeout: 15_000 });
     },
+    submit: () =>
+      dialog.getByRole('button', { name: submitLabel }).click({ timeout: 15_000 }),
   });
 }
 
@@ -62,7 +63,7 @@ export function detailActionsButton(page: Page): Locator {
 }
 
 export async function setJobStatus(page: Page, status: string): Promise<void> {
-  const card = page.getByRole('main').getByTestId('work-lifecycle-card');
+  const card = workLifecycleCard(page);
   const transition = async (label: string): Promise<void> => {
     await card.getByRole('button', { name: label, exact: true }).click();
     const dialog = page.getByRole('dialog');
@@ -223,8 +224,7 @@ export function calendarTimeline(page: Page): Locator {
 }
 
 export function clockOutTimeGroup(dialog: Locator): Locator {
-  // The time editor exposes two identically named groups in clock-in/out order.
-  return dialog.getByRole('group', { name: 'Uhrzeit' }).nth(1);
+  return dialog.getByRole('group', { name: 'Arbeitsende', exact: true });
 }
 
 export function documentUploadInput(page: Page): Locator {

@@ -3,138 +3,74 @@ name: diagnosing-bugs
 description: Diagnosis loop for hard bugs and performance regressions. Use when the user says "diagnose"/"debug this", or reports something broken, throwing, failing, or slow.
 ---
 
-# Diagnosing Bugs
+# Diagnose a defect
 
-Adapted for WerkFlow from mattpocock/skills (MIT). Scope note for this repo: harness failures (Playwright golden/audit runs) are classified FIRST via the failure-classification section of `docs/technical/testing.md` — that doc owns run mechanics, transient classes, and rerun rules. This skill is for diagnosing the product defect itself once one is suspected. Feedback loops that touch the database run against the dev project only (`docs/technical/environments.md`).
+Adapted for WerkFlow from mattpocock/skills (MIT). For a test failure, first read `docs/technical/testing.md`. That guide owns group selection, deadlines, retained diagnosis, recovery, and stopping rules under decision 0007. Apply this skill to the suspected product, test, or environment defect. Read the owning feature contract before deciding what behavior is wrong.
 
-A discipline for hard bugs. Skip phases only when explicitly justified.
+Application tests use local Supabase. The canary and named provider checks use cloud DEV. Production is read-only during diagnosis. Use the repository wrappers and workspace ownership rules. Do not start a competing server, database reset, or test command.
 
-When exploring the codebase, route through `docs/README.md` to the owning feature spec for the domain's intended behavior, and check `docs/decisions/` for decision records in the area you're touching.
+When repairing an existing test, follow `docs/technical/testing.md#repair-an-existing-test-under-the-current-workflow`. It routes legacy fixture, selector, save, and timing failures to their current owners. Historical acceptance records do not override that procedure.
 
-## Redact
+## 1. Establish the symptom and evidence
 
-This skill has you show commands, outputs and captured artifacts. **Redact every secret first**: write `<REDACTED>` in its place. Build loops against env vars, so the credential stays in the environment rather than in what you show. Captured artifacts carry auth headers: quote only the lines that carry the signal.
+State the exact expected and observed behavior. Identify which user, record, operation, and execution boundary are involved. Distinguish a contract violation from an incorrect test assumption.
 
-If the redacted output is not enough to diagnose the bug, say so and ask the user.
+Inspect existing evidence first: the failed group's error context, screenshot, trace, relevant logs, and exact persisted state. A captured failure is evidence. You do not need to recreate it repeatedly before reading the code or forming a hypothesis.
 
-## Phase 1: Build a feedback loop
+Redact credentials and personal data before showing artifacts. Keep secrets in environment variables. Read selected trace fields rather than dumping requests, cookies, or storage state.
 
-**This is the skill.** Everything else is mechanical. If you have a **tight** pass/fail signal for the bug (one that goes red on _this_ bug), you will find the cause; bisection, hypothesis-testing, and instrumentation all just consume it. If you don't have one, no amount of staring at code will save you.
+Choose a bounded feedback method that can distinguish the leading explanations:
 
-Spend disproportionate effort here. **Be aggressive. Be creative. Refuse to give up.**
+- A focused unit or SQL assertion for a domain or database rule.
+- A real-component browser check for control behavior.
+- A retained diagnostic or fresh affected group for application behavior.
+- A read-only request or state comparison for a disputed saved result.
+- A focused timing measurement for a performance defect.
 
-### Ways to construct one, in roughly this order
+Completion means the symptom and relevant evidence are identified, with either a suitable bounded experiment or a precise reason that observation is currently blocked. Do not claim a reproduction merely because a nearby assertion failed.
 
-1. **Failing test** at whatever seam reaches the bug: unit (`bun run test:unit`), or a focused Playwright spec.
-2. **Curl / HTTP script** against a running dev server.
-3. **CLI invocation** with a fixture input, diffing stdout against a known-good snapshot.
-4. **Headless browser script** (Playwright) that drives the UI and asserts on DOM/console/network. Reuse the harness's world/steps helpers where they fit; port 3000 only.
-5. **Replay a captured trace.** Save a real network request / payload / event log to disk; replay it through the code path in isolation.
-6. **Throwaway harness.** Spin up a minimal subset of the system (one service, mocked deps) that exercises the bug code path with a single function call.
-7. **Property / fuzz loop.** If the bug is "sometimes wrong output", run 1000 random inputs and look for the failure mode.
-8. **Bisection harness.** If the bug appeared between two known states (commit, dataset, version), automate "boot at state X, check, repeat" so you can `git bisect run` it.
-9. **Differential loop.** Run the same input through old-version vs new-version (or two configs) and diff outputs.
-10. **HITL bash script.** Last resort. If a human must click, drive _them_ with this skill's `scripts/hitl-loop.template.sh` so the loop is still structured. Captured output feeds back to you.
+## 2. Minimize the investigation
 
-Build the right feedback loop, and the bug is 90% fixed.
+Choose the smallest scenario that still exercises the suspected boundary. Preserve authorization, tenant context, meaningful state, and the timing relationship that matters. Reuse known valid setup without pre-completing the operation under test.
 
-### Tighten the loop
+For intermittent failures, use the retained trace to identify the ordering before adding load or repetition. A seeded domain experiment or controlled delayed response can test that ordering. Set an explicit experiment limit and stop when it answers the hypothesis. Do not use arbitrary 100-run loops, parallel stress, or sleeps in business tests to force a failure.
 
-Treat the loop as a product. Once you have _a_ loop, **tighten** it:
+If the environment prevents valid observation, preserve the evidence and identify the missing capability or repair. Continue safe code and artifact inspection. Ask for user input only when a necessary fact or access is unavailable. No failed-command quota is required before reporting that limit.
 
-- Can I make it faster? (Cache setup, skip unrelated init, narrow the test scope.)
-- Can I make the signal sharper? (Assert on the specific symptom, not "didn't crash".)
-- Can I make it more deterministic? (Pin time, seed RNG, isolate filesystem, freeze network.)
+## 3. Form falsifiable explanations
 
-A 30-second flaky loop is barely better than no loop; a 2-second deterministic one is tight, a debugging superpower.
+List the plausible explanations supported by the evidence and rank them. Do not invent extra hypotheses to meet a quota. For each explanation, state what observation would support it and what would rule it out.
 
-### Non-deterministic bugs
+Share consequential findings and uncertainty in the progress update. Proceed with already authorized, bounded inspection. Do not introduce another permission checkpoint for routine diagnosis.
 
-The goal is not a clean repro but a **higher reproduction rate**. Loop the trigger 100×, parallelise, add stress, narrow timing windows, inject sleeps. A 50%-flake bug is debuggable; 1% is not, so keep raising the rate until it's debuggable.
+Completion means the next experiment distinguishes explanations rather than merely repeating the failing operation.
 
-### When you genuinely cannot build a loop
+## 4. Instrument the disputed boundary
 
-Stop and say so explicitly. List what you tried. Ask the user for: (a) access to whatever environment reproduces it, (b) a redacted captured artifact (HAR file, log dump, core dump, screen recording with timestamps), or (c) permission to add temporary instrumentation. Do **not** proceed to hypothesise without a loop.
+Change one relevant variable at a time. Prefer existing logs, a debugger, or a focused read. Add temporary instrumentation only where it can distinguish the explanations. Prefix temporary logs with a unique marker and remove them before completion.
 
-### Completion criterion: a tight loop that goes red
+For performance, record the start event, completion event, elapsed time, and required deadline. Do not start the clock after a loading delay or reload a receiving page to manufacture freshness. An emergency timeout does not define acceptable response time.
 
-Phase 1 is done when the loop is **tight** and **red-capable**: you can name **one command** (a script path, a test invocation, a curl) that you have **already run at least once** (show the invocation and its output, redacted), and that is:
+If a mutation response is unclear, inspect its exact persisted identity or version before any recovery. A repeat write is not an observation.
 
-- [ ] **Red-capable**: it drives the actual bug code path and asserts the **user's exact symptom**, so it can go red on this bug and green once fixed. Not "runs without erroring"; it must be able to _catch this specific bug_.
-- [ ] **Deterministic**: same verdict every run (flaky bugs: a pinned, high reproduction rate, per above).
-- [ ] **Fast**: seconds, not minutes.
-- [ ] **Agent-runnable**: you can run it unattended; a human in the loop only via this skill's `scripts/hitl-loop.template.sh`.
+## 5. Repair and prevent recurrence
 
-If you catch yourself reading code to build a theory before this command exists, **stop: jumping straight to a hypothesis is the exact failure this skill prevents.** No red-capable command, no Phase 2.
+Repair the smallest confirmed cause without weakening the promised behavior. Exercise the real failing boundary in the regression check. A test that simulates away the cause does not establish prevention.
 
-## Phase 2: Reproduce + minimise
+Where practical, demonstrate that the check rejects the defect and passes the repair. Existing retained failure evidence may establish the rejected behavior. Do not spend another full browser run solely to recreate it.
 
-Run the loop. Watch it go red as the bug appears.
+Use the enforcement ladder from decision 0005: first remove the invalid state through a type or shared API, then add an automated check, then document a remaining judgment. State the prevention tier. If no suitable automated boundary exists, record why and the focused follow-up needed.
 
-Confirm:
+## 6. Verify the affected scope and close the investigation
 
-- [ ] The loop produces the failure mode the **user** described, not a different failure that happens to be nearby. Wrong bug = wrong fix.
-- [ ] The failure is reproducible across multiple runs (or, for non-deterministic bugs, reproducible at a high enough rate to debug against).
-- [ ] You have captured the exact symptom (error message, wrong output, slow timing) so later phases can verify the fix actually addresses it.
+Run the affected checks through the current test plan. Preserve valid unrelated group evidence. An unchanged failed group cannot be retried as acceptance except for the bounded environment-recovery path in `docs/technical/testing.md`: classify the environment cause, obtain matching retained diagnostic evidence, clean its owned world, and use the single permitted fresh retry. Two failures on the same inputs remain blocked until the underlying cause is resolved.
 
-### Minimise
+Before closing the finding, confirm:
 
-Once it's red, shrink the repro to the **smallest scenario that still goes red**. Cut inputs, callers, config, data, and steps **one at a time**, re-running the loop after each cut, and keep only what's load-bearing for the failure.
+- The repair addresses the original symptom and its real boundary.
+- Appropriate regression evidence exists, with any limitations stated.
+- Temporary instrumentation and throwaway prototypes are removed or clearly archived.
+- The incident record names the cause, correction, affected proof, cleanup, and prevention tier.
+- No required selected group is falsely reported green while failed, blocked, or too slow.
 
-Why bother: a minimal repro shrinks the hypothesis space in Phase 3 (fewer moving parts left to suspect) and becomes the clean regression test in Phase 5.
-
-Done when **every remaining element is load-bearing**: removing any one of them makes the loop go green.
-
-Do not proceed until you have reproduced **and** minimised.
-
-## Phase 3: Hypothesise
-
-Generate **3–5 ranked hypotheses** before testing any of them. Single-hypothesis generation anchors on the first plausible idea.
-
-Each hypothesis must be **falsifiable**: state the prediction it makes.
-
-> Format: "If <X> is the cause, then <changing Y> will make the bug disappear / <changing Z> will make it worse."
-
-If you cannot state the prediction, the hypothesis is a vibe: discard or sharpen it.
-
-**Show the ranked list to the user before testing.** They often have domain knowledge that re-ranks instantly ("we just deployed a change to #3"), or know hypotheses they've already ruled out. Cheap checkpoint, big time saver. Don't block on it; proceed with your ranking if the user is AFK.
-
-## Phase 4: Instrument
-
-Each probe must map to a specific prediction from Phase 3. **Change one variable at a time.**
-
-Tool preference:
-
-1. **Debugger / REPL inspection** if the env supports it. One breakpoint beats ten logs.
-2. **Targeted logs** at the boundaries that distinguish hypotheses.
-3. Never "log everything and grep".
-
-**Tag every debug log** with a unique prefix, e.g. `[DEBUG-a4f2]`. Cleanup at the end becomes a single grep. Untagged logs survive; tagged logs die.
-
-**Perf branch.** For performance regressions, logs are usually wrong. Instead: establish a baseline measurement (timing harness, `performance.now()`, profiler, query plan), then bisect. Measure first, fix second.
-
-## Phase 5: Fix + regression test
-
-Write the regression test **before the fix**, but only if there is a **correct seam** for it.
-
-A correct seam is one where the test exercises the **real bug pattern** as it occurs at the call site. If the only available seam is too shallow (single-caller test when the bug needs multiple callers, unit test that can't replicate the chain that triggered the bug), a regression test there gives false confidence.
-
-**If no correct seam exists, that itself is the finding.** Note it. The codebase architecture is preventing the bug from being locked down. Flag this for the next phase.
-
-If a correct seam exists:
-
-1. Turn the minimised repro into a failing test at that seam.
-2. Watch it fail.
-3. Apply the fix.
-4. Watch it pass.
-5. Re-run the Phase 1 feedback loop against the original (un-minimised) scenario.
-
-## Phase 6: Cleanup
-
-Required before declaring done:
-
-- [ ] Original repro no longer reproduces (re-run the Phase 1 loop)
-- [ ] Regression test passes (or absence of seam is documented)
-- [ ] All `[DEBUG-...]` instrumentation removed (`grep` the prefix)
-- [ ] Throwaway prototypes deleted (or moved to a clearly-marked debug location)
-- [ ] The hypothesis that turned out correct is stated in the commit message, so the next debugger learns
+Do not restart all passing groups, enlarge a timeout, or reset attempt history to obtain a clean-looking report. The result can be a confirmed repair, a disproved hypothesis, or an unresolved observation with a precise next step. Report which conclusion the evidence supports.

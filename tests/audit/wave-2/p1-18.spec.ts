@@ -1,4 +1,4 @@
-import { expect, test } from "../../golden/support/fixtures";
+import { expect, test } from "../support/fixtures";
 import {
   getInstalledEquipmentNumberByName,
   getInstalledEquipmentState,
@@ -94,10 +94,10 @@ test.describe("P1-18 exhaustive installed-equipment audit @AUDIT-W2-P1-18 @AUDIT
       visibleText(adminPage, `Übergeordnet: ${fixture.rootName}`),
     ).toBeVisible();
     await expect(
-      adminPage.getByTestId("equipment-fact-manufacturer"),
+      adminPage.getByRole("main").getByTestId("equipment-fact-manufacturer"),
     ).toContainText("Nicht erfasst");
     await expect(
-      adminPage.getByTestId("equipment-fact-commissioning"),
+      adminPage.getByRole("main").getByTestId("equipment-fact-commissioning"),
     ).toContainText("Nicht erfasst");
     await expect(
       visibleText(adminPage, "Keine Kennung erfasst."),

@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 
-import { closeWorkArtifactDialog } from "./support/spec-helpers/work-artifact-dialog";
+import { closeWorkArtifactDialog, workArtifactsSection } from "./support/spec-helpers/work-artifact-dialog";
 import { expect, test } from "./support/fixtures";
 import {
   getMaintenanceCoverageStateByReference,
@@ -55,8 +55,7 @@ function names(world: TestWorld) {
 }
 
 async function createSubmittedReport(page: Page, title: string): Promise<void> {
-  await page
-    .getByTestId("work-artifacts-section")
+  await workArtifactsSection(page)
     .getByRole("button", { name: "Neu" })
     .click();
   const dialog: Locator = page.getByRole("dialog");
@@ -120,7 +119,7 @@ async function assignEmployee(
   await page.getByPlaceholder("Mitarbeiter suchen...").fill(employeeName);
   await page
     .getByRole("listbox")
-    .getByRole("button")
+    .getByRole("option")
     .filter({ hasText: employeeName })
     .click();
   await dialog.getByRole("heading", { name: "Mitarbeiter zuweisen" }).click();
@@ -167,7 +166,15 @@ test.describe("P1-20 maintenance plan to completed visit @P1-20 @GG-06", () => {
     });
   });
 
-  test("records operational coverage and an exact follow-up @P1-20-stage-coverage", async ({
+  test("records operational coverage and an exact follow-up @P1-20-stage-coverage",
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description: "prepares exact existing owners @P1-20-stage-setup",
+        },
+      ],
+    }, async ({
     adminPage,
     world,
   }) => {
@@ -184,8 +191,7 @@ test.describe("P1-20 maintenance plan to completed visit @P1-20 @GG-06", () => {
       operationalNote: "Leistungsumfang vor Verlängerung intern prüfen.",
     });
     await expect(visibleText(adminPage, "Prüfung vorgemerkt")).toBeVisible();
-    const coverageRow = adminPage
-      .getByTestId("maintenance-coverage-row")
+    const coverageRow = adminPage.getByRole("main").getByTestId("maintenance-coverage-row")
       .filter({ hasText: fixture.coverageReference });
     await coverageRow.getByRole("button", { name: "Wiedervorlage" }).click();
     const dialog = adminPage.getByRole("dialog");
@@ -214,7 +220,20 @@ test.describe("P1-20 maintenance plan to completed visit @P1-20 @GG-06", () => {
     expect(state.followUps).toHaveLength(1);
   });
 
-  test("activates a versioned plan and materializes the horizon @P1-20-stage-plan", async ({
+  test("activates a versioned plan and materializes the horizon @P1-20-stage-plan",
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description: "prepares exact existing owners @P1-20-stage-setup",
+        },
+        {
+          type: "requires-test",
+          description:
+            "records operational coverage and an exact follow-up @P1-20-stage-coverage",
+        },
+      ],
+    }, async ({
     adminPage,
     world,
   }) => {
@@ -278,7 +297,25 @@ test.describe("P1-20 maintenance plan to completed visit @P1-20 @GG-06", () => {
     );
   });
 
-  test("creates and schedules one normal visit job @P1-20-stage-visit", async ({
+  test("creates and schedules one normal visit job @P1-20-stage-visit",
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description: "prepares exact existing owners @P1-20-stage-setup",
+        },
+        {
+          type: "requires-test",
+          description:
+            "records operational coverage and an exact follow-up @P1-20-stage-coverage",
+        },
+        {
+          type: "requires-test",
+          description:
+            "activates a versioned plan and materializes the horizon @P1-20-stage-plan",
+        },
+      ],
+    }, async ({
     adminPage,
     world,
   }) => {
@@ -308,8 +345,7 @@ test.describe("P1-20 maintenance plan to completed visit @P1-20 @GG-06", () => {
       },
     );
     await adminPage.goto("/service/wartung");
-    const dueRow = adminPage
-      .getByTestId("maintenance-due-row")
+    const dueRow = adminPage.getByRole("main").getByTestId("maintenance-due-row")
       .filter({ hasText: planNumber })
       .filter({ hasText: FIRST_DUE_LABEL });
     await dueRow.getByRole("button", { name: "Auftrag anlegen" }).click();
@@ -336,8 +372,7 @@ test.describe("P1-20 maintenance plan to completed visit @P1-20 @GG-06", () => {
     );
     expect(linkedDueWork.status).toBe("visit_created");
     await adminPage.goto("/service/wartung");
-    const scheduledRow = adminPage
-      .getByTestId("maintenance-due-row")
+    const scheduledRow = adminPage.getByRole("main").getByTestId("maintenance-due-row")
       .filter({ hasText: planNumber })
       .filter({ hasText: FIRST_DUE_LABEL });
     await scheduledRow.getByRole("button", { name: "Termin planen" }).click();
@@ -356,7 +391,31 @@ test.describe("P1-20 maintenance plan to completed visit @P1-20 @GG-06", () => {
     expect(state.dueWork[0].planning_occurrence_id).not.toBeNull();
   });
 
-  test("projects only exact visit context to the assigned employee @P1-20-stage-field", async ({
+  test("projects only exact visit context to the assigned employee @P1-20-stage-field",
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description: "prepares exact existing owners @P1-20-stage-setup",
+        },
+        {
+          type: "requires-test",
+          description:
+            "records operational coverage and an exact follow-up @P1-20-stage-coverage",
+        },
+        {
+          type: "requires-test",
+          description:
+            "activates a versioned plan and materializes the horizon @P1-20-stage-plan",
+        },
+        {
+          type: "requires-test",
+          description:
+            "creates and schedules one normal visit job @P1-20-stage-visit",
+        },
+      ],
+    },
+    async ({
     adminPage,
     employeePage,
     world,
@@ -422,7 +481,35 @@ test.describe("P1-20 maintenance plan to completed visit @P1-20 @GG-06", () => {
     await createSubmittedReport(employeePage, fixture.evidenceTitle);
   });
 
-  test("completes the due item with exact evidence and next due @P1-20-stage-completion", async ({
+  test("completes the due item with exact evidence and next due @P1-20-stage-completion",
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description: "prepares exact existing owners @P1-20-stage-setup",
+        },
+        {
+          type: "requires-test",
+          description:
+            "records operational coverage and an exact follow-up @P1-20-stage-coverage",
+        },
+        {
+          type: "requires-test",
+          description:
+            "activates a versioned plan and materializes the horizon @P1-20-stage-plan",
+        },
+        {
+          type: "requires-test",
+          description:
+            "creates and schedules one normal visit job @P1-20-stage-visit",
+        },
+        {
+          type: "requires-test",
+          description:
+            "projects only exact visit context to the assigned employee @P1-20-stage-field",
+        },
+      ],
+    }, async ({
     adminPage,
     world,
   }) => {
@@ -452,8 +539,7 @@ test.describe("P1-20 maintenance plan to completed visit @P1-20 @GG-06", () => {
       },
     );
     await adminPage.goto("/service/wartung");
-    const dueRow = adminPage
-      .getByTestId("maintenance-due-row")
+    const dueRow = adminPage.getByRole("main").getByTestId("maintenance-due-row")
       .filter({ hasText: planNumber })
       .filter({ hasText: FIRST_DUE_LABEL });
     await dueRow.getByRole("button", { name: "Abschließen" }).click();

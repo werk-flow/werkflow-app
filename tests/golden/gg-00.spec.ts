@@ -18,7 +18,7 @@ import {
   visibleText,
   textInDom,
 } from './support/steps';
-import { ARTIFACTS_DIR, storageStatePath } from './support/world';
+import { artifactsDirectory, storageStatePath } from './support/world';
 import { expectLiveWithin } from './support/live';
 
 // GG-00 — Existing Foundation Regression (@GG-00)
@@ -63,7 +63,7 @@ test.describe('GG-00 Bestandsfunktionen @GG-00', () => {
     await uploadDocumentOnJobPage(
       employeePage,
       `GG-${world.runId}-1`,
-      resolve(ARTIFACTS_DIR, 'upload-fixture.pdf'),
+      resolve(artifactsDirectory(), 'upload-fixture.pdf'),
       'upload-fixture'
     );
   });
@@ -82,7 +82,7 @@ test.describe('GG-00 Bestandsfunktionen @GG-00', () => {
     await clockOut(employeePage);
   });
 
-  test('Realtime: Büro sieht neue Kunden ohne Neuladen', async ({
+  test('Realtime: Büro sieht neue Kunden ohne Neuladen @FRESHNESS', async ({
     adminPage,
     bueroPage,
     world,
@@ -97,13 +97,15 @@ test.describe('GG-00 Bestandsfunktionen @GG-00', () => {
     ]);
     await expect(visibleText(bueroPage, `Testkunde ${world.runId}`)).toBeVisible();
 
-    await createCustomer(adminPage, `Realtime Kunde ${world.runId}`);
-
     // The Büro page must pick the new customer up via Realtime, without
     // reload, inside the latency contract (D4).
     await expectLiveWithin(visibleText(bueroPage, `Realtime Kunde ${world.runId}`), {
       label: 'gg-00 customer list cross-session',
-    });
+        mutation: (beforeSubmit) =>
+          createCustomer(adminPage, `Realtime Kunde ${world.runId}`, {
+            beforeSubmit,
+          }),
+      });
   });
 
   test('Mobil: Mitarbeiter sieht zugewiesene Aufträge auf kleinem Viewport', async ({

@@ -1,6 +1,6 @@
 # AI Automations
 
-Status: living — last reviewed 2026-09-03
+Status: living — last reviewed 2026-09-05
 
 AI automations are WerkFlow's second product phase: assistants, recommendations, workflows, and bounded agents that use the complete operational context of the business to reduce repetitive work inside and outside the app.
 
@@ -85,7 +85,7 @@ WerkFlow needs one understandable way to present:
 
 Each feature should not invent a separate AI inbox. Automation work should enter the same role-aware task, approval, and notification experience as human work.
 
-**Current baseline (`P1-07`, 2026-08-07; taxonomy extended through `P1-22`):** this shared experience exists for human work. One server-side resolver (`lib/attention/`) derives attention items live from the owning domains, discriminated by a stable `source_type` + `source_id` identity, deduplicated per viewer, authorization-scoped through the P1-05 responsibility resolution at derivation time, and surfaced role-aware at `/aufgaben` with deep links into the owning context. As of `P1-22` the resolver serves 17 derived source types, listed in `lib/attention/types.ts`: `time_session_approval`, `time_change_request_approval`, `time_correction_approval`, `vacation_request_approval`, `client_request_open`, `vacation_decision`, `sickness_report`, `employee_certification_expiry`, `client_follow_up`, `dispatch_acknowledgement`, `dispatch_challenge_open`, `job_parking_review`, `work_blocker_review`, `work_artifact_review`, `work_artifact_correction`, `work_defect_due` and `work_handover_review`. `job_parking_review` is retained only for persisted P1-12 read and event identities; new parking tasks use `work_blocker_review`. The one non-derived exception is the `P1-24` personnel own-actions section „Meine Personalaufgaben" on `/aufgaben`, which reads the affected person's onboarding requirements, acknowledgements and released personnel files from their owning tables rather than through the resolver. Decision notifications for the affected person, strictly personal read markers, and an append-only pattern audit are the only stored pattern state. Phase 2 automation items (drafts requiring review, blocked automations, failed external actions, recommendations) are expected to enter this pattern as new `source_type`s with their own derivation — never as a parallel inbox or a materialized task table.
+**Current human-work foundation.** The shared `/aufgaben` view derives actionable items from their owning domains through `lib/attention/`. Each item has a stable source identity, viewer-scoped authorization, and a link to the owning record. `lib/attention/types.ts` owns the exact source-type vocabulary, including legacy identities retained for stored read markers and events. The pattern stores personal read markers and audit events, not a second task model. The personnel section reads onboarding requirements, acknowledgements, and released files directly from their owners. See [P1-07](../plans/phase-1/slices/p1-07-attention-pattern.md) for the shared pattern and [P1-24](../plans/phase-1/slices/p1-24-controlled-people-lifecycle.md) for personnel actions. Phase 2 review items must join this experience with explicit authorization and failure ownership.
 
 ### Integration And Identity Boundaries
 
@@ -120,7 +120,7 @@ The user should be able to distinguish source fact, model inference, and human d
 
 Low-friction assistance inside existing workflows:
 
-- OCR and document search;
+- AI-assisted retrieval and explanation over the OCR and full-text search foundation owned by `P1-44`;
 - structured extraction from invoices, delivery notes, offers, contracts, reports, and forms;
 - classification and linking suggestions;
 - summaries of customer, job, project, service, inventory, or financial history;

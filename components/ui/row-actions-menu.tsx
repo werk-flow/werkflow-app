@@ -94,6 +94,14 @@ export function RowActionsMenu({ actions, disabled = false }: RowActionsMenuProp
       return;
     }
 
+    if (event.key === 'Tab') {
+      // Start native traversal from the row trigger, not the body portal.
+      // Do not preventDefault: Tab/Shift+Tab must reach the next/previous control.
+      triggerRef.current?.focus();
+      closeMenu();
+      return;
+    }
+
     if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
     event.preventDefault();
     const items = Array.from(
@@ -160,6 +168,9 @@ export function RowActionsMenu({ actions, disabled = false }: RowActionsMenuProp
                       'text-destructive focus:bg-destructive/10 focus:text-destructive dark:focus:bg-destructive/20'
                   )}
                   onClick={() => {
+                    // Restore before the action so a newly opened dialog owns
+                    // subsequent autofocus. A delayed restoration would steal it.
+                    triggerRef.current?.focus();
                     closeMenu();
                     action.onSelect();
                   }}

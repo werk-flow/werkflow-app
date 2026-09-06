@@ -205,7 +205,7 @@ export function WorkScheduleSection({
                         Woche
                       </span>
                       {isCurrent && (
-                        <span className="inline-flex items-center rounded-full bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary">
+                        <span className="inline-flex items-center rounded-full bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary-text">
                           Aktuell
                         </span>
                       )}
@@ -318,7 +318,7 @@ export function WorkScheduleSection({
                 handleDelete();
               }}
               disabled={isDeleting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              variant="destructive"
             >
               {isDeleting ? (
                 <>

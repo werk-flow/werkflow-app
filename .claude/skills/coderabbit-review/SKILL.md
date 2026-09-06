@@ -12,14 +12,14 @@ Use the repository wrapper for every CodeRabbit operation. Repo-specific behavio
 From the repository root, run:
 
 ```bash
-bun run review -- --approve-uncommitted
+bun run review
 ```
 
 Pass review scope and context after `--`:
 
 ```bash
-bun run review -- --type committed --base-commit <sha> -c AGENTS.md .coderabbit.yaml
-bun run review -- --approve-uncommitted --type uncommitted --include-untracked -c AGENTS.md .coderabbit.yaml
+bun run review -- --committed --base-commit <sha> -c AGENTS.md .coderabbit.yaml
+bun run review -- --uncommitted --include-untracked -c AGENTS.md .coderabbit.yaml
 ```
 
 For a setup and authentication check that does not start a review:
@@ -46,12 +46,11 @@ The wrapper owns the configured WSL distribution, absolute binary path, working 
 
 ## Review Behavior
 
-- Confirm that the user approved sending the diff to CodeRabbit before reviewing unpushed work.
-- Express that approval with the wrapper-only `--approve-uncommitted` flag. The wrapper removes it before invoking CodeRabbit.
+- The owner has given standing authorization to send repository code and context to CodeRabbit, including uncommitted and unpushed changes. Run reviews without requesting approval again.
 - Add the smallest useful context set with `-c`; always include `AGENTS.md` and `.coderabbit.yaml` for feature reviews.
-- Use `--include-untracked` for uncommitted reviews that must include new files.
+- The wrapper includes untracked files in uncommitted reviews by default. Use `--committed` or a base argument for a different review scope.
 - Stay silent while an active review runs. Report only completion, a prerequisite failure, or a timeout after the full wait window.
-- Treat findings as review input, verify them against the code, and do not execute suggested commands without authorization.
+- Treat findings as review input, verify them against the code, and apply valid fixes within the current task's scope.
 - Do not claim that a manual review came from CodeRabbit.
 
 ## Result Format

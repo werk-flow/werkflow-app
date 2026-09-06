@@ -53,6 +53,10 @@ import {
   parseHoursInputToMinutes,
 } from "@/lib/jobs/planned-working";
 
+const EVIDENCE_LIST_CLASS =
+  "max-h-40 space-y-2 overflow-y-auto rounded-md border p-3";
+const EVIDENCE_ROW_CLASS = "flex items-center gap-2 text-sm";
+
 function toLocalDate(value: string): Date | undefined {
   const [year, month, day] = value.split("-").map(Number);
   return year && month && day ? new Date(year, month - 1, day) : undefined;
@@ -245,7 +249,8 @@ export function MaintenanceDueActionDialog({
     if (action === "complete") {
       if (!completedOn) errors.completedOn = "Bitte gib das Abschlussdatum an.";
       if (evidenceIds.length === 0) {
-        errors.evidenceIds = "Wähle mindestens einen versionierten Arbeitsnachweis.";
+        errors.evidenceIds =
+          "Wähle mindestens einen versionierten Arbeitsnachweis.";
       }
     }
     if (action === "link_service_case" && !serviceCaseId) {
@@ -320,7 +325,12 @@ export function MaintenanceDueActionDialog({
           </Field>
           {action === "schedule" && (
             <div className="grid gap-4 sm:grid-cols-3">
-              <Field label="Datum" htmlFor="due-date" required error={fieldErrors.date}>
+              <Field
+                label="Datum"
+                htmlFor="due-date"
+                required
+                error={fieldErrors.date}
+              >
                 <DatePicker
                   ariaLabel="Datum"
                   value={toLocalDate(date)}
@@ -389,15 +399,23 @@ export function MaintenanceDueActionDialog({
                 </legend>
                 {isEvidenceLoading ? (
                   <div
-                    className="space-y-3 rounded-md border p-3"
+                    className={EVIDENCE_LIST_CLASS}
                     role="status"
                     aria-busy="true"
                   >
                     <span className="sr-only">
                       Arbeitsnachweise werden geladen.
                     </span>
-                    <Skeleton className="h-4 w-3/4" />
-                    <Skeleton className="h-4 w-2/3" />
+                    {[0, 1].map((index) => (
+                      <div
+                        key={index}
+                        className={EVIDENCE_ROW_CLASS}
+                        aria-hidden="true"
+                      >
+                        <Skeleton className="size-4 shrink-0" />
+                        <Skeleton className="h-5 w-2/3" />
+                      </div>
+                    ))}
                   </div>
                 ) : evidenceLoadFailed ? (
                   <SectionError>
@@ -408,12 +426,12 @@ export function MaintenanceDueActionDialog({
                   <div
                     id="due-evidence"
                     tabIndex={-1}
-                    className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-3"
+                    className={EVIDENCE_LIST_CLASS}
                   >
                     {evidence.map((option) => (
                       <label
                         key={option.revisionId}
-                        className="flex items-center gap-2 text-sm"
+                        className={EVIDENCE_ROW_CLASS}
                       >
                         <Checkbox
                           checked={evidenceIds.includes(option.revisionId)}

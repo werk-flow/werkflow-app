@@ -1,4 +1,5 @@
 export const PLAYWRIGHT_LANES = [
+  "group",
   "iteration",
   "certification",
   "diagnostic",
@@ -48,15 +49,18 @@ export type CertificationAttempt = {
   classifiedAt: string | null;
   failedSpecFile: string | null;
   focusedGrepToken?: string | null;
+  failedTestId?: string | null;
 };
 
 export type FocusedVerification = {
   status: "passed" | "failed";
   startedAt: string;
-  sourceFingerprint: string;
+  candidateFingerprint: string;
   suite: PlaywrightSuite;
   grep: string;
   total: number;
+  target: PlaywrightTarget;
+  passedTestIds: readonly string[];
 };
 
 export type FocusedIterationAttempt = {
@@ -71,33 +75,6 @@ export type FocusedProofRequirement = {
   token: string;
   reason: string;
 };
-
-export type PlaywrightSelection = {
-  titles: string[];
-  total: number;
-};
-
-type SerialSelectionRule = {
-  suite: PlaywrightSuite;
-  dependentTitleToken: string;
-  requiredTitleTokens: readonly string[];
-  recoveryGrep: string;
-};
-
-const SERIAL_SELECTION_RULES = [
-  {
-    suite: "golden",
-    dependentTitleToken: "@P1-04",
-    requiredTitleTokens: ["@P1-03"],
-    recoveryGrep: "@P1-03|@P1-04",
-  },
-  {
-    suite: "audit",
-    dependentTitleToken: "A1-02/A1-03",
-    requiredTitleTokens: ["A1-01/A1-07"],
-    recoveryGrep: "A1-01/A1-07|A1-02/A1-03",
-  },
-] as const satisfies readonly SerialSelectionRule[];
 
 const FOCUSED_PROOF_IMPACT_RULES = [
   {
@@ -136,9 +113,9 @@ export function focusedProofTokenForFailure(input: {
 
 // Token-boundary match: "@P1-16-stage-boundaries" covers token "p1-16", but a
 // bare substring must not let "p1-1" cover "@P1-16".
-export function focusedGrepCoversToken(grep: string, token: string): boolean {
+export function testIdentityCoversToken(testId: string, token: string): boolean {
   const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`${escaped}(?![a-z0-9])`, "i").test(grep);
+  return new RegExp(`(?:^|[^a-z0-9])${escaped}(?![a-z0-9])`, "i").test(testId);
 }
 
 export function validateRunRequest(request: RunRequest): string[] {
@@ -166,25 +143,6 @@ export function validateRunRequest(request: RunRequest): string[] {
   return errors;
 }
 
-export function parsePlaywrightListOutput(output: string): PlaywrightSelection {
-  const totalMatch = /^Total:\s+(\d+)\s+tests?/m.exec(output);
-  if (!totalMatch)
-    throw new Error(
-      "Playwright --list output did not report a total test count.",
-    );
-  const total = Number.parseInt(totalMatch[1], 10);
-  const titles = output
-    .split(/\r?\n/)
-    .filter((line) => /^\s{2}\S.*\s›\s/.test(line))
-    .map((line) => line.trim());
-  if (titles.length !== total) {
-    throw new Error(
-      `Playwright --list reported ${total} tests but exposed ${titles.length} test titles.`,
-    );
-  }
-  return { titles, total };
-}
-
 export function validateFocusedSelection(input: {
   lane: PlaywrightLane;
   suite: PlaywrightSuite;
@@ -204,32 +162,6 @@ export function validateFocusedSelection(input: {
     ];
   }
   return [];
-}
-
-export function validateSerialSelection(input: {
-  lane: PlaywrightLane;
-  suite: PlaywrightSuite;
-  selectedTitles: readonly string[];
-}): string[] {
-  if (input.lane !== "iteration") return [];
-  const errors: string[] = [];
-  for (const rule of SERIAL_SELECTION_RULES) {
-    if (rule.suite !== input.suite) continue;
-    const dependentSelected = input.selectedTitles.some((title) =>
-      title.includes(rule.dependentTitleToken),
-    );
-    if (!dependentSelected) continue;
-    const missingProducer = rule.requiredTitleTokens.some(
-      (requiredToken) =>
-        !input.selectedTitles.some((title) => title.includes(requiredToken)),
-    );
-    if (missingProducer) {
-      errors.push(
-        `${rule.dependentTitleToken} requires its serial producer. Run: bun run test:${rule.suite}:focused --grep "${rule.recoveryGrep}".`,
-      );
-    }
-  }
-  return errors;
 }
 
 export function evaluateFocusedIterationRerun(input: {
@@ -252,7 +184,7 @@ export function evaluateFocusedIterationRerun(input: {
   if (repeatedClass && !input.overrideReason?.trim()) {
     return {
       allowed: false,
-      reason: `The last two focused runs failed in the ${latestFailure.classification} class. Use a retained-world diagnostic or provide --override-rerun-budget with the investigated reason.`,
+      reason: `The last two focused runs failed in the ${latestFailure.classification} class. Use a retained-world diagnostic, or issue one investigated extension with test:runs campaign-extend and pass its --rerun-grant.`,
     };
   }
   return { allowed: true, reason: null };
@@ -276,17 +208,19 @@ export function requiredFocusedProofsForChangedFiles(
 export function evaluateRequiredFocusedProofs(input: {
   requirements: readonly FocusedProofRequirement[];
   focusedVerifications: readonly FocusedVerification[];
-  currentSourceFingerprint: string;
+  currentCandidateFingerprint: string;
+  currentTarget: PlaywrightTarget;
 }): FocusedProofRequirement[] {
   return input.requirements.filter(
     (requirement) =>
       !input.focusedVerifications.some(
         (verification) =>
           verification.status === "passed" &&
-          verification.sourceFingerprint === input.currentSourceFingerprint &&
+          verification.candidateFingerprint === input.currentCandidateFingerprint &&
           verification.suite === requirement.suite &&
+          verification.target === input.currentTarget &&
           verification.total > 0 &&
-          focusedGrepCoversToken(verification.grep, requirement.token),
+          verification.passedTestIds.some((id) => testIdentityCoversToken(id, requirement.token)),
       ),
   );
 }
@@ -308,9 +242,11 @@ export function shouldRefreshStoredSession(
 export function evaluateFullCertificationRerun(input: {
   attemptsSinceLastPass: CertificationAttempt[];
   focusedVerifications: FocusedVerification[];
-  currentSourceFingerprint: string;
+  currentCandidateFingerprint: string;
+  currentSuite: PlaywrightSuite;
   fullSuiteTestCount: number;
   overrideReason: string | null;
+  currentTarget: PlaywrightTarget;
 }): { allowed: boolean; reason: string | null } {
   const failedAttempts = input.attemptsSinceLastPass.filter(
     (attempt) => attempt.status === "failed",
@@ -334,16 +270,20 @@ export function evaluateFullCertificationRerun(input: {
     input.focusedVerifications.some(
       (verification) =>
         verification.status === "passed" &&
-        verification.sourceFingerprint === input.currentSourceFingerprint &&
+        verification.suite === input.currentSuite &&
+        verification.candidateFingerprint === input.currentCandidateFingerprint &&
+        verification.target === input.currentTarget &&
         verification.total > 0 &&
         verification.total < input.fullSuiteTestCount &&
         Date.parse(verification.startedAt) > classifiedAt &&
-        (requiredToken === null ||
-          focusedGrepCoversToken(verification.grep, requiredToken)),
+        verification.passedTestIds.length > 0 &&
+        (latestFailure.failedTestId
+          ? verification.passedTestIds.includes(latestFailure.failedTestId)
+          : requiredToken === null || verification.passedTestIds.some((id) => testIdentityCoversToken(id, requiredToken))),
     );
   if (!focusedProofExists) {
     const scope = requiredToken
-      ? ` covering ${requiredToken} (grep must match the failed spec)`
+      ? ` covering ${requiredToken} (the failed stage must actually execute)`
       : "";
     return {
       allowed: false,

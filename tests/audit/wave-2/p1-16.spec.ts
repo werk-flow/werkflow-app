@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 
-import { expect, test } from '../../golden/support/fixtures';
+import { expect, test } from "../support/fixtures";
 import {
   getAppliedWorkTemplateState,
   getDispatchState,
@@ -36,8 +36,8 @@ import {
   visibleText,
 } from '../../golden/support/steps';
 import { ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
-import { ARTIFACTS_DIR } from '../../golden/support/world';
-import { closeWorkArtifactDialog } from '../../golden/support/spec-helpers/work-artifact-dialog';
+import { artifactsDirectory } from '../../golden/support/world';
+import { closeWorkArtifactDialog, workArtifactsSection } from '../../golden/support/spec-helpers/work-artifact-dialog';
 import { representativeFieldWorkPackState } from '../support/p1-16-steps';
 
 test.describe.configure({ mode: 'serial' });
@@ -121,8 +121,7 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
 
     const officeDraftTitle = `P116 interner Büroentwurf ${world.runId}`;
     await bueroPage.goto(`/auftraege/projekt/${projectNumber}/${childJobNumber}`);
-    await bueroPage
-      .getByTestId('work-artifacts-section')
+    await workArtifactsSection(bueroPage)
       .getByRole('button', { name: 'Neu' })
       .click();
     const officeDraftDialog = bueroPage.getByRole('dialog');
@@ -370,10 +369,10 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     await uploadDocumentOnJobPage(
       employeePage,
       jobNumber,
-      resolve(ARTIFACTS_DIR, 'upload-fixture.pdf'),
+      resolve(artifactsDirectory(), 'upload-fixture.pdf'),
       'upload-fixture'
     );
-    const artifacts = employeePage.getByTestId('work-artifacts-section');
+    const artifacts = workArtifactsSection(employeePage);
     await artifacts.getByRole('button', { name: 'Neu', exact: true }).click();
     const dialog = employeePage.getByRole('dialog');
     const artifactTitle = `P116 Feldbericht ${world.runId}`;
@@ -389,7 +388,7 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     await closeWorkArtifactDialog(dialog);
     await employeePage.reload();
     await expect(
-      employeePage.getByTestId('work-artifacts-section').getByText(artifactTitle, { exact: true })
+      workArtifactsSection(employeePage).getByText(artifactTitle, { exact: true })
     ).toBeVisible();
 
     await transitionWorkOnJobPage(employeePage, 'Ausführung abgeschlossen');

@@ -9,6 +9,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
   DialogContent,
+  DialogBody,
   DialogDescription,
   DialogFooter,
   DialogHeader,
@@ -383,7 +384,7 @@ export function EquipmentFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
@@ -392,335 +393,338 @@ export function EquipmentFormDialog({
               : "Ordne die Anlage einem vorhandenen Kunden und Einsatzort zu."}
           </DialogDescription>
         </DialogHeader>
-
-        <div className="grid gap-4 py-1 sm:grid-cols-2">
-          <Field
-            label="Kunde"
-            htmlFor="equipment-client"
-            required
-            error={fieldErrors.clientId}
-          >
-            <SearchableSelect
-              value={form.clientId}
-              disabled={mode !== "create"}
-              onChange={(value) =>
-                setForm((current) => ({
-                  ...current,
-                  clientId: value,
-                  siteId: "",
-                  parentEquipmentId: null,
-                }))
-              }
-              options={clients.map((client) => ({
-                value: client.id,
-                label: client.name,
-              }))}
-              placeholder="Kunde auswählen"
-              searchPlaceholder="Kunde suchen..."
-            />
-          </Field>
-          <Field
-            label="Einsatzort"
-            htmlFor="equipment-site"
-            required
-            error={fieldErrors.siteId}
-          >
-            <SearchableSelect
-              value={form.siteId}
-              disabled={!form.clientId || mode !== "create"}
-              onChange={(value) =>
-                setForm((current) => ({
-                  ...current,
-                  siteId: value,
-                  parentEquipmentId: null,
-                }))
-              }
-              options={siteOptions.map((site) => ({
-                value: site.id,
-                label: site.name,
-                description: site.address,
-              }))}
-              placeholder="Einsatzort auswählen"
-              searchPlaceholder="Einsatzort suchen..."
-            />
-          </Field>
-          <Field
-            label="Bezeichnung"
-            htmlFor="equipment-name"
-            required
-            error={fieldErrors.name}
-            className="sm:col-span-2"
-          >
-            <Input
-              value={form.name}
-              onChange={(event) => updateField("name", event.target.value)}
-              placeholder="z. B. Wärmepumpe Wohnhaus"
-            />
-          </Field>
-          <Field label="Kategorie" htmlFor="equipment-category">
-            <Select
-              value={form.category}
-              onValueChange={(value: EquipmentCategory) =>
-                setForm((current) => ({
-                  ...current,
-                  category: value,
-                  subtype: null,
-                  parentEquipmentId:
-                    value === "system_component"
-                      ? current.parentEquipmentId
-                      : null,
-                }))
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {EQUIPMENT_CATEGORIES.map((category) => (
-                  <SelectItem key={category} value={category}>
-                    {EQUIPMENT_CATEGORY_LABELS[category]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="Untertyp" htmlFor="equipment-subtype">
-            <Select
-              value={form.subtype ?? "none"}
-              onValueChange={(value) =>
-                updateField(
-                  "subtype",
-                  value === "none" ? null : (value as EquipmentSubtype),
-                )
-              }
-              disabled={subtypeOptions.length === 0}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Nicht angegeben" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Nicht angegeben</SelectItem>
-                {subtypeOptions.map((subtype) => (
-                  <SelectItem key={subtype} value={subtype}>
-                    {EQUIPMENT_SUBTYPE_LABELS[subtype]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          {form.category === "system_component" && (
-            <Field
-              label="Übergeordnete Anlage"
-              htmlFor="equipment-parent"
-              required
-              error={fieldErrors.parentEquipmentId}
-              className="sm:col-span-2"
-            >
-              <SearchableSelect
-                value={form.parentEquipmentId ?? ""}
-                disabled={mode === "replace"}
-                onChange={(value) =>
-                  updateField("parentEquipmentId", value || null)
-                }
-                options={parentOptions.map((item) => ({
-                  value: item.id,
-                  label: `${item.equipmentNumber} · ${item.name}`,
-                }))}
-                placeholder="Anlage auswählen"
-                searchPlaceholder="Anlage suchen..."
-              />
-            </Field>
-          )}
-          {mode !== "edit" && (
-            <Field label="Aktueller Zustand" htmlFor="equipment-state">
-              <Select
-                value={form.state}
-                onValueChange={(value: EquipmentState) =>
-                  updateField("state", value)
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(["unknown", "active", "inactive"] as const).map((state) => (
-                    <SelectItem key={state} value={state}>
-                      {EQUIPMENT_STATE_LABELS[state]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-          )}
-          <Field label="Position am Einsatzort" htmlFor="equipment-location">
-            <Input
-              value={form.locationDetail ?? ""}
-              onChange={(event) =>
-                updateField("locationDetail", event.target.value)
-              }
-              placeholder="z. B. Heizraum, Keller"
-            />
-          </Field>
-        </div>
-
-        <FormDisclosure
-          label="Technische Angaben und Kennungen"
-          defaultOpen={mode === "edit"}
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (!isPending) void handleSubmit();
+          }}
+          noValidate
+          className="flex min-h-0 flex-1 flex-col gap-4"
         >
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Hersteller" htmlFor="equipment-manufacturer">
-              <Input
-                value={form.manufacturer ?? ""}
-                onChange={(event) =>
-                  updateField("manufacturer", event.target.value)
-                }
-              />
-            </Field>
-            <Field label="Modell" htmlFor="equipment-model">
-              <Input
-                value={form.model ?? ""}
-                onChange={(event) => updateField("model", event.target.value)}
-              />
-            </Field>
-            <Field label="Seriennummer" htmlFor="equipment-serial">
-              <Input
-                value={form.serialNumber}
-                onChange={(event) =>
-                  updateField("serialNumber", event.target.value)
-                }
-              />
-            </Field>
-            <Field
-              label="Hersteller- oder Artikelnummer"
-              htmlFor="equipment-product"
-            >
-              <Input
-                value={form.productNumber}
-                onChange={(event) =>
-                  updateField("productNumber", event.target.value)
-                }
-              />
-            </Field>
-            <Field label="Betreiberkennung" htmlFor="equipment-operator">
-              <Input
-                value={form.operatorNumber}
-                onChange={(event) =>
-                  updateField("operatorNumber", event.target.value)
-                }
-              />
-            </Field>
-            <Field
-              label="Technische Hinweise"
-              htmlFor="equipment-notes"
-              className="sm:col-span-2"
-            >
-              <Textarea
-                value={form.technicalNotes ?? ""}
-                onChange={(event) =>
-                  updateField("technicalNotes", event.target.value)
-                }
-                placeholder="Nur dauerhafte technische Hinweise, keine Servicechronik"
-              />
-            </Field>
-          </div>
-        </FormDisclosure>
+          <DialogBody>
+            <div className="grid gap-4 py-1 sm:grid-cols-2">
+              <Field
+                label="Kunde"
+                htmlFor="equipment-client"
+                required
+                error={fieldErrors.clientId}
+              >
+                <SearchableSelect
+                  value={form.clientId}
+                  disabled={mode !== "create"}
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      clientId: value,
+                      siteId: "",
+                      parentEquipmentId: null,
+                    }))
+                  }
+                  options={clients.map((client) => ({
+                    value: client.id,
+                    label: client.name,
+                  }))}
+                  placeholder="Kunde auswählen"
+                  searchPlaceholder="Kunde suchen..."
+                />
+              </Field>
+              <Field
+                label="Einsatzort"
+                htmlFor="equipment-site"
+                required
+                error={fieldErrors.siteId}
+              >
+                <SearchableSelect
+                  value={form.siteId}
+                  disabled={!form.clientId || mode !== "create"}
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      siteId: value,
+                      parentEquipmentId: null,
+                    }))
+                  }
+                  options={siteOptions.map((site) => ({
+                    value: site.id,
+                    label: site.name,
+                    description: site.address,
+                  }))}
+                  placeholder="Einsatzort auswählen"
+                  searchPlaceholder="Einsatzort suchen..."
+                />
+              </Field>
+              <Field
+                label="Bezeichnung"
+                htmlFor="equipment-name"
+                required
+                error={fieldErrors.name}
+                className="sm:col-span-2"
+              >
+                <Input
+                  value={form.name}
+                  onChange={(event) => updateField("name", event.target.value)}
+                  placeholder="z. B. Wärmepumpe Wohnhaus"
+                />
+              </Field>
+              <Field label="Kategorie" htmlFor="equipment-category">
+                <Select
+                  value={form.category}
+                  onValueChange={(value: EquipmentCategory) =>
+                    setForm((current) => ({
+                      ...current,
+                      category: value,
+                      subtype: null,
+                      parentEquipmentId:
+                        value === "system_component"
+                          ? current.parentEquipmentId
+                          : null,
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EQUIPMENT_CATEGORIES.map((category) => (
+                      <SelectItem key={category} value={category}>
+                        {EQUIPMENT_CATEGORY_LABELS[category]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="Untertyp" htmlFor="equipment-subtype">
+                <Select
+                  value={form.subtype ?? "none"}
+                  onValueChange={(value) =>
+                    updateField(
+                      "subtype",
+                      value === "none" ? null : (value as EquipmentSubtype),
+                    )
+                  }
+                  disabled={subtypeOptions.length === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Nicht angegeben" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Nicht angegeben</SelectItem>
+                    {subtypeOptions.map((subtype) => (
+                      <SelectItem key={subtype} value={subtype}>
+                        {EQUIPMENT_SUBTYPE_LABELS[subtype]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              {form.category === "system_component" && (
+                <Field
+                  label="Übergeordnete Anlage"
+                  htmlFor="equipment-parent"
+                  required
+                  error={fieldErrors.parentEquipmentId}
+                  className="sm:col-span-2"
+                >
+                  <SearchableSelect
+                    value={form.parentEquipmentId ?? ""}
+                    disabled={mode === "replace"}
+                    onChange={(value) =>
+                      updateField("parentEquipmentId", value || null)
+                    }
+                    options={parentOptions.map((item) => ({
+                      value: item.id,
+                      label: `${item.equipmentNumber} · ${item.name}`,
+                    }))}
+                    placeholder="Anlage auswählen"
+                    searchPlaceholder="Anlage suchen..."
+                  />
+                </Field>
+              )}
+              {mode !== "edit" && (
+                <Field label="Aktueller Zustand" htmlFor="equipment-state">
+                  <Select
+                    value={form.state}
+                    onValueChange={(value: EquipmentState) =>
+                      updateField("state", value)
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(["unknown", "active", "inactive"] as const).map((state) => (
+                        <SelectItem key={state} value={state}>
+                          {EQUIPMENT_STATE_LABELS[state]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+              )}
+              <Field label="Position am Einsatzort" htmlFor="equipment-location">
+                <Input
+                  value={form.locationDetail ?? ""}
+                  onChange={(event) =>
+                    updateField("locationDetail", event.target.value)
+                  }
+                  placeholder="z. B. Heizraum, Keller"
+                />
+              </Field>
+            </div>
 
-        <FormDisclosure label="Installation, Inbetriebnahme und Gewährleistung">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field
-              label="Installationsdatum"
-              htmlFor="equipment-installation-date"
+            <FormDisclosure
+              label="Technische Angaben und Kennungen"
+              defaultOpen={mode === "edit"}
             >
-              <DatePicker
-                value={toDate(form.installationDate)}
-                onChange={(value) =>
-                  updateField("installationDate", toDateValue(value))
-                }
-              />
-            </Field>
-            <Field
-              label="Inbetriebnahme"
-              htmlFor="equipment-commissioning-date"
-            >
-              <DatePicker
-                value={toDate(form.commissioningDate)}
-                onChange={(value) =>
-                  updateField("commissioningDate", toDateValue(value))
-                }
-              />
-            </Field>
-            <Field
-              label="Gewährleistungsgeber"
-              htmlFor="equipment-warranty-provider"
-            >
-              <Input
-                value={form.warrantyProvider ?? ""}
-                onChange={(event) =>
-                  updateField("warrantyProvider", event.target.value)
-                }
-              />
-            </Field>
-            <Field label="Grundlage" htmlFor="equipment-warranty-basis">
-              <Input
-                value={form.warrantyBasis ?? ""}
-                onChange={(event) =>
-                  updateField("warrantyBasis", event.target.value)
-                }
-                placeholder="z. B. Vertrag oder Herstellerzusage"
-              />
-            </Field>
-            <Field label="Beginn" htmlFor="equipment-warranty-start">
-              <DatePicker
-                value={toDate(form.warrantyStartDate)}
-                onChange={(value) =>
-                  updateField("warrantyStartDate", toDateValue(value))
-                }
-              />
-            </Field>
-            <Field label="Ende" htmlFor="equipment-warranty-end">
-              <DatePicker
-                value={toDate(form.warrantyEndDate)}
-                onChange={(value) =>
-                  updateField("warrantyEndDate", toDateValue(value))
-                }
-              />
-            </Field>
-          </div>
-        </FormDisclosure>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Hersteller" htmlFor="equipment-manufacturer">
+                  <Input
+                    value={form.manufacturer ?? ""}
+                    onChange={(event) =>
+                      updateField("manufacturer", event.target.value)
+                    }
+                  />
+                </Field>
+                <Field label="Modell" htmlFor="equipment-model">
+                  <Input
+                    value={form.model ?? ""}
+                    onChange={(event) => updateField("model", event.target.value)}
+                  />
+                </Field>
+                <Field label="Seriennummer" htmlFor="equipment-serial">
+                  <Input
+                    value={form.serialNumber}
+                    onChange={(event) =>
+                      updateField("serialNumber", event.target.value)
+                    }
+                  />
+                </Field>
+                <Field
+                  label="Hersteller- oder Artikelnummer"
+                  htmlFor="equipment-product"
+                >
+                  <Input
+                    value={form.productNumber}
+                    onChange={(event) =>
+                      updateField("productNumber", event.target.value)
+                    }
+                  />
+                </Field>
+                <Field label="Betreiberkennung" htmlFor="equipment-operator">
+                  <Input
+                    value={form.operatorNumber}
+                    onChange={(event) =>
+                      updateField("operatorNumber", event.target.value)
+                    }
+                  />
+                </Field>
+                <Field
+                  label="Technische Hinweise"
+                  htmlFor="equipment-notes"
+                  className="sm:col-span-2"
+                >
+                  <Textarea
+                    value={form.technicalNotes ?? ""}
+                    onChange={(event) =>
+                      updateField("technicalNotes", event.target.value)
+                    }
+                    placeholder="Nur dauerhafte technische Hinweise, keine Servicechronik"
+                  />
+                </Field>
+              </div>
+            </FormDisclosure>
 
-        {mode !== "create" && (
-          <Field
-            label="Grund der Änderung"
-            htmlFor="equipment-reason"
-            required
-            error={fieldErrors.reason}
-          >
-            <Textarea
-              value={form.reason ?? ""}
-              onChange={(event) => updateField("reason", event.target.value)}
-              placeholder="Warum wird diese Änderung vorgenommen?"
-            />
-          </Field>
-        )}
-        <ErrorText>{error}</ErrorText>
+            <FormDisclosure label="Installation, Inbetriebnahme und Gewährleistung">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field
+                  label="Installationsdatum"
+                  htmlFor="equipment-installation-date"
+                >
+                  <DatePicker
+                    value={toDate(form.installationDate)}
+                    onChange={(value) =>
+                      updateField("installationDate", toDateValue(value))
+                    }
+                  />
+                </Field>
+                <Field label="Inbetriebnahme" htmlFor="equipment-commissioning-date">
+                  <DatePicker
+                    value={toDate(form.commissioningDate)}
+                    onChange={(value) =>
+                      updateField("commissioningDate", toDateValue(value))
+                    }
+                  />
+                </Field>
+                <Field
+                  label="Gewährleistungsgeber"
+                  htmlFor="equipment-warranty-provider"
+                >
+                  <Input
+                    value={form.warrantyProvider ?? ""}
+                    onChange={(event) =>
+                      updateField("warrantyProvider", event.target.value)
+                    }
+                  />
+                </Field>
+                <Field label="Grundlage" htmlFor="equipment-warranty-basis">
+                  <Input
+                    value={form.warrantyBasis ?? ""}
+                    onChange={(event) =>
+                      updateField("warrantyBasis", event.target.value)
+                    }
+                    placeholder="z. B. Vertrag oder Herstellerzusage"
+                  />
+                </Field>
+                <Field label="Beginn" htmlFor="equipment-warranty-start">
+                  <DatePicker
+                    value={toDate(form.warrantyStartDate)}
+                    onChange={(value) =>
+                      updateField("warrantyStartDate", toDateValue(value))
+                    }
+                  />
+                </Field>
+                <Field label="Ende" htmlFor="equipment-warranty-end">
+                  <DatePicker
+                    value={toDate(form.warrantyEndDate)}
+                    onChange={(value) =>
+                      updateField("warrantyEndDate", toDateValue(value))
+                    }
+                  />
+                </Field>
+              </div>
+            </FormDisclosure>
 
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
-            Abbrechen
-          </Button>
-          <Button
-            type="button"
-            onClick={() => void handleSubmit()}
-            disabled={isPending}
-          >
-            {isPending && <Loader2 className="size-4 animate-spin" />}
-            {mode === "replace" ? "Nachfolger anlegen" : "Speichern"}
-          </Button>
-        </DialogFooter>
+            {mode !== "create" && (
+              <Field
+                label="Grund der Änderung"
+                htmlFor="equipment-reason"
+                required
+                error={fieldErrors.reason}
+              >
+                <Textarea
+                  value={form.reason ?? ""}
+                  onChange={(event) => updateField("reason", event.target.value)}
+                  placeholder="Warum wird diese Änderung vorgenommen?"
+                />
+              </Field>
+            )}
+            <ErrorText>{error}</ErrorText>
+          </DialogBody>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Abbrechen
+            </Button>
+            <Button type="submit" disabled={isPending}>
+              {isPending && <Loader2 className="size-4 animate-spin" />}
+              {mode === "replace" ? "Nachfolger anlegen" : "Speichern"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

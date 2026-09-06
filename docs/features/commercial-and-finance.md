@@ -1,6 +1,6 @@
 # Commercial And Finance
 
-Status: living — last reviewed 2026-09-03
+Status: living — last reviewed 2026-09-05
 
 Commercial and finance capabilities connect WerkFlow's operational record of customers, jobs, projects, time, documents, and material with calculation, offers, orders, billing, incoming costs, payments, and post-calculation.
 
@@ -298,11 +298,11 @@ Financially consequential workflows need:
 - clear original-versus-extracted data for OCR and imported e-invoices;
 - testable control totals across document, open-item, payment, and accounting-handoff views.
 
-Infrastructure direction ([decision 0001](../../docs/decisions/0001-infrastructure-stack.md)): issued and received financial documents (invoices, credits, vouchers, e-invoice files) are the primary consumers of the planned independent retention archive — a separately administered S3 bucket with Object Lock in compliance mode, with per-category German retention periods (commonly 10 years for books/financial statements, 8 for vouchers, 6 for commercial correspondence). Active copies live on Cloudflare R2 via the document-management storage layer; structured records stay in Postgres, whose relational constraints (number ranges, uniqueness, immutable issued states, joins for post-calculation reporting) are a standing reason this domain remains on Postgres.
+Issued and received financial documents are the primary consumers of the future retention archive defined in [decision 0001](../decisions/0001-infrastructure-stack.md). `P1-45` owns its design and delivery, including legally reviewed retention rules by category. Active files use the document-management storage layer; structured commercial records belong in Postgres.
 
 WerkFlow should not claim GoBD conformity, legally compliant archiving, qualified signatures, or tax correctness solely because an audit trail or PDF exists. Claims require current expert review, documented procedures, and acceptance evidence.
 
-> **Heads-up for implementation agents:** this feature area is the highest-risk part of Phase 1 (see "Practical Execution Cautions" in the [Phase 1 roadmap](../plans/phase-1/roadmap.md)). Invoice semantics, number ranges, e-invoice profiles, retention, and accounting exports need paid, qualified German tax/legal expertise before acceptance — no agent or document research substitutes for it. Surface this as `decision_blocked` rather than implementing plausible-looking compliance behavior.
+> Invoice semantics, number ranges, e-invoice profiles, retention, and accounting exports require the qualified expert review defined in the [execution protocol's practical cautions](../plans/phase-1/protocol.md#practical-execution-cautions). Record `decision_blocked` while that review is missing.
 
 ### Onboarding, Packaging, Integrations, And Support
 

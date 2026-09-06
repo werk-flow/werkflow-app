@@ -34,7 +34,7 @@ Use the compass on a whole document or on one sentence. Reach for it whenever yo
 
 **Explanation: understanding and why.** One bounded topic, readable away from the product. Each title should tolerate an implicit "About..." in front. Anchor on a real why question. Give context: design decisions, history, constraints, alternatives. Opinion is allowed here and nowhere else.
 
-Don't mix modes: no reference tables inside a tutorial, no tutorial hand-holding inside reference, no arguing inside a how-to. Split and link instead.
+Choose one primary purpose for a document. Keep supporting reference beside a step when the reader needs it to complete that step. Move independently useful reference or explanation behind a link. Agent procedures may combine ordered steps and reference sections, as `writing-for-agents` describes.
 
 Source: diataxis.fr, fetched 2026-07-18.
 
@@ -108,7 +108,7 @@ The fixes, by layer: "configuration is performed" becomes "`budget.mjs` reads", 
 
 Apply to any prose this skill covers. Item 1 applies only to document sets:
 
-1. Is each file one Diátaxis mode, with links where modes meet?
+1. Does each file have a clear primary purpose, with supporting reference close to the step that needs it and separate topics linked?
 2. Is every instruction written as a command, with its condition in front?
 3. Does any sentence carry two instructions or two thoughts? Split it.
 4. Can any word be cut without losing meaning? Cut it.

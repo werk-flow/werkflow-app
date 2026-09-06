@@ -1,6 +1,6 @@
 # Product Capability Map
 
-Status: living — last reviewed 2026-09-02
+Status: living — last reviewed 2026-09-05
 
 This document defines how WerkFlow should grow from its current operational foundation into a complete, coherent operating system for German SHK businesses and, later, an intelligent automation platform.
 
@@ -145,7 +145,7 @@ These capabilities affect every feature and should not be rebuilt differently in
 
 ## Shared Product Objects
 
-The exact database design remains a later technical decision, but feature work should preserve these conceptual distinctions:
+These are conceptual distinctions, not a schema proposal. Implemented domains already have database models; generated types and live inspection establish their exact structure. Future feature work must preserve the distinctions below:
 
 | Concept | Meaning |
 | --- | --- |
@@ -236,7 +236,7 @@ This is a dependency sequence, not a release commitment.
 
 ### Done As Of 2026-09-02
 
-Waves 0 to 2 of the Phase 1 roadmap are accepted: 26 of 56 slices, `P1-00` and `P1-00a` through `P1-24`. That closes the operational graph this section once listed as next: customer contacts, sites, requests and the relationship timeline; employee records, schedules, responsibilities, vacation, sickness, teams and qualifications; recurring planning and dispatch; work templates, the execution lifecycle, structured evidence, the field work pack and office handover; installed equipment, reactive service and maintenance plans; explicit time segments, corrections, time accounts with period close and payroll export; and the controlled people lifecycle. The shared attention pattern on `/aufgaben` carries approvals and notifications for all of them. Search, mobile and offline behavior are not done; they sit in Wave 5. The exact position, the per-slice records and the pending Wave 2 wave-end certification live in the [roadmap checkpoint](../plans/phase-1/roadmap.md#current-checkpoint).
+The accepted Wave 2 checkpoint establishes the foundation below. Slice counts and certification status live only in the [roadmap checkpoint](../plans/phase-1/roadmap.md#current-checkpoint). That closes the operational graph this section once listed as next: customer contacts, sites, requests and the relationship timeline; employee records, schedules, responsibilities, vacation, sickness, teams and qualifications; recurring planning and dispatch; work templates, the execution lifecycle, structured evidence, the field work pack and office handover; installed equipment, reactive service and maintenance plans; explicit time segments, corrections, time accounts with period close and payroll export; and the controlled people lifecycle. The shared attention pattern on `/aufgaben` carries approvals and notifications for all of them. Cross-domain search remains Wave 5 scope; feature-local search already exists. Native mobile and offline workflows also remain Wave 5 scope.
 
 ### Remaining
 
@@ -340,8 +340,8 @@ One spec carries extra sections by design. `document-management.md` keeps the ni
 
 When behavior is implemented:
 
-- move it from planned capability into the current baseline;
-- preserve any still-relevant product rationale;
+- describe it in the current baseline; keep the Phase 1 outcome as the durable requirement and distinguish any remaining depth;
+- preserve product rationale in the accepting slice record and link it; remove resolved questions from Open Product Decisions;
 - link a concrete implementation plan only when one exists;
 - update dependent feature handoffs;
 - update the conceptual data model if the domain boundary changed;

@@ -544,7 +544,7 @@ export function EmbeddedAuftraegeSection({
               className={cn(
                 'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors',
                 activeStatusFilter === opt.value
-                  ? 'border-primary bg-primary/10 text-primary'
+                  ? 'border-primary bg-primary/10 text-primary-text'
                   : 'border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground'
               )}
             >
@@ -553,7 +553,7 @@ export function EmbeddedAuftraegeSection({
                 className={cn(
                   'tabular-nums',
                   activeStatusFilter === opt.value
-                    ? 'text-primary'
+                    ? 'text-primary-text'
                     : 'text-muted-foreground/70'
                 )}
               >

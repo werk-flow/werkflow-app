@@ -1,6 +1,6 @@
 # Product Offer
 
-Status: living — last reviewed 2026-09-02; placeholder, do not invent details it lacks
+Status: living — last reviewed 2026-09-05; placeholder, do not invent details it lacks
 
 This document is still a placeholder for the complete WerkFlow offer.
 
@@ -23,9 +23,9 @@ Do not invent pricing, guarantees, detailed onboarding promises, service levels,
 
 ## Known Cost Input: File Storage Allowance
 
-One infrastructure fact is settled enough to constrain future packaging ([decision 0001](../decisions/0001-infrastructure-stack.md)): the marginal infrastructure cost per onboarded business is dominated by file storage, roughly `$15/month per stored terabyte` (Cloudflare R2, downloads free) plus a small archive copy. Database, auth, and hosting marginal costs are near zero at typical SHK team sizes.
+The dated infrastructure cost assumptions live in [decision 0001's cost model](../decisions/0001-infrastructure-stack.md#cost-model-snapshot-2026-08-usd-pre-vat--refresh-before-pricing-decisions). That model identifies file storage as the main marginal cost per business at the assumed team size. Refresh provider prices and measured usage before making pricing decisions.
 
-Packaging must therefore include an explicit storage allowance per organization (for example, an included volume plus paid tiers) instead of unlimited storage. Whether a typical business stores hundreds of gigabytes or multiple terabytes is **unvalidated** — original-resolution photos and videos, not PDFs, will drive the number. TODO: measure real storage growth with the first onboarded businesses before fixing allowance tiers or prices.
+The infrastructure decision calls for an explicit storage allowance per organization. An included volume plus paid tiers is a packaging option, not a settled entitlement or price. Define the allowance and any paid tiers only after refreshing provider prices and measured usage. Whether a typical business stores hundreds of gigabytes or multiple terabytes is **unvalidated** — original-resolution photos and videos, not PDFs, will drive the number. TODO: measure real storage growth with the first onboarded businesses before fixing allowance tiers or prices.
 
 ## Future Topics
 

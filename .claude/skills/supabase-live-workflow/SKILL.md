@@ -8,16 +8,16 @@ description: Use for Supabase-related work in this WerkFlow repo: database schem
 WerkFlow runs two cloud Supabase projects plus a local stack. Project IDs, plan and compute posture, per-backend configuration, and which tool reaches which backend live in `docs/technical/environments.md`; read it before any Supabase work and do not restate its facts elsewhere.
 
 - **Prod** serves the deployed Vercel app and real customers. Treat as read-only outside the migration rule below.
-- **Dev** is routine-write territory: local development, the cloud canary suite, and wave-end cloud batteries.
-- **Local stack** (WSL Docker, `supabase db reset` over the committed migrations) is the default backend for the Golden and audit batteries. Reached through the Supabase CLI in WSL and direct psql, not through MCP.
+- **Dev** supports local development, the cloud canary, and explicitly scoped provider checks. Routine wave and release verification uses the local release plan plus the cloud canary under decision 0007. Read `docs/technical/testing.md` for selection and acceptance.
+- **Local stack** (WSL Docker, `supabase db reset` over the committed migrations) is the default backend for application test groups. Reached through the Supabase CLI in WSL and direct psql, not through MCP.
 
-`.env.local` has no permanent target: `bun run env:local` / `env:dev` / `env:prod` switch it between the three backends. Schemas stay identical through the shared migration history in `supabase/migrations/`.
+`.env.local` has no permanent target: `bun run env:local` / `env:dev` / `env:prod` switch it between the three backends. The shared migration history in `supabase/migrations/` is intended to keep schemas aligned. Verify live parity rather than inferring it from shared filenames.
 
 ## Required workflow
 
-1. Inspect the real project before making schema-aware claims or edits. Prod is the source of truth for production state; dev mirrors it through `supabase/migrations/`, so for schema questions dev inspection or the migration files are equivalent to prod.
+1. Inspect the real project before making schema-aware claims or edits. Inspect production for production-state claims. Dev and the migration files describe their own state and intended rollout; they are not substitutes for a production parity check.
 2. Prefer MCP or project inspection over guessing from app code or older architecture docs.
-3. When a schema change affects app code, run `bun run types:generate`. It reads dev, covers the `graphql_public` and `public` schemas, and formats with pinned Supabase 2.116.0 and Prettier 3.6.2. `bun run types:check` fails when the committed `lib/supabase/database.types.ts` differs from a fresh generation.
+3. When a schema change affects app code, run `bun run types:generate`. It reads dev, covers the `graphql_public` and `public` schemas, and uses the pinned tools in `package.json`. `bun run types:check` fails when the committed `lib/supabase/database.types.ts` differs from a fresh generation.
 
 ## The migration rule
 

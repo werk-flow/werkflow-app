@@ -1,7 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Download, FileDown, FileLock2, Loader2, Plus, UserRoundCheck } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  Download,
+  FileDown,
+  FileLock2,
+  Loader2,
+  Plus,
+  UserRoundCheck,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,7 +32,7 @@ import { Field } from "@/components/ui/field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Textarea } from "@/components/ui/textarea";
 import { useBanner } from "@/components/ui/banner";
-import { useRealtimeRouterRefresh } from "@/hooks/use-realtime-router-refresh";
+import { useLiveView } from "@/hooks/use-live-view";
 import { useBusyIds } from "@/hooks/use-busy-id";
 import { useServerAction } from "@/hooks/use-server-action";
 import { parseBerlinDateTimeInput } from "@/lib/customer-relationships/date-time";
@@ -33,6 +41,7 @@ import {
   createPersonnelOnboardingPlan,
   exportPersonnelLifecycleManifest,
   getPersonnelDocumentSignedUrl,
+  getPersonnelLifecycle,
   savePersonnelOnboardingRequirement,
   setPersonnelAccessTransition,
   setPersonnelDocumentRelease,
@@ -51,7 +60,10 @@ import {
 } from "@/lib/personnel/lifecycle";
 import { toLocalDateString } from "@/lib/utils";
 
-const ACCESS_TRANSITIONS: Array<{ value: PersonnelAccessTransitionKind; label: string }> = [
+const ACCESS_TRANSITIONS: Array<{
+  value: PersonnelAccessTransitionKind;
+  label: string;
+}> = [
   { value: "schedule_activation", label: "Zugang planen" },
   { value: "activate_now", label: "Jetzt aktivieren" },
   { value: "suspend_now", label: "Sofort sperren" },
@@ -61,7 +73,10 @@ const ACCESS_TRANSITIONS: Array<{ value: PersonnelAccessTransitionKind; label: s
   { value: "end_access", label: "Zugang beenden" },
 ];
 
-const EMPLOYMENT_TRANSITIONS: Array<{ value: PersonnelEmploymentTransitionKind; label: string }> = [
+const EMPLOYMENT_TRANSITIONS: Array<{
+  value: PersonnelEmploymentTransitionKind;
+  label: string;
+}> = [
   { value: "plan_start", label: "Eintritt planen" },
   { value: "start", label: "Beschäftigung starten" },
   { value: "record_notice", label: "Austritt vormerken" },
@@ -73,7 +88,10 @@ const EMPLOYMENT_TRANSITIONS: Array<{ value: PersonnelEmploymentTransitionKind; 
   { value: "reactivate", label: "Beschäftigung reaktivieren" },
 ];
 
-const REQUIREMENT_TYPES: Array<{ value: PersonnelRequirementType; label: string }> = [
+const REQUIREMENT_TYPES: Array<{
+  value: PersonnelRequirementType;
+  label: string;
+}> = [
   { value: "document", label: "Dokument" },
   { value: "qualification", label: "Qualifikation" },
   { value: "employment_condition", label: "Beschäftigungsbedingung" },
@@ -84,33 +102,62 @@ const REQUIREMENT_TYPES: Array<{ value: PersonnelRequirementType; label: string 
   { value: "manual", label: "Manueller Punkt" },
 ];
 
-const ACCESS_CLASS_OPTIONS: Array<{ value: PersonnelDocumentAccessClass; label: string; description: string }> = [
-  { value: "personnel_standard", label: "Personalunterlage", description: "Admin und Büro; Freigabe an die betroffene Person möglich" },
-  { value: "admin_restricted", label: "Nur Admin", description: "Verträge oder besonders sensible Personalunterlagen" },
-  { value: "health_evidence", label: "Gesundheitsnachweis", description: "Minimaler Nachweis mit besonders enger Sichtbarkeit" },
+const ACCESS_CLASS_OPTIONS: Array<{
+  value: PersonnelDocumentAccessClass;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "personnel_standard",
+    label: "Personalunterlage",
+    description: "Admin und Büro; Freigabe an die betroffene Person möglich",
+  },
+  {
+    value: "admin_restricted",
+    label: "Nur Admin",
+    description: "Verträge oder besonders sensible Personalunterlagen",
+  },
+  {
+    value: "health_evidence",
+    label: "Gesundheitsnachweis",
+    description: "Minimaler Nachweis mit besonders enger Sichtbarkeit",
+  },
 ];
 
 const ERROR_MESSAGES: Record<string, string> = {
   invalid_input: "Bitte prüfe die Eingaben.",
   stale_version: "Der Stand hat sich geändert. Die Ansicht wird aktualisiert.",
   not_authorized: "Du darfst diese Aktion nicht ausführen.",
-  membership_required: "Vor der Aktivierung muss ein eingelöster Zugang bestehen.",
+  membership_required:
+    "Vor der Aktivierung muss ein eingelöster Zugang bestehen.",
   last_admin_protected: "Der letzte aktive Admin kann nicht gesperrt werden.",
-  organization_owner_protected: "Der Organisationsinhaber kann hier nicht gesperrt oder inaktiv gesetzt werden.",
-  last_responsibility_holder: "Mindestens eine Verantwortung hätte danach keine wirksame Vertretung.",
-  unresolved_work: "Offene Zuständigkeiten oder Aufträge müssen zuerst geprüft werden.",
-  future_effective_at_required: "Wähle für eine Planung einen Zeitpunkt in der Zukunft.",
-  immediate_effective_at_required: "Für diese Aktion gilt der aktuelle Zeitpunkt. Wähle für eine spätere Sperre den geplanten Übergang.",
-  future_effective_date_required: "Wähle für eine Planung ein Datum in der Zukunft.",
-  no_scheduled_transition: "Es gibt keinen geplanten Übergang, der zurückgenommen werden kann.",
-  access_requirements_incomplete: "Mindestens eine ausdrücklich zugangsblockierende Anforderung ist noch offen.",
-  requirement_not_open: "Diese Anforderung ist nicht mehr offen und kann nicht bestätigt werden.",
+  organization_owner_protected:
+    "Der Organisationsinhaber kann hier nicht gesperrt oder inaktiv gesetzt werden.",
+  last_responsibility_holder:
+    "Mindestens eine Verantwortung hätte danach keine wirksame Vertretung.",
+  unresolved_work:
+    "Offene Zuständigkeiten oder Aufträge müssen zuerst geprüft werden.",
+  future_effective_at_required:
+    "Wähle für eine Planung einen Zeitpunkt in der Zukunft.",
+  immediate_effective_at_required:
+    "Für diese Aktion gilt der aktuelle Zeitpunkt. Wähle für eine spätere Sperre den geplanten Übergang.",
+  future_effective_date_required:
+    "Wähle für eine Planung ein Datum in der Zukunft.",
+  no_scheduled_transition:
+    "Es gibt keinen geplanten Übergang, der zurückgenommen werden kann.",
+  access_requirements_incomplete:
+    "Mindestens eine ausdrücklich zugangsblockierende Anforderung ist noch offen.",
+  requirement_not_open:
+    "Diese Anforderung ist nicht mehr offen und kann nicht bestätigt werden.",
   file_missing: "Die Datei konnte nach dem Hochladen nicht bestätigt werden.",
   mutation_failed: "Die Änderung konnte nicht gespeichert werden.",
 };
 
 function errorMessage(code: string): string {
-  return ERROR_MESSAGES[code] ?? "Die Aktion ist fehlgeschlagen. Bitte versuche es erneut.";
+  return (
+    ERROR_MESSAGES[code] ??
+    "Die Aktion ist fehlgeschlagen. Bitte versuche es erneut."
+  );
 }
 
 /** Field errors are keyed by control id; the first key wins focus. */
@@ -123,7 +170,10 @@ function focusFirstInvalid(errors: Record<string, string>): boolean {
 
 function formatDate(value: string | null): string {
   if (!value) return "Nicht festgelegt";
-  return new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeZone: "Europe/Berlin" }).format(new Date(value));
+  return new Intl.DateTimeFormat("de-DE", {
+    dateStyle: "medium",
+    timeZone: "Europe/Berlin",
+  }).format(new Date(value));
 }
 
 function berlinIsoDateAtOffset(offsetDays: number): string {
@@ -146,12 +196,14 @@ function defaultAccessDateTime(): string {
   return `${berlinIsoDateAtOffset(1)}T09:00`;
 }
 
-function isScheduledAccessTransition(kind: PersonnelAccessTransitionKind): boolean {
+function isScheduledAccessTransition(
+  kind: PersonnelAccessTransitionKind,
+): boolean {
   return kind === "schedule_activation" || kind === "schedule_suspension";
 }
 
 export function PersonnelLifecycleSection({
-  data,
+  data: initialData,
   canManage,
   canAdministerAccess,
 }: {
@@ -160,6 +212,7 @@ export function PersonnelLifecycleSection({
   canAdministerAccess: boolean;
 }) {
   const { showBanner } = useBanner();
+  const router = useRouter();
   const [accessOpen, setAccessOpen] = useState(false);
   const [employmentOpen, setEmploymentOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
@@ -167,24 +220,33 @@ export function PersonnelLifecycleSection({
   const [uploadOpen, setUploadOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [accessKind, setAccessKind] = useState<PersonnelAccessTransitionKind>("schedule_activation");
+  const [accessKind, setAccessKind] = useState<PersonnelAccessTransitionKind>(
+    "schedule_activation",
+  );
   const [accessAt, setAccessAt] = useState(defaultAccessDateTime);
-  const [employmentKind, setEmploymentKind] = useState<PersonnelEmploymentTransitionKind>("record_notice");
-  const [employmentDate, setEmploymentDate] = useState<Date | undefined>(todayDate());
+  const [employmentKind, setEmploymentKind] =
+    useState<PersonnelEmploymentTransitionKind>("record_notice");
+  const [employmentDate, setEmploymentDate] = useState<Date | undefined>(
+    todayDate(),
+  );
   const [reason, setReason] = useState("");
   const [acceptUnresolved, setAcceptUnresolved] = useState(false);
   const [planName, setPlanName] = useState("Onboarding");
-  const [planTemplateVersionId, setPlanTemplateVersionId] = useState<string>("");
+  const [planTemplateVersionId, setPlanTemplateVersionId] =
+    useState<string>("");
   const [planStartDate, setPlanStartDate] = useState<Date | undefined>();
   const [requirementTitle, setRequirementTitle] = useState("");
-  const [requirementType, setRequirementType] = useState<PersonnelRequirementType>("manual");
+  const [requirementType, setRequirementType] =
+    useState<PersonnelRequirementType>("manual");
   const [requirementRequired, setRequirementRequired] = useState(true);
   const [requirementBlocksAccess, setRequirementBlocksAccess] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [documentType, setDocumentType] = useState("");
-  const [accessClass, setAccessClass] = useState<PersonnelDocumentAccessClass>("personnel_standard");
+  const [accessClass, setAccessClass] =
+    useState<PersonnelDocumentAccessClass>("personnel_standard");
 
-  useRealtimeRouterRefresh({
+  const view = useLiveView<PersonnelLifecycleView>({
+    initialData,
     tables: [
       "personnel_access_lifecycles",
       "personnel_employment_lifecycles",
@@ -193,14 +255,42 @@ export function PersonnelLifecycleSection({
       "personnel_onboarding_templates",
       "personnel_onboarding_plans",
       "personnel_onboarding_requirements",
+      "employee_records",
+      "organization_members",
+      "profiles",
+      "documents",
+      "jobs",
+      "job_assignments",
+      "organization_responsibility_configurations",
+      "organization_responsibility_assignments",
+      "organization_responsibility_delegations",
     ],
+    read: async () => {
+      const result = await getPersonnelLifecycle(initialData.employeeRecordId);
+      return result.success
+        ? { ok: true, data: result.data }
+        : { ok: false, error: result.error };
+    },
   });
+  const data = view.data ?? initialData;
 
-  const { run, isPending } = useServerAction(async (task: () => Promise<void>) => task());
+  const { run, isPending } = useServerAction(
+    async (task: () => Promise<void>) => task(),
+  );
+  const mutationDisabled = isPending || view.isStale;
   const rowBusy = useBusyIds();
+
+  function reconcileMutation(): void {
+    router.refresh();
+    // The owned reader settles independently of route commits and mutation pending.
+    void view.refresh();
+  }
   const currentPlan = data.plans[0] ?? null;
   const incompleteRequirements = useMemo(
-    () => currentPlan?.requirements.filter((item) => !["fulfilled", "waived", "cancelled"].includes(item.state)) ?? [],
+    () =>
+      currentPlan?.requirements.filter(
+        (item) => !["fulfilled", "waived", "cancelled"].includes(item.state),
+      ) ?? [],
     [currentPlan],
   );
   const hasUnresolvedWork =
@@ -208,13 +298,16 @@ export function PersonnelLifecycleSection({
     data.transitionInventory.strandedResponsibilities.length > 0;
 
   async function submitAccess(): Promise<void> {
+    if (mutationDisabled) return;
     setError(null);
     const instant = isScheduledAccessTransition(accessKind)
       ? parseBerlinDateTimeInput(accessAt)?.toISOString()
       : new Date().toISOString();
     const nextErrors: Record<string, string> = {};
-    if (!instant) nextErrors["access-transition-date"] = "Bitte gib einen Zeitpunkt an.";
-    if (reason.trim().length < 2) nextErrors["access-reason"] = "Bitte gib einen Grund an.";
+    if (!instant)
+      nextErrors["access-transition-date"] = "Bitte gib einen Zeitpunkt an.";
+    if (reason.trim().length < 2)
+      nextErrors["access-reason"] = "Bitte gib einen Grund an.";
     setFieldErrors(nextErrors);
     if (focusFirstInvalid(nextErrors)) return;
     try {
@@ -233,19 +326,29 @@ export function PersonnelLifecycleSection({
         }
         setAccessOpen(false);
         setReason("");
-        showBanner({ variant: "success", message: "Zugangsstatus wurde gespeichert." });
+        showBanner({
+          variant: "success",
+          message: "Zugangsstatus wurde gespeichert.",
+        });
+        reconcileMutation();
       });
     } catch (submitError) {
-      console.error("Unexpected error saving the access transition:", submitError);
+      console.error(
+        "Unexpected error saving the access transition:",
+        submitError,
+      );
       setError(ERROR_MESSAGES.mutation_failed);
     }
   }
 
   async function submitEmployment(): Promise<void> {
+    if (mutationDisabled) return;
     setError(null);
     const nextErrors: Record<string, string> = {};
-    if (!employmentDate) nextErrors["employment-date"] = "Bitte gib ein Datum an.";
-    if (reason.trim().length < 2) nextErrors["employment-reason"] = "Bitte gib einen Grund an.";
+    if (!employmentDate)
+      nextErrors["employment-date"] = "Bitte gib ein Datum an.";
+    if (reason.trim().length < 2)
+      nextErrors["employment-reason"] = "Bitte gib einen Grund an.";
     setFieldErrors(nextErrors);
     if (focusFirstInvalid(nextErrors) || !employmentDate) return;
     try {
@@ -266,18 +369,27 @@ export function PersonnelLifecycleSection({
         setEmploymentOpen(false);
         setReason("");
         setAcceptUnresolved(false);
-        showBanner({ variant: "success", message: "Beschäftigungsübergang wurde gespeichert." });
+        showBanner({
+          variant: "success",
+          message: "Beschäftigungsübergang wurde gespeichert.",
+        });
+        reconcileMutation();
       });
     } catch (submitError) {
-      console.error("Unexpected error saving the employment transition:", submitError);
+      console.error(
+        "Unexpected error saving the employment transition:",
+        submitError,
+      );
       setError(ERROR_MESSAGES.mutation_failed);
     }
   }
 
   async function submitPlan(): Promise<void> {
+    if (mutationDisabled) return;
     setError(null);
     const nextErrors: Record<string, string> = {};
-    if (!planName.trim()) nextErrors["plan-name"] = "Bitte gib eine Bezeichnung an.";
+    if (!planName.trim())
+      nextErrors["plan-name"] = "Bitte gib eine Bezeichnung an.";
     setFieldErrors(nextErrors);
     if (focusFirstInvalid(nextErrors)) return;
     try {
@@ -286,7 +398,9 @@ export function PersonnelLifecycleSection({
           employeeRecordId: data.employeeRecordId,
           templateVersionId: planTemplateVersionId || null,
           name: planName,
-          targetStartDate: planStartDate ? toLocalDateString(planStartDate) : null,
+          targetStartDate: planStartDate
+            ? toLocalDateString(planStartDate)
+            : null,
           operationId: crypto.randomUUID(),
         });
         if (!result.success) {
@@ -294,10 +408,17 @@ export function PersonnelLifecycleSection({
           return;
         }
         setPlanOpen(false);
-        showBanner({ variant: "success", message: "Onboardingplan wurde angelegt." });
+        showBanner({
+          variant: "success",
+          message: "Onboardingplan wurde angelegt.",
+        });
+        reconcileMutation();
       });
     } catch (submitError) {
-      console.error("Unexpected error creating the onboarding plan:", submitError);
+      console.error(
+        "Unexpected error creating the onboarding plan:",
+        submitError,
+      );
       setError(ERROR_MESSAGES.mutation_failed);
     }
   }
@@ -305,12 +426,18 @@ export function PersonnelLifecycleSection({
   async function downloadManifest(): Promise<void> {
     try {
       await run(async () => {
-        const result = await exportPersonnelLifecycleManifest(data.employeeRecordId);
+        const result = await exportPersonnelLifecycleManifest(
+          data.employeeRecordId,
+        );
         if (!result.success) {
           showBanner({ variant: "error", message: errorMessage(result.error) });
           return;
         }
-        const url = URL.createObjectURL(new Blob([JSON.stringify(result.data, null, 2)], { type: "application/json" }));
+        const url = URL.createObjectURL(
+          new Blob([JSON.stringify(result.data, null, 2)], {
+            type: "application/json",
+          }),
+        );
         const anchor = document.createElement("a");
         anchor.href = url;
         anchor.download = `personalprozess-${data.employeeRecordId}.json`;
@@ -318,16 +445,24 @@ export function PersonnelLifecycleSection({
         URL.revokeObjectURL(url);
       });
     } catch (downloadError) {
-      console.error("Unexpected error exporting the personnel lifecycle manifest:", downloadError);
-      showBanner({ variant: "error", message: "Der Arbeitsstand konnte nicht exportiert werden." });
+      console.error(
+        "Unexpected error exporting the personnel lifecycle manifest:",
+        downloadError,
+      );
+      showBanner({
+        variant: "error",
+        message: "Der Arbeitsstand konnte nicht exportiert werden.",
+      });
     }
   }
 
   async function submitRequirement(): Promise<void> {
+    if (mutationDisabled) return;
     if (!currentPlan) return;
     setError(null);
     const nextErrors: Record<string, string> = {};
-    if (!requirementTitle.trim()) nextErrors["requirement-title"] = "Bitte gib einen Titel an.";
+    if (!requirementTitle.trim())
+      nextErrors["requirement-title"] = "Bitte gib einen Titel an.";
     setFieldErrors(nextErrors);
     if (focusFirstInvalid(nextErrors)) return;
     try {
@@ -353,51 +488,76 @@ export function PersonnelLifecycleSection({
         }
         setRequirementOpen(false);
         setRequirementTitle("");
-        showBanner({ variant: "success", message: "Anforderung wurde ergänzt." });
+        showBanner({
+          variant: "success",
+          message: "Anforderung wurde ergänzt.",
+        });
+        reconcileMutation();
       });
     } catch (submitError) {
-      console.error("Unexpected error creating the onboarding requirement:", submitError);
+      console.error(
+        "Unexpected error creating the onboarding requirement:",
+        submitError,
+      );
       setError(ERROR_MESSAGES.mutation_failed);
     }
   }
 
   async function resolveRequirement(
     requirement: PersonnelLifecycleView["plans"][number]["requirements"][number],
-    state: Extract<PersonnelRequirementState, "fulfilled" | "waived" | "cancelled">,
+    state: Extract<
+      PersonnelRequirementState,
+      "fulfilled" | "waived" | "cancelled"
+    >,
   ): Promise<void> {
+    if (mutationDisabled) return;
     setError(null);
-    await rowBusy.run(requirement.id, async () => {
-      const result = await savePersonnelOnboardingRequirement({
-        planId: requirement.planId,
-        requirementId: requirement.id,
-        expectedVersion: requirement.version,
-        requirementType: requirement.requirementType,
-        title: requirement.title,
-        description: requirement.description,
-        isRequired: requirement.isRequired,
-        blocksAccess: requirement.blocksAccess,
-        ownerEmployeeRecordId: requirement.ownerEmployeeRecordId,
-        dueDate: requirement.dueDate,
-        state,
-        blockerReason: null,
-        operationId: crypto.randomUUID(),
+    await rowBusy
+      .run(requirement.id, async () => {
+        const result = await savePersonnelOnboardingRequirement({
+          planId: requirement.planId,
+          requirementId: requirement.id,
+          expectedVersion: requirement.version,
+          requirementType: requirement.requirementType,
+          title: requirement.title,
+          description: requirement.description,
+          isRequired: requirement.isRequired,
+          blocksAccess: requirement.blocksAccess,
+          ownerEmployeeRecordId: requirement.ownerEmployeeRecordId,
+          dueDate: requirement.dueDate,
+          state,
+          blockerReason: null,
+          operationId: crypto.randomUUID(),
+        });
+        if (!result.success) {
+          showBanner({ variant: "error", message: errorMessage(result.error) });
+          return;
+        }
+        showBanner({
+          variant: "success",
+          message: "Anforderung wurde aktualisiert.",
+        });
+        reconcileMutation();
+      })
+      .catch((submitError: unknown) => {
+        console.error(
+          "Unexpected error updating the onboarding requirement:",
+          submitError,
+        );
+        showBanner({
+          variant: "error",
+          message: ERROR_MESSAGES.mutation_failed,
+        });
       });
-      if (!result.success) {
-        showBanner({ variant: "error", message: errorMessage(result.error) });
-        return;
-      }
-      showBanner({ variant: "success", message: "Anforderung wurde aktualisiert." });
-    }).catch((submitError: unknown) => {
-      console.error("Unexpected error updating the onboarding requirement:", submitError);
-      showBanner({ variant: "error", message: ERROR_MESSAGES.mutation_failed });
-    });
   }
 
   async function submitUpload(): Promise<void> {
+    if (mutationDisabled) return;
     setError(null);
     const nextErrors: Record<string, string> = {};
     if (!file) nextErrors["personnel-file"] = "Bitte wähle eine Datei aus.";
-    if (documentType.trim().length < 2) nextErrors["document-type"] = "Bitte gib die Dokumentart an.";
+    if (documentType.trim().length < 2)
+      nextErrors["document-type"] = "Bitte gib die Dokumentart an.";
     setFieldErrors(nextErrors);
     if (focusFirstInvalid(nextErrors) || !file) return;
     try {
@@ -418,67 +578,155 @@ export function PersonnelLifecycleSection({
         setUploadOpen(false);
         setFile(null);
         setDocumentType("");
-        showBanner({ variant: "success", message: "Geschützte Personalunterlage wurde gespeichert." });
+        showBanner({
+          variant: "success",
+          message: "Geschützte Personalunterlage wurde gespeichert.",
+        });
+        reconcileMutation();
       });
     } catch (submitError) {
-      console.error("Unexpected error uploading the personnel document:", submitError);
+      console.error(
+        "Unexpected error uploading the personnel document:",
+        submitError,
+      );
       setError(ERROR_MESSAGES.mutation_failed);
     }
   }
 
-  async function toggleRelease(document: PersonnelLifecycleView["documents"][number]): Promise<void> {
-    await rowBusy.run(document.id, async () => {
-      const result = await setPersonnelDocumentRelease({
-        employeeRecordId: data.employeeRecordId,
-        personnelDocumentId: document.id,
-        documentVersionNumber: document.currentVersionNumber,
-        release: !document.releasedToEmployee,
-        reason: document.releasedToEmployee ? "Freigabe zurückgenommen" : null,
-        operationId: crypto.randomUUID(),
+  async function toggleRelease(
+    document: PersonnelLifecycleView["documents"][number],
+  ): Promise<void> {
+    if (mutationDisabled) return;
+    await rowBusy
+      .run(document.id, async () => {
+        const result = await setPersonnelDocumentRelease({
+          employeeRecordId: data.employeeRecordId,
+          personnelDocumentId: document.id,
+          documentVersionNumber: document.currentVersionNumber,
+          release: !document.releasedToEmployee,
+          reason: document.releasedToEmployee
+            ? "Freigabe zurückgenommen"
+            : null,
+          operationId: crypto.randomUUID(),
+        });
+        showBanner(
+          result.success
+            ? {
+                variant: "success",
+                message: document.releasedToEmployee
+                  ? "Freigabe wurde zurückgenommen."
+                  : "Dokument wurde für die betroffene Person freigegeben.",
+              }
+            : { variant: "error", message: errorMessage(result.error) },
+        );
+        if (result.success) reconcileMutation();
+      })
+      .catch((submitError: unknown) => {
+        console.error(
+          "Unexpected error updating the document release:",
+          submitError,
+        );
+        showBanner({
+          variant: "error",
+          message: ERROR_MESSAGES.mutation_failed,
+        });
       });
-      showBanner(
-        result.success
-          ? { variant: "success", message: document.releasedToEmployee ? "Freigabe wurde zurückgenommen." : "Dokument wurde für die betroffene Person freigegeben." }
-          : { variant: "error", message: errorMessage(result.error) },
-      );
-    }).catch((submitError: unknown) => {
-      console.error("Unexpected error updating the document release:", submitError);
-      showBanner({ variant: "error", message: ERROR_MESSAGES.mutation_failed });
-    });
   }
 
-  async function downloadDocument(document: PersonnelLifecycleView["documents"][number]): Promise<void> {
-    await rowBusy.run(document.id, async () => {
-      const result = await getPersonnelDocumentSignedUrl(document.documentId);
-      if (!result.success) {
-        showBanner({ variant: "error", message: errorMessage(result.error) });
-        return;
-      }
-      window.location.assign(result.data.signedUrl);
-    }).catch((downloadError: unknown) => {
-      console.error("Unexpected error opening the personnel document:", downloadError);
-      showBanner({ variant: "error", message: "Das Dokument konnte nicht geöffnet werden." });
-    });
+  async function downloadDocument(
+    document: PersonnelLifecycleView["documents"][number],
+  ): Promise<void> {
+    await rowBusy
+      .run(document.id, async () => {
+        const result = await getPersonnelDocumentSignedUrl(document.documentId);
+        if (!result.success) {
+          showBanner({ variant: "error", message: errorMessage(result.error) });
+          return;
+        }
+        window.location.assign(result.data.signedUrl);
+      })
+      .catch((downloadError: unknown) => {
+        console.error(
+          "Unexpected error opening the personnel document:",
+          downloadError,
+        );
+        showBanner({
+          variant: "error",
+          message: "Das Dokument konnte nicht geöffnet werden.",
+        });
+      });
   }
 
   return (
-    <section className="min-w-0 space-y-4 rounded-lg border bg-card p-4 shadow-xs md:col-span-2 2xl:col-span-1" aria-labelledby="personnel-lifecycle-title" data-testid="personnel-lifecycle">
+    <section
+      className="min-w-0 space-y-4 rounded-lg border bg-card p-4 shadow-xs md:col-span-2 2xl:col-span-1"
+      aria-labelledby="personnel-lifecycle-title"
+      data-testid="personnel-lifecycle"
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 id="personnel-lifecycle-title" className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          <h2
+            id="personnel-lifecycle-title"
+            className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground"
+          >
             <UserRoundCheck className="size-4" /> Personalprozess
           </h2>
-          <p className="mt-1 text-xs text-muted-foreground">Zugang, Onboarding und Übergänge bleiben getrennt und nachvollziehbar.</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Zugang, Onboarding und Übergänge bleiben getrennt und
+            nachvollziehbar.
+          </p>
         </div>
-        {isPending ? <Loader2 className="size-4 animate-spin text-muted-foreground" aria-label="Änderung wird gespeichert" /> : null}
-        {canAdministerAccess ? <Button size="sm" variant="outline" onClick={() => void downloadManifest()} disabled={isPending}><FileDown className="size-4" /> Arbeitsstand exportieren</Button> : null}
+        {isPending ? (
+          <Loader2
+            className="size-4 animate-spin text-muted-foreground"
+            aria-label="Änderung wird gespeichert"
+          />
+        ) : null}
+        {canAdministerAccess ? (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void downloadManifest()}
+            disabled={isPending}
+          >
+            <FileDown className="size-4" /> Arbeitsstand exportieren
+          </Button>
+        ) : null}
       </div>
+
+      <InlinePending
+        active={view.isRefreshing}
+        label="Personalprozess wird aktualisiert"
+      />
+      {view.isStale ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <ErrorText>
+            Der Personalprozess konnte nicht aktualisiert werden. Der zuletzt
+            geladene Stand bleibt sichtbar. Bitte lade die Ansicht erneut.
+          </ErrorText>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void view.refresh()}
+            disabled={view.isRefreshing}
+          >
+            Erneut laden
+          </Button>
+        </div>
+      ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-md border p-3">
           <div className="flex items-center justify-between gap-2">
             <span className="text-sm font-medium">Organisationszugang</span>
-            <Badge variant={data.access.state === "suspended" || data.access.state === "ended" ? "destructive" : "secondary"}>
+            <Badge
+              variant={
+                data.access.state === "suspended" ||
+                data.access.state === "ended"
+                  ? "destructive"
+                  : "secondary"
+              }
+            >
               {ACCESS_STATE_LABELS[data.access.state]}
             </Badge>
           </div>
@@ -489,14 +737,30 @@ export function PersonnelLifecycleSection({
                 ? "Noch keine kontrollierte Zugangsregel. Bestehender Mitgliedszugang bleibt unverändert."
                 : `Wirksam seit ${formatDate(data.access.effectiveAt)}`}
           </p>
-          {canAdministerAccess ? <Button className="mt-3" size="sm" variant="outline" onClick={() => { setError(null); setFieldErrors({}); setAccessOpen(true); }}>Zugang steuern</Button> : null}
+          {canAdministerAccess ? (
+            <Button
+              className="mt-3"
+              size="sm"
+              variant="outline"
+              disabled={mutationDisabled}
+              onClick={() => {
+                setError(null);
+                setFieldErrors({});
+                setAccessOpen(true);
+              }}
+            >
+              Zugang steuern
+            </Button>
+          ) : null}
         </div>
 
         <div className="rounded-md border p-3">
           <div className="flex items-center justify-between gap-2">
             <span className="text-sm font-medium">Beschäftigung</span>
             <Badge variant="secondary">
-              {data.employment.state ? EMPLOYMENT_LIFECYCLE_LABELS[data.employment.state] : "Nicht eingerichtet"}
+              {data.employment.state
+                ? EMPLOYMENT_LIFECYCLE_LABELS[data.employment.state]
+                : "Nicht eingerichtet"}
             </Badge>
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
@@ -506,7 +770,21 @@ export function PersonnelLifecycleSection({
                 ? `Wirksam seit ${formatDate(data.employment.effectiveOn)}`
                 : "Eintritts- und Austrittsdaten bleiben bis zum ersten kontrollierten Übergang maßgeblich."}
           </p>
-          {canAdministerAccess ? <Button className="mt-3" size="sm" variant="outline" onClick={() => { setError(null); setFieldErrors({}); setEmploymentOpen(true); }}>Übergang erfassen</Button> : null}
+          {canAdministerAccess ? (
+            <Button
+              className="mt-3"
+              size="sm"
+              variant="outline"
+              disabled={mutationDisabled}
+              onClick={() => {
+                setError(null);
+                setFieldErrors({});
+                setEmploymentOpen(true);
+              }}
+            >
+              Übergang erfassen
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -514,7 +792,10 @@ export function PersonnelLifecycleSection({
         <div className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm">
           <p className="font-medium">Vor einem Austritt prüfen</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {data.transitionInventory.activeJobs.length} aktive Auftragszuweisungen, {data.transitionInventory.strandedResponsibilities.length} nicht ersetzte Verantwortungen.
+            {data.transitionInventory.activeJobs.length} aktive
+            Auftragszuweisungen,{" "}
+            {data.transitionInventory.strandedResponsibilities.length} nicht
+            ersetzte Verantwortungen.
           </p>
         </div>
       ) : null}
@@ -523,40 +804,119 @@ export function PersonnelLifecycleSection({
         <div className="flex items-center justify-between gap-2">
           <div>
             <h3 className="text-sm font-medium">Onboarding</h3>
-            <p className="text-xs text-muted-foreground">Fehlende Konfiguration gilt nicht als erledigt.</p>
+            <p className="text-xs text-muted-foreground">
+              Fehlende Konfiguration gilt nicht als erledigt.
+            </p>
           </div>
           {canManage ? (
             currentPlan ? (
-              <Button size="sm" variant="outline" onClick={() => { setError(null); setFieldErrors({}); setRequirementOpen(true); }}><Plus className="size-4" /> Anforderung</Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={mutationDisabled}
+                onClick={() => {
+                  setError(null);
+                  setFieldErrors({});
+                  setRequirementOpen(true);
+                }}
+              >
+                <Plus className="size-4" /> Anforderung
+              </Button>
             ) : (
-              <Button size="sm" variant="outline" onClick={() => { setError(null); setFieldErrors({}); setPlanOpen(true); }}><Plus className="size-4" /> Plan anlegen</Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={mutationDisabled}
+                onClick={() => {
+                  setError(null);
+                  setFieldErrors({});
+                  setPlanOpen(true);
+                }}
+              >
+                <Plus className="size-4" /> Plan anlegen
+              </Button>
             )
           ) : null}
         </div>
         {!currentPlan ? (
-          <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">Nicht eingerichtet. Es wurde kein Plan aus Bestandsdaten abgeleitet.</p>
+          <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+            Nicht eingerichtet. Es wurde kein Plan aus Bestandsdaten abgeleitet.
+          </p>
         ) : incompleteRequirements.length === 0 ? (
-          <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">Keine offenen Anforderungen.</p>
+          <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+            Keine offenen Anforderungen.
+          </p>
         ) : (
           <ul className="divide-y rounded-md border">
             {incompleteRequirements.map((requirement) => (
-              <li key={requirement.id} className="flex flex-wrap items-start justify-between gap-3 p-3">
+              <li
+                key={requirement.id}
+                className="flex flex-wrap items-start justify-between gap-3 p-3"
+              >
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{requirement.title}</p>
+                  <p className="truncate text-sm font-medium">
+                    {requirement.title}
+                  </p>
                   <p className="text-xs text-muted-foreground">
                     {requirement.isRequired ? "Erforderlich" : "Optional"}
                     {requirement.blocksAccess ? " · blockiert Aktivierung" : ""}
-                    {requirement.dueDate ? ` · fällig ${formatDate(requirement.dueDate)}` : ""}
+                    {requirement.dueDate
+                      ? ` · fällig ${formatDate(requirement.dueDate)}`
+                      : ""}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-1">
-                  <InlinePending active={rowBusy.isBusy(requirement.id)} label="Anforderung wird aktualisiert" />
-                  <Badge variant={requirement.state === "blocked" ? "destructive" : "secondary"}>{REQUIREMENT_STATE_LABELS[requirement.state]}</Badge>
+                  <InlinePending
+                    active={rowBusy.isBusy(requirement.id)}
+                    label="Anforderung wird aktualisiert"
+                  />
+                  <Badge
+                    variant={
+                      requirement.state === "blocked"
+                        ? "destructive"
+                        : "secondary"
+                    }
+                  >
+                    {REQUIREMENT_STATE_LABELS[requirement.state]}
+                  </Badge>
                   {canManage ? (
                     <>
-                      <Button size="sm" variant="ghost" onClick={() => void resolveRequirement(requirement, "fulfilled")} disabled={rowBusy.isBusy(requirement.id)}>Erledigen</Button>
-                      <Button size="sm" variant="ghost" onClick={() => void resolveRequirement(requirement, "waived")} disabled={rowBusy.isBusy(requirement.id)}>Erlassen</Button>
-                      <Button size="sm" variant="ghost" onClick={() => void resolveRequirement(requirement, "cancelled")} disabled={rowBusy.isBusy(requirement.id)}>Abbrechen</Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          void resolveRequirement(requirement, "fulfilled")
+                        }
+                        disabled={
+                          mutationDisabled || rowBusy.isBusy(requirement.id)
+                        }
+                      >
+                        Erledigen
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          void resolveRequirement(requirement, "waived")
+                        }
+                        disabled={
+                          mutationDisabled || rowBusy.isBusy(requirement.id)
+                        }
+                      >
+                        Erlassen
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          void resolveRequirement(requirement, "cancelled")
+                        }
+                        disabled={
+                          mutationDisabled || rowBusy.isBusy(requirement.id)
+                        }
+                      >
+                        Abbrechen
+                      </Button>
                     </>
                   ) : null}
                 </div>
@@ -569,25 +929,80 @@ export function PersonnelLifecycleSection({
       <div className="space-y-2 border-t pt-4">
         <div className="flex items-center justify-between gap-2">
           <div>
-            <h3 className="flex items-center gap-2 text-sm font-medium"><FileLock2 className="size-4" /> Geschützte Personalunterlagen</h3>
-            <p className="text-xs text-muted-foreground">Getrennt von „Dokumente & Bilder“ und an den Personalstammsatz gebunden.</p>
+            <h3 className="flex items-center gap-2 text-sm font-medium">
+              <FileLock2 className="size-4" /> Geschützte Personalunterlagen
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Getrennt von „Dokumente & Bilder“ und an den Personalstammsatz
+              gebunden.
+            </p>
           </div>
-          {canManage ? <Button size="sm" variant="outline" onClick={() => { setError(null); setFieldErrors({}); setUploadOpen(true); }}><Plus className="size-4" /> Datei</Button> : null}
+          {canManage ? (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={mutationDisabled}
+              onClick={() => {
+                setError(null);
+                setFieldErrors({});
+                setUploadOpen(true);
+              }}
+            >
+              <Plus className="size-4" /> Datei
+            </Button>
+          ) : null}
         </div>
         {data.documents.length === 0 ? (
-          <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">Keine geschützten Personalunterlagen vorhanden.</p>
+          <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+            Keine geschützten Personalunterlagen vorhanden.
+          </p>
         ) : (
           <ul className="divide-y rounded-md border">
             {data.documents.map((document) => (
-              <li key={document.id} className="flex flex-wrap items-center justify-between gap-2 p-3">
+              <li
+                key={document.id}
+                className="flex flex-wrap items-center justify-between gap-2 p-3"
+              >
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{document.displayName}</p>
-                  <p className="text-xs text-muted-foreground">{document.documentType} · {document.releasedToEmployee ? "für Person freigegeben" : "nicht freigegeben"}</p>
+                  <p className="truncate text-sm font-medium">
+                    {document.displayName}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {document.documentType} ·{" "}
+                    {document.releasedToEmployee
+                      ? "für Person freigegeben"
+                      : "nicht freigegeben"}
+                  </p>
                 </div>
                 <div className="flex items-center gap-1">
-                  <InlinePending active={rowBusy.isBusy(document.id)} label="Dokument wird aktualisiert" />
-                  <Button size="sm" variant="ghost" onClick={() => void downloadDocument(document)} disabled={rowBusy.isBusy(document.id)}><Download className="size-4" /> Öffnen</Button>
-                  {canManage ? <Button size="sm" variant="ghost" onClick={() => void toggleRelease(document)} disabled={rowBusy.isBusy(document.id) || !data.userId}>{document.releasedToEmployee ? "Freigabe entziehen" : "Freigeben"}</Button> : null}
+                  <InlinePending
+                    active={rowBusy.isBusy(document.id)}
+                    label="Dokument wird aktualisiert"
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => void downloadDocument(document)}
+                    disabled={rowBusy.isBusy(document.id)}
+                  >
+                    <Download className="size-4" /> Öffnen
+                  </Button>
+                  {canManage ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => void toggleRelease(document)}
+                      disabled={
+                        mutationDisabled ||
+                        rowBusy.isBusy(document.id) ||
+                        !data.userId
+                      }
+                    >
+                      {document.releasedToEmployee
+                        ? "Freigabe entziehen"
+                        : "Freigeben"}
+                    </Button>
+                  ) : null}
                 </div>
               </li>
             ))}
@@ -595,72 +1010,402 @@ export function PersonnelLifecycleSection({
         )}
       </div>
 
-      <Dialog open={accessOpen} onOpenChange={(open) => { if (!isPending) setAccessOpen(open); }}>
+      <Dialog
+        open={accessOpen}
+        onOpenChange={(open) => {
+          if (!isPending) setAccessOpen(open);
+        }}
+      >
         <DialogContent>
-          <DialogHeader><DialogTitle>Organisationszugang steuern</DialogTitle><DialogDescription>Die Änderung gilt nur für diese Organisation. Das globale Konto bleibt unberührt.</DialogDescription></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Organisationszugang steuern</DialogTitle>
+            <DialogDescription>
+              Die Änderung gilt nur für diese Organisation. Das globale Konto
+              bleibt unberührt.
+            </DialogDescription>
+          </DialogHeader>
           <DialogBody className="space-y-4 py-1">
-            <Field label="Übergang" htmlFor="access-transition-kind"><SearchableSelect options={ACCESS_TRANSITIONS} value={accessKind} onChange={(value) => setAccessKind(value as PersonnelAccessTransitionKind)} searchPlaceholder="Übergang suchen…" /></Field>
-            {isScheduledAccessTransition(accessKind) && <Field label="Zeitpunkt" htmlFor="access-transition-date" required error={fieldErrors["access-transition-date"]}><DateTimeField idPrefix="access-transition" value={accessAt} onChange={setAccessAt} disabled={isPending} /></Field>}
-            <Field label="Grund" htmlFor="access-reason" required error={fieldErrors["access-reason"]}><Textarea value={reason} onChange={(event) => setReason(event.target.value)} disabled={isPending} /></Field>
+            <Field label="Übergang" htmlFor="access-transition-kind">
+              <SearchableSelect
+                options={ACCESS_TRANSITIONS}
+                value={accessKind}
+                onChange={(value) =>
+                  setAccessKind(value as PersonnelAccessTransitionKind)
+                }
+                searchPlaceholder="Übergang suchen…"
+              />
+            </Field>
+            {isScheduledAccessTransition(accessKind) && (
+              <Field
+                label="Zeitpunkt"
+                htmlFor="access-transition-date"
+                required
+                error={fieldErrors["access-transition-date"]}
+              >
+                <DateTimeField
+                  idPrefix="access-transition"
+                  value={accessAt}
+                  onChange={setAccessAt}
+                  disabled={isPending}
+                />
+              </Field>
+            )}
+            <Field
+              label="Grund"
+              htmlFor="access-reason"
+              required
+              error={fieldErrors["access-reason"]}
+            >
+              <Textarea
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                disabled={isPending}
+              />
+            </Field>
             <ErrorText>{error}</ErrorText>
           </DialogBody>
-          <DialogFooter><Button variant="outline" onClick={() => setAccessOpen(false)} disabled={isPending}>Abbrechen</Button><Button onClick={() => void submitAccess()} disabled={isPending}>{isPending && <Loader2 className="size-4 animate-spin" />}Speichern</Button></DialogFooter>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setAccessOpen(false)}
+              disabled={isPending}
+            >
+              Abbrechen
+            </Button>
+            <Button
+              onClick={() => void submitAccess()}
+              disabled={mutationDisabled}
+            >
+              {isPending && <Loader2 className="size-4 animate-spin" />}
+              Speichern
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={employmentOpen} onOpenChange={(open) => { if (!isPending) setEmploymentOpen(open); }}>
+      <Dialog
+        open={employmentOpen}
+        onOpenChange={(open) => {
+          if (!isPending) setEmploymentOpen(open);
+        }}
+      >
         <DialogContent>
-          <DialogHeader><DialogTitle>Beschäftigungsübergang erfassen</DialogTitle><DialogDescription>Historische Zuordnungen bleiben erhalten. Vollständiges Offboarding folgt separat.</DialogDescription></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Beschäftigungsübergang erfassen</DialogTitle>
+            <DialogDescription>
+              Historische Zuordnungen bleiben erhalten. Vollständiges
+              Offboarding folgt separat.
+            </DialogDescription>
+          </DialogHeader>
           <DialogBody className="space-y-4 py-1">
-            <Field label="Übergang" htmlFor="employment-transition-kind"><SearchableSelect options={EMPLOYMENT_TRANSITIONS} value={employmentKind} onChange={(value) => setEmploymentKind(value as PersonnelEmploymentTransitionKind)} searchPlaceholder="Übergang suchen…" /></Field>
-            <Field label="Wirksam am" htmlFor="employment-date" required error={fieldErrors["employment-date"]}><DatePicker value={employmentDate} onChange={setEmploymentDate} disabled={isPending} ariaLabel="Wirksam am" /></Field>
-            <Field label="Grund" htmlFor="employment-reason" required error={fieldErrors["employment-reason"]}><Textarea value={reason} onChange={(event) => setReason(event.target.value)} disabled={isPending} /></Field>
-            {hasUnresolvedWork ? <label className="flex items-start gap-2 rounded-md border p-3 text-sm"><Checkbox checked={acceptUnresolved} onCheckedChange={(value) => setAcceptUnresolved(value === true)} /><span>Offene Zuordnungen wurden geprüft und sollen sichtbar im Übergang erhalten bleiben. Es wird nichts still gelöscht.</span></label> : null}
+            <Field label="Übergang" htmlFor="employment-transition-kind">
+              <SearchableSelect
+                options={EMPLOYMENT_TRANSITIONS}
+                value={employmentKind}
+                onChange={(value) =>
+                  setEmploymentKind(value as PersonnelEmploymentTransitionKind)
+                }
+                searchPlaceholder="Übergang suchen…"
+              />
+            </Field>
+            <Field
+              label="Wirksam am"
+              htmlFor="employment-date"
+              required
+              error={fieldErrors["employment-date"]}
+            >
+              <DatePicker
+                value={employmentDate}
+                onChange={setEmploymentDate}
+                disabled={isPending}
+                ariaLabel="Wirksam am"
+              />
+            </Field>
+            <Field
+              label="Grund"
+              htmlFor="employment-reason"
+              required
+              error={fieldErrors["employment-reason"]}
+            >
+              <Textarea
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                disabled={isPending}
+              />
+            </Field>
+            {hasUnresolvedWork ? (
+              <label className="flex items-start gap-2 rounded-md border p-3 text-sm">
+                <Checkbox
+                  checked={acceptUnresolved}
+                  onCheckedChange={(value) =>
+                    setAcceptUnresolved(value === true)
+                  }
+                />
+                <span>
+                  Offene Zuordnungen wurden geprüft und sollen sichtbar im
+                  Übergang erhalten bleiben. Es wird nichts still gelöscht.
+                </span>
+              </label>
+            ) : null}
             <ErrorText>{error}</ErrorText>
           </DialogBody>
-          <DialogFooter><Button variant="outline" onClick={() => setEmploymentOpen(false)} disabled={isPending}>Abbrechen</Button><Button onClick={() => void submitEmployment()} disabled={isPending}>{isPending && <Loader2 className="size-4 animate-spin" />}Speichern</Button></DialogFooter>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEmploymentOpen(false)}
+              disabled={isPending}
+            >
+              Abbrechen
+            </Button>
+            <Button
+              onClick={() => void submitEmployment()}
+              disabled={mutationDisabled}
+            >
+              {isPending && <Loader2 className="size-4 animate-spin" />}
+              Speichern
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={planOpen} onOpenChange={(open) => { if (!isPending) setPlanOpen(open); }}>
+      <Dialog
+        open={planOpen}
+        onOpenChange={(open) => {
+          if (!isPending) setPlanOpen(open);
+        }}
+      >
         <DialogContent>
-          <DialogHeader><DialogTitle>Onboardingplan anlegen</DialogTitle><DialogDescription>Du kannst leer beginnen oder eine veröffentlichte Vorlage als bearbeitbare Kopie verwenden. Bestandsdaten gelten nie automatisch als erledigt.</DialogDescription></DialogHeader>
-          <DialogBody className="space-y-4 py-1">
-            <Field label="Bezeichnung" htmlFor="plan-name" required error={fieldErrors["plan-name"]}><Input value={planName} onChange={(event) => setPlanName(event.target.value)} /></Field>
-            <Field label="Vorlage" htmlFor="onboarding-plan-template"><SearchableSelect options={[{ value: "", label: "Ohne Vorlage" }, ...data.templates.map((template) => ({ value: template.currentVersionId, label: `${template.name} · Version ${template.currentVersionNumber}` }))]} value={planTemplateVersionId} onChange={setPlanTemplateVersionId} searchPlaceholder="Vorlage suchen…" /></Field>
-            <Field label="Zieldatum" htmlFor="onboarding-plan-target-date"><DatePicker value={planStartDate} onChange={setPlanStartDate} disabled={isPending} ariaLabel="Zieldatum" /></Field>
-            {data.templates.length === 0 ? <p className="text-xs text-muted-foreground">Keine veröffentlichte Vorlage. Der Plan startet leer.</p> : null}
-            <ErrorText>{error}</ErrorText>
-          </DialogBody>
-          <DialogFooter><Button variant="outline" onClick={() => setPlanOpen(false)} disabled={isPending}>Abbrechen</Button><Button onClick={() => void submitPlan()} disabled={isPending}>Plan anlegen</Button></DialogFooter>
+          <DialogHeader>
+            <DialogTitle>Onboardingplan anlegen</DialogTitle>
+            <DialogDescription>
+              Du kannst leer beginnen oder eine veröffentlichte Vorlage als
+              bearbeitbare Kopie verwenden. Bestandsdaten gelten nie automatisch
+              als erledigt.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              if (!isPending) void submitPlan();
+            }}
+            noValidate
+            className="flex min-h-0 flex-1 flex-col gap-4"
+          >
+            <DialogBody className="space-y-4 py-1">
+              <Field
+                label="Bezeichnung"
+                htmlFor="plan-name"
+                required
+                error={fieldErrors["plan-name"]}
+              >
+                <Input
+                  value={planName}
+                  onChange={(event) => setPlanName(event.target.value)}
+                />
+              </Field>
+              <Field label="Vorlage" htmlFor="onboarding-plan-template">
+                <SearchableSelect
+                  options={[
+                    { value: "", label: "Ohne Vorlage" },
+                    ...data.templates.map((template) => ({
+                      value: template.currentVersionId,
+                      label: `${template.name} · Version ${template.currentVersionNumber}`,
+                    })),
+                  ]}
+                  value={planTemplateVersionId}
+                  onChange={setPlanTemplateVersionId}
+                  searchPlaceholder="Vorlage suchen…"
+                />
+              </Field>
+              <Field label="Zieldatum" htmlFor="onboarding-plan-target-date">
+                <DatePicker
+                  value={planStartDate}
+                  onChange={setPlanStartDate}
+                  disabled={isPending}
+                  ariaLabel="Zieldatum"
+                />
+              </Field>
+              {data.templates.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Keine veröffentlichte Vorlage. Der Plan startet leer.
+                </p>
+              ) : null}
+              <ErrorText>{error}</ErrorText>
+            </DialogBody>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setPlanOpen(false)}
+                disabled={isPending}
+              >
+                Abbrechen
+              </Button>
+              <Button type="submit" disabled={mutationDisabled}>
+                Plan anlegen
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={requirementOpen} onOpenChange={(open) => { if (!isPending) setRequirementOpen(open); }}>
+      <Dialog
+        open={requirementOpen}
+        onOpenChange={(open) => {
+          if (!isPending) setRequirementOpen(open);
+        }}
+      >
         <DialogContent>
-          <DialogHeader><DialogTitle>Anforderung ergänzen</DialogTitle><DialogDescription>Die Anforderung verweist später auf vorhandene Nachweise. Sie kopiert keine Fachdaten.</DialogDescription></DialogHeader>
-          <DialogBody className="space-y-4 py-1">
-            <Field label="Art" htmlFor="onboarding-requirement-type"><SearchableSelect options={REQUIREMENT_TYPES} value={requirementType} onChange={(value) => setRequirementType(value as PersonnelRequirementType)} searchPlaceholder="Art suchen…" /></Field>
-            <Field label="Titel" htmlFor="requirement-title" required error={fieldErrors["requirement-title"]}><Input value={requirementTitle} onChange={(event) => setRequirementTitle(event.target.value)} /></Field>
-            <label className="flex items-center gap-2 text-sm"><Checkbox checked={requirementRequired} onCheckedChange={(value) => setRequirementRequired(value === true)} />Erforderlich</label>
-            <label className="flex items-center gap-2 text-sm"><Checkbox checked={requirementBlocksAccess} onCheckedChange={(value) => setRequirementBlocksAccess(value === true)} />Blockiert die Zugangsaktivierung</label>
-            <ErrorText>{error}</ErrorText>
-          </DialogBody>
-          <DialogFooter><Button variant="outline" onClick={() => setRequirementOpen(false)} disabled={isPending}>Abbrechen</Button><Button onClick={() => void submitRequirement()} disabled={isPending}>Speichern</Button></DialogFooter>
+          <DialogHeader>
+            <DialogTitle>Anforderung ergänzen</DialogTitle>
+            <DialogDescription>
+              Die Anforderung verweist später auf vorhandene Nachweise. Sie
+              kopiert keine Fachdaten.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              if (!isPending) void submitRequirement();
+            }}
+            noValidate
+            className="flex min-h-0 flex-1 flex-col gap-4"
+          >
+            <DialogBody className="space-y-4 py-1">
+              <Field label="Art" htmlFor="onboarding-requirement-type">
+                <SearchableSelect
+                  options={REQUIREMENT_TYPES}
+                  value={requirementType}
+                  onChange={(value) =>
+                    setRequirementType(value as PersonnelRequirementType)
+                  }
+                  searchPlaceholder="Art suchen…"
+                />
+              </Field>
+              <Field
+                label="Titel"
+                htmlFor="requirement-title"
+                required
+                error={fieldErrors["requirement-title"]}
+              >
+                <Input
+                  value={requirementTitle}
+                  onChange={(event) => setRequirementTitle(event.target.value)}
+                />
+              </Field>
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={requirementRequired}
+                  onCheckedChange={(value) =>
+                    setRequirementRequired(value === true)
+                  }
+                />
+                Erforderlich
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={requirementBlocksAccess}
+                  onCheckedChange={(value) =>
+                    setRequirementBlocksAccess(value === true)
+                  }
+                />
+                Blockiert die Zugangsaktivierung
+              </label>
+              <ErrorText>{error}</ErrorText>
+            </DialogBody>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setRequirementOpen(false)}
+                disabled={isPending}
+              >
+                Abbrechen
+              </Button>
+              <Button type="submit" disabled={mutationDisabled}>
+                Speichern
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={uploadOpen} onOpenChange={(open) => { if (!isPending) setUploadOpen(open); }}>
+      <Dialog
+        open={uploadOpen}
+        onOpenChange={(open) => {
+          if (!isPending) setUploadOpen(open);
+        }}
+      >
         <DialogContent>
-          <DialogHeader><DialogTitle>Geschützte Personalunterlage</DialogTitle><DialogDescription>Die Datei wird direkt in den privaten Speicher geladen. Sie erscheint nicht in der normalen Dokumentenbibliothek.</DialogDescription></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Geschützte Personalunterlage</DialogTitle>
+            <DialogDescription>
+              Die Datei wird direkt in den privaten Speicher geladen. Sie
+              erscheint nicht in der normalen Dokumentenbibliothek.
+            </DialogDescription>
+          </DialogHeader>
           <DialogBody className="space-y-4 py-1">
-            <Field label="Datei" htmlFor="personnel-file" required error={fieldErrors["personnel-file"]}><Input type="file" onChange={(event) => setFile(event.target.files?.[0] ?? null)} disabled={isPending} /></Field>
-            <Field label="Dokumentart" htmlFor="document-type" required error={fieldErrors["document-type"]}><Input value={documentType} onChange={(event) => setDocumentType(event.target.value)} placeholder="z. B. Arbeitsvertrag" /></Field>
-            <Field label="Zugriffsklasse" htmlFor="personnel-document-access-class"><SearchableSelect options={ACCESS_CLASS_OPTIONS} value={accessClass} onChange={(value) => setAccessClass(value as PersonnelDocumentAccessClass)} searchPlaceholder="Zugriffsklasse suchen…" /></Field>
-            <p className="text-xs text-muted-foreground">Eine Empfangsbestätigung dokumentiert nur den Erhalt einer konkreten Version. Sie ist keine elektronische Unterschrift.</p>
+            <Field
+              label="Datei"
+              htmlFor="personnel-file"
+              required
+              error={fieldErrors["personnel-file"]}
+            >
+              <Input
+                type="file"
+                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                disabled={isPending}
+              />
+            </Field>
+            <Field
+              label="Dokumentart"
+              htmlFor="document-type"
+              required
+              error={fieldErrors["document-type"]}
+            >
+              <Input
+                value={documentType}
+                onChange={(event) => setDocumentType(event.target.value)}
+                placeholder="z. B. Arbeitsvertrag"
+              />
+            </Field>
+            <Field
+              label="Zugriffsklasse"
+              htmlFor="personnel-document-access-class"
+            >
+              <SearchableSelect
+                options={ACCESS_CLASS_OPTIONS}
+                value={accessClass}
+                onChange={(value) =>
+                  setAccessClass(value as PersonnelDocumentAccessClass)
+                }
+                searchPlaceholder="Zugriffsklasse suchen…"
+              />
+            </Field>
+            <p className="text-xs text-muted-foreground">
+              Eine Empfangsbestätigung dokumentiert nur den Erhalt einer
+              konkreten Version. Sie ist keine elektronische Unterschrift.
+            </p>
             <ErrorText>{error}</ErrorText>
           </DialogBody>
-          <DialogFooter><Button variant="outline" onClick={() => setUploadOpen(false)} disabled={isPending}>Abbrechen</Button><Button onClick={() => void submitUpload()} disabled={isPending}>{isPending && <Loader2 className="size-4 animate-spin" />}Hochladen</Button></DialogFooter>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setUploadOpen(false)}
+              disabled={isPending}
+            >
+              Abbrechen
+            </Button>
+            <Button
+              onClick={() => void submitUpload()}
+              disabled={mutationDisabled}
+            >
+              {isPending && <Loader2 className="size-4 animate-spin" />}
+              Hochladen
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </section>

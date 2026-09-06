@@ -1,6 +1,6 @@
 # Phase 1 Golden Scenario Gates
 
-Status: living — last reviewed 2026-09-02
+Status: living — last reviewed 2026-09-05
 
 Gate definitions `GG-00` through `GG-16` and the run-record requirements. A gate definition changes only when a slice's acceptance extends it; runs are recorded in [`golden-gate-log.md`](../golden-gate-log.md). Process rules live in [protocol.md](protocol.md); the slice index in [roadmap.md](roadmap.md).
 
@@ -46,7 +46,7 @@ Create a commercial customer with multiple contacts/sites, capture a request whi
 
 Spec: `tests/golden/p1-07.spec.ts` (`@GG-02`).
 
-Create full-time and part-time schedules, submit overlapping leave, delegate an approver, approve/reject/withdraw requests, and verify target hours, provisional/approved calendar availability, notification deduplication, audit, and employee transparency. Add sickness and qualification constraints when those slices land.
+Create full-time and part-time schedules, submit overlapping leave, delegate an approver, approve/reject/withdraw requests, and verify target hours, provisional/approved calendar availability, notification deduplication, audit, and employee transparency. Include sickness and qualification constraints added by P1-08 and P1-09.
 
 ### `GG-03` — Qualified Planning And Dispatch
 
@@ -86,7 +86,7 @@ Create operational contract coverage and a maintenance plan, generate due work, 
 
 Spec: `tests/golden/p1-23.spec.ts` and `tests/golden/p1-24.spec.ts` (`@GG-07`; the gate is split across both slice specs).
 
-Use employees with different schedules and absences to record work, travel, breaks, internal time, overnight work, and corrections. Resolve approvals and warnings, close/export a period, apply a late correction/re-export, and confirm employee-visible balances. Later reruns add onboarding, access start/suspension, asset return, and preserved offboarding history.
+Use employees with different schedules and absences to record work, travel, breaks, internal time, overnight work, and corrections. Resolve approvals and warnings, close/export a period, apply a late correction/re-export, and confirm employee-visible balances. P1-24 adds onboarding, protected-document receipts, organization access activation/suspension/reactivation, and retained transition history. P1-33 will add asset return and full offboarding closure.
 
 ### `GG-08` — Job Material Lifecycle
 

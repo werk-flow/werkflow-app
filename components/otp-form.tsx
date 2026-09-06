@@ -279,7 +279,7 @@ export function OTPForm({
                     type="button"
                     onClick={handleResend}
                     disabled={isResending}
-                    className="text-primary underline-offset-4 hover:underline"
+                    className="text-primary-text underline-offset-4 hover:underline"
                   >
                     {isResending ? 'Sende erneut...' : 'Erneut senden'}
                   </button>

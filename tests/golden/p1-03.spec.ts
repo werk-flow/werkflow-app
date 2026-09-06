@@ -1,4 +1,7 @@
 import { expect, test } from './support/fixtures';
+import { checkpointValue, saveCheckpoint } from "./support/checkpoints";
+import { requireChainedValue } from "./support/preconditions";
+import { testBusinessDate } from "../../lib/testing/business-date";
 import { getEmployeeRecordStateByUser, getPendingInviteCode } from './support/db';
 import {
   addConditionViaDialog,
@@ -23,8 +26,14 @@ import {
 
 test.describe.configure({ mode: 'serial' });
 
-// Shared across the serial tests below.
-let noraRecordId = '';
+function requirePersonnelRecordId(): string {
+  return requireChainedValue(checkpointValue("p1-03.personnelRecordId"), {
+    test: "P1-03 personnel record consumer",
+    needs: "the exact personnel record created without login",
+    grep: "@P1-03",
+    suite: "golden",
+  });
+}
 
 // Business dates are Europe/Berlin dates (sv-SE formats as YYYY-MM-DD).
 function toBerlinIsoDate(value: string | Date): string {
@@ -111,12 +120,13 @@ test.describe('P1-03 Personalidentität und Konditionen @P1-03', () => {
   }) => {
     // Entry date in the next calendar year so the record is always a future
     // starter, regardless of when the suite runs.
-    const nextYear = new Date().getFullYear() + 1;
-    noraRecordId = await createPersonnelRecordViaDialog(adminPage, {
+    const nextYear = Number(testBusinessDate().slice(0, 4)) + 1;
+    const noraRecordId = await createPersonnelRecordViaDialog(adminPage, {
       firstName: 'Nora',
       lastName: `Neuling-${world.runId}`,
       entryDateDigits: `0101${nextYear}`,
     });
+    saveCheckpoint("p1-03.personnelRecordId", noraRecordId);
 
     // The record detail shows the derived states for a future starter.
     const recordTitleRow = adminPage
@@ -145,23 +155,34 @@ test.describe('P1-03 Personalidentität und Konditionen @P1-03', () => {
     await expect(
       adminPage
         .getByRole('listbox')
-        .getByRole('button')
+        .getByRole("option")
         .filter({
           hasText: `${world.users.employee.firstName} ${world.users.employee.lastName}`,
         })
     ).toBeVisible({ timeout: 15_000 });
     await search.fill('Neuling');
     await expect(
-      adminPage.getByRole('listbox').getByRole('button').filter({ hasText: 'Neuling' })
+      adminPage.getByRole('listbox').getByRole("option").filter({ hasText: 'Neuling' })
     ).toHaveCount(0);
   });
 
-  test('Einladung verknüpft die Personalakte mit dem neuen Zugang', async ({
+  test('Einladung verknüpft die Personalakte mit dem neuen Zugang',
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "Personalakte ohne Zugang ist sichtbar getrennt und in keiner Auswahl",
+        },
+      ],
+    },
+    async ({
     adminPage,
     browser,
     world,
   }) => {
-    await adminPage.goto(`/mitarbeiter/${noraRecordId}`);
+      const noraRecordId = requirePersonnelRecordId();
+      await adminPage.goto(`/mitarbeiter/${noraRecordId}`);
     await sendInviteFromPersonnelRecord(adminPage, world.personnelInvitee.email, 'Handwerker/in');
     await expectVisibleAfterSave(adminPage, 'Eingeladen');
 
@@ -204,8 +225,19 @@ test.describe('P1-03 Personalidentität und Konditionen @P1-03', () => {
     await expect(visibleText(adminPage, 'Ausgeschieden')).toBeVisible();
   });
 
-  test('Mitarbeiterrolle erreicht keine Personalflächen', async ({ employeePage }) => {
-    await expectRedirectedAway(employeePage, '/mitarbeiter');
+  test('Mitarbeiterrolle erreicht keine Personalflächen',
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "Personalakte ohne Zugang ist sichtbar getrennt und in keiner Auswahl",
+        },
+      ],
+    },
+    async ({ employeePage }) => {
+      const noraRecordId = requirePersonnelRecordId();
+      await expectRedirectedAway(employeePage, '/mitarbeiter');
     // Direct record URL: the employee role is redirected away and sees nothing.
     await employeePage.goto(`/mitarbeiter/${noraRecordId}`);
     await expect(employeePage).not.toHaveURL(new RegExp(noraRecordId), {
@@ -214,8 +246,19 @@ test.describe('P1-03 Personalidentität und Konditionen @P1-03', () => {
     await expect(textInDom(employeePage, 'Personalien')).toHaveCount(0);
   });
 
-  test('Fremde Organisation sieht keine Personalakten', async ({ outsiderPage, world }) => {
-    await outsiderPage.goto('/mitarbeiter');
+  test('Fremde Organisation sieht keine Personalakten',
+    {
+      annotation: [
+        {
+          type: "requires-test",
+          description:
+            "Personalakte ohne Zugang ist sichtbar getrennt und in keiner Auswahl",
+        },
+      ],
+    },
+    async ({ outsiderPage, world }) => {
+      const noraRecordId = requirePersonnelRecordId();
+      await outsiderPage.goto('/mitarbeiter');
     await expect(textInDom(outsiderPage, `Neuling-${world.runId}`)).toHaveCount(0);
     await expect(textInDom(outsiderPage, world.users.employee.lastName)).toHaveCount(0);
 

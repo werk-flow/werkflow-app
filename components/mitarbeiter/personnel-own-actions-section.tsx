@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Check, Download, FileUp, Loader2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { useBanner } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -32,6 +33,8 @@ import {
 import { REQUIREMENT_STATE_LABELS } from "@/lib/personnel/lifecycle";
 
 export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisible?: boolean }) {
+  const { showBanner } = useBanner();
+  const evidenceFormId = useId();
   const { run: runBusy, isBusy } = useBusyIds();
   const [uploadOpen, setUploadOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -74,6 +77,7 @@ export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisi
         operationId: crypto.randomUUID(),
       });
       if (!result.success) setError(result.error === "stale_version" ? "Die Aufgabe wurde inzwischen geändert." : "Die Bestätigung konnte nicht gespeichert werden.");
+      else showBanner({ variant: "success", message: "Die Bestätigung wurde gespeichert." });
       await view.refresh();
       } catch {
         setError("Die Bestätigung konnte nicht gespeichert werden.");
@@ -109,6 +113,7 @@ export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisi
       if (!result.success) {
         setError("Die Empfangsbestätigung konnte nicht gespeichert werden.");
       } else {
+        showBanner({ variant: "success", message: "Der Erhalt der Dokumentversion wurde bestätigt." });
         await view.refresh();
       }
       } catch {
@@ -118,6 +123,7 @@ export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisi
   }
 
   async function uploadEvidence(): Promise<void> {
+    setError(null);
     const nextFieldErrors = {
       file: file ? undefined : "Bitte wähle eine Datei aus.",
       type: documentType.trim().length < 2 ? "Bitte gib die Dokumentart an." : undefined,
@@ -143,6 +149,7 @@ export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisi
       }
       setUploadOpen(false);
       setFile(null);
+      showBanner({ variant: "success", message: "Der Gesundheitsnachweis wurde hochgeladen." });
       await view.refresh();
     });
   }
@@ -195,18 +202,24 @@ export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisi
           ))}
         </ul>
       ) : null}
-      <ErrorText>{error}</ErrorText>
+      {!uploadOpen && <ErrorText>{error}</ErrorText>}
 
       <Dialog open={uploadOpen} onOpenChange={(open) => { if (!isPending) setUploadOpen(open); }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Gesundheitsnachweis hochladen</DialogTitle><DialogDescription>Die Datei wird geschützt gespeichert. Andere Beschäftigte und Büro-Nutzer sehen sie nicht.</DialogDescription></DialogHeader>
           <DialogBody className="space-y-4 py-1">
+            <form id={evidenceFormId} className="space-y-4" onSubmit={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              if (!isPending) void uploadEvidence();
+            }}>
             <Field label="Datei" htmlFor="own-evidence-file" required error={fieldErrors.file}><Input type="file" onChange={(event) => setFile(event.target.files?.[0] ?? null)} /></Field>
             <Field label="Dokumentart" htmlFor="own-evidence-type" required error={fieldErrors.type}><Input value={documentType} onChange={(event) => setDocumentType(event.target.value)} /></Field>
             <p className="text-xs text-muted-foreground">Keine Diagnose oder medizinischen Details in WerkFlow erfassen.</p>
             <ErrorText>{error}</ErrorText>
+            </form>
           </DialogBody>
-          <DialogFooter><Button variant="outline" onClick={() => setUploadOpen(false)} disabled={isPending}>Abbrechen</Button><Button onClick={() => void uploadEvidence()} disabled={isPending}>{isPending && <Loader2 className="size-4 animate-spin" />}Hochladen</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setUploadOpen(false)} disabled={isPending}>Abbrechen</Button><Button type="submit" form={evidenceFormId} disabled={isPending}>{isPending && <Loader2 className="size-4 animate-spin" />}Hochladen</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </section>

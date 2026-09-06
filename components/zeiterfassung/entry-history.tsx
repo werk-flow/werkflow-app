@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { InlinePending } from '@/components/ui/inline-pending';
+import { ListRow } from '@/components/ui/list-row';
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
@@ -35,6 +36,7 @@ import { getTimeEntries } from '@/lib/time-tracking/actions';
 import { getProfilesByIds } from '@/lib/members/actions';
 import type { TimeEntry, TimeEntryStatus } from '@/lib/time-tracking/types';
 import { useBusyIds } from '@/hooks/use-busy-id';
+import { useHydrated } from '@/hooks/use-hydrated';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { TimeCorrectionDialog } from './time-correction-dialog';
 
@@ -141,6 +143,7 @@ export function EntryHistory({
   organizationId,
   members = []
 }: EntryHistoryProps) {
+  const hydrated = useHydrated();
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [memberFilter, setMemberFilter] = useState<string>('all');
@@ -299,7 +302,7 @@ export function EntryHistory({
           </Select>
         </Field>
         <RefreshButton onRefresh={view.refresh} label="Einträge aktualisieren" />
-        <Button variant="outline" size="sm" onClick={() => setCorrectionEntry(null)}>
+        <Button variant="outline" size="sm" disabled={!hydrated} onClick={() => setCorrectionEntry(null)}>
           <Plus className="mr-1.5 size-4" /> Zeit nachtragen
         </Button>
         <InlinePending active={settling.isBusy(NEW_ENTRY_ID)} />
@@ -351,9 +354,9 @@ export function EntryHistory({
           {/* Mobile cards */}
           <div className="space-y-2 md:hidden">
             {entries.map((entry) => (
-              <div
+              <ListRow
                 key={entry.id}
-                className="rounded-lg border bg-card p-3 space-y-2"
+                className="block space-y-2"
               >
                 <div className="flex items-center justify-between">
                   <span className="font-medium">
@@ -384,11 +387,11 @@ export function EntryHistory({
                     <Clock className="mr-1.5 size-4" /> Korrektur in Prüfung
                   </Button>
                 ) : entry.status === 'approved' ? (
-                  <Button variant="ghost" size="sm" onClick={() => setCorrectionEntry(entry)}>
+                  <Button variant="ghost" size="sm" disabled={!hydrated} onClick={() => setCorrectionEntry(entry)}>
                     <Pencil className="mr-1.5 size-4" /> Korrigieren
                   </Button>
                 ) : null}
-              </div>
+              </ListRow>
             ))}
           </div>
 
@@ -432,7 +435,7 @@ export function EntryHistory({
                           <Clock className="mr-1.5 size-4" /> Korrektur in Prüfung
                         </Button>
                       ) : entry.status === 'approved' ? (
-                        <Button variant="ghost" size="sm" onClick={() => setCorrectionEntry(entry)}>
+                        <Button variant="ghost" size="sm" disabled={!hydrated} onClick={() => setCorrectionEntry(entry)}>
                           <Pencil className="mr-1.5 size-4" /> Korrigieren
                         </Button>
                       ) : null}

@@ -15,6 +15,7 @@
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { withWorkspaceTestLock } from "../lib/testing/workspace-test-lock";
 
 const BACKUP_FILES = {
   local: ".env.local-stack-backup",
@@ -40,19 +41,18 @@ function resolveWslIp(): string {
   try {
     output = execFileSync("wsl.exe", ["hostname", "-I"], { encoding: "utf8", timeout: 30_000 });
   } catch (error) {
-    console.error(
+    throw new Error(
       `Could not resolve the WSL address (${error instanceof Error ? error.message : String(error)}). Is WSL installed and the local stack set up? See docs/technical/environments.md.`,
     );
-    process.exit(1);
   }
   const ip = output.trim().split(/\s+/)[0];
   if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
-    console.error(`Unexpected WSL address output: ${output.trim()}`);
-    process.exit(1);
+    throw new Error(`Unexpected WSL address output: ${output.trim()}`);
   }
   return ip;
 }
 
+await withWorkspaceTestLock({ operation: `switch environment to ${target}`, repositoryRoot: repoRoot }, async () => {
 if (target === "local") {
   const ip = resolveWslIp();
   const backupContents = readFileSync(source, "utf8");
@@ -62,10 +62,9 @@ if (target === "local") {
     !/^NEXT_PUBLIC_SUPABASE_URL=.*$/m.test(backupContents) ||
     !/^R2_ENDPOINT=.*$/m.test(backupContents)
   ) {
-    console.error(
+    throw new Error(
       `${BACKUP_FILES.local} must define NEXT_PUBLIC_SUPABASE_URL and R2_ENDPOINT; restore it per docs/technical/environments.md.`,
     );
-    process.exit(1);
   }
   const refreshed = backupContents
     .replace(/^NEXT_PUBLIC_SUPABASE_URL=.*$/m, `NEXT_PUBLIC_SUPABASE_URL=http://${ip}:54321`)
@@ -95,3 +94,4 @@ if (target === "prod") {
 } else if (target === "dev") {
   console.log(".env.local now points at the cloud DEV backend (mbkkzuqjbdvzelqvuzcn, werkflow-documents-dev).");
 }
+});

@@ -1,7 +1,11 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 import { requireEnv } from './env';
-import type { TestRole, TestUser, TestWorld } from './world';
+import { testSupabaseClientOptions } from './client-options';
+import type { TestUser, TestWorld } from './world';
+import { registerTestUserEmail } from './world';
+import { planTestWorld, seedOwnedWorld } from '../../../lib/testing/seed-world-plan';
+import { ownedTestEmails } from '../../../lib/testing/test-email-ownership';
 import {
   deleteStorageObjects,
   listStorageObjectPaths,
@@ -9,13 +13,9 @@ import {
 
 const ORGANIZATION_CODE_CHARSET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
-// Golden-marker identity mints. The leftover sweep keys on exactly these
-// markers (emails on @werkflow-golden.test, organization names prefixed
-// "Golden Test SHK"/"Fremde Firma"), so every cleanable identity a spec
-// creates must come from here — the spec-lint set bans the literals outside
-// this module (Tier 1: an unmatchable identity cannot be minted).
+// Reserve exact cleanup identity before returning an address that a browser can submit.
 export function goldenTestEmail(label: string, runId: string): string {
-  return `${label}-${runId}@werkflow-golden.test`;
+  return registerTestUserEmail(label, runId);
 }
 
 export function goldenTestOrganizationName(label: string, runId: string): string {
@@ -23,46 +23,7 @@ export function goldenTestOrganizationName(label: string, runId: string): string
 }
 
 function createAdminClient(): SupabaseClient {
-  return createClient(requireEnv('NEXT_PUBLIC_SUPABASE_URL'), requireEnv('SUPABASE_SECRET_KEY'), {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
-
-async function withTransientAuthRetry<T>(
-  label: string,
-  operation: () => Promise<{ data: T | null; error: { message: string } | null }>
-): Promise<T> {
-  // The sb_secret keys are exchanged for a gateway-minted JWT per request;
-  // Supabase-side clock skew between nodes intermittently rejects one with
-  // "JWT issued at future" (environment class, observed 2026-08-21 killing
-  // global setup twice). A bounded retry rides over the skewed node.
-  const MAX_ATTEMPTS = 3;
-  for (let attempt = 1; ; attempt += 1) {
-    const result = await operation();
-    if (!result.error) {
-      if (result.data === null) throw new Error(`${label} returned no data.`);
-      return result.data;
-    }
-    if (attempt >= MAX_ATTEMPTS || !result.error.message.includes('JWT')) {
-      throw new Error(`${label} failed: ${result.error.message}`);
-    }
-    console.warn(
-      `[golden] transient auth error during ${label} (attempt ${attempt}/${MAX_ATTEMPTS}): ${result.error.message}`
-    );
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-  }
-}
-
-async function listTestUserIds(admin: SupabaseClient): Promise<string[]> {
-  const profiles = await withTransientAuthRetry('test user lookup', async () => {
-    const [goldenDomainResult, resendResult] = await Promise.all([
-      admin.from('profiles').select('id').like('email', '%@werkflow-golden.test'),
-      admin.from('profiles').select('id').like('email', 'delivered+gg-%@resend.dev'),
-    ]);
-    const error = goldenDomainResult.error ?? resendResult.error;
-    return { data: [...(goldenDomainResult.data ?? []), ...(resendResult.data ?? [])], error };
-  });
-  return [...new Set(profiles.map((profile) => profile.id as string))];
+  return createClient(requireEnv('NEXT_PUBLIC_SUPABASE_URL'), requireEnv('SUPABASE_SECRET_KEY'), testSupabaseClientOptions);
 }
 
 // Mailbox stand-in for UI signup tests. The production flow requires the user
@@ -97,18 +58,11 @@ function randomOrgCode(): string {
   return code;
 }
 
-async function createTestUser(
-  admin: SupabaseClient,
-  runId: string,
-  role: string,
-  firstName: string,
-  lastName: string,
-  emailOverride?: string
-): Promise<TestUser> {
-  const email = emailOverride ?? `gg-${role}-${runId}@werkflow-golden.test`;
-  const password = `GgTest!${runId}#2026`;
+async function createTestUser(admin: SupabaseClient, user: TestUser): Promise<void> {
+  const { id, email, password, firstName, lastName } = user;
 
   const { data, error } = await admin.auth.admin.createUser({
+    id,
     email,
     password,
     email_confirm: true,
@@ -130,17 +84,17 @@ async function createTestUser(
     throw new Error(`Failed to set profile name for ${email}: ${profileError.message}`);
   }
 
-  return { id: data.user.id, email, password, firstName, lastName };
 }
 
 async function createOrganizationWithSettings(
   admin: SupabaseClient,
+  organizationId: string,
   name: string,
   adminUserId: string
-): Promise<string> {
+): Promise<void> {
   const { data: org, error: orgError } = await admin
     .from('organizations')
-    .insert({ name, admin_id: adminUserId, unique_code: randomOrgCode() })
+    .insert({ id: organizationId, name, admin_id: adminUserId, unique_code: randomOrgCode() })
     .select('id, created_at')
     .single();
 
@@ -168,7 +122,6 @@ async function createOrganizationWithSettings(
     throw new Error(`Failed to create organization settings: ${settingsError.message}`);
   }
 
-  return org.id as string;
 }
 
 // Seeds inventory master data plus opening stock. Stock enters through the
@@ -178,15 +131,14 @@ async function seedInventory(
   admin: SupabaseClient,
   orgId: string,
   actorId: string,
-  runId: string
-): Promise<TestWorld['inventory']> {
-  const locationName = 'Hauptlager (Golden)';
-  const itemName = `Kupferrohr 15 mm ${runId}`;
-  const initialQuantity = 20;
+  inventory: TestWorld['inventory']
+): Promise<void> {
+  const { locationId, locationName, itemId, itemName, initialQuantity } = inventory;
 
   const { data: location, error: locationError } = await admin
     .from('inventory_locations')
     .insert({
+      id: locationId,
       organization_id: orgId,
       name: locationName,
       location_type: 'storage',
@@ -201,6 +153,7 @@ async function seedInventory(
   const { data: item, error: itemError } = await admin
     .from('inventory_items')
     .insert({
+      id: itemId,
       organization_id: orgId,
       name: itemName,
       item_type: 'material',
@@ -230,102 +183,50 @@ async function seedInventory(
     throw new Error(`Failed to seed inventory stock: ${movementError.message}`);
   }
 
-  return {
-    itemId: item.id as string,
-    itemName,
-    locationId: location.id as string,
-    locationName,
-    initialQuantity,
-  };
 }
 
-export async function createTestWorld(): Promise<TestWorld> {
-  const admin = createAdminClient();
-  const runId = Date.now().toString(36);
+export async function createTestWorld(
+  recordOwnership: (world: TestWorld) => void | Promise<void>,
+): Promise<TestWorld> {
+  return seedOwnedWorld({
+    world: planTestWorld(),
+    recordOwnership,
+    createResources: async (world) => {
+      const admin = createAdminClient();
+      // IDs and test emails are durably owned before requests, including a lost create response.
+      for (const user of [
+        ...Object.values(world.users),
+        world.outsider.admin,
+        world.invitee,
+        world.removableEmployee,
+        world.personnelInvitee,
+      ]) {
+        await createTestUser(admin, user);
+      }
 
-  const users: Record<TestRole, TestUser> = {
-    admin: await createTestUser(admin, runId, 'admin', 'Greta', `Golden-${runId}`),
-    buero: await createTestUser(admin, runId, 'buero', 'Bruno', `Golden-${runId}`),
-    employee: await createTestUser(admin, runId, 'employee', 'Emil', `Golden-${runId}`),
-  };
-  const outsiderAdmin = await createTestUser(admin, runId, 'outsider', 'Otto', `Fremd-${runId}`);
-  // The invitee joins during the gate via the real invite flow. Resend's
-  // delivered+label@resend.dev test address accepts mail without bouncing, so
-  // the gate does not damage sender reputation on every run.
-  const invitee = await createTestUser(
-    admin,
-    runId,
-    'invitee',
-    'Ida',
-    `Golden-${runId}`,
-    `delivered+gg-${runId}@resend.dev`
-  );
-  // P1-03 fixtures: a member the personnel spec removes, and a future login
-  // for a personnel record without access. The invite email address reuses the
-  // delivered+gg- prefix so the leftover cleaner keeps matching it.
-  const removableEmployee = await createTestUser(
-    admin,
-    runId,
-    'removable',
-    'Rudi',
-    `Golden-${runId}`
-  );
-  const personnelInvitee = await createTestUser(
-    admin,
-    runId,
-    'personnel-invitee',
-    'Nora',
-    `Neuling-${runId}`,
-    `delivered+gg-p103-${runId}@resend.dev`
-  );
+      // Seed only the subscription prerequisite. Browser journeys still exercise their own business writes.
+      for (const userId of [world.users.admin.id, world.outsider.admin.id]) {
+        const { error } = await admin
+          .from('subscriptions')
+          .insert({ user_id: userId, status: 'active', plan_id: 'golden-test' });
+        if (error) throw new Error(`Failed to insert test subscription: ${error.message}`);
+      }
 
-  // Organization creation is subscription-gated in the product UI; seeded
-  // admins get an active subscription row so admin-gated surfaces behave.
-  for (const userId of [users.admin.id, outsiderAdmin.id]) {
-    const { error } = await admin
-      .from('subscriptions')
-      .insert({ user_id: userId, status: 'active', plan_id: 'golden-test' });
-    if (error) {
-      throw new Error(`Failed to insert test subscription: ${error.message}`);
-    }
-  }
-
-  const orgName = `Golden Test SHK ${runId}`;
-  const orgId = await createOrganizationWithSettings(admin, orgName, users.admin.id);
-  // The add_admin_membership trigger creates the admin membership; add the rest.
-  for (const [role, user] of [
-    ['buero', users.buero],
-    ['employee', users.employee],
-    ['employee', removableEmployee],
-  ] as const) {
-    const { error } = await admin
-      .from('organization_members')
-      .insert({ organization_id: orgId, user_id: user.id, role });
-    if (error) {
-      throw new Error(`Failed to add ${role} membership: ${error.message}`);
-    }
-  }
-
-  const outsiderOrgName = `Fremde Firma ${runId}`;
-  const outsiderOrgId = await createOrganizationWithSettings(
-    admin,
-    outsiderOrgName,
-    outsiderAdmin.id
-  );
-
-  const inventory = await seedInventory(admin, orgId, users.admin.id, runId);
-
-  return {
-    runId,
-    orgId,
-    orgName,
-    users,
-    invitee,
-    removableEmployee,
-    personnelInvitee,
-    inventory,
-    outsider: { orgId: outsiderOrgId, orgName: outsiderOrgName, admin: outsiderAdmin },
-  };
+      await createOrganizationWithSettings(admin, world.orgId, world.orgName, world.users.admin.id);
+      for (const [role, user] of [
+        ['buero', world.users.buero],
+        ['employee', world.users.employee],
+        ['employee', world.removableEmployee],
+      ] as const) {
+        const { error } = await admin
+          .from('organization_members')
+          .insert({ organization_id: world.orgId, user_id: user.id, role });
+        if (error) throw new Error(`Failed to add ${role} membership: ${error.message}`);
+      }
+      await createOrganizationWithSettings(admin, world.outsider.orgId, world.outsider.orgName, world.outsider.admin.id);
+      await seedInventory(admin, world.orgId, world.users.admin.id, world.inventory);
+    },
+  });
 }
 
 export function worldUserIds(world: TestWorld): string[] {
@@ -342,7 +243,15 @@ export async function destroyTestWorld(world: TestWorld): Promise<void> {
   const admin = createAdminClient();
   const failures: string[] = [];
 
-  const userIds = worldUserIds(world);
+  const additionalEmails = ownedTestEmails(world);
+  let additionalUserIds: string[] = [];
+  if (additionalEmails.length) {
+    const { data: profiles, error } = await admin.from('profiles').select('id').in('email', additionalEmails);
+    if (error) throw new Error(`Owned signup-user lookup failed: ${error.message}`);
+    // A contact-only address or rejected signup has no Auth profile and owns no extra user.
+    additionalUserIds = (profiles ?? []).map((profile) => profile.id as string);
+  }
+  const userIds = [...new Set([...worldUserIds(world), ...additionalUserIds])];
   const { data: ownedTestOrganizations, error: ownedOrganizationsError } = await admin
     .from('organizations')
     .select('id')
@@ -410,80 +319,4 @@ export async function destroyTestWorld(world: TestWorld): Promise<void> {
   if (failures.length > 0) {
     throw new Error(`Test world cleanup incomplete:\n${failures.join('\n')}`);
   }
-}
-
-// Safety valve: remove leftover worlds from crashed runs. Only touches
-// organizations whose name matches the unmistakable test prefix.
-export async function destroyLeftoverTestWorlds(excludedWorlds: TestWorld[] = []): Promise<number> {
-  const admin = createAdminClient();
-  const excludedOrganizationIds = new Set(
-    excludedWorlds.flatMap((world) => [world.orgId, world.outsider.orgId])
-  );
-  const excludedUserIds = new Set(excludedWorlds.flatMap(worldUserIds));
-
-  // Resolve users before deleting auth-owned profile rows.
-  const testUserIds = (await listTestUserIds(admin)).filter(
-    (userId) => !excludedUserIds.has(userId)
-  );
-
-  const leftoverOrgs = await withTransientAuthRetry('leftover organization lookup', async () =>
-    admin
-      .from('organizations')
-      .select('id')
-      .or('name.like.Golden Test SHK %,name.like.Fremde Firma %')
-  );
-
-  const orgIds = leftoverOrgs
-    .map((org) => org.id as string)
-    .filter((organizationId) => !excludedOrganizationIds.has(organizationId));
-  for (const orgId of orgIds) {
-    try {
-      const paths = await listStorageObjectPaths(`${orgId}/`);
-      await deleteStorageObjects(paths);
-    } catch {
-      // Bytes may already be gone; org deletion below is what matters.
-    }
-  }
-  if (orgIds.length > 0) {
-    // Same ordering as destroyTestWorld: clear selected-responsibility
-    // configurations so protect_last_selected_responsibility_holder cannot
-    // block the cascaded member deletes of a partially torn-down world.
-    const { error: configError } = await admin
-      .from('organization_responsibility_configurations')
-      .delete()
-      .in('organization_id', orgIds);
-    if (configError) {
-      throw new Error(`Leftover responsibility cleanup failed: ${configError.message}`);
-    }
-    const { error } = await admin.from('organizations').delete().in('id', orgIds);
-    if (error) {
-      throw new Error(`Leftover organization cleanup failed: ${error.message}`);
-    }
-  }
-
-  let removedUsers = 0;
-  const failures: string[] = [];
-  for (const userId of testUserIds) {
-    const { error: subscriptionError } = await admin
-      .from('subscriptions')
-      .delete()
-      .eq('user_id', userId);
-    const { error: authError } = await admin.auth.admin.deleteUser(userId);
-
-    if (subscriptionError) {
-      failures.push(
-        `subscription delete ${userId}: ${subscriptionError.message}`
-      );
-    }
-    if (authError && !/user not found/i.test(authError.message)) {
-      failures.push(`auth user delete ${userId}: ${authError.message}`);
-    }
-    if (!subscriptionError && !authError) removedUsers++;
-  }
-
-  if (failures.length > 0) {
-    throw new Error(`Leftover test cleanup incomplete:\n${failures.join('\n')}`);
-  }
-
-  return orgIds.length + removedUsers;
 }

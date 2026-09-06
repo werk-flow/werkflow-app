@@ -1,17 +1,20 @@
 import { defineConfig } from '@playwright/test';
+import { browserRunPaths } from './lib/testing/run-paths';
 
 import { loadEnvLocal } from './tests/golden/support/env';
-import { configureRunEnvironment } from './tests/golden/support/run-state';
+import { configureRunEnvironment, currentRunKey } from './tests/golden/support/run-state';
 
 loadEnvLocal();
 configureRunEnvironment('golden');
+
+const runPaths = browserRunPaths(__dirname, currentRunKey());
 
 const quietReporter = process.env.WERKFLOW_QUIET_REPORTER === '1';
 const listingTests = process.argv.includes('--list');
 
 // Golden-gate harness (docs/plans/phase-1/gates.md). Runs the GG-XX
-// business scenarios against a locally running app and the live Supabase
-// project using disposable, organization-isolated fixture data.
+// business scenarios against a locally running app and the selected Supabase
+// target, local by default, using disposable organization-isolated fixture data.
 export default defineConfig({
   testDir: './tests/golden',
   globalSetup: './tests/golden/global-setup',
@@ -35,11 +38,14 @@ export default defineConfig({
     : [
         ...(quietReporter ? [] : ([['list']] as const)),
         ['./tests/golden/support/run-reporter.ts'],
-        ['html', { open: 'never', outputFolder: 'tests/golden/.report' }],
+        ['html', { open: 'never', outputFolder: runPaths.report }],
       ],
-  outputDir: 'tests/golden/.results',
+  outputDir: runPaths.results,
   use: {
     baseURL: process.env.GOLDEN_BASE_URL ?? 'http://localhost:3000',
+    // Missing controls must fail at the action, not consume a whole scenario.
+    actionTimeout: 30_000,
+    navigationTimeout: 60_000,
     viewport: { width: 1440, height: 900 },
     locale: 'de-DE',
     timezoneId: 'Europe/Berlin',

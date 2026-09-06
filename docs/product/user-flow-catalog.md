@@ -1,6 +1,6 @@
 # User Flow Catalog
 
-Status: living — last reviewed 2026-09-02
+Status: living — last reviewed 2026-09-06
 
 ## Purpose And Rules (for agents)
 
@@ -9,16 +9,18 @@ This file is the tactical, exhaustive answer to one question per slice: **what c
 It exists for two planned uses:
 
 1. **Handover:** after Phase 1 (possibly in steps), this list explains every new capability to the customer in plain German without roadmap terminology.
-2. **Audit coverage:** this list is the test inventory for the exhaustive audit batteries that exercise far more flows than the golden gates cover. Wave 1 audited it in wave-end sessions; **since Wave 2 every slice ships audit coverage for its own flow IDs as part of acceptance** (see [wave-2-audit.md](../plans/wave-2-audit.md) and testing rule 12), and the wave end only certifies.
+2. **Verification coverage:** every supported flow and observable clause maps to evidence in `lib/testing/coverage-map.json`. The mapping can combine domain, SQL, component browser, application browser, and reviewed inspection evidence. [Decision 0007](../decisions/0007-independent-test-groups.md) owns this allocation and [testing.md](../technical/testing.md) owns the workflow. Since Wave 2, coverage ships with each slice rather than being discovered at wave end.
 
 Rules for maintaining this file:
 
+The IDs below are authoritative, including the lowercase suffix in `P1-00a-F01` and `P1-00a-F02`. Historical Wave 1 tables used uppercase `P1-00A` for these same flows. That spelling is historical, not a second set of IDs.
+
 - Every flow bullet has one immutable technical ID in inline code. `BASE-*` IDs identify the pre-Phase-1 baseline; `P1-XX-FNN` IDs identify slice flows. Keep an ID stable when wording changes, never reuse a retired ID, and assign a new ID to every new bullet. The ID is excluded when the German wording is reused for customer handover.
 - Flows are written in **natural German** after the ID (they will be reused verbatim for handover). Headings and this preamble stay English like other developer artifacts.
-- One flow ID = one bullet of 1–3 sentences: what the user does, step by step where needed, and what they see / what the app does in return. A bullet may contain several observable clauses; audit coverage of its ID means **every clause** is evidenced, not merely its headline behavior.
+- One flow ID = one bullet of 1–3 sentences: what the user does, step by step where needed, and what they see / what the app does in return. A bullet may contain several observable clauses; coverage of its ID means **every clause** is evidenced, not merely its headline behavior.
 - Be **exhaustive**, not aspirational: list every new user-visible action, including small ones (a new filter, a new badge, a new warning, a new denial). Do not list planned or deferred behavior — only what works today.
 - Prefix flows with the acting role where it matters: `Büro/Admin`, `Admin`, `Handwerker`, `Alle`.
-- Update this file **as part of every slice's acceptance**, while the behavior is fresh — not retroactively at wave end. Since Wave 2, the slice's flow list is additionally **proposed up front**: the pre-implementation report drafts the bullets with provisional IDs for owner confirmation, implementation refines them, and acceptance finalizes them here together with the slice's rule-12 audit coverage.
+- Update this file **as part of every slice's acceptance**, while the behavior is fresh — not retroactively at wave end. Since Wave 2, the slice's flow list is additionally **proposed up front**: the pre-implementation report drafts the bullets with provisional IDs for owner confirmation, implementation refines them, and acceptance finalizes them here together with the slice's complete clause mapping and qualifying group evidence.
 - If a later slice changes an earlier flow, correct the earlier flow in place and note the changing slice in parentheses. The catalog describes the app as it is now, per the slice that introduced each capability.
 - A material wording change reopens the affected flow ID's audit mapping until the assertion bodies have been rechecked against the complete revised bullet.
 - This catalog intentionally repeats things that also live in feature docs. Feature docs describe the product model for agents; this file describes concrete user actions for humans. Do not "deduplicate" it away.

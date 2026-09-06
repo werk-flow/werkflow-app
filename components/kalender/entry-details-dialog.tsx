@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useRouter } from 'next/navigation';
 import {
@@ -20,6 +20,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogBody,
   DialogDescription,
   DialogFooter,
   DialogHeader,
@@ -477,6 +478,7 @@ export function EntryDetailsDialog({
   const hasCanonicalSegment = sessionEntriesForReview.some(
     (entry) => entry.canonicalSegmentId
   );
+  const editFormId = useId();
   const [isEditing, setIsEditing] = useState(
     startInEditMode && !hasCanonicalSegment
   );
@@ -493,7 +495,7 @@ export function EntryDetailsDialog({
   useEffect(() => {
     if (!open || !session.jobId) {
       if (!jobName) {
-         
+
         setResolvedJob(null);
       }
       return;
@@ -543,7 +545,7 @@ export function EntryDetailsDialog({
     // refresh-interrupted-dialog defect class. handleStartEdit re-seeds the
     // draft from the current snapshot when editing begins, so the snapshot
     // values are deliberately read without being dependencies here.
-     
+
     setIsEditing(startInEditMode && !hasCanonicalSegment);
     setError(null);
     setSuccessMessage(null);
@@ -1340,499 +1342,499 @@ export function EntryDetailsDialog({
     !!clockOutDate &&
     !isOrphan;
 
+  const entryContent = (
+    <>
+      {employeeName && (
+        <DetailCard
+          icon={<User className="size-4" />}
+          label="Mitarbeiter"
+          value={employeeName}
+          onClick={
+            employeeDetailUrl
+              ? () => {
+                  onOpenChange(false);
+                  router.push(employeeDetailUrl);
+                }
+              : undefined
+          }
+          disabled={!employeeDetailUrl}
+        />
+      )}
+
+      {resolvedJob && (
+        <DetailCard
+          icon={<Briefcase className="size-4" />}
+          label="Auftrag"
+          value={resolvedJob.title}
+          onClick={
+            jobDetailUrl
+              ? () => {
+                  onOpenChange(false);
+                  router.push(jobDetailUrl);
+                }
+              : undefined
+          }
+          disabled={!jobDetailUrl}
+        />
+      )}
+
+      {!isOrphan && totalWorkMinutes !== null && (
+        <div
+          className={cn(
+            "rounded-md border border-green-500/30 bg-green-500/8 px-3 py-3",
+            isActiveBlock && "animate-pulse",
+          )}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-green-600 dark:text-green-400" />
+              <span className="text-sm font-medium">Arbeitszeit gesamt</span>
+            </div>
+            <span className="text-base font-semibold text-green-700 dark:text-green-300">
+              {formatDuration(totalWorkMinutes)}
+            </span>
+          </div>
+          {showBlockScopedTotalHint && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Bezieht sich nur auf diesen geöffneten Arbeitsblock, nicht auf den
+              gesamten Tag.
+            </p>
+          )}
+        </div>
+      )}
+
+      {isEditing && editedBlockDate && (
+        <Field
+          label="Datum des Arbeitsblocks"
+          description="Dieses Datum gilt für alle Zeiten dieses Arbeitsblocks."
+          className="rounded-md border border-border/60 px-3 py-3"
+        >
+          <DatePicker value={editedBlockDate} onChange={handleBlockDateChange} />
+        </Field>
+      )}
+
+      {startEntry && (
+        <div className="space-y-2 rounded-md border border-border/60 px-3 py-3">
+          {isEditing && editedClockIn ? (
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1">
+                <DateTimePicker
+                  value={editedClockIn}
+                  onChange={setEditedClockIn}
+                  label={getEntryLabel(startEntry)}
+                  dateLabel={
+                    editedBlockDate?.toLocaleDateString("de-DE") ??
+                    clockInDate?.toLocaleDateString("de-DE")
+                  }
+                  disableDateEditing
+                />
+              </div>
+              <span
+                className={cn(
+                  "mt-7 shrink-0 rounded-full px-2 py-0.5 text-xs font-medium",
+                  getStatusConfig(startEntry).className,
+                )}
+              >
+                {getStatusConfig(startEntry).label}
+              </span>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between">
+                <Label>{getEntryLabel(startEntry)}</Label>
+                <span
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-xs font-medium",
+                    getStatusConfig(startEntry).className,
+                  )}
+                >
+                  {getStatusConfig(startEntry).label}
+                </span>
+              </div>
+              <p className="text-sm">
+                {clockInDate ? formatDateTime(clockInDate) : "-"}
+              </p>
+            </>
+          )}
+          {startEntry.isManual && !isEditing && (
+            <p className="text-xs text-muted-foreground">Manuell eingetragen</p>
+          )}
+        </div>
+      )}
+
+      {displayedBreaks.map((workBreak, index) => {
+        const breakStartStatus = getStatusConfig(workBreak.breakStartEntry);
+        const breakEndStatus = getStatusConfig(workBreak.breakEndEntry);
+        const breakStartEntry =
+          workBreak.breakStartEntry ??
+          buildDraftEntry(
+            workBreak.key,
+            "break_start",
+            workBreak.breakStart,
+            entryUserId,
+            entryOrganizationId,
+          );
+        const breakEndEntry = workBreak.breakEnd
+          ? (workBreak.breakEndEntry ??
+            buildDraftEntry(
+              `${workBreak.key}-end`,
+              "break_end",
+              workBreak.breakEnd,
+              entryUserId,
+              entryOrganizationId,
+            ))
+          : null;
+
+        return (
+          <div
+            key={workBreak.key}
+            className="space-y-3 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-3"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Coffee className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <span>Pause</span>
+              </div>
+              <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300">
+                {formatDuration(getBreakDurationMinutes(workBreak))}
+              </span>
+              {isEditing && canEdit && !isAutomaticBreakMode && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleRemoveBreak(workBreak.key)}
+                  className="h-7 px-2 text-destructive hover:text-destructive"
+                >
+                  <Trash2 className="mr-1 h-3.5 w-3.5" />
+                  Entfernen
+                </Button>
+              )}
+            </div>
+
+            {isEditing && !isAutomaticBreakMode ? (
+              <div className="space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1">
+                    <DateTimePicker
+                      value={workBreak.breakStart}
+                      onChange={(value) =>
+                        handleBreakChange(workBreak.key, "breakStart", value)
+                      }
+                      label={getEntryLabel(breakStartEntry, index)}
+                      dateLabel={
+                        editedBlockDate?.toLocaleDateString("de-DE") ??
+                        workBreak.breakStart.toLocaleDateString("de-DE")
+                      }
+                      disableDateEditing
+                    />
+                  </div>
+                  <span
+                    className={cn(
+                      "mt-7 shrink-0 rounded-full px-2 py-0.5 text-xs font-medium",
+                      breakStartStatus.className,
+                    )}
+                  >
+                    {breakStartStatus.label}
+                  </span>
+                </div>
+
+                {workBreak.breakEnd ? (
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1">
+                      <DateTimePicker
+                        value={workBreak.breakEnd}
+                        onChange={(value) =>
+                          handleBreakChange(workBreak.key, "breakEnd", value)
+                        }
+                        label={
+                          breakEndEntry ? getEntryLabel(breakEndEntry, index) : ""
+                        }
+                        dateLabel={
+                          editedBlockDate?.toLocaleDateString("de-DE") ??
+                          workBreak.breakEnd.toLocaleDateString("de-DE")
+                        }
+                        disableDateEditing
+                      />
+                    </div>
+                    <span
+                      className={cn(
+                        "mt-7 shrink-0 rounded-full px-2 py-0.5 text-xs font-medium",
+                        breakEndStatus.className,
+                      )}
+                    >
+                      {breakEndStatus.label}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <Label>
+                      {getEntryLabel(
+                        { ...breakStartEntry, entryType: "break_end" },
+                        index,
+                      )}
+                    </Label>
+                    <p className="text-sm text-muted-foreground">Noch in Pause</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <Label>{getEntryLabel(breakStartEntry, index)}</Label>
+                    <span
+                      className={cn(
+                        "rounded-full px-2 py-0.5 text-xs font-medium",
+                        breakStartStatus.className,
+                      )}
+                    >
+                      {breakStartStatus.label}
+                    </span>
+                  </div>
+                  <p className="text-sm">
+                    {formatDateTime(new Date(breakStartEntry.timestamp))}
+                  </p>
+                  {breakStartEntry.isManual && (
+                    <p className="text-xs text-muted-foreground">
+                      Manuell eingetragen
+                    </p>
+                  )}
+                  {isAutomaticBreakMode && (
+                    <p className="text-xs text-muted-foreground">
+                      Automatisch aus der aktiven Pausenregel abgeleitet
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <Label>
+                      {breakEndEntry
+                        ? getEntryLabel(breakEndEntry, index)
+                        : getEntryLabel(
+                            {
+                              ...breakStartEntry,
+                              entryType: "break_end",
+                            },
+                            index,
+                          )}
+                    </Label>
+                    <span
+                      className={cn(
+                        "rounded-full px-2 py-0.5 text-xs font-medium",
+                        breakEndStatus.className,
+                      )}
+                    >
+                      {breakEndStatus.label}
+                    </span>
+                  </div>
+                  <p className="text-sm">
+                    {breakEndEntry
+                      ? formatDateTime(new Date(breakEndEntry.timestamp))
+                      : "Noch in Pause"}
+                  </p>
+                  {breakEndEntry?.isManual && (
+                    <p className="text-xs text-muted-foreground">
+                      Manuell eingetragen
+                    </p>
+                  )}
+                  {isAutomaticBreakMode && (
+                    <p className="text-xs text-muted-foreground">
+                      Passt sich beim Bearbeiten von Arbeitsbeginn oder
+                      Arbeitsende automatisch an
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {displayedBreaks.length > 1 && (
+        <div className="rounded-md border border-amber-500/30 bg-amber-500/8 px-3 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Coffee className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <span className="text-sm font-medium">Pausenzeit gesamt</span>
+            </div>
+            <span className="text-base font-semibold text-amber-700 dark:text-amber-300">
+              {formatDuration(totalBreakMinutes)}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {isAutomaticBreakMode && canEdit && !isOrphan && (
+        <div className="space-y-2 rounded-md border border-amber-500/20 bg-amber-500/6 px-3 py-3">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled
+            className="w-full gap-2 border-border/70 bg-background/40 text-muted-foreground opacity-70"
+          >
+            <Plus className="h-4 w-4" />
+            Pause hinzufügen
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            Pausen werden in dieser Organisation automatisch abgezogen. Deshalb
+            kann in diesem Dialog keine manuelle Pause hinzugefügt werden.
+          </p>
+        </div>
+      )}
+
+      {canAddBreak && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={handleAddBreak}
+          className="w-full gap-2"
+        >
+          <Plus className="h-4 w-4" />
+          Pause hinzufügen
+        </Button>
+      )}
+
+      {canOfferAddBreak && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={handleStartEditWithBreak}
+          className="w-full gap-2"
+        >
+          <Plus className="h-4 w-4" />
+          Pause hinzufügen
+        </Button>
+      )}
+
+      {actualClockOutEntry && (
+        <div className="space-y-2 rounded-md border border-border/60 px-3 py-3">
+          {isEditing && editedClockOut ? (
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1">
+                <DateTimePicker
+                  value={editedClockOut}
+                  onChange={setEditedClockOut}
+                  label={getEntryLabel(actualClockOutEntry)}
+                  dateLabel={
+                    editedBlockDate?.toLocaleDateString("de-DE") ??
+                    clockOutDate?.toLocaleDateString("de-DE")
+                  }
+                  disableDateEditing
+                />
+              </div>
+              <span
+                className={cn(
+                  "mt-7 shrink-0 rounded-full px-2 py-0.5 text-xs font-medium",
+                  getStatusConfig(actualClockOutEntry).className,
+                )}
+              >
+                {getStatusConfig(actualClockOutEntry).label}
+              </span>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between">
+                <Label>{getEntryLabel(actualClockOutEntry)}</Label>
+                <span
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-xs font-medium",
+                    getStatusConfig(actualClockOutEntry).className,
+                  )}
+                >
+                  {getStatusConfig(actualClockOutEntry).label}
+                </span>
+              </div>
+              <p className="text-sm">
+                {clockOutDate ? formatDateTime(clockOutDate) : "-"}
+              </p>
+            </>
+          )}
+          {actualClockOutEntry.isManual && !isEditing && (
+            <p className="text-xs text-muted-foreground">Manuell eingetragen</p>
+          )}
+        </div>
+      )}
+
+      {!actualClockOutEntry &&
+        !interactiveSession.isOnBreakBlock &&
+        !isOrphan &&
+        !hasActualBreaks &&
+        !isEditing && (
+          <div className="space-y-2 rounded-md border border-border/60 px-3 py-3">
+            <div className="flex items-center justify-between">
+              <Label>Arbeitsende</Label>
+            </div>
+            <p className="text-sm text-muted-foreground">Noch aktiv</p>
+          </div>
+        )}
+
+      {showBoundaryExplanation && (
+        <div className="rounded-md border border-blue-500/30 bg-blue-500/8 px-3 py-3">
+          <div className="flex items-start gap-2">
+            <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+            <p className="text-xs text-muted-foreground">
+              Dieser Arbeitsblock endet hier, weil danach die Arbeit in einem
+              neuen Arbeitsblock oder Auftrag weitergeführt wurde. Das ist kein
+              Arbeitsende des gesamten Arbeitstages.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {hasCanonicalSegment && (
+        <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-3">
+          <p className="text-xs text-muted-foreground">
+            Aktivitätsabschnitte werden in der Zeiterfassung korrigiert und sind
+            im Kalender schreibgeschützt.
+          </p>
+        </div>
+      )}
+
+      {successMessage && (
+        <div className="rounded-md bg-green-500/10 px-3 py-2 text-sm text-green-700 dark:text-green-300">
+          {successMessage}
+        </div>
+      )}
+
+      <ErrorText>{error}</ErrorText>
+    </>
+  );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Eintrag Details</DialogTitle>
           <DialogDescription>{getDescriptionText()}</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          {employeeName && (
-            <DetailCard
-              icon={<User className="size-4" />}
-              label="Mitarbeiter"
-              value={employeeName}
-              onClick={
-                employeeDetailUrl
-                  ? () => {
-                      onOpenChange(false);
-                      router.push(employeeDetailUrl);
-                    }
-                  : undefined
-              }
-              disabled={!employeeDetailUrl}
-            />
-          )}
-
-          {resolvedJob && (
-            <DetailCard
-              icon={<Briefcase className="size-4" />}
-              label="Auftrag"
-              value={resolvedJob.title}
-              onClick={
-                jobDetailUrl
-                  ? () => {
-                      onOpenChange(false);
-                      router.push(jobDetailUrl);
-                    }
-                  : undefined
-              }
-              disabled={!jobDetailUrl}
-            />
-          )}
-
-          {!isOrphan && totalWorkMinutes !== null && (
-            <div
-              className={cn(
-                'rounded-md border border-green-500/30 bg-green-500/8 px-3 py-3',
-                isActiveBlock && 'animate-pulse'
-              )}
+        <DialogBody className="space-y-4">
+          {isEditing ? (
+            <form
+              id={editFormId}
+              onSubmit={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (isPending || !isEditing) return;
+                handleSaveEdit();
+              }}
+              noValidate
+              className="space-y-4"
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-green-600 dark:text-green-400" />
-                  <span className="text-sm font-medium">
-                    Arbeitszeit gesamt
-                  </span>
-                </div>
-                <span className="text-base font-semibold text-green-700 dark:text-green-300">
-                  {formatDuration(totalWorkMinutes)}
-                </span>
-              </div>
-              {showBlockScopedTotalHint && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Bezieht sich nur auf diesen geöffneten Arbeitsblock, nicht auf
-                  den gesamten Tag.
-                </p>
-              )}
-            </div>
-          )}
-
-          {isEditing && editedBlockDate && (
-            <Field
-              label="Datum des Arbeitsblocks"
-              description="Dieses Datum gilt für alle Zeiten dieses Arbeitsblocks."
-              className="rounded-md border border-border/60 px-3 py-3"
-            >
-              <DatePicker
-                value={editedBlockDate}
-                onChange={handleBlockDateChange}
-              />
-            </Field>
-          )}
-
-          {startEntry && (
-            <div className="space-y-2 rounded-md border border-border/60 px-3 py-3">
-              {isEditing && editedClockIn ? (
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1">
-                    <DateTimePicker
-                      value={editedClockIn}
-                      onChange={setEditedClockIn}
-                      label={getEntryLabel(startEntry)}
-                      dateLabel={
-                        editedBlockDate?.toLocaleDateString('de-DE') ??
-                        clockInDate?.toLocaleDateString('de-DE')
-                      }
-                      disableDateEditing
-                    />
-                  </div>
-                  <span
-                    className={cn(
-                      'mt-7 shrink-0 rounded-full px-2 py-0.5 text-xs font-medium',
-                      getStatusConfig(startEntry).className
-                    )}
-                  >
-                    {getStatusConfig(startEntry).label}
-                  </span>
-                </div>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between">
-                    <Label>{getEntryLabel(startEntry)}</Label>
-                    <span
-                      className={cn(
-                        'rounded-full px-2 py-0.5 text-xs font-medium',
-                        getStatusConfig(startEntry).className
-                      )}
-                    >
-                      {getStatusConfig(startEntry).label}
-                    </span>
-                  </div>
-                  <p className="text-sm">
-                    {clockInDate ? formatDateTime(clockInDate) : '-'}
-                  </p>
-                </>
-              )}
-              {startEntry.isManual && !isEditing && (
-                <p className="text-xs text-muted-foreground">
-                  Manuell eingetragen
-                </p>
-              )}
-            </div>
-          )}
-
-          {displayedBreaks.map((workBreak, index) => {
-            const breakStartStatus = getStatusConfig(workBreak.breakStartEntry);
-            const breakEndStatus = getStatusConfig(workBreak.breakEndEntry);
-            const breakStartEntry =
-              workBreak.breakStartEntry ??
-              buildDraftEntry(
-                workBreak.key,
-                'break_start',
-                workBreak.breakStart,
-                entryUserId,
-                entryOrganizationId
-              );
-            const breakEndEntry = workBreak.breakEnd
-              ? (workBreak.breakEndEntry ??
-                buildDraftEntry(
-                  `${workBreak.key}-end`,
-                  'break_end',
-                  workBreak.breakEnd,
-                  entryUserId,
-                  entryOrganizationId
-                ))
-              : null;
-
-            return (
-              <div
-                key={workBreak.key}
-                className="space-y-3 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-3"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    <Coffee className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                    <span>Pause</span>
-                  </div>
-                  <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300">
-                    {formatDuration(getBreakDurationMinutes(workBreak))}
-                  </span>
-                  {isEditing && canEdit && !isAutomaticBreakMode && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRemoveBreak(workBreak.key)}
-                      className="h-7 px-2 text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="mr-1 h-3.5 w-3.5" />
-                      Entfernen
-                    </Button>
-                  )}
-                </div>
-
-                {isEditing && !isAutomaticBreakMode ? (
-                  <div className="space-y-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1">
-                        <DateTimePicker
-                          value={workBreak.breakStart}
-                          onChange={(value) =>
-                            handleBreakChange(
-                              workBreak.key,
-                              'breakStart',
-                              value
-                            )
-                          }
-                          label={getEntryLabel(breakStartEntry, index)}
-                          dateLabel={
-                            editedBlockDate?.toLocaleDateString('de-DE') ??
-                            workBreak.breakStart.toLocaleDateString('de-DE')
-                          }
-                          disableDateEditing
-                        />
-                      </div>
-                      <span
-                        className={cn(
-                          'mt-7 shrink-0 rounded-full px-2 py-0.5 text-xs font-medium',
-                          breakStartStatus.className
-                        )}
-                      >
-                        {breakStartStatus.label}
-                      </span>
-                    </div>
-
-                    {workBreak.breakEnd ? (
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1">
-                          <DateTimePicker
-                            value={workBreak.breakEnd}
-                            onChange={(value) =>
-                              handleBreakChange(
-                                workBreak.key,
-                                'breakEnd',
-                                value
-                              )
-                            }
-                            label={
-                              breakEndEntry
-                                ? getEntryLabel(breakEndEntry, index)
-                                : ''
-                            }
-                            dateLabel={
-                              editedBlockDate?.toLocaleDateString('de-DE') ??
-                              workBreak.breakEnd.toLocaleDateString('de-DE')
-                            }
-                            disableDateEditing
-                          />
-                        </div>
-                        <span
-                          className={cn(
-                            'mt-7 shrink-0 rounded-full px-2 py-0.5 text-xs font-medium',
-                            breakEndStatus.className
-                          )}
-                        >
-                          {breakEndStatus.label}
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="space-y-1">
-                        <Label>
-                          {getEntryLabel(
-                            { ...breakStartEntry, entryType: 'break_end' },
-                            index
-                          )}
-                        </Label>
-                        <p className="text-sm text-muted-foreground">
-                          Noch in Pause
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <Label>{getEntryLabel(breakStartEntry, index)}</Label>
-                        <span
-                          className={cn(
-                            'rounded-full px-2 py-0.5 text-xs font-medium',
-                            breakStartStatus.className
-                          )}
-                        >
-                          {breakStartStatus.label}
-                        </span>
-                      </div>
-                      <p className="text-sm">
-                        {formatDateTime(new Date(breakStartEntry.timestamp))}
-                      </p>
-                      {breakStartEntry.isManual && (
-                        <p className="text-xs text-muted-foreground">
-                          Manuell eingetragen
-                        </p>
-                      )}
-                      {isAutomaticBreakMode && (
-                        <p className="text-xs text-muted-foreground">
-                          Automatisch aus der aktiven Pausenregel abgeleitet
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <Label>
-                          {breakEndEntry
-                            ? getEntryLabel(breakEndEntry, index)
-                            : getEntryLabel(
-                                {
-                                  ...breakStartEntry,
-                                  entryType: 'break_end'
-                                },
-                                index
-                              )}
-                        </Label>
-                        <span
-                          className={cn(
-                            'rounded-full px-2 py-0.5 text-xs font-medium',
-                            breakEndStatus.className
-                          )}
-                        >
-                          {breakEndStatus.label}
-                        </span>
-                      </div>
-                      <p className="text-sm">
-                        {breakEndEntry
-                          ? formatDateTime(new Date(breakEndEntry.timestamp))
-                          : 'Noch in Pause'}
-                      </p>
-                      {breakEndEntry?.isManual && (
-                        <p className="text-xs text-muted-foreground">
-                          Manuell eingetragen
-                        </p>
-                      )}
-                      {isAutomaticBreakMode && (
-                        <p className="text-xs text-muted-foreground">
-                          Passt sich beim Bearbeiten von Arbeitsbeginn oder
-                          Arbeitsende automatisch an
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-
-          {displayedBreaks.length > 1 && (
-            <div className="rounded-md border border-amber-500/30 bg-amber-500/8 px-3 py-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Coffee className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                  <span className="text-sm font-medium">Pausenzeit gesamt</span>
-                </div>
-                <span className="text-base font-semibold text-amber-700 dark:text-amber-300">
-                  {formatDuration(totalBreakMinutes)}
-                </span>
-              </div>
-            </div>
-          )}
-
-          {isAutomaticBreakMode && canEdit && !isOrphan && (
-            <div className="space-y-2 rounded-md border border-amber-500/20 bg-amber-500/6 px-3 py-3">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled
-                className="w-full gap-2 border-border/70 bg-background/40 text-muted-foreground opacity-70"
-              >
-                <Plus className="h-4 w-4" />
-                Pause hinzufügen
-              </Button>
-              <p className="text-xs text-muted-foreground">
-                Pausen werden in dieser Organisation automatisch abgezogen.
-                Deshalb kann in diesem Dialog keine manuelle Pause hinzugefügt
-                werden.
-              </p>
-            </div>
-          )}
-
-          {canAddBreak && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleAddBreak}
-              className="w-full gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              Pause hinzufügen
-            </Button>
-          )}
-
-          {canOfferAddBreak && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleStartEditWithBreak}
-              className="w-full gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              Pause hinzufügen
-            </Button>
-          )}
-
-          {actualClockOutEntry && (
-            <div className="space-y-2 rounded-md border border-border/60 px-3 py-3">
-              {isEditing && editedClockOut ? (
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1">
-                    <DateTimePicker
-                      value={editedClockOut}
-                      onChange={setEditedClockOut}
-                      label={getEntryLabel(actualClockOutEntry)}
-                      dateLabel={
-                        editedBlockDate?.toLocaleDateString('de-DE') ??
-                        clockOutDate?.toLocaleDateString('de-DE')
-                      }
-                      disableDateEditing
-                    />
-                  </div>
-                  <span
-                    className={cn(
-                      'mt-7 shrink-0 rounded-full px-2 py-0.5 text-xs font-medium',
-                      getStatusConfig(actualClockOutEntry).className
-                    )}
-                  >
-                    {getStatusConfig(actualClockOutEntry).label}
-                  </span>
-                </div>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between">
-                    <Label>{getEntryLabel(actualClockOutEntry)}</Label>
-                    <span
-                      className={cn(
-                        'rounded-full px-2 py-0.5 text-xs font-medium',
-                        getStatusConfig(actualClockOutEntry).className
-                      )}
-                    >
-                      {getStatusConfig(actualClockOutEntry).label}
-                    </span>
-                  </div>
-                  <p className="text-sm">
-                    {clockOutDate ? formatDateTime(clockOutDate) : '-'}
-                  </p>
-                </>
-              )}
-              {actualClockOutEntry.isManual && !isEditing && (
-                <p className="text-xs text-muted-foreground">
-                  Manuell eingetragen
-                </p>
-              )}
-            </div>
-          )}
-
-          {!actualClockOutEntry &&
-            !interactiveSession.isOnBreakBlock &&
-            !isOrphan &&
-            !hasActualBreaks &&
-            !isEditing && (
-              <div className="space-y-2 rounded-md border border-border/60 px-3 py-3">
-                <div className="flex items-center justify-between">
-                  <Label>Arbeitsende</Label>
-                </div>
-                <p className="text-sm text-muted-foreground">Noch aktiv</p>
-              </div>
-            )}
-
-          {showBoundaryExplanation && (
-            <div className="rounded-md border border-blue-500/30 bg-blue-500/8 px-3 py-3">
-              <div className="flex items-start gap-2">
-                <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
-                <p className="text-xs text-muted-foreground">
-                  Dieser Arbeitsblock endet hier, weil danach die Arbeit in
-                  einem neuen Arbeitsblock oder Auftrag weitergeführt wurde. Das
-                  ist kein Arbeitsende des gesamten Arbeitstages.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {hasCanonicalSegment && (
-            <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-3">
-              <p className="text-xs text-muted-foreground">
-                Aktivitätsabschnitte werden in der Zeiterfassung korrigiert und sind im Kalender schreibgeschützt.
-              </p>
-            </div>
-          )}
-
-          {successMessage && (
-            <div className="rounded-md bg-green-500/10 px-3 py-2 text-sm text-green-700 dark:text-green-300">
-              {successMessage}
-            </div>
-          )}
-
-          <ErrorText>{error}</ErrorText>
-        </div>
+              {entryContent}
+            </form>
+          ) : entryContent}
+        </DialogBody>
 
         <DialogFooter className="flex-col gap-2 sm:flex-row">
           {canApprove && !isEditing && (
             <div className="flex gap-2">
-              <Button
+              <Button type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => handleReview('approved')}
@@ -1846,7 +1848,7 @@ export function EntryDetailsDialog({
                 )}
                 Genehmigen
               </Button>
-              <Button
+              <Button type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => handleReview('rejected')}
@@ -1865,7 +1867,7 @@ export function EntryDetailsDialog({
 
           {canEdit && !isEditing && (
             <div className="flex gap-2">
-              <Button
+              <Button type="button"
                 variant="outline"
                 size="sm"
                 onClick={handleStartEdit}
@@ -1878,7 +1880,7 @@ export function EntryDetailsDialog({
               {!hasPendingEntry && (
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button
+                    <Button type="button"
                       variant="outline"
                       size="sm"
                       disabled={isPending}
@@ -1905,7 +1907,7 @@ export function EntryDetailsDialog({
                       <AlertDialogCancel>Abbrechen</AlertDialogCancel>
                       <AlertDialogAction
                         onClick={handleDelete}
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        variant="destructive"
                       >
                         Löschen
                       </AlertDialogAction>
@@ -1918,7 +1920,7 @@ export function EntryDetailsDialog({
 
           {isEditing && (
             <div className="flex gap-2">
-              <Button
+              <Button type="button"
                 variant="outline"
                 size="sm"
                 onClick={handleCancelEdit}
@@ -1926,7 +1928,7 @@ export function EntryDetailsDialog({
               >
                 Abbrechen
               </Button>
-              <Button size="sm" onClick={handleSaveEdit} disabled={isPending}>
+              <Button type="submit" form={editFormId} size="sm" disabled={isPending}>
                 {isBusy('save') && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}

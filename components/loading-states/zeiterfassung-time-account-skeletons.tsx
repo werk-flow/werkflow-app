@@ -1,8 +1,7 @@
 import { Fragment, type ReactNode } from 'react';
 
 import { Skeleton } from '@/components/ui/skeleton';
-import { SkeletonTable } from '@/components/ui/skeleton-table';
-import { TIME_PERIOD_RESULT_COLUMNS } from '@/components/zeiterfassung/time-period-result-columns';
+import { TimePeriodResultsSkeleton } from '@/components/zeiterfassung/time-period-results';
 
 // Content-only skeletons for the Zeiterfassung subpages. The area layout keeps
 // the header and `AreaNav` on screen, so each one mirrors only what its page
@@ -100,7 +99,7 @@ export function TimePeriodDetailSkeleton() {
       </div>
       <div className="space-y-3">
         <SectionTitle />
-        <SkeletonTable columns={TIME_PERIOD_RESULT_COLUMNS} rows={5} className="bg-card" />
+        <TimePeriodResultsSkeleton />
       </div>
       <div className="space-y-3">
         <SectionTitle />

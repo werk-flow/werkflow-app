@@ -895,8 +895,10 @@ export function WorkLifecycleCard({
       window.location.assign(url.toString());
       return;
     }
+    // Header metadata and project summaries are owned by the route, not this
+    // card's snapshot. Local success must reconcile them without Realtime.
+    router.refresh();
     await refresh();
-    if (fieldMode) router.refresh();
     if (message) showBanner({ variant: "success", message });
   };
   const changedRow = async (rowId: string, message: string) =>

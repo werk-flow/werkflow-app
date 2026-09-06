@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import type { Locator, Page } from "@playwright/test";
 
-import { expect, test } from "../../golden/support/fixtures";
+import { expect, test } from "../support/fixtures";
 import {
   getServiceCaseCountsAs,
   getServiceCaseNumberBySummary,
@@ -12,7 +12,7 @@ import {
   ownedBerlinDateAtOffset,
 } from "../../golden/support/date-ownership";
 import { requireChainedValue } from "../../golden/support/preconditions";
-import { closeWorkArtifactDialog } from "../../golden/support/spec-helpers/work-artifact-dialog";
+import { closeWorkArtifactDialog, workArtifactsSection } from "../../golden/support/spec-helpers/work-artifact-dialog";
 import {
   acknowledgeDispatchOnJobPage,
   addSiteOnCustomerDetail,
@@ -34,7 +34,7 @@ import {
   uploadIntoDocumentsSection,
   visibleText,
 } from "../../golden/support/steps";
-import { ARTIFACTS_DIR, type TestWorld } from "../../golden/support/world";
+import { artifactsDirectory, type TestWorld } from "../../golden/support/world";
 
 test.describe.configure({ mode: "serial" });
 
@@ -64,8 +64,7 @@ async function createSubmittedReport(
   page: Page,
   title: string,
 ): Promise<void> {
-  await page
-    .getByTestId("work-artifacts-section")
+  await workArtifactsSection(page)
     .getByRole("button", { name: "Neu" })
     .click();
   const dialog: Locator = page.getByRole("dialog");
@@ -264,7 +263,7 @@ test.describe("P1-19 exhaustive reactive-service audit @AUDIT-W2-P1-19 @AUDIT-W2
       "darf nicht den neueren Stand überschreiben",
     );
 
-    const relationSection = adminPage.getByTestId("service-case-relations");
+    const relationSection = adminPage.getByRole("main").getByTestId("service-case-relations");
     await relationSection.getByRole("button", { name: "Verknüpfen" }).click();
     const relationDialog = adminPage.getByRole("dialog");
     await selectFromSearchable(
@@ -332,7 +331,7 @@ test.describe("P1-19 exhaustive reactive-service audit @AUDIT-W2-P1-19 @AUDIT-W2
     await createSubmittedReport(employeePage, fixture.evidenceTitle);
 
     await adminPage.goto(`/service/faelle/${caseNumber}`);
-    const evidenceSection = adminPage.getByTestId("service-case-evidence");
+    const evidenceSection = adminPage.getByRole("main").getByTestId("service-case-evidence");
     await evidenceSection.getByRole("button", { name: "Verknüpfen" }).click();
     const evidenceDialog = adminPage.getByRole("dialog");
     await selectFromSearchable(
@@ -360,7 +359,7 @@ test.describe("P1-19 exhaustive reactive-service audit @AUDIT-W2-P1-19 @AUDIT-W2
     await adminPage.goto(`/service/faelle/${caseNumber}`);
     await uploadIntoDocumentsSection(
       adminPage,
-      resolve(ARTIFACTS_DIR, "upload-fixture.pdf"),
+      resolve(artifactsDirectory(), "upload-fixture.pdf"),
       "upload-fixture",
     );
     const state = await getServiceCaseStateByNumber(world.orgId, caseNumber);
@@ -382,8 +381,7 @@ test.describe("P1-19 exhaustive reactive-service audit @AUDIT-W2-P1-19 @AUDIT-W2
       },
     );
     await adminPage.goto(`/service/faelle/${caseNumber}`);
-    await adminPage
-      .getByTestId("service-case-follow-up")
+    await adminPage.getByRole("main").getByTestId("service-case-follow-up")
       .getByRole("button", { name: "Nachfassaktion anlegen" })
       .click();
     const followUpDialog = adminPage.getByRole("dialog");

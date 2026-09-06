@@ -122,15 +122,77 @@ export function PersonnelOnboardingTemplateSettings({ templates }: { templates: 
       <Dialog open={open} onOpenChange={(value) => { if (!isPending) setOpen(value); }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Onboardingvorlage veröffentlichen</DialogTitle><DialogDescription>Die erste Version enthält einen klaren Punkt. Weitere Anforderungen werden im erzeugten Plan bearbeitet.</DialogDescription></DialogHeader>
-          <DialogBody className="space-y-4 py-1">
-            <Field label="Name" htmlFor="template-name" required error={fieldErrors.name}><Input value={name} onChange={(event) => setName(event.target.value)} /></Field>
-            <Field label="Art des ersten Punkts" htmlFor="template-requirement-type"><SearchableSelect options={REQUIREMENT_OPTIONS} value={requirementType} onChange={(value) => setRequirementType(value as PersonnelRequirementType)} searchPlaceholder="Art suchen…" /></Field>
-            <Field label="Erster Punkt" htmlFor="template-item-title" required error={fieldErrors.itemTitle}><Input value={itemTitle} onChange={(event) => setItemTitle(event.target.value)} /></Field>
-            <label className="flex items-center gap-2 text-sm"><Checkbox checked={required} onCheckedChange={(value) => setRequired(value === true)} />Erforderlich</label>
-            <label className="flex items-center gap-2 text-sm"><Checkbox checked={blocksAccess} onCheckedChange={(value) => setBlocksAccess(value === true)} />Blockiert die Zugangsaktivierung</label>
-            <ErrorText>{error}</ErrorText>
-          </DialogBody>
-          <DialogFooter><Button variant="outline" onClick={() => setOpen(false)} disabled={isPending}>Abbrechen</Button><Button onClick={() => void submit()} disabled={isPending}>{isPending && <Loader2 className="size-4 animate-spin" />}Veröffentlichen</Button></DialogFooter>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              if (isPending) return;
+              void submit();
+            }}
+            noValidate
+            className="flex min-h-0 flex-1 flex-col gap-4"
+          >
+            <DialogBody className="space-y-4 py-1">
+              <Field
+                label="Name"
+                htmlFor="template-name"
+                required
+                error={fieldErrors.name}
+              >
+                <Input value={name} onChange={(event) => setName(event.target.value)} />
+              </Field>
+              <Field label="Art des ersten Punkts" htmlFor="template-requirement-type">
+                <SearchableSelect
+                  options={REQUIREMENT_OPTIONS}
+                  value={requirementType}
+                  onChange={(value) =>
+                    setRequirementType(value as PersonnelRequirementType)
+                  }
+                  searchPlaceholder="Art suchen…"
+                />
+              </Field>
+              <Field
+                label="Erster Punkt"
+                htmlFor="template-item-title"
+                required
+                error={fieldErrors.itemTitle}
+              >
+                <Input
+                  value={itemTitle}
+                  onChange={(event) => setItemTitle(event.target.value)}
+                />
+              </Field>
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={required}
+                  onCheckedChange={(value) => setRequired(value === true)}
+                />
+                Erforderlich
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={blocksAccess}
+                  onCheckedChange={(value) => setBlocksAccess(value === true)}
+                />
+                Blockiert die Zugangsaktivierung
+              </label>
+              <ErrorText>{error}</ErrorText>
+            </DialogBody>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setOpen(false)}
+                disabled={isPending}
+              >
+                Abbrechen
+              </Button>
+              <Button type="submit" disabled={isPending}>
+                {isPending && <Loader2 className="size-4 animate-spin" />}
+                Veröffentlichen
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </section>

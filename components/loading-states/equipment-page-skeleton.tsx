@@ -1,5 +1,6 @@
 "use client";
 
+import { ContextualDocumentsSkeleton } from "@/components/dokumente/contextual-documents-layout";
 import { ServiceToolbarSkeleton } from "@/components/loading-states/service-cases-page-skeleton";
 import { EQUIPMENT_COLUMNS } from "@/components/service/equipment-list-content";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -42,11 +43,7 @@ export function EquipmentPageSkeleton() {
 
 export function EquipmentDetailSkeleton() {
   return (
-    <div
-      className="space-y-6"
-      role="status"
-      aria-label="Anlage wird geladen"
-    >
+    <div className="space-y-6" role="status" aria-label="Anlage wird geladen">
       <span className="sr-only">Anlage wird geladen.</span>
       <div className="space-y-2">
         <Skeleton className="h-4 w-32" />
@@ -56,6 +53,11 @@ export function EquipmentDetailSkeleton() {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
         <div className="space-y-6">
           <Skeleton className="h-72 rounded-lg" />
+          <ContextualDocumentsSkeleton
+            description="Dokumente werden aus der zentralen Dokumentenablage verknüpft. Es entsteht keine Dateikopie."
+            canUpload
+            canAttach
+          />
           <Skeleton className="h-64 rounded-lg" />
         </div>
         <div className="space-y-6">

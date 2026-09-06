@@ -25,6 +25,7 @@ const SelectTrigger = React.forwardRef<
     id={id ?? field?.controlId}
     aria-describedby={props["aria-describedby"] ?? field?.describedBy}
     aria-invalid={props["aria-invalid"] ?? (field?.invalid || undefined)}
+    aria-required={props["aria-required"] ?? (field?.required || undefined)}
     className={cn(
       "flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-colors",
       "placeholder:text-muted-foreground",

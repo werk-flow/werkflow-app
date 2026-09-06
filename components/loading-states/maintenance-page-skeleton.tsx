@@ -1,9 +1,8 @@
 "use client";
 
 import { ServiceToolbarSkeleton } from "@/components/loading-states/service-cases-page-skeleton";
-import { MAINTENANCE_DUE_COLUMNS } from "@/components/service/maintenance-content";
+import { MaintenanceDueListSkeleton } from "@/components/service/maintenance-content";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SkeletonList, SkeletonTable } from "@/components/ui/skeleton-table";
 
 /**
  * Search, the three in-page tabs, and the due list. Due rows carry their own
@@ -19,11 +18,7 @@ export function MaintenanceContentSkeleton() {
           <Skeleton className="h-8 w-20" />
           <Skeleton className="h-8 w-32" />
         </div>
-        <SkeletonList className="md:hidden" />
-        <SkeletonTable
-          columns={MAINTENANCE_DUE_COLUMNS}
-          className="hidden shadow-xs md:block"
-        />
+        <MaintenanceDueListSkeleton />
       </div>
     </>
   );

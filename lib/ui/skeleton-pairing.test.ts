@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import ts from 'typescript';
 
 // Structural check of the loading canon (werkflow-design skill, "Loading
 // states"; enforcement ladder Tier 2, UI/UX hardening Phase 4, 2026-09-03):
@@ -11,6 +12,63 @@ import { join } from 'node:path';
 // that feeds only one of header and skeleton.
 
 const REPO_ROOT = join(import.meta.dir, '..', '..');
+
+function hasCustomRowSkeleton(source: string, columnName: string): boolean {
+  const syntax = ts.createSourceFile('skeleton.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  function contains(node: ts.Node, predicate: (child: ts.Node) => boolean): boolean {
+    return predicate(node) || Boolean(ts.forEachChild(node, (child) => contains(child, predicate) || undefined));
+  }
+  return contains(syntax, (node) => {
+    const implementation = ts.isFunctionDeclaration(node) && node.name?.text.endsWith('Skeleton')
+      ? node
+      : ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text.endsWith('Skeleton') &&
+          node.initializer && (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))
+        ? node.initializer
+        : undefined;
+    if (!implementation?.body) return false;
+    const body = implementation.body;
+    const mapsColumns = contains(body, (child) =>
+      ts.isCallExpression(child) && ts.isPropertyAccessExpression(child.expression) &&
+      child.expression.name.text === 'map' && ts.isIdentifier(child.expression.expression) &&
+      child.expression.expression.text === columnName
+    );
+    const rendersSkeletonRow = contains(body, (child) =>
+      (ts.isJsxOpeningElement(child) || ts.isJsxSelfClosingElement(child)) &&
+      ts.isIdentifier(child.tagName) && child.tagName.text === 'ListRow' &&
+      child.attributes.properties.some((attribute) =>
+        ts.isJsxAttribute(attribute) && attribute.name.getText() === 'skeleton' &&
+        (!attribute.initializer || (ts.isJsxExpression(attribute.initializer) &&
+          attribute.initializer.expression?.kind === ts.SyntaxKind.TrueKeyword))
+      )
+    );
+    const usesColumnSkeleton = contains(body, (child) =>
+      ts.isPropertyAccessExpression(child) && ts.isIdentifier(child.expression) &&
+      child.expression.text === 'column' && child.name.text === 'skeleton'
+    );
+    return mapsColumns && rendersSkeletonRow && usesColumnSkeleton;
+  });
+}
+
+describe('custom row skeleton detection', () => {
+  const row = '<ListRow skeleton>{ITEM_COLUMNS.map((column) => column.skeleton)}</ListRow>';
+  const fixtures: Array<[string, string, boolean]> = [
+    ['function declaration', `function ItemSkeleton() { return ${row}; }`, true],
+    ['arrow function', `const ItemSkeleton = () => ${row};`, true],
+    ['function expression', `const ItemSkeleton = function () { return ${row}; };`, true],
+    ['nested declaration', `function Parent() { function ItemSkeleton() { return ${row}; } }`, true],
+    ['arrow and comparison attributes', `const ItemSkeleton = () => <ListRow onClick={() => refresh()} interactive={count > 0} skeleton={true}>{ITEM_COLUMNS . map((column) => column.skeleton)}</ListRow>;`, true],
+    ['different columns', `function ItemSkeleton() { return ${row.replace('ITEM_COLUMNS', 'OTHER_COLUMNS')}; }`, false],
+    ['non-skeleton function', `function ItemRows() { return ${row}; }`, false],
+    ['missing skeleton prop', `function ItemSkeleton() { return ${row.replace(' skeleton>', '>')}; }`, false],
+    ['disabled skeleton prop', `function ItemSkeleton() { return ${row.replace(' skeleton>', ' skeleton={false}>')}; }`, false],
+    ['missing column skeleton', `function ItemSkeleton() { return ${row.replace('column.skeleton', 'column.label')}; }`, false],
+  ];
+  for (const [name, source, expected] of fixtures) {
+    test(name, () => {
+      expect(hasCustomRowSkeleton(source, 'ITEM_COLUMNS')).toBe(expected);
+    });
+  }
+});
 
 function listTsxFiles(directory: string): string[] {
   return readdirSync(join(REPO_ROOT, directory), { recursive: true, encoding: 'utf8' })
@@ -100,8 +158,8 @@ describe('skeleton pairing (design canon, Loading states)', () => {
       );
       const rendersSkeleton = [...sources.values()].some(
         (source) =>
-          consumers.some((name) => source.includes(`columns={${name}`)) &&
-          /Skeleton(Rows|Table)\b/.test(source)
+          (consumers.some((name) => source.includes(`columns={${name}`)) &&
+          /Skeleton(Rows|Table)\b/.test(source)) || hasCustomRowSkeleton(source, identifier)
       );
       expect({ rendersHeader, rendersSkeleton }).toEqual({
         rendersHeader: true,

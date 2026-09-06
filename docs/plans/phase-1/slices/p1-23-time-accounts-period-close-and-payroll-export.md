@@ -2,6 +2,8 @@
 
 Status: closed (2026-09-01) — accepted P1-23 acceptance record; canonical home for the slice's evidence
 
+Navigation amendment, 2026-09-05: the [accepted UI/UX hardening pass](../../uiux-hardening-2026-09.md) moved time-account rules and payroll mapping from `/einstellungen/zeiterfassung` to `/zeiterfassung/einstellungen`. The plan below preserves the route used at P1-23 acceptance. Current navigation belongs to the [time-tracking baseline](../../../features/time-tracking.md).
+
 ## Bounded outcome
 
 Time accounts, overtime and supplement classifications, operational compliance warnings, exception review, period close, payroll-ready export, correction and re-export become understandable, reproducible and versioned. Employees can inspect the balances that affect them. Authorized office users can review the source facts, resolve blocking exceptions, close a period and reproduce each export version without turning WerkFlow into payroll, tax or legal-compliance software.

@@ -63,14 +63,29 @@ export const labelInSpacedContainerRule = {
     type: "problem",
     schema: [],
     messages: {
+      useField: "Label-plus-control stacks use Field so naming, required state and errors stay connected (werkflow-design: every field is a Field).",
       bareContainer:
         "<Label> sits in a container with no spacing, so it touches its control. Use <Field label=...> from components/ui/field (design canon: every field is a Field), or give the container gap-2 / space-y-2.",
     },
   },
   create(context) {
+    const controlNames = new Set(["Input", "Textarea", "Select", "SearchableSelect", "SearchableMultiSelect", "DatePicker", "TimeInput", "DurationHoursInput", "QuantityStepper", "DateTimeField", "input", "textarea", "select"]);
+    function containsUnownedControl(node) {
+      if (!node || typeof node !== 'object') return false;
+      const name = jsxElementName(node);
+      if (name === 'Field') return false;
+      if (controlNames.has(name)) return true;
+      return (context.sourceCode.visitorKeys[node.type] ?? []).some((key) => {
+        const child = node[key];
+        return Array.isArray(child) ? child.some(containsUnownedControl) : containsUnownedControl(child);
+      });
+    }
     return {
       JSXElement(node) {
         if (jsxElementName(node) !== "Label") return;
+        for (let ancestor = node.parent; ancestor; ancestor = ancestor.parent) {
+          if (jsxElementName(ancestor) === 'Field') return;
+        }
         let parent = node.parent;
         while (parent && (parent.type === "JSXFragment" || parent.type === "JSXExpressionContainer")) {
           parent = parent.parent;
@@ -78,6 +93,10 @@ export const labelInSpacedContainerRule = {
         if (!parent || parent.type !== "JSXElement") return;
         const parentName = jsxElementName(parent);
         if (parentName === "Field") return;
+        if (parent.children.some((child) => child !== node && containsUnownedControl(child))) {
+          context.report({ node: node.openingElement, messageId: "useField" });
+          return;
+        }
         const classes = classNameLiteral(parent);
         if (classes !== null && SPACED_CONTAINER_CLASS.test(classes)) return;
         // A Label that wraps its control (checkbox rows) is fine: the label is

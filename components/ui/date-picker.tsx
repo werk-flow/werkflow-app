@@ -52,7 +52,7 @@ export function DatePicker({
   placeholder = "Datum wählen",
   disabled = false,
   id,
-  ariaLabel = "Datum",
+  ariaLabel,
 }: DatePickerProps) {
   const field = useFieldContext();
   const [open, setOpen] = React.useState(false);
@@ -310,8 +310,10 @@ export function DatePicker({
       ref={containerRef}
       id={id ?? field?.controlId}
       role="group"
-      aria-label={ariaLabel}
-      aria-describedby={field?.describedBy}
+      aria-label={ariaLabel ?? (field ? undefined : "Datum")}
+      aria-labelledby={ariaLabel ? undefined : field?.labelId}
+      aria-describedby={[field?.describedBy, field?.requiredDescriptionId].filter(Boolean).join(' ') || undefined}
+      aria-disabled={disabled || undefined}
       data-invalid={field?.invalid || undefined}
       tabIndex={disabled ? -1 : 0}
       onFocus={handleFocus}
@@ -328,6 +330,7 @@ export function DatePicker({
         <PopoverTrigger asChild>
           <button
             type="button"
+            aria-label="Kalender öffnen"
             tabIndex={-1}
             disabled={disabled}
             className="mr-1.5 shrink-0 text-muted-foreground hover:text-foreground transition-colors"

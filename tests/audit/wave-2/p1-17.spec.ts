@@ -2,7 +2,7 @@ import { resolve } from 'node:path';
 
 import type { Page } from '@playwright/test';
 
-import { expect, test } from '../../golden/support/fixtures';
+import { expect, test } from "../support/fixtures";
 import {
   getJobCountByNumber,
   getVisibleWorkHandoverCountsAs,
@@ -10,6 +10,7 @@ import {
   getWorkLifecycleState,
 } from '../../golden/support/db';
 import {
+  workLifecycleCard,
   addContactOnCustomerDetail,
   addSiteOnCustomerDetail,
   createCustomer,
@@ -18,12 +19,13 @@ import {
   createProject,
   openCustomerDetail,
   selectAllHandoverSources,
+  workHandoverSection,
   transitionWorkOnJobPage,
   uploadIntoDocumentsSection,
 } from '../../golden/support/steps';
 import { ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
 import { requireSerialPrecondition } from '../../golden/support/preconditions';
-import { ARTIFACTS_DIR, type TestWorld } from '../../golden/support/world';
+import { artifactsDirectory, type TestWorld } from '../../golden/support/world';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -53,7 +55,7 @@ async function completeManagerWork(
   startNeedsReason = false
 ): Promise<void> {
   await page.goto(path);
-  const lifecycle = page.getByTestId('work-lifecycle-card');
+  const lifecycle = workLifecycleCard(page);
   const completeButton = lifecycle.getByRole('button', {
     name: 'Ausführung abgeschlossen',
     exact: true,
@@ -91,7 +93,7 @@ async function completeManagerWork(
 
 async function releaseHandover(page: Page, path: string): Promise<void> {
   await page.goto(path);
-  const section = page.getByTestId('work-handover-section');
+  const section = workHandoverSection(page);
   await selectAllHandoverSources(section);
   await section.getByRole('button', { name: 'Entwurf speichern' }).click();
   await expect(section.getByText('Entwurf gespeichert.')).toBeVisible({
@@ -187,13 +189,13 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
       ),
       bueroPage.goto(`/auftraege/projekt/${fixture.projectNumber}/uebergabe`),
     ]);
-    await expect(adminPage.getByTestId('work-handover-section')).toContainText(
+    await expect(workHandoverSection(adminPage)).toContainText(
       'Noch kein Übergabepaket'
     );
-    await expect(adminPage.getByTestId('work-handover-section')).toContainText(
+    await expect(workHandoverSection(adminPage)).toContainText(
       'Die Ausführung muss abgeschlossen sein'
     );
-    await expect(bueroPage.getByTestId('work-handover-section')).toBeVisible();
+    await expect(workHandoverSection(bueroPage)).toBeVisible();
     expect(
       await getWorkHandoverState(world.orgId, {
         jobNumber: fixture.firstJobNumber,
@@ -241,11 +243,11 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
         await adminPage.goto(`/auftraege/projekt/${fixture.projectNumber}/${jobNumber}`);
         await uploadIntoDocumentsSection(
           adminPage,
-          resolve(ARTIFACTS_DIR, 'upload-fixture.pdf'),
+          resolve(artifactsDirectory(), 'upload-fixture.pdf'),
           'upload-fixture'
         );
         await adminPage.goto('/aufgaben');
-        await expect(adminPage.getByTestId('aufgaben-content')).toHaveAttribute(
+        await expect(adminPage.getByRole('main').getByTestId('aufgaben-content')).toHaveAttribute(
           'data-loaded',
           'true'
         );
@@ -253,7 +255,7 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
           bueroPage,
           `/auftraege/projekt/${fixture.projectNumber}/${jobNumber}`
         );
-        await expect(adminPage.getByTestId('attention-work-handover-tasks')).toContainText(
+        await expect(adminPage.getByRole('main').getByTestId('attention-work-handover-tasks')).toContainText(
           jobNumber,
           { timeout: 30_000 }
         );
@@ -343,18 +345,18 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
       projectNumber: fixture.projectNumber,
     });
     expect(projectBefore.package?.state).not.toBe('released');
-    const adminSection = adminPage.getByTestId('work-handover-section');
+    const adminSection = workHandoverSection(adminPage);
     await selectAllHandoverSources(adminSection);
     await adminSection.getByRole('button', { name: 'Entwurf speichern' }).click();
     await expect(adminSection.getByText('Entwurf gespeichert.')).toBeVisible({
       timeout: 20_000,
     });
-    const bueroSection = bueroPage.getByTestId('work-handover-section');
+    const bueroSection = workHandoverSection(bueroPage);
     await bueroSection.getByRole('button', { name: 'Entwurf speichern' }).click();
     await expect(bueroSection).toContainText('Die Übergabe wurde inzwischen geändert');
 
     await adminPage.reload();
-    const refreshed = adminPage.getByTestId('work-handover-section');
+    const refreshed = workHandoverSection(adminPage);
     const popupPromise = adminPage.waitForEvent('popup');
     await refreshed.getByRole('button', { name: 'Vorschau öffnen' }).click();
     const preview = await popupPromise;
@@ -410,7 +412,7 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
     });
     if (initialState.package?.state !== 'reopened') {
       await adminPage.goto(route);
-      let section = adminPage.getByTestId('work-handover-section');
+      let section = workHandoverSection(adminPage);
       await section
         .getByLabel('Grund für die Rücknahme')
         .fill('Projektpaket benötigt eine ergänzende Abschlussprüfung.');
@@ -419,7 +421,7 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
         timeout: 20_000,
       });
       await adminPage.reload();
-      section = adminPage.getByTestId('work-handover-section');
+      section = workHandoverSection(adminPage);
       await section
         .getByLabel('Ausführung erneut öffnen')
         .fill('Projektprüfung wird mit dem Büro erneut durchgeführt.');

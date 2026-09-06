@@ -1,4 +1,4 @@
-import { expect, test } from '../../golden/support/fixtures';
+import { expect, test } from "../support/fixtures";
 import type { Page } from '@playwright/test';
 import {
   getAppliedWorkTemplateState,
@@ -6,12 +6,14 @@ import {
   getWorkLifecycleState,
 } from '../../golden/support/db';
 import {
+  workLifecycleCard,
   clockInOnJob,
   clockOut,
   createAndPublishWorkTemplate,
   createJob,
   createProject,
   selectAllHandoverSources,
+  workHandoverSection,
   selectFromSearchable,
   typeIntoDatePickerById,
   visibleText,
@@ -42,7 +44,7 @@ async function transition(
   reason?: string,
   expectSuccess = true
 ): Promise<void> {
-  const card = page.getByTestId('work-lifecycle-card');
+  const card = workLifecycleCard(page);
   await card.getByRole('button', { name: label, exact: true }).click();
   const dialog = page.getByRole('dialog');
   if (reason) await dialog.locator('#work-transition-reason').fill(reason);
@@ -68,7 +70,7 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
       assignEmployeeName: `${world.users.employee.firstName} ${world.users.employee.lastName}`,
     });
     await adminPage.goto(`/auftraege/${jobNumber}`);
-    const adminCard = adminPage.getByTestId('work-lifecycle-card');
+    const adminCard = workLifecycleCard(adminPage);
     await expect(adminCard.getByText('Nicht begonnen', { exact: true })).toBeVisible();
     await expect(adminCard.getByText('Geplant', { exact: true })).toBeVisible();
     await expect(adminCard.getByText(/Nächster Schritt: Arbeit starten/)).toBeVisible();
@@ -78,13 +80,11 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
     await expect(representativeReadinessState(readinessSection, 'Nicht bewertet')).toBeVisible();
 
     await employeePage.goto(`/auftraege/${jobNumber}`);
-    const employeeCard = employeePage.getByTestId('work-lifecycle-card');
-    await expect(employeeCard.getByRole('button', { name: 'Storniert' })).toHaveCount(0);
-    await expect(employeeCard.getByRole('button', { name: 'Parken' })).toHaveCount(0);
+    await expect(employeePage.getByTestId('work-lifecycle-card').getByRole('button', { name: 'Storniert' })).toHaveCount(0);
+    await expect(employeePage.getByTestId('work-lifecycle-card').getByRole('button', { name: 'Parken' })).toHaveCount(0);
 
     await bueroPage.goto(`/auftraege/${jobNumber}`);
-    await bueroPage
-      .getByTestId('work-lifecycle-card')
+    await workLifecycleCard(bueroPage)
       .getByRole('button', { name: 'In Ausführung' })
       .click();
     await transition(adminPage, 'In Ausführung');
@@ -95,7 +95,7 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
     await expect(bueroPage.getByRole('dialog').getByText(/inzwischen geändert/)).toBeVisible();
     await bueroPage.getByRole('dialog').getByRole('button', { name: 'Abbrechen' }).click();
     await expect(
-      bueroPage.getByTestId('work-lifecycle-card').getByText('In Ausführung', { exact: true })
+      workLifecycleCard(bueroPage).getByText('In Ausführung', { exact: true })
     ).toBeVisible();
 
     await adminPage.reload();
@@ -130,7 +130,7 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
       assignEmployeeName: `${world.users.employee.firstName} ${world.users.employee.lastName}`,
     });
     await employeePage.goto(`/auftraege/${jobNumber}`);
-    let card = employeePage.getByTestId('work-lifecycle-card');
+    let card = workLifecycleCard(employeePage);
     await card.getByRole('button', { name: 'Blocker', exact: true }).click();
     let dialog = employeePage.getByRole('dialog');
     await selectFromSearchable(employeePage, dialog.locator('#work-blocker-reason'), 'Sicherheit');
@@ -150,7 +150,7 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
     await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 
     await adminPage.goto(`/auftraege/${jobNumber}`);
-    card = adminPage.getByTestId('work-lifecycle-card');
+    card = workLifecycleCard(adminPage);
     await card.getByText('Gelöste Blocker', { exact: true }).click();
     await card.getByRole('button', { name: 'Wieder öffnen' }).click();
     dialog = adminPage.getByRole('dialog');
@@ -158,14 +158,14 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
     await dialog.getByRole('button', { name: 'Wieder öffnen' }).click();
     await expect(dialog).toHaveCount(0, { timeout: 15_000 });
     await adminPage.reload();
-    card = adminPage.getByTestId('work-lifecycle-card');
+    card = workLifecycleCard(adminPage);
     await card.getByRole('button', { name: 'Lösen' }).click();
     dialog = adminPage.getByRole('dialog');
     await dialog.locator('#work-reason').fill('Die Absperrung ist wieder wirksam.');
     await dialog.getByRole('button', { name: 'Lösen' }).click();
     await expect(dialog).toHaveCount(0, { timeout: 15_000 });
     await adminPage.reload();
-    card = adminPage.getByTestId('work-lifecycle-card');
+    card = workLifecycleCard(adminPage);
     await card.getByRole('button', { name: 'Parken' }).click();
     dialog = adminPage.getByRole('dialog');
     await selectFromSearchable(adminPage, dialog.locator('#work-blocker-reason'), 'Kunde');
@@ -217,7 +217,7 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
       title: `Vorausgehender Auftrag ${world.runId}`,
     });
     await adminPage.goto(`/auftraege/${first}`);
-    let card = adminPage.getByTestId('work-lifecycle-card');
+    let card = workLifecycleCard(adminPage);
     await card.getByRole('button', { name: 'Voraussetzung', exact: true }).click();
     let dialog = adminPage.getByRole('dialog');
     await selectFromSearchable(adminPage, dialog.locator('#dependency-target'), second);
@@ -233,7 +233,7 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
     await adminPage.getByRole('dialog').getByRole('button', { name: 'Abbrechen' }).click();
 
     await adminPage.goto(`/auftraege/${second}`);
-    card = adminPage.getByTestId('work-lifecycle-card');
+    card = workLifecycleCard(adminPage);
     await card.getByRole('button', { name: 'Voraussetzung', exact: true }).click();
     dialog = adminPage.getByRole('dialog');
     await selectFromSearchable(adminPage, dialog.locator('#dependency-target'), first);
@@ -244,8 +244,7 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
     await transition(adminPage, 'In Ausführung');
     await transition(adminPage, 'Ausführung abgeschlossen');
     await adminPage.goto(`/auftraege/${first}`);
-    let linkedDependency = adminPage
-      .getByTestId('work-dependency-row')
+    let linkedDependency = adminPage.getByRole('main').getByTestId('work-dependency-row')
       .filter({ hasText: 'Verknüpfte Arbeit' });
     await expect(linkedDependency.getByText(/erfüllt/)).toBeVisible();
     await transition(adminPage, 'In Ausführung');
@@ -259,8 +258,7 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
     await adminPage.goto(`/auftraege/${second}`);
     await transition(adminPage, 'In Ausführung', 'Nacharbeit wurde erforderlich.');
     await adminPage.goto(`/auftraege/${first}`);
-    linkedDependency = adminPage
-      .getByTestId('work-dependency-row')
+    linkedDependency = adminPage.getByRole('main').getByTestId('work-dependency-row')
       .filter({ hasText: 'Verknüpfte Arbeit' });
     await expect(linkedDependency.getByText(/offen/)).toBeVisible();
     state = await getWorkLifecycleState(world.orgId, { jobNumber: first });
@@ -271,7 +269,7 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
     await adminPage.goto(`/auftraege/${second}`);
     await transition(adminPage, 'Storniert', 'Vorausgehender Auftrag wurde storniert.');
     await adminPage.goto(`/auftraege/${first}`);
-    card = adminPage.getByTestId('work-lifecycle-card');
+    card = workLifecycleCard(adminPage);
     linkedDependency = card
       .getByTestId('work-dependency-row')
       .filter({ hasText: 'Verknüpfte Arbeit' });
@@ -353,7 +351,7 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
       assignEmployeeName: `${world.users.employee.firstName} ${world.users.employee.lastName}`,
     });
     await adminPage.goto(`/auftraege/${jobNumber}`);
-    const card = adminPage.getByTestId('work-lifecycle-card');
+    const card = workLifecycleCard(adminPage);
     await expect(card.getByText('Einsatzbereitschaft')).toBeVisible();
     const readinessSection = card
       .getByRole('heading', { name: 'Einsatzbereitschaft' })
@@ -426,7 +424,7 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
       timeout: 10_000,
     });
     await adminPage.goto(`/auftraege/${jobNumber}/uebergabe`);
-    const handoverSection = adminPage.getByTestId('work-handover-section');
+    const handoverSection = workHandoverSection(adminPage);
     await selectAllHandoverSources(handoverSection);
     await handoverSection.getByRole('button', { name: 'Entwurf speichern' }).click();
     await expect(handoverSection.getByText('Entwurf gespeichert.')).toBeVisible({
@@ -489,7 +487,7 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
       assignEmployeeName: `${world.users.employee.firstName} ${world.users.employee.lastName}`,
     });
     await adminPage.goto(`/auftraege/projekt/${projectNumber}`);
-    const projectCard = adminPage.getByTestId('work-lifecycle-card');
+    const projectCard = workLifecycleCard(adminPage);
     await expect(projectCard.getByText('Automatisch abgeleitet')).toBeVisible();
     await projectCard.getByRole('button', { name: 'Parken' }).click();
     let dialog = adminPage.getByRole('dialog');

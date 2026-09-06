@@ -92,7 +92,7 @@ function PasswordStepIndicator({
                   isComplete
                     ? 'border-primary bg-primary text-primary-foreground'
                     : isActive
-                      ? 'border-primary bg-primary/10 text-primary'
+                      ? 'border-primary bg-primary/10 text-primary-text'
                       : 'border-border bg-background text-muted-foreground'
                 )}
               >

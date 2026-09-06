@@ -26,8 +26,8 @@ export function ManualEntryButton() {
             }),
           );
         }
-        await refresh();
         router.refresh();
+        await refresh();
       }}
       trigger={
         <Button size="default" className="gap-2">

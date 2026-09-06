@@ -109,7 +109,7 @@ export function ClientActionsMenu({
                 reports a failure, so the confirm can close immediately. */}
             <AlertDialogAction
               onClick={() => void onDelete(client)}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              variant="destructive"
             >
               Löschen
             </AlertDialogAction>

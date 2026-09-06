@@ -199,7 +199,7 @@ export function LoginForm({ successMessage, inviteCode = '' }: LoginFormProps) {
               </Field>
               <Link
                 href="/forgot-password"
-                className="justify-self-end text-sm text-primary underline-offset-4 hover:underline"
+                className="justify-self-end text-sm text-primary-text underline-offset-4 hover:underline"
               >
                 Passwort vergessen?
               </Link>

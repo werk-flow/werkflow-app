@@ -20,7 +20,7 @@ import {
 } from '../golden/support/steps';
 import { createSignedDownloadUrl } from '../../lib/storage/r2';
 import { goldenTestEmail } from '../golden/support/seed';
-import { ARTIFACTS_DIR } from '../golden/support/world';
+import { artifactsDirectory } from '../golden/support/world';
 import { expectLiveWithin } from '../golden/support/live';
 import { getDevMigrationHistoryProblems } from '../../lib/testing/dev-migration-history';
 
@@ -85,7 +85,7 @@ test.describe('Cloud-Canary @CANARY', () => {
     await uploadDocumentOnJobPage(
       adminPage,
       `CAN-${world.runId}-1`,
-      resolve(ARTIFACTS_DIR, 'upload-fixture.pdf'),
+      resolve(artifactsDirectory(), 'upload-fixture.pdf'),
       'upload-fixture',
     );
     // The browser PUT went straight to R2; prove the bytes are really there by
@@ -103,7 +103,7 @@ test.describe('Cloud-Canary @CANARY', () => {
     expect(bytes.byteLength).toBe(6 * 1024 * 1024);
   });
 
-  test('C3: Realtime-Zustellung zwischen Sitzungen über die Cloud', async ({
+  test('C3: Realtime-Zustellung zwischen Sitzungen über die Cloud @FRESHNESS', async ({
     adminPage,
     bueroPage,
     world,
@@ -112,13 +112,16 @@ test.describe('Cloud-Canary @CANARY', () => {
     await expect(
       textInDom(bueroPage, `Canary Realtime ${world.runId}`),
     ).toHaveCount(0);
-    await createCustomer(adminPage, `Canary Realtime ${world.runId}`);
     // No reload: the row must arrive through the Realtime subscription within
     // the cloud latency budget (D4); the measured time lands in the archive.
     await expectLiveWithin(
       visibleText(bueroPage, `Canary Realtime ${world.runId}`),
       {
         label: 'canary C3 realtime cross-session',
+        mutation: (beforeSubmit) =>
+          createCustomer(adminPage, `Canary Realtime ${world.runId}`, {
+            beforeSubmit,
+          }),
       },
     );
   });

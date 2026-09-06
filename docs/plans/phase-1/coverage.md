@@ -1,12 +1,12 @@
 # Phase 1 Coverage Matrices
 
-Status: living — last reviewed 2026-09-03
+Status: living — last reviewed 2026-09-05
 
 Routing aids: the starting-foundation snapshot and the feature-to-slice and cross-cutting coverage matrices. They change only when slice scope or feature routing changes. The slice index lives in [roadmap.md](roadmap.md).
 
 ## Starting Foundation Snapshot
 
-This snapshot is a roadmap orientation aid. Feature baselines and current code remain authoritative.
+This table describes the foundation at the roadmap's start on 2026-08-04, before the numbered slices extended it. It is an orientation aid, not the current product baseline. Read feature baselines and current code for implemented behavior.
 
 | Area | Starting position | Roadmap consequence |
 | --- | --- | --- |
@@ -59,4 +59,3 @@ Use this matrix to find every roadmap slice that may require a feature-doc updat
 | Security and privacy | Every slice; personnel/privacy in `P1-05`, `P1-08`, `P1-24`, `P1-45`; complete audit in `P1-51` |
 | Infrastructure stack ([decision 0001](../../decisions/0001-infrastructure-stack.md)) | Hygiene in `P1-00`; R2 direct file storage in `P1-00a`; retention archive design in `P1-45`; first Railway workers expected with `P1-44`/`P1-47`; auth re-evaluation before `P1-49` (mobile) |
 | Help and enablement | Contextual help as features land; complete customer enablement in `P1-52` |
-

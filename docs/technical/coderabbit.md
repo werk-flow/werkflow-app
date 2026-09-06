@@ -1,12 +1,12 @@
 # CodeRabbit reviews
 
-Status: living — last reviewed 2026-09-02
+Status: living — last reviewed 2026-09-06
 
 This document explains how future agents should use CodeRabbit for WerkFlow code reviews. It is intentionally practical and repo-specific. For current product context, still start with `AGENTS.md`; for CodeRabbit behavior, start with `.coderabbit.yaml`.
 
 ## What CodeRabbit Is Used For Here
 
-CodeRabbit is an AI code review service that can review pull requests, IDE changes, and local CLI changes. In this repo it is mainly useful as a second reviewer for larger feature branches before production: it can spot data integrity issues, role/tenant boundary mistakes, accessibility problems, unsafe storage behavior, and subtle workflow regressions that ordinary lint/build checks do not catch.
+CodeRabbit provides a second review of local changes and committed slice diffs before acceptance. WerkFlow development stays on local `main`, following the publication rule in `AGENTS.md`. Choose a pre-change commit or the uncommitted diff as the review scope. Findings can expose data integrity issues, role and tenant boundary mistakes, accessibility problems, unsafe storage behavior, and workflow regressions that lint and build checks do not catch.
 
 Treat CodeRabbit as a reviewer, not an authority. Every finding still needs engineering judgment. In WerkFlow especially, check whether a suggested fix preserves German SHK product context, role-specific workflows, organization boundaries, and practical field-worker usability.
 
@@ -91,30 +91,31 @@ When capturing agent output to a file, write it inside the repository in a gitig
 
 Claude Code note: its repo-local skill is `.claude/skills/coderabbit-review/SKILL.md`; both Codex and Claude must follow the same wrapper-only workflow.
 
-The CLI sends local diff/context to CodeRabbit. Before reviewing unpushed local work, make sure the user has approved sending those diffs to CodeRabbit.
+The owner has given standing authorization to send repository code and review context to CodeRabbit, including uncommitted and unpushed changes. Run reviews without requesting approval again.
 
 ## Running reviews
+
+The wrapper defaults to `--agent --uncommitted --include-untracked -c AGENTS.md`. Historical `--type committed`, `--type uncommitted`, and `-t` commands are translated to the current scope flags before invoking CodeRabbit. Explicit committed or base scopes do not inherit the local-change defaults.
 
 Common commands:
 
 ```bash
-# Default agent review of approved uncommitted changes
-bun run review -- --approve-uncommitted
+# Default agent review of uncommitted changes, including new untracked files
+bun run review
 
 # Only committed or uncommitted changes
-bun run review -- --type committed
-bun run review -- --approve-uncommitted --type uncommitted
+bun run review -- --committed
+bun run review -- --uncommitted
 
-# Include files that are not yet tracked by git (new modules, new scripts).
-# Without this, brand-new files are invisible to an uncommitted-changes review.
-bun run review -- --approve-uncommitted --type uncommitted --include-untracked
+# New files are included by default. This explicit form has the same scope.
+bun run review -- --uncommitted --include-untracked
 
 # Uncommitted inventory review with durable repo and feature context
-bun run review -- --approve-uncommitted --type uncommitted \
+bun run review -- --uncommitted \
   -c AGENTS.md .coderabbit.yaml docs/features/inventory.md docs/technical/realtime-and-caching.md
 
 # Review against a base branch or commit
-bun run review -- --base main
+bun run review -- --base <base-branch>
 bun run review -- --base-commit <sha>
 
 # Replay stored findings from the most recent local review
@@ -124,13 +125,13 @@ bun run review -- findings
 bun run review -- --show-prompts
 ```
 
-Use committed/uncommitted/base scopes to keep reviews focused. For a huge branch, prefer reviewing sensible commits or a focused PR-sized diff. Do not split work just for ceremony; split when it improves review signal and makes fixes safer.
+Choose a base that includes the intended changes. While working on local `main`, `--base main` does not select the committed work already on that same branch. Use `--committed --base-commit <commit before the change>` for that scope, or the uncommitted command above for local edits.
 
 The Codex-side CodeRabbit skill (shipped with Codex, not in this repo) expects agent mode and parses JSON-line output. Once a CodeRabbit review starts, stay quiet while it runs. Report only completion, authentication/setup blockers, timeout, or failure. The official docs note that large reviews can take many minutes; if a review is too slow or quota-limited, narrow the scope or retry later.
 
 ## Interpreting Agent Output
 
-`bun run review` emits one JSON object per line in agent mode. The wrapper-only `--approve-uncommitted` flag records that the owner approved sending a local diff and is removed before CodeRabbit runs. Parse each output line independently.
+`bun run review` emits one JSON object per line in agent mode. Parse each output line independently.
 
 Important event types:
 
@@ -150,7 +151,7 @@ bun run lint
 bun run build
 ```
 
-Rerun CodeRabbit once if the original findings were serious, the fix touched shared behavior, or the user asks for a review-fix-review loop. If you are unsure whether to run it again, run it once more. CLI reviews are rate-limited by plan (see the next section), so budget the passes when a task needs several reviews.
+Use another CodeRabbit pass when serious findings, a shared-behavior repair, or an explicit review-fix-review request justify it. Review a coherent batch through [the batching rule](#post-freeze-review-fixes-are-batched). CLI reviews are rate-limited. Do not repeat unchanged reviews merely to obtain another empty result.
 
 ## Plans And Limits
 
@@ -181,19 +182,21 @@ Pass it with `-c`: always `AGENTS.md` and `.coderabbit.yaml`, plus the primary f
 
 ### Scope to the slice's diff
 
-Use `--type committed --base-commit <commit before the slice>` for committed work, or `--type uncommitted --include-untracked` for local work.
+Use `--committed --base-commit <commit before the slice>` for committed work, or `--uncommitted --include-untracked` for local work.
 
 ### Verify findings before fixing
 
-Verify each finding against the code before fixing it. Skip invalid findings with a stated reason. After fixes, rerun lint/typecheck and the slice's golden-gate spec.
+Verify each finding against the code before fixing it. Skip invalid findings with a stated reason. After fixes, run the selected checks and affected groups from `bun run test:plan`. Apply [decision 0005](../decisions/0005-enforcement-ladder.md) to each retained finding and record the prevention tier. Qualify evidence through [testing.md](testing.md), including current-input result reuse and failure stopping rules.
 
-### Every intended review pass happens before the confirmation gate run
+### Review before final acceptance
 
-CodeRabbit fixes, self-review, and any quality/skill checklists (React patterns, design review) included. Once the post-review full suite is green, only documentation may change; a later application-code change invalidates that evidence and forces another build + full run (this cost the P1-05 cycle an extra build and two full-suite runs).
+Complete the intended review and investigate its findings before final acceptance. After an application correction, rebuild when the build inputs changed and rerun the groups selected by the current plan. Unchanged, unrelated group evidence remains valid under [decision 0007](../decisions/0007-independent-test-groups.md). A later code edit does not automatically require another complete browser battery.
 
 ### Post-freeze review fixes are batched
 
-Not ping-ponged. The pre-freeze review phase has no pass cap — run review-fix-review until the findings converge; the passes pay for themselves. But once the confirmation phase has begun and browser evidence forces an application fix, do not launch a review pass per individual fix: first prove the fix at the failed stage (focused or diagnostic lane), accumulate any further fixes from the same investigation, then run ONE delta-scoped CodeRabbit pass over all of them before freezing the next build. The only exception is a fix that touches authorization or data integrity — that warrants an immediate, non-batched pass. Everything still gets reviewed before the commit; this rule only removes the review↔rebuild↔rerun oscillation that dominated the P1-16 cycle (six interleaved passes, each restarting the browser ladder).
+Review a coherent set of corrections together. After a browser failure, establish the cause and verify its repair at the smallest relevant boundary. Collect related corrections before requesting another review of the changed files. An authorization or data-integrity concern can justify an immediate focused review.
+
+Every retained finding needs a disposition and an appropriate check. This requirement does not mandate repeated CodeRabbit passes until one reports no findings. Reject an incorrect finding with evidence, preserve unresolved concerns, and stop an unproductive review loop. Do not alternate one-fix reviews with full rebuilds and complete-battery reruns.
 
 ## WerkFlow-Specific Review Priorities
 

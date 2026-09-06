@@ -1,10 +1,13 @@
 import { defineConfig } from '@playwright/test';
+import { browserRunPaths } from './lib/testing/run-paths';
 
 import { loadEnvLocal } from './tests/golden/support/env';
-import { configureRunEnvironment } from './tests/golden/support/run-state';
+import { configureRunEnvironment, currentRunKey } from './tests/golden/support/run-state';
 
 loadEnvLocal();
 configureRunEnvironment('canary');
+
+const runPaths = browserRunPaths(__dirname, currentRunKey());
 
 const quietReporter = process.env.WERKFLOW_QUIET_REPORTER === '1';
 const listingTests = process.argv.includes('--list');
@@ -17,8 +20,7 @@ const listingTests = process.argv.includes('--list');
 // Application logic is certified by the local golden/audit batteries; keep
 // this suite short (growth rule in docs/technical/testing.md).
 //
-// IMPORTANT: never run this battery concurrently with the golden or audit
-// suite. All three share tests/golden/.artifacts (world.json, auth states).
+// Files belong to this run. The workspace lock still serializes app/backend use.
 export default defineConfig({
   testDir: './tests/canary',
   globalSetup: './tests/golden/global-setup',
@@ -37,11 +39,14 @@ export default defineConfig({
     : [
         ...(quietReporter ? [] : ([['list']] as const)),
         ['./tests/golden/support/run-reporter.ts'],
-        ['html', { open: 'never', outputFolder: 'tests/canary/.report' }],
+        ['html', { open: 'never', outputFolder: runPaths.report }],
       ],
-  outputDir: 'tests/canary/.results',
+  outputDir: runPaths.results,
   use: {
     baseURL: process.env.GOLDEN_BASE_URL ?? 'http://localhost:3000',
+    // Provider checks retain their own waits; locator actions stay bounded.
+    actionTimeout: 30_000,
+    navigationTimeout: 60_000,
     viewport: { width: 1440, height: 900 },
     locale: 'de-DE',
     timezoneId: 'Europe/Berlin',

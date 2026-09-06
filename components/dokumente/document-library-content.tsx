@@ -3092,7 +3092,7 @@ export function DocumentLibraryContent({
           <AlertDialogFooter>
             <AlertDialogCancel>Abbrechen</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              variant="destructive"
               onClick={() => {
                 const onConfirm = confirmDialog?.onConfirm;
                 setConfirmDialog(null);

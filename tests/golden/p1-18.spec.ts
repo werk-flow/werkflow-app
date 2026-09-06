@@ -25,7 +25,7 @@ import {
   visibleText,
 } from "./support/steps";
 import { ownedBerlinDateAtOffset } from "./support/date-ownership";
-import { ARTIFACTS_DIR, type TestWorld } from "./support/world";
+import { artifactsDirectory, type TestWorld } from "./support/world";
 
 test.describe.configure({ mode: "serial" });
 
@@ -151,7 +151,7 @@ test.describe("P1-18 installed equipment vertical slice @P1-18", () => {
     );
     await uploadIntoDocumentsSection(
       adminPage,
-      resolve(ARTIFACTS_DIR, "upload-fixture.pdf"),
+      resolve(artifactsDirectory(), "upload-fixture.pdf"),
       "upload-fixture",
     );
     await transitionInstalledEquipment(
@@ -200,7 +200,7 @@ test.describe("P1-18 installed equipment vertical slice @P1-18", () => {
     );
   });
 
-  test("refreshes another manager session from the equipment root @P1-18-stage-realtime", async ({
+  test("refreshes another manager session from the equipment root @P1-18-stage-realtime @FRESHNESS", async ({
     adminPage,
     bueroPage,
     world,
@@ -226,13 +226,15 @@ test.describe("P1-18 installed equipment vertical slice @P1-18", () => {
       bueroPage.getByRole("heading", { name: fixture.equipmentName }),
     ).toBeVisible();
     const liveModel = `WP 18 LIVE ${world.runId}-${Date.now()}`;
-    await updateInstalledEquipmentModel(
-      adminPage,
-      liveModel,
-      "Typenschild für die Live-Aktualisierung berichtigt",
-    );
     await expectLiveWithin(visibleText(bueroPage, liveModel), {
       label: "P1-18 equipment detail cross-session refresh",
+      mutation: (beforeSubmit) =>
+        updateInstalledEquipmentModel(
+          adminPage,
+          liveModel,
+          "Typenschild für die Live-Aktualisierung berichtigt",
+          beforeSubmit,
+        ),
     });
   });
 

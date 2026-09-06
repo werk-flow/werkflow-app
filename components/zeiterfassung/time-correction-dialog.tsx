@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { Loader2, Pencil, Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -99,6 +99,7 @@ export function TimeCorrectionDialog({
   hideTrigger = false,
 }: CorrectionDialogProps) {
   const { showBanner } = useBanner();
+  const correctionFormId = useId();
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
   const setOpen = useCallback((nextOpen: boolean) => {
@@ -277,6 +278,173 @@ export function TimeCorrectionDialog({
   ];
   const sourceKinds = entry ? SOURCE_KINDS : ['add', 'missed_clock'] as TimeCorrectionKind[];
 
+  const correctionContent = (
+    <>
+      {loadingOptions || !options ? (
+        <div className="space-y-4" role="status" aria-busy="true">
+          <span className="sr-only">Daten werden geladen.</span>
+          {Array.from({ length: 3 }, (_, index) => (
+            <div key={index} className="space-y-2">
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-9 w-full" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <>
+          <Field label="Korrektur" className="gap-1.5">
+            <Select
+              value={kind}
+              onValueChange={(value) => setKind(value as TimeCorrectionKind)}
+            >
+              <SelectTrigger aria-label="Art der Zeitkorrektur">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {sourceKinds.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {TIME_CORRECTION_KIND_LABELS[value]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+
+          {!entry ? (
+            <Field
+              label="Person"
+              htmlFor="time-correction-person"
+              required
+              error={fieldErrors.person}
+              className="gap-1.5"
+            >
+              <SearchableSelect
+                ariaLabel="Person für Zeitkorrektur"
+                options={peopleOptions}
+                value={subjectEmployeeRecordId}
+                onChange={setSubjectEmployeeRecordId}
+                searchPlaceholder="Person suchen …"
+                emptyMessage="Keine Person gefunden"
+              />
+            </Field>
+          ) : null}
+
+          {kind === "reassign" ? (
+            <Field
+              label="Neue Person"
+              htmlFor="time-correction-target-person"
+              required
+              className="gap-1.5"
+            >
+              <SearchableSelect
+                ariaLabel="Neue Person für Zeiteintrag"
+                options={peopleOptions}
+                value={targetEmployeeRecordId}
+                onChange={setTargetEmployeeRecordId}
+                searchPlaceholder="Person suchen …"
+                emptyMessage="Keine Person gefunden"
+              />
+            </Field>
+          ) : null}
+
+          {kind !== "delete" ? (
+            <Field
+              label={kind === "edit" ? "Neue Zeit" : "Beginn"}
+              htmlFor="time-correction-start-date"
+              required
+              className="gap-1.5"
+            >
+              <DateTimeField
+                value={startAt}
+                onChange={setStartAt}
+                idPrefix="time-correction-start"
+              />
+            </Field>
+          ) : null}
+          {kind === "split" ? (
+            <Field
+              label="Trennzeit"
+              htmlFor="time-correction-split-date"
+              required
+              className="gap-1.5"
+            >
+              <DateTimeField
+                value={splitAt}
+                onChange={setSplitAt}
+                idPrefix="time-correction-split"
+              />
+            </Field>
+          ) : null}
+          {kind === "add" || kind === "missed_clock" || kind === "split" ? (
+            <Field
+              label="Ende"
+              htmlFor="time-correction-end-date"
+              required
+              className="gap-1.5"
+            >
+              <DateTimeField
+                value={endAt}
+                onChange={setEndAt}
+                idPrefix="time-correction-end"
+              />
+            </Field>
+          ) : null}
+
+          {kind === "reclassify" ? (
+            <Field label="Neue Tätigkeit" className="gap-1.5">
+              <Select
+                value={activityKind}
+                onValueChange={(value) =>
+                  setActivityKind(value as TimeSegmentKind)
+                }
+              >
+                <SelectTrigger aria-label="Neue Tätigkeit">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ACTIVITY_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          ) : null}
+
+          {kind === "reallocate" || kind === "add" || kind === "missed_clock" ? (
+            <Field label="Auftrag" className="gap-1.5">
+              <SearchableSelect
+                ariaLabel="Auftrag für Zeitkorrektur"
+                options={jobOptions}
+                value={jobId}
+                onChange={setJobId}
+                searchPlaceholder="Auftrag suchen …"
+                emptyMessage="Kein Auftrag gefunden"
+              />
+            </Field>
+          ) : null}
+
+          <Field
+            label="Grund"
+            htmlFor="time-correction-reason"
+            required
+            error={fieldErrors.reason}
+            className="gap-1.5"
+          >
+            <Textarea
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              placeholder="Was soll korrigiert werden?"
+              maxLength={2000}
+            />
+          </Field>
+          <ErrorText>{submitError}</ErrorText>
+        </>
+      )}
+    </>
+  );
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       {!hideTrigger ? <DialogTrigger asChild>
@@ -293,131 +461,37 @@ export function TimeCorrectionDialog({
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="space-y-4">
-          {loadingOptions || !options ? (
-            <div className="space-y-4" role="status" aria-busy="true">
-              <span className="sr-only">Daten werden geladen.</span>
-              {Array.from({ length: 3 }, (_, index) => (
-                <div key={index} className="space-y-2">
-                  <Skeleton className="h-4 w-28" />
-                  <Skeleton className="h-9 w-full" />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <>
-              <Field label="Korrektur" className="gap-1.5">
-                <Select value={kind} onValueChange={(value) => setKind(value as TimeCorrectionKind)}>
-                  <SelectTrigger aria-label="Art der Zeitkorrektur"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {sourceKinds.map((value) => (
-                      <SelectItem key={value} value={value}>
-                        {TIME_CORRECTION_KIND_LABELS[value]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-
-              {!entry ? (
-                <Field
-                  label="Person"
-                  htmlFor="time-correction-person"
-                  required
-                  error={fieldErrors.person}
-                  className="gap-1.5"
-                >
-                  <SearchableSelect
-                    ariaLabel="Person für Zeitkorrektur"
-                    options={peopleOptions}
-                    value={subjectEmployeeRecordId}
-                    onChange={setSubjectEmployeeRecordId}
-                    searchPlaceholder="Person suchen …"
-                    emptyMessage="Keine Person gefunden"
-                  />
-                </Field>
-              ) : null}
-
-              {kind === 'reassign' ? (
-                <Field label="Neue Person" htmlFor="time-correction-target-person" required className="gap-1.5">
-                  <SearchableSelect
-                    ariaLabel="Neue Person für Zeiteintrag"
-                    options={peopleOptions}
-                    value={targetEmployeeRecordId}
-                    onChange={setTargetEmployeeRecordId}
-                    searchPlaceholder="Person suchen …"
-                    emptyMessage="Keine Person gefunden"
-                  />
-                </Field>
-              ) : null}
-
-              {kind !== 'delete' ? (
-                <Field label={kind === 'edit' ? 'Neue Zeit' : 'Beginn'} htmlFor="time-correction-start-date" required className="gap-1.5">
-                  <DateTimeField value={startAt} onChange={setStartAt} idPrefix="time-correction-start" />
-                </Field>
-              ) : null}
-              {kind === 'split' ? (
-                <Field label="Trennzeit" htmlFor="time-correction-split-date" required className="gap-1.5">
-                  <DateTimeField value={splitAt} onChange={setSplitAt} idPrefix="time-correction-split" />
-                </Field>
-              ) : null}
-              {kind === 'add' || kind === 'missed_clock' || kind === 'split' ? (
-                <Field label="Ende" htmlFor="time-correction-end-date" required className="gap-1.5">
-                  <DateTimeField value={endAt} onChange={setEndAt} idPrefix="time-correction-end" />
-                </Field>
-              ) : null}
-
-              {kind === 'reclassify' ? (
-                <Field label="Neue Tätigkeit" className="gap-1.5">
-                  <Select value={activityKind} onValueChange={(value) => setActivityKind(value as TimeSegmentKind)}>
-                    <SelectTrigger aria-label="Neue Tätigkeit"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {ACTIVITY_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-              ) : null}
-
-              {kind === 'reallocate' || kind === 'add' || kind === 'missed_clock' ? (
-                <Field label="Auftrag" className="gap-1.5">
-                  <SearchableSelect
-                    ariaLabel="Auftrag für Zeitkorrektur"
-                    options={jobOptions}
-                    value={jobId}
-                    onChange={setJobId}
-                    searchPlaceholder="Auftrag suchen …"
-                    emptyMessage="Kein Auftrag gefunden"
-                  />
-                </Field>
-              ) : null}
-
-              <Field
-                label="Grund"
-                htmlFor="time-correction-reason"
-                required
-                error={fieldErrors.reason}
-                className="gap-1.5"
-              >
-                <Textarea
-                  value={reason}
-                  onChange={(event) => setReason(event.target.value)}
-                  placeholder="Was soll korrigiert werden?"
-                  maxLength={2000}
-                />
-              </Field>
-              <ErrorText>{submitError}</ErrorText>
-            </>
-          )}
+          {kind !== 'delete' ? (
+            <form
+              id={correctionFormId}
+              onSubmit={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (loadingOptions || submitting || !options) return;
+                void submit();
+              }}
+              noValidate
+              className="space-y-4"
+            >
+              {correctionContent}
+            </form>
+          ) : correctionContent}
         </DialogBody>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)} disabled={submitting}>
+          <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={submitting}>
             Abbrechen
           </Button>
-          <Button onClick={() => void submit()} disabled={loadingOptions || submitting || !options}>
-            {submitting ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
-            Speichern
-          </Button>
+          {kind === 'delete' ? (
+            <Button type="button" onClick={() => void submit()} disabled={loadingOptions || submitting || !options}>
+              {submitting ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+              Speichern
+            </Button>
+          ) : (
+            <Button type="submit" form={correctionFormId} disabled={loadingOptions || submitting || !options}>
+              {submitting ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+              Speichern
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

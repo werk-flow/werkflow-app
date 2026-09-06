@@ -97,7 +97,7 @@ export function ZeiterfassungContent({
             <>
               <span
                 aria-hidden="true"
-                className="ml-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/15 px-1.5 text-[10px] font-semibold text-primary group-data-[state=active]:bg-primary group-data-[state=active]:text-primary-foreground"
+                className="ml-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/15 px-1.5 text-[10px] font-semibold text-primary-text group-data-[state=active]:bg-primary group-data-[state=active]:text-primary-foreground"
               >
                 {approvalsCount}
               </span>

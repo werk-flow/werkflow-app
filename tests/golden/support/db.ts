@@ -19,6 +19,7 @@ import {
 } from "../../../lib/personnel/targets";
 import { parseWorkLifecycleSnapshot } from "../../../lib/work-lifecycle/types";
 import { requireEnv } from "./env";
+import { testSupabaseClientOptions } from "./client-options";
 
 // Read-only service-role lookups for gate assertions. Specs drive everything
 // user-visible through the UI; these helpers only observe database state that
@@ -29,9 +30,7 @@ function createAdminClient(): SupabaseClient<Database> {
   return createClient<Database>(
     requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
     requireEnv("SUPABASE_SECRET_KEY"),
-    {
-      auth: { persistSession: false, autoRefreshToken: false },
-    },
+    testSupabaseClientOptions,
   );
 }
 
@@ -546,7 +545,7 @@ export async function withRoleClient<T>(
   const client = createClient(
     requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
     requireEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
-    { auth: { persistSession: false, autoRefreshToken: false } },
+    testSupabaseClientOptions,
   );
   const { error } = await client.auth.signInWithPassword({
     email: user.email,
@@ -573,7 +572,7 @@ export async function getVisibleWorkScheduleRecordIdsAs(
   const client = createClient(
     requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
     requireEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
-    { auth: { persistSession: false, autoRefreshToken: false } },
+    testSupabaseClientOptions,
   );
 
   const { error: signInError } = await client.auth.signInWithPassword({
@@ -649,7 +648,7 @@ export async function getVisibleResponsibilityEmployeeRecordIdsAs(
   const client = createClient(
     requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
     requireEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
-    { auth: { persistSession: false, autoRefreshToken: false } },
+    testSupabaseClientOptions,
   );
   const { error: signInError } = await client.auth.signInWithPassword({
     email: user.email,
@@ -959,7 +958,7 @@ export async function getVisibleVacationRequestRecordIdsAs(
   const client = createClient(
     requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
     requireEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
-    { auth: { persistSession: false, autoRefreshToken: false } },
+    testSupabaseClientOptions,
   );
   const { error: signInError } = await client.auth.signInWithPassword({
     email: user.email,
@@ -1046,7 +1045,7 @@ export async function getVisibleAttentionOwnersAs(
   const client = createClient(
     requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
     requireEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
-    { auth: { persistSession: false, autoRefreshToken: false } },
+    testSupabaseClientOptions,
   );
   const { error: signInError } = await client.auth.signInWithPassword({
     email: user.email,
@@ -1452,7 +1451,7 @@ export async function getVisibleSicknessRecordIdsAs(
   const client = createClient(
     requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
     requireEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
-    { auth: { persistSession: false, autoRefreshToken: false } },
+    testSupabaseClientOptions,
   );
   const { error: signInError } = await client.auth.signInWithPassword({
     email: user.email,
@@ -1579,7 +1578,7 @@ export async function getVisibleQualificationStateAs(
   const client = createClient(
     requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
     requireEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
-    { auth: { persistSession: false, autoRefreshToken: false } },
+    testSupabaseClientOptions,
   );
   const { error: signInError } = await client.auth.signInWithPassword({
     email: user.email,
@@ -1784,7 +1783,7 @@ export async function getVisibleCustomerRelationshipStateAs(
   const client = createClient(
     requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
     requireEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
-    { auth: { persistSession: false, autoRefreshToken: false } },
+    testSupabaseClientOptions,
   );
   const { error: signInError } = await client.auth.signInWithPassword({
     email: user.email,
@@ -2207,7 +2206,7 @@ export async function getVisiblePlanningStateAs(
   const client = createClient(
     requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
     requireEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
-    { auth: { persistSession: false, autoRefreshToken: false } },
+    testSupabaseClientOptions,
   );
   const { error: signInError } = await client.auth.signInWithPassword({
     email: user.email,
@@ -2445,8 +2444,8 @@ export async function getDispatchState(
         targetKind: dispatch.occurrence_id ? "occurrence" : "job",
         currentRevisionNumber:
           dispatch.current_revision_id
-            ? revisionNumberById.get(dispatch.current_revision_id) ?? null
-            : null,
+            ? (revisionNumberById.get(dispatch.current_revision_id) ?? null)
+          : null,
         revisionChangeKinds: revisions.map((row) => row.change_kind as string),
         currentRecipientRecordIds: (recipientsResult.data ?? [])
           .filter((row) => row.revision_id === dispatch.current_revision_id)
@@ -2644,7 +2643,7 @@ export async function getVisibleWorkLifecycleCountsAs(
   const client = createClient(
     requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
     requireEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
-    { auth: { persistSession: false, autoRefreshToken: false } },
+    testSupabaseClientOptions,
   );
   const { error: signInError } = await client.auth.signInWithPassword(user);
   if (signInError)
@@ -2896,7 +2895,7 @@ export async function getVisibleDispatchStateAs(
   const client = createClient(
     requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
     requireEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
-    { auth: { persistSession: false, autoRefreshToken: false } },
+    testSupabaseClientOptions,
   );
   const { error: signInError } = await client.auth.signInWithPassword({
     email: user.email,
@@ -3873,6 +3872,13 @@ export async function seedP123UnclosedLegacySequence(input: {
   userId: string;
   startedAt: string;
 }): Promise<void> {
+  const existing = await getP123LegacyTransition(
+    input.organizationId,
+    input.userId,
+    "clock_in",
+    input.startedAt,
+  );
+  if (existing) return;
   const { error } = await createAdminClient()
     .from("time_entries")
     .insert({
@@ -3892,6 +3898,13 @@ export async function closeP123LegacySequence(input: {
   userId: string;
   endedAt: string;
 }): Promise<void> {
+  const existing = await getP123LegacyTransition(
+    input.organizationId,
+    input.userId,
+    "clock_out",
+    input.endedAt,
+  );
+  if (existing) return;
   const { error } = await createAdminClient()
     .from("time_entries")
     .insert({
@@ -3904,6 +3917,29 @@ export async function closeP123LegacySequence(input: {
     });
   if (error)
     throw new Error(`P1-23 legacy-sequence cleanup failed: ${error.message}`);
+}
+
+export async function getP123LegacyTransition(
+  organizationId: string,
+  userId: string,
+  entryType: "clock_in" | "clock_out",
+  timestamp: string,
+): Promise<string | null> {
+  const { data, error } = await createAdminClient()
+    .from("time_entries")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("user_id", userId)
+    .eq("entry_type", entryType)
+    .eq("timestamp", timestamp)
+    .eq("is_manual", true)
+    .eq("status", "approved")
+    .maybeSingle();
+  if (error)
+    throw new Error(
+      `P1-23 exact legacy transition lookup failed: ${error.message}`,
+    );
+  return data?.id ?? null;
 }
 
 export async function getP123CountsAs(

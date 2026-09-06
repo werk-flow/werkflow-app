@@ -5,18 +5,56 @@ import {
   evaluateFocusedIterationRerun,
   evaluateFullCertificationRerun,
   evaluateRequiredFocusedProofs,
-  focusedGrepCoversToken,
+  testIdentityCoversToken,
   focusedProofToken,
   focusedProofTokenForFailure,
-  parsePlaywrightListOutput,
   requiredFocusedProofsForChangedFiles,
   shouldRefreshStoredSession,
   validateFocusedSelection,
   validateRunRequest,
-  validateSerialSelection,
 } from "./run-policy";
 
 describe("Playwright run policy", () => {
+  test("does not accept grep text as evidence that a required boundary executed", () => {
+    const requirements = [{ suite: "golden" as const, token: "p1-16", reason: "Changed field pack" }];
+    expect(evaluateRequiredFocusedProofs({
+      requirements,
+      currentCandidateFingerprint: "source-a",
+      currentTarget: "local",
+      focusedVerifications: [{
+        status: "passed", startedAt: "2026-09-05T12:00:00Z", candidateFingerprint: "source-a",
+        suite: "golden", target: "local", grep: "@GG-00|@P1-16", total: 1,
+        passedTestIds: ["gg-00.spec.ts › unrelated @GG-00"],
+      }],
+    })).toEqual(requirements);
+  });
+
+  test("does not accept a different backend's focused proof", () => {
+    const requirements = [{ suite: "golden" as const, token: "p1-16", reason: "Changed field pack" }];
+    expect(evaluateRequiredFocusedProofs({
+      requirements,
+      currentCandidateFingerprint: "source-a",
+      currentTarget: "local",
+      focusedVerifications: [{
+        status: "passed", startedAt: "2026-09-05T12:00:00Z", candidateFingerprint: "source-a",
+        suite: "golden", target: "cloud", grep: "@P1-16", total: 1,
+        passedTestIds: ["p1-16.spec.ts › field pack @P1-16"],
+      }],
+    })).toEqual(requirements);
+  });
+
+  test("requires the actual failed stage, even when another stage has the same spec tag", () => {
+    const failedTestId = "tests/golden/p1-20.spec.ts › stage field @P1-20";
+    const input = {
+      attemptsSinceLastPass: [{ runKey: "failed-stage", status: "failed" as const, startedAt: "2026-09-05T10:00:00Z", classification: "harness" as const, classifiedAt: "2026-09-05T10:30:00Z", failedSpecFile: "tests/golden/p1-20.spec.ts", failedTestId }],
+      currentCandidateFingerprint: "candidate", currentSuite: "golden" as const, currentTarget: "local" as const, fullSuiteTestCount: 142, overrideReason: null,
+    };
+    const proof = { status: "passed" as const, startedAt: "2026-09-05T11:00:00Z", candidateFingerprint: "candidate", suite: "golden" as const, target: "local" as const, grep: "@P1-20", total: 1, passedTestIds: ["tests/golden/p1-20.spec.ts › stage setup @P1-20"] };
+    expect(evaluateFullCertificationRerun({ ...input, focusedVerifications: [proof] }).allowed).toBe(false);
+    expect(evaluateFullCertificationRerun({ ...input, focusedVerifications: [{ ...proof, passedTestIds: [failedTestId] }] }).allowed).toBe(true);
+    expect(evaluateFullCertificationRerun({ ...input, focusedVerifications: [{ ...proof, target: "cloud", passedTestIds: [failedTestId] }] }).allowed).toBe(false);
+    expect(evaluateFullCertificationRerun({ ...input, focusedVerifications: [{ ...proof, suite: "audit", passedTestIds: [failedTestId] }] }).allowed).toBe(false);
+  });
   test("keeps iteration and diagnostic runs focused", () => {
     expect(
       validateRunRequest({
@@ -117,77 +155,6 @@ describe("Playwright run policy", () => {
     ).toEqual([]);
   });
 
-  test("parses Playwright list output for pre-world selection checks", () => {
-    expect(
-      parsePlaywrightListOutput(
-        [
-          "Listing tests:",
-          "  canary.spec.ts:41:7 › Cloud-Canary @CANARY › C1: Login",
-          "  canary.spec.ts:183:7 › Cloud-Canary @CANARY › C9: Migrationen",
-          "Total: 2 tests in 1 file",
-        ].join("\n"),
-      ),
-    ).toEqual({
-      titles: [
-        "canary.spec.ts:41:7 › Cloud-Canary @CANARY › C1: Login",
-        "canary.spec.ts:183:7 › Cloud-Canary @CANARY › C9: Migrationen",
-      ],
-      total: 2,
-    });
-  });
-
-  test("rejects a known dependent serial test without its producer", () => {
-    expect(
-      validateSerialSelection({
-        lane: "iteration",
-        suite: "golden",
-        selectedTitles: ["p1-04.spec.ts › P1-04 @P1-04 › dependent"],
-      }),
-    ).toContain(
-      '@P1-04 requires its serial producer. Run: bun run test:golden:focused --grep "@P1-03|@P1-04".',
-    );
-    expect(
-      validateSerialSelection({
-        lane: "iteration",
-        suite: "golden",
-        selectedTitles: [
-          "p1-03.spec.ts › P1-03 @P1-03 › producer",
-          "p1-04.spec.ts › P1-04 @P1-04 › dependent",
-        ],
-      }),
-    ).toEqual([]);
-    expect(
-      validateSerialSelection({
-        lane: "iteration",
-        suite: "audit",
-        selectedTitles: [
-          "@AUDIT-W1-A1 A1-02/A1-03 creates the inherited customer",
-        ],
-      }),
-    ).toContain(
-      'A1-02/A1-03 requires its serial producer. Run: bun run test:audit:focused --grep "A1-01/A1-07|A1-02/A1-03".',
-    );
-    expect(
-      validateSerialSelection({
-        lane: "iteration",
-        suite: "audit",
-        selectedTitles: [
-          "@AUDIT-W1-A1 A1-01/A1-07 establishes the world",
-          "@AUDIT-W1-A1 A1-02/A1-03 creates the inherited customer",
-        ],
-      }),
-    ).toEqual([]);
-    expect(
-      validateSerialSelection({
-        lane: "diagnostic",
-        suite: "audit",
-        selectedTitles: [
-          "tests/audit/wave-1/a1-grundstock.spec.ts:1:1 › A1-02/A1-03 dependent",
-        ],
-      }),
-    ).toEqual([]);
-  });
-
   test("classifies focused failures and stops two same-class fresh-world attempts", () => {
     const firstFailure = {
       runKey: "focused-1",
@@ -261,7 +228,8 @@ describe("Playwright run policy", () => {
       evaluateRequiredFocusedProofs({
         requirements,
         focusedVerifications: [],
-        currentSourceFingerprint: "source-a",
+        currentCandidateFingerprint: "source-a",
+      currentTarget: "local" as const,
       }),
     ).toEqual(requirements);
     expect(
@@ -271,13 +239,16 @@ describe("Playwright run policy", () => {
           {
             status: "passed",
             startedAt: "2026-08-29T19:00:00Z",
-            sourceFingerprint: "source-a",
+            candidateFingerprint: "source-a",
             suite: "golden",
             grep: "@P1-16-stage-setup|@P1-16-stage-execution",
+            target: "local" as const,
+            passedTestIds: ["@P1-16-stage-setup|@P1-16-stage-execution"],
             total: 2,
           },
         ],
-        currentSourceFingerprint: "source-a",
+        currentCandidateFingerprint: "source-a",
+      currentTarget: "local" as const,
       }),
     ).toEqual([]);
   });
@@ -295,6 +266,7 @@ describe("Playwright run policy", () => {
 
   test("blocks an unclassified full-run retry", () => {
     const result = evaluateFullCertificationRerun({
+      currentSuite: "golden",
       attemptsSinceLastPass: [
         {
           runKey: "failed-1",
@@ -306,7 +278,8 @@ describe("Playwright run policy", () => {
         },
       ],
       focusedVerifications: [],
-      currentSourceFingerprint: "source-a",
+      currentCandidateFingerprint: "source-a",
+      currentTarget: "local" as const,
       fullSuiteTestCount: 114,
       overrideReason: null,
     });
@@ -316,6 +289,7 @@ describe("Playwright run policy", () => {
 
   test("requires focused proof after classification", () => {
     const result = evaluateFullCertificationRerun({
+      currentSuite: "golden",
       attemptsSinceLastPass: [
         {
           runKey: "failed-1",
@@ -330,13 +304,16 @@ describe("Playwright run policy", () => {
         {
           status: "passed",
           startedAt: "2026-08-25T11:00:00Z",
-          sourceFingerprint: "old-source",
+          candidateFingerprint: "old-source",
           suite: "golden",
           grep: "@P1-16",
+          target: "local" as const,
+          passedTestIds: ["@P1-16"],
           total: 1,
         },
       ],
-      currentSourceFingerprint: "source-a",
+      currentCandidateFingerprint: "source-a",
+      currentTarget: "local" as const,
       overrideReason: null,
       fullSuiteTestCount: 114,
     });
@@ -359,16 +336,22 @@ describe("Playwright run policy", () => {
   });
 
   test("matches proof tokens at boundaries, not as bare substrings", () => {
-    expect(focusedGrepCoversToken("@P1-16", "p1-16")).toBe(true);
-    expect(focusedGrepCoversToken("@P1-16-stage-boundaries", "p1-16")).toBe(
+    expect(testIdentityCoversToken("@P1-16", "p1-16")).toBe(true);
+    expect(testIdentityCoversToken("@P1-16-stage-boundaries", "p1-16")).toBe(
       true,
     );
-    expect(focusedGrepCoversToken("@P1-16", "p1-1")).toBe(false);
-    expect(focusedGrepCoversToken("@P1-01", "p1-16")).toBe(false);
+    expect(testIdentityCoversToken("@P1-16", "p1-1")).toBe(false);
+    expect(testIdentityCoversToken("@P1-01", "p1-16")).toBe(false);
+    expect(testIdentityCoversToken("@XP1-16", "p1-16")).toBe(false);
+    expect(testIdentityCoversToken("tests/golden/notp1-16.spec.ts", "p1-16")).toBe(false);
+    expect(testIdentityCoversToken("XC9: unrelated stage", "C9:")).toBe(false);
+    expect(testIdentityCoversToken("tests/golden/p1-16.spec.ts › real stage", "p1-16")).toBe(true);
+    expect(testIdentityCoversToken("@CANARY C9: migration stage", "C9:")).toBe(true);
   });
 
   test("requires the focused proof to cover the failed spec", () => {
     const base = {
+      currentSuite: "golden" as const,
       attemptsSinceLastPass: [
         {
           runKey: "failed-1",
@@ -379,7 +362,8 @@ describe("Playwright run policy", () => {
           failedSpecFile: "tests/golden/p1-16.spec.ts",
         },
       ],
-      currentSourceFingerprint: "source-a",
+      currentCandidateFingerprint: "source-a",
+      currentTarget: "local" as const,
       fullSuiteTestCount: 114,
       overrideReason: null,
     };
@@ -389,9 +373,11 @@ describe("Playwright run policy", () => {
         {
           status: "passed",
           startedAt: "2026-08-25T11:00:00Z",
-          sourceFingerprint: "source-a",
+          candidateFingerprint: "source-a",
           suite: "golden",
           grep: "@GG-00",
+          target: "local" as const,
+          passedTestIds: ["@GG-00"],
           total: 13,
         },
       ],
@@ -405,9 +391,11 @@ describe("Playwright run policy", () => {
         {
           status: "passed",
           startedAt: "2026-08-25T11:00:00Z",
-          sourceFingerprint: "source-a",
+          candidateFingerprint: "source-a",
           suite: "golden",
           grep: "@P1-16-stage-boundaries",
+          target: "local" as const,
+          passedTestIds: ["@P1-16-stage-boundaries"],
           total: 1,
         },
       ],
@@ -430,17 +418,21 @@ describe("Playwright run policy", () => {
       {
         status: "passed" as const,
         startedAt: "2026-08-25T11:00:00Z",
-        sourceFingerprint: "source-a",
+        candidateFingerprint: "source-a",
         suite: "golden" as const,
         grep: "@P1-16",
+        target: "local" as const,
+        passedTestIds: ["@P1-16"],
         total: 4,
       },
     ];
     expect(
       evaluateFullCertificationRerun({
         attemptsSinceLastPass: attempts,
+        currentSuite: "golden",
         focusedVerifications,
-        currentSourceFingerprint: "source-a",
+        currentCandidateFingerprint: "source-a",
+      currentTarget: "local" as const,
         overrideReason: null,
         fullSuiteTestCount: 114,
       }).allowed,
@@ -481,36 +473,44 @@ describe("Playwright run policy", () => {
       },
     ];
     const suiteWideProof = evaluateFullCertificationRerun({
+      currentSuite: "canary",
       attemptsSinceLastPass,
       focusedVerifications: [
         {
           status: "passed",
           startedAt: "2026-08-29T19:36:00Z",
-          sourceFingerprint: "source-a",
+          candidateFingerprint: "source-a",
           suite: "canary",
           grep: "@CANARY",
+          target: "local" as const,
+          passedTestIds: ["@CANARY"],
           total: 9,
         },
       ],
-      currentSourceFingerprint: "source-a",
+      currentCandidateFingerprint: "source-a",
+      currentTarget: "local" as const,
       fullSuiteTestCount: 9,
       overrideReason: null,
     });
     expect(suiteWideProof.allowed).toBe(false);
 
     const focusedC9Proof = evaluateFullCertificationRerun({
+      currentSuite: "canary",
       attemptsSinceLastPass,
       focusedVerifications: [
         {
           status: "passed",
           startedAt: "2026-08-29T19:36:00Z",
-          sourceFingerprint: "source-a",
+          candidateFingerprint: "source-a",
           suite: "canary",
           grep: "C9:",
+          target: "local" as const,
+          passedTestIds: ["C9:"],
           total: 1,
         },
       ],
-      currentSourceFingerprint: "source-a",
+      currentCandidateFingerprint: "source-a",
+      currentTarget: "local" as const,
       fullSuiteTestCount: 9,
       overrideReason: null,
     });
@@ -530,13 +530,16 @@ function repeatedInput(
   focusedVerifications: Array<{
     status: "passed";
     startedAt: string;
-    sourceFingerprint: string;
+    candidateFingerprint: string;
     suite: "golden";
     grep: string;
     total: number;
+    target: "local";
+    passedTestIds: string[];
   }>,
 ) {
   return {
+    currentSuite: "golden" as const,
     attemptsSinceLastPass: [
       ...attempts,
       {
@@ -551,13 +554,16 @@ function repeatedInput(
       {
         status: "passed" as const,
         startedAt: "2026-08-25T13:00:00Z",
-        sourceFingerprint: "source-a",
+        candidateFingerprint: "source-a",
         suite: "golden" as const,
         grep: "@P1-16",
+        target: "local" as const,
+        passedTestIds: ["@P1-16"],
         total: 4,
       },
     ],
-    currentSourceFingerprint: "source-a",
+    currentCandidateFingerprint: "source-a",
+      currentTarget: "local" as const,
     fullSuiteTestCount: 114,
   };
 }

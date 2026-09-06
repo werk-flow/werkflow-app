@@ -3,15 +3,7 @@ import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { TIME_PERIOD_RESULT_COLUMNS } from "@/components/zeiterfassung/time-period-result-columns";
+import { TimePeriodResults } from "@/components/zeiterfassung/time-period-results";
 import {
   closeTimePeriod,
   decidePeriodFinding,
@@ -24,7 +16,6 @@ import {
 import {
   FINDING_DECISION_LABELS,
   FINDING_LABELS,
-  formatMinutes,
   formatPeriod,
   PAYROLL_EXPORT_STATE_LABELS,
   PERIOD_STATE_LABELS,
@@ -110,43 +101,7 @@ export default async function TimePeriodDetailPage({
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Monatswerte</h2>
-        <div className="rounded-lg border bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {TIME_PERIOD_RESULT_COLUMNS.map((column) => (
-                  <TableHead key={column.id} className={column.className}>
-                    {column.header}
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {detail.results.map((result) => (
-                <TableRow key={result.employeeRecordId}>
-                  <TableCell className="font-medium">
-                    {result.employeeName}
-                  </TableCell>
-                  <TableCell className="tabular-nums">
-                    {formatMinutes(result.targetMinutes)}
-                  </TableCell>
-                  <TableCell className="tabular-nums">
-                    {formatMinutes(result.creditedMinutes)}
-                  </TableCell>
-                  <TableCell className="tabular-nums">
-                    {formatMinutes(result.periodDeltaMinutes)}
-                  </TableCell>
-                  <TableCell className="tabular-nums">
-                    {formatMinutes(result.closingBalanceMinutes)}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {result.authoritativeTargets ? "Arbeitsplan" : "Ersatzwert"}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+        <TimePeriodResults results={detail.results} />
       </section>
 
       <section className="space-y-3">

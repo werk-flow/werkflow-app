@@ -1,6 +1,6 @@
 # Document Storage And Access
 
-Status: living — last reviewed 2026-09-03
+Status: living — last reviewed 2026-09-05
 
 This is the implementation reference for WerkFlow's document system: where bytes and metadata live, how the signed upload and download flow works, how authorization splits between server actions and RLS, which operations exist and what they change, the audit vocabulary, the Realtime and caching contract, and the code map. What users can do, the role split in product terms, planned scope, and open decisions live in the feature spec [document-management.md](../features/document-management.md). For exact schema details, prefer live Supabase inspection and `lib/supabase/database.types.ts` over this file.
 
@@ -25,7 +25,7 @@ flowchart TB
   end
 
   subgraph storage [Cloudflare R2 EU]
-    R2["Bucket: werkflow-documents-dev/-prod"]
+    R2["Private document bucket"]
   end
 
   Library --> Actions
@@ -40,12 +40,12 @@ flowchart TB
   Actions --> Versions["document_versions"]
 ```
 
-Postgres holds organization, folder structure, links, categories, trash state, versions, and audit events. Cloudflare R2 holds bytes. The two are joined by immutable storage paths on document and version rows. File bytes never pass through server compute: server actions authorize and sign URLs, and the browser transfers bytes directly through `lib/storage/r2.ts`. The provider choice and the reasons for it are [decision 0001](../decisions/0001-infrastructure-stack.md); the runtime placement is in [architecture.md](architecture.md).
+Postgres holds organization, folder structure, links, categories, trash state, versions, and audit events. Cloudflare R2 holds bytes, joined to metadata by immutable storage paths. Server actions authorize browser transfers and sign URLs through `lib/storage/r2.ts`; the browser transfers bytes directly. Server-generated artifact HTML, handover HTML, and payroll ZIP files use `putStorageObject` directly. The provider choice is in [decision 0001](../decisions/0001-infrastructure-stack.md); runtime placement is in [architecture.md](architecture.md).
 
-- **Provider:** Cloudflare R2, EU jurisdiction, private bucket selected via `R2_BUCKET_NAME`. Since the 2026-08-18 environment split ([decision 0003](../decisions/0003-dev-prod-environment-split.md)), each database has its own bucket: the production database pairs with `werkflow-documents-prod`, and the dev database, which serves local dev and the test harness, pairs with `werkflow-documents-dev`. Metadata rows and bytes always live in the same environment. `documents.storage_bucket` keeps the logical value `organization-documents`; the physical bucket comes from the environment. Project IDs and the tool-access matrix live in [environments.md](environments.md).
+- **Provider:** Cloudflare R2, EU jurisdiction, with the private bucket selected by `R2_BUCKET_NAME`. The local test stack substitutes its own S3-compatible endpoint. Metadata and bytes must target the same environment; [environments.md](environments.md) owns the backend and bucket mapping. `documents.storage_bucket` retains the logical value `organization-documents` rather than the physical bucket name.
 - **Path pattern:** `{organizationId}/{documentId}/{sanitizedFileName}`
 - **Version path pattern:** `{organizationId}/{documentId}/versions/{versionNumber}-{sanitizedFileName}`
-- **Environment variables:** `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` (plus optional `R2_JURISDICTION`, default `eu`).
+- **Environment variables:** `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, optional `R2_JURISDICTION` with default `eu`, and the local-only `R2_ENDPOINT` override.
 - **Bucket CORS** must allow `GET`, `PUT`, `HEAD` with the `content-type` header from the app origins (see `scripts/setup-r2-cors.ts`; applying it needs a bucket-admin token or the dashboard, the runtime object token deliberately cannot change bucket settings).
 - Orphaned uploads (PUT succeeded, finalize never ran) are invisible to users and are reconciled through the storage-cleanup report, which lists R2 objects against metadata.
 
@@ -141,6 +141,8 @@ Authorization is enforced at two layers:
 
 ### Role behavior
 
+This table covers ordinary documents. Protected personnel files use the separate access path below and are excluded from the ordinary library.
+
 | Action                                               | `admin` / `buero`                                  | `employee` (Handwerker/in)        |
 | ---------------------------------------------------- | -------------------------------------------------- | --------------------------------- |
 | View `/dokumente` library                            | Yes                                                | No (redirect)                     |
@@ -173,7 +175,7 @@ The `/dokumente` sidebar entry is gated by `managerOrAbove` in `app-shell.tsx`; 
 
 ### Employee access path
 
-Field employees access documents only when:
+Field employees access ordinary work documents only when:
 
 1. A `document_links.job_id` exists for the document, and
 2. The employee has a row in `job_assignments` for that job.
@@ -299,9 +301,9 @@ Supported categories: `contract`, `invoice`, `offer`, `report`.
 
 Uploading a new version:
 
-1. Moves current file metadata into `document_versions`.
-2. Uploads new bytes to the version path.
-3. Updates the `documents` row as the latest pointer.
+1. Creates an authorized version-upload ticket.
+2. Uploads bytes directly to the reserved version path.
+3. Finalizes the upload after object verification and a version conflict check, preserving the old metadata in `document_versions` and updating the current pointer.
 4. Records an audit event.
 
 Previous versions: download via signed URL. Rollback UI not implemented (optional future).
@@ -368,7 +370,7 @@ The shared transport posture, debounce, dialog suspension and catch-up rules are
 | `lib/data/cached.ts`                                    | `CACHE_TAGS.documents`                                   |
 | `components/realtime/realtime-provider.tsx`             | Realtime table subscriptions                             |
 | `components/sidebar/app-shell.tsx`                      | Sidebar nav (`/dokumente`, manager-only)                 |
-| `proxy.ts`                                              | Auth gate for protected routes including `/dokumente`    |
+| `proxy.ts`                                              | Cookie-presence routing; authorization belongs to server actions, layouts, and RLS |
 
 ### Contextual integrations
 

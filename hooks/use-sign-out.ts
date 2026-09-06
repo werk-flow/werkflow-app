@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useBanner } from '@/components/ui/banner';
 
 import { clearEmailChangeChallengeBeforeSignOut } from '@/lib/settings/email-change-actions';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
@@ -9,6 +10,7 @@ import { clockOutBeforeSignOut } from '@/lib/time-tracking/actions';
 
 export function useSignOut() {
   const router = useRouter();
+  const { showBanner } = useBanner();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [isSigningOut, setIsSigningOut] = useState(false);
 
@@ -39,8 +41,9 @@ export function useSignOut() {
       // Explicit global: the menu sign-out currently ends the user's sessions
       // on every device (pre-existing behavior, made explicit by the scope
       // lint from decision 0005).
-      await supabase.auth.signOut({ scope: 'global' });
-      await fetch('/auth/callback', {
+      const { error } = await supabase.auth.signOut({ scope: 'global' });
+      if (error) throw error;
+      const response = await fetch('/auth/callback', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -50,9 +53,12 @@ export function useSignOut() {
           session: null,
         }),
       });
+      if (!response.ok) throw new Error('Server session cleanup failed.');
 
       router.replace('/login');
       router.refresh();
+    } catch {
+      showBanner({ variant: 'error', message: 'Die Abmeldung konnte nicht vollständig abgeschlossen werden. Bitte versuche es erneut.' });
     } finally {
       setIsSigningOut(false);
     }

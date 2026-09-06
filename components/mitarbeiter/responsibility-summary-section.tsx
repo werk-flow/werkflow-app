@@ -45,7 +45,7 @@ export function ResponsibilitySummarySection({
         </div>
         <Link
           href="/einstellungen/mitarbeiter"
-          className="text-sm font-medium text-primary hover:underline"
+          className="text-sm font-medium text-primary-text hover:underline"
         >
           Einstellungen öffnen
         </Link>

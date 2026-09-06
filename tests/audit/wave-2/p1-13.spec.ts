@@ -1,4 +1,4 @@
-import { expect, test } from '../../golden/support/fixtures';
+import { expect, test } from "../support/fixtures";
 import {
   getAppliedWorkTemplateState,
   getCustomerNumber,
@@ -233,8 +233,9 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
       has: adminPage.getByRole('heading', { name: 'Lager erstellen' }),
     });
     await locationDialog.locator('#quick-location-name').fill(`Servicewagen ${world.runId}`);
-    await locationDialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+    await locationDialog.locator('#quick-location-name').press('Enter');
     await expect(locationDialog).toHaveCount(0, { timeout: 15_000 });
+    await expect(editor).toBeVisible();
     await materialCard.locator('input[id^="quantity-"]').fill('3');
     await materialCard.getByRole('checkbox').click();
     await materialCard.getByLabel('Notiz').fill('Nur für die Einsatzplanung.');
@@ -824,8 +825,7 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
 
     await adminPage.goto('/mitarbeiter');
     await adminPage.getByRole('tab', { name: 'Qualifikationen', exact: true }).click();
-    const capabilityRow = adminPage
-      .getByTestId('capability-definition-row')
+    const capabilityRow = adminPage.getByRole('main').getByTestId('capability-definition-row')
       .filter({ hasText: `Gasprüfung ${world.runId}` });
     await expect(capabilityRow).toBeVisible({ timeout: 15_000 });
     await capabilityRow.getByRole('button', { name: 'Archivieren' }).click();

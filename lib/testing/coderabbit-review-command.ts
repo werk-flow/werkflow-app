@@ -1,11 +1,9 @@
 export const CODERABBIT_WSL_BINARY = "/root/.local/bin/coderabbit";
 export const CODERABBIT_WSL_DISTRIBUTION = "Ubuntu";
-export const CODERABBIT_UNCOMMITTED_APPROVAL_ARGUMENT =
-  "--approve-uncommitted";
 
 const SCOPE_ARGUMENTS = new Set([
-  "-t",
-  "--type",
+  "--uncommitted",
+  "--committed",
   "--base",
   "--base-commit",
 ]);
@@ -23,27 +21,6 @@ function hasArgument(
   return argumentsToCheck.some((argument) =>
     acceptedArguments.has(argument.split("=")[0] ?? argument),
   );
-}
-
-function getArgumentValue(
-  argumentsToCheck: readonly string[],
-  acceptedArguments: ReadonlySet<string>,
-): string | undefined {
-  for (const [index, argument] of argumentsToCheck.entries()) {
-    const [argumentName, inlineValue] = argument.split("=", 2);
-    if (argumentName !== undefined && acceptedArguments.has(argumentName)) {
-      return inlineValue ?? argumentsToCheck[index + 1];
-    }
-  }
-  return undefined;
-}
-
-function isUncommittedReview(reviewArguments: readonly string[]): boolean {
-  if (hasArgument(reviewArguments, new Set(["--base", "--base-commit"]))) {
-    return false;
-  }
-  return getArgumentValue(reviewArguments, new Set(["-t", "--type"])) !==
-    "committed";
 }
 
 export function findCodeRabbitInstructionViolations(
@@ -65,25 +42,33 @@ export function findCodeRabbitInstructionViolations(
 export function buildCodeRabbitReviewArguments(
   rawArguments: readonly string[],
 ): string[] {
-  const wrapperArguments = rawArguments.filter((argument) => argument !== "--");
-  const uncommittedReviewApproved = wrapperArguments.includes(
-    CODERABBIT_UNCOMMITTED_APPROVAL_ARGUMENT,
-  );
-  const reviewArguments = wrapperArguments.filter(
-    (argument) => argument !== CODERABBIT_UNCOMMITTED_APPROVAL_ARGUMENT,
+  // Ignore the retired wrapper flag so historical commands still work.
+  const suppliedArguments = rawArguments.filter(
+    (argument) => argument !== "--" && argument !== "--approve-uncommitted",
   );
   const isStoredReviewCommand =
-    reviewArguments[0] === "findings" ||
-    reviewArguments.includes("--show-prompts");
+    suppliedArguments[0] === "findings" ||
+    suppliedArguments.includes("--show-prompts") ||
+    suppliedArguments.includes("--help") ||
+    suppliedArguments.includes("-h");
 
   if (isStoredReviewCommand) {
-    return ["review", ...reviewArguments];
+    return ["review", ...suppliedArguments];
   }
 
-  if (isUncommittedReview(reviewArguments) && !uncommittedReviewApproved) {
-    throw new Error(
-      `Uncommitted reviews require ${CODERABBIT_UNCOMMITTED_APPROVAL_ARGUMENT} to confirm that sending the local diff was approved.`,
-    );
+  const reviewArguments: string[] = [];
+  for (let index = 0; index < suppliedArguments.length; index += 1) {
+    const argument = suppliedArguments[index]!;
+    const [name, ...inlineParts] = argument.split("=");
+    if (name !== "--type" && name !== "-t") {
+      reviewArguments.push(argument);
+      continue;
+    }
+    const scope = inlineParts.length ? inlineParts.join("=") : suppliedArguments[++index];
+    if (scope !== "uncommitted" && scope !== "committed") {
+      throw new Error("Legacy --type/-t requires committed or uncommitted. Use the current --committed or --uncommitted flags to select the review scope.");
+    }
+    reviewArguments.push(`--${scope}`);
   }
 
   const argumentsWithDefaults = ["review"];
@@ -91,7 +76,13 @@ export function buildCodeRabbitReviewArguments(
     argumentsWithDefaults.push("--agent");
   }
   if (!hasArgument(reviewArguments, SCOPE_ARGUMENTS)) {
-    argumentsWithDefaults.push("--type", "uncommitted");
+    argumentsWithDefaults.push("--uncommitted");
+  }
+  if (
+    (argumentsWithDefaults.includes("--uncommitted") || reviewArguments.includes("--uncommitted")) &&
+    !reviewArguments.includes("--include-untracked")
+  ) {
+    argumentsWithDefaults.push("--include-untracked");
   }
   if (!hasArgument(reviewArguments, CONFIG_ARGUMENTS)) {
     argumentsWithDefaults.push("-c", "AGENTS.md");

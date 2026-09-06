@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { ArrowDown, ArrowUp, ArrowUpDown, Briefcase, ChevronRight } from 'lucide-react';
 
 import {
@@ -892,10 +893,14 @@ function JobCard({
             </span>
           )}
           <MarqueeText className="flex-1 text-sm font-medium">
-            <span className="inline-flex items-center">
+            {isPending ? <span>{getJobDisplayTitle(job)}</span> : <Link
+              href={detailHref}
+              className="inline-flex items-center rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={(event) => event.stopPropagation()}
+            >
               {getJobDisplayTitle(job)}
               {isActive && <ActiveWorkIndicator />}
-            </span>
+            </Link>}
           </MarqueeText>
         </div>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
@@ -1039,10 +1044,14 @@ function ProjectCard({
               </span>
             )}
             <MarqueeText className="flex-1 text-sm font-medium">
-              <span className="inline-flex items-center">
+              {isPending ? <span>{getProjectDisplayTitle(project)}</span> : <Link
+                href={projectHref}
+                className="inline-flex items-center rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={(event) => event.stopPropagation()}
+              >
                 {getProjectDisplayTitle(project)}
                 {childJobs.some((j) => activeJobIds.has(j.id)) && <ActiveWorkIndicator />}
-              </span>
+              </Link>}
             </MarqueeText>
           </div>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">

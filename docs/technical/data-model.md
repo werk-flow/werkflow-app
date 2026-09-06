@@ -1,6 +1,6 @@
 # Conceptual Data Model
 
-Status: living — last reviewed 2026-09-02
+Status: living — last reviewed 2026-09-05
 
 This document describes WerkFlow's domain model at a conceptual level. It is not a schema dump.
 
@@ -84,8 +84,8 @@ Employment identity is organization-scoped and deliberately separate from the gl
 - Employee record (`Personalakte`): one per person per organization, holding practical master data (employee number, contact/address, emergency contact, entry/exit dates, notes). `user_id` is nullable — future starters and non-login personnel exist as records without an account; a pending invite can be remembered on the record and redeeming it links the login to the existing record instead of creating a duplicate. Every membership-creation path auto-creates a record via trigger; the personnel record survives destructive member removal and is marked exited.
 - Employment condition: date-effective versions per employee record keyed by `valid_from`; the condition effective on a date is the newest version on or before that date. Later changes never silently rewrite what was true for past work and time (time tracking's `P1-04` is the first consumer). No compensation fields exist.
 - Employee record event: append-only, actor-attributed audit of material personnel changes with before/after payloads (same pattern as request and document audit events).
-- States are derived, never stored: employment `aktiv`/`geplant`/`ausgeschieden` from entry/exit dates, access `mit Zugang`/`eingeladen`/`ohne Zugang` from the linked user/invite.
-- Access: manager-only SELECT RLS; all writes through service-role server actions with org-validation triggers. Operational pickers (assignment, time) read memberships, so non-login personnel can never appear in them.
+- Records without a controlled P1-24 lifecycle retain date-derived employment labels and linked-user/invite access labels. Once a controlled lifecycle starts, its stored state and effective transitions own those decisions, as described below.
+- Access: manager-only SELECT RLS; all writes through service-role server actions with org-validation triggers. Membership-based job and time pickers require a login. P1-11 planning assignments instead reference stable employee records and can include personnel without logins.
 - Work schedule (`P1-04`): date-effective weekly-pattern versions per employee record (minutes per weekday, `valid_from` semantics like conditions). The schedule wins over the condition's contractual weekly hours for time targets. SELECT RLS is self-or-manager — the first employee-self read path on personnel-adjacent data; writes stay service-role with the same audit trail.
 - Organization holiday context (`P1-04`): the org's selected German-state holiday calendar (in-code dataset; selection with effective-from history on organization settings, `break_policy_history` pattern) and dated closure-day rows (today/future edits only). Daily targets are computed, never stored: schedule → condition-derived → visibly labeled 8h default, with holidays/closure days forcing 0. Later config changes never silently rewrite what was true for past days.
 - Vacation request (`P1-06`): org-scoped, keyed to the employee record, with an inclusive Berlin date range, a day portion (`full`/`half_day`, half only for single days), and lifecycle `pending` → `approved`/`rejected`/`withdrawn`, plus `cancelled` from `approved` (approver-only retroactive correction with reason). A gist exclusion constraint forbids overlapping own requests in non-terminal states. Approved requests snapshot consumed entitlement days per calendar year at decision time so later configuration changes never rewrite a decided balance; entitlement itself is read from the newest employment condition of the vacation year. Approved vacation feeds the daily-target resolver as a discriminated absence input (never a parallel `istImUrlaub` flag). Authority comes exclusively from the `leave_approval` responsibility resolved at action time. Append-only vacation request events audit every transition. Reads are self-or-manager via `app_private` helpers; writes are service-role with organization-validation triggers.
@@ -278,10 +278,10 @@ Document management is implemented (Stages 1–4). See [document-management.md](
 
 At a high level:
 
-- **Metadata in Postgres:** folders, documents, links to jobs/projects/customers/employees, categories, trash state, versions, audit events.
-- **Bytes in Cloudflare R2 (EU jurisdiction):** private `werkflow-documents-dev`/`-prod` buckets with org-scoped paths and direct signed uploads/downloads (`lib/storage/r2.ts`; see [decision 0001](../decisions/0001-infrastructure-stack.md)). `documents.storage_bucket` keeps the logical value `organization-documents`.
+- **Metadata in Postgres:** folders, documents, operational links, protected personnel classifications, categories, trash state, versions, and audit events. The [storage reference](document-storage-and-access.md) owns the supported link targets.
+- **Bytes in object storage:** cloud environments use private R2 EU buckets with organization-scoped paths; the local test stack uses its S3-compatible storage. [Environments](environments.md) owns the mapping. Browser transfers use signed URLs through `lib/storage/r2.ts`. `documents.storage_bucket` retains the logical value `organization-documents`.
 - **No automatic folder creation** when jobs, projects, customers, or employee records are created; manual folders, metadata links, and library filters provide operational organization instead.
-- **Role split:** managers use `/dokumente`; employees use assigned job contextual sections only.
+- **Role split:** managers use `/dokumente` for ordinary files; employees use assigned-job sections for work files. Protected personnel documents use the separate P1-24 classification and exact-version release path.
 
 Exact columns and RLS policies belong in Supabase and generated types, not in this conceptual doc.
 

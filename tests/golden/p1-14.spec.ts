@@ -1,6 +1,7 @@
 import { expect, test } from './support/fixtures';
 import { getVisibleWorkLifecycleCountsAs, getWorkLifecycleState } from './support/db';
 import {
+  workLifecycleCard,
   clockInOnJob,
   clockOut,
   createJob,
@@ -35,7 +36,7 @@ test.describe('P1-14 work lifecycle @P1-14', () => {
     });
 
     await employeePage.goto(`/auftraege/${jobNumber}`);
-    const card = employeePage.getByTestId('work-lifecycle-card');
+    const card = workLifecycleCard(employeePage);
     await expect(card.getByText('Nicht begonnen', { exact: true })).toBeVisible();
     await expect(card.getByText('Nächster Schritt: Arbeit starten')).toBeVisible();
 
@@ -70,7 +71,7 @@ test.describe('P1-14 work lifecycle @P1-14', () => {
       assignEmployeeName: `${world.users.employee.firstName} ${world.users.employee.lastName}`,
     });
     await employeePage.goto(`/auftraege/${jobNumber}`);
-    const card = employeePage.getByTestId('work-lifecycle-card');
+    const card = workLifecycleCard(employeePage);
     await card.getByRole('button', { name: 'Blocker', exact: true }).click();
     const dialog = employeePage.getByRole('dialog');
     await selectFromSearchable(
@@ -91,7 +92,7 @@ test.describe('P1-14 work lifecycle @P1-14', () => {
       version: 1,
     });
     await expect(card.getByText('Offene Blocker klären', { exact: false })).toBeVisible();
-    await expect(card.getByRole('button', { name: 'Parken' })).toHaveCount(0);
+    await expect(employeePage.getByTestId('work-lifecycle-card').getByRole('button', { name: 'Parken' })).toHaveCount(0);
 
     await card.getByRole('button', { name: 'Lösen' }).click();
     await employeePage
@@ -121,7 +122,7 @@ test.describe('P1-14 work lifecycle @P1-14', () => {
       title: `Lifecycle Parkplatz ${world.runId}`,
     });
     await adminPage.goto(`/auftraege/${jobNumber}`);
-    const card = adminPage.getByTestId('work-lifecycle-card');
+    const card = workLifecycleCard(adminPage);
     await card.getByRole('button', { name: 'Parken', exact: true }).click();
     const dialog = adminPage.getByRole('dialog');
     await selectFromSearchable(adminPage, dialog.locator('#work-blocker-reason'), 'Material');
@@ -162,7 +163,7 @@ test.describe('P1-14 work lifecycle @P1-14', () => {
       title: `Lifecycle Projekt ${world.runId}`,
     });
     await adminPage.goto(`/auftraege/projekt/${projectNumber}`);
-    const card = adminPage.getByTestId('work-lifecycle-card');
+    const card = workLifecycleCard(adminPage);
     await expect(card.getByText('Automatisch abgeleitet', { exact: true })).toBeVisible();
     await card.getByRole('button', { name: 'Storniert', exact: true }).click();
     let dialog = adminPage.getByRole('dialog');

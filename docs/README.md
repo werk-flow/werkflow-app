@@ -1,6 +1,6 @@
 # WerkFlow Docs
 
-Status: living — the docs index; update it in the same change that adds, moves, or retires a doc (`bun run docs:check` fails otherwise)
+Status: living — last reviewed 2026-09-05; update this index when adding, moving, or retiring a doc
 
 This folder is the deeper reference library for WerkFlow: durable product and technical explanations that are too detailed for `AGENTS.md`, but important enough that future agents and developers should not rediscover them from scratch.
 
@@ -13,6 +13,8 @@ This folder is the deeper reference library for WerkFlow: durable product and te
 - Current implementation behavior: the application code.
 
 Do not treat docs as a manual copy of every table, route, component, or enum. Prefer conceptual explanations, decisions, invariants, and feature behavior that should remain useful for months.
+
+For a new task, start with `AGENTS.md`, then choose the matching rows below. Phase 1 work starts at the roadmap and the owning feature baseline. Runtime work starts at architecture and the relevant technical reference. Testing work starts at testing.md; accepted slice records explain past evidence, not a fresh test result. For post-Wave-2 handoff work, read the current roadmap checkpoint and the documentation audit's remaining findings.
 
 ## Index
 
@@ -27,7 +29,8 @@ Every doc carries a `Status:` header under its title (`living` with a last-revie
 | [environments.md](technical/environments.md)                             | Anything touches Supabase, env files, R2, or a new machine: the two-project model, project IDs, tool-access matrix, migration rule, onboarding.  |
 | [realtime-and-caching.md](technical/realtime-and-caching.md)             | You change cache tags, Realtime subscriptions, or data freshness behavior.                                                                       |
 | [document-storage-and-access.md](technical/document-storage-and-access.md) | You touch document bytes, signed URLs, storage paths, document RLS, categories, audit vocabulary, or the storage maintenance helpers: the implementation reference behind the document-management spec. |
-| [testing.md](technical/testing.md)                                       | You run or extend the Playwright harness: lanes and targets, the operational rules, audit battery, failure classes, left-behind-state registry.                  |
+| [testing.md](technical/testing.md) | You implement or verify a change: plan selected groups, preserve clause coverage, qualify evidence, enforce deadlines, and investigate failures. |
+| [integrated-test-state.md](technical/integrated-test-state.md) | You change an integrated Golden producer, inherited fixture state, or date ownership. Independent groups do not inherit unrelated state. |
 | [test-incident-log.md](technical/test-incident-log.md)                   | A browser failure consumes a rerun or reveals a reusable lesson: required evidence, classification and the P1-16 retrospective.                  |
 | [enforcement-ladder-backlog.md](technical/enforcement-ladder-backlog.md) | You fix a diagnosed defect, keep a review finding, or plan the consolidation phase: the open Tier 1/2 conversion candidates under decision 0005. |
 | [coderabbit.md](technical/coderabbit.md)                                 | You run a CodeRabbit review: CLI invocation (WSL path!), config, per-slice review protocol.                                                      |
@@ -75,7 +78,10 @@ Phase 1 execution lives in `phase-1/`, split by change rate: the entry files plu
 | [phase-1-build-roadmap.md](plans/phase-1-build-roadmap.md)                                                           | Pointer stub for the pre-split path; do not add content.                                                                                                           |
 | [golden-gate-log.md](plans/golden-gate-log.md)                                                                       | You record or check a gate run — append-only run log.                                                                                                              |
 | [platform-hardening.md](plans/platform-hardening.md)                                                                 | Closed — historical decisions, implementation ledger, and final evidence for the 2026-08-28 to 2026-08-29 local-stack, Realtime, and browser-test hardening phase. |
-| [wave-2-audit.md](plans/wave-2-audit.md)                                                                             | Living — Wave 2 per-slice coverage ledger and certification-gate record; the wave-end certification gate is not yet recorded.                                                                              |
+| [wave-2-audit.md](plans/wave-2-audit.md) | Living — accepted Wave 2 slice coverage and the remaining formal wave-end certification record; distinguishes later UI/UX battery evidence from the unrecorded wave-end gate. |
+| [post-wave-2-documentation-audit.md](plans/post-wave-2-documentation-audit.md) | Closed — the 2026-09-05 documentation audit, read-only database comparison, validation limits, and findings to carry into beta-handoff work. |
+| [uiux-and-test-reliability-2026-09.md](plans/uiux-and-test-reliability-2026-09.md) | Closed with qualified evidence — UI canon verification, test-system repairs, historical failures, and explicit limits of the mixed-candidate proof. |
+| [testing-system-restructure-2026-09.md](plans/testing-system-restructure-2026-09.md) | Closed implementation checkpoint for test allocation, independent groups, selected verification, evidence reuse, and bounded execution. Read for verification limits and remaining application acceptance. |
 | [wave-1-audit.md](plans/wave-1-audit.md)                                                                             | Closed — Wave 1 coverage ledger (retired wave-end model); historical reference only.                                                                               |
 | [uiux-hardening-2026-09.md](plans/uiux-hardening-2026-09.md) | Closed — the accepted pre-handoff UI/UX hardening ledger: owner rulings, finding classification, completed phase checklist, verification evidence, and the Phase 6 test-campaign retrospective. |
 | [uiux-consolidation.md](plans/uiux-consolidation.md)                                                                 | Closed — the 2026-08 UI/UX consolidation ledger; the durable output is the `werkflow-design` skill.                                                                |
@@ -92,7 +98,8 @@ Short ADR-style records: why a durable choice was made. Immutable once accepted;
 | [0003-dev-prod-environment-split.md](decisions/0003-dev-prod-environment-split.md)                                 | The dev/prod two-project split, migration-history materialization, repair migrations.                                                    |
 | [0004-documentation-structure.md](decisions/0004-documentation-structure.md)                                       | Why this docs tree looks the way it does: graph discipline over a knowledge graph, and what agent memory may hold.                       |
 | [0005-enforcement-ladder.md](decisions/0005-enforcement-ladder.md)                                                 | The enforcement ladder: every learned lesson climbs Tier 1 (unwritable) or Tier 2 (checked) before resting as prose.                     |
-| [0006-testing-architecture.md](decisions/0006-testing-architecture.md)                                             | The deterministic/canary split: full batteries run against the local Supabase stack, a nine-test cloud canary proves the live providers. |
+| [0006-testing-architecture.md](decisions/0006-testing-architecture.md) | Historical local-backend/cloud-canary decision; execution and acceptance rules are superseded by decision 0007. |
+| [0007-independent-test-groups.md](decisions/0007-independent-test-groups.md) | Current coverage allocation, independent execution, selected change acceptance, input-qualified release results, and failure stopping rules. |
 
 ## Skills
 
@@ -127,8 +134,8 @@ Add a document when it prevents repeated confusion, guides future implementation
 1. **Status header**: line 3 of every doc (directly under the H1 and one blank line) is its status line. Living docs use `Status: living — last reviewed YYYY-MM-DD`, optionally followed by `; <clause>`. Closed docs use `Status: closed (YYYY-MM-DD) — <what it remains useful for>`; slice records and implementation plans are closed docs whose date is the acceptance date. Decision records use their metadata bullet block starting with `- **Status:** accepted (YYYY-MM-DD)`. The pre-split roadmap path uses `Status: pointer stub`. Closing a plan is a status change, not a deletion.
 2. **One home per fact**: a changeable fact (project IDs, plan tiers, counters, acceptance evidence) lives in exactly one doc; everything else links to it. Skills carry procedure and link to the doc that owns the facts.
 3. **Link syntax**: doc-to-doc references inside `docs/` are relative markdown links — target `technical/environments.md` from this index, or `../technical/environments.md` from a feature spec — so they are clickable and checkable. Backtick paths are for code/config files and for references from outside `docs/` (e.g. `AGENTS.md`). Bare IDs ("decision 0002") always appear with a link on first mention in a doc.
-4. **This index is exhaustive**: every `docs/**/*.md` file appears in the index above.
-5. **Check**: `bun run docs:check` validates index coverage, relative-link resolution, and status headers. Run it after any docs change; it is part of keeping a slice's documentation update honest.
+4. **This index is exhaustive**: every Markdown document under `docs/` has a row, except this index itself and slice records. The slice-folder row routes to the roadmap, which links each accepted record. Each slice has at most one record, including while work is in progress.
+5. **Check**: `bun run docs:check` validates file-level link resolution, index coverage, status shape, skill-mirror files in both directions, slice-record uniqueness, roadmap invariants, and catalog ordering. Heading fragments and semantic agreement with code still need review. Run the check after any docs change.
 
 ## Removed Legacy Architecture File
 

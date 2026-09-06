@@ -31,3 +31,9 @@ On 2026-08-27, four full certifications failed at the final boundary because a h
 - Tier 3: this record, the ladder rule in `AGENTS.md`, and the tier column in the incident log.
 
 The three-part audit (code comments, docs, skills) that seeded this adoption produced a substantially larger conversion backlog; it lives in [enforcement-ladder-backlog.md](../technical/enforcement-ladder-backlog.md) and feeds the Realtime/testing consolidation phase planned after P1-17.
+
+## Amendment 2026-09-05: current enforcement labels and follow-up ownership
+
+The consolidation named above completed in the [platform-hardening phase](../plans/platform-hardening.md). Remaining conversions stay in the living backlog for later work.
+
+Apply the tier definitions to the mechanism, even where historical run records used a different label. Runtime routing checks, certification preflight, and an exclusive-lock check are Tier 2 because they reject an attempted operation. A type or API that removes an invalid state is Tier 1. A rule awaiting an achievable check is temporarily Tier 3 with an open conversion, not a claim that enforcement is impossible.

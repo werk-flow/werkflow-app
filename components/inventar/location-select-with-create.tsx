@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
+  DialogBody,
   DialogDescription,
   DialogFooter,
   DialogHeader,
@@ -145,47 +146,68 @@ function CreateLocationDialog({
             Lege einen Lagerraum, ein Regal oder ein Fahrzeug direkt hier an.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
-          <Field label="Name" htmlFor="quick-location-name" required>
-            <Input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </Field>
-          <Field label="Typ" htmlFor="quick-location-type">
-            <Select
-              value={locationType}
-              onValueChange={(value) => setLocationType(value as InventoryLocationType)}
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (!isPending) handleSave();
+          }}
+          noValidate
+          className="flex min-h-0 flex-1 flex-col gap-4"
+        >
+          <DialogBody>
+            <div className="space-y-4">
+              <Field label="Name" htmlFor="quick-location-name" required>
+                <Input
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                />
+              </Field>
+              <Field label="Typ" htmlFor="quick-location-type">
+                <Select
+                  value={locationType}
+                  onValueChange={(value) =>
+                    setLocationType(value as InventoryLocationType)
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(INVENTORY_LOCATION_TYPE_LABELS).map(
+                      ([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ),
+                    )}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="Beschreibung" htmlFor="quick-location-description">
+                <Textarea
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                />
+              </Field>
+            </div>
+            <ErrorText>{error}</ErrorText>
+          </DialogBody>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={isPending}
             >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(INVENTORY_LOCATION_TYPE_LABELS).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="Beschreibung" htmlFor="quick-location-description">
-            <Textarea
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-            />
-          </Field>
-        </div>
-        <ErrorText>{error}</ErrorText>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
-            Abbrechen
-          </Button>
-          <Button onClick={handleSave} disabled={isPending || !name.trim()}>
-            {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
-            Speichern
-          </Button>
-        </DialogFooter>
+              Abbrechen
+            </Button>
+            <Button type="submit" disabled={isPending || !name.trim()}>
+              {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
+              Speichern
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

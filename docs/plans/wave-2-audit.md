@@ -1,25 +1,26 @@
 # Wave 2 Flow Audit (per-slice model)
 
-Status: living — last reviewed 2026-09-02; Wave 2 coverage ledger, wave-end certification gate not yet run
+Status: living — last reviewed 2026-09-06; all Wave 2 slices accepted, formal wave-end certification remains unrecorded
 
-Wave 2 audits work differently from Wave 1: **every slice ships its own exhaustive flow coverage as part of slice acceptance.** There are no wave-end discovery sessions. This document is the wave's coverage ledger and the certification-gate record; the process rules live in [`phase-1/protocol.md`](phase-1/protocol.md) and testing rules 12–13.
+Wave 2 audits work differently from Wave 1: **every slice ships its own exhaustive flow coverage as part of slice acceptance.** There are no wave-end discovery sessions. This document is the wave's coverage ledger and the certification-gate record; current process rules live in [`phase-1/protocol.md`](phase-1/protocol.md), [testing.md](../technical/testing.md), and [decision 0007](../decisions/0007-independent-test-groups.md). Historical acceptance rows below keep the evidence recorded at that time.
 
 ## Why the model changed (decision, 2026-08-21)
 
-Wave 1 enumerated and tested catalog flows after all twelve slices were done. That worked, but the retroactive R1 reconciliation (four extra sessions repairing A1–A4 coverage) was the direct cost of enumerating flows after the fact, and defects surfaced weeks after the context that produced them was gone. From Wave 2 on, the flow inventory is part of the slice itself:
+Wave 1 enumerated and tested catalog flows after all twelve slices were done. That worked, but the retroactive R1 reconciliation (four extra sessions repairing A1–A4 coverage) was the direct cost of enumerating flows after the fact, and defects surfaced weeks after the context that produced them was gone. From Wave 2 on, the flow inventory is part of the slice itself. Decision 0007 preserves this obligation and replaces its execution policy:
 
 1. **Pre-implementation:** the slice's numbered report proposes the complete user-flow list as German catalog bullets with provisional `P1-XX-FNN` IDs. The owner confirms product design and flow inventory in one gate. Flows discovered during implementation are added; the catalog is finalized at acceptance.
-2. **Acceptance:** the slice ships a rule-12 audit spec in `tests/audit/wave-2/` mapping **all** of its flow IDs with full clause evidence, closes its ledger rows below with the `X/X mapped; X/X fully evidenced; 0 partial; 0 unmapped` invariant, and runs the focused audit spec green in the normal acceptance ladder (alongside statics, the focused golden spec, review, and the one full golden run).
-3. **Wave end:** a thin certification gate only — see below.
+2. **Acceptance:** the slice maps every catalog clause to reviewed assertions in `lib/testing/coverage-map.json`, registers its executable groups, and closes its ledger rows with `X/X mapped; X/X fully evidenced; 0 partial; 0 unmapped`. Evidence can combine browser, domain, SQL, and component tests as the contract requires.
+3. **Wave end:** verify the complete local release plan and cloud canary. Scope and result qualification follow decision 0007.
 
-Golden gates are unchanged: they stay the lean cross-slice scenario suite that reruns at every acceptance.
+Golden groups prove connected business outcomes. Detailed audit groups prove the browser-visible clauses that need the real app. A catalog flow remains required when its assertion moves to a cheaper layer.
 
-## Battery mechanics
+## Group execution
 
-- Specs live in `tests/audit/wave-2/`, one per slice, named `p1-13.spec.ts`, `p1-14.spec.ts`, … and tagged `@AUDIT-W2-P1-13` etc. plus the shared `@AUDIT-W2` wave tag in the describe title.
-- Run with `bun run test:audit:w2` (full wave battery) or `--grep @AUDIT-W2-P1-13` (one slice). `bun run test:audit` runs every wave's battery in one world; `playwright.audit.config.ts` covers all of `tests/audit/`.
-- All Wave 1 battery rules carry over unchanged: golden harness reuse via relative imports, one disposable world per invocation, serial execution in filename order, never concurrently with the golden suite, production build for acceptance runs, and testing rules 12–13.
-- Later slices' specs run after earlier ones in the shared-world battery: every spec must tolerate its predecessors' in-world state and record its own left-behind state below.
+- Browser audit specs live in `tests/audit/wave-2/`, with stable slice tags retained for diagnosis.
+- Use `bun run test:plan` and `bun run test:verify` for the complete selected change scope. Use `--group audit:wave-2:p1-13` for a deliberately bounded implementation check.
+- Every independently invoked audit group owns its world, role sessions, checkpoints, and output files. It cannot inherit a previous audit file's records.
+- Historical `test:audit` commands remain available. Their old full-battery acceptance ladder does not govern new work.
+- The [testing guide](../technical/testing.md) owns concurrency limits, production builds, retained diagnosis, cleanup, and coverage evidence.
 
 ### Fixture-date ownership
 
@@ -42,23 +43,17 @@ Wave 1 owns run-day offsets +20 … +69. Wave 2 slices own **+70 onward**, five 
 
 The next unassigned block starts at +130. It belongs to the Wave 3 audit doc, not to this table.
 
-## Per-slice validation ladder (what actually runs at each Wave 2 acceptance)
+## Slice and wave verification
 
-The full Wave 1 battery does NOT rerun at every slice — the full Golden suite is the every-slice regression net, the audit batteries are exhaustive flow evidence. Per slice, in this order (testing rules 8–10 govern reruns and the freeze):
+Slice acceptance follows the complete selected local change plan, with provider checks where applicable. Review the mapped clauses and changed dependencies before execution. Reuse results only when the owning and shared inputs remain qualified. An explicit subset run proves only that subset.
 
-1. **Statics:** `tsc --noEmit`, lint, `bun run test:unit`.
-2. **Focused, iterating:** the slice's own audit spec (`--grep @AUDIT-W2-P1-XX`) and the slice's golden spec/gate tag until green.
-3. **Affected Wave 1 audit tags:** if the slice materially changed a surface a Wave 1 session owns (e.g. anything under `/kalender` → `@AUDIT-W1-A6`/`A7`; job/checklist surfaces → `@AUDIT-W1-A1`), run those focused tags. Name the chosen tags and the reasoning in the acceptance evidence; "none affected" is a claim that needs a sentence, not silence.
-4. **CodeRabbit review** with fixes, then re-freeze (statics + focused greens).
-5. **Final confirmation on a fresh production build, nothing changes after:** the slice's focused audit spec, then **one full Golden run**. Scoped reopening per the Wave 1 rules: app-code or `tests/golden/**` changes reopen the pair; `tests/audit/**`-only changes reopen only the focused audit run.
+For wave end or beta handoff, run `bun run test:verify --mode release` against the recorded local production build, then the cloud canary against its recorded DEV build. The release plan includes all audit groups and the integrated Golden journey. Separate passing group runs can qualify the release when their inputs match. The integrated journey itself must run from beginning to end.
 
-The full multi-wave audit batteries run at the **wave-end certification gate only** (below) — that is where cross-wave flow regressions get their exhaustive sweep. Never run two Playwright batteries concurrently (shared world artifacts).
+Confirm catalog-to-mapping equality and review the complete clauses. Record the report, selected scope, target, input identities, fresh and reused results, retained-state disposition, and remaining limitations in [golden-gate-log.md](golden-gate-log.md) as `AUDIT-W2`.
 
-## Wave-end certification gate
+As of 2026-09-05, every Wave 2 slice is accepted, but the formal `AUDIT-W2` gate remains unrecorded. The [2026-09-04 UI/UX closure](uiux-hardening-2026-09.md#verification-record) subsequently passed the full local audit and Golden batteries against unchanged application code and one product build, followed by the rebuilt DEV canary. A Golden harness correction changed the source fingerprint after the audit; the closure explicitly records that limit. It does not claim the complete wave-end gate or a full cloud battery. The requirement for a full cloud battery has since been superseded by decision 0007. Resolve the current local-release-plus-canary scope during the owner-directed handoff; do not infer missing evidence from slice acceptance or rerun complete batteries solely to update this ledger.
 
-After the wave's last slice is accepted: fresh production build, then sequentially (never concurrently) the **full golden suite** and the **full `@AUDIT-W2` battery**, both green in one recorded pair; plus the mechanical set-equality check that the wave's catalog IDs equal the union of the ledger rows below, `0 partial; 0 unmapped`. Record the gate in [golden-gate-log.md](golden-gate-log.md) as `AUDIT-W2`. Because every slice already certified its own coverage, this gate is confirmation, not discovery — budget a day, not weeks.
-
-As of 2026-09-02 this gate has not been run or recorded. P1-24 was accepted on that date without a full audit battery, so the sequential Golden plus `@AUDIT-W2` pair is still open.
+Documentation reconciliation, 2026-09-05: a read-only comparison expanded the compressed ranges in each ledger's first column and compared their union with the catalog bullet IDs. All twelve slice sets match, totaling `850/850` IDs with no missing or extra ID. This proves mapping equality only; it does not re-certify assertion-body coverage or replace browser evidence.
 
 ## Coverage ledger
 
@@ -205,7 +200,7 @@ One section per slice, added at slice acceptance. Same row format and status voc
 
 ## In-world left-behind state (shared battery)
 
-One entry per slice spec, added at acceptance, same purpose as Wave 1's register: what the spec leaves in-world for later specs in a full battery run.
+These entries preserve the state recorded at slice acceptance. Current audit groups own separate worlds, so later audit files do not inherit these records. The integrated Golden fixture reference in [integrated-test-state.md](../technical/integrated-test-state.md) owns intentional cross-file state.
 
 - **P1-13:** owns run-day +70 through +74 at 06:00 Europe/Berlin. It leaves two run-scoped templates with published/version history (one archived then reactivated), direct and converted jobs/projects, one later child job, material/capability catalog additions, template applications and attributed instruction/evidence/dependency/material/capability rows, plus the request conversion/history facts created by the six journeys. It creates no stock movements, reservations, dispatches, attention types, actual time or documents. Later specs must address these records by `world.runId` and cannot assume an empty template/application domain.
 - **P1-14:** owns run-day +75 through +79 at 06:00 Europe/Berlin. It leaves run-scoped jobs/projects with canonical transitions and project overrides, execution/blocker/dependency/instruction event history, one resolved blocker plus one open parking blocker, one linked dependency, one template/application and checklist completion, planning occurrences and a closed time session. It creates no inventory movement, reservation, document, signature, message or customer package. Later specs must select lifecycle records by `world.runId` and cannot assume the work-lifecycle or P1-13 template domains are empty.

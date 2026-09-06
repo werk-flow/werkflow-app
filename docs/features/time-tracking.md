@@ -1,6 +1,6 @@
 # Time Tracking
 
-Status: living — last reviewed 2026-09-03
+Status: living — last reviewed 2026-09-05
 
 Time tracking (`Zeiterfassung`) covers attendance, working time, travel, breaks, job/project allocation, on-call work, overtime, time accounts, corrections, approvals, absence effects, and payroll/accounting handoffs.
 
@@ -71,7 +71,7 @@ Phase 1 is not an MVP stopwatch. It is the complete, dependable operational time
 - Provide one consistent web and future mobile clock surface for working, travelling, breaking, switching jobs, and clocking out.
 - Show the current state, active Auftrag, elapsed time, last successful synchronization, and pending local actions at all times.
 - Let an employee start from an assigned job, from the clock surface, or from today's schedule without creating different kinds of records accidentally.
-- Keep job selection optional or required according to an explicit organization rule; never lose time merely because job context is missing.
+- Keep job selection optional, as settled by `P1-21`, and show missing allocation explicitly. Any later mandatory-allocation policy needs a separate decision and must preserve captured time.
 - Make switching between travel, work, break, and jobs a short explicit action that closes the previous segment and shows the new state.
 - Support correcting a missed clock-in/out or wrong classification through a guided request rather than forcing employees to invent compensating entries.
 - Detect impossible or suspicious sequences, overlaps, duplicate taps, clocking in elsewhere, and abandoned sessions while preserving a recoverable path.
@@ -143,7 +143,7 @@ WerkFlow should help an organization apply and monitor its chosen rules, but it 
 - Give employees a complete personal history and a guided way to request add, edit, delete, split, classification, allocation, and missed-clock corrections.
 - Show the proposed result before submission, including changed totals, job allocation, break impact, and time-account impact.
 - Require a reason for material corrections and retain original value, proposed value, actor, approver, timestamps, decision, and comment.
-- Define which live or recent entries an employee may correct directly, which create a request, and which are locked after period close.
+- Preserve the `P1-22` rule that an employee's own correction is a proposal. `P1-23` defines the closed-period lock and reasoned reopen path.
 - Apply four-eyes rules consistently when an approver changes their own records or records where they have a conflict of interest.
 - Support delegated approvers, substitutes, reminders, escalation, and clear fallback when no approver is available.
 - Allow admins/Büro to approve, reject, return for clarification, or correct within explicit authority.
@@ -310,28 +310,11 @@ Every intelligent action must show its source, proposed change, uncertainty, hum
 
 ## Open Product Decisions
 
-Resolved with `P1-05` (2026-08-06): the fixed-role fallback remains Admin plus Büro. Admin can approve Büro and employee time; Büro can approve employee time. A selected direct holder can approve any other member but never themselves, while a substitute inherits the delegator's narrower or broader scope. Büro-owned new manual entries are pending; admin-owned additions remain auto-approved so an organization always has an owner recovery path. Holder removal cannot leave a selected responsibility without a base holder. Ownership transfer remains later scope; P1-22 now owns the complete correction request and batch-decision model, while actual closed-period behavior remains P1-23.
+The current baseline above describes the accepted capture, approval, correction, account, and export decisions. Their linked slice records preserve the rationale. Remaining questions:
 
-Resolved with `P1-22` (2026-09-01): every own correction is a proposal with no direct self-edit window; a scoped Admin/Büro correction for another person can apply immediately, but no role can self-approve. The one immutable request/revision/source/event/application aggregate covers add, edit, delete, split, reclassification, reallocation, reassignment and missed clocks across legacy and canonical sources. `time_approval` is resolved at action time with existing delegation, clarification appends a revision, withdrawal/rejection retain history, selected approval is atomic, and pending projections are explicitly provisional. Sequential applications remain attributable. Actual close/reopen, time accounts, credited/payroll classifications and correction/re-export stay with `P1-23`.
-
-Resolved with `P1-21` (2026-09-01): the six activity kinds are work, travel, break, standby, call-out and internal activity. Internal activity uses a bounded fixed vocabulary; organization-managed activity taxonomies stay out of scope. Job selection is optional: work, travel and call-out reference one normal job or are explicitly unallocated, and no time is lost for missing job context. Travel captures its route and the driver or passenger role as factual qualifiers without GPS, distance or mileage.
-
-Resolved with `P1-23` (2026-09-01): credited-time policy uses the six activity categories with allowed values of 0, 50 and 100 percent; work, internal activity and call-out start at 100, breaks at 0, travel varies by route and driver or passenger role, standby varies by on-site or remote context. Holiday calendars were already settled by `P1-04` as the in-code dataset for all 16 states, selected per organization. Findings use three severities: informational, approval-required and close-blocked; live capture is never blocked. Balances carry forward without automatic caps, expiry, payout or forfeiture; manual adjustment, expiry and payout events are minute requests that a different effective `time_approval` holder approves. Night, Sunday and organization-holiday minutes are classified with source references and no money, premium or tariff. Period close creates an immutable version of one Berlin calendar month, refuses ordinary affected edits, and a late approved correction stays unapplied until an administrator reopens with a reason; recalculation and re-close create a successor version and re-export explicitly supersedes the earlier file. The first payroll artifact is one deterministic ZIP with CSV files and a manifest; providers and formats beyond it are out of scope. Employees receive a monthly statement rendered on demand from the immutable close snapshot, plus their own account view.
-
-- ~~Which time categories and internal activities should ship as defaults for SHK businesses?~~ Resolved with `P1-21`, see above.
-- ~~Is job selection required for all field work, required only for selected roles, or handled through an unallocated-time queue?~~ Resolved with `P1-21`: optional, with an explicit unallocated state.
-- ~~Which travel models must be supported first: company start, home-to-site, site-to-site, passengers, or driver distinction?~~ Resolved with `P1-21` for capture and `P1-23` for credit rules.
-- ~~How should standby/on-call schedules and active call-outs affect credited time, supplements, and rest warnings?~~ Resolved with `P1-23`: 0, 50 or 100 percent by on-site or remote context; rest findings begin informational.
-- ~~Which German state holiday calendars and exceptional-work configurations are needed first?~~ Resolved with `P1-04`: all 16 states as an in-code dataset.
-- ~~Which warnings should be informational, approval-required, or blocking by default?~~ Resolved with `P1-23`: informational, approval-required, close-blocked.
-- ~~How are overtime approval, time off in lieu, carryover, expiry, payout, and caps configured?~~ Resolved with `P1-23`: carry-forward without automatic caps, expiry or payout; manual four-eyes adjustment requests.
-- ~~Which night/Sunday/holiday/travel supplements must be classified in WerkFlow versus only in payroll?~~ Resolved with `P1-23`: classification without money.
-- ~~What does period close lock, and what exact correction/re-export process follows a late change?~~ Resolved with `P1-23`: immutable close version, reopen with reason, successor version and superseding re-export.
-- ~~Which payroll/accounting providers and export formats should be prioritized?~~ Resolved with `P1-23`: one deterministic ZIP/CSV package; providers out of scope.
 - Should a shared terminal/kiosk be part of Phase 1, and what fallback identifies employees safely?
 - What offline data must be available for an employee's next assignments, and how are conflicting device actions resolved?
 - Is any location evidence necessary for specific customers, and can the same outcome be achieved with less intrusive evidence?
-- ~~Which personal time statements and exports should employees receive by default?~~ Resolved with `P1-23`: on-demand monthly statements from the close snapshot and the own account view.
 
 ## Related Docs
 

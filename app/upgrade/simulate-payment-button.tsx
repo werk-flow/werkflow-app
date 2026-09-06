@@ -2,6 +2,7 @@
 import { ErrorText } from '@/components/ui/error-text';
 
 import { useState } from 'react';
+import { unstable_rethrow } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -26,9 +27,9 @@ export function SimulatePaymentButton() {
             : 'Ein Fehler ist aufgetreten. Bitte versuche es erneut.'
         );
       }
-    } catch {
-      // Redirect will throw, so this is expected behavior
-      // Only set error if it's actually an error
+    } catch (error) {
+      unstable_rethrow(error);
+      setError('Die Zahlung konnte nicht verarbeitet werden. Bitte versuche es erneut.');
     } finally {
       setIsLoading(false);
     }
@@ -55,6 +56,5 @@ export function SimulatePaymentButton() {
     </div>
   );
 }
-
 
 

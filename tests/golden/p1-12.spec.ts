@@ -8,6 +8,7 @@ import {
   getVisibleDispatchStateAs,
 } from './support/db';
 import {
+  workLifecycleCard,
   acknowledgeDispatchOnJobPage,
   challengeDispatchOnJobPage,
   confirmBatchReschedule,
@@ -78,7 +79,7 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
     });
 
     await adminPage.goto(`/auftraege/${parkJobNumber(world.runId)}`);
-    const lifecycle = adminPage.getByTestId('work-lifecycle-card');
+    const lifecycle = workLifecycleCard(adminPage);
     await lifecycle.getByRole('button', { name: 'Parken', exact: true }).click();
     const parkingDialog = adminPage.getByRole('dialog');
     await selectFromSearchable(adminPage, parkingDialog.locator('#work-blocker-reason'), 'Material');
@@ -121,7 +122,7 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
 
     // The recipient sees the pending confirmation on the shared surface.
     await employeePage.goto('/aufgaben');
-    const taskGroup = employeePage.getByTestId('attention-dispatch-tasks');
+    const taskGroup = employeePage.getByRole('main').getByTestId('attention-dispatch-tasks');
     await expect(taskGroup).toBeVisible({ timeout: 20_000 });
     await expect(taskGroup.getByText(title, { exact: true })).toBeVisible();
   });
@@ -346,7 +347,7 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
     ]);
   });
 
-  test('privacy, isolation, Realtime freshness, and zero actual time hold', async ({
+  test('privacy, isolation, Realtime freshness, and zero actual time hold @FRESHNESS', async ({
     adminPage,
     bueroPage,
     employeePage,
@@ -383,9 +384,10 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
     await expect(bueroRow.locator('[data-recipient-state]')).toHaveCount(0);
 
     await openDispatchPanel(adminPage);
-    await issueDispatchForOccurrence(adminPage, liveTitle);
     await expectLiveWithin(bueroRow.locator('[data-recipient-state]'), {
       label: 'p1-12 dispatch state cross-session',
+      mutation: (beforeSubmit) =>
+        issueDispatchForOccurrence(adminPage, liveTitle, beforeSubmit),
     });
 
     // Employees never see the office dispatch surface.

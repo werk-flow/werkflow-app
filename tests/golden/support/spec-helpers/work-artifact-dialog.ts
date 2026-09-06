@@ -1,5 +1,11 @@
 import type { Locator, Page } from '@playwright/test';
 
+export function workArtifactsSection(page: Page): Locator {
+  // PPR can stage duplicate sections in hidden streaming containers outside
+  // main. Positive interactions belong to the active semantic page content.
+  return page.getByRole('main').getByTestId('work-artifacts-section');
+}
+
 export async function closeWorkArtifactDialog(dialog: Locator): Promise<void> {
   // WorkArtifactDialog renders its visible footer action before Radix's icon
   // close, and both controls have the accessible name "Schließen".
