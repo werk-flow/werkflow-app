@@ -1,0 +1,32 @@
+# Security checklist, part 4: auth, CI/CD, and AI agents
+
+Source: https://www.instagram.com/reel/DcbDo37zTvJ/
+Creator: @byarnieverma (Arnie Verma)
+Platform: Instagram
+Posted: 2026-08-24
+Transcript: Whisper small.en, transcribed from the video audio
+Note: one of four consecutive checklist videos by this creator, 2026-08-15 to 2026-08-24. Together they enumerate a single long list.
+
+## Caption
+
+Comment “risk” for the resource doc, and hopefully you minimise your risk. 
+
+#ai #founder #security #vibecode #tech
+
+## Transcript
+
+No MFA, account enumeration through user flows,
+business logic abuse,
+race conditions and critical ops,
+webhook replay attacks,
+insecure CI CD permissions
+or exposed deployment credentials,
+untrusted GitHub actions,
+unpinned or unreviewed build dependencies and actions,
+security checks that fail open,
+missing timeouts, AI features leaking sensitive info,
+unsafe execution of AI generated output,
+AI agents given excessive permission,
+sensitive data stored insecurely in local storage,
+open redirects or unsafe user controlled redirects,
+unsecured GraphQL, WebSocket or real-time endpoints.

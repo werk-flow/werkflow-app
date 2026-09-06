@@ -1,0 +1,47 @@
+# Important Concepts episode 1: idempotency
+
+Source: https://www.instagram.com/reel/DcrKQfWOrpG/
+Creator: @belowthestack (Arfa)
+Platform: Instagram
+Posted: 2026-08-30
+Transcript: Whisper small.en, transcribed from the video audio
+Series: Important Concepts, episode 1
+
+## Caption
+
+Idempotency (I think I’m saying that right)
+
+#claude #dev #app #appstore #systemdesign
+
+## Transcript
+
+So it's been a while but you finally shipped your app or your product.
+You end up staying up late trying to make some posts about it to market it and you end
+up getting some users overnight.
+But then you wake up to a customer complaining that they were charged twice.
+Another one complaining that they got the same email for a time.
+And then a third sitting on two accounts that they only made once under the same email.
+All this because you didn't understand idempotency.
+Welcome to episode one of important concepts where I go over systems design principles
+so you actually know them while you're building.
+Today we're discussing idempotency.
+Idempotency just means that if you do the same operation twice it leads your system
+in the same state as doing it once.
+The second attempt doesn't create a second charge, a second email or a second record.
+Idempotency is commonly mentioned regarding payment issues but really it applies anywhere
+and action generates a result in your app.
+Say you send a welcome email when a webhook arrives.
+The provider retries that webhook and your user gets an email three times.
+Or somebody double clicks the sign up button and they end up having two accounts on the
+same email.
+And then if your app has AI there's an additional risk.
+Because each of those repeat calls on the AI endpoint is something that was already
+generated once and it's either causing you money, your users money or both of you guys.
+To fix this you just need to make sure that whenever a client sends a request it comes
+attached with a unique key for the attempt but not for the click itself.
+The system checks if it's seen the key before and then if it has it returns the stored result
+instead of repeating the working time.
+So if you take one thing from this just remember that anything that costs money, sends a message
+or creates a record needs a key.
+Be sure to follow me so I can teach you about niche concepts that you should be knowledgeable
+about when you're building.

@@ -1,0 +1,22 @@
+# Security checklist, part 2: injection and session flaws
+
+Source: https://www.instagram.com/reel/DcOELo1zGtz/
+Creator: @byarnieverma (Arnie Verma)
+Platform: Instagram
+Posted: 2026-08-19
+Transcript: Whisper small.en, transcribed from the video audio
+Note: one of four consecutive checklist videos by this creator, 2026-08-15 to 2026-08-24. Together they enumerate a single long list.
+
+## Caption
+
+Comment “safe” for the resource doc so you can give it to your agent. 
+
+#ai #tech #founder #vibecode #build
+
+## Transcript
+
+Cross-site scripting, cross-site request forgery, insecure file uploads, path traversal vulnerabilities, server-side request forgery, broken password reset flows,
+weak session management, vulnerable JWT secrets, overly permissive cores, missing rate limits, exposed test or staging environments,
+default credentials left unchanged, webhook endpoints without signature verification,
+payment or subscription checks only done on the front end, IDOL and BOLAR, API endpoints trusting user-controlled input,
+logs containing sensitive info, exposed source maps.

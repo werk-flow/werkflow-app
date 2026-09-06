@@ -1,0 +1,47 @@
+# Important Concepts episode 2: retries and timeouts
+
+Source: https://www.instagram.com/reel/Dc7Hjz7A6pT/
+Creator: @belowthestack (Arfa)
+Platform: Instagram
+Posted: 2026-09-05
+Transcript: Whisper small.en, transcribed from the video audio
+Series: Important Concepts, episode 2
+
+## Caption
+
+Retries and timeouts will save your app retention
+
+#ai #systemdesign #softwareengineering #claude #appstore
+
+## Transcript
+
+So you shipped your app a little while ago, right?
+It's been working for months, but then a recurring user of your app ends up being at a hotel on their wifi,
+and one request takes 9 seconds instead of 1,
+and your app just sits there with no error, no message, and nothing in the log.
+The user gets upset, they close the app, and they never come back.
+All this because you didn't understand timeouts.
+Welcome to episode 2 of Important Concepts, where I go over a system's design principle so you actually know them while you're building.
+Today, we're going over retries and timeouts.
+So a timeout is just a deadline that you put on a request.
+A retry is what you do when that request fails.
+Most HTTP clients ship without a timeout at all, so unless you set one, the deadline is forever.
+Now, networks constantly fail.
+Every call your app makes it database, an API, or a payment provider is a bet,
+and you're deciding right now what happens when a group of people.
+One slow service freezes your entire app.
+Requests end up calling behind it, and the call is what makes your app go super slow or end up crashing.
+And then with no retry, a blip that lasted 1 second can cost you the entire work.
+But now there's a version worse than both, and that's retries without hiding code.
+That's where your requests actually work, but the response got lost on the way back.
+So you retry, and then now you have them charged the point.
+So now to implement this, you want to make sure that you have a timeout on every outbound call.
+Pick a number based off of the amount of time that a person is actually going to wait, not how long the server's going to wait.
+And then also make sure that your only retrying will actually need to retry.
+Reading is always safe, but writing needs an item post.
+And then finally, make sure that you're waiting a bit between each attempt and you're adding a little bit of grammar.
+That's because if each client ends up retrying at the same time, you finish off the server that was already struggling.
+Then make sure that you had a stop.
+So three attempts is complaining.
+If it failed three times, then it's not a glitch.
+If you have any questions, be sure to shoot them in the comments, and be sure to follow me for more videos like these.

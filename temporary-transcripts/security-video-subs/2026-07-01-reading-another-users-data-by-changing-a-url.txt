@@ -1,0 +1,42 @@
+# Reading another user's data by changing a URL
+
+Source: https://www.instagram.com/reel/DaOydhIJs-V/
+Creator: @securedbycasco (Casco)
+Platform: Instagram
+Posted: 2026-07-01
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Can someone steal your users’ data just by pasting a URL?
+
+If your app doesn’t check who’s asking for that data, then yes.
+In this one I break down one of the most common vulnerabilities we find at Casco: Insecure Direct Object Reference, or IDOR. Change a single ID in a URL, and a broken app will hand over someone else’s private data.
+If you’re vibe coding an app right now, watch this before you ship it.
+
+#cybersecurity #vibecoding #softwareengineering #startup
+
+## Transcript
+
+Oh, your vibe coded website has a login page.
+What happens if I take one of your users URLs and put it into my browser?
+Am I going to be able to access all their data?
+Oftentimes when you have a URL, you can like go to Gmail, for example, if you
+open up Gmail.com, go to a particular email, you'll see there's identifiers
+inside that URL bar that shows that one particular email.
+And then if you copy that URL and paste it on your end, you know, the
+expectations that you're not supposed to be able to see that user's email.
+But many applications do not enforce security rules properly and actually
+allow you to access that email.
+That's actually called a indirect object reference attack.
+And it's one of the most common security vulnerabilities we see at Casco.
+What happens if you log in and then log out and then post the URL again?
+Can you get into the backend?
+That oftentimes is a symptom of people not doing a proper logout procedure.
+So you're supposed to invalidate the tokens that are available on the device.
+You should actually also be clearing any sort of cookies and local storage items,
+section storage items that indicates that you're logged into that particular machine.
+And next time you access that data, even if all this information is provided, your
+server should reject it and not allow you to access it again.
+Is this a security issue?
+Yeah, it is a security issue.

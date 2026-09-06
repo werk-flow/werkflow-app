@@ -1,0 +1,22 @@
+# Security checklist, part 3: dependencies and AI access
+
+Source: https://www.instagram.com/reel/DcV4_XvTded/
+Creator: @byarnieverma (Arnie Verma)
+Platform: Instagram
+Posted: 2026-08-22
+Transcript: Whisper small.en, transcribed from the video audio
+Note: one of four consecutive checklist videos by this creator, 2026-08-15 to 2026-08-24. Together they enumerate a single long list.
+
+## Caption
+
+Comment “protection” for the resource doc.
+
+#ai #security #vibecode #tech #founder
+
+## Transcript
+
+Vulnerable dependencies, malicious packages, prompt injection, unpermissioned AI access,
+excessive database permissions, missing audit logs, no security monitoring, no backup, exposed
+internal dashboards, missing security headers, insecure cookie settings, unencrypted, sensitive
+data, port tenant isolation, unreviewed AI code, mass assignment, command injection,
+insecure deserialization, and misconfigured OAuth.

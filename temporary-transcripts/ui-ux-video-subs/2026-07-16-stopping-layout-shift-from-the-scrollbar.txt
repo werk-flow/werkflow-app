@@ -1,0 +1,20 @@
+# Stopping the layout shift when a scrollbar appears
+
+Source: https://www.instagram.com/reel/Da3HqlBMeoJ/
+Creator: @aniakubow (Code with Ania Kubow)
+Platform: Instagram
+Posted: 2026-07-16
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+This lesser known CSS is one you didn’t know you needed! #csstips #coding #100daysofcode #devcommunity
+
+## Transcript
+
+Add this line and watch your page stop shifting when the scroll bar appears.
+Notice how your page nudges to the left these secondary scroll bar shows up.
+That bar's stealing a few pixels of width and scroll bar got a stable.
+Well stop it, add it and the browser reserve the space no matter what.
+No more little sideways jumps between pages.
+You're welcome.

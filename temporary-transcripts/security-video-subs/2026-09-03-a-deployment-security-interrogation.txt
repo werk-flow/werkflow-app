@@ -1,0 +1,37 @@
+# A deployment security interrogation
+
+Source: https://www.instagram.com/reel/Dc0b0K-thYr/
+Creator: @sayed.developer (Mohamad Al Sayed)
+Platform: Instagram
+Posted: 2026-09-03
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Comment “list” for the full guide👨🏽‍💻🤝🫡
+#softwareengineering #computerscience #dev
+
+## Transcript
+
+I am finally deploying my website.
+Wait, if I'm logged in, can I see your data?
+No way, users are strictly logged into their own new UIDs.
+Do your password reset links expire?
+They're dead after 30 minutes.
+Are you sanitizing every single field?
+Tender procedure, SQL injection and XSS don't stand a chance here.
+Is the API open to the whole world?
+We only serve requests originating from our own domain.
+Did you apply rate limiting?
+Limits are active.
+What about error handling?
+We have custom error screens for every failure state.
+Do you have indexes on your main queries?
+Only on the high traffic fields.
+We're keeping the traffic overhead low.
+What about logging and monitoring?
+Basic logs are flowing.
+I've got alerts set up for critical failures.
+Last one, if this deployment crashes, can you roll back?
+Easy, we're running a blue-green strategy for instant recovery.
+Nice, deploy it.

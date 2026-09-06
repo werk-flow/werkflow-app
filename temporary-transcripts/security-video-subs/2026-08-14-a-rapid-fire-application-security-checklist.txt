@@ -1,0 +1,23 @@
+# A rapid-fire application security checklist
+
+Source: https://www.instagram.com/reel/DcCT3UfpFAn/
+Creator: @millee.md (Michael Ly | AI Systems for Creators)
+Platform: Instagram
+Posted: 2026-08-14
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Am I missing anything this time?
+
+P.S. This doesn’t replace a proper pen-test!
+
+#ai #claude #vibecoding #appsecurity #app
+
+## Transcript
+
+Add HSTS, add CSRF tokens, reset sessions on password change, expire reset links,
+prevent user enumeration, whitelist upload types, verify payment webhooks, set prices service site,
+block prompt injection, cap AI usage, limit request size, rate limit password resets, sanitize
+before storing, lock down cores, disable directory listing, remove default admin routes, lock accounts
+after failed logins, log security events, set secure cookies, restrict database permissions.

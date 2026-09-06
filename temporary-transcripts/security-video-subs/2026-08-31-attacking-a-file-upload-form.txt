@@ -1,0 +1,48 @@
+# How an attacker probes a file upload form
+
+Source: https://www.instagram.com/reel/Dcs0p_JtCYz/
+Creator: @kematheengineer (Kema Sambondu | AI engineer)
+Platform: Instagram
+Posted: 2026-08-31
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+#vibecoder
+
+## Transcript
+
+If you're a VibeCoder, here's how I would ruin your life.
+First of all, log into your web application and look for any section that allows me to upload any file.
+Then I would ask myself three questions.
+Can I disguise a dangerous file as something allowed?
+For example, let's assume your application allows the upload of photos.
+If I upload malicious JavaScript and add .jpg, will your application allow this?
+Number two, will you save or trust whatever file I upload without shaking the actual file?
+Three, if your application does accept this file,
+can the server process or execute it?
+Normally your application would block this file, but
+somebody has an insecure file upload vulnerability
+because your server actually stole what I uploaded as a working file.
+I'll then find the link to my picture and open it directly.
+The moment I visit that link, my code executes.
+I would get a web show and take control of your server.
+At this point, I now have access to all the customer records.
+Names, emails, passwords, card numbers, and addresses.
+Next, I would plant back doors, several of them,
+hidden in places you would never think to look.
+So that when your team finds one and patches it,
+plenty more hidden ones will still be left.
+What will follow will be unfortunate.
+I would conduct a series of attacks that would destroy your application and exploit your users.
+You would lose your job, get sued.
+Your reputation would be ruined.
+Regulators would come and find you.
+And all this because you trusted a vibe coded application a little too much.
+Solving this is pretty easy.
+Validate actual file content, not just extension.
+Whitelist allowed file types.
+Rename upload files.
+Store outside the web root.
+Disable script execution in the upload folder.
+If you want my specific security framework, comment security and I'll send it to you.

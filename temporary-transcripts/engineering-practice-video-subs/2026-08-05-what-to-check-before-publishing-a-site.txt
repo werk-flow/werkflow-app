@@ -1,0 +1,22 @@
+# What to check before publishing a site
+
+Source: https://www.instagram.com/reel/Dbpctz6Cp5a/
+Creator: @yatesvids (Alex Yates)
+Platform: Instagram
+Posted: 2026-08-05
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Before you publish your first vibecoded website check these! (Free tool in my bio)
+
+#vibecoding #vibecode
+
+## Transcript
+
+ElonVoseL.app with no custom domain connected, view source is empty, no 404 pages, browser
+tab says Vite or React, same page title everywhere, no meta description, no OG image, no structured
+data, multiple heading 1 tags, no heading 1 tags, no canonical tag, no LLMs.txt, AI
+crawlers are blocked in robots.txt, no favicon, no sitemap.xml, no language attribute, missing
+alt text, source maps in production, console is full of errors and enormous javascript
+bundles.

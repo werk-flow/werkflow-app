@@ -1,0 +1,29 @@
+# A CVSS 10.0 SQL injection found in a sync engine
+
+Source: https://www.instagram.com/reel/DY3VGsWpSEf/
+Creator: @securedbycasco (Casco)
+Platform: Instagram
+Posted: 2026-05-28
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+We took over an entire Postgres database with one parameter.
+We found a critical SQL injection vulnerability in ElectricSQL while doing a security assessment for a customer. The Shape API was evaluating arbitrary SQL passed into the ORDER BY parameter. The database literally returned the data inside its own error messages.
+
+Full breakdown at the link in bio.
+#cybersecurity #appsec #sqlinjection #vulnerability
+
+## Transcript
+
+A single parameter inside an API request would have taken over an entire Postgres database.
+We found a critical vulnerability in ElectricSQL.
+It's a CVSS 10.0 vulnerability, we have a CVE attached to it as well.
+We were doing a security assessment for a customer and we identified that there was
+a SQL injection vulnerability within that customer's environment.
+ElectricSQL's API shape allowed us to pass in an arbitrary set of strings into the order
+by parameter.
+It turns out ElectricSQL actually evaluates that SQL statement.
+So now you can stuff effectively any SQL statement into there and get it evaluated
+and start finding out information like looking at other database tables that exist on the
+system and it also returns that error back to the user and actually shows you the results.

@@ -1,0 +1,51 @@
+# Six decisions that turn a spreadsheet back into a data table
+
+Source: https://www.instagram.com/reel/Dc3KFOaNfnW/
+Creator: @designmotionhq (UX Patterns · Design + Motion)
+Platform: Instagram
+Posted: 2026-09-04
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Data table is a system, here are 6 tips for better UX #motiondesign #uiux #frontend
+
+## Transcript
+
+Your table is a spreadsheet in disguise.
+Six decisions fix that.
+Amounts centered.
+Digits never line up so the eye can't compare.
+Numbers right, tabular figures on.
+Text left.
+A column of amounts now reads like a receipt.
+Zebra stripes fight the content.
+Every other row screams for nothing.
+One hairline between rows.
+Hover lights the row you're on.
+Stripes earn their place on wide rows only.
+Row height is a decision, not a padding.
+Compact 40.
+Default 48.
+Comfortable 56.
+Three modes, one toggle.
+Dense for ops.
+Airy for review.
+Twelve columns, the screen shows six.
+Scroll right and you lose the row's name.
+Pin the first column.
+Pin the header on vertical scroll.
+Context never leaves the screen.
+An empty cell is a question.
+Missing, zero or loading.
+Use a dash.
+Long text wraps and the row explodes.
+Trunkate, tooltip on hover.
+Numbers never truncate.
+An action column on every row is noise.
+50 rows, 50 pencils.
+Reveal on hover or focus.
+Touch gets a kebab.
+Sort arrows only on the active column.
+Follow for more UI systems.
+Save this before your next dashboard.

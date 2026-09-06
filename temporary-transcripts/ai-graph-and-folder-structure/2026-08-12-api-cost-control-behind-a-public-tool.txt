@@ -1,0 +1,38 @@
+# Keeping API costs survivable behind a public tool
+
+Source: https://www.instagram.com/reel/Db7AH33MHvg/
+Creator: @lostandlucky (Jake Van Clief)
+Platform: Instagram
+Posted: 2026-08-12
+Transcript: Whisper small.en, transcribed from the video audio
+Note: filed with this creator's other knowledge-graph videos. The video itself is about API key limits and token spend; the caption points at his preprint claiming a 96% cost reduction with little accuracy loss, which is where it connects to that research.
+
+## Caption
+
+Links in bio if you want to learn more 
+
+I have a research paper how I will be posting the preprint showing 96% cost reduction with little to no cost in accuracy! 
+
+And that's just for the short period as time progresses. The cost savings compound!
+
+## Transcript
+
+Oh my gosh, we deployed our SaaS and I only had one API key and over a hundred users are using it.
+They burned over 484 million tokens in the last few days alone.
+What if I didn't put the limits on? How much is this going to cost me?
+I'd be freaking out if I didn't know what I was doing.
+With well over a hundred users using our tools right now, we're only spending about 30 bucks a
+day in API fees and that's again with hundreds of millions tokens being burned with Opus Ents on it.
+They're not doing random requests. They're building entire data sets and folder structures
+that allows the AI itself and Claude code in many ways or any other coding agents to rip through
+and answer questions. And again, we have almost 200 current users with another 300 coming in soon.
+So if they've burned this many tokens just in the last week,
+but my total spend on the key that I have for the entire platform is this.
+These horror stories I'm hearing about people's API bills being $50,000 when they wake up in the
+morning. That's the power of folder structure baby. You see our users are getting the outcome
+that you would get from Claude code or anything like that, but they're getting the efficiency
+that comes when you structure data properly and use one model, not hundreds of agents to navigate
+that data quickly and efficiently. And I made claims about 90, 95% efficiency, but now I get to prove it.
+And I have hundreds of users doing whatever they want on this app. And so far I haven't woken up
+with a bad API bill. And even if they do, we have some safeties built in. That's the difference
+between a basic vibe coded app and one with software experience behind it.

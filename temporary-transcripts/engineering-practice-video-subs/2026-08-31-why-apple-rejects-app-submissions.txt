@@ -1,0 +1,38 @@
+# The five most common reasons Apple rejects a submission
+
+Source: https://www.instagram.com/reel/DctCXdSh0jc/
+Creator: @lincolndevine (Lincoln Devine)
+Platform: Instagram
+Posted: 2026-08-31
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Comment “REJECTED” to get the full app launch guide 👇🏻
+
+Follow @lincolndevine for more vibe coding advice 📈
+
+#vibecoding #solofounder #startupstories #buildwithai #aitips
+
+## Transcript
+
+Last year, Apple rejected 1.2 million app store submissions.
+Here are the top five reasons yours got sent back.
+First reason is that you basically vibe coded a website
+and then put it into a wrapper.
+Apple can tell.
+Second reason is that you built a beautiful signup flow,
+but you didn't build a way to delete an account
+and it has to be done inside the app.
+Third reason is that you may be collecting data
+that you don't know about and you're required to disclose.
+Things like crash reporting, analytics, ad delivery.
+Fourth is that your app icon matches an icon
+associated with an in-app purchase.
+It's a weird one, but they look for this.
+Last, you don't have the EULA
+or the end user license agreement link
+in the app description.
+Super easy one to miss.
+Follow and leave a comment rejected
+if you want the full app store launch guide.

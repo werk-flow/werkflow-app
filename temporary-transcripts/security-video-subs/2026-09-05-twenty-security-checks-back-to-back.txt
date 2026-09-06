@@ -1,0 +1,15 @@
+# Twenty security checks, back to back
+
+Source: https://www.instagram.com/reel/Dc6cA32zyyR/
+Creator: @julianxu33 (Julian Xu | Build & Lifestyle)
+Platform: Instagram
+Posted: 2026-09-05
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Was anything left out?
+
+## Transcript
+
+Hide API keys, enable RLS, test IDR attacks, scan git secrets, log admin routes, test user isolation, rate limit API's, log storage buckets, validate all inputs, block unauthenticated routes, test SQL injection, remove sensitive logs, block field hammering, restrict file uploads, secure server logic, trim API responses, secure off sessions, scan dependencies, test record access, attack your own app.

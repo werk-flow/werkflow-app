@@ -1,0 +1,51 @@
+# Five checks against a runaway cloud bill
+
+Source: https://www.instagram.com/reel/Dc6KPc6SxhN/
+Creator: @joinbuildingwithai (BuildingWithAI)
+Platform: Instagram
+Posted: 2026-09-05
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Comment BILL for the five-point billing-check prompt.
+
+Your app doesn’t need real users to run up a real bill.
+
+The prompt helps spot costly mistakes in your code, suggests fixes and guides you through the billing settings you need to verify yourself.
+
+Check your spending controls, database queries, retry limits, rate limits and file downloads before leaving your app running tonight.
+
+Don’t wait for the invoice to find out what you missed.
+
+#vibecoding #claudecode #cursor #supabase #claude
+
+## Transcript
+
+Don't let your wipe-coded app put you in debt overnight.
+Check these five things before you go to bed.
+One, a spending alert is not a spending limit.
+On WordCell, check automatic pausing.
+On Superbase, check what your spend cap actually covers.
+Does users stop or do you just get an email?
+Two, stop loading your whole database, showing 10 rows.
+Don't download 10,000.
+Only request what the page actually needs.
+Three, this is the one that multiplies.
+Something fails, your app tries again.
+It fails again and again.
+One bug, thousands of extra requests.
+Cap the retries, wait longer between each attempt.
+Four, bots can make your app do expensive work.
+Uploads, Payday I-Calls, your app does the work,
+you get the bill.
+Capital's request per user or IP.
+On the server, not just the button.
+Five, your file links need limits too.
+Bots can download the same file without opening your app.
+That bandwidth can still cost you.
+Make sure your download URLs are covered by rate limits.
+A CDN alone is in a spending cap.
+Don't guess which ones you've got.
+Comment bill and I'll send the prompt that finds all five.
+Do it tonight, not after the invoice.

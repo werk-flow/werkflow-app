@@ -1,0 +1,60 @@
+# Five unglamorous checks before launching an app
+
+Source: https://www.instagram.com/reel/Dcw3qskOsM4/
+Creator: @davecto (Dave Brown | AI, Money & Career Mindset)
+Platform: Instagram
+Posted: 2026-09-01
+Transcript: Whisper small.en, transcribed from the video audio
+Note: the first item is legal (terms covering user-generated content, arbitration, data ownership, privacy). The other four are operational.
+
+## Caption
+
+These 5 things have cost people real money, and all easily avoidable.
+
+**1. Terms and conditions that actually cover you.**
+
+UGC, arbitration, data ownership, privacy. Most founders copy-paste a template from a competitor and hope. That template was written for a different business model than yours.
+
+**2. Run a read/write load test against your primary data object.**
+
+Not the whole app. The one table everything touches. That’s where it falls over, and it falls over on your best day, not your worst.
+
+**3. Do a real security audit.**
+
+I use a Claude skill for this now. Takes an hour. Finds the exposed keys, the missing auth checks, the endpoint you forgot was public.
+
+**4. Test your backup by restoring it somewhere.**
+
+A backup you’ve never restored is not a backup. It’s a folder.
+
+**5. Test live payments in production.**
+
+Real card. Real money. Refund it after. Sandbox lies.
+
+None of this is sexy.
+
+But getting the app to work is the easy part. The stuff that kills software companies happens after you hit deploy.
+
+Save this for the week before your launch.
+
+What’s on your pre-launch list that I missed? Drop it below.
+
+## Transcript
+
+If I was an ambitious five cutter,
+here's five things I'd check before I launch my app
+as somebody who's built two seven figure software companies.
+One, I'd make sure that my terms and conditions
+covered me for UGC, arbitration and data privacy.
+Two, I'd do some performance or load testing
+against the key model objects in my database.
+Three, I'd run a public cloud security skill audit
+and fix any P0, P1 issues that came up.
+Four, I'd test backup and more importantly,
+I'd test the restore of my database somewhere.
+Five, I'd test live payments in production
+and make sure that that money
+is actually hitting a bank account somewhere.
+Building software and building these apps
+has never been easier, but the boring stuff
+is what will actually kill a software company.
