@@ -14,6 +14,18 @@ interface EmailChangeOtpParams {
   kind?: EmailChangeOtpKind;
 }
 
+
+// Names and organization titles are user-controlled. Escape them before they
+// enter the HTML template so a crafted value cannot inject markup (SI-021).
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 const jsonHeaders = {
   'Content-Type': 'application/json'
 };
@@ -122,8 +134,10 @@ function getCopy(kind: EmailChangeOtpKind) {
 
 function generateEmailHtml(params: EmailChangeOtpParams): string {
   const { code, firstName, expiresInMinutes = 10, kind = 'current' } = params;
-  const greeting = firstName?.trim() ? `Hallo ${firstName.trim()},` : 'Hallo,';
+  const greeting = firstName?.trim() ? `Hallo ${escapeHtml(firstName.trim())},` : 'Hallo,';
   const copy = getCopy(kind);
+  const safeCode = escapeHtml(code);
+  const safeExpiry = escapeHtml(expiresInMinutes);
 
   return `
 <!DOCTYPE html>
@@ -154,11 +168,11 @@ function generateEmailHtml(params: EmailChangeOtpParams): string {
               </p>
 
               <div style="margin: 0 0 24px; padding: 16px; border-radius: 12px; background-color: #f4f4f5; font-size: 32px; font-weight: 700; letter-spacing: 0.35em; color: #18181b;">
-                ${code}
+                ${safeCode}
               </div>
 
               <p style="margin: 0 0 12px; font-size: 14px; line-height: 1.6; color: #71717a; text-align: left;">
-                Der Code ist ${expiresInMinutes} Minuten gültig. ${copy.outro}
+                Der Code ist ${safeExpiry} Minuten gültig. ${copy.outro}
               </p>
 
               <p style="margin: 24px 0 0; font-size: 12px; color: #a1a1aa;">

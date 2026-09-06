@@ -19,7 +19,7 @@ Source: [Login endpoint checklist](security-video-subs/2026-06-17-five-ways-a-vi
 | Aspect | Topic | Status | Consideration |
 | --- | --- | --- | --- |
 | 01 | session-security | Candidate | Inspect actual token storage and script access rather than assuming a login screen establishes safe sessions. |
-| 02 | authorization | Candidate | Verify admin privileges on the server for every privileged operation. |
+| 02 | authorization | Already covered | Verify admin privileges on the server for every privileged operation. Verified 2026-09-06: every exported Server Action must reach a caller-identity helper ([lib/security/server-action-authorization.test.ts](../lib/security/server-action-authorization.test.ts)); route handlers are inventoried with their mechanism ([lib/security/route-inventory.test.ts](../lib/security/route-inventory.test.ts)). Scope: web app route handlers and Server Actions at commit 4ab0319 plus the hardening pass; not the future mobile client. |
 | 03 | authentication | Candidate | Evaluate email verification and MFA separately against the SHK account lifecycle and provider capabilities. Neither universally prevents impersonation alone. |
 | 04 | abuse-controls | Candidate | Inspect login and reset throttling, including direct provider access and bypass of disabled UI controls. |
 | 05 | authentication | Candidate | Check password policy and breached-password controls at the authoritative boundary. |
@@ -98,7 +98,7 @@ Source: [Committed secrets](security-video-subs/2026-08-01-secrets-committed-to-
 
 | Aspect | Topic | Status | Consideration |
 | --- | --- | --- | --- |
-| 01 | secrets | Candidate | Inspect tracked files, generated client assets, history, and ignored environment files for actual credentials without reproducing secrets in reports. |
+| 01 | secrets | Already covered | Inspect tracked files, generated client assets, history, and ignored environment files for actual credentials without reproducing secrets in reports. Verified 2026-09-06: pattern scan of tracked files and of every .env path in history found nothing; recorded in [docs/plans/security-infrastructure-hardening-2026-09.md](../docs/plans/security-infrastructure-hardening-2026-09.md). Scope: repository content and history on 2026-09-06; build output and provider logs were not scanned. |
 | 02 | secrets | Candidate | If exposure is verified, revoke and rotate the affected credential and document the boundary. Deleting a file does not revoke a key. |
 | 03 | supply-chain | Candidate | Evaluate commit and CI secret detection with known bypasses and false positives. A pre-commit hook alone is not permanent prevention. |
 | 04 | evidence-quality | Not applicable | The author's 70% audit rate and one-hour exposure framing are not WerkFlow evidence or a safe exposure window. |
@@ -141,7 +141,7 @@ Source: [Website audit questions](security-video-subs/2026-08-04-questions-from-
 
 | Aspect | Topic | Status | Consideration |
 | --- | --- | --- | --- |
-| 01 | browser-security | Candidate | Inspect cookie attributes and actual CSRF defenses. SameSite=Lax is one control, not universal protection. |
+| 01 | browser-security | Already covered | Inspect cookie attributes and actual CSRF defenses. SameSite=Lax is one control, not universal protection. Verified 2026-09-06: Next checks the Origin of Server Actions; the one route handler that writes session cookies now requires a same-origin JSON request ([lib/security/same-origin.ts](../lib/security/same-origin.ts), finding SI-013). Scope: cookie-writing entry points of the web app; a script CSP remains deferred. |
 | 02 | authorization | Candidate | Verify every server entry point enforces access regardless of UI visibility. An API gateway is an example, not a required new component. |
 | 03 | data-governance | Candidate | Map sensitive personnel, operational, internal, and public data to storage, access, retention, and encryption requirements. Four labels are optional vocabulary. |
 | 04 | abuse-controls | Candidate | Assess bulk extraction and automation limits beyond login abuse. |
@@ -188,7 +188,7 @@ Source: [Rapid-fire checklist](security-video-subs/2026-08-14-a-rapid-fire-appli
 
 | Aspect | Topic | Status | Consideration |
 | --- | --- | --- | --- |
-| 01 | browser-security | Candidate | HSTS on deployed HTTPS responses. |
+| 01 | browser-security | Already covered | HSTS on deployed HTTPS responses. Verified 2026-09-06: production sends Strict-Transport-Security with a two-year max-age from Vercel ([docs/technical/environments.md](../docs/technical/environments.md)). Scope: app.werk-flow.app; preload and includeSubDomains are an open owner decision. |
 | 02 | browser-security | Candidate | CSRF defenses matched to action and cookie mechanisms. |
 | 03 | session-security | Candidate | Session invalidation after password changes. |
 | 04 | authentication | Candidate | Expiring and single-use reset links. |
@@ -311,7 +311,7 @@ Source: [Checklist 3](security-video-subs/2026-08-22-security-checklist-3-depend
 
 | Aspect | Topic | Status | Consideration |
 | --- | --- | --- | --- |
-| 01 | dependency-security | Candidate | Known vulnerable dependencies. |
+| 01 | dependency-security | Already covered | Known vulnerable dependencies. Verified 2026-09-06: Next upgraded to 16.3.4, transitive packages updated; remaining bun audit entries are nested development tooling ([docs/plans/security-infrastructure-hardening-2026-09.md](../docs/plans/security-infrastructure-hardening-2026-09.md), SI-018). Scope: the audit on 2026-09-06; recheck on every dependency change. |
 | 02 | supply-chain | Candidate | Malicious packages and install hooks. |
 | 03 | ai-security | Deferred | Product prompt injection before adding AI; developer tooling remains in current scope. |
 | 04 | agent-security | Candidate | Agent permissions and exposed tools. |
@@ -373,7 +373,7 @@ Source: [Checklist 4](security-video-subs/2026-08-24-security-checklist-4-auth-c
 | 12 | agent-security | Candidate | Execution of generated code/output in development tools; product execution is future scope. |
 | 13 | agent-security | Candidate | Excessive agent privileges. |
 | 14 | session-security | Candidate | Sensitive browser storage. |
-| 15 | authentication | Candidate | Open redirects and caller-controlled destinations. |
+| 15 | authentication | Already covered | Open redirects and caller-controlled destinations. Verified 2026-09-06: the auth callback accepts only same-origin return paths ([lib/auth/return-path.ts](../lib/auth/return-path.ts), finding SI-003). Scope: /auth/callback; no other caller-controlled redirect exists in the app. |
 | 16 | service-security | Candidate | Realtime/WebSocket authorization; GraphQL requires a boundary inventory rather than assumed usage. |
 
 ## SEC-028
@@ -537,3 +537,107 @@ Source: [Password hashing](security-video-subs/2026-09-06-password-hashing-expla
 | 02 | cryptography | Verify | One-way hashing alone is not a complete password-storage design; verify current salted, work-factor-aware provider behavior rather than implementing custom crypto. |
 | 03 | incident-response | Candidate | Credential reuse makes password disclosure affect other services. If verified exposure occurs, include revocation/reset and communication in response. |
 | 04 | evidence-quality | Not applicable | Lawsuit rhetoric and blanket impossibility of recovering passwords are not technical guarantees; weak passwords can still be guessed against hashes. |
+
+## SEC-041
+
+Source: [Client-controlled checkout prices](security-video-subs/2026-09-02-a-checkout-price-the-client-can-set.txt)
+
+Reviewed on 2026-09-06 for Step 1 planning. These are conditional payment-design inputs, not evidence that WerkFlow currently exposes a Stripe checkout.
+
+| Aspect | Topic | Status | Consideration |
+| --- | --- | --- | --- |
+| 01 | business-integrity | Deferred | When payments enter scope, derive chargeable products and amounts from authorized server data rather than trusting a submitted amount. The one-dollar example illustrates value tampering. |
+| 02 | authorization | Deferred | A client product or Price ID still needs server validation against the allowed catalog, customer, and purchase. Moving session creation to the server alone does not establish this boundary. |
+| 03 | payments | Verify | Confirm current Stripe Price/session semantics before adopting the claim that no application code can override pricing. Choosing another price, quantity, discount, or currency can still alter a transaction. |
+| 04 | webhooks | Deferred | Before paid access exists, verify authenticated provider events and expected transaction details before granting access. A browser redirect or manually opened success page is not evidence of payment. |
+| 05 | business-integrity | Deferred | Reconcile webhook confirmation with the existing duplicate/replay considerations in SEC-028.02; price integrity and event idempotence remain separate aspects. |
+
+## SEC-042
+
+Source: [Production errors exposing schema](security-video-subs/2026-09-02-production-errors-that-reveal-your-schema.txt)
+
+Reviewed on 2026-09-06 for Step 1 planning. This adds concrete error-path cases to SEC-014 rather than replacing its redaction caveats.
+
+| Aspect | Topic | Status | Consideration |
+| --- | --- | --- | --- |
+| 01 | error-disclosure | Candidate | Exercise broken URLs and failing reads/writes for exposed database names, queries, table structure, server paths, ORM identity, package versions, and stack traces. Distinguish sensitive data from harmless public implementation metadata when prioritizing findings. |
+| 02 | deployment-security | Candidate | Check actual development, preview, and production error behavior. A development flag must not expose customer data in a reachable preview or developer environment. |
+| 03 | observability | Candidate | Capture safe structured error context, time, and correlation identifiers in restricted monitoring while preserving useful public recovery guidance. |
+| 04 | data-minimization | Not applicable | Logging the complete user session and every request context without redaction would create another exposure. Define which fields are necessary and exclude tokens, credentials, and sensitive personal data. |
+| 05 | interaction-feedback | Candidate | Verify 404, server failure, and timeout experiences provide a clear next action and retain recoverable work. A branded page that reveals nothing useful to the user is not sufficient. |
+| 06 | security-tests | Candidate | Match safe-error checks to public response bodies and actual browser output, not just one shared error component; different server boundaries can bypass it. |
+
+## SEC-043
+
+Source: [IDs supplied in API requests](security-video-subs/2026-09-03-an-api-that-trusts-the-id-in-the-url.txt)
+
+Reviewed on 2026-09-06 for Step 1 planning. This extends the input-location inventory for SEC-004 and SEC-039.19.
+
+| Aspect | Topic | Status | Consideration |
+| --- | --- | --- | --- |
+| 01 | authorization | Candidate | Inventory identifiers accepted through route paths, query strings, and request bodies. Derive actor identity from verified authentication rather than a submitted user ID. |
+| 02 | tenant-isolation | Candidate | Test record access across organizations and between roles/assignments within an organization. A legitimate manager may access another employee's authorized records, so equality with a record owner is not the complete SHK rule. |
+| 03 | authorization | Not applicable | Replacing every sequential identifier with a UUID does not repair missing authorization and would create unnecessary migration work without an independent requirement. |
+| 04 | abuse-controls | Candidate | Consider identifier enumeration and bulk extraction even when identifiers are unpredictable; authorization and request-volume controls serve different purposes. |
+| 05 | api-contracts | Verify | A universal 403 response or ownership middleware is not automatically appropriate. Preserve the app's chosen disclosure behavior and enforce permissions at the actual action/data boundary. |
+
+## SEC-044
+
+Source: [Credentials in browser bundles](security-video-subs/2026-09-03-database-credentials-in-the-client-bundle.txt)
+
+Reviewed on 2026-09-06 for Step 1 planning. The concrete additions are public-build inspection and a distinction between import protection and serialized-data exposure.
+
+| Aspect | Topic | Status | Consideration |
+| --- | --- | --- | --- |
+| 01 | secrets | Candidate | Inventory credential-bearing modules, their imports/exports, and actual client entry points. Inspect whether sensitive values cross into browser-delivered modules or serialized props/action results. |
+| 02 | supply-chain | Candidate | Evaluate build-time server-only module guards as prevention for accidental client imports, using the installed framework's supported conventions. |
+| 03 | architecture | Verify | A correctly declared Server Action is not inherently shipped as server implementation code to the browser. Verify the specific framework import/export behavior before accepting the video's causal explanation. |
+| 04 | security-tests | Candidate | Inspect the public files delivered by a production build and deployed responses for server-only secrets. Report locations and redacted evidence without printing secret values into test or review logs. |
+| 05 | data-minimization | Verify | Database hostnames and intentionally public environment values are not all credentials; a match anywhere in server-side build output does not prove browser exposure. Classify the value and the delivered artifact. |
+| 06 | evidence-quality | Not applicable | A successful build after adding server-only does not prove secrets are absent from rendered data, logs, responses, public environment variables, or other files. Import protection and secret scanning need separate evidence. |
+| 07 | maintainability | Candidate | Keep actual server/client ownership clear without mechanically moving every function to another file or forbidding supported Server Action references. Fix proven boundary risks and preserve current architecture. |
+
+## SEC-045
+
+Source: [Tokens in browser storage](security-video-subs/2026-09-04-an-auth-token-left-in-localstorage.txt)
+
+Reviewed on 2026-09-06 for Step 1 planning. These overlap SEC-006 and SEC-015 but add explicit revocation-list/token-version options for evaluation.
+
+| Aspect | Topic | Status | Consideration |
+| --- | --- | --- | --- |
+| 01 | session-security | Candidate | Inspect actual access/refresh-token storage and which same-origin scripts can read it, including any third-party widget. Do not infer this repository uses localStorage from the video. |
+| 02 | authentication | Verify | HttpOnly cookies can limit script reads, but adopting them must fit the actual auth and browser Realtime architecture. Check current provider-supported handling before changing token ownership or inventing a second session system. |
+| 03 | browser-security | Candidate | Evaluate Secure/SameSite, cookie scope, CSRF defenses, and script restrictions together. HttpOnly does not prevent an injected script from issuing authenticated requests in the victim's browser. |
+| 04 | session-security | Candidate | Review access expiry, refresh-token rotation/reuse behavior, and lost-device risk together. Fifteen minutes and thirty days are examples, not accepted policy. |
+| 05 | session-security | Candidate | Establish password-change, compromise, offboarding, and role-change revocation behavior with an explicit maximum surviving access window and tests. |
+| 06 | architecture | Deferred | A custom revocation list or token-version scheme is a possible response only if provider behavior cannot meet an agreed requirement; account for every API, database, and Realtime consumer before adoption. |
+| 07 | evidence-quality | Verify | Cookies do not travel on every request regardless of origin/path/attributes, and immediate token death is not guaranteed by changing a password or storing a server-side version alone. Verify actual enforcement paths. |
+
+## SEC-046
+
+Source: [Privileged cloud functions](security-video-subs/2026-09-05-cloud-functions-running-with-admin-privileges.txt)
+
+Reviewed on 2026-09-06 for Step 1 planning. Firebase is the example platform; the audit question is the privilege gap in WerkFlow's actual trusted server/database operations.
+
+| Aspect | Topic | Status | Consideration |
+| --- | --- | --- | --- |
+| 01 | database-security | Candidate | Inventory privileged clients/functions, the access rules they bypass, and why elevated access is required. A server execution environment does not itself restrict access to the caller's permitted records. |
+| 02 | input-validation | Candidate | Validate types, allowed values, identifiers, and unexpected fields before privileged queries. Examine caller-selected table/collection/resource names separately from ordinary data values. |
+| 03 | authorization | Candidate | Derive trusted actor/organization context and enforce actual role, assignment, personnel, and record permissions before elevated reads or writes. Literal owner-only filtering would break intentional shared-business access. |
+| 04 | security-tests | Candidate | For each privileged path, compare reachable data/effects with permitted data/effects and test direct calls using unauthorized actors or identifiers. Validation alone does not prove authorization. |
+| 05 | evidence-quality | Not applicable | The app does not gain a Firebase Cloud Functions requirement from this source, and blanket statements that server functions have no rules must be checked against actual runtime and database privileges. |
+
+## SEC-047
+
+Source: [Mass assignment and review limits](security-video-subs/2026-09-06-mass-assignment-a-code-review-will-not-catch.txt)
+
+Reviewed on 2026-09-06 for Step 1 planning. This makes the earlier mass-assignment checklist item SEC-024.15 concrete without assuming a defect exists.
+
+| Aspect | Topic | Status | Consideration |
+| --- | --- | --- | --- |
+| 01 | input-validation | Candidate | Inventory write handlers that spread or pass submitted objects into database updates. Explicitly define writable fields by operation and actor; test omitted, extra, and protected fields. |
+| 02 | authorization | Candidate | Treat role, permissions, account/employment state, organization, and future plan/entitlement fields as explicit privilege decisions. The video's name/email/avatar examples still need their own identity and verification rules. |
+| 03 | architecture | Candidate | Separate ordinary and elevated operations through precise contracts and authorization. Separate URLs can help but are not mandatory if one existing boundary safely enforces distinct operations; avoid duplicate endpoints solely to match the video. |
+| 04 | security-tests | Candidate | Send prohibited fields directly, bypassing the normal form, and verify rejection or removal plus unchanged protected database state. A successful status code or sanitized response alone cannot prove no forbidden write occurred. |
+| 05 | security-tests | Candidate | Treat clean CodeRabbit/static review as complementary evidence, not proof of complete runtime authorization or business-logic coverage. Preserve negative integration tests for actual critical write boundaries. |
+| 06 | evidence-quality | Verify | The categorical claim that CodeRabbit cannot catch mass assignment or inspect an attack boundary is not established. Its capabilities and a specific scan result need direct evidence; false negatives remain possible for any reviewer. |

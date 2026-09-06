@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
       }
 
       return NextResponse.json(
-        { error: 'redeem_failed', details: redeemError.message },
+        { error: 'redeem_failed' },
         { status: 500 }
       );
     }

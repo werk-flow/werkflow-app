@@ -120,6 +120,7 @@ export function getTestGroups(repositoryRoot: string): TestGroup[] {
   for (const [slice, name] of [["21", "time_segments"], ["22", "time_corrections"], ["23", "time_accounts"], ["24", "people_lifecycle"]]) {
     groups.push({ id: `sql:p1-${slice}`, kind: "sql", files: [`supabase/tests/p1_${slice}_${name}.sql`], scopes: slice === "24" ? ["personnel", "documents", "time", "work"] : ["time", "personnel", "work"], prerequisites: [], isolation: "database-transaction", timing: untimed });
   }
+  groups.push({ id: "sql:security", kind: "sql", files: ["supabase/tests/security_boundaries.sql"], scopes: ["*"], prerequisites: [], isolation: "database-transaction", timing: untimed });
   for (const [id, file] of [["typecheck", "tsconfig.json"], ["lint", "eslint.config.mjs"], ["docs", "scripts/check-docs.ts"], ["coverage", "scripts/check-test-coverage.ts"]]) {
     groups.push({ id: `static:${id}`, kind: "static", files: [file!], scopes: ["*"], prerequisites: [], isolation: "process", timing: untimed });
   }

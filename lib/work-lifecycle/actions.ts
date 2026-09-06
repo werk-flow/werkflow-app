@@ -8,7 +8,7 @@ import { CACHE_TAGS } from "@/lib/data/cached";
 import { authenticateAndAuthorize } from "@/lib/jobs/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
-import { composeReadinessForTarget } from "@/lib/dispatch/actions";
+import { composeReadinessForTarget } from "@/lib/dispatch/readiness-target";
 
 import {
   parseWorkLifecycleSnapshot,

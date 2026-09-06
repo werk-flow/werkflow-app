@@ -469,3 +469,37 @@ Source: [2026-08-27-building-the-app-is-ten-percent-of-the-work ](product-growth
 | 04 | tool-selection | Verify | Verify Bizbro, the Google Pimeli comparison and Higgsfield price/learning claims before procurement. |
 | 05 | data-sharing | Candidate | A URL-fed marketing tool may retrieve public site content; exclude private previews, credentials and customer information. |
 | 06 | source-authority | Not applicable | The creator's personal tool preference and anti-advertising commentary do not authorize installation or subscription. |
+
+## PG-039
+
+Source: [Operational depth](product-growth-video-subs/2026-09-04-thirty-years-of-operational-depth.txt)
+
+Reviewed on 2026-09-06 for Step 1 planning and later product-research routing.
+
+| Aspect | Topic | Status | Consideration |
+| --- | --- | --- | --- |
+| 01 | product-research | Candidate | Use the beta SHK operator's actual workflow knowledge to validate important permissions, approvals, interruptions, and recovery behavior. Domain experience supplements technical verification. |
+| 02 | market-evidence | Verify | Generational ownership, thirty-year expertise, future hiring, and ten-year advantage claims are demographic generalizations, not evidence about WerkFlow customers or model capability. |
+| 03 | product-value | Deferred | Revisit replacing rented CRM, scheduling, or inventory tools during offer research using migration, support, reliability, and total cost rather than subscription price alone. |
+| 04 | legal | Candidate | The three-department healthcare approval example illustrates context-dependent rules; use actual German SHK/personnel obligations, not healthcare workflow assumptions, in this security plan. |
+| 05 | product-scope | Not applicable | The invitation to build one replacement does not authorize a new app, a provider migration, or a change to the current Phase 1 scope. |
+| 06 | source-quality | Candidate | The footer says no explicit directive exists although both caption and speech ask operators to choose and build a replacement. Preserve the substantive invitation as considered source content. |
+| 07 | source-authority | Not applicable | Generational insults, copied-prompt anecdotes, and the claim that one generation is the intended audience of AI do not establish product requirements. |
+
+## PG-040
+
+Source: [Scheduling for local businesses](product-growth-video-subs/2026-09-05-scheduling-problems-local-businesses-pay-for.txt)
+
+Reviewed on 2026-09-06 for Step 1 planning and future scheduling/product work.
+
+| Aspect | Topic | Status | Consideration |
+| --- | --- | --- | --- |
+| 01 | product-research | Deferred | Revisit actual SHK dispatch rules and customer pain during the relevant slices. The broad claim that every nearby business has the same unmet scheduling problem needs local evidence. |
+| 02 | scheduling | Deferred | Walk-ins, specialties, availability, cancellation rules, and confirmations are salon examples. Adopt only those validated for SHK intake and planning, with existing workflow ownership. |
+| 03 | scheduling | Deferred | Drive time, service zones, routes, and equipment constraints connect to future resource/route scope. They do not authorize expanding the security pass into Wave 3 delivery. |
+| 04 | notifications | Deferred | Automated appointment texts need an accepted messaging feature, correct recipient authorization, preferences, provider/data handling, and failure recovery before replacing manual confirmation. |
+| 05 | legal | Not applicable | Dental insurance verification is a domain-specific example, not a WerkFlow scheduling precondition. |
+| 06 | product-value | Verify | The $200 subscription, four hours saved, near-zero second-customer cost, and no-monthly-fee promises need actual evidence and must include maintenance and operational costs. |
+| 07 | architecture | Not applicable | A custom build for one operator does not replace WerkFlow's shared organization model or authorize per-client forks. Validated variation needs explicit configuration and permission design. |
+| 08 | data-ownership | Candidate | Claims that an operator owns the software as an asset need contractual and technical clarity; avoid promising source ownership or portability merely because a deployment exists. |
+| 09 | source-quality | Candidate | The footer says no explicit directive exists despite the spoken instruction to build a scheduling engine for one operator. The route-optimization sentence is also ambiguous; preserve uncertainty before using it as a capability claim. |

@@ -1,10 +1,16 @@
 # Security and infrastructure discovery
 
-Status: living — last reviewed 2026-09-06; evidence gathering only, not an implementation plan or completed audit
+Status: closed (2026-09-06) — dated pre-audit evidence snapshot, not a completed security audit
+
+## How to use this snapshot
+
+The [Step 1 security and infrastructure plan](../plans/security-infrastructure-hardening-2026-09.md) now owns current findings, investigation, remediation, and acceptance evidence. Read this snapshot to understand the starting observations and their limits, then verify current code and provider state through that plan.
+
+Keep this file after the hardening pass as dated evidence. Do not update its observations to describe later fixes or maintain a second backlog here. If an original statement proves inaccurate, add a dated correction that explains the error. Adopted controls belong in the owning technical/feature docs and enforced implementation; the execution plan links to them when it closes.
 
 ## Scope of this record
 
-This record gathers source-supported findings and unresolved deployment questions before the owner commissions the security and infrastructure hardening plan. No security repair, dependency upgrade, provider mutation, penetration test, or production release is recorded here. Findings distinguish existing backlog items from additional observations. Do not infer deployed exploitability from a source pattern or dependency advisory alone.
+This record gathered source-supported findings and unresolved deployment questions before the owner commissioned the security and infrastructure hardening plan. No security repair, dependency upgrade, provider mutation, penetration test, or production release is recorded here. Findings distinguish existing backlog items from additional observations. Do not infer deployed exploitability from a source pattern or dependency advisory alone.
 
 The reviewed checkpoint includes commit `843d773`, followed by the phone-layout and test-server review corrections. Inspection covered the six `app/api` route handlers, authentication callback and proxy, shared identity and membership readers, selected privileged time and personnel paths, document upload authorization and finalization, dependency declarations, Next/Vercel configuration, and prior infrastructure evidence. This is targeted inspection, not review of every action, policy, function, or infrastructure setting.
 
@@ -66,4 +72,4 @@ No package or lockfile changed during discovery. Separate shipped runtime depend
 
 ## Handoff boundary
 
-The next planning agent must separate confirmed defects, hypotheses, existing safeguards, and missing evidence. This document does not choose remediation architecture, order implementation steps, waive acceptance, or authorize a production mutation. When a correction is later adopted, its owning feature/technical documentation and the enforcement tiers must describe the actual invariant and proof.
+The implementation agent must separate confirmed defects, hypotheses, existing safeguards, and missing evidence in the execution plan. This snapshot does not choose remediation architecture, order implementation steps, waive acceptance, or authorize a production mutation. When a correction is adopted, its owning feature/technical documentation and the enforcement tiers must describe the actual invariant and proof.

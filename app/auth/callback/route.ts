@@ -3,8 +3,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { type EmailOtpType } from '@supabase/supabase-js';
 import { getSupabasePublishableKey, getSupabaseUrl } from '@/lib/env/public';
+import { resolveSafeReturnPath } from '@/lib/auth/return-path';
 import { CURRENT_ORG_COOKIE, CURRENT_ORG_MAX_AGE } from '@/lib/org/cookies';
+import { verifySameOriginJsonRequest } from '@/lib/security/same-origin';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { isUuid } from '@/lib/validation/uuid';
+
+function isSessionPayload(
+  value: unknown
+): value is { access_token: string; refresh_token: string } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { access_token?: unknown }).access_token === 'string' &&
+    typeof (value as { refresh_token?: unknown }).refresh_token === 'string'
+  );
+}
 
 function redeemInviteForUser(inviteCode: string, userId: string) {
   return createSupabaseAdminClient().rpc('redeem_organization_invite_for_user', {
@@ -17,9 +31,13 @@ export async function GET(req: NextRequest) {
   const { searchParams, origin } = new URL(req.url);
   const code = searchParams.get('code');
   const tokenHash = searchParams.get('token_hash');
-  const next = searchParams.get('next') ?? '/';
+  // Only same-origin paths may follow authentication (SI-003).
+  const next = resolveSafeReturnPath(searchParams.get('next'), origin);
   const type = searchParams.get('type') as EmailOtpType | null;
-  const inviteCode = searchParams.get('invite_code');
+  // Invite codes are generated UUIDs; anything else is neither redeemed nor
+  // echoed into a redirect (SI-026).
+  const rawInviteCode = searchParams.get('invite_code');
+  const inviteCode = rawInviteCode && isUuid(rawInviteCode) ? rawInviteCode : null;
 
   // Determine the redirect destination based on the auth type
   let redirectTo = next;
@@ -320,7 +338,22 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { event, session } = await req.json();
+  // This handler writes auth cookies from a request body. Without an origin
+  // check a cross-site form could log this browser into an attacker's account
+  // (login CSRF, SI-013). Route handlers get no framework CSRF protection.
+  const verdict = verifySameOriginJsonRequest(req);
+  if (!verdict.allowed) {
+    return NextResponse.json({ error: 'forbidden_origin' }, { status: 403 });
+  }
+
+  const body = (await req.json().catch(() => undefined)) as
+    | { event?: unknown; session?: unknown }
+    | undefined;
+  if (body === undefined || typeof body !== 'object' || body === null) {
+    return NextResponse.json({ error: 'invalid_body' }, { status: 400 });
+  }
+  const event = typeof body.event === 'string' ? body.event : null;
+  const session = body.session;
 
   const res = NextResponse.json({ success: true });
 
@@ -346,7 +379,10 @@ export async function POST(req: NextRequest) {
     }
   );
 
-  if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+  if (
+    (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') &&
+    isSessionPayload(session)
+  ) {
     await supabase.auth.setSession(session);
   }
 

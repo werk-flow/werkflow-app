@@ -13,7 +13,8 @@ import {
   getTimeEntries,
 } from "@/lib/time-tracking/actions";
 import { getWeeklyTargets } from "@/lib/personnel/target-actions";
-import { getOrgMembersForUser, type OrgRole } from "@/lib/members/actions";
+import { type OrgRole } from "@/lib/members/actions";
+import { getOrgMembersForUser } from "@/lib/members/queries";
 import type {
   LiveClockState,
   ZeiterfassungOverview,

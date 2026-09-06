@@ -8,6 +8,11 @@ import type { User } from '@supabase/supabase-js';
 import { CACHE_TAGS, getAuthenticatedUser } from '@/lib/data/cached';
 import { getSupabaseSecretKey } from '@/lib/env/server';
 import { getInitialEmailChangeWizardState } from '@/lib/settings/email-change-state';
+import {
+  canCompleteEmailChange,
+  canResendNewEmailCode,
+  type EmailChangeChallengeFacts,
+} from '@/lib/settings/email-change-rules';
 import { reportAuthUsersStringColumnHealth } from '@/lib/supabase/auth-health';
 import {
   CURRENT_EMAIL_MAX_ATTEMPTS,
@@ -75,6 +80,17 @@ function mergeUserMetadataEmail(user: User, email: string) {
     ...metadata,
     email,
     email_verified: true,
+  };
+}
+
+function toChallengeFacts(
+  challenge: EmailChangeChallengeRow | null
+): EmailChangeChallengeFacts | null {
+  if (!challenge) return null;
+  return {
+    status: challenge.status,
+    currentEmailVerifiedAt: challenge.current_email_verified_at,
+    currentEmailVerifiedExpiresAt: challenge.current_email_verified_expires_at,
   };
 }
 
@@ -393,48 +409,9 @@ export async function touchPendingNewEmailVerification(
     return buildResult(false, 'cooldown');
   }
 
-  if (!challenge) {
-    const { error } = await admin.from('email_change_challenges').upsert(
-      {
-        user_id: user.id,
-        current_email: user.email?.trim().toLowerCase() ?? '',
-        status: 'pending_new',
-        new_email: parsed.data.toLowerCase(),
-        new_email_code_hash: hashOtpCode(code),
-        new_email_code_expires_at: addMinutes(
-          now,
-          CURRENT_EMAIL_OTP_EXPIRY_MINUTES
-        ).toISOString(),
-        new_email_last_sent_at: now.toISOString(),
-        new_email_attempt_count: 0,
-        new_email_requested_at: now.toISOString(),
-        updated_at: now.toISOString(),
-      },
-      { onConflict: 'user_id' }
-    );
-
-    if (error) {
-      console.error('Failed to recreate pending new email verification row:', error);
-      return buildResult(false, 'unexpected_error');
-    }
-
-    const firstName = await getProfileFirstName(user.id);
-    const emailError = await sendEmailChangeOtpEmail({
-      email: parsed.data.toLowerCase(),
-      firstName,
-      code,
-      kind: 'new',
-    });
-
-    if (emailError) {
-      console.error('Failed to resend new email OTP:', emailError);
-      return buildResult(false, 'email_send_failed');
-    }
-
-    return buildResult(true);
-  }
-
-  if (challenge.status !== 'pending_new') {
+  // A resend never creates a challenge: that would skip the current-address
+  // confirmation and let a stolen session move the account (SI-016).
+  if (!canResendNewEmailCode(toChallengeFacts(challenge), now)) {
     return buildResult(false, 'challenge_not_found');
   }
 
@@ -496,7 +473,7 @@ export async function verifyNewEmailChangeOtp(
 
   if (
     !challenge ||
-    challenge.status !== 'pending_new' ||
+    !canCompleteEmailChange(toChallengeFacts(challenge), now) ||
     !challenge.new_email ||
     !challenge.new_email_code_hash ||
     !challenge.new_email_code_expires_at

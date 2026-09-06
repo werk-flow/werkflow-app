@@ -16,7 +16,8 @@ import { CalendarContainer } from '@/components/kalender/calendar-container';
 import { KalenderPageSkeleton } from '@/components/loading-states/kalender-page-skeleton';
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
-import { getOrgMembersForUser, type OrgRole } from '@/lib/members/actions';
+import { type OrgRole } from '@/lib/members/actions';
+import { getOrgMembersForUser } from '@/lib/members/queries';
 import { toLocalDateString } from '@/lib/utils';
 
 type MemberRow = {

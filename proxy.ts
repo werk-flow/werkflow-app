@@ -4,13 +4,22 @@ import { NextResponse } from 'next/server';
 import { getSupabasePublishableKey, getSupabaseUrl } from '@/lib/env/public';
 
 
-const PROTECTED_PREFIXES = [
+// Every folder under app/(app) plus the two authenticated areas outside it.
+// lib/security/proxy-prefixes.test.ts fails when a shipped route area is
+// missing here or from the matcher below (SI-012). The proxy only routes;
+// app/(app)/layout.tsx and each action re-check identity.
+export const PROTECTED_PREFIXES = [
   '/dashboard',
   '/kalender',
   '/zeiterfassung',
   '/mitarbeiter',
   '/kunden',
+  '/anfragen',
   '/auftraege',
+  '/arbeitsvorlagen',
+  '/aufgaben',
+  '/qualifikationen',
+  '/service',
   '/dokumente',
   '/inventar',
   '/einstellungen',
@@ -123,7 +132,12 @@ export const config = {
     '/zeiterfassung',
     '/mitarbeiter/:path*',
     '/kunden/:path*',
+    '/anfragen/:path*',
     '/auftraege/:path*',
+    '/arbeitsvorlagen/:path*',
+    '/aufgaben/:path*',
+    '/qualifikationen/:path*',
+    '/service/:path*',
     '/dokumente/:path*',
     '/inventar/:path*',
     '/einstellungen/:path*',

@@ -52,6 +52,7 @@ import {
   canAddEntriesFor,
   needsChangeRequest
 } from './helpers';
+import { canViewChangeRequest } from './change-request-visibility';
 import {
   getLocalDayEnd,
   getLocalDayKey,
@@ -3049,13 +3050,24 @@ export async function getChangeRequestsForEntries(
       return { success: false, error: 'not_authenticated' };
     }
 
+    // Caller-supplied entry IDs are a filter, not an authorization: only
+    // organizations the caller belongs to are queried, and employees see only
+    // requests they raised or that concern their own entries (SI-002).
+    const memberships = await getCachedMemberships(user.id);
+    if (memberships.length === 0) {
+      return { success: true, requests: [] };
+    }
+    const roleByOrganization = new Map(
+      memberships.map((membership) => [membership.orgId, membership.role as OrgRole])
+    );
+
     const admin = createSupabaseAdminClient();
 
-    // Get all pending change requests for these entries
     const { data: requests, error } = await admin
       .from('entry_change_requests')
       .select('*')
       .in('entry_id', persistedEntryIds)
+      .in('organization_id', [...roleByOrganization.keys()])
       .eq('status', 'pending');
 
     if (error) {
@@ -3063,9 +3075,32 @@ export async function getChangeRequestsForEntries(
       return { success: false, error: 'fetch_failed' };
     }
 
+    const { data: entries, error: entryError } = await admin
+      .from('time_entries')
+      .select('id, user_id')
+      .in('id', (requests || []).map((request) => request.entry_id));
+    if (entryError) {
+      console.error('Error fetching entries for change requests:', entryError);
+      return { success: false, error: 'fetch_failed' };
+    }
+    const entryOwnerById = new Map(
+      (entries || []).map((entry) => [entry.id, entry.user_id])
+    );
+
+    const visible = (requests || []).filter((request) =>
+      canViewChangeRequest(
+        {
+          organizationId: request.organization_id,
+          requestedBy: request.requested_by,
+          entryUserId: entryOwnerById.get(request.entry_id) ?? null,
+        },
+        { userId: user.id, roleByOrganization }
+      )
+    );
+
     return {
       success: true,
-      requests: (requests || []).map(toChangeRequest)
+      requests: visible.map(toChangeRequest)
     };
   } catch (error) {
     console.error('Unexpected error in getChangeRequestsForEntries:', error);
@@ -3687,12 +3722,22 @@ export async function getAssignedJobs(
       return { success: false, error: 'not_authenticated' };
     }
 
+    // Membership in the requested organization and manager role for a foreign
+    // user are required; a UUID alone grants nothing (SI-017).
+    const callerRole = await verifyMembershipFromCache(user.id, organizationId);
+    if (!callerRole) {
+      return { success: false, error: 'not_a_member' };
+    }
     const targetUserId = userId || user.id;
+    if (!canViewEntries(callerRole, targetUserId, user.id)) {
+      return { success: false, error: 'not_authorized' };
+    }
     const admin = createSupabaseAdminClient();
 
     const { data: assignments, error: assignError } = await admin
       .from('job_assignments')
       .select('job_id')
+      .eq('organization_id', organizationId)
       .eq('user_id', targetUserId);
 
     if (assignError) {

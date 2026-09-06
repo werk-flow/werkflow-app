@@ -13,12 +13,8 @@ import {
   getCachedOrganizationUserPreferences,
   getCachedUser,
 } from '@/lib/data/cached';
-import {
-  getMemberDetail,
-  getOrgMembersForUser,
-  getProfilesByIds,
-  type OrgRole,
-} from '@/lib/members/actions';
+import { getMemberDetail, getProfilesByIds, type OrgRole } from '@/lib/members/actions';
+import { getOrgMembersForUser } from '@/lib/members/queries';
 import { getPersonnelDetail, type PersonnelDetail } from '@/lib/personnel/actions';
 import { getJobsForMember } from '@/lib/jobs/actions';
 import { toClient, toProject, type Client, type ProjectWithDetails } from '@/lib/jobs/types';

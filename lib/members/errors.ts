@@ -11,6 +11,8 @@ const MEMBER_ACTION_ERROR_MESSAGES: Record<string, string> = {
   cannot_change_own_role: 'Du kannst deine eigene Rolle nicht ändern.',
   insufficient_permissions: 'Du darfst dieses Mitglied nicht verwalten.',
   delete_failed: 'Das Mitglied konnte nicht entfernt werden.',
+  has_time_history:
+    'Für dieses Mitglied wurde bereits Arbeitszeit erfasst. Es kann nicht entfernt werden; beende stattdessen das Beschäftigungsverhältnis über die Personalakte.',
   update_failed: 'Die Rolle konnte nicht geändert werden.',
 };
 

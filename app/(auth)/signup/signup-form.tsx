@@ -214,7 +214,6 @@ export function SignupForm({
         return;
       }
 
-      await invalidateProfileCache(data.user.id);
     }
 
     if (data.session) {
@@ -228,6 +227,9 @@ export function SignupForm({
           session: data.session
         })
       });
+      // The action identifies the caller from the server session, so it can
+      // only invalidate the profile once the callback has set the cookies.
+      await invalidateProfileCache();
     }
 
     // Include invite_code in the verify redirect if present

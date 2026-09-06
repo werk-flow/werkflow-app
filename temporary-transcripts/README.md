@@ -74,7 +74,7 @@ bun temporary-transcripts/check-inventory.mjs
 
 `--record` records the explicitly named source after its review. It is not a bulk "mark everything reviewed" command. A source edit fails the normal check until reconciled; a new source without a review also fails, including a source added at the folder root. The check reserves this README and the nine named review files as bookkeeping; register a new review file in its `reviewNames` set when adding one. URL-only inbox/history files are reported separately and do not count as transcribed videos. They need transcription before semantic review can be claimed. Untranscribed screen-only prompts, graphs, or code remain `Verify` even if the available transcript has been fully considered. Obtain the missing source material if it becomes relevant to a decision; never invent it.
 
-Security/infrastructure fact gathering is an evaluation of candidate controls and actual evidence. It is not yet the implementation plan. Public/current technical and legal claims need primary verification before they reach that plan; this folder alone cannot prove a vulnerability, a legal obligation, or a vendor entitlement.
+Security/infrastructure notes here evaluate candidate controls and actual evidence. Implementation plans belong in canonical documentation and must justify their proposed controls through product requirements and verified technical evidence. Public/current technical and legal claims need primary verification before they reach a plan; this folder alone cannot prove a vulnerability, a legal obligation, or a vendor entitlement.
 
 ## Structure
 

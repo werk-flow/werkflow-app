@@ -7,6 +7,7 @@
     "BASE-ORG-F04": "9d05401ac0f0307384d924e40d68a71c9a29fbfd8198aff5f8b0d8809fe596fc",
     "BASE-ORG-F05": "6d557881094a6d33a5c14f8f7e79215336dc4ddd75f8812422760aac1ab6ed0e",
     "BASE-ORG-F06": "dbd12199492c0fd89852586084702544b0fe411c64df802c1eba6f0b896905d3",
+    "BASE-ORG-F07": "3f1b09e22e90c4e3d96d74fef62e3bfa8c3bd209a8202778abef537c8524f2ad",
     "BASE-CUSTOMER-F01": "0b5a464efc390966d2ac8a808195e8125486fc59bb5e87e44d748e9068c73da6",
     "BASE-CUSTOMER-F02": "68af994d960a14ba04e0ea75127d88adf985ad35e26bfbe9149d1ea472bf4365",
     "BASE-CUSTOMER-F03": "35a3e99af91de9699dad7671f8047c8e9aa80ee0498341587230d9810f319251",
@@ -6104,6 +6105,24 @@
       "review": {
         "kind": "assertions-reviewed",
         "rationale": "The unrelated approved correction now enters through canonical test preparation with an authenticated Büro actor. P122 audit retains the real manager direct-correction UI path. P123 still operates the actual period UI and verifies the original missing-clock finding, exact repaired source and successor calculation. Direct calculation and legacy-projection assertions preserve all clauses of F24. Source review on 2026-09-06; runtime outcomes remain separate."
+      }
+    },
+    {
+      "id": "security-si-006-member-removal-history",
+      "flowIds": [
+        "BASE-ORG-F07"
+      ],
+      "evidence": [
+        {
+          "file": "supabase/tests/security_boundaries.sql",
+          "kind": "sql",
+          "description": "remove_member_with_time_capture raises time_member_removal_has_history and leaves membership and time history in place"
+        }
+      ],
+      "clauses": "Entfernen eines Mitglieds mit erfasster Arbeitszeit wird an der Datenbankgrenze abgelehnt; Mitgliedschaft und Zeithistorie bleiben erhalten. Die deutsche Meldung der Aktion ist reviewed, nicht browsergetestet.",
+      "review": {
+        "kind": "assertions-reviewed",
+        "rationale": "The SQL assertion calls the real RPC as service_role for a member with one time entry, checks the exception name, and verifies that the membership row and the time entry survive. The action maps the exception to the German message rendered by the member actions."
       }
     }
   ]

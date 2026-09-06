@@ -25,7 +25,8 @@ import { PageActionButton, PageActionProvider } from '@/components/shared/page-a
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { UrlFlashBanner } from '@/components/ui/banner';
-import { getOrgMembersForUser, type OrgRole } from '@/lib/members/actions';
+import { type OrgRole } from '@/lib/members/actions';
+import { getOrgMembersForUser } from '@/lib/members/queries';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 
 async function AuftraegeData({

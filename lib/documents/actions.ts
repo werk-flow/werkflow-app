@@ -64,7 +64,7 @@ import {
 import { getOrgClients } from "@/lib/clients/actions";
 import { getOrgJobs } from "@/lib/jobs/actions";
 import { getOrgProjects } from "@/lib/projects/actions";
-import { getOrgMembersForUser } from "@/lib/members/actions";
+import { getOrgMembersForUser } from "@/lib/members/queries";
 import type { Client, Job, ProjectWithDetails } from "@/lib/jobs/types";
 import {
   buildDocumentStoragePath,

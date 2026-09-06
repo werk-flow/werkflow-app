@@ -40,6 +40,7 @@ Diese Abschnitte beschreiben, was die App bereits konnte, bevor der Phase-1-Fahr
 - `BASE-ORG-F04` — Alle: wer mehreren Organisationen angehört, kann die aktive Organisation wechseln; alle Daten und Ansichten sind strikt auf die aktive Organisation begrenzt.
 - `BASE-ORG-F05` — Admin/Büro: sehen unter `/mitarbeiter` die Mitgliederliste mit Rolle, aktuellem Stempelstatus und Tagesfortschritt sowie eine Detailseite je Mitglied. Handwerker haben keinen Zugriff auf diese Seite.
 - `BASE-ORG-F06` — Rollenänderungen sind bewusst konservativ: niemand kann die eigene Rolle ändern, einen zweiten Admin ernennen oder sich selbst entfernen. Büro kann neue Büro-Mitglieder einladen, bestehende Büro- oder Admin-Mitglieder aber nicht ändern oder entfernen; bestehende Handwerker können verwaltet werden.
+- `BASE-ORG-F07` — Admin/Büro: können ein Mitglied nur entfernen, solange für dieses Mitglied keine Arbeitszeit erfasst wurde. Mit erfasster Zeit lehnt die App das Entfernen mit einem Hinweis ab; die Person wird stattdessen über die Personalakte ausgestempelt und ihr Beschäftigungsverhältnis beendet (Sicherheits- und Infrastruktur-Härtung 2026-09; vollständige Offboarding-Abwicklung folgt in P1-33).
 
 ### Kunden
 

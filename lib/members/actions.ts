@@ -8,6 +8,7 @@ import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { getAuthenticatedUser, getCachedMemberships, CACHE_TAGS } from '@/lib/data/cached';
 import { getBusinessTodayIso } from '@/lib/personnel/types';
 import { getResponsibilitiesStrandedByMemberRemoval } from '@/lib/responsibilities/server';
+import { getOrgMembersForUser, getProfileNamesVisibleTo } from './queries';
 
 // Role hierarchy for permission checks
 // Lower number = higher rank
@@ -244,6 +245,11 @@ export async function removeMember(
 
     if (deleteError) {
       console.error('Error removing member atomically:', deleteError);
+      // SI-006 containment: recorded time keeps the member; offboarding runs
+      // through the P1-24 employment transitions until P1-33.
+      if (deleteError.message.includes('time_member_removal_has_history')) {
+        return { success: false, error: 'has_time_history' };
+      }
       if (deleteError.message.includes('last_responsibility_holder:')) {
         const responsibility = deleteError.message.includes('leave_approval')
           ? 'leave_approval'
@@ -337,27 +343,10 @@ export type OrgMemberInfo = {
   joined_at: string;
 };
 
-export async function getOrgMembersForUser(
-  organizationId: string,
-  userId: string
-): Promise<OrgMemberInfo[]> {
-  const admin = createSupabaseAdminClient();
-  const { data, error } = await admin.rpc('get_org_members_for_user', {
-    p_org_id: organizationId,
-    p_user_id: userId
-  });
-
-  if (error) {
-    console.error('Error fetching organization members:', error);
-    return [];
-  }
-
-  return (data ?? []) as OrgMemberInfo[];
-}
-
 /**
- * Get org members (server action replacement for /api/get-org-members).
+ * Get org members for the authenticated caller.
  * Enforces admin/manager authorization and filters by role for managers.
+ * The unauthenticated read helper lives in `lib/members/queries.ts` (SI-014).
  */
 export async function getOrgMembersAction(
   organizationId: string
@@ -400,22 +389,13 @@ export async function getOrgMembersAction(
 export async function getProfilesByIds(
   userIds: string[]
 ): Promise<Record<string, { firstName: string | null; lastName: string | null }>> {
-  if (!userIds || userIds.length === 0) return {};
+  if (!Array.isArray(userIds) || userIds.length === 0) return {};
 
   try {
-    const admin = createSupabaseAdminClient();
-    const { data: profiles, error } = await admin
-      .from('profiles')
-      .select('id, first_name, last_name')
-      .in('id', userIds);
-
-    if (error || !profiles) return {};
-
-    const map: Record<string, { firstName: string | null; lastName: string | null }> = {};
-    for (const p of profiles) {
-      map[p.id] = { firstName: p.first_name, lastName: p.last_name };
-    }
-    return map;
+    // Names are visible only across shared organizations (SI-015).
+    const user = await getAuthenticatedUser();
+    if (!user) return {};
+    return await getProfileNamesVisibleTo(user.id, userIds);
   } catch {
     return {};
   }

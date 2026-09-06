@@ -6,7 +6,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { isUserSubscribed } from '@/lib/subscription/helpers';
 import { generateUniqueOrgCode } from './generate-code';
 import { CURRENT_ORG_COOKIE, CURRENT_ORG_MAX_AGE } from './cookies';
-import { getAuthenticatedUser, CACHE_TAGS } from '@/lib/data/cached';
+import { getAuthenticatedUser, getCachedMemberships, CACHE_TAGS } from '@/lib/data/cached';
 import {
   getOrganizationNameValidationError,
   normalizeOrganizationName,
@@ -14,9 +14,16 @@ import {
 import { buildBreakPolicyHistoryEntry } from '@/lib/time-tracking/settings';
 
 /**
- * Sets the active organization cookie
+ * Sets the active organization cookie. `resolveActiveOrgId` re-checks
+ * membership on every read, so this only refuses obviously wrong input early
+ * and never stores a foreign organization for a stranger (SI-007).
  */
 export async function setActiveOrgCookie(orgId: string): Promise<void> {
+  const user = await getAuthenticatedUser();
+  if (!user) return;
+  const memberships = await getCachedMemberships(user.id);
+  if (!memberships.some((membership) => membership.orgId === orgId)) return;
+
   const cookieStore = await cookies();
   cookieStore.set(CURRENT_ORG_COOKIE, orgId, {
     httpOnly: true,

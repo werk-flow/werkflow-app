@@ -173,7 +173,7 @@ These rules apply to every task in this repository. They originated as Cursor ru
 - Do not leave linter or type errors. Add focused tests when the change has non-trivial risk.
 - Preserve accessibility with ARIA where appropriate, keyboard/focus behavior, visible focus states, and sufficient contrast. Localize user-facing accessibility text in German.
 - Keep UI text centralized where practical for future translation management. Avoid burying hardcoded user-facing strings deep in logic.
-- Validate inputs at boundaries, avoid leaking PII in logs, and follow least-privilege handling for keys and tokens.
+- Validate inputs at boundaries, avoid leaking PII in logs, and follow least-privilege handling for keys and tokens. Before adding a route handler, an export to a `'use server'` module, a `SECURITY DEFINER` function, a storage path, or a provider setting, read `docs/technical/security.md`: it names the invariant, the mechanism, and the check that will fail if you skip it.
 - Avoid unnecessary renders, large client bundles, and expensive un-memoized React computations. Prefer streaming and Suspense patterns where they fit the app.
 
 ### Bun-First Local Development

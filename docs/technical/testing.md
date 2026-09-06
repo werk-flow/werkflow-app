@@ -46,6 +46,7 @@ An explicit subset proves only that subset. Return to the normal change plan bef
 | Work | Required evidence |
 | --- | --- |
 | Slice or application change | The complete selected local change plan, catalog coverage, relevant visual review, and provider checks when provider behavior is affected |
+| Cross-cutting hardening pass (security, performance) before the beta handoff | Owner decision 2026-09-06: the cheap groups (static, unit, SQL, UI contracts) plus a hand-picked set of browser groups covering the boundaries the pass changed, recorded by name in the pass's plan with the reason for each. The complete battery runs once, in release mode, at the final beta acceptance after the last pass, because each pass changes shared inputs that would select and then invalidate every browser group. This does not make a pass "accepted"; its plan must say which groups ran and which did not. |
 | Wave end, beta handoff, or production release | The complete local release plan and the cloud canary on the intended release inputs |
 | Failure investigation | The smallest relevant group or retained diagnostic. Diagnostic results cannot replace fresh acceptance evidence |
 | Documentation-only change | Current documentation checks and any executable contract changed by the documentation. A historical wording correction does not require another business journey |

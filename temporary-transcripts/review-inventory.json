@@ -2127,6 +2127,48 @@
       ]
     },
     {
+      "id": "PG-039",
+      "source": "product-growth-video-subs/2026-09-04-thirty-years-of-operational-depth.txt",
+      "sha256": "760414a4a0095a75131ef4edc93584fcaa246ae482ee2385990d45926659084d",
+      "lines": {
+        "start": 1,
+        "end": 58
+      },
+      "reviewFile": "review-product-growth.md",
+      "aspectIds": [
+        "PG-039.01",
+        "PG-039.02",
+        "PG-039.03",
+        "PG-039.04",
+        "PG-039.05",
+        "PG-039.06",
+        "PG-039.07"
+      ],
+      "reviewedOn": "2026-09-06"
+    },
+    {
+      "id": "PG-040",
+      "source": "product-growth-video-subs/2026-09-05-scheduling-problems-local-businesses-pay-for.txt",
+      "sha256": "bca4580b487744cac26b2f6fc68cc9a334853825773d4650db01ff4d77bd0cf9",
+      "lines": {
+        "start": 1,
+        "end": 57
+      },
+      "reviewFile": "review-product-growth.md",
+      "aspectIds": [
+        "PG-040.01",
+        "PG-040.02",
+        "PG-040.03",
+        "PG-040.04",
+        "PG-040.05",
+        "PG-040.06",
+        "PG-040.07",
+        "PG-040.08",
+        "PG-040.09"
+      ],
+      "reviewedOn": "2026-09-06"
+    },
+    {
       "id": "PRACTICE-001",
       "source": "engineering-practice-video-subs/2026-07-16-testing-the-paths-nobody-checked.txt",
       "sha256": "d91db38aa9ac9ad32aa93a0aad17ab6f7aac45f7c603659b0f1745a7ffc1064a",
@@ -3056,6 +3098,138 @@
         "SEC-040.03",
         "SEC-040.04"
       ]
+    },
+    {
+      "id": "SEC-041",
+      "source": "security-video-subs/2026-09-02-a-checkout-price-the-client-can-set.txt",
+      "sha256": "566b814a7e60726fd72e89507ea88c0c3fa382320d50b396fd0e273e117b1cb3",
+      "lines": {
+        "start": 1,
+        "end": 77
+      },
+      "reviewFile": "review-security.md",
+      "aspectIds": [
+        "SEC-041.01",
+        "SEC-041.02",
+        "SEC-041.03",
+        "SEC-041.04",
+        "SEC-041.05"
+      ],
+      "reviewedOn": "2026-09-06"
+    },
+    {
+      "id": "SEC-042",
+      "source": "security-video-subs/2026-09-02-production-errors-that-reveal-your-schema.txt",
+      "sha256": "e3fef2703e07dbc74af20367b0296a9ee77ed8eac7095f303f7e17137c152823",
+      "lines": {
+        "start": 1,
+        "end": 71
+      },
+      "reviewFile": "review-security.md",
+      "aspectIds": [
+        "SEC-042.01",
+        "SEC-042.02",
+        "SEC-042.03",
+        "SEC-042.04",
+        "SEC-042.05",
+        "SEC-042.06"
+      ],
+      "reviewedOn": "2026-09-06"
+    },
+    {
+      "id": "SEC-043",
+      "source": "security-video-subs/2026-09-03-an-api-that-trusts-the-id-in-the-url.txt",
+      "sha256": "13d3cca0c9762d817fe2a44417bd3f1fce7afec33ed1e2937690a73484957158",
+      "lines": {
+        "start": 1,
+        "end": 76
+      },
+      "reviewFile": "review-security.md",
+      "aspectIds": [
+        "SEC-043.01",
+        "SEC-043.02",
+        "SEC-043.03",
+        "SEC-043.04",
+        "SEC-043.05"
+      ],
+      "reviewedOn": "2026-09-06"
+    },
+    {
+      "id": "SEC-044",
+      "source": "security-video-subs/2026-09-03-database-credentials-in-the-client-bundle.txt",
+      "sha256": "7c63fd61d7835ed9c08585b09fdd275611c4c6861d9c48a6b390ce8a1dba3509",
+      "lines": {
+        "start": 1,
+        "end": 80
+      },
+      "reviewFile": "review-security.md",
+      "aspectIds": [
+        "SEC-044.01",
+        "SEC-044.02",
+        "SEC-044.03",
+        "SEC-044.04",
+        "SEC-044.05",
+        "SEC-044.06",
+        "SEC-044.07"
+      ],
+      "reviewedOn": "2026-09-06"
+    },
+    {
+      "id": "SEC-045",
+      "source": "security-video-subs/2026-09-04-an-auth-token-left-in-localstorage.txt",
+      "sha256": "ec0085910ceda88476f1881e0ebca6a9b8b5cab4f865aad7ed0a946bf5955af2",
+      "lines": {
+        "start": 1,
+        "end": 74
+      },
+      "reviewFile": "review-security.md",
+      "aspectIds": [
+        "SEC-045.01",
+        "SEC-045.02",
+        "SEC-045.03",
+        "SEC-045.04",
+        "SEC-045.05",
+        "SEC-045.06",
+        "SEC-045.07"
+      ],
+      "reviewedOn": "2026-09-06"
+    },
+    {
+      "id": "SEC-046",
+      "source": "security-video-subs/2026-09-05-cloud-functions-running-with-admin-privileges.txt",
+      "sha256": "69ae53dd4bcb95f097b8007de4420417e972452c2b3c5d4f83f7801e05272cb0",
+      "lines": {
+        "start": 1,
+        "end": 80
+      },
+      "reviewFile": "review-security.md",
+      "aspectIds": [
+        "SEC-046.01",
+        "SEC-046.02",
+        "SEC-046.03",
+        "SEC-046.04",
+        "SEC-046.05"
+      ],
+      "reviewedOn": "2026-09-06"
+    },
+    {
+      "id": "SEC-047",
+      "source": "security-video-subs/2026-09-06-mass-assignment-a-code-review-will-not-catch.txt",
+      "sha256": "a3d02196602fbb7f5797682974fae2bec2d4cb556044d44690d222cf59ff7255",
+      "lines": {
+        "start": 1,
+        "end": 72
+      },
+      "reviewFile": "review-security.md",
+      "aspectIds": [
+        "SEC-047.01",
+        "SEC-047.02",
+        "SEC-047.03",
+        "SEC-047.04",
+        "SEC-047.05",
+        "SEC-047.06"
+      ],
+      "reviewedOn": "2026-09-06"
     },
     {
       "id": "TERM-001",

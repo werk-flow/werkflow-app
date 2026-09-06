@@ -5,11 +5,14 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { getAuthenticatedUser, getCachedMemberships, CACHE_TAGS } from '@/lib/data/cached';
 
 /**
- * Invalidate the cached profile for a user.
- * Call this after upserting a profile from a client component.
+ * Invalidate the authenticated caller's cached profile.
+ * Call this after upserting a profile from a client component. The identity is
+ * taken from the verified session, never from the caller (SI-004).
  */
-export async function invalidateProfileCache(userId: string): Promise<void> {
-  updateTag(CACHE_TAGS.profile(userId));
+export async function invalidateProfileCache(): Promise<void> {
+  const user = await getAuthenticatedUser();
+  if (!user) return;
+  updateTag(CACHE_TAGS.profile(user.id));
 }
 
 export type DeleteAccountResult =

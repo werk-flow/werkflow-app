@@ -12,6 +12,18 @@ interface EmailParams {
   isExistingUser: boolean;
 }
 
+
+// Names and organization titles are user-controlled. Escape them before they
+// enter the HTML template so a crafted value cannot inject markup (SI-021).
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 const jsonHeaders = {
   'Content-Type': 'application/json'
 };
@@ -97,7 +109,9 @@ async function isAuthorized(req: Request): Promise<boolean> {
 }
 
 function generateEmailHtml(params: EmailParams): string {
-  const { inviterName, organizationName, inviteUrl, isExistingUser } = params;
+  const { inviteUrl, isExistingUser } = params;
+  const inviterName = escapeHtml(params.inviterName);
+  const organizationName = escapeHtml(params.organizationName);
 
   const actionText = isExistingUser
     ? 'Einladung annehmen'
@@ -138,7 +152,7 @@ function generateEmailHtml(params: EmailParams): string {
                 ${descriptionText}
               </p>
 
-              <a href="${inviteUrl}" style="display: inline-block; padding: 12px 32px; background-color: #18181b; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 500; border-radius: 8px;">
+              <a href="${escapeHtml(inviteUrl)}" style="display: inline-block; padding: 12px 32px; background-color: #18181b; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 500; border-radius: 8px;">
                 ${actionText}
               </a>
 

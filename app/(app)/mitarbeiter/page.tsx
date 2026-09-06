@@ -18,11 +18,8 @@ import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { UrlFlashBanner } from '@/components/ui/banner';
 import type { OrgMember } from '@/components/mitarbeiter/members-table';
 import type { Invite } from '@/components/mitarbeiter/invitations-table';
-import {
-  getOrgMembersForUser,
-  getProfilesByIds,
-  type OrgRole,
-} from '@/lib/members/actions';
+import { getProfilesByIds, type OrgRole } from '@/lib/members/actions';
+import { getOrgMembersForUser } from '@/lib/members/queries';
 import { getPersonnelRecords } from '@/lib/personnel/actions';
 import { getTodayTargetsForMembers } from '@/lib/personnel/target-actions';
 import { getQualificationWorkspace } from '@/lib/qualifications/actions';
