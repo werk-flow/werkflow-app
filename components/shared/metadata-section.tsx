@@ -441,12 +441,12 @@ function MetadataFieldRow({
   }
 
   return (
-    <div className="group grid gap-0.5">
+    <div className="group grid min-w-0 gap-0.5">
       <span className="text-xs font-medium text-muted-foreground">
         {field.label}
       </span>
-      <div className="flex items-center gap-1.5">
-        <span className="min-w-0 text-sm">{field.value ?? '—'}</span>
+      <div className="flex min-w-0 items-center gap-1.5">
+        <span className="min-w-0 break-words text-sm">{field.value ?? '—'}</span>
         {canEdit && (
           <button
             type="button"

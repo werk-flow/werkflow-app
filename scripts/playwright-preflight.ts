@@ -215,23 +215,12 @@ function getWindowsListener(): ListenerDetails | null {
   }
 }
 
-async function assertReusableServer(repositoryRoot: string): Promise<void> {
-  if (process.platform !== "win32") {
-    throw new Error("Workspace server ownership verification currently requires the configured Windows workstation.");
-  }
-  if (!getWindowsListener()) return;
-  // A focused pass must never stamp current-source proof onto an old build.
-  // With no listener, Playwright starts its own development server. Reuse is
-  // reserved for a production server whose receipt and response agree.
-  await assertCertificationServer(repositoryRoot);
-}
-
-async function assertCertificationServer(
+async function assertRecordedAppServer(
   repositoryRoot: string,
 ): Promise<void> {
   const buildIdPath = resolve(repositoryRoot, ".next/BUILD_ID");
   if (!existsSync(buildIdPath))
-    throw new Error("Certification requires a fresh production build.");
+    throw new Error("Application browser tests require a recorded production build. Start it with `bun run test:server local` or `bun run test:server cloud` for the selected target.");
   const buildId = readFileSync(buildIdPath, "utf8").trim();
   if (!buildId) throw new Error(".next/BUILD_ID is empty.");
   const receipt = readBuildReceipt(repositoryRoot);
@@ -241,13 +230,13 @@ async function assertCertificationServer(
 
   if (process.platform !== "win32") {
     throw new Error(
-      `Certification server ownership verification is not implemented for ${process.platform}.`,
+      `Application server ownership verification is not implemented for ${process.platform}.`,
     );
   }
   const listener = getWindowsListener();
   if (!listener) {
     throw new Error(
-      "Certification requires a freshly built, workspace-owned `next start` listening on port 3000. Nothing is listening — start the server after `bun run build:test` (testing rules 7 and 11).",
+      "Application browser tests require a recorded, workspace-owned production server on port 3000. Nothing is listening. Start `bun run test:server local` or `bun run test:server cloud` for the selected target.",
     );
   }
   // CommandLine is null for processes this user cannot inspect (elevated or
@@ -330,7 +319,18 @@ export async function runPlaywrightPreflight(input: {
       existsSync(resolve(runDirectory(runKey), 'state/world.json'))
     );
   }
-  if (input.lane === "certification" || input.lane === "group") await assertCertificationServer(repositoryRoot);
+  // All lanes share the same server requirement, including retained diagnostics.
+  await assertRecordedAppServer(repositoryRoot);
+  await runBackendPreflight({ target: input.target, repositoryRoot });
+}
+
+// Server preparation checks providers before building. This is not a browser lane.
+export async function runBackendPreflight(input: {
+  target: PlaywrightTarget;
+  repositoryRoot?: string;
+}): Promise<void> {
+  const repositoryRoot = input.repositoryRoot ?? resolve(import.meta.dir, "..");
+  assertRouting(input.target);
   await assertSupabaseReachable(input.target);
   if (input.target === "cloud") {
     await assertDevMigrationHistoryParity(repositoryRoot);
@@ -340,16 +340,12 @@ export async function runPlaywrightPreflight(input: {
     await assertLocalEdgeRuntimeReachable();
     assertRealtimeParity();
   }
-  if (input.lane !== "certification" && input.lane !== "group") {
-    await assertReusableServer(repositoryRoot);
-    return;
-  }
 }
 
 if (import.meta.main) {
   try {
     const laneArgument = process.argv[2] ?? "iteration";
-    if (!PLAYWRIGHT_LANES.includes(laneArgument as PlaywrightLane)) {
+    if (laneArgument !== "backend" && !PLAYWRIGHT_LANES.includes(laneArgument as PlaywrightLane)) {
       throw new Error(
         `Unknown lane: ${laneArgument}. Expected one of ${PLAYWRIGHT_LANES.join(", ")}.`,
       );
@@ -360,10 +356,10 @@ if (import.meta.main) {
         `Unknown target: ${targetArgument}. Expected one of ${PLAYWRIGHT_TARGETS.join(", ")}.`,
       );
     }
-    const lane = laneArgument as PlaywrightLane;
     const target = targetArgument as PlaywrightTarget;
-    await runPlaywrightPreflight({ lane, target });
-    console.log(`[werkflow-test] ${lane} preflight passed (target ${target})`);
+    if (laneArgument === "backend") await runBackendPreflight({ target });
+    else await runPlaywrightPreflight({ lane: laneArgument as PlaywrightLane, target });
+    console.log(`[werkflow-test] ${laneArgument} preflight passed (target ${target})`);
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;

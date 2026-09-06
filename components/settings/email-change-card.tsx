@@ -542,14 +542,14 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
           E-Mail-Adresse und bestätige sie mit einem zweiten Code.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-6 break-words">
         {completionState ? (
           <div className="rounded-lg border bg-primary/5 p-5">
             <div className="flex items-start gap-3">
               <div className="rounded-full bg-primary/10 p-2 text-primary">
                 <CheckCircle2 className="size-5" />
               </div>
-              <div className="space-y-3">
+              <div className="min-w-0 space-y-3">
                 <div>
                   <p className="font-medium text-foreground">
                     E-Mail-Adresse erfolgreich aktualisiert
@@ -589,11 +589,11 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
             Aktuelle E-Mail-Adresse
           </p>
           <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <div className="rounded-full bg-primary/10 p-2 text-primary">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="shrink-0 rounded-full bg-primary/10 p-2 text-primary">
                 <Mail className="size-4" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="font-medium text-foreground">{currentEmail || '—'}</p>
                 <p className="text-sm text-muted-foreground">
                   Diese Adresse ist aktuell mit deinem Konto verknüpft.

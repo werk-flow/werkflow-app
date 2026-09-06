@@ -1,7 +1,10 @@
-import type { Page } from "@playwright/test";
+import type { Page, TestInfo } from "@playwright/test";
 
 import { expect, test } from "../support/fixtures";
 import { expectButtonTextContrast } from "../support/button-contrast";
+import { DYNAMIC_PHONE_ROUTES, MANAGER_PHONE_ROUTES, PHONE_REDIRECTS, type DynamicPhoneRoute } from "../../../lib/testing/mobile-route-inventory";
+import { layoutNames, prepareLayoutDetails } from "../support/layout-fixtures";
+import type { TestWorld } from "../../golden/support/world";
 
 // Design canon (werkflow-design, "Density and layout"): no page-level
 // horizontal scroll on any viewport, and the app shell owns the vertical
@@ -13,29 +16,6 @@ import { expectButtonTextContrast } from "../support/button-contrast";
 test.describe.configure({ mode: "serial" });
 
 const PHONE = { width: 375, height: 812 };
-
-const MANAGER_ROUTES = [
-  "/dashboard",
-  "/aufgaben",
-  "/kalender",
-  "/zeiterfassung",
-  "/zeiterfassung/zeitkonto",
-  "/zeiterfassung/perioden",
-  "/zeiterfassung/einstellungen",
-  "/qualifikationen",
-  "/anfragen",
-  "/auftraege",
-  "/kunden",
-  "/mitarbeiter",
-  "/arbeitsvorlagen",
-  "/dokumente",
-  "/inventar",
-  "/service/faelle",
-  "/service/anlagen",
-  "/service/wartung",
-  "/einstellungen/profil",
-  "/einstellungen/zeiterfassung",
-] as const;
 
 const EMPLOYEE_ROUTES = [
   "/dashboard",
@@ -98,10 +78,18 @@ async function measure(page: Page): Promise<ViewportReport> {
   });
 }
 
-async function expectPhoneLayout(page: Page, route: string): Promise<void> {
+async function expectPhoneLayout(page: Page, route: string, testInfo: TestInfo, heading?: string): Promise<void> {
   await page.setViewportSize(PHONE);
   await page.goto(route);
+  await expect(page).toHaveURL(url => decodeURIComponent(url.pathname) === route);
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  const content = page.getByRole("main").locator("[data-page-body]");
+  await expect(content).toBeVisible();
+  // Area/settings headings can arrive before their streamed content.
+  await expect(content.locator(".animate-pulse:visible")).toHaveCount(0);
+  await expect(content).not.toHaveText("");
+  if (heading) await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
+  await testInfo.attach("phone-layout", { body: await page.screenshot(), contentType: "image/png" });
   const report = await measure(page);
   expect(
     report,
@@ -399,9 +387,9 @@ async function expectServiceDialogContracts(
 }
 
 test.describe("@AUDIT-LAYOUT phone viewport: no horizontal scroll, shell-owned scroll, no native controls", () => {
-  for (const route of MANAGER_ROUTES) {
-    test(`admin ${route} fits a 375 px viewport`, async ({ adminPage }) => {
-      await expectPhoneLayout(adminPage, route);
+  for (const route of MANAGER_PHONE_ROUTES) {
+    test(`admin ${route} fits a 375 px viewport`, async ({ adminPage }, testInfo) => {
+      await expectPhoneLayout(adminPage, route, testInfo);
       if (route === "/service/faelle") {
         await expectButtonTextContrast(adminPage, adminPage.getByRole("main").getByRole("button", {
           name: "Servicefall erfassen", exact: true,
@@ -417,8 +405,89 @@ test.describe("@AUDIT-LAYOUT phone viewport: no horizontal scroll, shell-owned s
   for (const route of EMPLOYEE_ROUTES) {
     test(`employee ${route} fits a 375 px viewport`, async ({
       employeePage,
-    }) => {
-      await expectPhoneLayout(employeePage, route);
+    }, testInfo) => {
+      await expectPhoneLayout(employeePage, route, testInfo);
+    });
+  }
+});
+
+async function detailDestination(
+  pattern: DynamicPhoneRoute,
+  page: Page,
+  world: TestWorld,
+): Promise<{ route: string; heading: string }> {
+  if (pattern === "/zeiterfassung/perioden/[periodId]") {
+    await page.goto("/zeiterfassung/perioden");
+    const content = page.getByRole("main").locator("[data-page-body]");
+    await expect(content.getByRole("heading", { name: "Abrechnungsperioden", exact: true })).toBeVisible();
+    const open = content.getByRole("link", { name: "Öffnen", exact: true });
+    if (await open.count() === 0) {
+      // Use the real preparation boundary to obtain a calculated period with
+      // employee rows and findings, rather than fabricating protected snapshots.
+      // Seeded personnel starts this month. The default previous month would
+      // produce an empty result and leave the mobile result cards unobserved.
+      const month = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date()).slice(0, 7);
+      const monthInput = content.getByRole("textbox", { name: "Monat", exact: true });
+      await expect(monthInput).toHaveValue(/^\d{2}\.\d{4}$/);
+      await monthInput.fill(month);
+      await expect(content.locator('input[name="month"]')).toHaveValue(month);
+      await content.getByRole("button", { name: "Periode vorbereiten", exact: true }).click();
+      // Successful preparation redirects directly to the saved period.
+      await expect(page).toHaveURL(/\/zeiterfassung\/perioden\/[0-9a-f-]{36}$/);
+      return { route: new URL(page.url()).pathname, heading: "Monatswerte" };
+    }
+    await expect(open).toHaveCount(1);
+    const route = await open.getAttribute("href");
+    if (!route?.startsWith("/zeiterfassung/perioden/")) throw new Error("Period preparation did not expose its exact saved detail route.");
+    return { route, heading: "Monatswerte" };
+  }
+  const details = await prepareLayoutDetails(world);
+  const names = layoutNames(world);
+  switch (pattern) {
+    case "/kunden/[clientId]": return { route: `/kunden/${details.clientId}`, heading: names.client };
+    case "/anfragen/[requestId]": return { route: `/anfragen/${details.requestId}`, heading: names.request };
+    case "/mitarbeiter/[userId]": return { route: `/mitarbeiter/${world.users.employee.id}`, heading: `${world.users.employee.firstName} ${world.users.employee.lastName}` };
+    case "/service/anlagen/[equipmentNumber]": return { route: `/service/anlagen/${details.equipmentNumber}`, heading: names.equipment };
+    case "/service/faelle/[caseNumber]": return { route: `/service/faelle/${details.caseNumber}`, heading: names.serviceCase };
+    case "/auftraege/[jobNumber]": return { route: `/auftraege/${details.jobNumber}`, heading: names.job };
+    case "/auftraege/[jobNumber]/uebergabe": return { route: `/auftraege/${details.jobNumber}/uebergabe`, heading: names.job };
+    case "/auftraege/projekt/[projectNumber]": return { route: `/auftraege/projekt/${details.projectNumber}`, heading: names.project };
+    case "/auftraege/projekt/[projectNumber]/uebergabe": return { route: `/auftraege/projekt/${details.projectNumber}/uebergabe`, heading: names.project };
+    case "/auftraege/projekt/[projectNumber]/[jobNumber]": return { route: `/auftraege/projekt/${details.projectNumber}/${details.nestedJobNumber}`, heading: names.nestedJob };
+    case "/auftraege/projekt/[projectNumber]/[jobNumber]/uebergabe": return { route: `/auftraege/projekt/${details.projectNumber}/${details.nestedJobNumber}/uebergabe`, heading: names.nestedJob };
+    case "/auftraege/uebergaben/[targetType]/[targetId]": return { route: `/auftraege/uebergaben/auftrag/${details.jobId}`, heading: names.job };
+  }
+}
+
+test.describe("@AUDIT-LAYOUT phone details and route aliases", () => {
+  for (const pattern of DYNAMIC_PHONE_ROUTES) {
+    test(`admin ${pattern} fits a 375 px viewport`, async ({ adminPage, world }, testInfo) => {
+      const destination = await detailDestination(pattern, adminPage, world);
+      await expectPhoneLayout(adminPage, destination.route, testInfo, destination.heading);
+      if (pattern === "/zeiterfassung/perioden/[periodId]") {
+        const results = adminPage.getByRole("heading", { name: "Monatswerte", exact: true }).locator("..");
+        await expect(results.locator('[data-slot="list-row"]').getByText(`${world.users.employee.firstName} ${world.users.employee.lastName}`, { exact: true })).toBeVisible();
+      }
+    });
+  }
+
+  test("admin scoped project handover fits a 375 px viewport", async ({ adminPage, world }, testInfo) => {
+    const details = await prepareLayoutDetails(world);
+    await expectPhoneLayout(adminPage, `/auftraege/uebergaben/projekt/${details.projectId}`, testInfo, layoutNames(world).project);
+  });
+
+  for (const pattern of ["/auftraege/[jobNumber]", "/auftraege/projekt/[projectNumber]/[jobNumber]"] as const) {
+    test(`employee ${pattern} work pack fits a 375 px viewport`, async ({ adminPage, employeePage, world }, testInfo) => {
+      const destination = await detailDestination(pattern, adminPage, world);
+      await expectPhoneLayout(employeePage, destination.route, testInfo, destination.heading);
+    });
+  }
+
+  for (const alias of PHONE_REDIRECTS) {
+    test(`admin ${alias.route} redirects to its audited page`, async ({ adminPage }, testInfo) => {
+      await adminPage.goto(alias.route);
+      await expect(adminPage).toHaveURL(url => url.pathname === alias.destination);
+      await expectPhoneLayout(adminPage, alias.destination, testInfo);
     });
   }
 });

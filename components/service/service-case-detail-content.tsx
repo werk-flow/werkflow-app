@@ -345,11 +345,11 @@ export function ServiceCaseDetailContent({ initial, documents, documentsLoadFail
       <div>
         <Link href="/service/faelle" className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"><ArrowLeft className="size-4" />Servicefälle</Link>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div><div className="flex flex-wrap items-center gap-2"><span className="font-mono text-sm text-muted-foreground">{item.caseNumber}</span><span className="rounded-md bg-muted px-2 py-1 text-xs font-medium">{SERVICE_CASE_STATUS_LABELS[item.status]}</span><span className="text-sm text-muted-foreground">{SERVICE_CASE_URGENCY_LABELS[item.urgency]}</span></div><h2 className="mt-1 text-xl font-semibold">{item.summary}</h2><p className="mt-1 text-sm text-muted-foreground">{item.intakeType === "request" ? "Aus Anfrage übernommen" : "Direkt erfasst"} · Aktualisiert {formatDateTime(item.updatedAt)}</p></div>
+          <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="font-mono text-sm text-muted-foreground">{item.caseNumber}</span><span className="rounded-md bg-muted px-2 py-1 text-xs font-medium">{SERVICE_CASE_STATUS_LABELS[item.status]}</span><span className="text-sm text-muted-foreground">{SERVICE_CASE_URGENCY_LABELS[item.urgency]}</span></div><h2 className="mt-1 break-words text-xl font-semibold">{item.summary}</h2><p className="mt-1 text-sm text-muted-foreground">{item.intakeType === "request" ? "Aus Anfrage übernommen" : "Direkt erfasst"} · Aktualisiert {formatDateTime(item.updatedAt)}</p></div>
           <span className="flex items-center gap-2"><InlinePending active={settling.isBusy("case")} label="Änderungen werden übernommen" /><Button type="button" onClick={() => setEditOpen(true)} disabled={live.isStale}><Pencil className="size-4" />Bearbeiten</Button></span>
         </div>
       </div>
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <main className="space-y-6">
           <section className="rounded-lg border p-4 shadow-xs">
             <h2 className="text-base font-semibold">Ursprüngliche Kundenaussage</h2>

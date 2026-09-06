@@ -51,12 +51,12 @@ export function OrgInfoCard({ initialMemberCount }: OrgInfoCardProps) {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
             <Building2 className="size-5 text-primary" />
           </div>
-          <div>
-            <CardTitle className="text-lg">{activeOrg.name}</CardTitle>
+          <div className="min-w-0">
+            <CardTitle className="break-words text-lg">{activeOrg.name}</CardTitle>
             <CardDescription>
               Deine Rolle: {getRoleLabel(activeOrg.role)}
             </CardDescription>

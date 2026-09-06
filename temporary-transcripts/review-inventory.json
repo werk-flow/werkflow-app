@@ -1,0 +1,3965 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": "COMMENT-001",
+      "source": "commentary-video-subs/2026-07-01-hostility-towards-beginners.txt",
+      "sha256": "af6730ad4c9ca47c2c2d55ffb769ccbd2d9ce93eeab431e1f39feafc3d516dd0",
+      "lines": {
+        "start": 1,
+        "end": 43
+      },
+      "reviewFile": "review-commentary.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "COMMENT-001.01",
+        "COMMENT-001.02",
+        "COMMENT-001.03",
+        "COMMENT-001.04"
+      ]
+    },
+    {
+      "id": "COMMENT-002",
+      "source": "commentary-video-subs/2026-07-17-a-skit-about-turning-down-money.txt",
+      "sha256": "ed2eacd5f59142d63cf846e9d6e75f4d7fd50ce40a18faee1baf13861aa1e8c2",
+      "lines": {
+        "start": 1,
+        "end": 29
+      },
+      "reviewFile": "review-commentary.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "COMMENT-002.01",
+        "COMMENT-002.02"
+      ]
+    },
+    {
+      "id": "COMMENT-003",
+      "source": "commentary-video-subs/2026-07-23-nobody-has-built-a-good-todo-app.txt",
+      "sha256": "14c7d2a4372a9d5f877360e65fe0b8b1f46c3b8a8eb6e2e10e9553c9964d5545",
+      "lines": {
+        "start": 1,
+        "end": 26
+      },
+      "reviewFile": "review-commentary.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "COMMENT-003.01",
+        "COMMENT-003.02",
+        "COMMENT-003.03",
+        "COMMENT-003.04"
+      ]
+    },
+    {
+      "id": "COMMENT-004",
+      "source": "commentary-video-subs/2026-08-05-calling-everything-ai-in-the-comments.txt",
+      "sha256": "bfa448fb5028ca568292c0ace86300271127145a05b792e73321a2fd87401df6",
+      "lines": {
+        "start": 1,
+        "end": 28
+      },
+      "reviewFile": "review-commentary.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "COMMENT-004.01",
+        "COMMENT-004.02"
+      ]
+    },
+    {
+      "id": "COMP-001",
+      "source": "compliance-video-subs/2026-07-21-data-retention-versus-deletion-requests.txt",
+      "sha256": "865a9e9538938c19e67ff4b969c9fa18aed14db38d2afb116dc574b8f50d5794",
+      "lines": {
+        "start": 1,
+        "end": 75
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "COMP-001.01",
+        "COMP-001.02",
+        "COMP-001.03",
+        "COMP-001.04"
+      ]
+    },
+    {
+      "id": "COMP-002",
+      "source": "compliance-video-subs/2026-07-23-sales-tax-nexus-across-states.txt",
+      "sha256": "e6695b8aaf8dc129b91cfd3214d5f2ede87a22800f9c1fc6fb687259c3721d7d",
+      "lines": {
+        "start": 1,
+        "end": 71
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "COMP-002.01",
+        "COMP-002.02",
+        "COMP-002.03",
+        "COMP-002.04"
+      ]
+    },
+    {
+      "id": "COMP-003",
+      "source": "compliance-video-subs/2026-07-25-hipaa-for-health-data.txt",
+      "sha256": "3e57671a1798244d092f4ca3a5cfc0ee2f4766404b04e98e506a6c99c366831a",
+      "lines": {
+        "start": 1,
+        "end": 52
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "COMP-003.01",
+        "COMP-003.02",
+        "COMP-003.03",
+        "COMP-003.04"
+      ]
+    },
+    {
+      "id": "COMP-004",
+      "source": "compliance-video-subs/2026-08-03-eu-ai-act-synthetic-content-disclosure.txt",
+      "sha256": "7f801fe33f5c57f20f9d7f2111ceb6b9446355c0549b3c1eeb6165afd262238f",
+      "lines": {
+        "start": 1,
+        "end": 61
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "COMP-004.01",
+        "COMP-004.02",
+        "COMP-004.03",
+        "COMP-004.04"
+      ]
+    },
+    {
+      "id": "COMP-005",
+      "source": "compliance-video-subs/2026-08-04-gdpr-reaches-you-outside-the-eu.txt",
+      "sha256": "64e3fe3742b13d7679e86db4906005306ad732ca8eef008f6bb552c3fb463f65",
+      "lines": {
+        "start": 1,
+        "end": 49
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "COMP-005.01",
+        "COMP-005.02",
+        "COMP-005.03",
+        "COMP-005.04"
+      ]
+    },
+    {
+      "id": "COMP-006",
+      "source": "compliance-video-subs/2026-08-14-production-readiness-audit.txt",
+      "sha256": "1f4970559aa357e7c0d40a786ba8d24ca02d3c0caa7ef9a0fc2d115eaeea37a0",
+      "lines": {
+        "start": 1,
+        "end": 47
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "COMP-006.01",
+        "COMP-006.02",
+        "COMP-006.03",
+        "COMP-006.04"
+      ]
+    },
+    {
+      "id": "COMP-007",
+      "source": "compliance-video-subs/2026-08-23-cryptographic-erasure-for-deletion-requests.txt",
+      "sha256": "5f51e24610425947a684b81bdc68eb33e42e5341f8e736b68b0d0afa333dcc20",
+      "lines": {
+        "start": 1,
+        "end": 36
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "COMP-007.01",
+        "COMP-007.02",
+        "COMP-007.03",
+        "COMP-007.04"
+      ]
+    },
+    {
+      "id": "COMP-008",
+      "source": "compliance-video-subs/2026-08-24-a-vendor-deprecation-that-reroutes-compliance.txt",
+      "sha256": "ca2a5719c6f65c8f74d49b34d5a4d10f772e68ef78449ea133796d5af7ffdc7c",
+      "lines": {
+        "start": 1,
+        "end": 85
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "COMP-008.01",
+        "COMP-008.02",
+        "COMP-008.03",
+        "COMP-008.04"
+      ]
+    },
+    {
+      "id": "DB-001",
+      "source": "database-video-subs/2026-05-20-connection-pooling-for-your-first-users.txt",
+      "sha256": "bb6dddd3c3bfc24912141e36026f4a8e209d94407a2459c90a1d35fa8a5f1532",
+      "lines": {
+        "start": 1,
+        "end": 35
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "DB-001.01",
+        "DB-001.02",
+        "DB-001.03",
+        "DB-001.04"
+      ]
+    },
+    {
+      "id": "DB-002",
+      "source": "database-video-subs/2026-07-12-picking-a-database-type.txt",
+      "sha256": "90ab1574c0bc1c424796c238716e2248985b7e064c8d18a497e7324ca9c8082e",
+      "lines": {
+        "start": 1,
+        "end": 50
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "DB-002.01",
+        "DB-002.02",
+        "DB-002.03",
+        "DB-002.04"
+      ]
+    },
+    {
+      "id": "DB-003",
+      "source": "database-video-subs/2026-08-08-expand-contract-migrations-with-rollback.txt",
+      "sha256": "ee124d7c78571bea152ce516262b8991132eab208d85dafa3e595d26dd384a22",
+      "lines": {
+        "start": 1,
+        "end": 72
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "DB-003.01",
+        "DB-003.02",
+        "DB-003.03",
+        "DB-003.04"
+      ]
+    },
+    {
+      "id": "DB-004",
+      "source": "database-video-subs/2026-08-15-disaster-recovery-rpo-and-rto.txt",
+      "sha256": "22abb76556f527813085b1bc77adfce734eeba9d29ff5e0d1371e1ba01ad7fb4",
+      "lines": {
+        "start": 1,
+        "end": 53
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "DB-004.01",
+        "DB-004.02",
+        "DB-004.03",
+        "DB-004.04"
+      ]
+    },
+    {
+      "id": "DB-005",
+      "source": "database-video-subs/2026-08-19-read-replica-lag-and-stale-reads.txt",
+      "sha256": "85c26ee6ab5b634de191b53b40009dcd8b09ad76adddb24d603cc4842406c942",
+      "lines": {
+        "start": 1,
+        "end": 69
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "DB-005.01",
+        "DB-005.02",
+        "DB-005.03",
+        "DB-005.04"
+      ]
+    },
+    {
+      "id": "DB-006",
+      "source": "database-video-subs/2026-08-22-one-column-for-one-client.txt",
+      "sha256": "ac5d04c5322eea8f3637cdc367414b0d8d3e78cb52df3541ee1ea0dcc1cad3d7",
+      "lines": {
+        "start": 1,
+        "end": 82
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "DB-006.01",
+        "DB-006.02",
+        "DB-006.03",
+        "DB-006.04"
+      ]
+    },
+    {
+      "id": "DB-007",
+      "source": "database-video-subs/2026-08-30-full-table-scans-since-launch.txt",
+      "sha256": "88fe6528f3bde433ea96311583ed6d9ebb3bef2e9cfa9d7a62db58c87016851d",
+      "lines": {
+        "start": 1,
+        "end": 89
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "DB-007.01",
+        "DB-007.02",
+        "DB-007.03",
+        "DB-007.04"
+      ]
+    },
+    {
+      "id": "ENG-001",
+      "source": "ai-engineering-video-subs/2026-07-02-the-principle-of-least-intelligence.txt",
+      "sha256": "58557ef5d74b0f8fbb9cd43c8cf82b86e739c98a392b2601bdc04dd967d469e6",
+      "lines": {
+        "start": 1,
+        "end": 28
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "ENG-001.01",
+        "ENG-001.02",
+        "ENG-001.03"
+      ]
+    },
+    {
+      "id": "ENG-002",
+      "source": "ai-engineering-video-subs/2026-07-04-a-sixty-second-vibecoding-setup.txt",
+      "sha256": "7928c9f4625db61bddf2cb1ea598879807821ba54854f387c0f95b489c2ecf6b",
+      "lines": {
+        "start": 1,
+        "end": 47
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "ENG-002.01",
+        "ENG-002.02",
+        "ENG-002.03",
+        "ENG-002.04",
+        "ENG-002.05",
+        "ENG-002.06"
+      ]
+    },
+    {
+      "id": "ENG-003",
+      "source": "ai-engineering-video-subs/2026-07-07-three-ways-to-improve-an-agentic-harness.txt",
+      "sha256": "5b850f18a9a55b900ae661abeaedcd1c6863f6b8eb94bb1edd1cecb3f8300608",
+      "lines": {
+        "start": 1,
+        "end": 38
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "ENG-003.01",
+        "ENG-003.02",
+        "ENG-003.03",
+        "ENG-003.04"
+      ]
+    },
+    {
+      "id": "ENG-004",
+      "source": "ai-engineering-video-subs/2026-07-16-governing-ai-generated-code.txt",
+      "sha256": "7355122293d323b53aefa8331c714e4b7cee784a0b67341baebfbf4a7e8dc9c7",
+      "lines": {
+        "start": 1,
+        "end": 48
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "ENG-004.01",
+        "ENG-004.02",
+        "ENG-004.03"
+      ]
+    },
+    {
+      "id": "ENG-005",
+      "source": "ai-engineering-video-subs/2026-07-16-tools-that-check-ai-written-react.txt",
+      "sha256": "a0ab0887b8ef7be728a1865ef1352cac08f8f8cc5d712af7d40750ef9612ba03",
+      "lines": {
+        "start": 1,
+        "end": 37
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "ENG-005.01",
+        "ENG-005.02",
+        "ENG-005.03",
+        "ENG-005.04",
+        "ENG-005.05",
+        "ENG-005.06"
+      ]
+    },
+    {
+      "id": "ENG-006",
+      "source": "ai-engineering-video-subs/2026-07-21-llms-were-not-built-to-resell.txt",
+      "sha256": "baad7705aa80c824e1361f4490816378ae638ca50ec55af88c6123e994ec752b",
+      "lines": {
+        "start": 1,
+        "end": 50
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "ENG-006.01",
+        "ENG-006.02",
+        "ENG-006.03"
+      ]
+    },
+    {
+      "id": "ENG-007",
+      "source": "ai-engineering-video-subs/2026-07-23-an-open-source-dictation-tool.txt",
+      "sha256": "389c525e6ac66eabe0db77c2180032ee160625d1b0d105ba941b4c40a93449b3",
+      "lines": {
+        "start": 1,
+        "end": 23
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "ENG-007.01",
+        "ENG-007.02"
+      ]
+    },
+    {
+      "id": "ENG-008",
+      "source": "ai-engineering-video-subs/2026-07-27-better-models-do-not-fix-architecture.txt",
+      "sha256": "7356f545e727703870c24e26b923cf8c7059cd1059705a53a8d6895ffe99d150",
+      "lines": {
+        "start": 1,
+        "end": 68
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "ENG-008.01",
+        "ENG-008.02",
+        "ENG-008.03",
+        "ENG-008.04"
+      ]
+    },
+    {
+      "id": "ENG-009",
+      "source": "ai-engineering-video-subs/2026-07-29-cursor-acquisition-what-it-means.txt",
+      "sha256": "a16e6cd52ec1c36ccbdb1db397bd50a0efd1d8276f8946de8e08c4c8a340704a",
+      "lines": {
+        "start": 1,
+        "end": 44
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "ENG-009.01",
+        "ENG-009.02",
+        "ENG-009.03"
+      ]
+    },
+    {
+      "id": "ENG-010",
+      "source": "ai-engineering-video-subs/2026-08-01-a-voice-agent-that-runs-a-workday.txt",
+      "sha256": "2f442eaf9ee77d26a82961cf5752fcef6de8a9dae36cf52211590124db08f888",
+      "lines": {
+        "start": 1,
+        "end": 31
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "ENG-010.01",
+        "ENG-010.02",
+        "ENG-010.03",
+        "ENG-010.04"
+      ]
+    },
+    {
+      "id": "ENG-011",
+      "source": "ai-engineering-video-subs/2026-08-01-why-voice-agents-sound-wrong.txt",
+      "sha256": "253c49dd0712d48c0ef5ab974271e6b580d2c2e72d93c148f77a606273ddafdb",
+      "lines": {
+        "start": 1,
+        "end": 57
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "ENG-011.01",
+        "ENG-011.02",
+        "ENG-011.03",
+        "ENG-011.04"
+      ]
+    },
+    {
+      "id": "ENG-012",
+      "source": "ai-engineering-video-subs/2026-08-03-what-mcp-actually-is.txt",
+      "sha256": "81f66411cc1da3a0ac78ad04668bdc54a87c84179e903421ab11af0f74a41192",
+      "lines": {
+        "start": 1,
+        "end": 48
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "ENG-012.01",
+        "ENG-012.02",
+        "ENG-012.03"
+      ]
+    },
+    {
+      "id": "ENG-013",
+      "source": "ai-engineering-video-subs/2026-08-07-agent-state-across-long-running-tasks.txt",
+      "sha256": "530b4e60c1cf754c774068b8c7ed57d0cbc51412699e2cedb6cbedfeb9bea84b",
+      "lines": {
+        "start": 1,
+        "end": 60
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "ENG-013.01",
+        "ENG-013.02",
+        "ENG-013.03",
+        "ENG-013.04",
+        "ENG-013.05"
+      ]
+    },
+    {
+      "id": "ENG-014",
+      "source": "ai-engineering-video-subs/2026-08-07-how-not-to-vibecode.txt",
+      "sha256": "d9f2664590eb2cbbb40d21e36934773d6fa90e82b3721a28911ed0fe2637dcbb",
+      "lines": {
+        "start": 1,
+        "end": 36
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "ENG-014.01",
+        "ENG-014.02",
+        "ENG-014.03"
+      ]
+    },
+    {
+      "id": "ENG-015",
+      "source": "ai-engineering-video-subs/2026-08-11-five-things-to-check-before-shipping-an-ai-feature.txt",
+      "sha256": "9690b0a418d366e16e1c9c159a3c47ae2151d98c59bc0bd500a4d920359a1e73",
+      "lines": {
+        "start": 1,
+        "end": 38
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "ENG-015.01",
+        "ENG-015.02",
+        "ENG-015.03",
+        "ENG-015.04",
+        "ENG-015.05"
+      ]
+    },
+    {
+      "id": "ENG-016",
+      "source": "ai-engineering-video-subs/2026-08-11-stale-agent-instructions-and-context.txt",
+      "sha256": "4be9d1945628cbe9ecbf71121280a9bb656573a43a66437125e9023d001a53df",
+      "lines": {
+        "start": 1,
+        "end": 59
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "ENG-016.01",
+        "ENG-016.02",
+        "ENG-016.03",
+        "ENG-016.04"
+      ]
+    },
+    {
+      "id": "ENG-017",
+      "source": "ai-engineering-video-subs/2026-08-12-mcp-versus-self-built-integrations.txt",
+      "sha256": "743a06cdda4b18c16dca7fbc4f96037030886e9062b2c407af5afe9f46a65b48",
+      "lines": {
+        "start": 1,
+        "end": 43
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "ENG-017.01",
+        "ENG-017.02",
+        "ENG-017.03",
+        "ENG-017.04"
+      ]
+    },
+    {
+      "id": "ENG-018",
+      "source": "ai-engineering-video-subs/2026-08-18-token-cost-model-routing-and-caching.txt",
+      "sha256": "820e7aed0b19432ec158d133d1d9ca2f206f7327077802ba8e4b8bd0d6cd55b1",
+      "lines": {
+        "start": 1,
+        "end": 50
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "ENG-018.01",
+        "ENG-018.02",
+        "ENG-018.03",
+        "ENG-018.04",
+        "ENG-018.05"
+      ]
+    },
+    {
+      "id": "ENG-019",
+      "source": "ai-engineering-video-subs/2026-08-22-polling-and-duplicate-versions-from-coding-agents.txt",
+      "sha256": "233f2a0eecd0d6f8bfee254df27b047e5499d3d7b0257d4c8751a52e0b6aa6f1",
+      "lines": {
+        "start": 1,
+        "end": 32
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "ENG-019.01",
+        "ENG-019.02",
+        "ENG-019.03",
+        "ENG-019.04"
+      ]
+    },
+    {
+      "id": "ENG-020",
+      "source": "ai-engineering-video-subs/2026-08-29-one-ai-cannot-review-its-own-work.txt",
+      "sha256": "c4979d143760908a8fa353d6fd6399557cd3ecdf22ea67d4898251d493a62779",
+      "lines": {
+        "start": 1,
+        "end": 89
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "ENG-020.01",
+        "ENG-020.02",
+        "ENG-020.03",
+        "ENG-020.04"
+      ]
+    },
+    {
+      "id": "ENG-021",
+      "source": "ai-engineering-video-subs/2026-08-31-stale-skills-written-for-models-that-are-gone.txt",
+      "sha256": "0063c254289845dc2fbb362908824838faccc41f153c501ecdfbda06045e96c5",
+      "lines": {
+        "start": 1,
+        "end": 49
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "ENG-021.01",
+        "ENG-021.02",
+        "ENG-021.03",
+        "ENG-021.04",
+        "ENG-021.05"
+      ]
+    },
+    {
+      "id": "ENG-022",
+      "source": "ai-engineering-video-subs/2026-09-01-matching-the-ai-platform-to-the-job.txt",
+      "sha256": "c2d79abfe6ebf68f102ee142e5e0763f18fc48d0585145c4f65cbd0817bf93eb",
+      "lines": {
+        "start": 1,
+        "end": 61
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "ENG-022.01",
+        "ENG-022.02",
+        "ENG-022.03",
+        "ENG-022.04"
+      ]
+    },
+    {
+      "id": "GRAPH-001",
+      "source": "ai-graph-and-folder-structure/2026-06-15-folder-structure-as-agent-architecture.txt",
+      "sha256": "adfb359d65b4158db7055b8d5e4a5f31e146d3b24209217788dde52586cab1fb",
+      "lines": {
+        "start": 1,
+        "end": 38
+      },
+      "reviewFile": "review-graph.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "GRAPH-001.01",
+        "GRAPH-001.02",
+        "GRAPH-001.03",
+        "GRAPH-001.04"
+      ]
+    },
+    {
+      "id": "GRAPH-002",
+      "source": "ai-graph-and-folder-structure/2026-08-12-api-cost-control-behind-a-public-tool.txt",
+      "sha256": "d9054b6109447cc334f478737e737abbdb240e12e3c225aa1a380f5a76d2b229",
+      "lines": {
+        "start": 1,
+        "end": 39
+      },
+      "reviewFile": "review-graph.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "GRAPH-002.01",
+        "GRAPH-002.02",
+        "GRAPH-002.03",
+        "GRAPH-002.04"
+      ]
+    },
+    {
+      "id": "GRAPH-003",
+      "source": "ai-graph-and-folder-structure/2026-08-15-obsidian-and-graphify-are-not-a-graph.txt",
+      "sha256": "87aa1840051c1f412835c5b18905d503ad5262b36774e069e1602f82c1cc866d",
+      "lines": {
+        "start": 1,
+        "end": 44
+      },
+      "reviewFile": "review-graph.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "GRAPH-003.01",
+        "GRAPH-003.02",
+        "GRAPH-003.03",
+        "GRAPH-003.04",
+        "GRAPH-003.05"
+      ]
+    },
+    {
+      "id": "GRAPH-004",
+      "source": "ai-graph-and-folder-structure/2026-08-16-implementing-a-real-knowledge-graph.txt",
+      "sha256": "048651d53703fa9097cd540b96c808d56ba2a57ccadfc43eba1eec18a2d73597",
+      "lines": {
+        "start": 1,
+        "end": 48
+      },
+      "reviewFile": "review-graph.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "GRAPH-004.01",
+        "GRAPH-004.02",
+        "GRAPH-004.03",
+        "GRAPH-004.04",
+        "GRAPH-004.05"
+      ]
+    },
+    {
+      "id": "GRAPH-005",
+      "source": "ai-graph-and-folder-structure/2026-08-16-knowledge-graph-made-haiku-match-fable.txt",
+      "sha256": "4001316d7f1223ac3b13dc93fcbec5e7aeea6007dfa35d08b0e4bebe97ac630f",
+      "lines": {
+        "start": 1,
+        "end": 110
+      },
+      "reviewFile": "review-graph.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "GRAPH-005.01",
+        "GRAPH-005.02",
+        "GRAPH-005.03",
+        "GRAPH-005.04",
+        "GRAPH-005.05",
+        "GRAPH-005.06",
+        "GRAPH-005.07"
+      ]
+    },
+    {
+      "id": "GRAPH-006",
+      "source": "ai-graph-and-folder-structure/2026-08-17-when-folders-and-keyword-search-win.txt",
+      "sha256": "523cca4c9d48d367f68d1fdd3800364ee3330490c6e8ff87dbc1af7ad34014fc",
+      "lines": {
+        "start": 1,
+        "end": 89
+      },
+      "reviewFile": "review-graph.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "GRAPH-006.01",
+        "GRAPH-006.02",
+        "GRAPH-006.03",
+        "GRAPH-006.04",
+        "GRAPH-006.05",
+        "GRAPH-006.06"
+      ]
+    },
+    {
+      "id": "GRAPH-007",
+      "source": "ai-graph-and-folder-structure/2026-08-21-duplicate-and-fabricated-entities.txt",
+      "sha256": "ecd68a6d32a81f986730b13c167ccb9d7b1def55b14e9c877383b82efc3993d2",
+      "lines": {
+        "start": 1,
+        "end": 43
+      },
+      "reviewFile": "review-graph.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "GRAPH-007.01",
+        "GRAPH-007.02",
+        "GRAPH-007.03",
+        "GRAPH-007.04",
+        "GRAPH-007.05"
+      ]
+    },
+    {
+      "id": "GRAPH-008",
+      "source": "ai-graph-and-folder-structure/2026-08-23-a-central-context-store-not-a-second-brain.txt",
+      "sha256": "32162e8cfcee4073bdf0c1196b0881639a32f62810ac6a57e222e33f6d3b5d08",
+      "lines": {
+        "start": 1,
+        "end": 52
+      },
+      "reviewFile": "review-graph.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "GRAPH-008.01",
+        "GRAPH-008.02",
+        "GRAPH-008.03",
+        "GRAPH-008.04",
+        "GRAPH-008.05"
+      ]
+    },
+    {
+      "id": "GRAPH-009",
+      "source": "ai-graph-and-folder-structure/2026-08-24-research-synthesis.md",
+      "sha256": "39e3ad220cd52a124907952a644fdd387d9b6c0e3e9157082b6e6ea0a10e7704",
+      "lines": {
+        "start": 1,
+        "end": 75
+      },
+      "reviewFile": "review-graph.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "GRAPH-009.01",
+        "GRAPH-009.02",
+        "GRAPH-009.03",
+        "GRAPH-009.04",
+        "GRAPH-009.05",
+        "GRAPH-009.06",
+        "GRAPH-009.07",
+        "GRAPH-009.08",
+        "GRAPH-009.09",
+        "GRAPH-009.10",
+        "GRAPH-009.11",
+        "GRAPH-009.12",
+        "GRAPH-009.13",
+        "GRAPH-009.14",
+        "GRAPH-009.15",
+        "GRAPH-009.16",
+        "GRAPH-009.17",
+        "GRAPH-009.18"
+      ]
+    },
+    {
+      "id": "GRAPH-010",
+      "source": "ai-graph-and-folder-structure/2026-08-24-roadmap-split-migration-map.md",
+      "sha256": "b3a2bbaa858adcc71f1b47edbe20761d3a24d5fe56579aadbcc5b1965ed52497",
+      "lines": {
+        "start": 1,
+        "end": 201
+      },
+      "reviewFile": "review-graph.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "GRAPH-010.01",
+        "GRAPH-010.02",
+        "GRAPH-010.03",
+        "GRAPH-010.04",
+        "GRAPH-010.05",
+        "GRAPH-010.06",
+        "GRAPH-010.07",
+        "GRAPH-010.08",
+        "GRAPH-010.09",
+        "GRAPH-010.10",
+        "GRAPH-010.11",
+        "GRAPH-010.12",
+        "GRAPH-010.13",
+        "GRAPH-010.14",
+        "GRAPH-010.15",
+        "GRAPH-010.16",
+        "GRAPH-010.17",
+        "GRAPH-010.18",
+        "GRAPH-010.19"
+      ]
+    },
+    {
+      "id": "INFRA-001",
+      "source": "infrastructure-video-subs/2026-05-31-full-production-stack-recap.txt",
+      "sha256": "0e3bbf9688ceea2f8925a555422dd19f145ce1d1b95d2c5f2aae9058d9b793a6",
+      "lines": {
+        "start": 1,
+        "end": 50
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "INFRA-001.01",
+        "INFRA-001.02",
+        "INFRA-001.03",
+        "INFRA-001.04",
+        "INFRA-001.05",
+        "INFRA-001.06",
+        "INFRA-001.07",
+        "INFRA-001.08",
+        "INFRA-001.09",
+        "INFRA-001.10",
+        "INFRA-001.11",
+        "INFRA-001.12",
+        "INFRA-001.13",
+        "INFRA-001.14"
+      ]
+    },
+    {
+      "id": "INFRA-002",
+      "source": "infrastructure-video-subs/2026-07-17-staging-environment-before-production.txt",
+      "sha256": "839ac1bb55a18d720387c039709348d2a89a5f421cb47759d9512c2b894ee030",
+      "lines": {
+        "start": 1,
+        "end": 57
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "INFRA-002.01",
+        "INFRA-002.02",
+        "INFRA-002.03",
+        "INFRA-002.04",
+        "INFRA-002.05"
+      ]
+    },
+    {
+      "id": "INFRA-003",
+      "source": "infrastructure-video-subs/2026-07-18-serverless-versus-containers-cost.txt",
+      "sha256": "feba0175b6b1c0e33956d3448cca60c6571af03f1e793fa5dc2c88e1358e0ba5",
+      "lines": {
+        "start": 1,
+        "end": 71
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "INFRA-003.01",
+        "INFRA-003.02",
+        "INFRA-003.03",
+        "INFRA-003.04"
+      ]
+    },
+    {
+      "id": "INFRA-004",
+      "source": "infrastructure-video-subs/2026-07-23-transactional-email-deliverability.txt",
+      "sha256": "10e9078970604851ac7a16484a09c7f60422f33f3b08cb0f3aabcaf6072c9368",
+      "lines": {
+        "start": 1,
+        "end": 50
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "INFRA-004.01",
+        "INFRA-004.02",
+        "INFRA-004.03",
+        "INFRA-004.04"
+      ]
+    },
+    {
+      "id": "INFRA-005",
+      "source": "infrastructure-video-subs/2026-07-24-status-page-and-incident-communication.txt",
+      "sha256": "8c6c4250b505fcdcfe4c3f7bdcb49792a21a4b2aea6f2ca576f0486a4820f516",
+      "lines": {
+        "start": 1,
+        "end": 73
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "INFRA-005.01",
+        "INFRA-005.02",
+        "INFRA-005.03",
+        "INFRA-005.04"
+      ]
+    },
+    {
+      "id": "INFRA-006",
+      "source": "infrastructure-video-subs/2026-07-28-internationalization-currency-dates-timezones.txt",
+      "sha256": "d5159bac2650f338eb1d98c1459fd8d8f6e1954255ec73b85736a2836fde4342",
+      "lines": {
+        "start": 1,
+        "end": 83
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "INFRA-006.01",
+        "INFRA-006.02",
+        "INFRA-006.03",
+        "INFRA-006.04"
+      ]
+    },
+    {
+      "id": "INFRA-007",
+      "source": "infrastructure-video-subs/2026-07-29-infrastructure-choices-set-your-ceiling.txt",
+      "sha256": "ce21cc548f8623fe53f5c55c7eff040e60d3e7f81973f12b030cbb948a510b96",
+      "lines": {
+        "start": 1,
+        "end": 44
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "INFRA-007.01",
+        "INFRA-007.02",
+        "INFRA-007.03",
+        "INFRA-007.04"
+      ]
+    },
+    {
+      "id": "INFRA-008",
+      "source": "infrastructure-video-subs/2026-08-17-circuit-breakers-and-cascading-failure.txt",
+      "sha256": "d085f237f1335611692027f6799b6569950f40047994ad31fa0cb57bf2a0427c",
+      "lines": {
+        "start": 1,
+        "end": 51
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "INFRA-008.01",
+        "INFRA-008.02",
+        "INFRA-008.03",
+        "INFRA-008.04",
+        "INFRA-008.05"
+      ]
+    },
+    {
+      "id": "INFRA-009",
+      "source": "infrastructure-video-subs/2026-08-19-error-budgets-and-burn-rate-alerting.txt",
+      "sha256": "39409ff9b6c100c70103dba888c27133787c0753e1bd3731fc9d365841af30d9",
+      "lines": {
+        "start": 1,
+        "end": 50
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "INFRA-009.01",
+        "INFRA-009.02",
+        "INFRA-009.03",
+        "INFRA-009.04",
+        "INFRA-009.05"
+      ]
+    },
+    {
+      "id": "INFRA-010",
+      "source": "infrastructure-video-subs/2026-08-20-multi-tenancy-without-forking-per-client.txt",
+      "sha256": "c10b9742a977d6ed98e697c61b3db1d930d0185135813ac5d01fb2fdc48eaa73",
+      "lines": {
+        "start": 1,
+        "end": 53
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "INFRA-010.01",
+        "INFRA-010.02",
+        "INFRA-010.03",
+        "INFRA-010.04"
+      ]
+    },
+    {
+      "id": "INFRA-011",
+      "source": "infrastructure-video-subs/2026-08-27-moving-to-a-vps-and-inheriting-its-security.txt",
+      "sha256": "41a6a0abd14a7c50cf2b03bf8d5251668f32e5b34851845def5b09c605fa4318",
+      "lines": {
+        "start": 1,
+        "end": 73
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "INFRA-011.01",
+        "INFRA-011.02",
+        "INFRA-011.03",
+        "INFRA-011.04"
+      ]
+    },
+    {
+      "id": "INFRA-012",
+      "source": "infrastructure-video-subs/2026-08-30-important-concepts-EP-01-idempotency.txt",
+      "sha256": "cb8ac507e1bcce9e3723cdad38a34111187e8fe88403e680ee57292e135c5c3a",
+      "lines": {
+        "start": 1,
+        "end": 48
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "INFRA-012.01",
+        "INFRA-012.02",
+        "INFRA-012.03",
+        "INFRA-012.04",
+        "INFRA-012.05"
+      ]
+    },
+    {
+      "id": "INFRA-013",
+      "source": "infrastructure-video-subs/2026-09-05-five-checks-against-a-runaway-cloud-bill.txt",
+      "sha256": "fc1de341a2bbc45751a6ec1716bb313c73a7ebe9a06ec4eca6277989769ce4fe",
+      "lines": {
+        "start": 1,
+        "end": 52
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "INFRA-013.01",
+        "INFRA-013.02",
+        "INFRA-013.03",
+        "INFRA-013.04",
+        "INFRA-013.05",
+        "INFRA-013.06"
+      ]
+    },
+    {
+      "id": "INFRA-014",
+      "source": "infrastructure-video-subs/2026-09-05-important-concepts-EP-02-retries-and-timeouts.txt",
+      "sha256": "31888c28fa243613f8b81841b56e79f25a973ab14805a89ba1930b4332119e0f",
+      "lines": {
+        "start": 1,
+        "end": 48
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "INFRA-014.01",
+        "INFRA-014.02",
+        "INFRA-014.03",
+        "INFRA-014.04",
+        "INFRA-014.05"
+      ]
+    },
+    {
+      "id": "NEWS-001",
+      "source": "ai-model-news-video-subs/2026-06-27-benchmark-claims-in-a-release-blog.txt",
+      "sha256": "d529503d062cd3edace26ed0acec5ff216e19460557e1908f78720f38a7f65ee",
+      "lines": {
+        "start": 1,
+        "end": 29
+      },
+      "reviewFile": "review-ai-model-news.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "NEWS-001.01",
+        "NEWS-001.02",
+        "NEWS-001.03"
+      ]
+    },
+    {
+      "id": "NEWS-002",
+      "source": "ai-model-news-video-subs/2026-06-27-export-restrictions-on-a-flagship-model.txt",
+      "sha256": "11a3c3de054824477cf6d5c7dda04b3713c3d2897fed049f0f4b902334815ed1",
+      "lines": {
+        "start": 1,
+        "end": 25
+      },
+      "reviewFile": "review-ai-model-news.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "NEWS-002.01",
+        "NEWS-002.02",
+        "NEWS-002.03"
+      ]
+    },
+    {
+      "id": "NEWS-003",
+      "source": "ai-model-news-video-subs/2026-06-27-gpt-5-6-released-to-partners.txt",
+      "sha256": "694cc5604921740ec4d96f7226267fec6642a2936feded5ffe878a55dcb49f69",
+      "lines": {
+        "start": 1,
+        "end": 36
+      },
+      "reviewFile": "review-ai-model-news.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "NEWS-003.01",
+        "NEWS-003.02",
+        "NEWS-003.03",
+        "NEWS-003.04"
+      ]
+    },
+    {
+      "id": "NEWS-004",
+      "source": "ai-model-news-video-subs/2026-06-30-sonnet-5-release-notes.txt",
+      "sha256": "987ca2e0cfb07456766b87100bb7eaa689cdbc87b65bea4f5db073895ca8059a",
+      "lines": {
+        "start": 1,
+        "end": 27
+      },
+      "reviewFile": "review-ai-model-news.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "NEWS-004.01",
+        "NEWS-004.02",
+        "NEWS-004.03",
+        "NEWS-004.04"
+      ]
+    },
+    {
+      "id": "NEWS-005",
+      "source": "ai-model-news-video-subs/2026-07-01-a-model-comes-back-from-an-export-ban.txt",
+      "sha256": "9a9b303d0728debc88015a4f0a00ce31fb105123b848f27dcd0e8af8425f8136",
+      "lines": {
+        "start": 1,
+        "end": 38
+      },
+      "reviewFile": "review-ai-model-news.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "NEWS-005.01",
+        "NEWS-005.02",
+        "NEWS-005.03",
+        "NEWS-005.04",
+        "NEWS-005.05"
+      ]
+    },
+    {
+      "id": "NEWS-006",
+      "source": "ai-model-news-video-subs/2026-07-01-correcting-a-rumour-about-model-routing.txt",
+      "sha256": "0384c017b04082a166febf978f5be296cb072ae290d8be5a7579ef1a8733021a",
+      "lines": {
+        "start": 1,
+        "end": 43
+      },
+      "reviewFile": "review-ai-model-news.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "NEWS-006.01",
+        "NEWS-006.02",
+        "NEWS-006.03",
+        "NEWS-006.04"
+      ]
+    },
+    {
+      "id": "NEWS-007",
+      "source": "ai-model-news-video-subs/2026-07-07-model-availability-extended.txt",
+      "sha256": "46d0b0e009b979a237da51b4c2a06d299acc896c0936fb5bfe5b876a414030e3",
+      "lines": {
+        "start": 1,
+        "end": 19
+      },
+      "reviewFile": "review-ai-model-news.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "NEWS-007.01",
+        "NEWS-007.02"
+      ]
+    },
+    {
+      "id": "NEWS-008",
+      "source": "ai-model-news-video-subs/2026-07-08-expectations-before-a-model-launch.txt",
+      "sha256": "f5fe09e4d84564692c70751e801865c5eca0402cec52801ac0eb4f1265727c3e",
+      "lines": {
+        "start": 1,
+        "end": 29
+      },
+      "reviewFile": "review-ai-model-news.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "NEWS-008.01",
+        "NEWS-008.02",
+        "NEWS-008.03"
+      ]
+    },
+    {
+      "id": "NEWS-009",
+      "source": "ai-model-news-video-subs/2026-07-09-the-release-detail-nobody-covered.txt",
+      "sha256": "d7e6e21af6cad43056befbfc065b2f9bcaf9e1c95fcb62e77fbfc3188106afd7",
+      "lines": {
+        "start": 1,
+        "end": 52
+      },
+      "reviewFile": "review-ai-model-news.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "NEWS-009.01",
+        "NEWS-009.02",
+        "NEWS-009.03",
+        "NEWS-009.04"
+      ]
+    },
+    {
+      "id": "NEWS-010",
+      "source": "ai-model-news-video-subs/2026-07-14-frustration-with-staged-model-releases.txt",
+      "sha256": "74eb508f9deb60f04cacd7aa22e19bc3f8810948640e9b95c823a820068efdf6",
+      "lines": {
+        "start": 1,
+        "end": 38
+      },
+      "reviewFile": "review-ai-model-news.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "NEWS-010.01",
+        "NEWS-010.02",
+        "NEWS-010.03"
+      ]
+    },
+    {
+      "id": "NEWS-011",
+      "source": "ai-model-news-video-subs/2026-07-14-how-models-get-quietly-worse.txt",
+      "sha256": "aa52b51da547fd3a53f0e493abef4182cedc6b6223b805373b9ac34600a50b1d",
+      "lines": {
+        "start": 1,
+        "end": 55
+      },
+      "reviewFile": "review-ai-model-news.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "NEWS-011.01",
+        "NEWS-011.02",
+        "NEWS-011.03",
+        "NEWS-011.04",
+        "NEWS-011.05"
+      ]
+    },
+    {
+      "id": "NEWS-012",
+      "source": "ai-model-news-video-subs/2026-07-24-opus-5-first-impressions.txt",
+      "sha256": "b48fbdbef0cc21d9b1c7cae70553ee9d533c7035c51b6c5a5cdd71703a3cf48a",
+      "lines": {
+        "start": 1,
+        "end": 39
+      },
+      "reviewFile": "review-ai-model-news.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "NEWS-012.01",
+        "NEWS-012.02",
+        "NEWS-012.03",
+        "NEWS-012.04"
+      ]
+    },
+    {
+      "id": "NEWS-013",
+      "source": "ai-model-news-video-subs/2026-08-01-a-video-model-release.txt",
+      "sha256": "3ba5bb815e0b5fea2020964d28ac22d05374c2377772aed5bb855625413e8943",
+      "lines": {
+        "start": 1,
+        "end": 45
+      },
+      "reviewFile": "review-ai-model-news.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "NEWS-013.01",
+        "NEWS-013.02",
+        "NEWS-013.03",
+        "NEWS-013.04",
+        "NEWS-013.05",
+        "NEWS-013.06"
+      ]
+    },
+    {
+      "id": "PERF-001",
+      "source": "performance-video-subs/2026-06-21-five-ways-to-make-a-vibecoded-app-faster.txt",
+      "sha256": "b225f9e4c52f0f81d0f6f0740eac3d6aab8f64c7977f323c5a1134b16849c6be",
+      "lines": {
+        "start": 1,
+        "end": 33
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PERF-001.01",
+        "PERF-001.02",
+        "PERF-001.03",
+        "PERF-001.04",
+        "PERF-001.05"
+      ]
+    },
+    {
+      "id": "PERF-002",
+      "source": "performance-video-subs/2026-07-03-five-things-slowing-your-app-down.txt",
+      "sha256": "afeef63534e07f09d80975098f73517d493ef944f8abd358838848ad760f3500",
+      "lines": {
+        "start": 1,
+        "end": 34
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PERF-002.01",
+        "PERF-002.02",
+        "PERF-002.03",
+        "PERF-002.04",
+        "PERF-002.05"
+      ]
+    },
+    {
+      "id": "PERF-003",
+      "source": "performance-video-subs/2026-07-06-five-reasons-your-app-is-slow.txt",
+      "sha256": "fb7a687d14f85fa6528c4e87bdaa1c851c9c5ba1c647da25ee2f773d7e663d35",
+      "lines": {
+        "start": 1,
+        "end": 32
+      },
+      "reviewFile": "review-foundations.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PERF-003.01",
+        "PERF-003.02",
+        "PERF-003.03",
+        "PERF-003.04",
+        "PERF-003.05"
+      ]
+    },
+    {
+      "id": "PG-001",
+      "source": "product-growth-video-subs/2026-06-29-ten-days-to-build-an-app-from-scratch.txt",
+      "sha256": "deee6204ea1a64899b3cbbcd85b119111844e1374386b714fc250e7c5bb94b77",
+      "lines": {
+        "start": 1,
+        "end": 26
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-001.01",
+        "PG-001.02",
+        "PG-001.03",
+        "PG-001.04"
+      ]
+    },
+    {
+      "id": "PG-002",
+      "source": "product-growth-video-subs/2026-07-01-build-in-public-day-1-scoping.txt",
+      "sha256": "0b93f971ff3a55639b497c6138d54e5ea07809fca000e130d1178a6bc55b060a",
+      "lines": {
+        "start": 1,
+        "end": 24
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-002.01",
+        "PG-002.02",
+        "PG-002.03",
+        "PG-002.04",
+        "PG-002.05",
+        "PG-002.06"
+      ]
+    },
+    {
+      "id": "PG-003",
+      "source": "product-growth-video-subs/2026-07-02-build-in-public-day-2-the-agentic-loop.txt",
+      "sha256": "84d37fa44b58d4427be586049198d84efa9a83e29a581c26954431f6f2286ebc",
+      "lines": {
+        "start": 1,
+        "end": 70
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-003.01",
+        "PG-003.02",
+        "PG-003.03",
+        "PG-003.04",
+        "PG-003.05",
+        "PG-003.06",
+        "PG-003.07",
+        "PG-003.08"
+      ]
+    },
+    {
+      "id": "PG-004",
+      "source": "product-growth-video-subs/2026-07-17-the-week-three-habit-gate.txt",
+      "sha256": "6b666983b343568d49a8d08cabe992f0bc0b663119a05e0c2cba5c3e68012205",
+      "lines": {
+        "start": 1,
+        "end": 77
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-004.01",
+        "PG-004.02",
+        "PG-004.03",
+        "PG-004.04",
+        "PG-004.05",
+        "PG-004.06"
+      ]
+    },
+    {
+      "id": "PG-005",
+      "source": "product-growth-video-subs/2026-07-18-one-billion-new-builders.txt",
+      "sha256": "ac00186905669ad3b7bb5910dddd44e4504c9005447a6813aa68e5385b288df2",
+      "lines": {
+        "start": 1,
+        "end": 48
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-005.01",
+        "PG-005.02",
+        "PG-005.03",
+        "PG-005.04",
+        "PG-005.05"
+      ]
+    },
+    {
+      "id": "PG-006",
+      "source": "product-growth-video-subs/2026-07-19-small-businesses-became-software-companies.txt",
+      "sha256": "9026456723848d68a3b002f1e5a8534f6d726b4731cc4bd976405a5bdbea0f3f",
+      "lines": {
+        "start": 1,
+        "end": 33
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-006.01",
+        "PG-006.02",
+        "PG-006.03",
+        "PG-006.04",
+        "PG-006.05"
+      ]
+    },
+    {
+      "id": "PG-007",
+      "source": "product-growth-video-subs/2026-07-20-business-registration-post-duplicate-video.txt",
+      "sha256": "d2558ddddabefaabff4be83f26b429d976dbdc8a8690e63a08e723cd14746fcf",
+      "lines": {
+        "start": 1,
+        "end": 24
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-007.01",
+        "PG-007.02",
+        "PG-007.03"
+      ]
+    },
+    {
+      "id": "PG-008",
+      "source": "product-growth-video-subs/2026-07-20-stripe-disputes-and-chargebacks.txt",
+      "sha256": "e3d25a3b0218da041a6f961efad899c68084f304101f9d4bc29a8c79314be139",
+      "lines": {
+        "start": 1,
+        "end": 46
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-008.01",
+        "PG-008.02",
+        "PG-008.03",
+        "PG-008.04",
+        "PG-008.05",
+        "PG-008.06"
+      ]
+    },
+    {
+      "id": "PG-009",
+      "source": "product-growth-video-subs/2026-07-21-dunning-and-failed-payments.txt",
+      "sha256": "ac230a78a9703e6e3e0dbded29f11cb4037c52abc22f97f90eaa118defe196b8",
+      "lines": {
+        "start": 1,
+        "end": 59
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-009.01",
+        "PG-009.02",
+        "PG-009.03",
+        "PG-009.04",
+        "PG-009.05",
+        "PG-009.06"
+      ]
+    },
+    {
+      "id": "PG-010",
+      "source": "product-growth-video-subs/2026-07-22-social-proof-page.txt",
+      "sha256": "4c8d5b83e7cce13a1eb4b928ddd2633e6e3e47c1da155214ecc71d8a2fafd04d",
+      "lines": {
+        "start": 1,
+        "end": 59
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-010.01",
+        "PG-010.02",
+        "PG-010.03",
+        "PG-010.04",
+        "PG-010.05"
+      ]
+    },
+    {
+      "id": "PG-011",
+      "source": "product-growth-video-subs/2026-07-23-software-for-an-audience-of-one.txt",
+      "sha256": "ecdd2daf4f143c7065cf8e03f6cae8b112944dab5f66a93eb4008073c5ce3141",
+      "lines": {
+        "start": 1,
+        "end": 60
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-011.01",
+        "PG-011.02",
+        "PG-011.03",
+        "PG-011.04",
+        "PG-011.05"
+      ]
+    },
+    {
+      "id": "PG-012",
+      "source": "product-growth-video-subs/2026-07-24-retention-and-weekly-churn.txt",
+      "sha256": "079d5ef33a6d6b363bb6f4ea29775e9c1e7bf409599e459987a62248872e3946",
+      "lines": {
+        "start": 1,
+        "end": 48
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-012.01",
+        "PG-012.02",
+        "PG-012.03",
+        "PG-012.04",
+        "PG-012.05"
+      ]
+    },
+    {
+      "id": "PG-013",
+      "source": "product-growth-video-subs/2026-07-26-building-a-content-engine.txt",
+      "sha256": "b650f2de7957bd928e5ed3cf660d24bba82e3c9be6359ab93309cd3f7f78910b",
+      "lines": {
+        "start": 1,
+        "end": 62
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-013.01",
+        "PG-013.02",
+        "PG-013.03",
+        "PG-013.04",
+        "PG-013.05",
+        "PG-013.06"
+      ]
+    },
+    {
+      "id": "PG-014",
+      "source": "product-growth-video-subs/2026-07-29-when-your-buyer-is-an-agent.txt",
+      "sha256": "b1aa42816ce7cc68a9f7c9917dc7ba3a27d70cc398a14f72cb55c4044cd063d9",
+      "lines": {
+        "start": 1,
+        "end": 91
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-014.01",
+        "PG-014.02",
+        "PG-014.03",
+        "PG-014.04",
+        "PG-014.05"
+      ]
+    },
+    {
+      "id": "PG-015",
+      "source": "product-growth-video-subs/2026-07-30-defining-your-ideal-customer-profile.txt",
+      "sha256": "d5ab309ab3b64d804eed4923b62bed9b4e6ecffb59f69ec65121dbdd5592bd06",
+      "lines": {
+        "start": 1,
+        "end": 90
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-015.01",
+        "PG-015.02",
+        "PG-015.03",
+        "PG-015.04",
+        "PG-015.05"
+      ]
+    },
+    {
+      "id": "PG-016",
+      "source": "product-growth-video-subs/2026-07-31-fix-what-is-broken-before-building-more.txt",
+      "sha256": "4314e7370f488d5ee7c4d8ac088dff01c38d3d761396f601693a21fd2308afa6",
+      "lines": {
+        "start": 1,
+        "end": 54
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-016.01",
+        "PG-016.02",
+        "PG-016.03",
+        "PG-016.04",
+        "PG-016.05",
+        "PG-016.06"
+      ]
+    },
+    {
+      "id": "PG-017",
+      "source": "product-growth-video-subs/2026-08-03-an-offer-to-promote-other-peoples-apps.txt",
+      "sha256": "812484c4cc745f35d4bf1b0225eecabc8d0865df76a589e5a50e861278574704",
+      "lines": {
+        "start": 1,
+        "end": 29
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-017.01",
+        "PG-017.02",
+        "PG-017.03",
+        "PG-017.04",
+        "PG-017.05"
+      ]
+    },
+    {
+      "id": "PG-018",
+      "source": "product-growth-video-subs/2026-08-03-cost-to-serve-a-single-customer.txt",
+      "sha256": "e6d76e0bcf94cd6f6e38295cbf4994119b899d361d13f3cf3c7d17bc071d05c8",
+      "lines": {
+        "start": 1,
+        "end": 50
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-018.01",
+        "PG-018.02",
+        "PG-018.03",
+        "PG-018.04",
+        "PG-018.05",
+        "PG-018.06"
+      ]
+    },
+    {
+      "id": "PG-019",
+      "source": "product-growth-video-subs/2026-08-04-saas-price-rises-at-renewal.txt",
+      "sha256": "03fd913db1b7f23f2be3aa446d474bbf1baab24b5ced8d1ba7f966c43dd3969f",
+      "lines": {
+        "start": 1,
+        "end": 75
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-019.01",
+        "PG-019.02",
+        "PG-019.03",
+        "PG-019.04",
+        "PG-019.05"
+      ]
+    },
+    {
+      "id": "PG-020",
+      "source": "product-growth-video-subs/2026-08-06-ai-security-roles-that-did-not-exist.txt",
+      "sha256": "61ae346484d7b290e14fceeeb6588aea0b9ad621b9d34486b3cd29976db71d12",
+      "lines": {
+        "start": 1,
+        "end": 53
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-020.01",
+        "PG-020.02",
+        "PG-020.03",
+        "PG-020.04",
+        "PG-020.05",
+        "PG-020.06"
+      ]
+    },
+    {
+      "id": "PG-021",
+      "source": "product-growth-video-subs/2026-08-06-execution-is-the-moat.txt",
+      "sha256": "5c0060d02ca46eb253b267cf599ad72aa361805a0bff800b44e7745bebf5fefd",
+      "lines": {
+        "start": 1,
+        "end": 72
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-021.01",
+        "PG-021.02",
+        "PG-021.03",
+        "PG-021.04",
+        "PG-021.05"
+      ]
+    },
+    {
+      "id": "PG-022",
+      "source": "product-growth-video-subs/2026-08-07-every-business-is-a-software-business.txt",
+      "sha256": "bb6835bb47830d2244e51ab7ace9decfe6961e16a5381608db186503d8d57c07",
+      "lines": {
+        "start": 1,
+        "end": 77
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-022.01",
+        "PG-022.02",
+        "PG-022.03",
+        "PG-022.04",
+        "PG-022.05"
+      ]
+    },
+    {
+      "id": "PG-023",
+      "source": "product-growth-video-subs/2026-08-08-building-products-agents-can-buy.txt",
+      "sha256": "f7572c63769f820d27b033a0a5583f832faee0069de19e5822cbc2e0a991e18c",
+      "lines": {
+        "start": 1,
+        "end": 73
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-023.01",
+        "PG-023.02",
+        "PG-023.03",
+        "PG-023.04",
+        "PG-023.05"
+      ]
+    },
+    {
+      "id": "PG-024",
+      "source": "product-growth-video-subs/2026-08-09-mapping-conversion-points.txt",
+      "sha256": "cbb6839b9e3bf090a3f27da9deddcf0fbcc4bdf8f13579a9345e4efb8b593ba5",
+      "lines": {
+        "start": 1,
+        "end": 58
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-024.01",
+        "PG-024.02",
+        "PG-024.03",
+        "PG-024.04"
+      ]
+    },
+    {
+      "id": "PG-025",
+      "source": "product-growth-video-subs/2026-08-09-you-built-it-and-nobody-came.txt",
+      "sha256": "4cf47762171b087044d33e0276503eae8bdc1d15f2a0d113f7f7afe6f324d3dd",
+      "lines": {
+        "start": 1,
+        "end": 73
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-025.01",
+        "PG-025.02",
+        "PG-025.03",
+        "PG-025.04",
+        "PG-025.05"
+      ]
+    },
+    {
+      "id": "PG-026",
+      "source": "product-growth-video-subs/2026-08-10-feature-audit-who-is-it-for.txt",
+      "sha256": "9865437ddbece31c442ca4cb7b9e204efab6425336674b969435e0bc0fe5434e",
+      "lines": {
+        "start": 1,
+        "end": 71
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-026.01",
+        "PG-026.02",
+        "PG-026.03",
+        "PG-026.04",
+        "PG-026.05"
+      ]
+    },
+    {
+      "id": "PG-027",
+      "source": "product-growth-video-subs/2026-08-10-launch-day-product-is-a-hypothesis.txt",
+      "sha256": "1d85f7f34616c72f6b8d2e03267a902e2825379557a711221d455f4f885c0f6c",
+      "lines": {
+        "start": 1,
+        "end": 60
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-027.01",
+        "PG-027.02",
+        "PG-027.03",
+        "PG-027.04",
+        "PG-027.05"
+      ]
+    },
+    {
+      "id": "PG-028",
+      "source": "product-growth-video-subs/2026-08-11-the-end-of-feature-bloat-saas.txt",
+      "sha256": "8b767950de820e820fd9b363b57075914c6c809e60ef2c6dac3d546635dcd1c6",
+      "lines": {
+        "start": 1,
+        "end": 61
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-028.01",
+        "PG-028.02",
+        "PG-028.03",
+        "PG-028.04",
+        "PG-028.05"
+      ]
+    },
+    {
+      "id": "PG-029",
+      "source": "product-growth-video-subs/2026-08-13-ten-thousand-people-have-your-idea.txt",
+      "sha256": "dcaaf4a5561a77e3502a9b2252224e7c71075179e644167f1bf74883a5ea1d7d",
+      "lines": {
+        "start": 1,
+        "end": 67
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-029.01",
+        "PG-029.02",
+        "PG-029.03",
+        "PG-029.04",
+        "PG-029.05"
+      ]
+    },
+    {
+      "id": "PG-030",
+      "source": "product-growth-video-subs/2026-08-13-the-in-house-ai-director-role.txt",
+      "sha256": "ae0ed4bb1e271bd9ab7d47d447b66b3457bddfc1e4fc976b3feb3b27fec394f6",
+      "lines": {
+        "start": 1,
+        "end": 70
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-030.01",
+        "PG-030.02",
+        "PG-030.03",
+        "PG-030.04",
+        "PG-030.05"
+      ]
+    },
+    {
+      "id": "PG-031",
+      "source": "product-growth-video-subs/2026-08-14-content-has-to-start-before-the-product.txt",
+      "sha256": "6503bdc49a3236e01ec2cbae85b2a9d1472eff02451d93e80667d53a779476bd",
+      "lines": {
+        "start": 1,
+        "end": 50
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-031.01",
+        "PG-031.02",
+        "PG-031.03",
+        "PG-031.04",
+        "PG-031.05"
+      ]
+    },
+    {
+      "id": "PG-032",
+      "source": "product-growth-video-subs/2026-08-17-payment-processor-fees.txt",
+      "sha256": "3dce43ed0ad5e69126be873148943ae0855103b2f564ba9c6f975b70b0df7238",
+      "lines": {
+        "start": 1,
+        "end": 46
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-032.01",
+        "PG-032.02",
+        "PG-032.03",
+        "PG-032.04",
+        "PG-032.05",
+        "PG-032.06"
+      ]
+    },
+    {
+      "id": "PG-033",
+      "source": "product-growth-video-subs/2026-08-19-free-trial-abuse-and-payment-fraud-rules.txt",
+      "sha256": "169ec95213a118df5271571fc1f081e8f22ac5f1071baadee2d693fdafc7448a",
+      "lines": {
+        "start": 1,
+        "end": 65
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-033.01",
+        "PG-033.02",
+        "PG-033.03",
+        "PG-033.04",
+        "PG-033.05",
+        "PG-033.06"
+      ]
+    },
+    {
+      "id": "PG-034",
+      "source": "product-growth-video-subs/2026-08-21-saying-yes-to-every-client-request.txt",
+      "sha256": "7b0cbc17ea4b01d16cbf0a65b5946192554f628752244cafd2578a40b50a8990",
+      "lines": {
+        "start": 1,
+        "end": 80
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-034.01",
+        "PG-034.02",
+        "PG-034.03",
+        "PG-034.04",
+        "PG-034.05"
+      ]
+    },
+    {
+      "id": "PG-035",
+      "source": "product-growth-video-subs/2026-08-21-signups-that-convert-and-products-that-do-not.txt",
+      "sha256": "45d112bf135f0ee095f11fed6ba56b13c3362644fb0ec7e7ce3a01140f2d6d7d",
+      "lines": {
+        "start": 1,
+        "end": 76
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-035.01",
+        "PG-035.02",
+        "PG-035.03",
+        "PG-035.04",
+        "PG-035.05"
+      ]
+    },
+    {
+      "id": "PG-036",
+      "source": "product-growth-video-subs/2026-08-22-session-replay-and-gated-review-prompts.txt",
+      "sha256": "0abad9bb328c10e2e30bc09dea7543c2b169407384f0711df9a852d16de0e2df",
+      "lines": {
+        "start": 1,
+        "end": 36
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-036.01",
+        "PG-036.02",
+        "PG-036.03",
+        "PG-036.04",
+        "PG-036.05",
+        "PG-036.06"
+      ]
+    },
+    {
+      "id": "PG-037",
+      "source": "product-growth-video-subs/2026-08-25-local-businesses-paying-third-party-fees.txt",
+      "sha256": "79718fe7ba7e7c74c6439556a18031a3b6b242086a5ea978dcf03807f4a6c631",
+      "lines": {
+        "start": 1,
+        "end": 67
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-037.01",
+        "PG-037.02",
+        "PG-037.03",
+        "PG-037.04",
+        "PG-037.05",
+        "PG-037.06"
+      ]
+    },
+    {
+      "id": "PG-038",
+      "source": "product-growth-video-subs/2026-08-27-building-the-app-is-ten-percent-of-the-work.txt",
+      "sha256": "800073112a0e7c94a0e9573adc82c72b4aad5e06321799fb00d6b5b4d4444ec9",
+      "lines": {
+        "start": 1,
+        "end": 56
+      },
+      "reviewFile": "review-product-growth.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PG-038.01",
+        "PG-038.02",
+        "PG-038.03",
+        "PG-038.04",
+        "PG-038.05",
+        "PG-038.06"
+      ]
+    },
+    {
+      "id": "PRACTICE-001",
+      "source": "engineering-practice-video-subs/2026-07-16-testing-the-paths-nobody-checked.txt",
+      "sha256": "d91db38aa9ac9ad32aa93a0aad17ab6f7aac45f7c603659b0f1745a7ffc1064a",
+      "lines": {
+        "start": 1,
+        "end": 83
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PRACTICE-001.01",
+        "PRACTICE-001.02",
+        "PRACTICE-001.03",
+        "PRACTICE-001.04"
+      ]
+    },
+    {
+      "id": "PRACTICE-002",
+      "source": "engineering-practice-video-subs/2026-07-26-error-handling-and-the-unhappy-path.txt",
+      "sha256": "07040e238170d38184e3c9436f8ccf665be8e5a3b00e0744ce4c817fa559fb0c",
+      "lines": {
+        "start": 1,
+        "end": 72
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PRACTICE-002.01",
+        "PRACTICE-002.02",
+        "PRACTICE-002.03",
+        "PRACTICE-002.04"
+      ]
+    },
+    {
+      "id": "PRACTICE-003",
+      "source": "engineering-practice-video-subs/2026-07-28-the-weekend-build-was-a-prototype.txt",
+      "sha256": "305d8e4857ddd177d6a12c516a2cb7bbff588beed9522cfe1467c068d861707c",
+      "lines": {
+        "start": 1,
+        "end": 76
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PRACTICE-003.01",
+        "PRACTICE-003.02",
+        "PRACTICE-003.03",
+        "PRACTICE-003.04"
+      ]
+    },
+    {
+      "id": "PRACTICE-004",
+      "source": "engineering-practice-video-subs/2026-08-05-what-to-check-before-publishing-a-site.txt",
+      "sha256": "df625c0c3757095924c846ebb22232bf68800252d524947bd757156fc54e3c6d",
+      "lines": {
+        "start": 1,
+        "end": 23
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PRACTICE-004.01",
+        "PRACTICE-004.02",
+        "PRACTICE-004.03",
+        "PRACTICE-004.04",
+        "PRACTICE-004.05",
+        "PRACTICE-004.06",
+        "PRACTICE-004.07",
+        "PRACTICE-004.08",
+        "PRACTICE-004.09",
+        "PRACTICE-004.10",
+        "PRACTICE-004.11",
+        "PRACTICE-004.12",
+        "PRACTICE-004.13",
+        "PRACTICE-004.14",
+        "PRACTICE-004.15",
+        "PRACTICE-004.16",
+        "PRACTICE-004.17",
+        "PRACTICE-004.18",
+        "PRACTICE-004.19",
+        "PRACTICE-004.20"
+      ]
+    },
+    {
+      "id": "PRACTICE-005",
+      "source": "engineering-practice-video-subs/2026-08-18-commit-discipline-and-ci-cd-gates.txt",
+      "sha256": "e5b6df5c9c65386374e00f19ec3ffe52a53ea46bf981029048335ff32496556b",
+      "lines": {
+        "start": 1,
+        "end": 46
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PRACTICE-005.01",
+        "PRACTICE-005.02",
+        "PRACTICE-005.03",
+        "PRACTICE-005.04"
+      ]
+    },
+    {
+      "id": "PRACTICE-006",
+      "source": "engineering-practice-video-subs/2026-08-26-app-store-submission-with-a-coding-agent.txt",
+      "sha256": "bb60300793bb22438aa40b4781b31a99a904baff4e3be36541c5945b9e2a79bd",
+      "lines": {
+        "start": 1,
+        "end": 41
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PRACTICE-006.01",
+        "PRACTICE-006.02",
+        "PRACTICE-006.03",
+        "PRACTICE-006.04"
+      ]
+    },
+    {
+      "id": "PRACTICE-007",
+      "source": "engineering-practice-video-subs/2026-08-31-why-apple-rejects-app-submissions.txt",
+      "sha256": "373d865ae806d6433a293c471ab07a944a39274b2dbcbbd70914e1361082ac22",
+      "lines": {
+        "start": 1,
+        "end": 39
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PRACTICE-007.01",
+        "PRACTICE-007.02",
+        "PRACTICE-007.03",
+        "PRACTICE-007.04",
+        "PRACTICE-007.05",
+        "PRACTICE-007.06"
+      ]
+    },
+    {
+      "id": "PRACTICE-008",
+      "source": "engineering-practice-video-subs/2026-09-01-five-checks-before-launching-an-app.txt",
+      "sha256": "c4d01fe8800abaf446db46ae91aba895bc1c3ce93bb009d1ce554ac5f5dd3c8a",
+      "lines": {
+        "start": 1,
+        "end": 61
+      },
+      "reviewFile": "review-engineering.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "PRACTICE-008.01",
+        "PRACTICE-008.02",
+        "PRACTICE-008.03",
+        "PRACTICE-008.04",
+        "PRACTICE-008.05"
+      ]
+    },
+    {
+      "id": "SEC-001",
+      "source": "security-video-subs/2026-05-28-a-cvss-10-sql-injection-in-a-sync-engine.txt",
+      "sha256": "bc3a10081b6b139d8993841d69bf1f5549d0b333fa6f3a47313a6b172112eb73",
+      "lines": {
+        "start": 1,
+        "end": 30
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-001.01",
+        "SEC-001.02",
+        "SEC-001.03"
+      ]
+    },
+    {
+      "id": "SEC-002",
+      "source": "security-video-subs/2026-06-17-five-ways-a-vibecoded-login-endpoint-is-insecure.txt",
+      "sha256": "b109640a48ec55ca804bff98607c22c604cabed48ca52a21bf979e897c9c1be9",
+      "lines": {
+        "start": 1,
+        "end": 29
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-002.01",
+        "SEC-002.02",
+        "SEC-002.03",
+        "SEC-002.04",
+        "SEC-002.05",
+        "SEC-002.06"
+      ]
+    },
+    {
+      "id": "SEC-003",
+      "source": "security-video-subs/2026-07-01-five-security-holes-in-ai-written-apps.txt",
+      "sha256": "796b1daadda99a42dff3c5c3e4404278aa6b37ac67053c92aac0b90c2a81a04e",
+      "lines": {
+        "start": 1,
+        "end": 30
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-003.01",
+        "SEC-003.02",
+        "SEC-003.03",
+        "SEC-003.04",
+        "SEC-003.05"
+      ]
+    },
+    {
+      "id": "SEC-004",
+      "source": "security-video-subs/2026-07-01-reading-another-users-data-by-changing-a-url.txt",
+      "sha256": "66d74a66e3af6b6ebcf982fe76dcddfeed0960dc59f05409483b9b29a1645511",
+      "lines": {
+        "start": 1,
+        "end": 43
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-004.01",
+        "SEC-004.02",
+        "SEC-004.03"
+      ]
+    },
+    {
+      "id": "SEC-005",
+      "source": "security-video-subs/2026-07-19-api-surface-audit-and-versioning.txt",
+      "sha256": "feaf085a75b89f3d47227a8e6d2fb1fd58489ecadc698b65684b29dc7314d338",
+      "lines": {
+        "start": 1,
+        "end": 48
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-005.01",
+        "SEC-005.02",
+        "SEC-005.03",
+        "SEC-005.04"
+      ]
+    },
+    {
+      "id": "SEC-006",
+      "source": "security-video-subs/2026-07-22-session-expiry-and-token-lifetime.txt",
+      "sha256": "982120981d13b3e91ab1891ca9d5513bdd440c17340531b8ba540148c002fc01",
+      "lines": {
+        "start": 1,
+        "end": 62
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-006.01",
+        "SEC-006.02",
+        "SEC-006.03",
+        "SEC-006.04"
+      ]
+    },
+    {
+      "id": "SEC-007",
+      "source": "security-video-subs/2026-07-25-saml-sso-and-soc2-for-enterprise-deals.txt",
+      "sha256": "37750dbca3defb93fba7ad4d05dceab2167b31353349ef7593def3d70db28be2",
+      "lines": {
+        "start": 1,
+        "end": 55
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-007.01",
+        "SEC-007.02",
+        "SEC-007.03",
+        "SEC-007.04"
+      ]
+    },
+    {
+      "id": "SEC-008",
+      "source": "security-video-subs/2026-07-27-security-audit-of-a-weekend-build.txt",
+      "sha256": "7547f3282a2da9c391f36eb2a9b97306c12093b8ec1fe689b40603bb998d6995",
+      "lines": {
+        "start": 1,
+        "end": 76
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-008.01",
+        "SEC-008.02",
+        "SEC-008.03",
+        "SEC-008.04",
+        "SEC-008.05"
+      ]
+    },
+    {
+      "id": "SEC-009",
+      "source": "security-video-subs/2026-08-01-secrets-committed-to-the-repo.txt",
+      "sha256": "13914bf5a513a706fa021441870cf398756849306af5620ff9f816f5e9ada129",
+      "lines": {
+        "start": 1,
+        "end": 62
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-009.01",
+        "SEC-009.02",
+        "SEC-009.03",
+        "SEC-009.04"
+      ]
+    },
+    {
+      "id": "SEC-010",
+      "source": "security-video-subs/2026-08-02-cache-not-scoped-per-tenant.txt",
+      "sha256": "14a6dd5b277f77a323557c1b76b24b46a4952ba90df3999c2c2444792097fbf0",
+      "lines": {
+        "start": 1,
+        "end": 62
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-010.01",
+        "SEC-010.02",
+        "SEC-010.03"
+      ]
+    },
+    {
+      "id": "SEC-011",
+      "source": "security-video-subs/2026-08-02-ddos-protection-and-rate-limiting.txt",
+      "sha256": "99f38bab43fb416cb4f2e2e4569f6593051a55acdf372f3a3f8e4f5aa2c8b766",
+      "lines": {
+        "start": 1,
+        "end": 56
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-011.01",
+        "SEC-011.02",
+        "SEC-011.03",
+        "SEC-011.04"
+      ]
+    },
+    {
+      "id": "SEC-012",
+      "source": "security-video-subs/2026-08-03-injection-attacks-against-vibe-coded-apps.txt",
+      "sha256": "512ed115cd33b8317ead24b1d510ba1f65c88f2813d9dbaf496aa860f20c4c72",
+      "lines": {
+        "start": 1,
+        "end": 28
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-012.01",
+        "SEC-012.02",
+        "SEC-012.03",
+        "SEC-012.04"
+      ]
+    },
+    {
+      "id": "SEC-013",
+      "source": "security-video-subs/2026-08-04-questions-from-a-website-security-audit.txt",
+      "sha256": "fcb843c8d6b0bae8e96092071fd714688d373d43fee016716e29a9b285c5e5b9",
+      "lines": {
+        "start": 1,
+        "end": 37
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-013.01",
+        "SEC-013.02",
+        "SEC-013.03",
+        "SEC-013.04",
+        "SEC-013.05"
+      ]
+    },
+    {
+      "id": "SEC-014",
+      "source": "security-video-subs/2026-08-05-stack-traces-leaking-credentials.txt",
+      "sha256": "bfda3242a651c52b0fa15dc6cd45cb8ee59cd45a3c34c6a792e9de3161ba0b63",
+      "lines": {
+        "start": 1,
+        "end": 64
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-014.01",
+        "SEC-014.02",
+        "SEC-014.03",
+        "SEC-014.04"
+      ]
+    },
+    {
+      "id": "SEC-015",
+      "source": "security-video-subs/2026-08-06-five-ways-a-vibecoded-login-endpoint-is-insecure-repost.txt",
+      "sha256": "4f174887d461be2e321c8e0cdf2798415ae640087b8a79affb84e9f51d9c03f4",
+      "lines": {
+        "start": 1,
+        "end": 47
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-015.01",
+        "SEC-015.02",
+        "SEC-015.03",
+        "SEC-015.04",
+        "SEC-015.05",
+        "SEC-015.06"
+      ]
+    },
+    {
+      "id": "SEC-016",
+      "source": "security-video-subs/2026-08-12-ai-agent-permissions-and-audit-trail.txt",
+      "sha256": "88287cacf438b547972ba0428ceb1612363889a9f5ff67f655f01088f898bec5",
+      "lines": {
+        "start": 1,
+        "end": 58
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-016.01",
+        "SEC-016.02",
+        "SEC-016.03",
+        "SEC-016.04"
+      ]
+    },
+    {
+      "id": "SEC-017",
+      "source": "security-video-subs/2026-08-14-a-rapid-fire-application-security-checklist.txt",
+      "sha256": "6b3f5adb289a586e3dbc9faf0bdee4c5f04dea62cfb242d1cc3753dfa480be19",
+      "lines": {
+        "start": 1,
+        "end": 24
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-017.01",
+        "SEC-017.02",
+        "SEC-017.03",
+        "SEC-017.04",
+        "SEC-017.05",
+        "SEC-017.06",
+        "SEC-017.07",
+        "SEC-017.08",
+        "SEC-017.09",
+        "SEC-017.10",
+        "SEC-017.11",
+        "SEC-017.12",
+        "SEC-017.13",
+        "SEC-017.14",
+        "SEC-017.15",
+        "SEC-017.16",
+        "SEC-017.17",
+        "SEC-017.18",
+        "SEC-017.19",
+        "SEC-017.20",
+        "SEC-017.21"
+      ]
+    },
+    {
+      "id": "SEC-018",
+      "source": "security-video-subs/2026-08-15-security-checklist-1-exposed-secrets-and-access.txt",
+      "sha256": "be041fe2c55422ebf59aeedfd66daf27e870207d319bc84cae25f1e9e0e3ce5c",
+      "lines": {
+        "start": 1,
+        "end": 38
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-018.01",
+        "SEC-018.02",
+        "SEC-018.03",
+        "SEC-018.04",
+        "SEC-018.05",
+        "SEC-018.06",
+        "SEC-018.07",
+        "SEC-018.08",
+        "SEC-018.09",
+        "SEC-018.10",
+        "SEC-018.11",
+        "SEC-018.12",
+        "SEC-018.13",
+        "SEC-018.14",
+        "SEC-018.15",
+        "SEC-018.16",
+        "SEC-018.17",
+        "SEC-018.18"
+      ]
+    },
+    {
+      "id": "SEC-019",
+      "source": "security-video-subs/2026-08-15-zero-trust-abac-session-anomaly-detection.txt",
+      "sha256": "ec1646adb894e57bf26959675c7efb32bfcec74d2502366d66e9e15b538452ce",
+      "lines": {
+        "start": 1,
+        "end": 53
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-019.01",
+        "SEC-019.02",
+        "SEC-019.03",
+        "SEC-019.04",
+        "SEC-019.05"
+      ]
+    },
+    {
+      "id": "SEC-020",
+      "source": "security-video-subs/2026-08-16-cloudflare-origin-ip-exposure.txt",
+      "sha256": "e6701da0264fa5b84eccf6600a45bff53f7490d4dfbb7f3cc08eb70a1c47ea64",
+      "lines": {
+        "start": 1,
+        "end": 72
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-020.01",
+        "SEC-020.02",
+        "SEC-020.03",
+        "SEC-020.04"
+      ]
+    },
+    {
+      "id": "SEC-021",
+      "source": "security-video-subs/2026-08-16-rag-vector-db-tenant-data-leakage.txt",
+      "sha256": "bb9ef1c19e5824f503665b05130b2ba0210614876770a1f169e133fdb1f0105b",
+      "lines": {
+        "start": 1,
+        "end": 46
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-021.01",
+        "SEC-021.02",
+        "SEC-021.03",
+        "SEC-021.04"
+      ]
+    },
+    {
+      "id": "SEC-022",
+      "source": "security-video-subs/2026-08-19-security-checklist-2-injection-and-session-flaws.txt",
+      "sha256": "fb012f44b36797638721345659beceac28ba26ad93c9f424d42a81eb156aceb2",
+      "lines": {
+        "start": 1,
+        "end": 23
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-022.01",
+        "SEC-022.02",
+        "SEC-022.03",
+        "SEC-022.04",
+        "SEC-022.05",
+        "SEC-022.06",
+        "SEC-022.07",
+        "SEC-022.08",
+        "SEC-022.09",
+        "SEC-022.10",
+        "SEC-022.11",
+        "SEC-022.12",
+        "SEC-022.13",
+        "SEC-022.14",
+        "SEC-022.15",
+        "SEC-022.16",
+        "SEC-022.17",
+        "SEC-022.18"
+      ]
+    },
+    {
+      "id": "SEC-023",
+      "source": "security-video-subs/2026-08-20-cloudflare-rate-limiting-bot-management-waf.txt",
+      "sha256": "f05c29d192e45a0ad72de34a226c07275a6bbd061fae9880ba87cba9a2a31366",
+      "lines": {
+        "start": 1,
+        "end": 52
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-023.01",
+        "SEC-023.02",
+        "SEC-023.03",
+        "SEC-023.04"
+      ]
+    },
+    {
+      "id": "SEC-024",
+      "source": "security-video-subs/2026-08-22-security-checklist-3-dependencies-and-ai-access.txt",
+      "sha256": "2113f588fce6c1eb5ed0b846366641850e86184cff663c4ff98fbc412bb9a148",
+      "lines": {
+        "start": 1,
+        "end": 23
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-024.01",
+        "SEC-024.02",
+        "SEC-024.03",
+        "SEC-024.04",
+        "SEC-024.05",
+        "SEC-024.06",
+        "SEC-024.07",
+        "SEC-024.08",
+        "SEC-024.09",
+        "SEC-024.10",
+        "SEC-024.11",
+        "SEC-024.12",
+        "SEC-024.13",
+        "SEC-024.14",
+        "SEC-024.15",
+        "SEC-024.16",
+        "SEC-024.17",
+        "SEC-024.18"
+      ]
+    },
+    {
+      "id": "SEC-025",
+      "source": "security-video-subs/2026-08-23-forged-requests-and-unsigned-endpoints.txt",
+      "sha256": "5611be4dc64bc7f9beccec3805d204d20af6b96e2ddc8c7d93464d279b2611d9",
+      "lines": {
+        "start": 1,
+        "end": 75
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-025.01",
+        "SEC-025.02",
+        "SEC-025.03",
+        "SEC-025.04"
+      ]
+    },
+    {
+      "id": "SEC-026",
+      "source": "security-video-subs/2026-08-23-web-app-wrapped-as-a-mobile-app.txt",
+      "sha256": "f6fe247059c1727f9d6ebcab1d6b63762ba8042ef6058fe2fcfb40f7034d4b13",
+      "lines": {
+        "start": 1,
+        "end": 74
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-026.01",
+        "SEC-026.02",
+        "SEC-026.03",
+        "SEC-026.04",
+        "SEC-026.05"
+      ]
+    },
+    {
+      "id": "SEC-027",
+      "source": "security-video-subs/2026-08-24-security-checklist-4-auth-ci-cd-and-ai-agents.txt",
+      "sha256": "83f46fec9f135bfb62f9dbb5771e24318ee25e89ff5c1c348f8165a16b9fe4c6",
+      "lines": {
+        "start": 1,
+        "end": 33
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-027.01",
+        "SEC-027.02",
+        "SEC-027.03",
+        "SEC-027.04",
+        "SEC-027.05",
+        "SEC-027.06",
+        "SEC-027.07",
+        "SEC-027.08",
+        "SEC-027.09",
+        "SEC-027.10",
+        "SEC-027.11",
+        "SEC-027.12",
+        "SEC-027.13",
+        "SEC-027.14",
+        "SEC-027.15",
+        "SEC-027.16"
+      ]
+    },
+    {
+      "id": "SEC-028",
+      "source": "security-video-subs/2026-08-24-unverified-stripe-webhooks.txt",
+      "sha256": "ef9fe63d058e1d710ae9d92d4881ac9d971cce41c20bb731471e8bed7f4c5a6e",
+      "lines": {
+        "start": 1,
+        "end": 64
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-028.01",
+        "SEC-028.02",
+        "SEC-028.03"
+      ]
+    },
+    {
+      "id": "SEC-029",
+      "source": "security-video-subs/2026-08-25-ssrf-through-an-agent-that-fetches-urls.txt",
+      "sha256": "4480ee1e24f4e103e5d9f0ae9cff5e55a3b5b7a7aa6613fa6d35df768c25d25d",
+      "lines": {
+        "start": 1,
+        "end": 85
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-029.01",
+        "SEC-029.02",
+        "SEC-029.03",
+        "SEC-029.04"
+      ]
+    },
+    {
+      "id": "SEC-030",
+      "source": "security-video-subs/2026-08-26-a-dependency-that-exfiltrates-your-environment.txt",
+      "sha256": "7beec0f665f0972596034825ef70a9fee5787ec438b229d71c02551115b7064f",
+      "lines": {
+        "start": 1,
+        "end": 86
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-030.01",
+        "SEC-030.02",
+        "SEC-030.03",
+        "SEC-030.04"
+      ]
+    },
+    {
+      "id": "SEC-031",
+      "source": "security-video-subs/2026-08-26-cors-open-to-any-origin-with-credentials.txt",
+      "sha256": "918a5c5faaae34fa03616d13e6a2e205debe376336b458e026abb1771ceea764",
+      "lines": {
+        "start": 1,
+        "end": 82
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-031.01",
+        "SEC-031.02",
+        "SEC-031.03",
+        "SEC-031.04"
+      ]
+    },
+    {
+      "id": "SEC-032",
+      "source": "security-video-subs/2026-08-28-prompt-injection-against-your-own-ai-feature.txt",
+      "sha256": "7169e6bf5b73aba9418c0c087f452f491bca967fd20d0c1d7eb55175f9b62da9",
+      "lines": {
+        "start": 1,
+        "end": 84
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-032.01",
+        "SEC-032.02",
+        "SEC-032.03"
+      ]
+    },
+    {
+      "id": "SEC-033",
+      "source": "security-video-subs/2026-08-29-mobile-traffic-in-plain-text.txt",
+      "sha256": "f6d256760c53eb0d002325d28c5b574224dfa9203f49b1e153645cf2f8cc9deb",
+      "lines": {
+        "start": 1,
+        "end": 79
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-033.01",
+        "SEC-033.02",
+        "SEC-033.03"
+      ]
+    },
+    {
+      "id": "SEC-034",
+      "source": "security-video-subs/2026-08-30-an-admin-dashboard-with-no-authentication.txt",
+      "sha256": "e10094e8d2ce5b7825439470fe2cd2f86d22590259a3c2d34a81d87cece29865",
+      "lines": {
+        "start": 1,
+        "end": 68
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-034.01",
+        "SEC-034.02",
+        "SEC-034.03",
+        "SEC-034.04"
+      ]
+    },
+    {
+      "id": "SEC-035",
+      "source": "security-video-subs/2026-08-31-a-third-party-widget-that-reads-every-keystroke.txt",
+      "sha256": "83a6af8a39205ba275c2c845b8ada09ca8c18faec6d0ba146dbab8c8a41b87f6",
+      "lines": {
+        "start": 1,
+        "end": 81
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-035.01",
+        "SEC-035.02",
+        "SEC-035.03",
+        "SEC-035.04"
+      ]
+    },
+    {
+      "id": "SEC-036",
+      "source": "security-video-subs/2026-08-31-attacking-a-file-upload-form.txt",
+      "sha256": "0ebd8c7d62044e9ffa0d17c7705fab2541498325d6cd60c8a6b480c5e2b11778",
+      "lines": {
+        "start": 1,
+        "end": 49
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-036.01",
+        "SEC-036.02",
+        "SEC-036.03",
+        "SEC-036.04",
+        "SEC-036.05"
+      ]
+    },
+    {
+      "id": "SEC-037",
+      "source": "security-video-subs/2026-09-01-an-oauth-redirect-left-wide-open.txt",
+      "sha256": "e9cb9716483a4b1fbf11851a071934b9e86f23e886164284043d155544ad77bc",
+      "lines": {
+        "start": 1,
+        "end": 57
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-037.01",
+        "SEC-037.02",
+        "SEC-037.03",
+        "SEC-037.04"
+      ]
+    },
+    {
+      "id": "SEC-038",
+      "source": "security-video-subs/2026-09-03-a-deployment-security-interrogation.txt",
+      "sha256": "e639dc81a3e727ec8b2a0452ebabd74db9e14e49b5995dc8ad8f61ef8b2d85de",
+      "lines": {
+        "start": 1,
+        "end": 38
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-038.01",
+        "SEC-038.02",
+        "SEC-038.03",
+        "SEC-038.04",
+        "SEC-038.05",
+        "SEC-038.06",
+        "SEC-038.07",
+        "SEC-038.08",
+        "SEC-038.09"
+      ]
+    },
+    {
+      "id": "SEC-039",
+      "source": "security-video-subs/2026-09-05-twenty-security-checks-back-to-back.txt",
+      "sha256": "2b54e414b047b80c4fe78ddcb95d89d2461e3d832957c2fc1fb6fa35bdc92850",
+      "lines": {
+        "start": 1,
+        "end": 16
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-039.01",
+        "SEC-039.02",
+        "SEC-039.03",
+        "SEC-039.04",
+        "SEC-039.05",
+        "SEC-039.06",
+        "SEC-039.07",
+        "SEC-039.08",
+        "SEC-039.09",
+        "SEC-039.10",
+        "SEC-039.11",
+        "SEC-039.12",
+        "SEC-039.13",
+        "SEC-039.14",
+        "SEC-039.15",
+        "SEC-039.16",
+        "SEC-039.17",
+        "SEC-039.18",
+        "SEC-039.19",
+        "SEC-039.20"
+      ]
+    },
+    {
+      "id": "SEC-040",
+      "source": "security-video-subs/2026-09-06-password-hashing-explained.txt",
+      "sha256": "e8525846eeff9824bd38a68b3e4c24ff2a4d28a991ef50270f498232b3108d9a",
+      "lines": {
+        "start": 1,
+        "end": 32
+      },
+      "reviewFile": "review-security.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "SEC-040.01",
+        "SEC-040.02",
+        "SEC-040.03",
+        "SEC-040.04"
+      ]
+    },
+    {
+      "id": "TERM-001",
+      "source": "vibecoder-terms-video-subs/2026-06-24-EP-01-cors.txt",
+      "sha256": "1c16aa8bec3ab409fbaf6bf314caf55e86749f7ae89efd97cc6c987db388d3b7",
+      "lines": {
+        "start": 1,
+        "end": 23
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-001.01",
+        "TERM-001.02"
+      ]
+    },
+    {
+      "id": "TERM-002",
+      "source": "vibecoder-terms-video-subs/2026-06-25-EP-02-environment-variables.txt",
+      "sha256": "5d0a33af28c4336b3b55a5e1ca0001a6b831780d39a237e8403892624743c8c8",
+      "lines": {
+        "start": 1,
+        "end": 50
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-002.01",
+        "TERM-002.02",
+        "TERM-002.03"
+      ]
+    },
+    {
+      "id": "TERM-003",
+      "source": "vibecoder-terms-video-subs/2026-06-26-EP-03-idempotency.txt",
+      "sha256": "963b02ba3bd85b6c837c74be84dc2795fc93addf69dc0d62833d42ef231b4514",
+      "lines": {
+        "start": 1,
+        "end": 38
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-003.01",
+        "TERM-003.02",
+        "TERM-003.03"
+      ]
+    },
+    {
+      "id": "TERM-004",
+      "source": "vibecoder-terms-video-subs/2026-06-27-EP-04-race-conditions.txt",
+      "sha256": "f6f030cb4fff5755b9a88e37fd95e35c33b718ea025c9ac876c87c3dac0c8bc7",
+      "lines": {
+        "start": 1,
+        "end": 41
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-004.01",
+        "TERM-004.02",
+        "TERM-004.03"
+      ]
+    },
+    {
+      "id": "TERM-005",
+      "source": "vibecoder-terms-video-subs/2026-06-28-EP-05-sql-injection.txt",
+      "sha256": "94807a5d424d51ee11a5c7c38bf6d89eb9a7c3f528b27dacd22ba952383b5169",
+      "lines": {
+        "start": 1,
+        "end": 41
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-005.01",
+        "TERM-005.02",
+        "TERM-005.03"
+      ]
+    },
+    {
+      "id": "TERM-006",
+      "source": "vibecoder-terms-video-subs/2026-06-29-EP-06-n-plus-one-queries.txt",
+      "sha256": "5f60fd64cb99a3e5a245e07685eefcf41dc52cfbe5f65cd4ce86c6392051d209",
+      "lines": {
+        "start": 1,
+        "end": 55
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-006.01",
+        "TERM-006.02"
+      ]
+    },
+    {
+      "id": "TERM-007",
+      "source": "vibecoder-terms-video-subs/2026-06-29-EP-07-rate-limiting.txt",
+      "sha256": "c433098739e4695984ba225cd08e17bb62e1f267aa84a76dc5f7da967d32b4af",
+      "lines": {
+        "start": 1,
+        "end": 44
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-007.01",
+        "TERM-007.02",
+        "TERM-007.03",
+        "TERM-007.04",
+        "TERM-007.05"
+      ]
+    },
+    {
+      "id": "TERM-008",
+      "source": "vibecoder-terms-video-subs/2026-06-30-EP-08-json-web-tokens.txt",
+      "sha256": "ba3f10c64a9a405d9a406fdea7b5944384a172e1a5739890a7513133e53d6ed6",
+      "lines": {
+        "start": 1,
+        "end": 46
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-008.01",
+        "TERM-008.02",
+        "TERM-008.03"
+      ]
+    },
+    {
+      "id": "TERM-009",
+      "source": "vibecoder-terms-video-subs/2026-07-01-EP-09-hashing-and-encryption.txt",
+      "sha256": "5925430b6d3678fe6a3ba0187ceebb3020cbf25a6a4ddcd6a5eadb87b2e8730c",
+      "lines": {
+        "start": 1,
+        "end": 40
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-009.01",
+        "TERM-009.02",
+        "TERM-009.03"
+      ]
+    },
+    {
+      "id": "TERM-010",
+      "source": "vibecoder-terms-video-subs/2026-07-01-EP-10-server-and-client-components.txt",
+      "sha256": "aa0ee311acd705fc17150ec7bc046c81bd25c40c8c1c546ce2ad5865f2873b49",
+      "lines": {
+        "start": 1,
+        "end": 44
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-010.01",
+        "TERM-010.02",
+        "TERM-010.03"
+      ]
+    },
+    {
+      "id": "TERM-011",
+      "source": "vibecoder-terms-video-subs/2026-07-01-EP-11-hydration.txt",
+      "sha256": "24b21aba96b78228ad97bcfc66e82d3ddba6e3888047c6e3a937c9046c94a71c",
+      "lines": {
+        "start": 1,
+        "end": 32
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-011.01",
+        "TERM-011.02",
+        "TERM-011.03"
+      ]
+    },
+    {
+      "id": "TERM-012",
+      "source": "vibecoder-terms-video-subs/2026-07-02-EP-12-caching-and-invalidation.txt",
+      "sha256": "b1ed999bc5a982e5f6fc3545025b467f71cf72c923d2fed41d3780fc8cda35c1",
+      "lines": {
+        "start": 1,
+        "end": 35
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-012.01",
+        "TERM-012.02",
+        "TERM-012.03",
+        "TERM-012.04"
+      ]
+    },
+    {
+      "id": "TERM-013",
+      "source": "vibecoder-terms-video-subs/2026-07-03-EP-13-database-indexing.txt",
+      "sha256": "6d4b86c62884ee289ce995d0ddde026399b1c5817af81d49fc6d7745fbe5719f",
+      "lines": {
+        "start": 1,
+        "end": 31
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-013.01",
+        "TERM-013.02"
+      ]
+    },
+    {
+      "id": "TERM-014",
+      "source": "vibecoder-terms-video-subs/2026-07-04-EP-14-database-migrations.txt",
+      "sha256": "ae53ef8f611a3e96d2b0b3511af3eb23ed207110d2cc661b8d9b3b1515ecf2fc",
+      "lines": {
+        "start": 1,
+        "end": 33
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-014.01",
+        "TERM-014.02",
+        "TERM-014.03"
+      ]
+    },
+    {
+      "id": "TERM-015",
+      "source": "vibecoder-terms-video-subs/2026-07-06-EP-15-transactions-and-atomicity.txt",
+      "sha256": "38f81e449af43031d45455f3d6d699d655678fc6a88d9a56989619e4b0fc7e26",
+      "lines": {
+        "start": 1,
+        "end": 33
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-015.01",
+        "TERM-015.02",
+        "TERM-015.03"
+      ]
+    },
+    {
+      "id": "TERM-016",
+      "source": "vibecoder-terms-video-subs/2026-07-11-EP-16-connection-pooling.txt",
+      "sha256": "735996f7ee4ba43f119b7b270133e62f09a98905c3bcc797a6098cc00ae67583",
+      "lines": {
+        "start": 1,
+        "end": 28
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-016.01",
+        "TERM-016.02"
+      ]
+    },
+    {
+      "id": "TERM-017",
+      "source": "vibecoder-terms-video-subs/2026-07-12-EP-17-promises.txt",
+      "sha256": "d54dd3f48525ab584cb96fb1d9fbd9060eaecd2c6873c4ee77acc8cce74a061f",
+      "lines": {
+        "start": 1,
+        "end": 45
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-017.01",
+        "TERM-017.02",
+        "TERM-017.03"
+      ]
+    },
+    {
+      "id": "TERM-018",
+      "source": "vibecoder-terms-video-subs/2026-07-13-EP-18-event-loop-and-blocking.txt",
+      "sha256": "cdc774346106ce494612603869f0eba392d5881bd0ebf35c54a62c6f769285aa",
+      "lines": {
+        "start": 1,
+        "end": 46
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-018.01",
+        "TERM-018.02",
+        "TERM-018.03",
+        "TERM-018.04",
+        "TERM-018.05"
+      ]
+    },
+    {
+      "id": "TERM-019",
+      "source": "vibecoder-terms-video-subs/2026-07-13-EP-19-memory-leaks.txt",
+      "sha256": "342495c56fc72406b774022e2afcff44be62bf6205d55de91bd3796bc633de79",
+      "lines": {
+        "start": 1,
+        "end": 42
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-019.01",
+        "TERM-019.02"
+      ]
+    },
+    {
+      "id": "TERM-020",
+      "source": "vibecoder-terms-video-subs/2026-07-15-EP-20-webhooks.txt",
+      "sha256": "d4805222525f524cadd1fe53222ccc6e68d5673590d46c811b74e3d5c4afafc7",
+      "lines": {
+        "start": 1,
+        "end": 32
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-020.01",
+        "TERM-020.02"
+      ]
+    },
+    {
+      "id": "TERM-021",
+      "source": "vibecoder-terms-video-subs/2026-07-16-EP-21-cdn-and-edge.txt",
+      "sha256": "6d3c1610d0b98066ade345456ca266bdfca9067a91c120dd502741ccd892c146",
+      "lines": {
+        "start": 1,
+        "end": 34
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-021.01",
+        "TERM-021.02",
+        "TERM-021.03",
+        "TERM-021.04"
+      ]
+    },
+    {
+      "id": "TERM-022",
+      "source": "vibecoder-terms-video-subs/2026-07-20-dns-and-propagation.txt",
+      "sha256": "e78024ab7302dd069a6a5d7865dbe76b03dc3aa82c24ad29b99ed2a6faac6b77",
+      "lines": {
+        "start": 1,
+        "end": 43
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-022.01",
+        "TERM-022.02",
+        "TERM-022.03"
+      ]
+    },
+    {
+      "id": "TERM-023",
+      "source": "vibecoder-terms-video-subs/2026-07-21-EP-23-https.txt",
+      "sha256": "6c763689f50a041ad81ab1d507e8bfc4d91b22c5aefc965ef4555846d40b1e4f",
+      "lines": {
+        "start": 1,
+        "end": 43
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-023.01",
+        "TERM-023.02",
+        "TERM-023.03"
+      ]
+    },
+    {
+      "id": "TERM-024",
+      "source": "vibecoder-terms-video-subs/2026-07-22-http-status-codes.txt",
+      "sha256": "2930a4baaee7144f0cde032bc1502a34c1eb0baf9a43385383aa4df2a6f0e253",
+      "lines": {
+        "start": 1,
+        "end": 44
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-024.01",
+        "TERM-024.02",
+        "TERM-024.03"
+      ]
+    },
+    {
+      "id": "TERM-025",
+      "source": "vibecoder-terms-video-subs/2026-07-27-EP-16-connection-pooling-repost.txt",
+      "sha256": "3b005d39bed9cfc736ba6b4caa074ab76fdeb4bfcff916a1c5de52fa55bbf45c",
+      "lines": {
+        "start": 1,
+        "end": 29
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-025.01",
+        "TERM-025.02"
+      ]
+    },
+    {
+      "id": "TERM-026",
+      "source": "vibecoder-terms-video-subs/2026-07-30-EP-24-serverless-functions.txt",
+      "sha256": "ae67ae81a8e4f514e984855f8f8d6e1f452375b0dc4f632174ddd3b4c974835b",
+      "lines": {
+        "start": 1,
+        "end": 34
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-026.01",
+        "TERM-026.02",
+        "TERM-026.03",
+        "TERM-026.04"
+      ]
+    },
+    {
+      "id": "TERM-027",
+      "source": "vibecoder-terms-video-subs/2026-08-04-EP-25-input-validation.txt",
+      "sha256": "8c686d949e3629405b1d4ec04eb192b4ee5f4662c37d55da3ae28092c0d8d762",
+      "lines": {
+        "start": 1,
+        "end": 37
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-027.01",
+        "TERM-027.02",
+        "TERM-027.03"
+      ]
+    },
+    {
+      "id": "TERM-028",
+      "source": "vibecoder-terms-video-subs/2026-08-05-EP-26-optimistic-rendering.txt",
+      "sha256": "7e3e647911fc71c7f36cd3039e44041ead22d265f56f5c163b3ab8618ce77327",
+      "lines": {
+        "start": 1,
+        "end": 41
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-028.01",
+        "TERM-028.02",
+        "TERM-028.03"
+      ]
+    },
+    {
+      "id": "TERM-029",
+      "source": "vibecoder-terms-video-subs/2026-08-11-database-migrations-revisited.txt",
+      "sha256": "14eb922d2bee28953599e84c4d15e7e43d48df3636f72ca82327cb57cadc1649",
+      "lines": {
+        "start": 1,
+        "end": 40
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-029.01",
+        "TERM-029.02",
+        "TERM-029.03"
+      ]
+    },
+    {
+      "id": "TERM-030",
+      "source": "vibecoder-terms-video-subs/2026-08-29-hashing-revisited.txt",
+      "sha256": "8f566b8b56398f415fdace78db9b79392dca108494d276b3470c1938bf723a2b",
+      "lines": {
+        "start": 1,
+        "end": 37
+      },
+      "reviewFile": "review-terms.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "TERM-030.01",
+        "TERM-030.02",
+        "TERM-030.03"
+      ]
+    },
+    {
+      "id": "UX-001",
+      "source": "ui-ux-video-subs/2026-06-28-five-ways-to-make-a-ui-look-professional.txt",
+      "sha256": "e4a5afee5aebd7af277a3ce1a0d955f53c65e38a0407cf25b7ce1e81b6dd7625",
+      "lines": {
+        "start": 1,
+        "end": 34
+      },
+      "reviewFile": "review-ui-ux.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "UX-001.01",
+        "UX-001.02",
+        "UX-001.03",
+        "UX-001.04",
+        "UX-001.05",
+        "UX-001.06"
+      ]
+    },
+    {
+      "id": "UX-002",
+      "source": "ui-ux-video-subs/2026-07-16-stopping-layout-shift-from-the-scrollbar.txt",
+      "sha256": "64fb2f6e2b27f7eda56e2ee1e7dfb3da2bbfc6a4d8258c2c393f7137152241e5",
+      "lines": {
+        "start": 1,
+        "end": 21
+      },
+      "reviewFile": "review-ui-ux.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "UX-002.01",
+        "UX-002.02"
+      ]
+    },
+    {
+      "id": "UX-003",
+      "source": "ui-ux-video-subs/2026-07-24-metas-open-source-design-system.txt",
+      "sha256": "ae38feb1f02a69b3667a967b674b284ee2709e280757ea778733e44cc7f4acd4",
+      "lines": {
+        "start": 1,
+        "end": 24
+      },
+      "reviewFile": "review-ui-ux.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "UX-003.01",
+        "UX-003.02",
+        "UX-003.03"
+      ]
+    },
+    {
+      "id": "UX-004",
+      "source": "ui-ux-video-subs/2026-07-30-accessibility-screen-readers-and-wcag.txt",
+      "sha256": "53cb1ca6262eb2974c799e786f5e01a67d06465a79e06a1d2094e0369abd80ce",
+      "lines": {
+        "start": 1,
+        "end": 53
+      },
+      "reviewFile": "review-ui-ux.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "UX-004.01",
+        "UX-004.02",
+        "UX-004.03",
+        "UX-004.04",
+        "UX-004.05",
+        "UX-004.06"
+      ]
+    },
+    {
+      "id": "UX-005",
+      "source": "ui-ux-video-subs/2026-08-07-four-ui-patterns-beyond-a-component-library.txt",
+      "sha256": "e6c15b67d011801663314de181a43df1b4c8eede425fa20445366e8346c97487",
+      "lines": {
+        "start": 1,
+        "end": 61
+      },
+      "reviewFile": "review-ui-ux.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "UX-005.01",
+        "UX-005.02",
+        "UX-005.03",
+        "UX-005.04",
+        "UX-005.05",
+        "UX-005.06"
+      ]
+    },
+    {
+      "id": "UX-006",
+      "source": "ui-ux-video-subs/2026-09-04-six-decisions-that-fix-a-data-table.txt",
+      "sha256": "929ef1aa45fc9b27be896ef91bfd1e0da647c79bb7339507c9b5358171d02d01",
+      "lines": {
+        "start": 1,
+        "end": 52
+      },
+      "reviewFile": "review-ui-ux.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "UX-006.01",
+        "UX-006.02",
+        "UX-006.03",
+        "UX-006.04",
+        "UX-006.05",
+        "UX-006.06",
+        "UX-006.07",
+        "UX-006.08"
+      ]
+    },
+    {
+      "id": "UX-007",
+      "source": "ui-ux-video-subs/build-for-good-UX-01.txt",
+      "sha256": "070d2253901efadb7e8107040c8dc677ba766d7a5408d2858c55d6d92f0d7318",
+      "lines": {
+        "start": 1,
+        "end": 27
+      },
+      "reviewFile": "review-ui-ux.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "UX-007.01",
+        "UX-007.02",
+        "UX-007.03",
+        "UX-007.04",
+        "UX-007.05"
+      ]
+    },
+    {
+      "id": "UX-008",
+      "source": "ui-ux-video-subs/build-for-good-UX-02.txt",
+      "sha256": "64e327ccafbeb6b1b68cc7378b8fafd10a32df1d57e6b654125c0c6bb9568df0",
+      "lines": {
+        "start": 1,
+        "end": 36
+      },
+      "reviewFile": "review-ui-ux.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "UX-008.01",
+        "UX-008.02",
+        "UX-008.03",
+        "UX-008.04",
+        "UX-008.05"
+      ]
+    },
+    {
+      "id": "UX-009",
+      "source": "ui-ux-video-subs/build-for-good-UX-03.txt",
+      "sha256": "aeb23d0b5508c82a2fd736b2ca51f0f62b8b8139a51c42f25f71554d29a81d66",
+      "lines": {
+        "start": 1,
+        "end": 41
+      },
+      "reviewFile": "review-ui-ux.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "UX-009.01",
+        "UX-009.02",
+        "UX-009.03",
+        "UX-009.04"
+      ]
+    },
+    {
+      "id": "UX-010",
+      "source": "ui-ux-video-subs/build-for-good-UX-04.txt",
+      "sha256": "958ffa968ce61aeff22207b695ba2dae412c7154ef706ab7b955d39b430b18b7",
+      "lines": {
+        "start": 1,
+        "end": 27
+      },
+      "reviewFile": "review-ui-ux.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "UX-010.01",
+        "UX-010.02",
+        "UX-010.03",
+        "UX-010.04",
+        "UX-010.05",
+        "UX-010.06"
+      ]
+    },
+    {
+      "id": "UX-011",
+      "source": "ui-ux-video-subs/build-for-good-UX-05.txt",
+      "sha256": "5aca41dd7d0d5062ecd7b900976de1538557296be7641d39e929873c72c403ed",
+      "lines": {
+        "start": 1,
+        "end": 43
+      },
+      "reviewFile": "review-ui-ux.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "UX-011.01",
+        "UX-011.02",
+        "UX-011.03"
+      ]
+    },
+    {
+      "id": "UX-012",
+      "source": "ui-ux-video-subs/build-for-good-UX-06.txt",
+      "sha256": "6d892b9151b4b3e387e017939d0ea8d19b4a3163da397f9a888bfb3db17cf38d",
+      "lines": {
+        "start": 1,
+        "end": 44
+      },
+      "reviewFile": "review-ui-ux.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "UX-012.01",
+        "UX-012.02",
+        "UX-012.03",
+        "UX-012.04",
+        "UX-012.05",
+        "UX-012.06"
+      ]
+    },
+    {
+      "id": "UX-013",
+      "source": "ui-ux-video-subs/build-for-good-UX-07.txt",
+      "sha256": "9c25295f12d05d043eba9b2381c06c535efbe9df89417e5a6b4cfc99a719acc3",
+      "lines": {
+        "start": 1,
+        "end": 42
+      },
+      "reviewFile": "review-ui-ux.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "UX-013.01",
+        "UX-013.02",
+        "UX-013.03",
+        "UX-013.04"
+      ]
+    },
+    {
+      "id": "UX-014",
+      "source": "ui-ux-video-subs/build-for-good-UX-08.txt",
+      "sha256": "0f5eec2d3375d0118728fca4a2d14550a1abb2901ea15bc1946e116be14ba5fe",
+      "lines": {
+        "start": 1,
+        "end": 37
+      },
+      "reviewFile": "review-ui-ux.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "UX-014.01",
+        "UX-014.02",
+        "UX-014.03",
+        "UX-014.04"
+      ]
+    },
+    {
+      "id": "UX-015",
+      "source": "ui-ux-video-subs/build-for-good-UX-09.txt",
+      "sha256": "1b0b0b8a4a033a2e65fb3fa09789131902d8def6b801f0f1d66dbb0cd12b26fb",
+      "lines": {
+        "start": 1,
+        "end": 37
+      },
+      "reviewFile": "review-ui-ux.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "UX-015.01",
+        "UX-015.02",
+        "UX-015.03"
+      ]
+    },
+    {
+      "id": "UX-016",
+      "source": "ui-ux-video-subs/build-for-good-UX-10.txt",
+      "sha256": "5e1628d63a756837f683e8cafd67b1a1ecc5004f697394e028b3e0902deafde9",
+      "lines": {
+        "start": 1,
+        "end": 33
+      },
+      "reviewFile": "review-ui-ux.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "UX-016.01",
+        "UX-016.02",
+        "UX-016.03",
+        "UX-016.04"
+      ]
+    },
+    {
+      "id": "UX-017",
+      "source": "ui-ux-video-subs/build-for-good-UX-11.txt",
+      "sha256": "e173929cc48b90b9e07b39e9e8b0954cc9c13fc7ffea2b7e5b7488ee151a6dbd",
+      "lines": {
+        "start": 1,
+        "end": 38
+      },
+      "reviewFile": "review-ui-ux.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "UX-017.01",
+        "UX-017.02",
+        "UX-017.03",
+        "UX-017.04"
+      ]
+    },
+    {
+      "id": "UX-018",
+      "source": "ui-ux-video-subs/build-for-good-UX-12.txt",
+      "sha256": "14c4f56c8a286a2ad50cf82f56e2248e937974f31b215ba38c9904970b4aa9e9",
+      "lines": {
+        "start": 1,
+        "end": 40
+      },
+      "reviewFile": "review-ui-ux.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "UX-018.01",
+        "UX-018.02",
+        "UX-018.03",
+        "UX-018.04"
+      ]
+    },
+    {
+      "id": "UX-019",
+      "source": "ui-ux-video-subs/build-for-good-UX-13.txt",
+      "sha256": "0d153b954a5eae843cca9cf691a1c0c9c0130bb4f7db1e5dae7d6f5090c83835",
+      "lines": {
+        "start": 1,
+        "end": 29
+      },
+      "reviewFile": "review-ui-ux.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "UX-019.01",
+        "UX-019.02",
+        "UX-019.03",
+        "UX-019.04"
+      ]
+    },
+    {
+      "id": "UX-020",
+      "source": "ui-ux-video-subs/build-for-good-UX-14.txt",
+      "sha256": "6180560f074b9157a6d6a255026d47d117745ee9d81a0f45c4902d0b3d0ca317",
+      "lines": {
+        "start": 1,
+        "end": 44
+      },
+      "reviewFile": "review-ui-ux.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "UX-020.01",
+        "UX-020.02",
+        "UX-020.03",
+        "UX-020.04",
+        "UX-020.05"
+      ]
+    },
+    {
+      "id": "UX-021",
+      "source": "ui-ux-video-subs/build-for-good-UX-15.txt",
+      "sha256": "da13a68b1f31bccaf408c14e71b5b945c34a5d6b8174e8985a6eb7380302bb37",
+      "lines": {
+        "start": 1,
+        "end": 46
+      },
+      "reviewFile": "review-ui-ux.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "UX-021.01",
+        "UX-021.02",
+        "UX-021.03",
+        "UX-021.04"
+      ]
+    },
+    {
+      "id": "UX-022",
+      "source": "ui-ux-video-subs/build-for-good-UX-16.txt",
+      "sha256": "db3796af37d392481f7bfbeb172c385ea683345fc1aea35e440a82305a0d52f9",
+      "lines": {
+        "start": 1,
+        "end": 43
+      },
+      "reviewFile": "review-ui-ux.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "UX-022.01",
+        "UX-022.02",
+        "UX-022.03",
+        "UX-022.04",
+        "UX-022.05"
+      ]
+    },
+    {
+      "id": "UX-023",
+      "source": "ui-ux-video-subs/build-for-good-UX-17.txt",
+      "sha256": "717714df4d34a63ba80f8e176e588649e3f07656312f98565c446be42277a316",
+      "lines": {
+        "start": 1,
+        "end": 80
+      },
+      "reviewFile": "review-ui-ux.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "UX-023.01",
+        "UX-023.02",
+        "UX-023.03",
+        "UX-023.04",
+        "UX-023.05",
+        "UX-023.06"
+      ]
+    },
+    {
+      "id": "UX-024",
+      "source": "ui-ux-video-subs/build-for-good-UX-18.txt",
+      "sha256": "f69decba32231fc7c84df3f517ae01b7b4a41e4b41703a86478256caddfb9f32",
+      "lines": {
+        "start": 1,
+        "end": 46
+      },
+      "reviewFile": "review-ui-ux.md",
+      "reviewedOn": "2026-09-06",
+      "aspectIds": [
+        "UX-024.01",
+        "UX-024.02",
+        "UX-024.03",
+        "UX-024.04",
+        "UX-024.05"
+      ]
+    }
+  ]
+}

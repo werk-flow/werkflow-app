@@ -1,0 +1,46 @@
+import { expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import ts from 'typescript';
+import { PLAYWRIGHT_LANES } from './run-policy';
+
+const repositoryRoot = resolve(import.meta.dir, '../..');
+
+function sourceAt(path: string): ts.SourceFile {
+  return ts.createSourceFile(path, readFileSync(resolve(repositoryRoot, path), 'utf8'), ts.ScriptTarget.Latest, true);
+}
+
+test('business browser configurations cannot start a fallback server', () => {
+  for (const path of ['playwright.config.ts', 'playwright.audit.config.ts', 'playwright.canary.config.ts']) {
+    const properties: string[] = [];
+    function visit(node: ts.Node): void {
+      if (ts.isPropertyAssignment(node)) properties.push(node.name.getText().replaceAll(/['"]/g, ''));
+      ts.forEachChild(node, visit);
+    }
+    visit(sourceAt(path));
+    expect(properties, path).not.toContain('webServer');
+  }
+});
+
+test('preflight requires the recorded app server for every lane before backend probes', () => {
+  const source = sourceAt('scripts/playwright-preflight.ts');
+  const preflight = source.statements.find((statement): statement is ts.FunctionDeclaration =>
+    ts.isFunctionDeclaration(statement) && statement.name?.text === 'runPlaywrightPreflight');
+  if (!preflight?.body) throw new Error('The runner preflight entry is missing.');
+  const directCalls = preflight.body.statements.map((statement) => {
+    if (!ts.isExpressionStatement(statement)) return null;
+    const expression = ts.isAwaitExpression(statement.expression) ? statement.expression.expression : statement.expression;
+    return ts.isCallExpression(expression) && ts.isIdentifier(expression.expression) ? expression.expression.text : null;
+  });
+  const recordedServer = directCalls.indexOf('assertRecordedAppServer');
+  expect(recordedServer).toBeGreaterThanOrEqual(0);
+  expect(recordedServer).toBeLessThan(directCalls.indexOf('runBackendPreflight'));
+  expect(source.text).not.toContain('assertReusableServer');
+});
+
+test('provider-only bootstrap cannot be selected as a business browser lane', () => {
+  expect(PLAYWRIGHT_LANES).not.toContain('backend');
+  const bootstrap = sourceAt('scripts/test-server.ts').text;
+  expect(bootstrap).toContain("'test:preflight', 'backend', target");
+  expect(bootstrap).not.toContain("'test:preflight', 'iteration'");
+});

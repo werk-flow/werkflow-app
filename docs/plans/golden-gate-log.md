@@ -1,10 +1,12 @@
 # Golden-Gate Run Log
 
-Status: living — last reviewed 2026-09-05; append-only, newest first
+Status: living — last reviewed 2026-09-06; append-only, newest first
 
 Append-only record of golden-gate runs, newest first, as required by the gate definitions in [`phase-1/gates.md`](phase-1/gates.md). Record: date, gate, commit/build, environment, fixtures, result, evidence, defects, and anything deliberately skipped.
 
 ## Entries from 2026-08-30 (prose format)
+
+**2026-09-06 — GG-00 failed its enforced freshness deadline.** Local group run `2026-09-06T083723136Z-100122` used production build `3e94ea8b-770b-4ede-a49f-09134dff6f4f`, candidate `9e0f088c12cfa6b1143428fe19e60233ace1157caeb75dd890da60d181cbb862`, and world `2058810537f649fab6cc4d67ca3b5111`, with local Supabase and `werkflow-documents-local`. Six scenarios passed before the seventh observed the correct customer in the receiving session after 2,507.9846 ms without navigation or reload. This exceeds the 2,000 ms deadline. The remaining six selected scenarios did not execute. The run is classified as a product responsiveness failure; its internal latency cause remains unresolved. Cleanup completed at 08:40:21.581 UTC. The run manifest, trace, and `live-latencies.ndjson` retain the evidence. [The restructure record](testing-system-restructure-2026-09.md) owns the associated group report, unchanged-failure blocking demonstration, and cloud canary outcome. This entry repairs the missing gate-log record; it does not record a rerun or passing gate.
 
 **2026-09-05 — UI/UX and test reliability follow-up closed with qualified evidence.** The [task-specific amendment](../decisions/0006-testing-architecture.md#amendment-2026-09-05-qualification-of-this-hardening-review) replaces this task's earlier complete-rerun requirement with the explicit evidence record in the [closure plan](uiux-and-test-reliability-2026-09.md). It does not change normal slice, wave, or production-release gates. The complete audit baseline remains 149/149 on its earlier candidate. Reconciliation of the 97-pass Golden run, the later 46-pass focused run, and fresh P1-24 yields exactly 142 unique passing Golden identities with no missing or extra identity. These outcomes span candidates and worlds; they are not one complete integrated Golden run.
 

@@ -22,10 +22,11 @@ export function hashValue(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
-/** Runtime Markdown/MDX remains an input; only repository guidance is exempt. */
+/** Runtime Markdown/MDX remains an input; guidance and isolated research are exempt. */
 export function isDocumentationInput(file: string): boolean {
   return file.startsWith("docs/") && /\.(md|mdx)$/.test(file) ||
-    /^(AGENTS|CLAUDE|README)\.md$/i.test(file) || file.startsWith(".claude/") || file.startsWith(".agents/");
+    /^(AGENTS|CLAUDE|README)\.md$/i.test(file) || file.startsWith(".claude/") || file.startsWith(".agents/") ||
+    file.startsWith("temporary-transcripts/");
 }
 
 /** Includes additions and deletions through snapshot comparison, without recording secret values. */
@@ -91,7 +92,10 @@ export function sourceImportGraph(repositoryRoot: string, files: readonly string
       return unknownBareResolution || matchesAlias(name) ? UNKNOWN_IMPORT_DEPENDENCY : undefined;
     }
     if (name.startsWith("@/") && !supportedRootAlias) return UNKNOWN_IMPORT_DEPENDENCY;
-    const base = name.startsWith("@/") ? name.slice(2) : posix.normalize(`${dirname(importer).replaceAll("\\", "/")}/${name}`);
+    const base = posix.normalize(name.startsWith("@/") ? name.slice(2) : `${dirname(importer).replaceAll("\\", "/")}/${name}`);
+    if (base === "temporary-transcripts" || base.startsWith("temporary-transcripts/")) {
+      throw new Error(`${importer} imports isolated research input ${name}. Move adopted implementation into its owning application module before using it.`);
+    }
     const candidates = [base, ...[".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".json", "/index.ts", "/index.tsx", "/index.js"].map((suffix) => `${base}${suffix}`)];
     // TypeScript permits an emitted .js/.mjs/.cjs suffix to refer to source.
     if (/\.[cm]?jsx?$/.test(base)) {

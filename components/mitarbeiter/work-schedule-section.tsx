@@ -160,7 +160,7 @@ export function WorkScheduleSection({
 
   return (
     <div className="rounded-lg border bg-card p-3 sm:p-4">
-      <div className="mb-3 flex items-center justify-between gap-2">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h3 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           <CalendarClock className="size-4" />
           Arbeitszeitmodell

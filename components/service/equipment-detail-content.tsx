@@ -291,7 +291,7 @@ export function EquipmentDetailContent({
               Anlagen & Geräte
             </Link>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <h2 className="text-xl font-semibold">{item.name}</h2>
+              <h2 className="min-w-0 break-words text-xl font-semibold">{item.name}</h2>
               <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium">
                 {item.archivedAt
                   ? "Archiviert"

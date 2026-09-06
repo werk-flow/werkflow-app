@@ -18,6 +18,9 @@ test("runtime Markdown remains qualified while agent guidance uses current stati
   expect(isDocumentationInput("docs/technical/testing.md")).toBe(true);
   expect(isDocumentationInput("AGENTS.md")).toBe(true);
   expect(isDocumentationInput(".agents/skills/testing/SKILL.md")).toBe(true);
+  expect(isDocumentationInput("temporary-transcripts/security/video.txt")).toBe(true);
+  expect(isDocumentationInput("temporary-transcripts/check-inventory.mjs")).toBe(true);
+  expect(isDocumentationInput("temporary-transcripts-app/runtime.ts")).toBe(false);
 });
 
 describe("independent group proof", () => {
@@ -93,6 +96,22 @@ function withImportFiles<T>(sources: Readonly<Record<string, string>>, check: (r
     return check(root, Object.keys(sources));
   } finally { rmSync(root, { recursive: true, force: true }); }
 }
+
+test("application and test imports cannot turn isolated research into unqualified runtime inputs", () => {
+  for (const importer of ['app/page.tsx', 'tests/example.ts', 'scripts/example.ts']) {
+    for (const declaration of [
+      'import value from "@/temporary-transcripts/check.mjs";',
+      'import value from "@/lib/../temporary-transcripts/check.mjs";',
+      'export { value } from "../temporary-transcripts/check.mjs";',
+      'const value = require("../temporary-transcripts/check.mjs");',
+      'const value = import("../temporary-transcripts/check.mjs");',
+    ]) {
+      withImportFiles({ [importer]: declaration }, (root, listed) => {
+        expect(() => sourceImportGraph(root, listed)).toThrow('imports isolated research input');
+      });
+    }
+  }
+});
 
 test("computed and unresolved local imports invalidate all group inputs", () => {
   for (const source of [

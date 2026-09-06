@@ -188,6 +188,8 @@ A preflight failure that creates no run or world is blocked verification, not a 
 
 Campaign history retains execution cost and interruptions. Legacy `test:golden`, `test:audit`, and `test:canary` commands still provide complete-suite execution and their historical campaign controls. They are not the default slice acceptance workflow. Do not reset or close an old campaign to erase unresolved evidence, and do not run a full suite solely to make its old close guard green.
 
+Legacy focused commands and retained diagnostics require the same recorded production server as `test:verify`. No business Playwright configuration starts a development server. Missing or stale server evidence stops preflight before fixture creation. Use `test:server` for the selected target before these commands as well.
+
 If the host kills a run, verify that the lock owner and child processes have stopped before recovering ownership. Run `bun run test:runs recover-interrupted <run-key> "<observed interruption>"`. Recovery records interrupted ownership before archival work, validates identities, and preserves original outcomes and cost. Missing state remains an unresolved recovery failure. No command steals a live lock.
 
 Transport diagnostics emit `[test-fetch-rejected]` with the HTTP method, origin, and allowlisted error codes. They exclude request contents and credentials and do not retry the fetch. Read captured test stderr and redact artifacts before sharing them. A rejected connection is evidence of a failed boundary, not proof of a specific operating-system cause.
@@ -232,7 +234,7 @@ Push each diagnosed lesson through the [enforcement ladder](../decisions/0005-en
 
 `bun run test:sql:p121` through `test:sql:p124` execute the matching files in `supabase/tests/` through `scripts/run-sql-assertions.ts`. The wrapper streams SQL into the local database with `ON_ERROR_STOP=1`. Each file owns a transaction and ends with rollback. These are SQL exception assertions, not pgTAP files. Add new SQL files to the group registry when introducing another protected domain.
 
-The layout audit in `tests/audit/layout/mobile-viewport.spec.ts` owns page overflow, shell scrolling, native-control bans, and form geometry. Add new routes when their area ships. Maintenance and period audits also attach representative images. Inspect those images before claiming visual fidelity; a passing business assertion does not establish it.
+The layout audit in `tests/audit/layout/mobile-viewport.spec.ts` owns page overflow, shell scrolling, native-control bans, and form geometry. `lib/testing/mobile-route-inventory.ts` declares the static pages, dynamic detail patterns, and redirects; its unit check compares that inventory with every authenticated `page.tsx`. Add an executable case or tested redirect when a route ships. Detail fixtures belong to the audit's disposable organization and do not claim creation-workflow coverage. Measurements wait for loaded page content and attach screenshots. Route coverage does not establish every role, tab, dialog, or data-state combination. Maintenance and period audits also attach representative images. Inspect images before claiming visual fidelity; a passing business assertion does not establish it.
 
 Backend IDs, local setup, storage routing, and machine onboarding live in [environments.md](environments.md). Production is excluded from test routing. Testing policy does not authorize a commit, push, production deployment, or a schema change.
 

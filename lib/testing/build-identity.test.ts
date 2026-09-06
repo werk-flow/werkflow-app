@@ -9,7 +9,7 @@ const directories: string[] = [];
 
 function runtimeToolingImportProblems(repositoryRoot: string): string[] {
   const problems: string[] = [];
-  const excluded = ['lib/testing', 'lib/docs'];
+  const excluded = ['lib/testing', 'lib/docs', 'temporary-transcripts'];
   function visit(directory: string, rootRuntimeEntries = false): void {
     if (!existsSync(directory)) return;
     for (const entry of readdirSync(directory, { withFileTypes: true })) {

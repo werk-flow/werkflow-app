@@ -20,7 +20,7 @@ await withLocalStackLease(target === 'local', async (signal) => {
   await withWorkspaceTestLock({ operation: `prepare ${target} test server`, repositoryRoot }, async () => {
     await run([process.execPath, 'run', target === 'local' ? 'env:local' : 'env:dev']);
     if (target === 'local') await run(['wsl.exe', '--exec', 'docker', 'start', 'supabase_edge_runtime_werkflow-app']);
-    await run([process.execPath, 'run', 'test:preflight', 'iteration', target]);
+    await run([process.execPath, 'run', 'test:preflight', 'backend', target]);
     await run([process.execPath, 'run', 'build:test']);
   });
   console.log(`[werkflow-test] Serving the recorded ${target} build. Keep this process alive throughout verification.`);

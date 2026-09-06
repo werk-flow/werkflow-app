@@ -84,11 +84,11 @@ export function PageHeader({
               </p>
             )}
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <h1 className="min-w-0 text-xl font-bold sm:text-2xl">{title}</h1>
+              <h1 className="min-w-0 break-words text-xl font-bold sm:text-2xl">{title}</h1>
               {badges}
             </div>
             {subtitle && (
-              <p className="mt-0.5 text-sm text-muted-foreground">{subtitle}</p>
+              <p className="mt-0.5 break-words text-sm text-muted-foreground">{subtitle}</p>
             )}
           </div>
           {actions && (

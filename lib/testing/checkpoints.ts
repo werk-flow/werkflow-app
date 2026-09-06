@@ -2,9 +2,17 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
 import { writeJsonAtomically } from "./file-lock";
+import { uuidSchema } from "../validation/uuid";
 
 const valuesSchema = z
   .object({
+    "layout.details": z.object({
+      clientId: uuidSchema, requestId: uuidSchema,
+      projectId: uuidSchema, projectNumber: z.string().min(1),
+      jobId: uuidSchema, jobNumber: z.string().min(1),
+      nestedJobNumber: z.string().min(1), equipmentNumber: z.string().min(1),
+      caseNumber: z.string().min(1),
+    }).strict().optional(),
     "a1.signupOrganizationCode": z.string().min(1).optional(),
     "a3.personnelRecordId": z.string().min(1).optional(),
     "a6.organizationTimeBaseline": z.number().int().nonnegative().optional(),

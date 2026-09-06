@@ -4,6 +4,16 @@ Status: living — last reviewed 2026-09-06
 
 This document explains how future agents should use CodeRabbit for WerkFlow code reviews. It is intentionally practical and repo-specific. For current product context, still start with `AGENTS.md`; for CodeRabbit behavior, start with `.coderabbit.yaml`.
 
+## Dedicated security scanning, checked 2026-09-06
+
+CodeRabbit's [security documentation](https://docs.coderabbit.ai/security) distinguishes whole-repository AI Deep Scan from ordinary review findings and continuous PR security review. The documented Deep Scan entry is the dashboard's Security area. The [CLI reference](https://docs.coderabbit.ai/cli/reference) has no dedicated scan command. A normal `bun run review` invocation is not a Deep Scan.
+
+Deep Scan has separate usage billing. Some organizations receive a free scan allowance, but WerkFlow's account entitlement and estimate have not been checked. The [plans reference](https://docs.coderabbit.ai/management/plans) gives open-source projects Team review features; this does not establish free dedicated scanning. Continuous dedicated PR security review belongs to Advanced and Enterprise. Check current dashboard entitlement and the visible scan estimate before starting a chargeable scan. Standing code-sharing authorization is not authorization to buy credits or a subscription.
+
+Free/open-source CLI reviews retain the [three-per-developer rolling-hour allowance](https://docs.coderabbit.ai/management/rate-limits). Dedicated scans have their own meter; official documentation does not explicitly establish every interaction with CLI quotas. Do not promise that a scan consumes or preserves a CLI slot without account-specific confirmation. No dedicated scan was started during this research.
+
+If a scan is later selected, use the current `partner-preview` commit rather than the older production branch and retain its exact scope and coverage report. A scan can finish with incomplete coverage. Deep Scan does not perform dependency analysis or generate an SBOM; dependency auditing and live provider/configuration review remain separate evidence.
+
 ## What CodeRabbit Is Used For Here
 
 CodeRabbit provides a second review of local changes and committed slice diffs before acceptance. WerkFlow development stays on local `main`, following the publication rule in `AGENTS.md`. Choose a pre-change commit or the uncommitted diff as the review scope. Findings can expose data integrity issues, role and tenant boundary mistakes, accessibility problems, unsafe storage behavior, and workflow regressions that lint and build checks do not catch.

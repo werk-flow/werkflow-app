@@ -6,6 +6,30 @@ This is the durable record for test-group failures that block selected verificat
 
 Dated campaigns preserve the evidence and operating decisions recorded at that time. Use [testing.md](testing.md) for current commands, budgets, and recovery rules. For new prevention records, apply the [2026-09-05 tier clarification](../decisions/0005-enforcement-ladder.md#amendment-2026-09-05-current-enforcement-labels-and-follow-up-ownership). Older Tier 1 labels on preflight refusals and claims that command serialization cannot be checked do not supersede those definitions or the current [workspace-lock boundary](testing.md#keep-groups-independent).
 
+## Loaded dashboard organization name overflow, 2026-09-06
+
+The expanded `audit:layout` run `2026-09-06T174515849Z-8c72d7` failed its first dashboard case with 15 px of page-body horizontal overflow. The retained screenshot shows the unbroken organization identifier escaping its card. The earlier H1-only observation could inspect a loading state; the current check waits for loaded content. This is a product layout failure, not a reason to relax the measurement.
+
+`components/dashboard/org-info-card.tsx` now allows the title's flex containers to shrink and wraps long words while preserving the icon size. The long owned organization name and loaded-content phone check provide Tier 2 prevention. The failed world was classified and cleaned. Follow-up runtime evidence belongs to the [restructure checkpoint](../plans/testing-system-restructure-2026-09.md).
+
+The first server-bootstrap attempt during this follow-up also exposed a dependency in the old workflow: `test:server` called iteration preflight before building. Requiring a production server in every browser lane correctly rejected that call. Bootstrap now invokes a separate provider-only check, which cannot be selected as a business browser lane. Structural tests cover the distinction. No browser world existed for that preflight failure.
+
+## Account-security card overflow, 2026-09-06
+
+Expanded layout run `2026-09-06T175948968Z-86d734` passed 23 cases, then found 91 px of horizontal page-body overflow on `/einstellungen/konto-sicherheit`. The screenshot shows the long owned email and explanatory text escaping the card. The previously unaudited route exposed another product layout defect. Its failed evidence is retained, the cause is classified as `product`, and its owned world was cleaned. Keep the exact overflow assertion and long email; the expanded loaded-content audit provides Tier 2 prevention. Final repair evidence belongs to the [restructure checkpoint](../plans/testing-system-restructure-2026-09.md#fable-review-follow-up-september-6).
+
+The repair permits the email's flex containers to shrink and wraps the content without clipping it. A bounded source review found the same unbroken-text risk in shared page titles/subtitles, metadata values, and equipment/service detail headings. Those locations now wrap too. Shared components supply Tier 1 prevention for their callers. Only the current-address state has the captured failing screenshot; email confirmation states inherit the correction without separate workflow acceptance in this follow-up.
+
+## Detail-page geometry sweep and period setup, 2026-09-06
+
+Layout run `2026-09-06T181302768Z-21ac2b` passed 33 cases, then found 17 px of customer-detail overflow. Retained diagnostic `2026-09-06T181902269Z-c9eed8` collected all 16 remaining detail variants in one bounded sweep. It confirmed customer, employee, and service-case page-body overflows of 17, 22, and 228 px. Twelve other observations passed; period setup failed before its geometry measurement. These are diagnostic observations, not 12 independently qualifying group passes.
+
+The customer contacts and employee work-schedule heading/action rows could not wrap. The service-case mobile grid used an implicit auto-sized column that expanded around a long equipment link. The repairs add wrapping to the two rows and an explicit `grid-cols-1` track to the mobile grid. Existing desktop columns remain defined. The expanded route cases provide Tier 2 prevention. Intentionally clipped marquee/progress contents were excluded from the causal diagnosis because their rectangles did not widen the page body.
+
+The new period test incorrectly expected preparation to remain on the list and expose an `Öffnen` link. The action actually redirects to the saved detail. The trace confirms that navigation succeeded. The test now waits for that destination, selects the current Berlin month to include freshly seeded personnel, verifies the form's committed month value, and checks that the employee's mobile result card is present. No timeout was extended. This fixes a test assumption, with Tier 2 regression coverage in the real preparation/detail case.
+
+The temporary geometry-sweep case was removed after collecting its attachments. Both failed manifests retain their classifications and evidence, and their shared owned world was cleaned once. Use a bounded retained-world collection when several independent layouts need inspection; keep it distinct from fresh acceptance so first-failure diagnosis does not become a series of full rebuilds.
+
 ## Required incident record
 
 Record each failed acceptance group and any focused failure that changes shared testing behavior:
@@ -26,9 +50,9 @@ The run manifest receives the classification, cause and prevention through `bun 
 
 ## Historical startups lacked finalized ownership records (2026-09-06)
 
-Final inventory inspection found local runs `2026-08-28T050935555Z-354ba0` and `2026-08-28T054328292Z-fbca87` still marked running/starting, although no process from those dates remained. Both named worlds but lacked archived world files. Explicit interruption recovery preserved the incomplete ownership and failed archive recovery. It did not delete data or mark cleanup successful. Read-only local SQL found zero of their four recorded organization IDs and fourteen Auth IDs. File-byte absence and full ownership reconciliation remain unproven.
+Final inventory inspection found local runs `2026-08-28T050935555Z-354ba0` and `2026-08-28T054328292Z-fbca87` still marked running/starting, although no process from those dates remained. Both named worlds but lacked archived world files. Initial interruption recovery preserved the incomplete ownership and failed archive recovery. Subsequent owner-authorized reconciliation found none of their four recorded organizations, fourteen Auth users, related owned database records, or file objects under their organization prefixes. The storage API returned a gateway error, so file absence was checked directly against the verified local storage volume. Both manifests now record completed cleanup while retaining the interrupted outcomes and original archive errors. Each run directory preserves the pre-reconciliation manifest and `cleanup-reconciliation.json`.
 
-Diagnostic startup `2026-09-01T150433364Z-80abce` was recovered as interrupted with no owned world. The recovery's conservative duration is an upper bound, not an inferred test duration or failed business assertion. The [restructure plan](../plans/testing-system-restructure-2026-09.md#remaining-application-acceptance) keeps the two unresolved legacy archives visible before release. Current run-owned paths and pre-write ownership journals prevent the former shared-state loss at Tier 1; archive identity checks and explicit incomplete recovery are Tier 2.
+Diagnostic startup `2026-09-01T150433364Z-80abce` was recovered as interrupted with no owned world. The recovery's conservative duration is an upper bound, not an inferred test duration or failed business assertion. The [restructure plan](../plans/testing-system-restructure-2026-09.md#remaining-application-acceptance) records the completed reconciliation and its evidence limits. Current run-owned paths and pre-write ownership journals prevent the former shared-state loss at Tier 1; archive identity checks and explicit incomplete recovery are Tier 2.
 
 ## Customer update exceeded the enforced freshness deadline (2026-09-06)
 

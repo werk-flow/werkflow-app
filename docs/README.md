@@ -34,6 +34,7 @@ Every doc carries a `Status:` header under its title (`living` with a last-revie
 | [test-incident-log.md](technical/test-incident-log.md)                   | A browser failure consumes a rerun or reveals a reusable lesson: required evidence, classification and the P1-16 retrospective.                  |
 | [enforcement-ladder-backlog.md](technical/enforcement-ladder-backlog.md) | You fix a diagnosed defect, keep a review finding, or plan the consolidation phase: the open Tier 1/2 conversion candidates under decision 0005. |
 | [coderabbit.md](technical/coderabbit.md)                                 | You run a CodeRabbit review: CLI invocation (WSL path!), config, per-slice review protocol.                                                      |
+| [security-infrastructure-discovery.md](technical/security-infrastructure-discovery.md) | You gather evidence for the pre-handoff security/infrastructure audit. Source findings, prior audit links, dependency evidence, and unverified provider boundaries; not an implementation plan. |
 
 ### Feature specifications (`docs/features/`)
 
