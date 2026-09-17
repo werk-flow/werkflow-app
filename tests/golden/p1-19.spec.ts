@@ -325,6 +325,7 @@ test.describe("P1-19 reactive service vertical slice @P1-19 @GG-05", () => {
     await expectLiveWithin(
       bueroPage.getByRole("heading", { name: fixture.liveSummary }),
       { label: "P1-19 service case cross-session refresh",
+        actingPage: adminPage,
         mutation: (beforeSubmit) =>
           updateServiceCaseViaDialog(adminPage, {
             summary: fixture.liveSummary,

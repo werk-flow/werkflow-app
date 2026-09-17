@@ -4,6 +4,7 @@ import { updateTag } from 'next/cache';
 import { cookies } from 'next/headers';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { readCompleteRows, readInBatches, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import {
   CACHE_TAGS,
@@ -11,6 +12,7 @@ import {
   getCachedMemberships,
 } from '@/lib/data/cached';
 import { getBusinessTodayIso } from '@/lib/personnel/types';
+import { parseIsoDateRange, type IsoDateRange } from '@/lib/calendar/date-range';
 import { authorizeResponsibilityForTarget } from '@/lib/responsibilities/server';
 import type { OrgRole } from '@/lib/members/actions';
 import {
@@ -1004,6 +1006,9 @@ export async function getDecidableApprovedVacationRequests(): Promise<ApproverVa
 
 function shiftIsoDateByDays(dateIso: string, days: number): string {
   const [year, month, day] = dateIso.split('-').map(Number);
+  if (year === undefined || month === undefined || day === undefined) {
+    throw new Error(`Invalid ISO date: ${dateIso}`);
+  }
   const shifted = new Date(Date.UTC(year, month - 1, day) + days * 86_400_000);
   return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, '0')}-${String(shifted.getUTCDate()).padStart(2, '0')}`;
 }
@@ -1021,30 +1026,44 @@ export type VacationCalendarEntry = {
   status: 'approved' | 'pending';
 };
 
+function defaultCalendarWindow(): IsoDateRange {
+  const businessDate = getBusinessTodayIso();
+  return {
+    from: shiftIsoDateByDays(businessDate, -365),
+    to: shiftIsoDateByDays(businessDate, 730),
+  };
+}
+
 export type VacationCalendarEntriesResult =
   | { success: true; entries: VacationCalendarEntry[] }
   | { success: false; error: string };
 
-export async function getVacationCalendarEntries(): Promise<VacationCalendarEntriesResult> {
+export async function getVacationCalendarEntries(
+  range?: IsoDateRange
+): Promise<VacationCalendarEntriesResult> {
   try {
     const auth = await resolveActionContext();
     if (!auth.success) return auth;
     const { userId, orgId, role } = auth.context;
     const isManager = role === 'admin' || role === 'buero';
 
+    // The calendar passes the window it renders, bounded at this boundary
+    // (PF-05). Without one, the former fixed horizon of one year back and
+    // two ahead keeps the payload bounded.
+    const window =
+      range === undefined ? defaultCalendarWindow() : parseIsoDateRange(range);
+    if (!window) return { success: false, error: 'invalid_input' };
+    const { from: windowStartIso, to: windowEndIso } = window;
+
     const admin = createSupabaseAdminClient();
-    // Bounded window (one year back, two ahead) mirroring the holiday-context
-    // horizon so the payload cannot grow without bound over the years.
-    const businessDate = getBusinessTodayIso();
-    const windowStartIso = shiftIsoDateByDays(businessDate, -365);
-    const windowEndIso = shiftIsoDateByDays(businessDate, 730);
     let query = admin
       .from('vacation_requests')
       .select('id, employee_record_id, start_date, end_date, day_portion, status')
       .eq('organization_id', orgId)
       .in('status', ['approved', 'pending'])
       .lte('start_date', windowEndIso)
-      .gte('end_date', windowStartIso);
+      .gte('end_date', windowStartIso)
+      .order('start_date').order('id');
 
     if (!isManager) {
       const { data: ownRecord, error: ownRecordError } = await admin
@@ -1061,7 +1080,9 @@ export async function getVacationCalendarEntries(): Promise<VacationCalendarEntr
       query = query.eq('employee_record_id', ownRecord.id);
     }
 
-    const { data: rows, error } = await query;
+    const { data: rows, error } = await readCompleteRows(
+      (from, to) => query.range(from, to), LIST_ROW_CAP,
+    );
     if (error) {
       console.error('Failed to load vacation calendar entries:', error);
       return { success: false, error: 'load_failed' };
@@ -1069,10 +1090,11 @@ export async function getVacationCalendarEntries(): Promise<VacationCalendarEntr
     if (!rows || rows.length === 0) return { success: true, entries: [] };
 
     const recordIds = [...new Set(rows.map((row) => row.employee_record_id))];
-    const { data: records, error: recordsError } = await admin
+    const { data: records, error: recordsError } = await readInBatches(recordIds, (ids) => admin
       .from('employee_records')
       .select('id, user_id, first_name, last_name')
-      .in('id', recordIds);
+      .eq('organization_id', orgId)
+      .in('id', [...ids]));
     if (recordsError) {
       console.error('Failed to load calendar records:', recordsError);
       return { success: false, error: 'load_failed' };
@@ -1086,10 +1108,10 @@ export async function getVacationCalendarEntries(): Promise<VacationCalendarEntr
     ];
     const profilesResult =
       userIds.length > 0
-        ? await admin
+        ? await readInBatches(userIds, (ids) => admin
             .from('profiles')
             .select('id, first_name, last_name')
-            .in('id', userIds)
+            .in('id', [...ids]))
         : { data: [], error: null };
     if (profilesResult.error) {
       console.error(

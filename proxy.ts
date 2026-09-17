@@ -66,7 +66,7 @@ export async function proxy(req: NextRequest) {
             }
           });
           cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
+            response.cookies.set({ name, value, ...options })
           );
         }
       }
@@ -129,7 +129,7 @@ export const config = {
     '/signup',
     '/dashboard',
     '/kalender',
-    '/zeiterfassung',
+    '/zeiterfassung/:path*',
     '/mitarbeiter/:path*',
     '/kunden/:path*',
     '/anfragen/:path*',

@@ -3,7 +3,7 @@ import { z } from 'zod'
 import type { Json } from '@/lib/supabase/database.types'
 import type { SortColumn } from '@/lib/jobs/types'
 
-export const AUFTRAEGE_COLUMN_IDS = [
+const AUFTRAEGE_COLUMN_IDS = [
   'nr',
   'bezeichnung',
   'kunde',
@@ -56,7 +56,7 @@ type RawPreferenceShape = {
   }
 }
 
-export function parseVisibleAuftraegeColumns(value: unknown): AuftraegeColumnId[] {
+function parseVisibleAuftraegeColumns(value: unknown): AuftraegeColumnId[] {
   if (!Array.isArray(value)) {
     return [...DEFAULT_VISIBLE_AUFTRAEGE_COLUMNS]
   }
@@ -131,7 +131,7 @@ export function isAuftraegeColumnVisible(
   return visibleColumns.includes(columnId)
 }
 
-export function getVisibleSortableColumns(
+function getVisibleSortableColumns(
   visibleColumns: AuftraegeColumnId[]
 ): SortColumn[] {
   return visibleColumns.filter(

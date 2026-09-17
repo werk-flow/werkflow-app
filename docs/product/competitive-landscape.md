@@ -1,6 +1,6 @@
 # Competitive Landscape: German Trades Software
 
-Status: living — last reviewed 2026-09-02; research snapshot 2026-07-23, refresh volatile figures before a current decision
+Status: living — last reviewed 2026-09-17; research snapshot 2026-07-23 (plancraft profile and the Plantafel finding refreshed 2026-09-13), refresh volatile figures before a current decision
 
 This document is a research reference for WerkFlow's competitive environment in German trade-business software (`Handwerkersoftware`). It focuses on software used by HVAC / SHK, plumbing, roofing, tiling, electrical, and adjacent construction trades.
 
@@ -100,23 +100,9 @@ Review-method sources: [OMR review verification process](https://hi.omr.com/en/s
 
 ## WerkFlow Baseline For Comparison
 
-At this snapshot, WerkFlow's implemented or documented core includes:
+As of the Wave 2 checkpoint (2026-09-02) WerkFlow's accepted core covers customers with contacts, sites, requests and a relationship timeline; employee records with schedules, responsibilities, vacation, sickness, teams and qualifications; recurring planning, capacity and qualification checks, dispatch with acknowledgement and customer commitments; work templates, an execution lifecycle, structured site evidence, the field work pack and the office handover; installed equipment, reactive service and maintenance plans; explicit time segments, corrections, time accounts with period close and payroll export; the controlled people lifecycle; a manager document library on R2 with contextual documents; and Inventory V1 (catalog, locations, suppliers, movements, CSV import, job material, field take and return). Not implemented: reservations, procurement, counts, tools, wholesaler standards (Wave 3), every commercial and finance capability (Wave 4), OCR, outbound messaging, migration, mobile and connectors (Wave 5), and AI (Phase 2).
 
-- organization-scoped customers, jobs, projects, assignments, calendar links, and role-specific views;
-- employee management and event-based time tracking;
-- a manager document library plus contextual job/project/customer/employee documents;
-- inventory V1 with catalog items, locations, suppliers, stock movements, CSV import, job/project material planning, and field-worker take/return flows.
-
-Structured offer, contract, invoice, payment, purchasing, and full accounting modules are not currently implemented. Native AI automations and the React Native mobile app remain future scope.
-
-Use the current feature references rather than this competitive document for exact WerkFlow behavior:
-
-- [jobs-and-projects.md](../features/jobs-and-projects.md)
-- [time-tracking.md](../features/time-tracking.md)
-- [employee-management.md](../features/employee-management.md)
-- [document-management.md](../features/document-management.md)
-- [inventory.md](../features/inventory.md)
-- [ai-automations.md](../features/ai-automations.md)
+Use the current feature specs rather than this competitive document for exact WerkFlow behavior; each spec's "Current Product Baseline" is the source: [customers-and-crm.md](../features/customers-and-crm.md), [jobs-and-projects.md](../features/jobs-and-projects.md), [calendar-and-resource-planning.md](../features/calendar-and-resource-planning.md), [employee-management.md](../features/employee-management.md), [time-tracking.md](../features/time-tracking.md), [document-management.md](../features/document-management.md), [inventory.md](../features/inventory.md), [service-and-maintenance.md](../features/service-and-maintenance.md), [commercial-and-finance.md](../features/commercial-and-finance.md), [ai-automations.md](../features/ai-automations.md).
 
 ## Market Shape
 
@@ -372,13 +358,15 @@ The UK Trustpilot profile is a particularly important research trap: the domain 
 
 ### plancraft
 
+Refresh snapshot 2026-09-13 (previous snapshot 2026-07-23). Every figure below was re-opened today unless marked "unchanged since 2026-07-23 snapshot, not re-verified".
+
 #### Positioning And Company
 
-plancraft is a Hamburg-based cloud product founded in 2020 and positioned as an all-in-one operating system for European trades businesses. The vendor's current facts page states more than 150 employees and more than 30,000 tradespeople. An August 2025 funding announcement used a different measure—more than 20,000 customers in 11 countries—and said the company had raised more than €50 million in total. These differently dated `Handwerker` and `Kunden` figures must not be combined into a growth calculation.
+plancraft is a Hamburg-based cloud product founded in February 2020 and positioned as an all-in-one operating system for European trades businesses. The vendor's facts page (last modified 5 May 2026) states more than 150 employees, more than 30,000 tradespeople, and active markets in Germany, Austria, the Netherlands, Italy, and Spain. The team page adds offices in Amsterdam and Vienna and an expansion into Spain and Italy that began in April 2026. The August 2025 Series B announcement used a different measure, more than 20,000 customers in 11 countries, more than 100 employees at that time, €38 million raised in the round, and more than €50 million in total. These differently dated `Handwerker` and `Kunden` figures must not be combined into a growth calculation.
 
 The product targets SHK, roofing, tiling, electrical, painting, landscaping, carpentry, solar, metalwork, and general construction. It combines a browser office application with iOS and Android field apps.
 
-Sources: [company facts](https://plancraft.com/de-de/fakten-ueber-plancraft), [team and history](https://plancraft.com/de-de/team), [August 2025 Series B announcement](https://plancraft.com/en-gb/press/eu38-million-for-plancraft---series-b-to-lead-ai-transformation-in-european-construction), and [trades overview](https://plancraft.com/de-de/gewerke).
+Sources: [company facts](https://plancraft.com/de-de/fakten-ueber-plancraft), [team and history](https://plancraft.com/de-de/team), [August 2025 Series B announcement](https://plancraft.com/en-gb/press/eu38-million-for-plancraft---series-b-to-lead-ai-transformation-in-european-construction), and [trades overview](https://plancraft.com/de-de/gewerke) (trades list unchanged since 2026-07-23 snapshot, not re-verified). Accessed 13 September 2026.
 
 #### Verified Product Scope
 
@@ -386,21 +374,23 @@ Sources: [company facts](https://plancraft.com/de-de/fakten-ueber-plancraft), [t
 | --- | --- | --- |
 | Customers and master data | Customer, supplier, employee, service, and material records | No broad sales/marketing CRM pipeline was found. |
 | Projects and collaboration | Central project folder, files, notes, project chat, assigned people, status, and history | The public model is project-centric; deep recurring-service dispatch should be tested separately. |
-| Scheduling | `Plantafel` for assignment and scheduling with absence information | A paid add-on for Business and Pro; included in Premium. |
-| Commercial documents | Quotes, order documents, invoices, partial/cumulative invoices, calculation, dunning, and e-invoices/XRechnung | Native customer payment collection was not verified. |
+| Scheduling | `Plantafel` for project, assignment, and absence planning; see the Plantafel detail below | A paid add-on for Business and Pro; included in Premium. People-only rows. |
+| Commercial documents | Quotes, order documents, invoices, partial/cumulative invoices, calculation, dunning, e-invoices/XRechnung, and a new AI quote draft from notes, voice, photos, measurements, or price lists | Native customer payment collection was not verified. |
 | Cost control | Incoming-invoice OCR, post-calculation, cost visibility, and invoice dashboards | OCR allowance depends on the plan. |
-| Time and people | Work/break time, vacation and absence capture, evaluation, and Excel/DATEV export | Permission and reporting depth need SHK-specific acceptance tests. |
-| Field app | Assignments, time, photos, notes, navigation/customer data, project chat, reports, and signatures | The vendor documents queued offline chat syncing, but full offline parity was not established. |
+| Time and people | Work/break time, a new `Zeit stempeln` clock, vacation entitlement and balances, working-time accounts, absence capture, evaluation, and Excel/DATEV export | Permission and reporting depth need SHK-specific acceptance tests. Location-based automatic project selection for time capture is marked `Bald`. |
+| Field app | Assignments, time, photos, notes, navigation/customer data, project chat, reports, and signatures | App reviews still ask for office-function parity on mobile; full offline parity was not established. |
 | Materials | Material/service price catalog and DATANORM import in Pro and Premium | No reliable evidence of stock counts, warehouses, barcode flows, reorder logic, or a complete purchasing workflow. |
-| Interfaces | DATEV, GAEB, DATANORM, and email through IMAP/SMTP | No public general-purpose API was located. |
-| AI and automation | PORTA telephone assistant, incoming-invoice OCR, and marketed voice-assisted workflows | PORTA email/WhatsApp and scheduling were still described as coming soon; shipped, beta, and future AI must be separated. |
-| Support and hosting | Help center, telephone support, higher-tier personal setup/contact, German/EU hosting, encryption, GDPR, and GoBD claims | No public ISO certification was found in the reviewed material. |
+| Interfaces | DATEV, GAEB, DATANORM, and Excel upload | The interfaces page no longer mentions IMAP/SMTP; no public general-purpose API or calendar synchronisation was located. |
+| AI and automation | `KI-Empfang` telephone assistant (shipped), AI quote drafting (marked `Neu`), incoming-invoice OCR | E-mail and further channels and `Terminabstimmung` are marked `Kommt bald`; shipped, beta, and future AI must be separated. |
+| Support and hosting | Help center, telephone support Mo to Fr 8:00 to 17:00, higher-tier personal setup/contact, German/EU hosting, encryption, GDPR, and GoBD claims | Hosting and certification claims unchanged since 2026-07-23 snapshot, not re-verified. |
 
-Primary sources: [feature overview](https://plancraft.com/de-de/funktionen), [mobile app](https://plancraft.com/de-de/funktionen/handwerker-app), [time tracking](https://plancraft.com/de-de/funktionen/zeiterfassung-handwerk), [AI overview](https://plancraft.com/de-de/ki), and [help center](https://help.plancraft.com/de/).
+Plantafel detail (help article dated 12 June 2026). The first column lists current and upcoming projects with status, start, and end date; rows are employees and teams. A planner drags a project onto a person's or team's timeline, or clicks one day or drags across several days, to create an `Einsatz`; switching off `ganztägig` allows timed entries and several per day. Views are week, month, and year. Absences of type `Krankheit`, `Bildung`, and `Urlaub` flow in from time tracking, and public holidays are pre-filled. The article promises visibility of conflicts in project, assignment, or vacation planning but documents no warning or block. There are no rows for vehicles, tools, machines, or material; the article suggests naming teams after vehicles as the workaround. An employee belongs to one team, with per-day help in another team. Field workers see their planned assignments, past and future, in the app.
+
+Primary sources: [feature overview](https://plancraft.com/de-de/funktionen), [Plantafel feature page](https://plancraft.com/de-de/funktionen/digitale-plantafel), [Plantafel help article](https://help.plancraft.com/de/articles/382799-plantafel-fur-projekt-einsatz-und-abwesenheitsplanung), [time and Plantafel help collection](https://help.plancraft.com/de/collections/892790-zeiterfassung-plantafel), [interfaces](https://plancraft.com/de-de/funktionen/software-schnittstellen), [AI overview](https://plancraft.com/de-de/ki), [KI-Empfang](https://plancraft.com/de-de/ki-empfang), and [help center](https://help.plancraft.com/de/). Accessed 13 September 2026.
 
 #### Pricing Detail
 
-Public net prices on 23 July 2026:
+Public net prices on 13 September 2026:
 
 | Billing commitment | Business | Pro | Premium |
 | --- | ---: | ---: | ---: |
@@ -408,50 +398,52 @@ Public net prices on 23 July 2026:
 | 12 months, prepaid | €59.90/month | €109.90/month | €199.90/month |
 | Monthly | €74.90/month | €139.90/month | €249.90/month |
 
-Included office users are one, two, and three respectively. Depending on the billing commitment, an additional office user is €39.92, €49.90, or €59.90 per month, while an additional mobile user is €15.92, €19.90, or €24.90. The `Plantafel` add-on for Business/Pro is €31.92, €39.90, or €49.90; it is included in Premium.
+Included office users are one, two, and three respectively. An additional office user is €39.92 (24 months) or €49.90 (12 months) per month, and an additional mobile user €15.92 or €19.90; the monthly-commitment figures of €59.90 and €24.90 are unchanged since 2026-07-23 snapshot, not re-verified, because today's render showed €49.90 and €24.90 for the monthly column. The `Plantafel` add-on for Business and Pro is €31.92, €39.90, or €49.90 by commitment and is included in Premium. Caveat: three automated reads of the same page today rendered the Business row differently, once as included; the row text "immer zusätzlich buchbar" was quoted in one read. Open the page by hand before quoting the add-on status.
 
-Business contains core documents, measurement, reports, time, master data, partial invoices, phone support, and 60 PORTA credits. Pro adds cumulative invoices, GAEB, DATANORM, post-calculation, and up to 50 incoming-invoice scans per month. Premium adds unlimited scans, the `Plantafel`, a personal contact, and an individual setup appointment.
+Business contains core documents, measurement, reports, time, master data, partial invoices, phone support, and `KI-Empfang` with 60 credits per month. Pro adds cumulative invoices, GAEB, DATANORM, post-calculation, and up to 50 incoming-invoice scans per month. Premium adds unlimited scans, the `Plantafel`, a personal contact, and an individual setup appointment.
 
-The public pricing page rendered conflicting PORTA customer prices—€79.90 in one section and €89.90 in its comparison table for 160 credits. This remains unresolved and should be quoted directly by sales. The main software has a seven-day trial; the help center says it becomes a restricted €0 state with retained data. The public terms describe renewal and cancellation up to one day before the period ends, but they do not clearly incorporate the newer 24-month option, so the order form must control.
+The two PORTA figures from July now look like different products rather than a conflict: the `Flexibel` plan is €79.90 per month from 160 credits, while a 160-credit top-up is €89.90, scaling to €284.10 for 1,000 credits in one read and €129.80 for 300 and €179.60 for 500 in another. One credit is one minute. Quote it from sales anyway. The trial is seven days and does not convert automatically. The terms, last updated 23 July 2025, describe monthly and yearly subscriptions with automatic renewal and cancellation up to one day before the period ends, plus a 30-day provider termination right; they still do not name the 24-month option, so the order form must control.
 
-Sources: [pricing](https://plancraft.com/de-de/preise), [terms](https://plancraft.com/de-de/agb), and [trial explanation](https://help.plancraft.com/de/articles/382687-testversion-und-vollversion-in-plancraft-was-sich-nach-dem-upgrade-andert).
+Sources: [pricing](https://plancraft.com/de-de/preise), [terms](https://plancraft.com/de-de/agb), and [trial explanation](https://help.plancraft.com/de/articles/382687-testversion-und-vollversion-in-plancraft-was-sich-nach-dem-upgrade-andert) (trial article unchanged since 2026-07-23 snapshot, not re-verified). Accessed 13 September 2026.
 
 #### Review Evidence
 
-Snapshot on 23 July 2026:
+Snapshot on 13 September 2026:
 
 | Platform | Score and volume | What the sample supports | Method caveat |
 | --- | --- | --- | --- |
-| [Trustpilot](https://de.trustpilot.com/review/plancraft.com) | 4.5/5, 235 reviews | Repeated praise for ease of use, approachable support, and fast adoption. Recent requests/criticism mention broader functional depth, DATANORM rebate groups, permissions, report transfer, supplier orders, overview lists, mobile address workflows, and lower-tier onboarding. | The company invites reviews, has a paid Trustpilot subscription, and Trustpilot does not independently verify every claim. |
-| [Capterra](https://www.capterra.com/p/250754/Plancraft/reviews/) | 5.0/5, 32 reviews; ease 4.9, service 5.0 | Repeated praise for simplicity, cross-device access, and support. Older criticism mentioned invoice editing, price-list depth, post-calculation, and document access. | Many visible reviews were from 2022, vendor-referred, and marked with an incentive; they are weak evidence for the current product. |
-| [OMR Reviews](https://omr.com/de/reviews/product/plancraft) | 4.7/5, 12 reviews | Positive aggregate only. | Too few accessible review texts for a defensible theme summary. |
-| [Apple App Store Germany](https://apps.apple.com/de/app/plancraft/id1545141852) | 4.2/5, 105 ratings | Visible feedback praises ease and continued updates; requests include deeper measurement and more office-function parity on mobile. | App experience only, not the complete product or commercial relationship. |
-| [Google Play](https://play.google.com/store/apps/details?id=de.plancraft.app&hl=de) | 4.3/5; 88 reviews in the header and 80 in a device-specific panel; 10,000+ downloads | Visible feedback included a positive office/field overview example and a dark-mode request. | Google rendered different counts by device/locale, so both are retained instead of choosing one. |
+| [Trustpilot](https://de.trustpilot.com/review/plancraft.com) | 4.5/5, 238 reviews; 80% five-star, 3% one-star; profile claimed January 2025 | Recent praise for service and consultation; July 2026 criticism names limited accounting functions, support staff training, inflexible handling of missed cancellation deadlines, and no personal onboarding on the entry tier. Several reviews mention the `Plantafel` positively. | The company invites reviews and answers negative ones; Trustpilot does not independently verify every claim. |
+| [Capterra](https://www.capterra.com/p/250754/Plancraft/reviews/) | 5.0/5, 32 reviews; ease 4.9, service 5.0; newest reviews dated August 2022 | Praise for simplicity, cross-device access, and support; older requests for material lists, invoice editing, and time-to-billing integration. | The sample has not grown since 2022 and is weak evidence for the current product. |
+| [OMR Reviews](https://omr.com/de/reviews/product/plancraft) | 4.7/5, 12 reviews | Ease of use, shorter office time, document search, and support; one reviewer: the `Plantafel` "vereinfacht die Mitarbeiter/Projekt aufteilung ungemein". Criticism names price for small businesses, complex projects, and recent price and feature changes. | Too few review texts for a defensible theme summary. |
+| [Apple App Store Germany](https://apps.apple.com/de/app/plancraft/id1545141852) | 4.1/5, 114 ratings | Praise for an easy interface and frequent updates; requests for schedule visibility, calculation, and measurement on mobile, batch photo upload, and chat search. | App experience only. The rendered version and update date looked stale, so treat the count as approximate. |
+| [Google Play](https://play.google.com/store/apps/details?id=de.plancraft.app&hl=de) | 4.3/5; 88 or 80 reviews; 10,000+ downloads; unchanged since 2026-07-23 snapshot, not re-verified | Positive office/field overview example and a dark-mode request. | The page did not render readable figures today. |
 
-The strongest cross-platform signal is usability and support. The most important counter-signal for WerkFlow is not “plancraft is bad for SHK”; it is that at least one recent SHK reviewer described missing depth in DATANORM discounts, permissions, Regiebericht transfer, and mobile customer workflows. That is a test list, not proof that every SHK customer has the same problem.
+The strongest cross-platform signal is still usability and support. The counter-signals have shifted from feature depth toward the commercial relationship: accounting scope, cancellation handling, and entry-tier onboarding. That is a test list, not proof that every customer has the same problem.
 
 #### Evidence-Backed Strengths
 
-- Broad quote-to-invoice depth with German trade interfaces and post-calculation.
+- Broad quote-to-invoice depth with German trade interfaces and post-calculation, now with an AI quote draft.
 - Modern office/field role model and strong ease-of-use signal on more than one platform.
-- Clear public packaging and a low-friction trial.
-- Substantial funding and active expansion into AI-assisted phone intake and European markets.
+- Clear public packaging, a low-friction trial, and a well-documented people board.
+- Substantial funding and active expansion into AI-assisted phone intake and further European markets.
 
 #### Evidence-Backed Risks And Open Questions
 
-- A material price catalog is not inventory. Stock, warehouses, barcode, reorder, and supplier purchasing were not publicly established.
-- Full offline behavior and mobile/office parity require direct testing.
+- A material price catalog is not inventory. Stock, warehouses, barcode, reorder, and supplier purchasing remain publicly unestablished.
+- The `Plantafel` plans people only. Vehicles, tools, and material are not planning rows, and no conflict warning is documented.
+- Full offline behavior and mobile/office parity require direct testing; app reviews still ask for office functions on mobile.
 - SHK acceptance testing should cover DATANORM rebate structures, customer-service reports, address creation in the field, permissions, and supplier orders.
-- PORTA's current price and the maturity of its promoted channels need confirmation.
-- Lower-tier onboarding may not meet every business's migration and setup needs.
+- `KI-Empfang` beyond telephone and any scheduling assistant are still `Kommt bald`.
+- Reviews from July 2026 point at cancellation handling and lower-tier onboarding as relationship risks.
 
 #### WerkFlow Lessons
 
 - Preserve simple defaults while revealing calculation and commercial depth progressively.
-- Use SHK-specific workflow acceptance tests instead of relying on a generic “all trades” claim.
+- Use SHK-specific workflow acceptance tests instead of relying on a generic "all trades" claim.
 - Keep real inventory and stock movements distinct from a quotation catalog.
 - Make office/mobile permissions and data visibility explicit.
 - Label AI features consistently as available, beta, waitlist, or planned.
+- A people-row board over the existing planning data is what buyers call `Plantafel`; WerkFlow's capacity and qualification checks already exceed what plancraft documents, but the row-per-employee week view is what the office user recognises.
 
 ### Craftnote
 
@@ -777,6 +769,24 @@ Current public examples include phone intake, report rewriting, translation, del
 ### 8. Review Scores Are Discovery Tools, Not Product Truth
 
 The strongest lessons come from repeated, concrete themes across recent reviews, not the average star value. Invitation practices, tiny samples, outdated app versions, aggregated profiles, and region-specific businesses can all distort the headline. Future competitive work should preserve this document's platform/count/date/caveat format.
+
+### 9. "Plantafel" Is A People-Row Week Board, Not A New Domain
+
+Refreshed 2026-09-13 from vendor feature pages and help centers (marketing claims marked as such in the underlying research). Across plancraft, HERO, Craftnote, STREIT, pds, ToolTime, Craftboxx, Meisterwerk, and openHandwerk the word names the same artefact: the office whiteboard digitised. Rows are resources (employees, sometimes teams, vehicles, tools, machines, rooms), columns are days or weeks, jobs are multi-day bars dragged onto rows, absences and holidays render inside the row, and the horizon runs from a week to a year. It reads like a Gantt chart, not like an hour grid. The hour grid is a separate "Kalender" or "Terminplaner" everywhere.
+
+| Vendor | Rows beyond people | Views | Conflict handling | Board pricing |
+| --- | --- | --- | --- | --- |
+| plancraft | none (teams only) | week, month, year | visible, no documented warning | add-on €31.92 to €49.90 by commitment, included in Premium |
+| HERO | vehicles, machines, tools, rooms | day, week, month | warning before save, including absences and holidays | all plans |
+| Craftnote | tools, workplaces, vehicles, custom | week, month | pre-warning on double booking | not stated publicly |
+| STREIT | vehicles, tools, material | week, month, map | availability check | quote |
+| pds | vehicles, tools, devices, map | day, month, project | not evidenced | quote |
+| ToolTime | none | day, week | absence warning, capacity view | not tied to a tier |
+| Craftboxx | vehicles, tools, material | day, week, month | warning for people and resources | per user, all features |
+| Meisterwerk | vehicles ("etc.") | not stated | double-booking alert | add-on €6 to €7 per user |
+| openHandwerk | vehicles, tools, subcontractors | zoomable timeline | not documented | bundle |
+
+Two things follow for WerkFlow. First, the planning data and rules already exist and in places exceed the market: timed, all-day, multi-day and recurring occurrences, capacity in minutes with override reasons, qualification checks, absences, the Parkplatz, dispatch with acknowledgement, and customer commitments kept separate from the internal plan. No vendor page documents a capacity calculation or a qualification check at planning time; HERO and Craftboxx warn on overlap, the rest show colour. Second, the shape is missing: WerkFlow's week view has hours on the vertical axis, so it does not answer "who is on which Baustelle each day for the next three weeks" at a glance, and the month view shows entries but not per-person rows. The buyer already uses the word `Plantafel` for that answer. The people-only boards of plancraft and ToolTime sell; non-people rows (tools, vehicles, material) are what HERO and Craftboxx add on top. The product decision this implied was taken on 2026-09-14 and 2026-09-15: the week view becomes the board in [`P1-24a`](../plans/phase-1/slices/p1-24a-plantafel.md). The 2026-09-17 research on Wave 3, Wave 4 and competitor AI (wholesaler standards, e-invoicing, offer editors, AI surfaces and pricing) is digested in [pre-Wave-3 step 4](../plans/phase-1/pre-wave-3/04-wave-3-4-and-phase-2-planning.md#research-digest-2026-09-17) and is the input for the next refresh of the profiles here.
 
 ## Recommended Demo And Customer-Interview Test Script
 

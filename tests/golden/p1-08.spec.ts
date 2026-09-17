@@ -71,6 +71,7 @@ function berlinTodayIso(): string {
 
 function shiftIsoDate(dateIso: string, days: number): string {
   const [year, month, day] = dateIso.split('-').map(Number);
+  if (year === undefined || month === undefined || day === undefined) throw new Error(`Invalid ISO date: ${dateIso}`);
   const shifted = new Date(Date.UTC(year, month - 1, day) + days * 86_400_000);
   return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, '0')}-${String(shifted.getUTCDate()).padStart(2, '0')}`;
 }
@@ -139,12 +140,15 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
     // resolver computes from stored schedules, conditions, holidays, and the
     // clamped absence spans — in both modes.
     const weekDates = getBusinessWeekDates();
+    const [weekStart] = weekDates;
+    const weekEnd = weekDates.at(-1);
+    if (!weekStart || !weekEnd) throw new Error('P1-08: the business week has no dates');
     const context = await getTargetContextForRecord(world.orgId, employeeRecord.id);
     const absences = await getAbsenceSpansForRecord(
       world.orgId,
       employeeRecord.id,
-      weekDates[0],
-      weekDates[weekDates.length - 1]
+      weekStart,
+      weekEnd
     );
     const targets = resolveDailyTargets(weekDates, { ...context, absences });
     const expectedSollMinutes = targets.reduce((total, target) => total + target.targetMinutes, 0);

@@ -1,9 +1,9 @@
-import type { Database, Json } from '@/lib/supabase/database.types'
+import type { Json } from '@/lib/supabase/database.types'
 
 export type WorkTemplateTargetType = 'job' | 'project'
-export type WorkTemplateItemKind = 'task' | 'checklist'
-export type WorkTemplateRequirementState = 'required' | 'optional'
-export type WorkTemplateDocumentCategory =
+type WorkTemplateItemKind = 'task' | 'checklist'
+type WorkTemplateRequirementState = 'required' | 'optional'
+type WorkTemplateDocumentCategory =
   | 'photo'
   | 'contract'
   | 'invoice'
@@ -11,7 +11,7 @@ export type WorkTemplateDocumentCategory =
   | 'report'
   | 'other'
 
-export type WorkTemplateItemDraft = {
+type WorkTemplateItemDraft = {
   id: string
   itemKind: WorkTemplateItemKind
   content: string
@@ -21,7 +21,7 @@ export type WorkTemplateItemDraft = {
   sortOrder: number
 }
 
-export type WorkTemplateEvidenceDraft = {
+type WorkTemplateEvidenceDraft = {
   id: string
   templateItemId: string
   description: string
@@ -29,13 +29,13 @@ export type WorkTemplateEvidenceDraft = {
   sortOrder: number
 }
 
-export type WorkTemplateDependencyDraft = {
+type WorkTemplateDependencyDraft = {
   id: string
   predecessorItemId: string
   dependentItemId: string
 }
 
-export type WorkTemplateMaterialDraft = {
+type WorkTemplateMaterialDraft = {
   id: string
   itemId: string
   preferredLocationId: string | null
@@ -45,7 +45,7 @@ export type WorkTemplateMaterialDraft = {
   sortOrder: number
 }
 
-export type WorkTemplateCapabilityDraft = {
+type WorkTemplateCapabilityDraft = {
   id: string
   capabilityId: string
   requireConfirmation: boolean
@@ -93,7 +93,7 @@ export type WorkTemplateApplicationPreview = PublishedWorkTemplateOption & {
   hasSameVersionApplication: boolean
 }
 
-export type WorkTemplateEvent = {
+type WorkTemplateEvent = {
   id: string
   eventType: string
   versionNumber: number | null
@@ -126,7 +126,5 @@ export type ApplyWorkTemplateInput = {
     coverageFingerprint: string
     overrideReason: string | null
     teamSourceId: string | null
-  }
+  } | undefined
 }
-
-export type WorkTemplateTable = Database['public']['Tables']['work_templates']['Row']

@@ -16,7 +16,7 @@ type QuantityStepperProps = {
   id?: string;
   value: string;
   onChange: (value: string) => void;
-  unitLabel?: string;
+  unitLabel?: string | undefined;
   min?: number;
   step?: number;
   disabled?: boolean;

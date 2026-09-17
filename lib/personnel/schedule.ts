@@ -97,7 +97,12 @@ export function getEffectiveSchedule(
  */
 export function getWeekdayIndex(dateIso: string): number {
   const [year, month, day] = dateIso.split('-').map(Number);
-  const jsWeekday = new Date(Date.UTC(year, (month ?? 1) - 1, day ?? 1)).getUTCDay();
+  const invalid = new Error(`Invalid ISO date: ${dateIso}`);
+  if (year === undefined || month === undefined || day === undefined || ![year, month, day].every(Number.isInteger)) throw invalid;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  // A rolled-over date (2026-02-30) is not the date that was written.
+  if (date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) throw invalid;
+  const jsWeekday = date.getUTCDay();
   return jsWeekday === 0 ? 6 : jsWeekday - 1;
 }
 
@@ -105,6 +110,7 @@ export function getWeekdayIndex(dateIso: string): number {
 export function getBusinessWeekDates(referenceDate: Date = new Date()): string[] {
   const todayIso = toBusinessIsoDate(referenceDate);
   const [year, month, day] = todayIso.split('-').map(Number);
+  if (year === undefined) throw new Error(`Invalid ISO date: ${todayIso}`);
   const todayUtcMs = Date.UTC(year, (month ?? 1) - 1, day ?? 1);
   const weekdayIndex = getWeekdayIndex(todayIso);
 

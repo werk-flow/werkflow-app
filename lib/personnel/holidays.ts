@@ -233,7 +233,7 @@ const HOLIDAY_RULES: HolidayRule[] = [
 const holidayCache = new Map<string, Map<string, string>>();
 
 /** Map of ISO date → holiday name for one region and year (memoized). */
-export function getHolidayMapForYear(
+function getHolidayMapForYear(
   region: HolidayRegion,
   year: number
 ): Map<string, string> {

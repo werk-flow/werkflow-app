@@ -67,3 +67,8 @@ export async function getManagerAssigneeOptions(
     })
     .sort((a, b) => a.name.localeCompare(b.name, 'de'));
 }
+
+/** Avatar initials; a missing name part contributes nothing. */
+export function getInitials(firstName: string | null, lastName: string | null): string {
+  return `${firstName?.charAt(0) ?? ''}${lastName?.charAt(0) ?? ''}`.toUpperCase();
+}

@@ -12,7 +12,7 @@ import type { useOptimisticList } from '@/hooks/use-optimistic-list';
  * Events with no subscriber are dropped, so the same dialog inside a select
  * (Aufträge, Anfragen) costs nothing.
  */
-export type OptimisticCreateEvent<Item> =
+type OptimisticCreateEvent<Item> =
   | { kind: 'insert'; tempId: string; draft: Item }
   | { kind: 'commit'; tempId: string; confirmed: Item }
   | { kind: 'rollback'; tempId: string };

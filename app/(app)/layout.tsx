@@ -19,51 +19,8 @@ import {
   getCachedSubscriptionStatus,
   getCachedUserProfile,
 } from '@/lib/data/cached';
-import { reportAuthUsersStringColumnHealth } from '@/lib/supabase/auth-health';
-import {
-  getActiveJobIdsForOrg,
-  getCurrentClockState,
-} from '@/lib/time-tracking/actions';
-import { getAttentionCounts } from '@/lib/attention/actions';
-import type { AttentionCounts } from '@/lib/attention/types';
-import type { LiveClockState } from '@/lib/time-tracking/types';
 import { getAuthenticatedRedirectPath } from '@/lib/auth/redirects';
 import { CURRENT_ORG_COOKIE, resolveActiveOrgId } from '@/lib/org/cookies';
-
-async function getInitialAppRuntimeState({
-  activeOrgId,
-}: {
-  activeOrgId: string | null;
-}): Promise<{
-  clockState: LiveClockState | null;
-  activeJobIds: string[];
-  attentionCounts: AttentionCounts | undefined;
-}> {
-  if (!activeOrgId) {
-    return {
-      clockState: null,
-      activeJobIds: [],
-      attentionCounts: undefined,
-    };
-  }
-
-  const [clockStateResult, activeJobsResult, attentionCountsResult] =
-    await Promise.all([
-      getCurrentClockState(activeOrgId),
-      getActiveJobIdsForOrg(activeOrgId),
-      getAttentionCounts(),
-    ]);
-
-  return {
-    clockState: clockStateResult.success ? clockStateResult.state : null,
-    activeJobIds: activeJobsResult.success ? activeJobsResult.activeJobIds : [],
-    // undefined lets the provider fetch on mount instead of trusting a failed
-    // initial load as "zero".
-    attentionCounts: attentionCountsResult.success
-      ? attentionCountsResult.counts
-      : undefined,
-  };
-}
 
 async function AppProviders({ children }: { children: React.ReactNode }) {
   const [{ data: { user } }, cookieStore] = await Promise.all([
@@ -73,7 +30,6 @@ async function AppProviders({ children }: { children: React.ReactNode }) {
 
   if (!user) redirect('/login');
 
-  await reportAuthUsersStringColumnHealth('app-layout');
 
   const [memberships, isSubscribed, activeOrgId, profile] = await Promise.all([
     getCachedMemberships(user.id),
@@ -86,9 +42,6 @@ async function AppProviders({ children }: { children: React.ReactNode }) {
     redirect(await getAuthenticatedRedirectPath(user.id));
   }
 
-  const initialRuntimeState = await getInitialAppRuntimeState({
-    activeOrgId,
-  });
   const activeOrgCookieNeedsSync =
     activeOrgId !== null &&
     cookieStore.get(CURRENT_ORG_COOKIE)?.value !== activeOrgId;
@@ -105,13 +58,10 @@ async function AppProviders({ children }: { children: React.ReactNode }) {
           <UserProfileProvider initialProfile={profile}>
             <OpenDialogProvider>
               <OrganizationRealtimeBridge />
-              <ActiveJobsProvider
-                initialActiveJobIds={initialRuntimeState.activeJobIds}
-                initialOrganizationId={activeOrgId}
-              >
-                <ClockStateProvider initialState={initialRuntimeState.clockState}>
+              {/* Optional runtime reads must not hold every route refresh. */}
+              <ActiveJobsProvider>
+                <ClockStateProvider>
                   <AppShell
-                    initialAttentionCounts={initialRuntimeState.attentionCounts}
                     initialOrganizationId={activeOrgId}
                   >
                     {children}

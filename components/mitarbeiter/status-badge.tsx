@@ -3,7 +3,7 @@
 import { cn } from '@/lib/utils';
 
 interface StatusBadgeProps {
-  status?: 'clocked_out' | 'working' | 'on_break';
+  status?: 'clocked_out' | 'working' | 'on_break' | undefined;
   isClockedIn: boolean;
   /** Whether the current working status is based on a pending entry */
   isPending?: boolean;
@@ -32,8 +32,8 @@ export function StatusBadge({
   // Pending state (working but awaiting approval)
   if (effectiveStatus === 'working' && isPending) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-yellow-500/20 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:text-yellow-300">
-        <span className="h-1.5 w-1.5 rounded-full bg-yellow-500 animate-pulse" />
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning-soft-foreground">
+        <span className="h-1.5 w-1.5 rounded-full bg-warning animate-pulse" />
         Arbeitet (ausstehend)
       </span>
     );
@@ -41,8 +41,8 @@ export function StatusBadge({
 
   if (effectiveStatus === 'on_break') {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-yellow-500/20 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:text-yellow-300">
-        <span className="h-1.5 w-1.5 rounded-full bg-yellow-500 animate-pulse" />
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning-soft-foreground">
+        <span className="h-1.5 w-1.5 rounded-full bg-warning animate-pulse" />
         Macht Pause
       </span>
     );
@@ -53,7 +53,7 @@ export function StatusBadge({
       className={cn(
         'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium',
         effectiveStatus === 'working'
-          ? 'bg-green-500/20 text-green-700 dark:text-green-300'
+          ? 'bg-success-soft text-success-soft-foreground'
           : 'bg-muted text-muted-foreground'
       )}
     >
@@ -61,7 +61,7 @@ export function StatusBadge({
         className={cn(
           'h-1.5 w-1.5 rounded-full',
           effectiveStatus === 'working'
-            ? 'bg-green-500 animate-pulse'
+            ? 'bg-success animate-pulse'
             : 'bg-muted-foreground'
         )}
       />

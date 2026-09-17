@@ -1,3 +1,7 @@
+// "certification" is retired (pre-Wave-3 step 2, 2026-09-14, decision D4 of
+// the testing-system review): acceptance is the group lane through test:verify.
+// The value stays in the list so historical manifests still parse; the runner
+// no longer accepts it.
 export const PLAYWRIGHT_LANES = [
   "group",
   "iteration",
@@ -6,6 +10,7 @@ export const PLAYWRIGHT_LANES = [
   "direct",
 ] as const;
 export type PlaywrightLane = (typeof PLAYWRIGHT_LANES)[number];
+export const RUNNABLE_LANES = ["group", "iteration", "diagnostic"] as const satisfies readonly PlaywrightLane[];
 
 export const PLAYWRIGHT_SUITES = ["golden", "audit", "canary"] as const;
 export type PlaywrightSuite = (typeof PLAYWRIGHT_SUITES)[number];
@@ -14,7 +19,7 @@ export type PlaywrightSuite = (typeof PLAYWRIGHT_SUITES)[number];
 // platform-hardening.md): golden and audit batteries run against the local
 // Supabase stack by default; the canary suite exists to prove cloud behavior
 // and only ever runs against cloud DEV. `--target cloud` on golden/audit is
-// the deliberate exception for wave-end and partner-milestone certifications
+// the deliberate exception for wave-end and partner-milestone verification
 // (decision D11).
 export const PLAYWRIGHT_TARGETS = ["local", "cloud"] as const;
 export type PlaywrightTarget = (typeof PLAYWRIGHT_TARGETS)[number];
@@ -41,82 +46,12 @@ export type RunRequest = {
   reuseRunKey: string | null;
 };
 
-export type CertificationAttempt = {
-  runKey: string;
-  status: "passed" | "failed";
-  startedAt: string;
-  classification: IncidentClass | null;
-  classifiedAt: string | null;
-  failedSpecFile: string | null;
-  focusedGrepToken?: string | null;
-  failedTestId?: string | null;
-};
-
-export type FocusedVerification = {
-  status: "passed" | "failed";
-  startedAt: string;
-  candidateFingerprint: string;
-  suite: PlaywrightSuite;
-  grep: string;
-  total: number;
-  target: PlaywrightTarget;
-  passedTestIds: readonly string[];
-};
-
 export type FocusedIterationAttempt = {
   runKey: string;
   status: "failed";
   classification: IncidentClass | null;
   classifiedAt: string | null;
 };
-
-export type FocusedProofRequirement = {
-  suite: PlaywrightSuite;
-  token: string;
-  reason: string;
-};
-
-const FOCUSED_PROOF_IMPACT_RULES = [
-  {
-    path: "components/auftraege/field-work-pack-page.tsx",
-    requirement: {
-      suite: "golden",
-      token: "p1-16",
-      reason: "The assigned field-work pack changed.",
-    },
-  },
-] as const satisfies ReadonlyArray<{
-  path: string;
-  requirement: FocusedProofRequirement;
-}>;
-
-// "tests/golden/p1-16.spec.ts" -> "p1-16"; null when the failure has no spec
-// file (runner or setup failures), in which case any focused proof qualifies.
-export function focusedProofToken(
-  failedSpecFile: string | null,
-): string | null {
-  if (!failedSpecFile) return null;
-  const match = /([^\\/]+)\.spec\.ts$/.exec(failedSpecFile);
-  return match ? match[1].toLowerCase() : null;
-}
-
-export function focusedProofTokenForFailure(input: {
-  suite: PlaywrightSuite;
-  failedTitle: string | null;
-  failedSpecFile: string | null;
-}): string | null {
-  if (input.suite === "canary" && input.failedTitle) {
-    return /\bC\d+:/i.exec(input.failedTitle)?.[0] ?? null;
-  }
-  return focusedProofToken(input.failedSpecFile);
-}
-
-// Token-boundary match: "@P1-16-stage-boundaries" covers token "p1-16", but a
-// bare substring must not let "p1-1" cover "@P1-16".
-export function testIdentityCoversToken(testId: string, token: string): boolean {
-  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(?:^|[^a-z0-9])${escaped}(?![a-z0-9])`, "i").test(testId);
-}
 
 export function validateRunRequest(request: RunRequest): string[] {
   const errors: string[] = [];
@@ -127,11 +62,8 @@ export function validateRunRequest(request: RunRequest): string[] {
   }
   if (request.lane === "iteration" && !request.grep?.trim()) {
     errors.push(
-      "Iteration runs require --grep. Use certification for a complete battery.",
+      "Iteration runs require --grep. Complete evidence comes from bun run test:verify.",
     );
-  }
-  if (request.lane === "certification" && request.grep?.trim()) {
-    errors.push("Certification runs cannot use --grep.");
   }
   if (request.lane === "diagnostic") {
     if (!request.grep?.trim()) errors.push("Diagnostic runs require --grep.");
@@ -164,9 +96,11 @@ export function validateFocusedSelection(input: {
   return [];
 }
 
+// Two same-class focused failures in a row end the fresh-world loop: the next
+// step is a retained-world diagnostic, never a third attempt. The rerun grant
+// that used to override this left with the certification lane.
 export function evaluateFocusedIterationRerun(input: {
   attemptsSinceLastPass: FocusedIterationAttempt[];
-  overrideReason: string | null;
 }): { allowed: boolean; reason: string | null } {
   const latestFailure = input.attemptsSinceLastPass.at(-1);
   if (!latestFailure) return { allowed: true, reason: null };
@@ -181,48 +115,13 @@ export function evaluateFocusedIterationRerun(input: {
   const repeatedClass =
     previousFailure?.classification !== null &&
     previousFailure?.classification === latestFailure.classification;
-  if (repeatedClass && !input.overrideReason?.trim()) {
+  if (repeatedClass) {
     return {
       allowed: false,
-      reason: `The last two focused runs failed in the ${latestFailure.classification} class. Use a retained-world diagnostic, or issue one investigated extension with test:runs campaign-extend and pass its --rerun-grant.`,
+      reason: `The last two focused runs failed in the ${latestFailure.classification} class. Replay the retained world with the diagnostic lane and repair the cause before another fresh-world run.`,
     };
   }
   return { allowed: true, reason: null };
-}
-
-export function requiredFocusedProofsForChangedFiles(
-  changedFiles: readonly string[],
-): FocusedProofRequirement[] {
-  const normalizedFiles = new Set(
-    changedFiles.map((file) => file.replaceAll("\\", "/")),
-  );
-  const requirements = new Map<string, FocusedProofRequirement>();
-  for (const rule of FOCUSED_PROOF_IMPACT_RULES) {
-    if (!normalizedFiles.has(rule.path)) continue;
-    const requirement = { ...rule.requirement };
-    requirements.set(`${requirement.suite}:${requirement.token}`, requirement);
-  }
-  return [...requirements.values()];
-}
-
-export function evaluateRequiredFocusedProofs(input: {
-  requirements: readonly FocusedProofRequirement[];
-  focusedVerifications: readonly FocusedVerification[];
-  currentCandidateFingerprint: string;
-  currentTarget: PlaywrightTarget;
-}): FocusedProofRequirement[] {
-  return input.requirements.filter(
-    (requirement) =>
-      !input.focusedVerifications.some(
-        (verification) =>
-          verification.status === "passed" &&
-          verification.candidateFingerprint === input.currentCandidateFingerprint &&
-          verification.suite === requirement.suite &&
-          verification.target === input.currentTarget &&
-          verification.total > 0 &&
-          verification.passedTestIds.some((id) => testIdentityCoversToken(id, requirement.token)),
-      ),
-  );
 }
 
 export function shouldRefreshStoredSession(
@@ -237,69 +136,4 @@ export function shouldRefreshStoredSession(
     savedAtMilliseconds > nowMilliseconds ||
     nowMilliseconds - savedAtMilliseconds >= maxAgeMilliseconds
   );
-}
-
-export function evaluateFullCertificationRerun(input: {
-  attemptsSinceLastPass: CertificationAttempt[];
-  focusedVerifications: FocusedVerification[];
-  currentCandidateFingerprint: string;
-  currentSuite: PlaywrightSuite;
-  fullSuiteTestCount: number;
-  overrideReason: string | null;
-  currentTarget: PlaywrightTarget;
-}): { allowed: boolean; reason: string | null } {
-  const failedAttempts = input.attemptsSinceLastPass.filter(
-    (attempt) => attempt.status === "failed",
-  );
-  const latestFailure = failedAttempts.at(-1);
-  if (!latestFailure) return { allowed: true, reason: null };
-
-  if (!latestFailure.classification || !latestFailure.classifiedAt) {
-    return {
-      allowed: false,
-      reason: `Classify failed full run ${latestFailure.runKey} before another full certification.`,
-    };
-  }
-
-  const classifiedAt = Date.parse(latestFailure.classifiedAt);
-  const requiredToken =
-    latestFailure.focusedGrepToken ??
-    focusedProofToken(latestFailure.failedSpecFile);
-  const focusedProofExists =
-    Number.isFinite(classifiedAt) &&
-    input.focusedVerifications.some(
-      (verification) =>
-        verification.status === "passed" &&
-        verification.suite === input.currentSuite &&
-        verification.candidateFingerprint === input.currentCandidateFingerprint &&
-        verification.target === input.currentTarget &&
-        verification.total > 0 &&
-        verification.total < input.fullSuiteTestCount &&
-        Date.parse(verification.startedAt) > classifiedAt &&
-        verification.passedTestIds.length > 0 &&
-        (latestFailure.failedTestId
-          ? verification.passedTestIds.includes(latestFailure.failedTestId)
-          : requiredToken === null || verification.passedTestIds.some((id) => testIdentityCoversToken(id, requiredToken))),
-    );
-  if (!focusedProofExists) {
-    const scope = requiredToken
-      ? ` covering ${requiredToken} (the failed stage must actually execute)`
-      : "";
-    return {
-      allowed: false,
-      reason: `Run a focused verification${scope} on the current source after classifying ${latestFailure.runKey}.`,
-    };
-  }
-
-  const repeatedClass =
-    failedAttempts.length >= 2 &&
-    failedAttempts.at(-2)?.classification === latestFailure.classification;
-  if (repeatedClass && !input.overrideReason?.trim()) {
-    return {
-      allowed: false,
-      reason: `The last two full runs failed in the ${latestFailure.classification} class. Investigate before overriding the rerun budget.`,
-    };
-  }
-
-  return { allowed: true, reason: null };
 }

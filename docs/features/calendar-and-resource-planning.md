@@ -1,6 +1,6 @@
 # Calendar And Resource Planning
 
-Status: living — last reviewed 2026-09-05
+Status: living — last reviewed 2026-09-17
 
 Calendar and resource planning (`Kalender` and `Einsatzplanung`) connects the work the business has promised with the people, time, tools, vehicles, locations, and materials needed to deliver it.
 
@@ -21,9 +21,12 @@ The calendar should reduce telephone coordination, paper schedules, duplicate en
 
 ## Current Product Baseline
 
-As of 2026-09-02, `/kalender` is the shared planning surface for Admin and Büro: they schedule one-off and recurring job visits and internal entries, see capacity and qualification warnings, dispatch work, keep parked work in the `Parkplatz`, and record customer commitments separately from the internal plan. Employees see only the occurrences assigned to them and confirm or challenge their dispatch. Actual working time appears in the same calendar but stays structurally separate from planned work.
+As of 2026-09-02, `/kalender` is the shared planning surface for Admin and Büro: they schedule one-off and recurring job visits and internal entries, see capacity and qualification warnings, dispatch work, keep parked work in the `Parkplatz`, and record customer commitments separately from the internal plan. Employees see only the occurrences assigned to them and confirm or challenge their dispatch. Actual working time appears in the same calendar but stays structurally separate from planned work. The week view becomes the `Plantafel` in [`P1-24a`](../plans/phase-1/slices/p1-24a-plantafel.md), the next calendar slice.
+
+- Bookmarks and ownership (Step 2, 2026-09-08). A calendar date can be bookmarked with `?date=YYYY-MM-DD`; server prefetch and client initialization share that validated date. Correction badges are required for a complete entry read. Calendar saves and Undo release their own refresh ownership even after a transport failure; Undo is offered only after confirmed persistence. Organization, caller, or role changes discard the previous calendar and Parkplatz state.
 
 - Views and direct manipulation. Day, week, and month views with filters for employees, working hours, and jobs. Managers create jobs from the calendar, move and resize them, reassign between employees, and drag between the `Parkplatz` and the schedule; manual time entries can be created from the calendar ([Grundstock](../product/user-flow-catalog.md#grundstock-vor-phase-1-stand-vor-p1-00-4-august-2026)).
+- Windows, loading, and freshness (Step 2, 2026-09-08). Each view reads one window: the selected day plus the previous day, the Monday-to-Sunday week plus one day on each side, or the six-week month grid plus one day on each side. Switching to dates the loaded window already covers shows them at once; switching outside it retains the previous grid as busy and non-interactive until the new window arrives. A skeleton appears when a required dataset has never loaded, and a failed read for an uncovered window shows an error block with retry instead of another window's entries. Existing content stays visible while a same-window refresh runs, and a failed refresh marks it stale and disables grid actions. The month becomes ready only after its actual renderer has applied the requested date and events. The user's own drag, park, or edit keeps its optimistic state until the server answers. Range, manual-refresh, and Realtime reads wait behind the same pending mutation, then converge on the current window. Scope changes discard old reads and timers. Reconnects recover writes missed during disconnection. Pending time-correction proposals and closure-day changes made in another session reach an open calendar without a reload. Absences are read for the visible window, so any month can be opened.
 - Absence and holiday context. The month view shows public holidays and **Betriebsruhe** as labeled, non-interactive entries, approved vacation as „Urlaub – Name" with pending requests dashed and marked „angefragt", and sickness as the neutral „Abwesend – Name". Sickness type and evidence stay outside the shared calendar; managers see everyone's availability, employees only their own ([P1-04](../plans/phase-1/slices/p1-04-work-schedules-and-holidays.md), [P1-06](../plans/phase-1/slices/p1-06-vacation.md), [P1-08](../plans/phase-1/slices/p1-08-sickness.md)).
 - Team shortcuts and qualification checks. A team in an assignment control expands to its members active on that date without granting authority. Every move, resize, schedule, unpark, or reassignment re-runs the job qualification check; gaps are explained in a confirmation dialog and can be overridden only with a recorded reason ([P1-09](../plans/phase-1/slices/p1-09-teams-and-qualifications.md)).
 - Planning occurrences. Managers create timed or all-day job visits and internal entries of the kinds `Interne Arbeit`, `Besprechung`, `Schulung`, and `Sonstiges` as one-off, multi-day, cross-midnight, or daily, weekly, or monthly series with an 18-month horizon that extends in six-month steps. Editing one occurrence creates an exception, `diese und zukünftige` splits the series, and skipped or cancelled occurrences stay visible history ([P1-11](../plans/phase-1/slices/p1-11-planning-occurrences.md)).
@@ -37,7 +40,7 @@ As of 2026-09-02, `/kalender` is the shared planning surface for Admin and Büro
 - Service visits. A reactive service case is linked to one existing job and then uses the normal visit and dispatch path. A manager creates a maintenance visit job, then schedules its occurrence in a separate action. Compatible due items can share a visit. The plan owns cadence and next-due, the calendar owns the appointment, and moving it never rewrites the maintenance definition ([P1-19](../plans/phase-1/slices/p1-19-reactive-service.md), [P1-20](../plans/phase-1/slices/p1-20-maintenance-plans.md)).
 - Actual time. Working-time blocks use the same projection of legacy entries, canonical segments, and approved corrections as every other time reader, with open proposals shown as provisional. Planning moves and dispatches never create or rewrite actual time, and a correction never reschedules planned work ([P1-21](../plans/phase-1/slices/p1-21-time-segments.md), [P1-22](../plans/phase-1/slices/p1-22-time-corrections-and-approvals.md)).
 
-### Important current limitations
+### Important Current Limitations
 
 - Route and travel-time providers, tool and vehicle reservation, material reservation, external calendar sync, and outbound customer messages are not implemented; readiness signals say so instead of guessing.
 - On-call coverage, training absence, and other absence types are not planned yet.
@@ -238,6 +241,7 @@ The system should start with proposals and previews. Automatic rescheduling, cus
 - Which map, travel-time, and navigation providers fit the German market and privacy requirements? (P1-12 deliberately computes travel feasibility only from explicit same-site/zero-gap facts and labels everything else „nicht bewertet"; provider selection stays `P1-50`.)
 - Which customer reminder channels should be supported first? (P1-12 records manual commitments only; every actual outbound channel stays `P1-46`.)
 - Is one-way calendar subscription sufficient before bidirectional Google/Microsoft synchronization?
+- Whether a vehicle row joins the `Plantafel` in Wave 3: the owner decided on 2026-09-17 that a vehicle stays an inventory location with an optional asset instance (`P1-32`) and that the board's `vehicle` row kind stays deferred until a customer asks; `P1-28` keeps the seam. The board itself is decided: the week view becomes the `Plantafel` in [`P1-24a`](../plans/phase-1/slices/p1-24a-plantafel.md) (owner decisions 2026-09-14 and 2026-09-15).
 
 ## Related Docs
 

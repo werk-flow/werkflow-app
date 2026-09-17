@@ -2,7 +2,7 @@ import type { Database } from '@/lib/supabase/database.types';
 
 export type CustomerCommitmentSource =
   Database['public']['Enums']['customer_commitment_source'];
-export type CustomerCommitmentStatus =
+type CustomerCommitmentStatus =
   Database['public']['Enums']['customer_commitment_status'];
 
 export const COMMITMENT_SOURCE_LABELS: Record<CustomerCommitmentSource, string> =
@@ -88,7 +88,9 @@ export function commitmentErrorMessage(error: string): string {
   );
 }
 
-export const COMMITMENT_ERROR_MESSAGES: Record<string, string> = {
+const COMMITMENT_ERROR_MESSAGES: Record<string, string> & {
+  unexpected_error: string;
+} = {
   invalid_input: 'Die Eingaben sind unvollständig oder ungültig.',
   commitment_occurrence_not_found: 'Der geplante Besuch wurde nicht gefunden.',
   commitment_occurrence_not_scheduled:

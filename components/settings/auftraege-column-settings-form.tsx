@@ -27,13 +27,14 @@ import {
   type AuftraegeColumnPreferencesValues,
 } from '@/lib/jobs/auftraege-table-columns'
 
-const ERROR_MESSAGES: Record<string, string> = {
+const ERROR_MESSAGES = {
   not_authenticated: 'Du bist nicht angemeldet.',
   no_active_org: 'Es ist keine aktive Organisation ausgewählt.',
   not_a_member: 'Du bist kein Mitglied der aktiven Organisation.',
   invalid_input: 'Bitte wähle mindestens eine sichtbare Spalte aus.',
   update_failed: 'Die Spalteneinstellungen konnten nicht gespeichert werden.',
-}
+} satisfies Record<string, string>
+const ERROR_MESSAGE_BY_CODE: Record<string, string> = ERROR_MESSAGES
 
 type AuftraegeColumnSettingsFormProps = {
   initialVisibleColumns: AuftraegeColumnId[]
@@ -81,7 +82,7 @@ export function AuftraegeColumnSettingsForm({
 
       if (!result.success) {
         showBanner({
-          message: ERROR_MESSAGES[result.error] ?? ERROR_MESSAGES.update_failed,
+          message: ERROR_MESSAGE_BY_CODE[result.error] ?? ERROR_MESSAGES.update_failed,
           variant: 'error',
         })
         return

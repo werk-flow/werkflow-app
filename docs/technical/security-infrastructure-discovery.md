@@ -4,7 +4,7 @@ Status: closed (2026-09-06) — dated pre-audit evidence snapshot, not a complet
 
 ## How to use this snapshot
 
-The [Step 1 security and infrastructure plan](../plans/security-infrastructure-hardening-2026-09.md) now owns current findings, investigation, remediation, and acceptance evidence. Read this snapshot to understand the starting observations and their limits, then verify current code and provider state through that plan.
+The [Step 1 security and infrastructure plan](../plans/phase-1/hardening-2026-09/05-step-1-security-infrastructure.md) now owns current findings, investigation, remediation, and acceptance evidence. Read this snapshot to understand the starting observations and their limits, then verify current code and provider state through that plan.
 
 Keep this file after the hardening pass as dated evidence. Do not update its observations to describe later fixes or maintain a second backlog here. If an original statement proves inaccurate, add a dated correction that explains the error. Adopted controls belong in the owning technical/feature docs and enforced implementation; the execution plan links to them when it closes.
 
@@ -14,7 +14,7 @@ This record gathered source-supported findings and unresolved deployment questio
 
 The reviewed checkpoint includes commit `843d773`, followed by the phone-layout and test-server review corrections. Inspection covered the six `app/api` route handlers, authentication callback and proxy, shared identity and membership readers, selected privileged time and personnel paths, document upload authorization and finalization, dependency declarations, Next/Vercel configuration, and prior infrastructure evidence. This is targeted inspection, not review of every action, policy, function, or infrastructure setting.
 
-The [documentation audit](../plans/post-wave-2-documentation-audit.md) owns the September 5 cloud catalog comparison and its limits. The [enforcement backlog](enforcement-ladder-backlog.md) owns existing conversions. [Environments](environments.md) owns backend identities and access methods. These records must be reconciled with current source and live configuration during the eventual audit.
+The [documentation audit](../plans/phase-1/hardening-2026-09/01-documentation-audit.md) owns the September 5 cloud catalog comparison and its limits. The [enforcement backlog](enforcement-ladder-backlog.md) owns existing conversions. [Environments](environments.md) owns backend identities and access methods. These records must be reconciled with current source and live configuration during the eventual audit.
 
 ## Source findings
 

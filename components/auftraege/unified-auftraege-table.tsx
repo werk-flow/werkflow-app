@@ -1,5 +1,9 @@
 'use client';
 
+import { getInitials } from '@/lib/members/profile-name';
+import { ListPagination } from '@/components/shared/list-pagination';
+import { SectionError } from '@/components/ui/section-error';
+import { useProjectJobPage } from './use-project-job-page';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -74,8 +78,8 @@ function ActiveWorkIndicator() {
       className="relative ml-2 inline-flex h-2.5 w-2.5 shrink-0"
       title="Jemand arbeitet gerade an diesem Auftrag"
     >
-      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-500" />
+      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
+      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-success" />
     </span>
   );
 }
@@ -86,31 +90,31 @@ function ActiveWorkIndicator() {
 
 const JOB_STATUS_CLASSES: Record<JobStatus, string> = {
   nicht_bearbeitet: 'bg-secondary text-secondary-foreground',
-  in_bearbeitung: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
-  fertig: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+  in_bearbeitung: 'bg-warning-soft text-warning-soft-foreground',
+  fertig: 'bg-success-soft text-success-soft-foreground',
   geparkt: 'bg-brand-purple/15 text-brand-purple-dark dark:text-brand-purple-light',
 };
 
 const PRIORITY_CLASSES: Record<JobPriority, string> = {
   niedrig: 'bg-secondary text-secondary-foreground',
-  mittel: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
-  hoch: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+  mittel: 'bg-info-soft text-info-soft-foreground',
+  hoch: 'bg-destructive-soft text-destructive-soft-foreground',
 };
 
 const PROJECT_STATUS_CLASSES: Record<ProjectStatus, string> = {
   nicht_begonnen: 'bg-secondary text-secondary-foreground',
-  in_bearbeitung: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
-  abgeschlossen: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+  in_bearbeitung: 'bg-warning-soft text-warning-soft-foreground',
+  abgeschlossen: 'bg-success-soft text-success-soft-foreground',
   geparkt: 'bg-brand-purple/15 text-brand-purple-dark dark:text-brand-purple-light',
 };
 
 const WORK_EXECUTION_CLASSES: Record<WorkExecutionState, string> = {
   not_started: 'bg-secondary text-secondary-foreground',
-  in_progress: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
-  interrupted: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
-  execution_complete: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-  handed_over: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-  cancelled: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+  in_progress: 'bg-warning-soft text-warning-soft-foreground',
+  interrupted: 'bg-warning-soft text-warning-soft-foreground',
+  execution_complete: 'bg-success-soft text-success-soft-foreground',
+  handed_over: 'bg-success-soft text-success-soft-foreground',
+  cancelled: 'bg-destructive-soft text-destructive-soft-foreground',
 };
 
 function getJobStatusClass(job: Job): string {
@@ -142,9 +146,9 @@ function TrafficLight({ status }: { status: 'green' | 'yellow' | 'red' }) {
             : 'Stark verzögert'
       }
     >
-      <span className={cn(base, status === 'red' ? 'bg-red-500' : inactive)} />
-      <span className={cn(base, status === 'yellow' ? 'bg-yellow-500' : inactive)} />
-      <span className={cn(base, status === 'green' ? 'bg-green-500' : inactive)} />
+      <span className={cn(base, status === 'red' ? 'bg-destructive' : inactive)} />
+      <span className={cn(base, status === 'yellow' ? 'bg-warning' : inactive)} />
+      <span className={cn(base, status === 'green' ? 'bg-success' : inactive)} />
     </div>
   );
 }
@@ -162,10 +166,6 @@ function formatDate(dateStr: string | null): string {
   });
 }
 
-function getInitials(firstName: string, lastName: string): string {
-  return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
-}
-
 function buildMemberLookup(members: OrgMemberOption[]): Map<string, OrgMemberOption> {
   const map = new Map<string, OrgMemberOption>();
   for (const m of members) map.set(m.userId, m);
@@ -179,7 +179,7 @@ function AvatarStack({
 }: {
   userIds: string[];
   memberLookup: Map<string, OrgMemberOption>;
-  max?: number;
+  max?: number | undefined;
 }) {
   if (userIds.length === 0) return <span className="text-muted-foreground/50">—</span>;
 
@@ -274,7 +274,7 @@ interface AuftraegeTableColumn extends SkeletonColumn {
 // One definition for the header row and the skeleton rows, so widths,
 // responsive visibility, and placeholder shapes cannot drift apart. The
 // header of a sortable column still renders through `SortableHeader`.
-export const AUFTRAEGE_COLUMNS: readonly AuftraegeTableColumn[] = [
+const AUFTRAEGE_COLUMNS: readonly AuftraegeTableColumn[] = [
   { id: 'selection', header: null, className: 'w-[36px]', skeleton: <Skeleton className="size-4" /> },
   { id: 'nr', header: 'Nr', className: 'w-[120px]', skeleton: <Skeleton className="h-5 w-24" /> },
   {
@@ -306,7 +306,7 @@ export const AUFTRAEGE_COLUMNS: readonly AuftraegeTableColumn[] = [
 ];
 
 /** The columns a table with these preferences renders, in order. */
-export function auftraegeColumns(
+function auftraegeColumns(
   visibleColumns: AuftraegeColumnId[],
   showActions: boolean,
 ): AuftraegeTableColumn[] {
@@ -335,7 +335,7 @@ const NO_ROW_FEEDBACK: AuftraegeRowFeedback = {
 
 const SETTLING_LABEL = 'Wird aktualisiert';
 
-function SettlingIndicator({ active, className }: { active: boolean; className?: string }) {
+function SettlingIndicator({ active, className }: { active: boolean; className?: string | undefined }) {
   return <InlinePending active={active} label={SETTLING_LABEL} className={className} />;
 }
 
@@ -400,7 +400,7 @@ interface AuftraegeSortState {
   direction: 'asc' | 'desc';
   onSort: (column: SortColumn) => void;
   /** Archived entries keep a fixed status column. */
-  isArchive?: boolean;
+  isArchive?: boolean | undefined;
 }
 
 function AuftraegeTableHeaderRow({
@@ -409,7 +409,7 @@ function AuftraegeTableHeaderRow({
 }: {
   columns: readonly AuftraegeTableColumn[];
   /** Omitted by route skeletons, which render plain headers. */
-  sort?: AuftraegeSortState;
+  sort?: AuftraegeSortState | undefined;
 }) {
   return (
     <TableRow>
@@ -443,8 +443,8 @@ export function AuftraegeTableSkeleton({
 }: {
   count: number;
   showActions: boolean;
-  visibleColumns?: AuftraegeColumnId[];
-  sort?: AuftraegeSortState;
+  visibleColumns?: AuftraegeColumnId[] | undefined;
+  sort?: AuftraegeSortState | undefined;
 }) {
   const columns = auftraegeColumns(visibleColumns, showActions);
   return (
@@ -512,12 +512,12 @@ function StandaloneJobRow({
   clients: Client[];
   members: OrgMemberOption[];
   projects: ProjectWithDetails[];
-  onJobUpdated?: (payload: {
+  onJobUpdated?: ((payload: {
     job: Job;
     selectedEmployeeIds?: string[];
-  }) => void | Promise<void>;
-  onJobDeleted?: (jobId: string) => void | Promise<void>;
-  onJobDeleteRequested?: (jobId: string) => void;
+  }) => void | Promise<void>) | undefined;
+  onJobDeleted?: ((jobId: string) => void | Promise<void>) | undefined;
+  onJobDeleteRequested?: ((jobId: string) => void) | undefined;
 }) {
   const router = useRouter();
   const detailHref = `/auftraege/${encodeURIComponent(job.jobNumber!)}`;
@@ -586,17 +586,19 @@ function StandaloneJobRow({
 
 function ProjectRow({
   project,
-  childJobs,
+  childJobs: initialChildJobs,
+  pagedChildren = false,
+  projectAssignedUserIds,
   clientName,
   isAdminOrManager,
   isExpanded,
   onToggle,
-  clientMap,
+  clientMap: initialClientMap,
   activeJobIds,
   rowFeedback,
   columns,
   memberLookup,
-  jobAssignmentMap,
+  jobAssignmentMap: initialAssignmentMap,
   visibleColumns,
   clients,
   jobs,
@@ -611,6 +613,8 @@ function ProjectRow({
 }: {
   project: ProjectWithDetails;
   childJobs: Job[];
+  pagedChildren?: boolean | undefined;
+  projectAssignedUserIds?: string[] | undefined;
   clientName: string;
   isAdminOrManager: boolean;
   isExpanded: boolean;
@@ -626,20 +630,25 @@ function ProjectRow({
   jobs: Job[];
   members: OrgMemberOption[];
   projects: ProjectWithDetails[];
-  onJobUpdated?: (payload: {
+  onJobUpdated?: ((payload: {
     job: Job;
     selectedEmployeeIds?: string[];
-  }) => void | Promise<void>;
-  onJobDeleted?: (jobId: string) => void | Promise<void>;
-  onJobDeleteRequested?: (jobId: string) => void;
-  onProjectUpdated?: (payload: {
+  }) => void | Promise<void>) | undefined;
+  onJobDeleted?: ((jobId: string) => void | Promise<void>) | undefined;
+  onJobDeleteRequested?: ((jobId: string) => void) | undefined;
+  onProjectUpdated?: ((payload: {
     project: Project;
     selectedJobIds?: string[];
-  }) => void | Promise<void>;
-  onProjectDeleted?: (projectId: string) => void | Promise<void>;
-  onProjectDeleteRequested?: (projectId: string) => void;
+  }) => void | Promise<void>) | undefined;
+  onProjectDeleted?: ((projectId: string) => void | Promise<void>) | undefined;
+  onProjectDeleteRequested?: ((projectId: string) => void) | undefined;
 }) {
   const router = useRouter();
+  const { activeProjectIds } = useActiveJobs();
+  const childPage = useProjectJobPage(project, isExpanded, initialChildJobs, pagedChildren);
+  const childJobs = childPage.jobs;
+  const clientMap = { ...initialClientMap, ...childPage.clientMap };
+  const jobAssignmentMap = { ...initialAssignmentMap, ...childPage.assignmentMap };
   const projectHref = `/auftraege/projekt/${encodeURIComponent(project.projectNumber!)}`;
   const effectiveStatus = project.statusOverride ?? getEffectiveProjectStatusFromCounts(project);
   const progress = project.jobCount > 0
@@ -651,7 +660,8 @@ function ProjectRow({
     project.completedJobCount,
   );
 
-  const allProjectUserIds = [...new Set(childJobs.flatMap((j) => jobAssignmentMap[j.id] ?? []))];
+  // A paged child list is one page, never the project's assignee universe.
+  const allProjectUserIds = projectAssignedUserIds ?? (pagedChildren ? [] : [...new Set(childJobs.flatMap((j) => jobAssignmentMap[j.id] ?? []))]);
 
   return (
     <>
@@ -685,7 +695,7 @@ function ProjectRow({
             <span className="line-clamp-4 break-words whitespace-pre-wrap">
               {getProjectDisplayTitle(project)}
             </span>
-            {childJobs.some((j) => activeJobIds.has(j.id)) && <ActiveWorkIndicator />}
+            {(pagedChildren ? activeProjectIds.has(project.id) : childJobs.some((j) => activeJobIds.has(j.id))) && <ActiveWorkIndicator />}
             <SettlingIndicator active={rowFeedback.settlingIds.has(project.id)} className="mt-0.5" />
           </div>
           </TableCell>
@@ -741,6 +751,7 @@ function ProjectRow({
         )}
       </TableRow>
 
+      {isExpanded && pagedChildren && <TableRow><TableCell colSpan={columns.length}>{childPage.error ? <SectionError onRetry={childPage.retry}>{childPage.error}</SectionError> : <ListPagination label="Projektaufträge" page={childPage.page} total={childPage.total} busy={childPage.busy} onPageChange={childPage.setPage} />}</TableCell></TableRow>}
       {isExpanded &&
         childJobs.map((job) => {
           const childClientName = job.clientId ? clientMap[job.clientId] || '—' : clientName;
@@ -853,23 +864,23 @@ function JobCard({
   job: Job;
   clientName: string;
   isAdminOrManager: boolean;
-  indented?: boolean;
-  projectNumber?: string;
-  isActive?: boolean;
+  indented?: boolean | undefined;
+  projectNumber?: string | undefined;
+  isActive?: boolean | undefined;
   /** A draft the server has not confirmed: dimmed, not navigable, no actions. */
-  isPending?: boolean;
-  isSettling?: boolean;
+  isPending?: boolean | undefined;
+  isSettling?: boolean | undefined;
   memberLookup: Map<string, OrgMemberOption>;
   assignedUserIds: string[];
   clients: Client[];
   members: OrgMemberOption[];
   projects: ProjectWithDetails[];
-  onJobUpdated?: (payload: {
+  onJobUpdated?: ((payload: {
     job: Job;
     selectedEmployeeIds?: string[];
-  }) => void | Promise<void>;
-  onJobDeleted?: (jobId: string) => void | Promise<void>;
-  onJobDeleteRequested?: (jobId: string) => void;
+  }) => void | Promise<void>) | undefined;
+  onJobDeleted?: ((jobId: string) => void | Promise<void>) | undefined;
+  onJobDeleteRequested?: ((jobId: string) => void) | undefined;
 }) {
   const router = useRouter();
   const detailHref = projectNumber
@@ -946,14 +957,16 @@ function JobCard({
 
 function ProjectCard({
   project,
-  childJobs,
+  childJobs: initialChildJobs,
+  pagedChildren = false,
+  projectAssignedUserIds,
   clientName,
   isAdminOrManager,
-  clientMap,
+  clientMap: initialClientMap,
   activeJobIds,
   rowFeedback,
   memberLookup,
-  jobAssignmentMap,
+  jobAssignmentMap: initialAssignmentMap,
   clients,
   jobs,
   members,
@@ -967,6 +980,8 @@ function ProjectCard({
 }: {
   project: ProjectWithDetails;
   childJobs: Job[];
+  pagedChildren?: boolean | undefined;
+  projectAssignedUserIds?: string[] | undefined;
   clientName: string;
   isAdminOrManager: boolean;
   clientMap: Record<string, string>;
@@ -978,21 +993,26 @@ function ProjectCard({
   jobs: Job[];
   members: OrgMemberOption[];
   projects: ProjectWithDetails[];
-  onJobUpdated?: (payload: {
+  onJobUpdated?: ((payload: {
     job: Job;
     selectedEmployeeIds?: string[];
-  }) => void | Promise<void>;
-  onJobDeleted?: (jobId: string) => void | Promise<void>;
-  onJobDeleteRequested?: (jobId: string) => void;
-  onProjectUpdated?: (payload: {
+  }) => void | Promise<void>) | undefined;
+  onJobDeleted?: ((jobId: string) => void | Promise<void>) | undefined;
+  onJobDeleteRequested?: ((jobId: string) => void) | undefined;
+  onProjectUpdated?: ((payload: {
     project: Project;
     selectedJobIds?: string[];
-  }) => void | Promise<void>;
-  onProjectDeleted?: (projectId: string) => void | Promise<void>;
-  onProjectDeleteRequested?: (projectId: string) => void;
+  }) => void | Promise<void>) | undefined;
+  onProjectDeleted?: ((projectId: string) => void | Promise<void>) | undefined;
+  onProjectDeleteRequested?: ((projectId: string) => void) | undefined;
 }) {
   const router = useRouter();
+  const { activeProjectIds } = useActiveJobs();
   const [expanded, setExpanded] = useState(false);
+  const childPage = useProjectJobPage(project, expanded, initialChildJobs, pagedChildren);
+  const childJobs = childPage.jobs;
+  const clientMap = { ...initialClientMap, ...childPage.clientMap };
+  const jobAssignmentMap = { ...initialAssignmentMap, ...childPage.assignmentMap };
   const isPending = rowFeedback.pendingIds.has(project.id);
   const projectHref = `/auftraege/projekt/${encodeURIComponent(project.projectNumber!)}`;
   const effectiveStatus = project.statusOverride ?? getEffectiveProjectStatusFromCounts(project);
@@ -1005,7 +1025,8 @@ function ProjectCard({
     project.completedJobCount,
   );
 
-  const allProjectUserIds = [...new Set(childJobs.flatMap((j) => jobAssignmentMap[j.id] ?? []))];
+  // A paged child list is one page, never the project's assignee universe.
+  const allProjectUserIds = projectAssignedUserIds ?? (pagedChildren ? [] : [...new Set(childJobs.flatMap((j) => jobAssignmentMap[j.id] ?? []))]);
 
   return (
     <div>
@@ -1050,7 +1071,7 @@ function ProjectCard({
                 onClick={(event) => event.stopPropagation()}
               >
                 {getProjectDisplayTitle(project)}
-                {childJobs.some((j) => activeJobIds.has(j.id)) && <ActiveWorkIndicator />}
+                {(pagedChildren ? activeProjectIds.has(project.id) : childJobs.some((j) => activeJobIds.has(j.id))) && <ActiveWorkIndicator />}
               </Link>}
             </MarqueeText>
           </div>
@@ -1098,6 +1119,7 @@ function ProjectCard({
         )}
       </ListRow>
 
+      {expanded && pagedChildren && (childPage.error ? <SectionError onRetry={childPage.retry}>{childPage.error}</SectionError> : <ListPagination label="Projektaufträge" page={childPage.page} total={childPage.total} busy={childPage.busy} onPageChange={childPage.setPage} />)}
       {expanded && childJobs.length > 0 && (
         <div className="mt-1 space-y-1">
           {childJobs.map((job) => (
@@ -1144,7 +1166,7 @@ function SortableHeader({
   currentColumn: SortColumn;
   currentDirection: 'asc' | 'desc';
   onSort: (column: SortColumn) => void;
-  className?: string;
+  className?: string | undefined;
 }) {
   const isActive = currentColumn === column;
   return (
@@ -1165,36 +1187,40 @@ function SortableHeader({
 }
 
 interface UnifiedAuftraegeTableProps {
+  pagedChildren?: boolean | undefined;
+  projectAssignmentMap?: Record<string, string[]> | undefined;
   entries: UnifiedListEntry[];
   clientMap: Record<string, string>;
   isAdminOrManager: boolean;
   sortColumn: SortColumn;
   sortDirection: 'asc' | 'desc';
   onSort: (column: SortColumn) => void;
-  isArchive?: boolean;
-  jobAssignmentMap?: Record<string, string[]>;
-  clients?: Client[];
-  members?: OrgMemberOption[];
-  hideClientColumn?: boolean;
+  isArchive?: boolean | undefined;
+  jobAssignmentMap?: Record<string, string[]> | undefined;
+  clients?: Client[] | undefined;
+  members?: OrgMemberOption[] | undefined;
+  hideClientColumn?: boolean | undefined;
   visibleColumns: AuftraegeColumnId[];
   /** Pending drafts and settling rows from the owner's optimistic overlay. */
-  rowFeedback?: AuftraegeRowFeedback;
-  onJobUpdated?: (payload: {
+  rowFeedback?: AuftraegeRowFeedback | undefined;
+  onJobUpdated?: ((payload: {
     job: Job;
     selectedEmployeeIds?: string[];
-  }) => void | Promise<void>;
-  onJobDeleted?: (jobId: string) => void | Promise<void>;
+  }) => void | Promise<void>) | undefined;
+  onJobDeleted?: ((jobId: string) => void | Promise<void>) | undefined;
   /** Optimistic delete owned by the list; see `JobActionsMenu`. */
-  onJobDeleteRequested?: (jobId: string) => void;
-  onProjectUpdated?: (payload: {
+  onJobDeleteRequested?: ((jobId: string) => void) | undefined;
+  onProjectUpdated?: ((payload: {
     project: Project;
     selectedJobIds?: string[];
-  }) => void | Promise<void>;
-  onProjectDeleted?: (projectId: string) => void | Promise<void>;
-  onProjectDeleteRequested?: (projectId: string) => void;
+  }) => void | Promise<void>) | undefined;
+  onProjectDeleted?: ((projectId: string) => void | Promise<void>) | undefined;
+  onProjectDeleteRequested?: ((projectId: string) => void) | undefined;
 }
 
 export function UnifiedAuftraegeTable({
+  pagedChildren = false,
+  projectAssignmentMap = {},
   entries,
   clientMap,
   isAdminOrManager,
@@ -1304,7 +1330,7 @@ export function UnifiedAuftraegeTable({
             <ProjectCard
               key={`project-${entry.project.id}`}
               project={entry.project}
-              childJobs={entry.childJobs}
+              childJobs={entry.childJobs} pagedChildren={pagedChildren} projectAssignedUserIds={projectAssignmentMap[entry.project.id]}
               clientName={entry.project.clientId ? clientMap[entry.project.clientId] || '—' : '—'}
               isAdminOrManager={isAdminOrManager}
               clientMap={clientMap}
@@ -1382,7 +1408,7 @@ export function UnifiedAuftraegeTable({
                 <ProjectRow
                   key={`project-${entry.project.id}`}
                   project={entry.project}
-                  childJobs={entry.childJobs}
+                  childJobs={entry.childJobs} pagedChildren={pagedChildren} projectAssignedUserIds={projectAssignmentMap[entry.project.id]}
                   clientName={clientName}
                   isAdminOrManager={isAdminOrManager}
                   isExpanded={expandedProjects.has(entry.project.id)}

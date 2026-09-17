@@ -17,8 +17,9 @@ export function loadEnvLocal(): void {
     const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
     if (!match) continue;
 
-    const key = match[1];
-    const value = match[2].replace(/^["']|["']$/g, '');
+    const [, key, rawValue] = match;
+    if (key === undefined || rawValue === undefined) continue;
+    const value = rawValue.replace(/^["']|["']$/g, '');
     if (!(key in process.env)) {
       process.env[key] = value;
     }

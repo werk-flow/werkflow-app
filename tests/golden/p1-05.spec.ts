@@ -38,6 +38,7 @@ function berlinTodayIso(): string {
 
 function shiftIsoDate(dateIso: string, days: number): string {
   const [year, month, day] = dateIso.split('-').map(Number);
+  if (year === undefined || month === undefined || day === undefined) throw new Error(`Invalid ISO date: ${dateIso}`);
   const shifted = new Date(Date.UTC(year, month - 1, day) + days * 86_400_000);
   return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, '0')}-${String(shifted.getUTCDate()).padStart(2, '0')}`;
 }

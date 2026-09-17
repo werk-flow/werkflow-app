@@ -586,7 +586,7 @@ export function MitarbeiterDetailContent({
                       className={cn(
                         'font-medium tabular-nums',
                         todayTargetMinutes > 0 && dailyPercentage >= 100
-                          ? 'text-green-600 dark:text-green-400'
+                          ? 'text-success-text'
                           : 'text-foreground'
                       )}
                     >
@@ -599,7 +599,7 @@ export function MitarbeiterDetailContent({
                     value={dailyPercentage}
                     className="h-2"
                     indicatorClassName={cn(
-                      'bg-green-500',
+                      'bg-success',
                       status?.status === 'working' && 'opacity-80'
                     )}
                   />
@@ -622,14 +622,14 @@ export function MitarbeiterDetailContent({
                 {/* Time breakdown indicators */}
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1.5 text-[11px]">
                   <span className="flex items-center gap-1">
-                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-success" />
                     <span className="text-muted-foreground">Arbeit</span>
                     <span className="font-medium tabular-nums">
                       {formatDuration(memberBreakdown.workMinutes)}
                     </span>
                   </span>
                   <span className="flex items-center gap-1">
-                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-yellow-500" />
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-warning" />
                     <span className="text-muted-foreground">Pause</span>
                     <span className="font-medium tabular-nums">
                       {memberBreakdown.breakMinutes > 0
@@ -638,7 +638,7 @@ export function MitarbeiterDetailContent({
                     </span>
                   </span>
                   <span className="flex items-center gap-1">
-                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-500" />
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-info" />
                     <span className="text-muted-foreground">Überstunden heute</span>
                     <span className="font-medium tabular-nums">
                       {memberBreakdown.overtimeMinutes > 0

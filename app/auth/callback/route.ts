@@ -152,7 +152,7 @@ export async function GET(req: NextRequest) {
         if (redeemError.message?.includes('email_mismatch')) {
           // Extract the invited email from the error message (format: "email_mismatch::email@example.com")
           const emailMatch = redeemError.message.match(/email_mismatch::(.+)/);
-          const invitedEmail = emailMatch ? emailMatch[1] : '';
+          const invitedEmail = emailMatch?.[1] ?? '';
           return NextResponse.redirect(
             `${origin}/invite-error?error=email_mismatch&email=${encodeURIComponent(
               invitedEmail
@@ -266,7 +266,7 @@ export async function GET(req: NextRequest) {
         if (redeemError.message?.includes('email_mismatch')) {
           // Extract the invited email from the error message (format: "email_mismatch::email@example.com")
           const emailMatch = redeemError.message.match(/email_mismatch::(.+)/);
-          const invitedEmail = emailMatch ? emailMatch[1] : '';
+          const invitedEmail = emailMatch?.[1] ?? '';
           return NextResponse.redirect(
             `${origin}/invite-error?error=email_mismatch&email=${encodeURIComponent(
               invitedEmail

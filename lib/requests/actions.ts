@@ -481,7 +481,6 @@ export async function promoteCallerToClient(
       actorId: userId,
     });
 
-    updateTag(CACHE_TAGS.clients(orgId));
     updateTag(CACHE_TAGS.requests(orgId));
     return { success: true, request: toClientRequest(data) };
   } catch (error) {
@@ -905,19 +904,6 @@ export async function getNextRequestNumber(): Promise<
     return { success: true, requestNumber: data as string };
   } catch (error) {
     console.error('Unexpected error in getNextRequestNumber:', error);
-    return { success: false, error: 'unexpected_error' };
-  }
-}
-
-export async function getRequestDetail(
-  requestId: string
-): Promise<ClientRequestResult> {
-  try {
-    const auth = await requireManagerAndRequest(requestId);
-    if (!auth.success) return auth;
-    return { success: true, request: auth.request };
-  } catch (error) {
-    console.error('Unexpected error in getRequestDetail:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }

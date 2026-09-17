@@ -40,7 +40,7 @@ export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisi
   const [file, setFile] = useState<File | null>(null);
   const [documentType, setDocumentType] = useState("Krankheitsnachweis");
   const [error, setError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<{ file?: string; type?: string }>({});
+  const [fieldErrors, setFieldErrors] = useState<{ file?: string | undefined; type?: string | undefined }>({});
   const { run, isPending } = useServerAction(async (task: () => Promise<void>) => task());
   const view = useLiveView<OwnPersonnelActions>({
     tables: [

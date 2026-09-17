@@ -1,5 +1,6 @@
 'use client';
 
+import type { useJobEntityOptions } from '@/hooks/use-job-entity-options';
 import { useMemo } from 'react';
 
 import { SearchableMultiSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
@@ -10,6 +11,7 @@ interface JobMultiSelectProps {
   selectedIds: string[];
   onSelectionChange: (ids: string[]) => void;
   disabled?: boolean;
+  search?: ReturnType<typeof useJobEntityOptions>;
 }
 
 export function JobMultiSelect({
@@ -17,6 +19,7 @@ export function JobMultiSelect({
   selectedIds,
   onSelectionChange,
   disabled = false,
+  search,
 }: JobMultiSelectProps) {
   const options: SearchableSelectOption[] = useMemo(
     () =>
@@ -30,7 +33,8 @@ export function JobMultiSelect({
 
   return (
     <SearchableMultiSelect
-      options={options}
+      {...search}
+      options={search?.options ?? options}
       selectedIds={selectedIds}
       onSelectionChange={onSelectionChange}
       placeholder="Aufträge zuweisen"

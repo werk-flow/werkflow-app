@@ -18,9 +18,9 @@ export type WorkDependency =
   Database["public"]["Tables"]["work_dependencies"]["Row"] & {
     is_satisfied: boolean;
   };
-export type WorkExecutionEvent =
+type WorkExecutionEvent =
   Database["public"]["Tables"]["work_execution_events"]["Row"];
-export type WorkArtifactFact = {
+type WorkArtifactFact = {
   artifactId: string;
   version: number;
   revisionId: string;
@@ -75,7 +75,7 @@ export const WORK_DECLARED_DEPENDENCY_KINDS = [
   "external_trade",
 ] as const satisfies readonly WorkDeclaredDependencyKind[];
 
-export type WorkGateSnapshot = {
+type WorkGateSnapshot = {
   incompleteRequiredInstructions: number;
   reopenedInstructionPredecessors: number;
   incompleteInstructionEvidence: number;

@@ -1,5 +1,6 @@
 'use client';
 
+import { formatGermanDateTime as formatDateTime } from '@/lib/utils';
 import { useState } from 'react';
 import { usePendingTask } from '@/hooks/use-server-action';
 import Link from 'next/link';
@@ -88,16 +89,6 @@ const EVENT_LABELS: Record<string, string> = {
   closed: 'Geschlossen',
   reopened: 'Wieder geöffnet',
 };
-
-function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat('de-DE', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(value));
-}
 
 export function RequestDetailContent({ data }: { data: RequestDetailData }) {
   const router = useRouter();
@@ -305,7 +296,7 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
         <div className="space-y-4">
           {data.convertedLink && (
             <div className="flex items-center gap-2 rounded-lg border bg-card p-4">
-              <CircleCheck className="size-5 shrink-0 text-green-600 dark:text-green-400" />
+              <CircleCheck className="size-5 shrink-0 text-success-text" />
               <p className="text-sm">
                 Diese Anfrage wurde umgewandelt:{' '}
                 {data.convertedLink.href ? (

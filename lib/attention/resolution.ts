@@ -153,7 +153,7 @@ export function isNotificationUnread(
 }
 
 /** Notifications older than this window are no longer surfaced. */
-export const NOTIFICATION_WINDOW_DAYS = 60;
+const NOTIFICATION_WINDOW_DAYS = 60;
 
 /**
  * Inclusive lower bound of the notification window as an ISO timestamp. UTC

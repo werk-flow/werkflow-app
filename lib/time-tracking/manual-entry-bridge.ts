@@ -9,7 +9,7 @@ function canUseBrowserStorage() {
   return typeof window !== 'undefined' && typeof window.sessionStorage !== 'undefined';
 }
 
-export function queueManualEntryBridge(entries: TimeEntry[]) {
+export function queueManualEntryBridge(entries: TimeEntry[]): void {
   if (!canUseBrowserStorage() || entries.length === 0) {
     return;
   }

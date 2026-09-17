@@ -40,19 +40,19 @@ export type ResponsibilityDelegation = {
   revokedFrom: string | null;
 };
 
-export type RoleDefaultResponsibilitySource = {
+type RoleDefaultResponsibilitySource = {
   kind: 'role_default';
   configurationId: string | null;
   role: Extract<OrgRole, 'admin' | 'buero'>;
 };
 
-export type DirectResponsibilitySource = {
+type DirectResponsibilitySource = {
   kind: 'direct_assignment';
   configurationId: string;
   assignmentId: string;
 };
 
-export type DelegatedResponsibilitySource = {
+type DelegatedResponsibilitySource = {
   kind: 'delegation';
   configurationId: string | null;
   delegationId: string;
@@ -64,7 +64,7 @@ export type DelegatedResponsibilitySource = {
     | DirectResponsibilitySource;
 };
 
-export type EffectiveResponsibilitySource =
+type EffectiveResponsibilitySource =
   | RoleDefaultResponsibilitySource
   | DirectResponsibilitySource
   | DelegatedResponsibilitySource;

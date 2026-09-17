@@ -46,7 +46,7 @@ import {
   type RequestUrgency,
 } from '@/lib/requests/types';
 
-const ERROR_MESSAGES: Record<string, string> = {
+const ERROR_MESSAGES = {
   not_authorized: 'Du bist nicht berechtigt, Anfragen zu bearbeiten.',
   request_not_found: 'Die Anfrage wurde nicht gefunden.',
   request_not_editable:
@@ -57,7 +57,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   update_failed: 'Die Änderungen konnten nicht gespeichert werden.',
   no_changes: 'Es gibt keine Änderungen zu speichern.',
   unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.',
-};
+} satisfies Record<string, string>;
+const ERROR_MESSAGE_BY_CODE: Record<string, string> = ERROR_MESSAGES;
 
 interface EditRequestDialogProps {
   request: ClientRequest;
@@ -111,7 +112,7 @@ export function EditRequestDialog({
     setReceivedAt(formatBerlinDateTimeInput(request.receivedAt));
     setAssignedTo(request.assignedTo ?? '');
     setError(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset the form only when the dialog opens or shows another request, not on every request field change
   }, [open, request.id]);
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -145,12 +146,12 @@ export function EditRequestDialog({
         category,
         urgency,
         source,
-        receivedAt: receivedAtDate?.toISOString(),
+        ...(receivedAtDate ? { receivedAt: receivedAtDate.toISOString() } : {}),
         assignedTo,
       });
 
       if (!result.success && result.error !== 'no_changes') {
-        setError(ERROR_MESSAGES[result.error] || 'Unbekannter Fehler');
+        setError(ERROR_MESSAGE_BY_CODE[result.error] || 'Unbekannter Fehler');
         return;
       }
 

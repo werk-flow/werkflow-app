@@ -16,12 +16,12 @@ import { useBanner } from '@/components/ui/banner';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import {
-  getTimeCorrectionRequests,
   resubmitTimeCorrection,
   reviewTimeCorrection,
   reviewTimeCorrectionsBatch,
   withdrawTimeCorrection,
 } from '@/lib/time-corrections/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
 import {
   TIME_CORRECTION_KIND_LABELS,
   TIME_CORRECTION_STATUS_LABELS,
@@ -47,20 +47,21 @@ function summarizeSnapshot(request: TimeCorrectionRequest, state: 'before' | 'pr
   const facts = state === 'before'
     ? request.revision.beforeSnapshot.facts
     : request.revision.proposedSnapshot.facts;
-  if (facts.length === 0) return state === 'before' ? 'Kein Eintrag' : 'Eintrag entfällt';
-  const timestamps = facts.map((fact) => formatDateTime(fact.timestamp));
-  return timestamps.length === 1
-    ? timestamps[0]
-    : `${timestamps[0]} bis ${timestamps[timestamps.length - 1]}`;
+  const [firstTimestamp, ...laterTimestamps] = facts.map((fact) => formatDateTime(fact.timestamp));
+  if (firstTimestamp === undefined) return state === 'before' ? 'Kein Eintrag' : 'Eintrag entfällt';
+  const lastTimestamp = laterTimestamps.at(-1);
+  return lastTimestamp === undefined
+    ? firstTimestamp
+    : `${firstTimestamp} bis ${lastTimestamp}`;
 }
 
 function statusClass(status: TimeCorrectionRequest['status']): string {
-  if (status === 'approved') return 'bg-green-500/15 text-green-700 dark:text-green-300';
+  if (status === 'approved') return 'bg-success-soft text-success-soft-foreground';
   if (status === 'rejected' || status === 'application_failed') {
     return 'bg-destructive/10 text-destructive';
   }
   if (status === 'clarification_required') {
-    return 'bg-yellow-500/15 text-yellow-800 dark:text-yellow-300';
+    return 'bg-warning-soft text-warning-soft-foreground';
   }
   return 'bg-muted text-muted-foreground';
 }
@@ -77,8 +78,8 @@ export function TimeCorrectionRequests({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const view = useLiveView<TimeCorrectionRequest[]>({
     tables: ['time_correction_requests'],
-    read: async (): Promise<LiveViewResult<TimeCorrectionRequest[]>> => {
-      const result = await getTimeCorrectionRequests(organizationId);
+    read: async ({ signal }): Promise<LiveViewResult<TimeCorrectionRequest[]>> => {
+      const result = await readInBackground('time-correction-requests', { organizationId }, signal);
       return result.success
         ? { ok: true, data: result.requests }
         : { ok: false, error: 'Die Zeitkorrekturen konnten nicht geladen werden.' };
@@ -286,7 +287,7 @@ export function TimeCorrectionRequests({
                     <p className="text-xs font-medium text-muted-foreground">Bisher wirksam</p>
                     <p className="mt-1">{summarizeSnapshot(request, 'before')}</p>
                   </div>
-                  <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 p-3">
+                  <div className="rounded-md border border-warning/30 bg-warning-soft p-3">
                     <p className="text-xs font-medium text-muted-foreground">Vorgeschlagen</p>
                     <p className="mt-1">{summarizeSnapshot(request, 'proposed')}</p>
                   </div>
@@ -295,7 +296,7 @@ export function TimeCorrectionRequests({
                   <span className="font-medium">Begründung:</span> {request.revision.reason}
                 </div>
                 {request.decisionComment ? (
-                  <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm">
+                  <div className="rounded-md border border-warning/30 bg-warning-soft p-3 text-sm">
                     <span className="font-medium">Rückmeldung:</span> {request.decisionComment}
                   </div>
                 ) : null}

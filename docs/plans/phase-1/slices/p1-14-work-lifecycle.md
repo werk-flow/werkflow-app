@@ -22,9 +22,9 @@ Implemented and accepted 2026-08-23 from baseline `6152730`; plan and decisions:
 
 ## Links
 
-- Gate runs: [golden-gate-log.md](../../golden-gate-log.md)
+- Gate runs: [golden-gate-log.md](../audits/golden-gate-log.md)
 - Progress log: [../log.md](../log.md)
-- Audit ledger rows: [wave-2-audit.md](../../wave-2-audit.md)
+- Audit ledger rows: [wave-2-audit.md](../audits/wave-2-audit.md)
 
 ## Implementation plan (merged 2026-09-03 from the former separate plan file)
 

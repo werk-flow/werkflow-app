@@ -7,14 +7,14 @@
 @source '../proxy.ts';
 
 :root {
-  --background: #fefcfa;
+  --background: #fafafb;
   --foreground: #1a1523;
   --card: #ffffff;
   --card-foreground: #1a1523;
   --popover: #ffffff;
   --popover-foreground: #1a1523;
   --muted: #f4f3f6;
-  --muted-foreground: #6b6572;
+  --muted-foreground: #5f5967;
   --accent: #f1eff5;
   --accent-foreground: #37304a;
   --destructive: #b91c1c;
@@ -45,6 +45,39 @@
   --brand-purple-light: #948ab3;
   --brand-purple-dark: #544a78;
   --brand-purple-deep: #3e3659;
+
+  /* Semantic status colors (werkflow-design: green success, yellow warning,
+     blue info, red destructive; never brand colors). Each family has a fill
+     with its readable text (`success` + `success-foreground`), a text color
+     for neutral surfaces (`success-text`), and a tinted surface with its text
+     (`success-soft` + `success-soft-foreground`). Components use these
+     tokens; raw palette classes such as bg-green-100 are a lint error
+     (pre-Wave-3 step 2, 2026-09-15). */
+  --success: #15803d;
+  --success-foreground: #ffffff;
+  --success-text: #166534;
+  --success-soft: #dcfce7;
+  --success-soft-foreground: #166534;
+  --warning: #eab308;
+  --warning-foreground: #422006;
+  --warning-text: #854d0e;
+  --warning-soft: #fef9c3;
+  --warning-soft-foreground: #854d0e;
+  --info: #2563eb;
+  --info-foreground: #ffffff;
+  --info-text: #1d4ed8;
+  --info-soft: #dbeafe;
+  --info-soft-foreground: #1e40af;
+  --destructive-soft: #fee2e2;
+  --destructive-soft-foreground: #991b1b;
+  /* The document viewer's stage is black in both themes; its error text
+     needs a light red that no theme-flipping token provides. */
+  --viewer-error: #fca5a5;
+
+  /* The time-progress ring reads the same families. */
+  --status-work: var(--success-text);
+  --status-break: var(--warning-text);
+  --status-overtime: var(--info-text);
 }
 
 @theme inline {
@@ -66,6 +99,24 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-destructive-hover: var(--destructive-hover);
   --color-destructive-active: var(--destructive-active);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-destructive-soft-foreground: var(--destructive-soft-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-text: var(--success-text);
+  --color-success-soft: var(--success-soft);
+  --color-success-soft-foreground: var(--success-soft-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-text: var(--warning-text);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-soft-foreground: var(--warning-soft-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-info-text: var(--info-text);
+  --color-info-soft: var(--info-soft);
+  --color-info-soft-foreground: var(--info-soft-foreground);
+  --color-viewer-error: var(--viewer-error);
   --color-primary-text: var(--primary-text);
   --color-primary-text-hover: var(--primary-text-hover);
   --color-primary-text-active: var(--primary-text-active);
@@ -98,7 +149,7 @@
     --popover: #13121a;
     --popover-foreground: #ddd9e4;
     --muted: #1a1920;
-    --muted-foreground: #9c96a8;
+    --muted-foreground: #a7a1b3;
     --accent: #252230;
     --accent-foreground: #d9d6e2;
     --destructive: #f87171;
@@ -117,16 +168,37 @@
     --ring: #ff8c1a;
     --selection: #3b3648;
     --selection-foreground: #ece9f0;
+    --success: #4ade80;
+    --success-foreground: #052e16;
+    --success-text: #4ade80;
+    --success-soft: #052e16;
+    --success-soft-foreground: #86efac;
+    --warning: #facc15;
+    --warning-foreground: #422006;
+    --warning-text: #facc15;
+    --warning-soft: #422006;
+    --warning-soft-foreground: #fde047;
+    --info: #60a5fa;
+    --info-foreground: #172554;
+    --info-text: #60a5fa;
+    --info-soft: #172554;
+    --info-soft-foreground: #93c5fd;
+    --destructive-soft: #450a0a;
+    --destructive-soft-foreground: #fca5a5;
   }
 }
 
-* {
-  border-color: var(--color-border);
-}
-
-/* Sleeker default icon strokes for Lucide icons app-wide.
-   Lives in the base layer so Tailwind utilities (e.g. [stroke-width:3]) still win. */
+/* Default border color and sleeker Lucide strokes app-wide. Both live in the
+   base layer so Tailwind utilities still win: an unlayered `*` rule beats every
+   layered utility, which silently disabled `border-primary`, `border-destructive`
+   and every other border color until 2026-09-15 (pre-Wave-3 step 3). */
 @layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-border);
+  }
+
   svg.lucide {
     stroke-width: 1.75;
   }

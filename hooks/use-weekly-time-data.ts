@@ -1,8 +1,7 @@
 'use client';
 
 import { useRef } from 'react';
-import { getTimeEntries } from '@/lib/time-tracking/actions';
-import { getWeeklyTargets } from '@/lib/personnel/target-actions';
+import { readInBackground } from '@/lib/data/background-read-client';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import type {
   WeeklyTimeDataPoint,
@@ -39,7 +38,7 @@ interface UseWeeklyTimeDataOptions {
   initialWeekData?: WeeklyTimeDataPoint[];
   initialTodayIndex?: number;
   initialWeekLabel?: WeeklyTimeLabel;
-  initialWeekTargets?: DailyTarget[];
+  initialWeekTargets?: DailyTarget[] | undefined;
 }
 
 export function useWeeklyTimeData({
@@ -73,7 +72,7 @@ export function useWeeklyTimeData({
       'organization_closure_days',
       'organization_settings',
     ],
-    read: async (): Promise<LiveViewResult<WeekSnapshot>> => {
+    read: async ({ signal }): Promise<LiveViewResult<WeekSnapshot>> => {
       // Recompute week bounds fresh on every read so we never use stale dates
       const { monday, sunday } = getWeekBounds();
 
@@ -90,13 +89,13 @@ export function useWeeklyTimeData({
       }
 
       const [result, targetsResult] = await Promise.all([
-        getTimeEntries({
+        readInBackground('time-entries', {
           organizationId,
           from: monday.toISOString(),
           to: sunday.toISOString(),
           userId,
-        }),
-        getWeeklyTargets({ userId }),
+        }, signal),
+        readInBackground('weekly-targets', { userId }, signal),
       ]);
 
       if (!result.success) {

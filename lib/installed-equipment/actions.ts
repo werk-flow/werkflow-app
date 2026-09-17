@@ -111,7 +111,6 @@ async function requireEquipmentManager(): Promise<ManagerContext | Failure> {
 }
 
 function revalidateEquipment(organizationId: string): void {
-  updateTag(CACHE_TAGS.clients(organizationId));
   updateTag(CACHE_TAGS.jobs(organizationId));
   updateTag(CACHE_TAGS.projects(organizationId));
   updateTag(CACHE_TAGS.documents(organizationId));

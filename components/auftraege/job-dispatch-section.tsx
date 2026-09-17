@@ -35,8 +35,8 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   acknowledgeDispatch,
   challengeDispatch,
-  getJobDispatchCards,
 } from '@/lib/dispatch/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
 import {
   DISPATCH_RECIPIENT_STATE_LABELS,
   dispatchErrorMessage,
@@ -83,7 +83,7 @@ export function JobDispatchSection({
   onStateChange,
 }: {
   jobId: string;
-  initialCards?: EmployeeDispatchCard[];
+  initialCards?: EmployeeDispatchCard[] | undefined;
   initialError?: string | null;
   readOnly?: boolean;
   onStateChange?: (state: FieldDispatchState) => void;
@@ -107,8 +107,8 @@ export function JobDispatchSection({
       'planning_dispatch_recipients',
       'planning_dispatch_acknowledgements',
     ],
-    read: async (): Promise<LiveViewResult<EmployeeDispatchCard[]>> => {
-      const result = await getJobDispatchCards(jobId);
+    read: async ({ signal }): Promise<LiveViewResult<EmployeeDispatchCard[]>> => {
+      const result = await readInBackground('job-dispatch-cards', { jobId }, signal);
       return result.success
         ? { ok: true, data: result.cards }
         : { ok: false, error: dispatchErrorMessage(result.error) };

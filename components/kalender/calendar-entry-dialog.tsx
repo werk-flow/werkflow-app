@@ -13,82 +13,27 @@ import { ErrorText } from '@/components/ui/error-text';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { CreateJobFormContent } from '@/components/auftraege/create-job-form-content';
 import { ManualEntryFormContent } from '@/components/manual-entry-form-content';
-import { getCalendarEntryDialogOptions } from '@/lib/jobs/actions';
+import { getOrgMembersAction } from '@/lib/members/actions';
 import { useOrganization } from '@/components/organization/organization-context';
 import { useLiveView } from '@/hooks/use-live-view';
 import type {
-  CalendarEntryDialogJobOption,
   CalendarEntryDialogMember,
-  Client,
-  ProjectWithDetails,
 } from '@/lib/jobs/types';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import type { CalendarEntryDraft } from './calendar-entry-draft';
 import { PlanningEntryForm } from './planning-entry-form';
 
-type CalendarEntryDialogData = {
-  clients: Client[];
-  projects: ProjectWithDetails[];
-  members: CalendarEntryDialogMember[];
-  manualEntryJobs: CalendarEntryDialogJobOption[];
-};
-
-const dialogDataCache = new Map<string, CalendarEntryDialogData>();
-const dialogDataPromiseCache = new Map<
-  string,
-  Promise<CalendarEntryDialogData | null>
->();
-
-async function loadCalendarEntryDialogData(
-  organizationId: string
-): Promise<CalendarEntryDialogData | null> {
-  const cached = dialogDataCache.get(organizationId);
-  if (cached) {
-    return cached;
-  }
-
-  const pending = dialogDataPromiseCache.get(organizationId);
-  if (pending) {
-    return pending;
-  }
-
-  const promise = getCalendarEntryDialogOptions()
-    .then((result) => {
-      if (!result.success) {
-        return null;
-      }
-
-      const data: CalendarEntryDialogData = {
-        clients: result.clients,
-        projects: result.projects,
-        members: result.members,
-        manualEntryJobs: result.manualEntryJobs,
-      };
-      dialogDataCache.set(organizationId, data);
-      return data;
-    })
-    // A failed load resolves to null; the dialog renders that as an
-    // ErrorText, so nothing is logged here.
-    .catch(() => null)
-    .finally(() => {
-      dialogDataPromiseCache.delete(organizationId);
-    });
-
-  dialogDataPromiseCache.set(organizationId, promise);
-  return promise;
-}
-
 interface CalendarEntryDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  preselectedDate?: Date;
-  preselectedUserId?: string;
-  preselectedClockInTime?: string;
-  preselectedClockOutTime?: string;
+  preselectedDate?: Date | undefined;
+  preselectedUserId?: string | undefined;
+  preselectedClockInTime?: string | undefined;
+  preselectedClockOutTime?: string | undefined;
   lockEntryMode?: boolean;
-  onManualEntrySuccess?: (entries: TimeEntry[]) => void | Promise<void>;
-  onJobSuccess?: () => void | Promise<void>;
+  onManualEntrySuccess?: ((entries: TimeEntry[]) => void | Promise<void>) | undefined;
+  onJobSuccess?: (() => void | Promise<void>) | undefined;
   onDraftChange?: (draft: CalendarEntryDraft | null) => void;
 }
 
@@ -105,35 +50,27 @@ export function CalendarEntryDialog({
   onDraftChange,
 }: CalendarEntryDialogProps) {
   const { activeOrg, activeOrgId } = useOrganization();
-  const activeOrgIdRef = useRef(activeOrgId);
   const [activeTab, setActiveTab] = useState<string>('job');
   const activeTabRef = useRef(activeTab);
   const jobDraftRef = useRef<CalendarEntryDraft | null>(null);
   const manualDraftRef = useRef<CalendarEntryDraft | null>(null);
-  const [loadedDialogData, setLoadedDialogData] = useState<{
-    organizationId: string;
-    data: CalendarEntryDialogData | null;
-  } | null>(null);
-  const [loadingDialogOrgId, setLoadingDialogOrgId] = useState<string | null>(
-    activeOrgId && dialogDataPromiseCache.has(activeOrgId) ? activeOrgId : null
-  );
-  const isAdminOrManager =
-    activeOrg?.role === 'admin' || activeOrg?.role === 'buero';
-  const isLoadingData = activeOrgId
-    ? loadingDialogOrgId === activeOrgId
-    : false;
-  // The reference data resolved to null for the active organization: the
-  // forms would silently offer empty lists, so the failure is named instead.
-  const hasDataLoadFailed =
-    isAdminOrManager &&
-    !isLoadingData &&
-    activeOrgId !== null &&
-    loadedDialogData?.organizationId === activeOrgId &&
-    loadedDialogData.data === null;
-
-  useEffect(() => {
-    activeOrgIdRef.current = activeOrgId;
-  }, [activeOrgId]);
+  const isAdminOrManager = activeOrg?.role === 'admin' || activeOrg?.role === 'buero';
+  const memberView = useLiveView<CalendarEntryDialogMember[]>({
+    tables: ['organization_members', 'profiles'],
+    enabled: open && isAdminOrManager && Boolean(activeOrgId),
+    resetKey: `${activeOrgId}:${activeOrg?.role}`,
+    read: async () => {
+      if (!activeOrgId) return { ok: false, error: 'member_read_failed' };
+      const result = await getOrgMembersAction(activeOrgId).catch(() => ({ success: false as const }));
+      if (!result.success) return { ok: false, error: 'member_read_failed' };
+      return { ok: true, data: result.members.map((member) => ({
+        userId: member.user_id, firstName: member.first_name ?? '', lastName: member.last_name ?? '',
+        email: member.email, role: member.role,
+      })) };
+    },
+  });
+  const isLoadingData = memberView.isLoading;
+  const hasDataLoadFailed = Boolean(memberView.error);
 
   useEffect(() => {
     if (open) return;
@@ -176,27 +113,11 @@ export function CalendarEntryDialog({
     [onDraftChange]
   );
 
-  const dialogData = useMemo(() => {
-    if (!activeOrgId) {
-      return null;
-    }
-
-    const cached = dialogDataCache.get(activeOrgId);
-    if (cached) {
-      return cached;
-    }
-
-    if (loadedDialogData?.organizationId === activeOrgId) {
-      return loadedDialogData.data;
-    }
-
-    return null;
-  }, [activeOrgId, loadedDialogData]);
-
   const defaultDurationHours = useMemo(() => {
     if (!preselectedClockInTime || !preselectedClockOutTime) return undefined;
     const [inH, inM] = preselectedClockInTime.split(':').map(Number);
     const [outH, outM] = preselectedClockOutTime.split(':').map(Number);
+    if (inH === undefined || inM === undefined || outH === undefined || outM === undefined) return undefined;
     const totalMin = (outH * 60 + outM) - (inH * 60 + inM);
     if (totalMin <= 0) return undefined;
     return String(totalMin / 60);
@@ -204,101 +125,22 @@ export function CalendarEntryDialog({
 
   const jobMembers = useMemo<OrgMemberOption[]>(
     () =>
-      (dialogData?.members ?? []).map((member) => ({
+      (memberView.data ?? []).map((member) => ({
         userId: member.userId,
         firstName: member.firstName,
         lastName: member.lastName,
         role: member.role,
       })),
-    [dialogData]
+    [memberView.data]
   );
-
-  const hydrateDialogData = useCallback(
-    async (organizationId: string) => {
-      const hasCachedData = dialogDataCache.has(organizationId);
-      if (activeOrgIdRef.current === organizationId) {
-        setLoadingDialogOrgId(hasCachedData ? null : organizationId);
-      }
-
-      const data = await loadCalendarEntryDialogData(organizationId);
-      if (activeOrgIdRef.current !== organizationId) {
-        return data;
-      }
-
-      setLoadedDialogData({ organizationId, data });
-      setLoadingDialogOrgId((currentOrgId) =>
-        currentOrgId === organizationId ? null : currentOrgId
-      );
-      return data;
-    },
-    []
-  );
-
-  const invalidateDialogData = useCallback(() => {
-    if (!activeOrgId || !isAdminOrManager) return;
-
-    dialogDataCache.delete(activeOrgId);
-    dialogDataPromiseCache.delete(activeOrgId);
-
-    if (open) {
-      void hydrateDialogData(activeOrgId);
-    }
-  }, [activeOrgId, hydrateDialogData, isAdminOrManager, open]);
-
-  // Signal-only view: an event drops the cached dialog options so the next
-  // open (or the queued catch-up after this one closes) hydrates fresh.
-  useLiveView<null>({
-    tables: [
-      'jobs',
-      'projects',
-      'clients',
-      'job_assignments',
-      'organization_members',
-      'profiles',
-    ],
-    read: async () => {
-      invalidateDialogData();
-      return { ok: true, data: null };
-    },
-    initialData: null,
-    enabled: isAdminOrManager && Boolean(activeOrgId),
-  });
-
-  useEffect(() => {
-    if (!activeOrgId || !isAdminOrManager) {
-      return;
-    }
-
-    if (dialogDataCache.has(activeOrgId)) {
-      return;
-    }
-
-    const hydrateTimer = window.setTimeout(() => {
-      void hydrateDialogData(activeOrgId);
-    }, 0);
-
-    return () => window.clearTimeout(hydrateTimer);
-  }, [activeOrgId, hydrateDialogData, isAdminOrManager]);
 
   useEffect(() => {
     if (!open || !activeOrgId) return;
     const initialTab = lockEntryMode || !isAdminOrManager ? 'entry' : 'planning';
     activeTabRef.current = initialTab;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- reopening the dialog should always start on the role-appropriate creation tab
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reopening resets the user's previous tab to the role-appropriate creation tab
     setActiveTab(initialTab);
-
-    if (!isAdminOrManager) return;
-
-    if (dialogDataCache.has(activeOrgId)) {
-      return;
-    }
-
-    const hydrateTimer = window.setTimeout(() => {
-      void hydrateDialogData(activeOrgId);
-    }, 0);
-
-    return () => window.clearTimeout(hydrateTimer);
-  }, [activeOrgId, hydrateDialogData, isAdminOrManager, lockEntryMode, open]);
+  }, [activeOrgId, isAdminOrManager, lockEntryMode, open]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -346,24 +188,24 @@ export function CalendarEntryDialog({
             </TabsContent>
           )}
 
-          {isLoadingData && !dialogData && (
+          {isLoadingData && (
             <div className="rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
               Referenzdaten werden geladen. Die vorausgefüllten Felder kannst du
               schon direkt anpassen.
             </div>
           )}
-          {hasDataLoadFailed && !dialogData && (
+          {hasDataLoadFailed && (
             <ErrorText>
-              Kunden, Aufträge und Mitarbeiter konnten nicht geladen werden.
+              Die Mitarbeiter konnten nicht geladen werden.
               Bitte schließe den Dialog und öffne ihn erneut.
             </ErrorText>
           )}
 
           <TabsContent value="job" className="flex min-h-0 flex-1 flex-col">
             <CreateJobFormContent
-              clients={dialogData?.clients ?? []}
+              clients={[]}
               members={jobMembers}
-              projects={dialogData?.projects ?? []}
+              projects={[]}
               defaultDate={preselectedDate}
               defaultTime={preselectedClockInTime}
               defaultDurationHours={defaultDurationHours}
@@ -383,8 +225,7 @@ export function CalendarEntryDialog({
               preselectedUserId={preselectedUserId}
               preselectedClockInTime={preselectedClockInTime}
               preselectedClockOutTime={preselectedClockOutTime}
-              prefetchedMembers={dialogData?.members}
-              prefetchedJobs={dialogData?.manualEntryJobs}
+              prefetchedMembers={memberView.data}
               lockEntryMode={lockEntryMode}
               isActive={activeTab === 'entry'}
               onDraftChange={handleManualDraftChange}

@@ -1,6 +1,6 @@
 # Commercial And Finance
 
-Status: living — last reviewed 2026-09-05
+Status: living — last reviewed 2026-09-17
 
 Commercial and finance capabilities connect WerkFlow's operational record of customers, jobs, projects, time, documents, and material with calculation, offers, orders, billing, incoming costs, payments, and post-calculation.
 
@@ -33,7 +33,7 @@ As of 2026-09-02, WerkFlow has no structured commercial or finance module. Admin
 - **Measurements and change work.** Versioned operational Aufmaß and Regie-/Änderungsnachweise carry internal decisions and customer-response evidence but no prices, commercial scope acceptance, billing release, or invoice effect ([P1-15](../plans/phase-1/slices/p1-15-structured-site-evidence.md)).
 - **Handover readiness.** An immutable handover release records `ready_for_commercial_review` or `ready_with_exceptions`. This means only that the office-reviewed evidence package is ready for a later commercial process; it creates no calculation, price or tax decision, billable quantity, offer, contract, invoice, payment, posting, or message ([P1-17](../plans/phase-1/slices/p1-17-office-handover.md)).
 
-### Important current limitations
+### Important Current Limitations
 
 - There is no structured product or service price catalog, calculation engine, offer, order confirmation, commercial contract or change order, billable measurement, invoice, credit, incoming bill, payment, open item, dunning, bank matching, accounting export, or native ledger workflow.
 - WerkFlow does not claim XRechnung, ZUGFeRD, Peppol, DATEV, GAEB, REB/VOB, §13b, GoBD archive, double-entry accounting, payroll, or tax-filing capability.
@@ -457,6 +457,10 @@ Native double-entry accounting, payroll, and tax filing each require a separate 
 No legal, tax, accounting, security, or standards-compliance claim should ship without current expert review and test evidence.
 
 ## Open Product Decisions
+
+Decided by the owner on 2026-09-17 (reasoning and research in [pre-Wave-3 step 4](../plans/phase-1/pre-wave-3/04-wave-3-4-and-phase-2-planning.md#wave-4-slice-by-slice-against-the-market)): offers, invoices and contracts are structured positions rendered to a PDF from a template with logo, automatic letterhead or uploaded Briefpapier and text blocks, created manually in that editor in Phase 1 and drafted into the same editor by AI in Phase 2, with no document editor and no PDF editing; the PDF/A-3 engine is a Gotenberg container on Railway from `P1-36` on, with the KoSIT and Mustang validators beside it in `P1-40` and a stored validator report before any invoice reaches "Versendet"; e-invoice generation is TypeScript (`@e-invoice-eu/core` under licence review); `P1-39` keeps issued files on R2 under immutable keys with an "Archivierung ausstehend" state that `P1-45` clears; `P1-43` exports the DATEV-Format `EXTF` file first and treats the DATEV Datenservice as a `P1-50` connector; `P1-42` starts with camt.053, MT940 and CSV import, treats a live bank connection as a decision gate, and never builds a wallet.
+
+The tax and legal questions below that need qualified review are collected as the [expert-review agenda](../plans/phase-1/pre-wave-3/04-wave-3-4-and-phase-2-planning.md#expert-review-agenda-for-wave-4-answer-to-q4) (E1 to E18); Willert Haustechnik's in-house experts and their `Steuerberater` answer them before `P1-39` starts, and each answer replaces its question here.
 
 - Which customer segment and job types should define the first complete commercial acceptance scenarios: service call, fixed-price installation, larger project, maintenance, or emergency work?
 - Which catalog positions and calculation methods do real SHK offices use most often?

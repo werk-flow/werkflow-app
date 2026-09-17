@@ -3,7 +3,7 @@ import { getSupabasePublishableKey, getSupabaseUrl } from '@/lib/env/public';
 
 let browserClient: ReturnType<typeof createBrowserClient> | null = null;
 
-export function createSupabaseBrowserClient() {
+export function createSupabaseBrowserClient(): ReturnType<typeof createBrowserClient> {
   if (!browserClient) {
     browserClient = createBrowserClient(getSupabaseUrl(), getSupabasePublishableKey(), {
       realtime: {

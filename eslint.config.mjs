@@ -1,6 +1,7 @@
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
+import eslintComments from "@eslint-community/eslint-plugin-eslint-comments/configs";
 import { playwrightSpecRules } from "./eslint-rules/playwright-spec-rules.mjs";
 import { uiRules } from "./eslint-rules/ui-rules.mjs";
 
@@ -273,6 +274,41 @@ const hoverSelectors = [
   },
 ];
 
+// Focus rings are 2px without offsets (werkflow-design: shape, depth, and
+// focus); seven ring-offset-1 sites in the calendar day view and the hours
+// chart were cleaned on 2026-09-14 (pre-Wave-3 step 2). JSX product files
+// only: the two shadcn close buttons under components/ui keep theirs.
+const focusRingSelectors = [
+  {
+    selector: 'Literal[value=/ring-offset-/]',
+    message:
+      "Focus rings are 2px without offsets (werkflow-design skill: shape, depth, and focus). Drop the ring-offset class.",
+  },
+  {
+    selector: 'TemplateElement[value.raw=/ring-offset-/]',
+    message:
+      "Focus rings are 2px without offsets (werkflow-design skill: shape, depth, and focus). Drop the ring-offset class.",
+  },
+];
+
+// Status and neutral colors come from the semantic tokens in app/globals.css
+// (success, warning, info, destructive, muted); 628 numbered palette classes in
+// 49 files were converted on 2026-09-15 (pre-Wave-3 step 2). JSX product files
+// only; the shadcn primitives under components/ui keep their own palette.
+const PALETTE_CLASS = String.raw`\b(bg|text|border|ring|fill|stroke|from|to|via|divide|outline|decoration|placeholder|shadow)-(red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone)-[0-9]`;
+const paletteSelectors = [
+  {
+    selector: `Literal[value=/${PALETTE_CLASS}/]`,
+    message:
+      "Numbered palette classes are banned in product JSX: use the semantic tokens in app/globals.css (bg-success-soft, text-warning-text, text-destructive, bg-muted, ...) per the werkflow-design skill's Color section.",
+  },
+  {
+    selector: `TemplateElement[value.raw=/${PALETTE_CLASS}/]`,
+    message:
+      "Numbered palette classes are banned in product JSX: use the semantic tokens in app/globals.css (bg-success-soft, text-warning-text, text-destructive, bg-muted, ...) per the werkflow-design skill's Color section.",
+  },
+];
+
 const stylingSelectors = [
   {
     selector: 'Literal[value=/h-screen/]',
@@ -317,6 +353,16 @@ const stylingSelectors = [
 // the incident log. The full Playwright API stays available to the shared
 // support modules (tests/golden/support/**), which own the bounded,
 // documented exceptions.
+// Component color literals (Step 3, 2026-09-13): the raw-hex ring and calendar colors
+// slipped past the arbitrary-class ban above. JSX files only; test fixtures may hold hex.
+const colorLiteralSelectors = [
+  {
+    selector: 'Literal[value=/^#[0-9a-fA-F]{3,8}$/]',
+    message:
+      "Hex color literals belong in app/globals.css as tokens; components reference var(--token) (AGENTS.md styling rules; Step 3 finding 2026-09-13).",
+  },
+];
+
 const specSelectors = [
   {
     selector:
@@ -425,7 +471,7 @@ function productRestrictions({ jsx = false, allow = [] } = {}) {
       ...realtimeSelectors,
       ...stylingSelectors,
       ...transitionSelectors,
-      ...(jsx ? [...shellSelectors, ...registrySelectors, ...hoverSelectors] : []),
+      ...(jsx ? [...shellSelectors, ...registrySelectors, ...hoverSelectors, ...colorLiteralSelectors, ...focusRingSelectors, ...paletteSelectors] : []),
     ].filter((restriction) => !allowed.has(restriction)),
   ];
 }
@@ -458,6 +504,50 @@ const eslintConfig = defineConfig([
       "no-restricted-syntax": ["error", ...alwaysOnSelectors],
     },
   },
+  // Lint suppressions name their rule and carry a `-- reason`; a directive
+  // that no longer suppresses anything is an error. Eleven reasonless
+  // disables were found by hand in Step 3 (CL-08, CL-D5); this makes the
+  // convention a check (pre-Wave-3 step 2, 2026-09-14).
+  {
+    files: ["**/*.{ts,tsx,js,mjs}"],
+    plugins: eslintComments.recommended.plugins,
+    linterOptions: { reportUnusedDisableDirectives: "error" },
+    rules: {
+      ...eslintComments.recommended.rules,
+      "@eslint-community/eslint-comments/require-description": ["error", { ignore: [] }],
+    },
+  },
+  // Exported functions under lib/ declare their parameter and return types
+  // (AGENTS.md coding standards; owner decision 2026-09-15). React components
+  // under components/ and app/ keep inferred types; the harness is excluded.
+  {
+    files: ["lib/**/*.{ts,tsx}"],
+    ignores: ["lib/testing/**", "**/*.test.*"],
+    rules: {
+      "@typescript-eslint/explicit-module-boundary-types": "error",
+    },
+  },
+  // Product modules stay under 2,000 raw lines; the five legacy modules below
+  // are capped at their current size (lib/conventions/module-caps.test.ts keeps
+  // each cap equal to its file), so any addition to them is paid by a
+  // split along the seam the step 2 record proposes (Step 3 CL-D7).
+  {
+    files: productFiles,
+    ignores: ["lib/supabase/database.types.ts"],
+    rules: {
+      "max-lines": ["error", { max: 2000, skipBlankLines: false, skipComments: false }],
+    },
+  },
+  ...Object.entries({
+    "lib/documents/actions.ts": 4198,
+    "components/dokumente/document-library-content.tsx": 3478,
+    "lib/time-tracking/actions.ts": 2819,
+    "lib/time-accounts/actions.ts": 2694,
+    "components/inventar/inventory-content.tsx": 2283,
+  }).map(([file, max]) => ({
+    files: [file],
+    rules: { "max-lines": ["error", { max, skipBlankLines: false, skipComments: false }] },
+  })),
   // The one home of the permissive uuid validator may use zod's primitives.
   {
     files: ["lib/validation/uuid.ts"],
@@ -509,6 +599,7 @@ const eslintConfig = defineConfig([
     plugins: { ui: uiRules },
     rules: {
       "ui/label-in-spaced-container": "error",
+      "ui/no-lucide-stroke-width": "error",
       "no-restricted-syntax": productRestrictions({ jsx: true }),
     },
   },

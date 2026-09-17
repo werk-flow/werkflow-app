@@ -1,11 +1,11 @@
 'use client';
 
-import { useMemo, useRef, useEffect, useState, useCallback } from 'react';
+import { memo, useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
-import type { EventClickArg, EventContentArg, EventDropArg } from '@fullcalendar/core';
+import type { EventClickArg, EventContentArg, EventDropArg, FormatterInput, MoreLinkContentArg } from '@fullcalendar/core';
 import { Clock, ArrowUp, ArrowDown, Briefcase, CalendarDays, Coffee, Repeat2 } from 'lucide-react';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 import {
@@ -65,6 +65,18 @@ interface FullCalendarViewProps {
   parkplatzPanelOpen?: boolean;
   onSessionDateChange?: (session: InteractiveCalendarSession, newDate: string, newMemberId: string, revertFn?: () => void) => void;
   onPointerOverParkplatzChange?: (isOver: boolean) => void;
+  onRendererReady?: (date: string | null) => void;
+}
+
+const CALENDAR_PLUGINS = [dayGridPlugin, timeGridPlugin, interactionPlugin];
+// FullCalendar refines these options by identity. Keep date-only navigation
+// from rebuilding formatters and every overflow link in the existing grid.
+const TIME_FORMAT: FormatterInput = { hour: '2-digit', minute: '2-digit', hour12: false, meridiem: false };
+const MONTH_HEADER_FORMAT: FormatterInput = { weekday: 'short' };
+const DATED_HEADER_FORMAT: FormatterInput = { weekday: 'short', day: 'numeric', month: 'numeric' };
+
+function renderMoreLink(arg: MoreLinkContentArg): React.JSX.Element {
+  return <><span className="sm:hidden">+{arg.num}</span><span className="hidden sm:inline">+{arg.num} mehr</span></>;
 }
 
 // Map our view names to FullCalendar view names
@@ -74,7 +86,7 @@ const VIEW_MAP: Record<CalendarView, string> = {
   month: 'dayGridMonth'
 };
 
-export function FullCalendarView({
+export const FullCalendarView = memo(function FullCalendarView({
   date,
   view,
   entries,
@@ -95,8 +107,9 @@ export function FullCalendarView({
   parkplatzZoneRef,
   parkplatzPanelOpen,
   onSessionDateChange,
-  onPointerOverParkplatzChange
-}: FullCalendarViewProps) {
+  onPointerOverParkplatzChange,
+  onRendererReady,
+}: FullCalendarViewProps): React.JSX.Element {
   const calendarRef = useRef<FullCalendar>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [selectedJob, setSelectedJob] = useState<{
@@ -227,11 +240,11 @@ export function FullCalendarView({
   }, [jobs, selectedJob]);
 
   // Helper to get member name
-  const getMemberName = (userId: string) => {
+  const getMemberName = useCallback((userId: string) => {
     const member = members.find((m) => m.user_id === userId);
     if (!member) return 'Arbeitszeit';
     return member.first_name || member.email.split('@')[0] || 'Arbeitszeit';
-  };
+  }, [members]);
 
   const withMemberContext = useCallback(
     (session: WorkSession): InteractiveCalendarSession => {
@@ -244,15 +257,17 @@ export function FullCalendarView({
           ? member.first_name || member.last_name
             ? `${member.first_name || ''} ${member.last_name || ''}`.trim()
             : member.email
-          : undefined,
-        employeeRole: member?.role as InteractiveCalendarSession['employeeRole']
+          : null,
+        ...(member
+          ? { employeeRole: member.role as Exclude<InteractiveCalendarSession['employeeRole'], undefined> }
+          : {})
       };
     },
     [members]
   );
 
   // Convert work sessions to FullCalendar events
-  const events = (() => {
+  const events = useMemo(() => {
     // Filter entries for the current user (for employees) or all (for admin in month view)
     const relevantEntries = isAdminOrManager
       ? entries
@@ -262,10 +277,9 @@ export function FullCalendarView({
     // calculateWorkSessions expects entries from a single user to pair correctly
     const entriesByUser: Record<string, typeof relevantEntries> = {};
     for (const entry of relevantEntries) {
-      if (!entriesByUser[entry.userId]) {
-        entriesByUser[entry.userId] = [];
-      }
-      entriesByUser[entry.userId].push(entry);
+      const userEntries = entriesByUser[entry.userId];
+      if (userEntries) userEntries.push(entry);
+      else entriesByUser[entry.userId] = [entry];
     }
 
     return Object.values(entriesByUser).flatMap((userEntries) => {
@@ -383,7 +397,7 @@ export function FullCalendarView({
             ? 'rgb(34 197 94 / 0.6)'
             : 'rgb(34 197 94 / 0.8)',
           borderColor: 'transparent',
-          textColor: '#fff',
+          textColor: 'var(--color-white)',
           extendedProps: {
             session,
             isPending: block.isPending,
@@ -408,7 +422,7 @@ export function FullCalendarView({
         ...orphanEvents.filter((event): event is NonNullable<typeof event> => event !== null)
       ];
     });
-  })();
+  }, [entries, isAdminOrManager, currentUserId, withMemberContext, getMemberName, nowTick, organizationSettings]);
 
   const jobEvents = useMemo(() => {
     return jobs.map((job) => {
@@ -444,7 +458,7 @@ export function FullCalendarView({
         id: `job-${job.id}`,
         title: '',
         start,
-        end,
+        ...(end ? { end } : {}),
         allDay: isAllDay,
         backgroundColor: isInactiveOccurrence
           ? 'rgb(123 44 191 / 0.06)'
@@ -470,10 +484,10 @@ export function FullCalendarView({
   // Holiday and closure context (P1-04): non-interactive all-day entries so
   // planners see days without Sollarbeitszeit. Deliberately display-only —
   // capacity/conflict behavior is later scope (P1-11).
+  const calendarYear = date.getFullYear();
   const holidayContextEvents = useMemo(() => {
     if (!holidayCalendar) return [];
-    const year = date.getFullYear();
-    const holidayDays = getHolidayContextDays(holidayCalendar, year - 1, year + 1);
+    const holidayDays = getHolidayContextDays(holidayCalendar, calendarYear - 1, calendarYear + 1);
 
     const holidayEvents = holidayDays.map((holiday) => ({
       id: `holiday-${holiday.date}`,
@@ -496,15 +510,16 @@ export function FullCalendarView({
     }));
 
     return [...holidayEvents, ...closureEvents];
-  }, [date, holidayCalendar]);
+  }, [calendarYear, holidayCalendar]);
 
   // Vacation absence entries (P1-06): labeled, non-interactive all-day
   // entries. Approved vacation reads as calm planning state; pending requests
   // stay visibly provisional („angefragt") so requested and approved
   // availability never look the same.
   const vacationEvents = useMemo(() => {
-    return vacationEntries.map((entry) => {
+    return vacationEntries.flatMap((entry) => {
       const [year, month, day] = entry.endDate.split('-').map(Number);
+      if (year === undefined || month === undefined || day === undefined) return [];
       const exclusiveEnd = new Date(Date.UTC(year, month - 1, day + 1));
       const endIso = `${exclusiveEnd.getUTCFullYear()}-${String(exclusiveEnd.getUTCMonth() + 1).padStart(2, '0')}-${String(exclusiveEnd.getUTCDate()).padStart(2, '0')}`;
       const halfDaySuffix =
@@ -531,8 +546,9 @@ export function FullCalendarView({
   // approved vacation, but the label is deliberately neutral — the shared
   // calendar shows WHO is unavailable WHEN, never why (privacy matrix).
   const sicknessEvents = useMemo(() => {
-    return sicknessEntries.map((entry) => {
+    return sicknessEntries.flatMap((entry) => {
       const [year, month, day] = entry.endDate.split('-').map(Number);
+      if (year === undefined || month === undefined || day === undefined) return [];
       const exclusiveEnd = new Date(Date.UTC(year, month - 1, day + 1));
       const endIso = `${exclusiveEnd.getUTCFullYear()}-${String(exclusiveEnd.getUTCMonth() + 1).padStart(2, '0')}-${String(exclusiveEnd.getUTCDate()).padStart(2, '0')}`;
       const halfDaySuffix =
@@ -570,7 +586,9 @@ export function FullCalendarView({
     }
 
     const frame = window.requestAnimationFrame(() => {
-      calendarApi.gotoDate(date);
+      if (toLocalDateString(calendarApi.getDate()) !== toLocalDateString(date)) {
+        calendarApi.gotoDate(date);
+      }
     });
 
     return () => window.cancelAnimationFrame(frame);
@@ -584,11 +602,28 @@ export function FullCalendarView({
     }
 
     const frame = window.requestAnimationFrame(() => {
-      calendarApi.changeView(VIEW_MAP[view]);
+      if (calendarApi.view.type !== VIEW_MAP[view]) {
+        calendarApi.changeView(VIEW_MAP[view]);
+      }
     });
 
     return () => window.cancelAnimationFrame(frame);
   }, [view]);
+
+  // The parent cannot certify a dynamically loaded renderer. Wait for this
+  // renderer's date update and committed event props before reporting ready.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      const api = calendarRef.current?.getApi();
+      if (api && api.view.type === VIEW_MAP[view] && toLocalDateString(api.getDate()) === toLocalDateString(date)) {
+        onRendererReady?.(toLocalDateString(date));
+      }
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      onRendererReady?.(null);
+    };
+  }, [date, view, allEvents, onRendererReady]);
 
   // Handle column hover highlighting for timeGrid week view via JavaScript
   // FullCalendar overlays slots table on columns table, so CSS :hover doesn't work reliably
@@ -867,7 +902,7 @@ export function FullCalendarView({
     onUnparkJob?.(jobId, date, time);
   };
 
-  const renderEventContent = (eventInfo: EventContentArg) => {
+  const renderEventContent = useCallback((eventInfo: EventContentArg) => {
     if (eventInfo.event.extendedProps.isHolidayContext) {
       return (
         <div
@@ -951,8 +986,8 @@ export function FullCalendarView({
       const ArrowIcon = isOrphanClockIn ? ArrowUp : ArrowDown;
       const textColorClass =
         isPendingDelete || isPending
-          ? 'text-yellow-800 dark:text-yellow-200'
-          : 'text-red-600 dark:text-red-400';
+          ? 'text-warning-foreground'
+          : 'text-destructive-soft-foreground';
       return (
         <div
           className={`flex items-center gap-1 pl-1 pr-0.5 overflow-hidden w-full ${textColorClass}`}
@@ -972,7 +1007,7 @@ export function FullCalendarView({
 
     const textColorClass =
       isPendingDelete || isPending
-        ? 'text-yellow-800 dark:text-yellow-200'
+        ? 'text-warning-foreground'
         : 'text-white';
 
     return (
@@ -985,7 +1020,7 @@ export function FullCalendarView({
         {breakMinutes > 0 && <Coffee className="h-3 w-3 shrink-0 opacity-70" />}
       </div>
     );
-  };
+  }, [isAdminOrManager]);
 
   return (
     <div ref={containerRef} className="fullcalendar-wrapper p-4 h-full">
@@ -1451,7 +1486,7 @@ export function FullCalendarView({
           .fc-daygrid-day.fc-day-today
           .fc-daygrid-day-number {
           background: var(--brand-purple);
-          color: #ffffff;
+          color: var(--color-white);
           border-radius: 9999px;
           width: 1.75rem;
           height: 1.75rem;
@@ -1603,7 +1638,7 @@ export function FullCalendarView({
 
         /* Default event text is white (for green approved events) */
         .fullcalendar-wrapper .fc-event-custom {
-          color: #fff;
+          color: var(--color-white);
         }
 
         /* Orphan events use red text */
@@ -1737,7 +1772,7 @@ export function FullCalendarView({
 
       <FullCalendar
         ref={calendarRef}
-        plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+        plugins={CALENDAR_PLUGINS}
         initialView={VIEW_MAP[view]}
         initialDate={date}
         events={allEvents}
@@ -1772,36 +1807,15 @@ export function FullCalendarView({
         scrollTime="06:00:00"
         slotDuration="00:30:00"
         slotLabelInterval="01:00:00"
-        slotLabelFormat={{
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false,
-          meridiem: false
-        }}
-        eventTimeFormat={{
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false,
-          meridiem: false
-        }}
-        dayHeaderFormat={
-          // In month view, only show weekday name (no dates)
-          // In day/week views, show weekday + date
-          view === 'month'
-            ? { weekday: 'short' }
-            : { weekday: 'short', day: 'numeric', month: 'numeric' }
-        }
+        slotLabelFormat={TIME_FORMAT}
+        eventTimeFormat={TIME_FORMAT}
+        dayHeaderFormat={view === 'month' ? MONTH_HEADER_FORMAT : DATED_HEADER_FORMAT}
         nowIndicator={true}
         selectable={false}
         editable={false}
         dragRevertDuration={0}
         dayMaxEvents={2} // Show at most 2 entries before "+ mehr"
-        moreLinkContent={(arg) => (
-          <>
-            <span className="sm:hidden">+{arg.num}</span>
-            <span className="hidden sm:inline">+{arg.num} mehr</span>
-          </>
-        )}
+        moreLinkContent={renderMoreLink}
       />
 
       {selectedJob && (
@@ -1815,4 +1829,4 @@ export function FullCalendarView({
       )}
     </div>
   );
-}
+});

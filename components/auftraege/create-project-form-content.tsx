@@ -1,5 +1,6 @@
 'use client';
 
+import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
 import { useState, useMemo, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 
@@ -25,7 +26,7 @@ import { type Client, type Job, type Project } from '@/lib/jobs/types';
 import { toLocalDateString } from '@/lib/utils';
 import { WorkTemplatePicker } from '@/components/arbeitsvorlagen/work-template-picker';
 
-export const CREATE_PROJECT_ERROR_MESSAGES: Record<string, string> = {
+export const CREATE_PROJECT_ERROR_MESSAGES = {
   not_authenticated: 'Du bist nicht angemeldet.',
   no_active_org: 'Keine Organisation ausgewählt.',
   not_authorized: 'Du bist nicht berechtigt, Projekte zu verwalten.',
@@ -39,7 +40,8 @@ export const CREATE_PROJECT_ERROR_MESSAGES: Record<string, string> = {
   work_template_reference_unavailable: 'Die Arbeitsvorlage verweist auf nicht mehr aktive Stammdaten.',
   template_apply_failed: 'Die Arbeitsvorlage konnte nicht übernommen werden.',
   unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.',
-};
+} satisfies Record<string, string>;
+const CREATE_PROJECT_ERROR_MESSAGE_BY_CODE: Record<string, string> = CREATE_PROJECT_ERROR_MESSAGES;
 
 /** A validated create request the landing list runs itself (deferred submit). */
 export type CreateProjectSubmission = {
@@ -83,8 +85,8 @@ export function projectCreatedBanner(
 export interface CreateProjectFormContentProps {
   clients: Client[];
   jobs: Job[];
-  defaultClientId?: string;
-  readOnlyClient?: boolean;
+  defaultClientId?: string | undefined;
+  readOnlyClient?: boolean | undefined;
   onSuccess?: (payload: {
     project: Project;
     linkedJobIds: string[];
@@ -94,8 +96,8 @@ export interface CreateProjectFormContentProps {
    * validated input over instead of awaiting the server, so the caller closes
    * the dialog at once, shows a pending row, and owns the result.
    */
-  onSubmitDeferred?: (submission: CreateProjectSubmission) => void;
-  isActive?: boolean;
+  onSubmitDeferred?: ((submission: CreateProjectSubmission) => void) | undefined;
+  isActive?: boolean | undefined;
 }
 
 export function CreateProjectFormContent({
@@ -135,6 +137,12 @@ export function CreateProjectFormContent({
     });
   }, [isActive]);
 
+  const jobSearch = useJobEntityOptions(
+    { kind: 'jobs', purpose: 'project-jobs', clientId: clientId || undefined,  },
+    selectedJobIds,
+    jobs.filter((job) => selectedJobIds.includes(job.id) || (!job.projectId && job.status !== 'fertig' && (!clientId || !job.clientId || job.clientId === clientId))).map((job) => ({ value: job.id, label: job.title || job.description || 'Auftrag', description: job.jobNumber ?? undefined, clientId: job.clientId, projectId: job.projectId, status: job.status })),
+  );
+
   const unlinkedJobs = useMemo(() => {
     const baseJobs = jobs.filter((j) => !j.projectId && j.status !== 'fertig');
     if (!clientId) return baseJobs;
@@ -147,17 +155,12 @@ export function CreateProjectFormContent({
     setSiteId('');
     setContactId('');
     if (selectedJobIds.length > 0) {
-      const validJobIds = new Set(
-        jobs
-          .filter(
-            (j) =>
-              !j.projectId &&
-              j.status !== 'fertig' &&
-              (!newClientId || j.clientId === newClientId || !j.clientId)
-          )
-          .map((j) => j.id)
-      );
-      setSelectedJobIds((prev) => prev.filter((id) => validJobIds.has(id)));
+      // A list page is not the selection universe. Discard only hydrated,
+      // incompatible choices; unknown selected identities must not be unlinked.
+      const incompatible = new Set(jobSearch.options.filter((job) =>
+        job.clientId && newClientId && job.clientId !== newClientId
+      ).map((job) => job.value));
+      setSelectedJobIds((previous) => previous.filter((id) => !incompatible.has(id)));
     }
   };
 
@@ -211,18 +214,18 @@ export function CreateProjectFormContent({
 
     const input: CreateProjectInput = {
       name: name.trim(),
-      description: description.trim() || undefined,
-      clientId: clientId || undefined,
-      siteId: siteId || undefined,
-      contactId: contactId || undefined,
-      projectNumber: projectNumber.trim() || undefined,
-      plannedStartDate: plannedStartDate
-        ? toLocalDateString(plannedStartDate)
-        : undefined,
-      plannedEndDate: plannedEndDate
-        ? toLocalDateString(plannedEndDate)
-        : undefined,
-      templateVersionId: templateVersionId || undefined,
+      ...(description.trim() ? { description: description.trim() } : {}),
+      ...(clientId ? { clientId } : {}),
+      ...(siteId ? { siteId } : {}),
+      ...(contactId ? { contactId } : {}),
+      ...(projectNumber.trim() ? { projectNumber: projectNumber.trim() } : {}),
+      ...(plannedStartDate
+        ? { plannedStartDate: toLocalDateString(plannedStartDate) }
+        : {}),
+      ...(plannedEndDate
+        ? { plannedEndDate: toLocalDateString(plannedEndDate) }
+        : {}),
+      ...(templateVersionId ? { templateVersionId } : {}),
     };
 
     if (onSubmitDeferred) {
@@ -245,7 +248,7 @@ export function CreateProjectFormContent({
           setContentError(CREATE_PROJECT_ERROR_MESSAGES[result.error]);
         } else {
           setError(
-            CREATE_PROJECT_ERROR_MESSAGES[result.error] || result.error || 'Unbekannter Fehler'
+            CREATE_PROJECT_ERROR_MESSAGE_BY_CODE[result.error] || result.error || 'Unbekannter Fehler'
           );
         }
         return;
@@ -383,6 +386,7 @@ export function CreateProjectFormContent({
         >
           <JobMultiSelect
             jobs={unlinkedJobs}
+            search={jobSearch}
             selectedIds={selectedJobIds}
             onSelectionChange={setSelectedJobIds}
             disabled={formDisabled}

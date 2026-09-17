@@ -22,3 +22,15 @@ test("documentation-only changes do not require missing unrelated browser proof;
   expect(select([], ["time"])).toEqual(["static:docs", "time"]);
   expect(selectRequiredGroups({ mode: "release", groups, changedFiles: [], unresolvedGroupIds: [] })).toHaveLength(4);
 });
+
+test('network dependency gate runs for dependency changes and release, not ordinary application edits', () => {
+  const withDependencies = [...groups, { id: 'static:dependencies', kind: 'static', inputs: ['bun.lock', 'package.json'] }];
+  const choose = (changedFiles: string[], mode: 'change' | 'release' = 'change', unresolvedGroupIds: string[] = []) =>
+    selectRequiredGroups({ mode, groups: withDependencies, changedFiles, unresolvedGroupIds });
+  expect(choose(['bun.lock'])).toContain('static:dependencies');
+  expect(choose(['package.json'])).toContain('static:dependencies');
+  expect(choose([], 'release')).toContain('static:dependencies');
+  expect(choose([], 'change', ['static:dependencies'])).toContain('static:dependencies');
+  expect(choose(['app/new-page.tsx'])).not.toContain('static:dependencies');
+  expect(choose([])).not.toContain('static:dependencies');
+});

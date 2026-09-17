@@ -169,7 +169,7 @@ function hashFingerprint(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
-export function buildAssignmentFingerprint(input: {
+function buildAssignmentFingerprint(input: {
   assessedForDate: string;
   candidates: AssignmentCandidate[];
   requirements: JobCapabilityRequirement[];

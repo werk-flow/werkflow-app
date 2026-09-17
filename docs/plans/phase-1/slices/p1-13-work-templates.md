@@ -22,9 +22,9 @@ Implemented and accepted 2026-08-23 from baseline `e8bd727`; plan and decisions:
 
 ## Links
 
-- Gate runs: [golden-gate-log.md](../../golden-gate-log.md)
+- Gate runs: [golden-gate-log.md](../audits/golden-gate-log.md)
 - Progress log: [../log.md](../log.md)
-- Audit ledger rows: [wave-2-audit.md](../../wave-2-audit.md)
+- Audit ledger rows: [wave-2-audit.md](../audits/wave-2-audit.md)
 
 ## Implementation plan (merged 2026-09-03 from the former separate plan file)
 
@@ -77,5 +77,5 @@ The 27 confirmed flows `P1-13-F01` through `P1-13-F27` live in the [user-flow ca
 - Add `tests/audit/wave-2/p1-13.spec.ts` with `@AUDIT-W2 @AUDIT-W2-P1-13`, using only run-day offsets +70 through +74 at 06:00 Europe/Berlin.
 - Map every clause of all 27 flows to executable assertions. Assert persisted state, organization isolation, and zero stock, schedule, dispatch, time, document, and attention side effects.
 - Rerun affected Wave 1 audit tags `@AUDIT-W1-A1`, `@AUDIT-W1-A2`, and `@AUDIT-W1-A5`.
-- Follow the per-slice ladder in `wave-2-audit.md`, including CodeRabbit fixes, re-freeze, a fresh production build and server, focused audit, and one final full Golden run.
+- Follow the per-slice ladder in [wave-2-audit.md](../audits/wave-2-audit.md), including CodeRabbit fixes, re-freeze, a fresh production build and server, focused audit, and one final full Golden run.
 - Close the catalog, Wave 2 ledger, both left-behind-state registers, gate log, feature contracts, technical docs, and roadmap before acceptance.

@@ -39,7 +39,7 @@ export function SkeletonRows({
 }: {
   columns: readonly SkeletonColumn[];
   rows?: number;
-  interactive?: TableRowInteractive;
+  interactive?: TableRowInteractive | undefined;
 }) {
   return (
     <>
@@ -64,7 +64,7 @@ export function SkeletonTable({
 }: {
   columns: readonly SkeletonColumn[];
   rows?: number;
-  interactive?: TableRowInteractive;
+  interactive?: TableRowInteractive | undefined;
   className?: string;
 }) {
   return (
@@ -95,7 +95,7 @@ export function SkeletonList({
   children,
 }: {
   count?: number;
-  interactive?: boolean;
+  interactive?: boolean | undefined;
   className?: string;
   /** Row content; defaults to a title bar and a meta bar. */
   children?: ReactNode;

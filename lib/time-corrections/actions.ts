@@ -10,6 +10,7 @@ import {
   getEffectiveResponsibilityHolderForActor,
 } from '@/lib/responsibilities/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { loadApprovedCorrectionProjection } from './approved-projection';
 import type { Json } from '@/lib/supabase/database.types';
 import type {
   OrgRole,
@@ -28,12 +29,14 @@ import {
   type TimeCorrectionSource,
 } from './types';
 import {
+  createPendingProjectionPort,
+  loadPendingCorrectionProjection,
+} from "./pending-projection";
+import {
   reviewTimeCorrectionSchema,
-  reviseTimeCorrectionSchema,
   submitTimeCorrectionSchema,
   validateCorrectionShape,
   type ReviewTimeCorrectionInput,
-  type ReviseTimeCorrectionInput,
   type SubmitTimeCorrectionInput,
 } from './validation';
 
@@ -176,7 +179,7 @@ async function loadSourceContext(input: {
       .maybeSingle();
     if (!segment || segment.employee_record_id !== input.subject.id) return null;
     const [startType, endType] = segmentEntryTypes(segment.kind);
-    const facts: TimeCorrectionFact[] = [{
+    const startFact: TimeCorrectionFact = {
       factId: `${segment.id}:start`,
       employeeRecordId: input.subject.id,
       userId: input.subject.userId,
@@ -185,10 +188,11 @@ async function loadSourceContext(input: {
       jobId: segment.job_id,
       activityKind: segment.kind as TimeSegmentKind,
       isManual: false,
-    }];
+    };
+    const facts: TimeCorrectionFact[] = [startFact];
     if (segment.ended_at) {
       facts.push({
-        ...facts[0],
+        ...startFact,
         factId: `${segment.id}:end`,
         entryType: endType,
         timestamp: segment.ended_at,
@@ -458,78 +462,6 @@ export async function submitTimeCorrection(
       p_responsibility_snapshot: responsibilitySnapshot,
     }
   );
-  if (error) return { success: false, error: mapRpcError(error.message) };
-  revalidateCorrectionSurfaces();
-  return toCorrectionResult(data);
-}
-
-export async function reviseTimeCorrection(
-  rawInput: ReviseTimeCorrectionInput
-): Promise<TimeCorrectionResult> {
-  const parsed = reviseTimeCorrectionSchema.safeParse(rawInput);
-  if (!parsed.success) return { success: false, error: 'invalid_input' };
-  const input = parsed.data;
-  const user = await getAuthenticatedUser();
-  if (!user) return { success: false, error: 'not_authenticated' };
-  const admin = createSupabaseAdminClient();
-  const { data: request } = await admin
-    .from('time_correction_requests')
-    .select('organization_id, subject_employee_record_id, kind')
-    .eq('id', input.requestId)
-    .maybeSingle();
-  if (!request) return { success: false, error: 'request_not_found' };
-  const identities = await loadEmployeeIdentities(
-    request.organization_id,
-    [request.subject_employee_record_id]
-  );
-  const subject = identities?.get(request.subject_employee_record_id);
-  if (!subject) return { success: false, error: 'subject_not_found' };
-  const shapeError = validateCorrectionShape({
-    kind: request.kind,
-    hasSource: Boolean(input.source),
-    proposedFactCount: input.proposedFacts.length,
-  });
-  if (shapeError) return { success: false, error: shapeError };
-  const [sourceContext, proposedSnapshot] = await Promise.all([
-    loadSourceContext({
-      organizationId: request.organization_id,
-      subject,
-      source: input.source,
-    }),
-    buildProposedSnapshot({
-      organizationId: request.organization_id,
-      proposedFacts: input.proposedFacts,
-    }),
-  ]);
-  if (!sourceContext || !proposedSnapshot) {
-    return { success: false, error: 'source_not_found' };
-  }
-  const sources = sourceContext.source ? [sourceContext.source] : [];
-  const effectiveProposedSnapshot = mergeCorrectionProposal(
-    request.kind,
-    sourceContext.snapshot,
-    proposedSnapshot
-  );
-  if (!hasValidChronology(effectiveProposedSnapshot)) {
-    return { success: false, error: 'invalid_time_order' };
-  }
-  const { data, error } = await admin.rpc('revise_time_correction_request', {
-    p_request_id: input.requestId,
-    p_actor_id: user.id,
-    p_operation_id: input.operationId,
-    p_expected_revision: input.expectedRevision,
-    p_reason: input.reason,
-    p_source_scope_key: digest({
-      organizationId: request.organization_id,
-      subjectEmployeeRecordId: subject.id,
-      sources,
-      proposedFacts: sources.length === 0 ? effectiveProposedSnapshot.facts : undefined,
-    }),
-    p_source_fingerprint: digest({ sources, beforeSnapshot: sourceContext.snapshot }),
-    p_before_snapshot: sourceContext.snapshot,
-    p_proposed_snapshot: effectiveProposedSnapshot,
-    p_sources: sources,
-  });
   if (error) return { success: false, error: mapRpcError(error.message) };
   revalidateCorrectionSurfaces();
   return toCorrectionResult(data);
@@ -838,7 +770,7 @@ export async function getTimeCorrectionRequests(
 
 export async function getApprovedTimeCorrectionApplications(input: {
   organizationId: string;
-  userId?: string;
+  userId?: string | undefined;
 }): Promise<TimeCorrectionApplicationProjection[]> {
   const user = await getAuthenticatedUser();
   if (!user) return [];
@@ -848,45 +780,7 @@ export async function getApprovedTimeCorrectionApplications(input: {
     return [];
   }
   const effectiveUserId = callerRole === 'employee' ? user.id : input.userId;
-  const admin = createSupabaseAdminClient();
-  let requestQuery = admin.from('time_correction_requests')
-    .select('id').eq('organization_id', input.organizationId).eq('status', 'approved');
-  if (effectiveUserId) {
-    requestQuery = requestQuery.eq('subject_user_id', effectiveUserId);
-  }
-  const { data: requests, error: requestError } = await requestQuery;
-  if (requestError || !requests?.length) return [];
-  const requestIds = requests.map((request) => request.id);
-  const [{ data: applications }, { data: sources }] = await Promise.all([
-    admin.from('time_correction_applications').select('*')
-      .eq('organization_id', input.organizationId).in('request_id', requestIds),
-    admin.from('time_correction_request_sources').select('*')
-      .eq('organization_id', input.organizationId).in('request_id', requestIds),
-  ]);
-  const sourcesByRevision = new Map<string, TimeCorrectionSource[]>();
-  for (const source of sources ?? []) {
-    const sourceId = source.time_entry_id ?? source.time_session_id
-      ?? source.time_segment_id ?? source.correction_application_id;
-    if (!sourceId) continue;
-    const key = `${source.request_id}:${source.revision}`;
-    const list = sourcesByRevision.get(key) ?? [];
-    list.push({ kind: source.source_kind, id: sourceId, version: source.source_version });
-    sourcesByRevision.set(key, list);
-  }
-  return (applications ?? []).flatMap((application) => {
-    if (!isTimeCorrectionSnapshot(application.applied_snapshot)) return [];
-    return [{
-      applicationId: application.id,
-      requestId: application.request_id,
-      appliedAt: application.applied_at,
-      appliedBy: application.applied_by,
-      sourceFingerprint: application.source_fingerprint,
-      snapshot: application.applied_snapshot,
-      sources: sourcesByRevision.get(
-        `${application.request_id}:${application.revision}`
-      ) ?? [],
-    }];
-  });
+  return loadApprovedCorrectionProjection(createSupabaseAdminClient(), { organizationId: input.organizationId, userId: effectiveUserId });
 }
 
 export type TimeCorrectionFormOptions = {
@@ -974,21 +868,38 @@ export async function getProvisionalTimeCorrectionProjection(input: {
   organizationId: string;
   from: string;
   to: string;
-  userId?: string;
+  userId?: string | undefined;
 }): Promise<ProvisionalTimeCorrectionProjection> {
-  const requestResult = await getTimeCorrectionRequests(input.organizationId);
-  if (!requestResult.success) return { entries: [], sources: [] };
-  const pending = requestResult.requests.filter((request) =>
-    (request.status === 'submitted' || request.status === 'clarification_required')
-    && (!input.userId || request.subjectUserId === input.userId)
+  // Pending-only, subject-filtered read (PF-19); the same identity and
+  // visibility rules as the list reader, without its names and memberships.
+  const user = await getAuthenticatedUser();
+  if (!user) return { entries: [], sources: [] };
+  const callerRole = await getMembershipRole(user.id, input.organizationId);
+  if (!callerRole) return { entries: [], sources: [] };
+  // Managers can view every pending request; an employee's own-subject
+  // projection needs no delegated approval scope. Resolve it only for the
+  // unfiltered employee view that may include another person's requests.
+  const holder = callerRole === 'employee' && input.userId === undefined
+    ? await getEffectiveResponsibilityHolderForActor({
+        organizationId: input.organizationId,
+        responsibility: 'time_approval',
+        actorUserId: user.id,
+      })
+    : null;
+  const projection = await loadPendingCorrectionProjection(
+    createPendingProjectionPort(createSupabaseAdminClient()),
+    {
+      organizationId: input.organizationId,
+      subjectUserId: input.userId,
+      caller: { userId: user.id, role: callerRole, holder },
+    }
   );
-  if (pending.length === 0) return { entries: [], sources: [] };
-  const admin = createSupabaseAdminClient();
-  const requestIds = pending.map((request) => request.id);
-  const { data: rows } = await admin.from('time_correction_request_sources')
-    .select('*').eq('organization_id', input.organizationId).in('request_id', requestIds);
+  if (!projection) throw new Error('Pending time corrections could not be read completely.');
+  if (projection.requests.length === 0) return { entries: [], sources: [] };
+  const pending = projection.requests;
+  const rows = projection.sources;
   const requestById = new Map(pending.map((request) => [request.id, request]));
-  const sources = (rows ?? []).flatMap((source) => {
+  const sources = rows.flatMap((source) => {
     const sourceId = source.time_entry_id ?? source.time_session_id
       ?? source.time_segment_id ?? source.correction_application_id;
     const request = requestById.get(source.request_id);
@@ -1004,7 +915,7 @@ export async function getProvisionalTimeCorrectionProjection(input: {
   const from = Date.parse(input.from);
   const to = Date.parse(input.to);
   const entries = pending.flatMap((request) =>
-    request.revision.proposedSnapshot.facts.flatMap((fact) => {
+    request.proposedSnapshot.facts.flatMap((fact) => {
       const timestamp = Date.parse(fact.timestamp);
       if (timestamp < from || timestamp > to || (input.userId && fact.userId !== input.userId)) {
         return [];

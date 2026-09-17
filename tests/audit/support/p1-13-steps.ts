@@ -1,16 +1,13 @@
 import type { Locator, Page } from '@playwright/test';
-import { inputByValue } from '../../golden/support/steps';
+import { inputByValue, visibleText } from '../../golden/support/steps';
+export { visibleMatchingText } from '../../golden/support/steps';
 
 export function visibleExactText(page: Page, text: string): Locator {
-  return page.getByText(text, { exact: true }).filter({ visible: true }).first();
+  return visibleText(page, text, true);
 }
 
 export function exactText(page: Page, text: string): Locator {
   return page.getByText(text, { exact: true });
-}
-
-export function visibleMatchingText(page: Page, text: RegExp): Locator {
-  return page.getByText(text).filter({ visible: true }).first();
 }
 
 export async function templateItemCard(editor: Locator, itemName: string): Promise<Locator> {

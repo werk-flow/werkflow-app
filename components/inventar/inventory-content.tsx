@@ -89,7 +89,6 @@ import type {
   InventoryLocationType,
   InventoryOverview,
   InventoryOverviewItem,
-  InventoryPickerOption,
   InventoryUnitOption,
 } from '@/lib/inventory/types';
 import {
@@ -102,6 +101,8 @@ import {
   INVENTORY_UNIT_OPTIONS,
 } from '@/lib/inventory/types';
 import { cn } from '@/lib/utils';
+import { ListPagination } from '@/components/shared/list-pagination';
+import { useListNavigation } from '@/hooks/use-list-navigation';
 
 type InventoryContentProps = {
   overview: InventoryOverview;
@@ -165,7 +166,7 @@ type ImportColumnKey = keyof InventoryImportRow;
 
 const NONE_VALUE = '__none__';
 const NEW_SUPPLIER_VALUE = '__new_supplier__';
-const ALL_VALUE = '__all__';
+const ALL_VALUE = 'all';
 
 const IMPORT_COLUMNS: Array<{ key: ImportColumnKey; label: string }> = [
   { key: 'name', label: 'Artikelname' },
@@ -334,24 +335,24 @@ function formatMovementTarget(movement: InventoryOverview['movements'][number]):
 function stockStatusClasses(status: InventoryOverviewItem['stockStatus']): string {
   switch (status) {
     case 'out_of_stock':
-      return 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300';
+      return 'border-destructive/40 bg-destructive-soft text-destructive-soft-foreground';
     case 'low_stock':
-      return 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300';
+      return 'border-warning/40 bg-warning-soft text-warning-soft-foreground';
     case 'in_stock':
-      return 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/40 dark:bg-green-950/20 dark:text-green-300';
+      return 'border-success/40 bg-success-soft text-success-soft-foreground';
   }
 }
 
 function itemTypeClasses(type: InventoryItemType): string {
   switch (type) {
     case 'material':
-      return 'bg-slate-100 text-slate-700 dark:bg-slate-900/50 dark:text-slate-300';
+      return 'bg-muted text-muted-foreground';
     case 'consumable':
-      return 'bg-slate-100 text-slate-700 dark:bg-slate-900/50 dark:text-slate-300';
+      return 'bg-muted text-muted-foreground';
     case 'tool':
-      return 'bg-slate-100 text-slate-700 dark:bg-slate-900/50 dark:text-slate-300';
+      return 'bg-muted text-muted-foreground';
     case 'asset':
-      return 'bg-slate-100 text-slate-700 dark:bg-slate-900/50 dark:text-slate-300';
+      return 'bg-muted text-muted-foreground';
   }
 }
 
@@ -371,23 +372,6 @@ function isServerRow<Row extends { id: string }, Draft extends object>(
   row: Row | Draft
 ): row is Row {
   return 'id' in row;
-}
-
-function matchesInventorySearch(item: InventoryOverviewItem, search: string): boolean {
-  if (!search) return true;
-  const query = search.toLowerCase();
-  return [
-    item.name,
-    item.description,
-    item.internalSku,
-    item.manufacturer,
-    item.supplierArticleNumber,
-    item.categoryName,
-    item.supplierName,
-    item.primaryBarcode,
-  ]
-    .filter(Boolean)
-    .some((value) => value!.toLowerCase().includes(query));
 }
 
 function formatDateTime(value: string): string {
@@ -440,13 +424,13 @@ function parseCsv(text: string): { headers: string[]; rows: Record<string, strin
     .split('\n')
     .filter((line) => line.trim().length > 0);
 
-  if (lines.length === 0) return { headers: [], rows: [] };
-
+  const [firstLine] = lines;
+  if (firstLine === undefined) return { headers: [], rows: [] };
   const delimiter =
-    parseCsvLine(lines[0], ';').length >= parseCsvLine(lines[0], ',').length
+    parseCsvLine(firstLine, ';').length >= parseCsvLine(firstLine, ',').length
       ? ';'
       : ',';
-  const headers = parseCsvLine(lines[0], delimiter).map((header) => header.trim());
+  const headers = parseCsvLine(firstLine, delimiter).map((header) => header.trim());
   const rows = lines.slice(1).map((line) => {
     const cells = parseCsvLine(line, delimiter);
     return headers.reduce<Record<string, string>>((acc, header, index) => {
@@ -458,7 +442,7 @@ function parseCsv(text: string): { headers: string[]; rows: Record<string, strin
   return { headers, rows };
 }
 
-function guessMapping(headers: string[]): Partial<Record<ImportColumnKey, string>> {
+function guessMapping(headers: string[]): Partial<Record<ImportColumnKey, string | undefined>> {
   const lowerHeaders = headers.map((header) => ({
     original: header,
     lower: header.toLowerCase(),
@@ -531,10 +515,12 @@ function parseMoneyToCents(value: string): number | null {
 export function InventoryContent({ overview }: InventoryContentProps) {
   const router = useRouter();
   const { showBanner } = useBanner();
-  const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState<string>(ALL_VALUE);
-  const [stockFilter, setStockFilter] = useState<string>(ALL_VALUE);
-  const [locationFilter, setLocationFilter] = useState<string>(ALL_VALUE);
+  const navigation = useListNavigation();
+  const query = overview.page.query;
+  const [search, setSearch] = useState(query.search);
+  const [typeFilter, setTypeFilter] = useState<string>(query.type);
+  const [stockFilter, setStockFilter] = useState<string>(query.stock);
+  const [locationFilter, setLocationFilter] = useState<string>(query.location);
   const [itemDialogOpen, setItemDialogOpen] = useState(false);
   const [itemForm, setItemForm] = useState<ItemFormState>(EMPTY_ITEM_FORM);
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
@@ -574,51 +560,22 @@ export function InventoryContent({ overview }: InventoryContentProps) {
     ],
   });
 
-  const filteredItems = useMemo(
-    () =>
-      overview.items.filter((item) => {
-        if (!matchesInventorySearch(item, search.trim())) return false;
-        if (typeFilter !== ALL_VALUE && item.itemType !== typeFilter) return false;
-        if (stockFilter !== ALL_VALUE && item.stockStatus !== stockFilter) return false;
-        if (
-          locationFilter !== ALL_VALUE &&
-          !item.stockByLocation.some((stock) => stock.locationId === locationFilter)
-        ) {
-          return false;
-        }
-        return true;
-      }),
-    [locationFilter, overview.items, search, stockFilter, typeFilter]
-  );
-
-  const plannedItems = useMemo(
-    () => overview.items.filter((item) => item.plannedQuantity > 0),
-    [overview.items]
-  );
-  const stockedItemCount = useMemo(
-    () => overview.items.filter((item) => item.totalOnHand > 0).length,
-    [overview.items]
-  );
-
-  const pickerItems: InventoryPickerOption[] = useMemo(
-    () =>
-      overview.items.map((item) => ({
-        id: item.id,
-        itemType: item.itemType,
-        name: item.name,
-        unit: item.unit,
-        internalSku: item.internalSku,
-        manufacturer: item.manufacturer,
-        supplierName: item.supplierName,
-        supplierArticleNumber: item.supplierArticleNumber,
-        primaryBarcode: item.primaryBarcode,
-        categoryName: item.categoryName,
-        isBillable: item.isBillable,
-        availableQuantity: item.availableQuantity,
-        stockByLocation: item.stockByLocation,
-      })),
-    [overview.items]
-  );
+  const filterKey = JSON.stringify([query.search, query.type, query.stock, query.location]);
+  const [appliedFilterKey, setAppliedFilterKey] = useState(filterKey);
+  if (appliedFilterKey !== filterKey && !navigation.busy) {
+    setAppliedFilterKey(filterKey);
+    setSearch(query.search);
+    setTypeFilter(query.type);
+    setStockFilter(query.stock);
+    setLocationFilter(query.location);
+  }
+  const pageItems = useMemo(() => {
+    const byId = new Map(overview.items.map(item => [item.id,item]));
+    return overview.page.ids.flatMap(id => { const item=byId.get(id); return item ? [item] : []; });
+  }, [overview.items, overview.page.ids]);
+  const filteredItems = pageItems;
+  const plannedItems = pageItems;
+  const stockedItemCount = overview.summary.stockedItems;
 
   function openCreateItemDialog() {
     setFormError(null);
@@ -641,7 +598,7 @@ export function InventoryContent({ overview }: InventoryContentProps) {
     }
 
     const input = {
-      id: itemForm.id ?? undefined,
+      ...(itemForm.id !== null ? { id: itemForm.id } : {}),
       name: itemForm.name,
       itemType: itemForm.itemType,
       description: itemForm.description,
@@ -705,7 +662,10 @@ export function InventoryContent({ overview }: InventoryContentProps) {
         setPendingItemDraft((current) =>
           current ? { ...current, confirmedId: result.item.id } : current
         );
+        const refreshed = waitForItems();
         router.refresh();
+        await refreshed;
+        setPendingItemDraft(null);
       })();
       return;
     }
@@ -791,7 +751,7 @@ export function InventoryContent({ overview }: InventoryContentProps) {
     <PageShell>
       <PageHeader
         title="Inventar"
-        subtitle={`${overview.summary.totalItems} Artikel · ${overview.locations.length} Lager · ${plannedItems.length} geplante Artikel`}
+        subtitle={`${overview.summary.totalItems} Artikel · ${overview.locations.length} Lager · ${overview.summary.plannedItems} geplante Artikel`}
         actions={
           <>
             <Button
@@ -841,12 +801,12 @@ export function InventoryContent({ overview }: InventoryContentProps) {
           />
           <SummaryTile
             label="Geplante Artikel"
-            value={String(plannedItems.length)}
+            value={String(overview.summary.plannedItems)}
             icon={<PackagePlus className="size-4" />}
           />
         </div>
 
-        <Tabs defaultValue="all" className="mt-4">
+        <Tabs value={query.tab} onValueChange={(tab) => navigation.navigate({ tab, page: 1 })} className="mt-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <TabsList>
               <TabsTrigger value="all">Alle Artikel</TabsTrigger>
@@ -860,13 +820,13 @@ export function InventoryContent({ overview }: InventoryContentProps) {
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={search}
-                  onChange={(event) => setSearch(event.target.value)}
+                  onChange={(event) => { setSearch(event.target.value); navigation.navigate({ search: event.target.value, page: 1 }, 200); }}
                   placeholder="Suchen"
                   aria-label="Artikel suchen"
                   className="pl-8"
                 />
               </div>
-              <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <Select value={typeFilter} onValueChange={(value) => { setTypeFilter(value); navigation.navigate({ type: value, page: 1 }); }}>
                 <SelectTrigger className="md:w-44" aria-label="Nach Typ filtern">
                   <SelectValue />
                 </SelectTrigger>
@@ -879,7 +839,7 @@ export function InventoryContent({ overview }: InventoryContentProps) {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={stockFilter} onValueChange={setStockFilter}>
+              <Select value={stockFilter} onValueChange={(value) => { setStockFilter(value); navigation.navigate({ stock: value, page: 1 }); }}>
                 <SelectTrigger className="md:w-40" aria-label="Nach Bestand filtern">
                   <SelectValue />
                 </SelectTrigger>
@@ -903,7 +863,7 @@ export function InventoryContent({ overview }: InventoryContentProps) {
                     })),
                   ]}
                   value={locationFilter}
-                  onChange={setLocationFilter}
+                  onChange={(value) => { setLocationFilter(value); navigation.navigate({ location: value, page: 1 }); }}
                   searchPlaceholder="Lager suchen …"
                   emptyMessage="Kein Lager gefunden"
                 />
@@ -911,7 +871,7 @@ export function InventoryContent({ overview }: InventoryContentProps) {
             </div>
           </div>
 
-          <TabsContent value="all" className="mt-4">
+          <TabsContent value="all" className="mt-4" aria-busy={navigation.busy} inert={navigation.busy}>
             <InventoryTable
               items={filteredItems}
               pendingDraft={visiblePendingItemDraft}
@@ -921,15 +881,16 @@ export function InventoryContent({ overview }: InventoryContentProps) {
             />
           </TabsContent>
 
-          <TabsContent value="locations" className="mt-4">
+          <TabsContent value="locations" className="mt-4" aria-busy={navigation.busy} inert={navigation.busy}>
             <LocationsView
-              locations={overview.locations}
+              locations={overview.locations.filter(location => overview.page.locationIds.includes(location.id))}
               items={overview.items}
+              itemCounts={overview.page.locationCounts}
               pendingDraft={pendingLocationDraft}
             />
           </TabsContent>
 
-          <TabsContent value="planned" className="mt-4">
+          <TabsContent value="planned" className="mt-4" aria-busy={navigation.busy} inert={navigation.busy}>
             <InventoryTable
               items={plannedItems}
               isBusy={busyItems.isBusy}
@@ -938,10 +899,15 @@ export function InventoryContent({ overview }: InventoryContentProps) {
             />
           </TabsContent>
 
-          <TabsContent value="movements" className="mt-4">
+          <TabsContent value="movements" className="mt-4" aria-busy={navigation.busy} inert={navigation.busy}>
             <MovementsTable movements={overview.movements} />
           </TabsContent>
         </Tabs>
+        {query.tab !== 'movements' && <ListPagination page={query.page}
+          total={query.tab === 'locations' ? overview.locations.length : overview.page.total}
+          pageSize={query.tab === 'locations' ? 12 : 50} busy={navigation.busy}
+          label={query.tab === 'locations' ? 'Lagerseiten' : 'Artikelseiten'}
+          onPageChange={page => navigation.navigate({ page })} />}
       </PageBody>
 
       <ItemDialog
@@ -977,7 +943,7 @@ export function InventoryContent({ overview }: InventoryContentProps) {
       <ImportDialog
         open={importDialogOpen}
         onOpenChange={setImportDialogOpen}
-        pickerItems={pickerItems}
+        existingItemCount={overview.summary.totalItems}
         locations={overview.locations}
         categories={overview.categories}
         onImported={() => router.refresh()}
@@ -1291,8 +1257,8 @@ function MovementsTable({ movements }: { movements: InventoryOverview['movements
                       className={cn(
                         'shrink-0 text-sm font-medium tabular-nums',
                         movement.quantityDelta < 0
-                          ? 'text-red-600 dark:text-red-300'
-                          : 'text-green-700 dark:text-green-300'
+                          ? 'text-destructive'
+                          : 'text-success-text'
                       )}
                     >
                       {movement.quantityDelta > 0 ? '+' : ''}
@@ -1363,8 +1329,8 @@ function MovementsTable({ movements }: { movements: InventoryOverview['movements
                       className={cn(
                         'text-right tabular-nums',
                         movement.quantityDelta < 0
-                          ? 'text-red-600 dark:text-red-300'
-                          : 'text-green-700 dark:text-green-300'
+                          ? 'text-destructive'
+                          : 'text-success-text'
                       )}
                     >
                       {movement.quantityDelta > 0 ? '+' : ''}
@@ -1388,10 +1354,12 @@ function MovementsTable({ movements }: { movements: InventoryOverview['movements
 function LocationsView({
   locations,
   items,
+  itemCounts,
   pendingDraft,
 }: {
   locations: InventoryLocation[];
   items: InventoryOverviewItem[];
+  itemCounts: Record<string,number>;
   pendingDraft: PendingLocationDraft | null;
 }) {
   return (
@@ -1418,7 +1386,8 @@ function LocationsView({
         }
         const locationItems = items.filter((item) =>
           item.stockByLocation.some((stock) => stock.locationId === location.id)
-        );
+        ).sort((left,right) => left.name.localeCompare(right.name, "de"));
+        const itemCount = itemCounts[location.id] ?? 0;
         return (
           <div key={location.id} className="rounded-lg border bg-card p-4">
             <div className="mb-4 flex items-start justify-between gap-3">
@@ -1432,16 +1401,16 @@ function LocationsView({
                 </p>
               </div>
               <Badge variant="secondary">
-                {locationItems.length} Artikel
+                {itemCount} Artikel
               </Badge>
             </div>
             <div className="mb-3 rounded-md bg-muted/40 px-3 py-2 text-sm">
               Artikel in diesem Lager:{' '}
               <span className="font-medium tabular-nums">
-                {locationItems.length.toLocaleString('de-DE')}
+                {itemCount.toLocaleString('de-DE')}
               </span>
             </div>
-            {locationItems.length === 0 ? (
+            {itemCount === 0 ? (
               <p className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
                 Keine Artikel in diesem Lager.
               </p>
@@ -2061,8 +2030,8 @@ function StockAdjustmentDialog({
               className={cn(
                 'rounded-md px-3 py-2 text-sm',
                 state.direction === 'add'
-                  ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-300'
-                  : 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300'
+                  ? 'bg-success-soft text-success-soft-foreground'
+                  : 'bg-destructive-soft text-destructive-soft-foreground'
               )}
             >
               {state.direction === 'add'
@@ -2101,14 +2070,14 @@ function StockAdjustmentDialog({
 function ImportDialog({
   open,
   onOpenChange,
-  pickerItems,
+  existingItemCount,
   locations,
   categories,
   onImported,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  pickerItems: InventoryPickerOption[];
+  existingItemCount: number;
   locations: InventoryLocation[];
   categories: InventoryCategory[];
   onImported: () => void;
@@ -2117,7 +2086,7 @@ function ImportDialog({
   const [fileName, setFileName] = useState('');
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<Record<string, string>[]>([]);
-  const [mapping, setMapping] = useState<Partial<Record<ImportColumnKey, string>>>({});
+  const [mapping, setMapping] = useState<Partial<Record<ImportColumnKey, string | undefined>>>({});
   const [error, setError] = useState<string | null>(null);
   const { run: runImportTask, isPending } = usePendingTask();
   const [attempted, setAttempted] = useState(false);
@@ -2231,7 +2200,7 @@ function ImportDialog({
           <DialogDescription>
             {rows.length > 0
               ? `${rows.length} Zeilen erkannt`
-              : `${pickerItems.length} bestehende Artikel, ${locations.length} Lager, ${categories.length} Kategorien`}
+              : `${existingItemCount} bestehende Artikel, ${locations.length} Lager, ${categories.length} Kategorien`}
           </DialogDescription>
         </DialogHeader>
 

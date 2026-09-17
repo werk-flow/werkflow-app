@@ -41,7 +41,13 @@ function digits(dateIso: string): string {
   return `${day}${month}${year}`;
 }
 
-const DATES = Array.from({ length: 5 }, (_, index) => ownedBerlinDateAtOffset('p1-13', 70 + index));
+const DATES = [
+  ownedBerlinDateAtOffset('p1-13', 70),
+  ownedBerlinDateAtOffset('p1-13', 71),
+  ownedBerlinDateAtOffset('p1-13', 72),
+  ownedBerlinDateAtOffset('p1-13', 73),
+  ownedBerlinDateAtOffset('p1-13', 74),
+] as const;
 
 async function workTemplateStateOrNull(organizationId: string, name: string) {
   try {
@@ -269,7 +275,9 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
     expect(state.capabilities).toHaveLength(1);
     expect(state.evidence).toHaveLength(2);
     expect(state.dependencies).toHaveLength(2);
-    const latestVersionId = state.versions[1].id;
+    const latestVersion = state.versions[1];
+    if (!latestVersion) throw new Error('P1-13: expected a second template version');
+    const latestVersionId = latestVersion.id;
     const latestItems = state.items.filter((item) => item.version_id === latestVersionId);
     expect(latestItems.map((item) => item.content)).toEqual([
       'Messung dokumentieren',
@@ -285,8 +293,8 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
       is_billable: false,
       notes: 'Nur für die Einsatzplanung.',
     });
-    expect(state.materials[0].preferred_location_id).not.toBeNull();
-    expect(state.capabilities[0].require_confirmation).toBe(true);
+    expect(state.materials[0]?.preferred_location_id).not.toBeNull();
+    expect(state.capabilities[0]?.require_confirmation).toBe(true);
   });
 
   test('version history, archive/reactivation, picker application on create, and snapshot meaning persist', async ({
@@ -326,13 +334,13 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
     expect(state.timeEntries).toHaveLength(0);
     expect(state.timeSegments).toHaveLength(0);
     expect(state.documentLinks).toHaveLength(0);
-    expect(state.materials[0].taken_quantity).toBe(0);
-    expect(state.materials[0].returned_quantity).toBe(0);
+    expect(state.materials[0]?.taken_quantity).toBe(0);
+    expect(state.materials[0]?.returned_quantity).toBe(0);
     expect(state.qualificationAssessments).toHaveLength(1);
-    expect(state.qualificationAssessments[0].override_reason).toBe(
+    expect(state.qualificationAssessments[0]?.override_reason).toBe(
       'Abweichung für den vollständigen Auditfluss.'
     );
-    expect(state.qualificationAssessments[0].coverage_fingerprint).toBeTruthy();
+    expect(state.qualificationAssessments[0]?.coverage_fingerprint).toBeTruthy();
 
     await employeePage.goto(`/auftraege/${jobNumber}`);
     await expect(visibleExactText(employeePage, 'Sicherheitsprüfung')).toBeVisible();
@@ -401,7 +409,7 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
       description: 'Foto direkt am Auftrag',
       document_category: 'other',
     });
-    expect(state.evidence[0].source_work_template_evidence_id).not.toBeNull();
+    expect(state.evidence[0]?.source_work_template_evidence_id).not.toBeNull();
 
     await adminPage.getByRole('button', { name: 'Position bearbeiten' }).click();
     const materialDialog = adminPage.getByRole('dialog').filter({
@@ -494,7 +502,9 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
       jobId: state.targetId,
       versionNumber: 2,
     });
-    expect(state.applications[0].template_version_id).toBe(templateState.versions[1].id);
+    const secondTemplateVersion = templateState.versions[1];
+    if (!secondTemplateVersion) throw new Error('P1-13: expected a second template version');
+    expect(state.applications[0]?.template_version_id).toBe(secondTemplateVersion.id);
     await adminPage.getByRole('combobox', { name: 'Status filtern' }).click();
     await adminPage.getByRole('option', { name: 'Aktive Vorlagen' }).click();
     await adminPage.getByRole('button', { name: 'Öffnen', exact: true }).click();
@@ -659,7 +669,7 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
     expect(projectState.instructions.map((item) => item.content)).toEqual([
       'Projektstart dokumentieren',
     ]);
-    expect(projectState.instructions[0].work_template_application_id).not.toBeNull();
+    expect(projectState.instructions[0]?.work_template_application_id).not.toBeNull();
     expect(projectState.materials).toHaveLength(1);
     expect(projectState.capabilities).toHaveLength(1);
     expect(projectState.capabilityOrigins).toHaveLength(1);

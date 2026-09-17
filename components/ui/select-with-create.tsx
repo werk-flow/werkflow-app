@@ -17,7 +17,7 @@ import {
  * create dialog.
  */
 type SelectWithCreateProps<T> = {
-  id?: string;
+  id?: string | undefined;
   items: T[];
   /** Maps a domain item to its option; `value` doubles as the item identity. */
   getOption: (item: T) => SearchableSelectOption;
@@ -29,15 +29,19 @@ type SelectWithCreateProps<T> = {
     onOpenChange: (open: boolean) => void;
     onCreated: (item: T) => void;
   }) => ReactNode;
-  onCreated?: (item: T) => void;
-  placeholder?: string;
-  searchPlaceholder?: string;
-  emptyMessage?: string;
-  disabled?: boolean;
-  allowNone?: boolean;
-  noneLabel?: string;
-  readOnly?: boolean;
-  readOnlyLabel?: string;
+  onCreated?: ((item: T) => void) | undefined;
+  placeholder?: string | undefined;
+  searchPlaceholder?: string | undefined;
+  emptyMessage?: string | undefined;
+  onSearchChange?: ((search: string) => void) | undefined;
+  loading?: boolean | undefined;
+  loadError?: string | undefined;
+  onLoadMore?: (() => void) | undefined;
+  disabled?: boolean | undefined;
+  allowNone?: boolean | undefined;
+  noneLabel?: string | undefined;
+  readOnly?: boolean | undefined;
+  readOnlyLabel?: string | undefined;
 };
 
 export function SelectWithCreate<T>({
@@ -52,6 +56,7 @@ export function SelectWithCreate<T>({
   placeholder,
   searchPlaceholder,
   emptyMessage,
+  onSearchChange, loading, loadError, onLoadMore,
   disabled,
   allowNone,
   noneLabel,
@@ -93,6 +98,7 @@ export function SelectWithCreate<T>({
         placeholder={placeholder}
         searchPlaceholder={searchPlaceholder}
         emptyMessage={emptyMessage}
+        onSearchChange={onSearchChange} loading={loading} loadError={loadError} onLoadMore={onLoadMore}
         disabled={disabled}
         allowNone={allowNone}
         noneLabel={noneLabel}

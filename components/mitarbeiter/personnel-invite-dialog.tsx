@@ -1,5 +1,6 @@
 'use client';
 
+import { INVITE_ROLE_OPTIONS } from '@/lib/roles';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, MailPlus } from 'lucide-react';
@@ -27,12 +28,7 @@ import {
 import { sendPersonnelInvite } from '@/lib/personnel/actions';
 import type { InviteRole } from '@/lib/invites/actions';
 
-const ROLE_OPTIONS: { value: InviteRole; label: string }[] = [
-  { value: 'buero', label: 'Büro' },
-  { value: 'employee', label: 'Handwerker/in' },
-];
-
-const ERROR_MESSAGES: Record<string, string> = {
+const ERROR_MESSAGES = {
   invalid_email: 'Bitte gib eine gültige E-Mail-Adresse ein.',
   already_member: 'Diese Person ist bereits Mitglied dieser Organisation.',
   already_has_login: 'Diese Personalakte ist bereits mit einem Zugang verknüpft.',
@@ -43,7 +39,8 @@ const ERROR_MESSAGES: Record<string, string> = {
     'Die Einladung wurde gesendet, konnte aber nicht mit der Personalakte verknüpft werden.',
   not_authorized: 'Du bist nicht berechtigt, Einladungen zu senden.',
   record_not_found: 'Die Personalakte wurde nicht gefunden.',
-};
+} satisfies Record<string, string>;
+const ERROR_MESSAGE_BY_CODE: Record<string, string> = ERROR_MESSAGES;
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -108,7 +105,7 @@ export function PersonnelInviteDialog({
       }, 1500);
     } else {
       setError(
-        ERROR_MESSAGES[result.error ?? ''] ??
+        ERROR_MESSAGE_BY_CODE[result.error ?? ''] ??
           'Die Einladung konnte nicht gesendet werden.'
       );
     }
@@ -165,7 +162,7 @@ export function PersonnelInviteDialog({
                   <SelectValue placeholder="Rolle auswählen" />
                 </SelectTrigger>
                 <SelectContent>
-                  {ROLE_OPTIONS.map((option) => (
+                  {INVITE_ROLE_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
                     </SelectItem>
@@ -175,7 +172,7 @@ export function PersonnelInviteDialog({
             </Field>
             <ErrorText>{error}</ErrorText>
             {success && (
-              <p className="text-sm text-green-600">
+              <p className="text-sm text-success-text">
                 Einladung erfolgreich gesendet!
               </p>
             )}

@@ -191,7 +191,7 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
       ['blocker', 'resolved'],
       ['parking', 'open'],
     ]);
-    expect(state.blockers[0].version).toBe(4);
+    expect(state.blockers[0]?.version).toBe(4);
     expect(state.entity).toMatchObject({
       execution_state: 'not_started',
       status: 'geparkt',
@@ -510,7 +510,7 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
       kind: 'parking',
       state: 'open',
     });
-    expect(childParkingState.blockers[0].parent_project_parking_blocker_id).not.toBeNull();
+    expect(childParkingState.blockers[0]?.parent_project_parking_blocker_id).not.toBeNull();
     expect(childParkingState.entity).toMatchObject({ status: 'geparkt' });
     await projectCard.getByRole('button', { name: 'Weiterplanen' }).click();
     dialog = adminPage.getByRole('dialog');

@@ -1,5 +1,6 @@
 "use client";
 
+import { formatFileSize } from '@/lib/documents/format';
 import {
   useCallback,
   useEffect,
@@ -34,7 +35,7 @@ import {
 export type DocumentUploadItem = {
   id: string;
   file: File;
-  relativePath?: string;
+  relativePath?: string | undefined;
   category?: DocumentCategory;
 };
 
@@ -43,7 +44,7 @@ type UploadStatus = "queued" | "uploading" | "done" | "error";
 type UploadRow = DocumentUploadItem & {
   status: UploadStatus;
   progress?: number;
-  error?: string;
+  error?: string | undefined;
 };
 
 type DocumentUploadDialogProps = {
@@ -59,12 +60,6 @@ type DocumentUploadDialogProps = {
     uploadedDocuments: OrganizationDocument[],
   ) => void;
 };
-
-function formatFileSize(sizeBytes: number): string {
-  if (sizeBytes < 1024) return `${sizeBytes} B`;
-  if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
-  return `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`;
-}
 
 function getFolderSegments(relativePath?: string): string[] {
   if (!relativePath) return [];
@@ -212,7 +207,7 @@ export function DocumentUploadDialog({
           const result = await uploadDocumentDirect({
             file: row.file,
             target: { ...target, folderId },
-            category: row.category,
+            ...(row.category ? { category: row.category } : {}),
             onProgress: (fraction) => updateRow(row.id, { progress: fraction }),
           });
           if (!result.success) {
@@ -253,7 +248,7 @@ export function DocumentUploadDialog({
     if (!open || hasStarted || isPending || items.length === 0) return;
     handleStartUpload();
     // handleStartUpload intentionally owns the mutable upload queue for this dialog.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rerunning on handleStartUpload's identity would restart the upload queue it owns
   }, [open, hasStarted, isPending, items.length, itemsKey]);
 
   useEffect(() => {

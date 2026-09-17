@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { readOrganizationClients } from "@/lib/clients/server";
 import { cookies } from "next/headers";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -13,7 +14,6 @@ import { getClientDocuments } from "@/lib/documents/actions";
 import { getJobsForClient } from "@/lib/jobs/actions";
 import { getCustomerRelationshipBundle } from "@/lib/customer-relationships/actions";
 import { getInstalledEquipmentForClient } from "@/lib/installed-equipment/actions";
-import { toClient, type Client } from "@/lib/jobs/types";
 import { type OrgRole } from "@/lib/members/actions";
 import { getOrgMembersForUser } from "@/lib/members/queries";
 import type { OrgMemberOption } from "@/components/auftraege/employee-multi-select";
@@ -55,7 +55,7 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
     relationsResult,
     jobsResult,
     clientDocumentsResult,
-    clientsResult,
+    allClients,
     membersResult,
     relationshipResult,
     equipmentResult,
@@ -64,11 +64,7 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
     getClientRelations(clientId, { includeInactive: true }),
     getJobsForClient(clientId),
     getClientDocuments(clientId),
-    admin
-      .from("clients")
-      .select("*")
-      .eq("organization_id", activeOrgId)
-      .order("name", { ascending: true }),
+    readOrganizationClients(admin, activeOrgId),
     getOrgMembersForUser(activeOrgId, user.id),
     getCustomerRelationshipBundle(clientId),
     getInstalledEquipmentForClient(clientId),
@@ -93,7 +89,6 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
       }
     : { jobs: [], projects: [], clientMap: {}, jobAssignmentMap: {} };
 
-  const allClients: Client[] = (clientsResult.data ?? []).map(toClient);
   const members: OrgMemberOption[] = membersResult.map((m) => ({
     userId: m.user_id,
     firstName: m.first_name,

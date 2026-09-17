@@ -1,5 +1,6 @@
 'use client';
 
+import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
@@ -68,7 +69,7 @@ const PRIORITY_OPTIONS: { value: JobPriority; label: string }[] = [
   { value: 'hoch', label: JOB_PRIORITY_LABELS.hoch }
 ];
 
-const ERROR_MESSAGES: Record<string, string> = {
+const ERROR_MESSAGES = {
   not_authenticated: 'Du bist nicht angemeldet.',
   no_active_org: 'Keine Organisation ausgewählt.',
   not_authorized: 'Du bist nicht berechtigt, Aufträge zu verwalten.',
@@ -83,7 +84,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   rollback_failed:
     'Der Auftrag konnte nicht vollständig angelegt werden. Bitte lade die Ansicht neu und prüfe die Auftragsliste.',
   unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.'
-};
+} satisfies Record<string, string>;
+const ERROR_MESSAGE_BY_CODE: Record<string, string> = ERROR_MESSAGES;
 
 interface EditJobDialogProps {
   job: Job;
@@ -92,10 +94,10 @@ interface EditJobDialogProps {
   clients: Client[];
   members: OrgMemberOption[];
   projects?: ProjectWithDetails[];
-  onSuccess?: (payload: {
+  onSuccess?: ((payload: {
     job: Job;
     selectedEmployeeIds?: string[];
-  }) => void | Promise<void>;
+  }) => void | Promise<void>) | undefined;
 }
 
 export function EditJobDialog({
@@ -239,20 +241,28 @@ export function EditJobDialog({
 
       const input: UpdateJobInput = {
         title: title.trim(),
-        description: description.trim() || (job.description !== null ? '' : undefined),
+        ...(description.trim() || job.description !== null
+          ? { description: description.trim() }
+          : {}),
         clientId: clientId && clientId !== 'none' ? clientId : '',
         projectId: projectId && projectId !== 'none' ? projectId : '',
-        jobNumber: jobNumber.trim() || undefined,
+        ...(jobNumber.trim() ? { jobNumber: jobNumber.trim() } : {}),
         priority,
-        plannedDate: plannedDate
-          ? toLocalDateString(plannedDate)
+        ...(plannedDate
+          ? { plannedDate: toLocalDateString(plannedDate) }
           : job.plannedDate !== null
-            ? null
-            : undefined,
-        plannedTime: plannedTime || (job.plannedTime !== null ? null : undefined),
-        estimatedDurationMinutes,
-        plannedWorkingMinutes,
-        location: location.trim() || (job.location !== null ? '' : undefined),
+            ? { plannedDate: null }
+            : {}),
+        ...(plannedTime
+          ? { plannedTime }
+          : job.plannedTime !== null
+            ? { plannedTime: null }
+            : {}),
+        ...(estimatedDurationMinutes !== undefined ? { estimatedDurationMinutes } : {}),
+        ...(plannedWorkingMinutes !== undefined ? { plannedWorkingMinutes } : {}),
+        ...(location.trim() || job.location !== null
+          ? { location: location.trim() }
+          : {}),
         siteId,
         contactId,
         selectedUserIds: selectedEmployees,
@@ -278,7 +288,7 @@ export function EditJobDialog({
           setContentError(ERROR_MESSAGES[result.error]);
         } else {
           setError(
-            ERROR_MESSAGES[result.error] || 'Der Auftrag konnte nicht gespeichert werden.'
+            ERROR_MESSAGE_BY_CODE[result.error] || 'Der Auftrag konnte nicht gespeichert werden.'
           );
         }
         return;
@@ -315,37 +325,19 @@ export function EditJobDialog({
   const submitDisabled =
     formDisabled || isLoadingAssignments || assignmentsLoadFailed;
 
-  const activeProjects = useMemo(
-    () =>
-      projects.filter((p) => {
-        const status = p.statusOverride ?? (p.completedJobCount === p.jobCount && p.jobCount > 0 ? 'abgeschlossen' : 'nicht_begonnen');
-        return status !== 'abgeschlossen';
-      }),
-    [projects]
+  const projectSearch = useJobEntityOptions(
+    { kind: 'projects', purpose: 'job-project', clientId: clientId || undefined },
+    projectId ? [projectId] : [],
+    projects.filter((project) => project.id === projectId || ((project.statusOverride ? project.statusOverride !== 'abgeschlossen' : !(project.jobCount > 0 && project.completedJobCount === project.jobCount)) && (!clientId || !project.clientId || project.clientId === clientId))).map((project) => ({ value: project.id, label: project.projectNumber ? `${project.projectNumber} – ${project.name}` : project.name, clientId: project.clientId })),
   );
+  const projectOptions = projectSearch.options;
+  const activeProjects = useMemo(() => projectOptions.map((option) => ({
+    id: option.value, clientId: option.clientId ?? null,
+    siteId: projects.find((project) => project.id === option.value)?.siteId ?? null,
+    contactId: projects.find((project) => project.id === option.value)?.contactId ?? null,
+  })), [projectOptions, projects]);
 
-  const filteredProjects = useMemo(
-    () => {
-      if (!clientId) return activeProjects;
-      return activeProjects.filter((p) => p.clientId === clientId || !p.clientId);
-    },
-    [activeProjects, clientId]
-  );
-
-  const projectOptions = useMemo(
-    () =>
-      filteredProjects.map((p) => ({
-        value: p.id,
-        label: p.projectNumber ? `${p.projectNumber} – ${p.name}` : p.name
-      })),
-    [filteredProjects]
-  );
-
-  const isClientLocked = useMemo(() => {
-    if (!projectId) return false;
-    const selected = activeProjects.find((p) => p.id === projectId);
-    return !!selected;
-  }, [projectId, activeProjects]);
+  const isClientLocked = Boolean(projectId);
 
   const lockedClientLabel = useMemo(() => {
     if (!projectId) return undefined;
@@ -353,7 +345,7 @@ export function EditJobDialog({
     if (!selected) return undefined;
     if (!selected.clientId) return 'Kein Kunde';
     const c = clients.find((cl) => cl.id === selected.clientId);
-    return c?.name ?? 'Kein Kunde';
+    return c?.name;
   }, [projectId, activeProjects, clients]);
 
   const handleClientChange = (newClientId: string) => {
@@ -389,7 +381,6 @@ export function EditJobDialog({
     }
   };
 
-  const noProjectsForClient = clientId && filteredProjects.length === 0;
 
   const handleEstimatedHoursChange = (nextValue: string) => {
     setEstimatedHours(nextValue);
@@ -487,19 +478,15 @@ export function EditJobDialog({
             <Field
               label="Projekt"
               htmlFor="edit-job-project"
-              description={
-                noProjectsForClient
-                  ? 'Dem ausgewählten Kunden sind keine aktiven Projekte zugeordnet.'
-                  : undefined
-              }
             >
               <SearchableSelect
                 options={projectOptions}
+                onSearchChange={projectSearch.onSearchChange} loading={projectSearch.loading} loadError={projectSearch.loadError} onLoadMore={projectSearch.onLoadMore}
                 value={projectId}
                 onChange={handleProjectChange}
                 placeholder="Kein Projekt"
                 searchPlaceholder="Projekt suchen..."
-                emptyMessage={noProjectsForClient ? 'Kein Projekt für diesen Kunden vorhanden' : 'Kein Projekt gefunden'}
+                emptyMessage="Kein Projekt gefunden"
                 disabled={formDisabled}
                 allowNone
                 noneLabel="Kein Projekt"

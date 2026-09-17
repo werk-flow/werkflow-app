@@ -34,8 +34,8 @@ Final frozen build `pa2j4ys53RN4VqROc1u6O`: focused `@AUDIT-W2-P1-15` passed 4/4
 
 ## Links
 
-- Audit ledger: [wave-2-audit.md](../../wave-2-audit.md)
-- Gate runs: [golden-gate-log.md](../../golden-gate-log.md)
+- Audit ledger: [wave-2-audit.md](../audits/wave-2-audit.md)
+- Gate runs: [golden-gate-log.md](../audits/golden-gate-log.md)
 - Progress log: [../log.md](../log.md)
 
 ## Implementation plan (merged 2026-09-03 from the former separate plan file)

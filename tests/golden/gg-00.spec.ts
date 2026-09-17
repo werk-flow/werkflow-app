@@ -19,7 +19,7 @@ import {
   textInDom,
 } from './support/steps';
 import { artifactsDirectory, storageStatePath } from './support/world';
-import { expectLiveWithin } from './support/live';
+import { expectLiveWithin, realtimeSubscribed } from './support/live';
 
 // GG-00 — Existing Foundation Regression (@GG-00)
 // Verifies the roadmap's baseline scenario: role-scoped core flows, document
@@ -88,19 +88,15 @@ test.describe('GG-00 Bestandsfunktionen @GG-00', () => {
     world,
   }) => {
     // Two users are signed in simultaneously in separate browser contexts.
-    await Promise.all([
-      bueroPage.waitForEvent('console', {
-        predicate: (message) => message.text() === `[Realtime] subscribed to org-${world.orgId}`,
-        timeout: 30_000,
-      }),
-      bueroPage.goto('/kunden'),
-    ]);
+    await bueroPage.goto('/kunden');
+    await expect(realtimeSubscribed(bueroPage)).toBeAttached();
     await expect(visibleText(bueroPage, `Testkunde ${world.runId}`)).toBeVisible();
 
     // The Büro page must pick the new customer up via Realtime, without
     // reload, inside the latency contract (D4).
     await expectLiveWithin(visibleText(bueroPage, `Realtime Kunde ${world.runId}`), {
       label: 'gg-00 customer list cross-session',
+      actingPage: adminPage,
         mutation: (beforeSubmit) =>
           createCustomer(adminPage, `Realtime Kunde ${world.runId}`, {
             beforeSubmit,

@@ -1,11 +1,14 @@
+import { readOrganizationCalendar } from '@/lib/personnel/calendar-reader';
 import { cache } from "react";
+import { z } from "zod";
+import { memoizeRequestRead } from './read-request-cache';
 import { unstable_cache } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getProfileAvatarUrl } from "@/lib/profile-avatar";
 import type { User } from "@supabase/supabase-js";
 import type { UserOrg } from "@/components/organization/organization-context";
-import type { Database, Json } from "@/lib/supabase/database.types";
+import { Constants, type Database, type Json } from "@/lib/supabase/database.types";
 import {
   getAuftraegePreferencesFromJson,
   type AuftraegeColumnId,
@@ -17,16 +20,9 @@ import {
   type OrganizationTimeTrackingSettings,
 } from "@/lib/time-tracking/settings";
 import {
-  parseHolidayRegionHistory,
   type OrganizationHolidayCalendar,
 } from "@/lib/personnel/targets";
 import { getMembershipAccessMode } from "@/lib/personnel/lifecycle";
-
-type OrganizationData = {
-  id: string;
-  name: string;
-  unique_code: string;
-};
 
 // Tag helpers for cache invalidation in server actions
 export const CACHE_TAGS = {
@@ -37,7 +33,6 @@ export const CACHE_TAGS = {
   organizationSettings: (orgId: string) => `organization-settings-${orgId}`,
   organizationUserPreferences: (orgId: string, userId: string) =>
     `organization-user-preferences-${orgId}-${userId}`,
-  clients: (orgId: string) => `clients-${orgId}`,
   requests: (orgId: string) => `requests-${orgId}`,
   personnel: (orgId: string) => `personnel-${orgId}`,
   vacation: (orgId: string): string => `vacation-${orgId}`,
@@ -57,35 +52,18 @@ export const CACHE_TAGS = {
 const REVALIDATE_SECONDS = 300; // 5 minutes safety net
 
 /**
- * Cached user fetch for page rendering — deduplicates within a single
- * request via React cache(). Uses getUser() which validates the JWT
- * against Supabase Auth servers (one network roundtrip per request).
- */
-export const getCachedUser = cache(async () => {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-  return {
-    data: { user: user ?? null },
-    error,
-  };
-});
-
-/**
  * Validates the JWT against Supabase Auth servers and returns the
- * authenticated User, or null if the token is invalid/expired/revoked.
+ * authenticated User, or null when Auth rejects the identity.
  *
  * This MUST use getUser() (network roundtrip) rather than getSession()
  * because server actions use the returned user ID with the admin client
- * (which bypasses RLS). Without server-side validation, a revoked or
- * banned user with an unexpired JWT could still execute privileged
- * operations.
+ * (which bypasses RLS). This is not proof of current organization permission
+ * or immediate session revocation: issued JWTs can survive sign-out until
+ * expiry. Callers must also enforce current membership and lifecycle access.
  *
- * Deduplicates within a single request via React cache().
+ * Deduplicates in a React render or an explicit GET read-request scope.
  */
-export const getAuthenticatedUser = cache(async (): Promise<User | null> => {
+export const getAuthenticatedUser = memoizeRequestRead(async (): Promise<User | null> => {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -96,9 +74,18 @@ export const getAuthenticatedUser = cache(async (): Promise<User | null> => {
 });
 
 /**
- * Cross-request cached memberships fetch.
- * Uses unstable_cache with the admin client (no cookies needed) so results
- * persist across navigations. Tagged for on-demand revalidation.
+ * Page-rendering shape of the same verified identity. It delegates to
+ * getAuthenticatedUser so a render that also runs Server-Action readers pays
+ * one Auth round trip, not two.
+ */
+export async function getCachedUser(): Promise<{ data: { user: User | null } }> {
+  return { data: { user: await getAuthenticatedUser() } };
+}
+
+/**
+ * Membership facts must be fresh on each request. A stale candidate list can
+ * overwrite a newly selected organization or retain revoked role/access facts.
+ * Share the read only within a GET scope or React render.
  */
 type MembershipCandidate = UserOrg & {
   hasAccessBlocker: boolean;
@@ -111,125 +98,65 @@ type MembershipCandidate = UserOrg & {
   } | null;
 };
 
-async function loadMembershipCandidates(userId: string): Promise<MembershipCandidate[]> {
-  const fetchMemberships = unstable_cache(
-    async (uid: string): Promise<MembershipCandidate[]> => {
-      const admin = createSupabaseAdminClient();
-      const [membersResult, employeesResult] = await Promise.all([
-        admin
-          .from("organization_members")
-          .select(
-            `organization_id, role, joined_at, organizations (id, name, unique_code)`,
-          )
-          .eq("user_id", uid),
-        admin
-          .from("employee_records")
-          .select("id, organization_id")
-          .eq("user_id", uid),
-      ]);
+const membershipRowsSchema = z.array(z.object({
+  organization_id: z.string(),
+  role: z.enum(Constants.public.Enums.org_role),
+  joined_at: z.string(),
+  organizations: z.object({
+    id: z.string(), name: z.string(), unique_code: z.string(),
+    employee_records: z.array(z.object({
+      id: z.string(), user_id: z.string(),
+      personnel_access_lifecycles: z.array(z.object({
+        state: z.enum(Constants.public.Enums.personnel_access_state),
+        scheduled_state: z.enum(Constants.public.Enums.personnel_access_state).nullable(),
+        scheduled_for: z.string().nullable(),
+      })).max(1),
+      personnel_onboarding_requirements: z.array(z.object({ id: z.string() })),
+    })).max(1),
+  }).nullable(),
+}));
 
-      if (membersResult.error || employeesResult.error) {
-        console.error(
-          "Error fetching memberships:",
-          membersResult.error ?? employeesResult.error,
-        );
-        throw membersResult.error ?? employeesResult.error;
+const loadMembershipCandidates = memoizeRequestRead(
+  async (userId: string): Promise<MembershipCandidate[]> => {
+    const admin = createSupabaseAdminClient();
+    // One current database snapshot, with composite foreign keys keeping each
+    // lifecycle/blocker attached to the employee in this organization.
+    const { data, error } = await admin.from("organization_members").select(`
+      organization_id, role, joined_at,
+      organizations (id, name, unique_code,
+        employee_records (id, user_id,
+          personnel_access_lifecycles!personnel_access_lifecycles_employee_org_fkey (state, scheduled_state, scheduled_for),
+          personnel_onboarding_requirements!personnel_onboarding_requirements_employee_org_fkey (id)
+        )
+      )
+    `)
+      .eq("user_id", userId)
+      .eq("organizations.employee_records.user_id", userId)
+      .eq("organizations.employee_records.personnel_onboarding_requirements.blocks_access", true)
+      .not("organizations.employee_records.personnel_onboarding_requirements.state", "in", "(fulfilled,waived,cancelled)")
+      // Only blocker existence matters; fetching its full history is unnecessary.
+      .limit(1, { referencedTable: "organizations.employee_records.personnel_onboarding_requirements" });
+    if (error) throw error;
+    const memberships = membershipRowsSchema.parse(data);
+    return memberships.flatMap((membership) => {
+      const organization = membership.organizations;
+      if (!organization) return [];
+      const employee = organization.employee_records[0];
+      if (organization.id !== membership.organization_id || (employee && employee.user_id !== userId)) {
+        throw new Error("Membership response crossed its requested scope");
       }
-
-      const employeeByOrganization = new Map(
-        (employeesResult.data ?? []).map((employee) => [
-          employee.organization_id,
-          employee.id,
-        ]),
-      );
-      const employeeIds = Array.from(employeeByOrganization.values());
-      const organizationIds = Array.from(employeeByOrganization.keys());
-      const organizationByEmployee = new Map(
-        Array.from(employeeByOrganization, ([organizationId, employeeId]) => [
-          employeeId,
-          organizationId,
-        ]),
-      );
-      const [lifecyclesResult, blockersResult] = await Promise.all([
-        employeeIds.length > 0
-          ? admin
-              .from("personnel_access_lifecycles")
-              .select("employee_record_id, organization_id, state, scheduled_state, scheduled_for")
-              .in("employee_record_id", employeeIds)
-              .in("organization_id", organizationIds)
-          : Promise.resolve({ data: [], error: null }),
-        employeeIds.length > 0
-          ? admin
-              .from("personnel_onboarding_requirements")
-              .select("employee_record_id, organization_id")
-              .in("employee_record_id", employeeIds)
-              .in("organization_id", organizationIds)
-              .eq("blocks_access", true)
-              .not("state", "in", "(fulfilled,waived,cancelled)")
-          : Promise.resolve({ data: [], error: null }),
-      ]);
-      if (lifecyclesResult.error || blockersResult.error) {
-        console.error(
-          "Error fetching membership access state:",
-          lifecyclesResult.error ?? blockersResult.error,
-        );
-        throw lifecyclesResult.error ?? blockersResult.error;
-      }
-      const lifecycleByEmployee = new Map(
-        (lifecyclesResult.data ?? [])
-          .filter(
-            (lifecycle) =>
-              organizationByEmployee.get(lifecycle.employee_record_id) ===
-              lifecycle.organization_id,
-          )
-          .map((lifecycle) => [
-            lifecycle.employee_record_id,
-            {
-              state: lifecycle.state,
-              scheduledState: lifecycle.scheduled_state,
-              scheduledFor: lifecycle.scheduled_for,
-            },
-          ]),
-      );
-      const blockedEmployeeIds = new Set(
-        (blockersResult.data ?? [])
-          .filter(
-            (requirement) =>
-              organizationByEmployee.get(requirement.employee_record_id) ===
-              requirement.organization_id,
-          )
-          .map((requirement) => requirement.employee_record_id),
-      );
-
-      return (membersResult.data ?? [])
-        .filter((membership) => membership.organizations !== null)
-        .map((membership) => {
-          const organization = membership.organizations as unknown as OrganizationData;
-          const employeeId = employeeByOrganization.get(membership.organization_id);
-          return {
-            orgId: membership.organization_id,
-            name: organization.name,
-            uniqueCode: organization.unique_code,
-            role: membership.role,
-            joinedAt: membership.joined_at,
-            hasAccessBlocker: employeeId
-              ? blockedEmployeeIds.has(employeeId)
-              : false,
-            accessLifecycle: employeeId
-              ? (lifecycleByEmployee.get(employeeId) ?? null)
-              : null,
-          };
-        });
-    },
-    [`memberships-${userId}`],
-    {
-      tags: [CACHE_TAGS.memberships(userId)],
-      revalidate: REVALIDATE_SECONDS,
-    },
-  );
-
-  return fetchMemberships(userId);
-}
+      const lifecycle = employee?.personnel_access_lifecycles[0];
+      return [{
+        orgId: organization.id, name: organization.name, uniqueCode: organization.unique_code,
+        role: membership.role, joinedAt: membership.joined_at,
+        hasAccessBlocker: (employee?.personnel_onboarding_requirements.length ?? 0) > 0,
+        accessLifecycle: lifecycle ? {
+          state: lifecycle.state, scheduledState: lifecycle.scheduled_state, scheduledFor: lifecycle.scheduled_for,
+        } : null,
+      }];
+    });
+  },
+);
 
 function toUserOrg(membership: MembershipCandidate): UserOrg {
   return {
@@ -241,7 +168,7 @@ function toUserOrg(membership: MembershipCandidate): UserOrg {
   };
 }
 
-export const getCachedMemberships = cache(
+export const getCachedMemberships = memoizeRequestRead(
   async (userId: string): Promise<UserOrg[]> => {
     const candidates = await loadMembershipCandidates(userId);
     const now = Date.now();
@@ -251,7 +178,7 @@ export const getCachedMemberships = cache(
   },
 );
 
-export const getCachedPrestartMemberships = cache(
+export const getCachedPrestartMemberships = memoizeRequestRead(
   async (userId: string): Promise<UserOrg[]> => {
     const candidates = await loadMembershipCandidates(userId);
     const now = Date.now();
@@ -379,47 +306,7 @@ export const getCachedOrganizationSettings = cache(
 export const getCachedOrganizationCalendar = cache(
   async (orgId: string): Promise<OrganizationHolidayCalendar> => {
     const fetchCalendar = unstable_cache(
-      async (oid: string): Promise<OrganizationHolidayCalendar> => {
-        const admin = createSupabaseAdminClient();
-
-        const [settingsResult, closureResult] = await Promise.all([
-          admin
-            .from("organization_settings")
-            .select("holiday_region, holiday_region_history")
-            .eq("organization_id", oid)
-            .maybeSingle(),
-          admin
-            .from("organization_closure_days")
-            .select("id, closure_date, label")
-            .eq("organization_id", oid)
-            .order("closure_date", { ascending: true }),
-        ]);
-
-        if (settingsResult.error) {
-          console.error(
-            "Error fetching organization holiday settings:",
-            settingsResult.error,
-          );
-        }
-        if (closureResult.error) {
-          console.error(
-            "Error fetching organization closure days:",
-            closureResult.error,
-          );
-        }
-
-        return {
-          holidayRegion: settingsResult.data?.holiday_region ?? null,
-          holidayRegionHistory: parseHolidayRegionHistory(
-            settingsResult.data?.holiday_region_history,
-          ),
-          closureDays: (closureResult.data ?? []).map((row) => ({
-            id: row.id,
-            closureDate: row.closure_date,
-            label: row.label,
-          })),
-        };
-      },
+      (oid: string) => readOrganizationCalendar(oid),
       [`organization-calendar-${orgId}`],
       {
         tags: [

@@ -1,4 +1,5 @@
 import { SectionError } from '@/components/ui/section-error';
+import { readOrganizationClients } from '@/lib/clients/server';
 import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
@@ -6,7 +7,6 @@ import { redirect } from 'next/navigation';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
-import { toClient } from '@/lib/jobs/types';
 import { toClientRequest } from '@/lib/requests/types';
 import {
   AnfragenContent,
@@ -26,7 +26,7 @@ import {
 async function AnfragenData({ activeOrgId }: { activeOrgId: string }) {
   const admin = createSupabaseAdminClient();
 
-  const [requestsResult, clientsResult] = await Promise.all([
+  const [requestsResult, clients] = await Promise.all([
     admin
       .from('client_requests')
       .select('*')
@@ -49,7 +49,7 @@ async function AnfragenData({ activeOrgId }: { activeOrgId: string }) {
 
   const requests = (requestsResult.data ?? []).map(toClientRequest);
   const clientNameById = new Map(
-    (clientsResult.data ?? []).map((client) => [client.id, client.name])
+    (clients.data ?? []).map((client) => [client.id, client.name])
   );
 
   const assigneeIds = Array.from(
@@ -128,16 +128,11 @@ async function AnfragenData({ activeOrgId }: { activeOrgId: string }) {
 async function CreateRequestDialogData({ activeOrgId }: { activeOrgId: string }) {
   const admin = createSupabaseAdminClient();
 
-  const [clientsResult, assignees] = await Promise.all([
-    admin
-      .from('clients')
-      .select('*')
-      .eq('organization_id', activeOrgId)
-      .order('name', { ascending: true }),
+  const [clients, assignees] = await Promise.all([
+    readOrganizationClients(admin, activeOrgId),
     getManagerAssigneeOptions(admin, activeOrgId),
   ]);
 
-  const clients = (clientsResult.data ?? []).map(toClient);
 
   return <CreateRequestDialog clients={clients} assignees={assignees} />;
 }

@@ -1,6 +1,6 @@
 # Phase 1 Execution Protocol
 
-Status: living — last reviewed 2026-09-06
+Status: living — last reviewed 2026-09-17
 
 This file holds the durable process rules for Phase 1. It changes only when the process itself changes, and any such change needs an explicit progress-log entry naming the decision. The hot status and slice index live in [roadmap.md](roadmap.md); gate definitions in [gates.md](gates.md); routing matrices in [coverage.md](coverage.md); history in [log.md](log.md); per-slice acceptance evidence in `slices/`.
 
@@ -103,7 +103,7 @@ Recorded 2026-08-23 to identify external dependencies before a wave starts. The 
 
 - **Wave 2 (`P1-13`–`P1-24`): deliberately zero new external resources.** Every slice is internal product depth. Two look-alikes that are NOT external here: `P1-15` "signatures" means captured signature evidence (drawn/uploaded, versioned) — qualified electronic signature providers are an explicit later decision gate, never an implied dependency; `P1-23` "payroll-ready export" means versioned export FILES an accountant/payroll tool can consume — no DATEV or payroll API connection (that is `P1-43` file handoff and `P1-50` connectors).
 - **Wave 3:** first real external touchpoints, still file-first and free of per-use fees: `P1-25` imports wholesaler catalog/price data (DATANORM files require the customer's own wholesaler accounts — an onboarding prerequisite, not a WerkFlow cost); `P1-34` scopes DATANORM/IDS/UGL/Open Masterdata/SHK Connect acceptance (open trade standards; live wholesaler API access again rides customer accounts). Budget acquisition effort for test fixtures/sample files, not money.
-- **Wave 4:** `P1-40` XRechnung/ZUGFeRD validation (open validators, e.g. the KoSIT tooling — free, but plan validation fixtures); `P1-42` bank data via file import (CSV/camt) by default — live bank aggregation APIs (finAPI-class, real monthly cost) are a decision gate, not assumed; `P1-43` stays accountant-ready file export.
+- **Wave 4:** the first Railway worker (owner decision 2026-09-17, [decision 0001 amendment](../../decisions/0001-infrastructure-stack.md)): a Gotenberg container renders offers, invoices and purchase orders to PDF/A-3 from `P1-36` on, and the KoSIT and Mustang validators sit beside it in `P1-40` (Chromium alone is not PDF/A; the reference validator is Java); e-invoice generation stays TypeScript (`@e-invoice-eu/core` under licence review, `@stackforge-eu/factur-x` as the alternative); `P1-42` bank data via file import (camt.053 v08, MT940, per-bank CSV) by default — a live bank connection (finAPI class, from about 100 € per month) is a decision gate, not assumed; `P1-43` stays the DATEV-Format `EXTF` file export, the DATEV Datenservice connector is `P1-50`. The qualified tax and legal review of caution 2 is a service cost: the [expert-review agenda](pre-wave-3/04-wave-3-4-and-phase-2-planning.md#expert-review-agenda-for-wave-4-answer-to-q4) names the items, which Willert Haustechnik's in-house experts and their `Steuerberater` answer before `P1-39` starts.
 - **Wave 5:** the paid-service concentration. `P1-44` OCR/thumbnails is the first Railway worker (decision 0001; Railway ~$5+/month plus compute, OCR itself open-source first); `P1-46` outbound messaging means real Resend volume (likely a paid tier, ~$20/month class) and SMS only via a paid provider — SMS is a decision gate with per-message cost; `P1-49` mobile app means Apple/Google developer accounts ($99/year + $25 once); `P1-50` connectors (DATEV, calendars, wholesalers) each carry their own account/partner-access decision.
 - **Wave 6:** nothing new.
 
@@ -120,7 +120,7 @@ Rule: a slice that would introduce an external account, API, or per-use cost not
 5. Restate the bounded outcome, non-goals, affected roles, direct dependencies, and acceptance criteria.
    - **Propose the slice's complete user-flow list** (the per-slice audit model): draft the slice's catalog bullets as German flows with provisional `P1-XX-FNN` IDs and include them in the pre-implementation report, so the owner confirms product behavior and the flow inventory in one gate. Flows discovered during implementation are added; the catalog is finalized at acceptance.
 6. Identify unresolved decisions. Resolve them with the owner using the `grilling` skill's frontier method (numbered questions with recommended answers, in rounds). Move the slice to `decision_blocked` if a decision would materially change ownership, data migration, permissions, legal/commercial behavior, or downstream contracts.
-7. The slice record under `slices/` is the slice's only document. It starts as the plan when the slice enters `in_progress` (bounded outcome, confirmed decisions, execution order, migration and rollout sequence) and closes as the acceptance record. Never create a separate implementation-plan file or any other per-slice file outside `slices/`; `docs:check` rejects them. Split by scope with suffixes such as `P1-15a` when a slice is too large, never by document.
+7. The slice record under `slices/` is the slice's only document. It starts as the plan when the slice enters `in_progress` (bounded outcome, confirmed decisions, execution order, migration and rollout sequence) and closes as the acceptance record. A planning step may write the record earlier, while the slice is `ready`, when its status line says the slice has not started (as `P1-24a` was written in pre-Wave-3 step 3). Never create a separate implementation-plan file or any other per-slice file outside `slices/`; `docs:check` rejects them. Split by scope with suffixes such as `P1-15a` when a slice is too large, never by document.
 
 ### During Implementation
 
@@ -154,9 +154,18 @@ The slice is not complete until all applicable items are satisfied:
 - connected feature contracts and open decisions are updated;
 - conceptual data-model and technical docs are updated if ownership or architecture changed;
 - the slice's acceptance is recorded in its owning files: the slice record under `slices/` closes with the full acceptance evidence, completion date, follow-up work, and any split/superseding slices (the record is the canonical home for the slice's facts); [roadmap.md](roadmap.md) updates the index-row status, the checkpoint table, the accepted counter, and the recomputed `ready` set; [log.md](log.md) gains one short appended entry linking the record;
-- the complete selected local change plan passes on qualified inputs, including affected browser groups on a recorded production build; provider changes also receive the applicable cloud canary evidence; the slice record and [gate log](../golden-gate-log.md) identify the verification report, selected scope, reused results, and fresh runs;
+- the complete selected local change plan passes on qualified inputs, including affected browser groups on a recorded production build; provider changes also receive the applicable cloud canary evidence; the slice record and [gate log](audits/golden-gate-log.md) identify the verification report, selected scope, reused results, and fresh runs;
 - failures have evidence and classification in [test-incident-log.md](../../technical/test-incident-log.md); unresolved selected groups block acceptance, unchanged failed inputs cannot be retried as a substitute for diagnosis, and retained ownership is resolved before release closure;
-- a separate review finds no unresolved correctness, security, data-loss, or documentation issue.
+- the deletion pass and the independent review below are recorded in the slice record, and the review leaves no unresolved correctness, security, data-loss, or documentation issue.
+
+### Deletion Pass And Independent Review
+
+Recorded 2026-09-14 ([pre-Wave-3 step 2](pre-wave-3/02-code-quality-regression-proofing.md)). Both happen after the slice's selected groups pass and before the slice record closes. The judgment inside them is Tier 3 by nature; the record and the gates behind it are Tier 2.
+
+1. **Deletion pass, by the session that implemented the slice.** Walk the diff once more, file by file (`git diff --stat HEAD` plus untracked files). For every added file, export, function, branch, state variable, effect, wrapper, and dependency, ask whether the outcome survives without it. Delete what does not earn its place; fold a helper with one caller back into that caller; replace a copy with an import of the one home. Then run `bun run test:plan`: `static:unused` (knip) fails on a dead file, export, or dependency, `static:typecheck` on an unused local or parameter, `static:lint` on a product module over its line cap or a suppression without a reason, and `unit:all` on a helper name declared in two files or a `key` built from a collection. Record the pass in the slice record under `## Deletion Pass And Review`: the `git diff --shortstat` line before and after the pass, and what the pass removed.
+2. **Independent review, by a different session.** A fresh context that did not write the code reads the diff against the bounded outcome and the coding standards in `AGENTS.md`, then runs `bun run review` on the slice's diff (`--uncommitted` while the slice is unpublished, `--base-commit <sha>` after an intermediate commit). When the diff exceeds CodeRabbit's file limit, review it in directory passes (`--dir app`, `--dir components`, `--dir lib`) and name the directories the review did not cover. Every finding gets a disposition row in the same section: repaired, declined with the reason, or deferred with its owner. The six rows of the [Step 3 record](hardening-2026-09/07-step-3-final-beta-acceptance.md#closing-account) are the model. A kept finding names the tier its prevention landed on ([decision 0005](../../decisions/0005-enforcement-ladder.md)).
+
+`docs:check` rejects a slice record closed on or after 2026-09-15 that lacks the section, the two shortstat lines, or the review command (check 13 in `scripts/check-docs.ts`).
 
 ## Cross-Cutting Invariants
 
@@ -248,6 +257,8 @@ Status: living — last reviewed YYYY-MM-DD; in-progress slice plan
 ## Automated And Manual Verification
 
 ## Documentation Updates
+
+## Deletion Pass And Review
 
 ## Completion Evidence
 ```

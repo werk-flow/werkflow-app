@@ -30,9 +30,13 @@ import type { TestWorld } from "./support/world";
 
 test.describe.configure({ mode: "serial" });
 
-const DATES = Array.from({ length: 5 }, (_, index) =>
-  ownedBerlinDateAtOffset("p1-20", 105 + index),
-);
+const DATES = [
+  ownedBerlinDateAtOffset("p1-20", 105),
+  ownedBerlinDateAtOffset("p1-20", 106),
+  ownedBerlinDateAtOffset("p1-20", 107),
+  ownedBerlinDateAtOffset("p1-20", 108),
+  ownedBerlinDateAtOffset("p1-20", 109),
+] as const;
 // Completion is bounded by the real operating date, not fixture-date
 // ownership. Keep the visit inside that boundary while coverage dates retain
 // P1-20's collision-free audit window.
@@ -388,7 +392,7 @@ test.describe("P1-20 maintenance plan to completed visit @P1-20 @GG-06", () => {
         suite: "golden",
       },
     );
-    expect(state.dueWork[0].planning_occurrence_id).not.toBeNull();
+    expect(state.dueWork[0]?.planning_occurrence_id).not.toBeNull();
   });
 
   test("projects only exact visit context to the assigned employee @P1-20-stage-field",

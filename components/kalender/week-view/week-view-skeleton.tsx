@@ -15,9 +15,9 @@ export function WeekViewSkeleton({ memberCount = 5 }: WeekViewSkeletonProps) {
           <div className="p-3 border-r">
             <Skeleton className="h-4 w-16" />
           </div>
-          {days.map((day, i) => (
+          {days.map((day, index) => (
             <div
-              key={i}
+              key={day}
               className="p-3 border-r last:border-r-0 flex flex-col gap-2"
             >
               <div className="flex flex-col items-center gap-1">
@@ -26,7 +26,7 @@ export function WeekViewSkeleton({ memberCount = 5 }: WeekViewSkeletonProps) {
               </div>
               <div className="space-y-1">
                 <Skeleton className="h-6 w-full rounded" />
-                {i % 3 === 0 && <Skeleton className="h-6 w-4/5 rounded" />}
+                {index % 3 === 0 && <Skeleton className="h-6 w-4/5 rounded" />}
               </div>
             </div>
           ))}

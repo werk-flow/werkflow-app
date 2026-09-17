@@ -54,9 +54,9 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { isFieldWorkPackReadOnly } from "@/lib/jobs/field-work-pack";
+import { readInBackground } from "@/lib/data/background-read-client";
 import {
   clearProjectWorkExecutionOverride,
-  getWorkLifecycleSnapshot,
   getApprovedArtifactActionsForTarget,
   linkWorkDependencyArtifactApproval,
   parkWorkTarget,
@@ -87,7 +87,7 @@ import {
   type WorkLifecycleSnapshot,
 } from "@/lib/work-lifecycle/types";
 
-const ERROR_MESSAGES: Record<string, string> = {
+const ERROR_MESSAGES = {
   work_transition_stale_version:
     "Der Arbeitsstand wurde inzwischen geändert. Die aktuelle Ansicht wurde geladen.",
   work_transition_not_allowed: "Dieser Zustandswechsel ist nicht erlaubt.",
@@ -106,7 +106,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   work_dependency_cycle: "Abhängigkeiten dürfen keinen Kreis bilden.",
   work_dependency_self: "Arbeit kann nicht von sich selbst abhängen.",
   work_action_failed: "Die Änderung konnte nicht gespeichert werden.",
-};
+} satisfies Record<string, string>;
+const ERROR_MESSAGE_BY_CODE: Record<string, string> = ERROR_MESSAGES;
 
 // Read failures inside the dialogs are not save failures; they get their own copy.
 const PREDECESSOR_SEARCH_FAILED_MESSAGE =
@@ -117,6 +118,7 @@ const APPROVALS_LOAD_FAILED_MESSAGE =
 function fromIsoDate(value?: string): Date | undefined {
   if (!value) return undefined;
   const [year, month, day] = value.split("-").map(Number);
+  if (year === undefined || month === undefined || day === undefined) return undefined;
   return new Date(year, month - 1, day);
 }
 
@@ -180,12 +182,12 @@ function TransitionDialog({
         targetId: snapshot.targetId,
         expectedVersion: snapshot.executionVersion,
         toState: transition,
-        reason: reason.trim() || undefined,
+        ...(reason.trim() ? { reason: reason.trim() } : {}),
         overrideGates: override,
       });
       if (!result.success) {
         setError(
-          ERROR_MESSAGES[result.error] ?? ERROR_MESSAGES.work_action_failed,
+          ERROR_MESSAGE_BY_CODE[result.error] ?? ERROR_MESSAGES.work_action_failed,
         );
         if (result.error.includes("stale_version")) await onStale();
         return;
@@ -270,7 +272,7 @@ function BlockerDialog({
 }: {
   snapshot: WorkLifecycleSnapshot;
   kind: "blocker" | "parking";
-  blocker?: WorkBlocker;
+  blocker?: WorkBlocker | undefined;
   isManager: boolean;
   onClose: () => void;
   onChanged: () => Promise<void>;
@@ -319,7 +321,7 @@ function BlockerDialog({
         targetType: snapshot.targetType,
         targetId: snapshot.targetId,
         reason,
-        details: details.trim() || undefined,
+        ...(details.trim() ? { details: details.trim() } : {}),
         responsibleEmployeeRecordId: ownerId,
         nextReviewDate: toIsoDate(reviewDate),
       };
@@ -331,12 +333,11 @@ function BlockerDialog({
             })
           : await saveWorkBlocker({
               ...input,
-              blockerId: blocker?.id,
-              expectedVersion: blocker?.version,
+              ...(blocker ? { blockerId: blocker.id, expectedVersion: blocker.version } : {}),
             });
       if (!result.success) {
         setError(
-          ERROR_MESSAGES[result.error] ?? ERROR_MESSAGES.work_action_failed,
+          ERROR_MESSAGE_BY_CODE[result.error] ?? ERROR_MESSAGES.work_action_failed,
         );
         return;
       }
@@ -457,7 +458,7 @@ function ReasonDialog({
       const result = await onSubmit(reason.trim());
       if (!result.success) {
         setError(
-          ERROR_MESSAGES[result.error ?? ""] ??
+          ERROR_MESSAGE_BY_CODE[result.error ?? ""] ??
             ERROR_MESSAGES.work_action_failed,
         );
         return;
@@ -563,12 +564,12 @@ function DependencyDialog({
           type === "declared"
             ? { type, kind: predecessor as WorkDeclaredDependencyKind }
             : { type, id: predecessor },
-        description: description.trim() || undefined,
+        ...(description.trim() ? { description: description.trim() } : {}),
         effect,
       });
       if (!result.success) {
         setError(
-          ERROR_MESSAGES[result.error] ?? ERROR_MESSAGES.work_action_failed,
+          ERROR_MESSAGE_BY_CODE[result.error] ?? ERROR_MESSAGES.work_action_failed,
         );
         return;
       }
@@ -731,7 +732,7 @@ function ArtifactApprovalDependencyDialog({
     void runApprovalTask(async () => {
       const result = await linkWorkDependencyArtifactApproval({ dependencyId: dependency.id,
         expectedVersion: dependency.version, actionId, reason });
-      if (!result.success) { setError(ERROR_MESSAGES[result.error] ?? ERROR_MESSAGES.work_action_failed); return; }
+      if (!result.success) { setError(ERROR_MESSAGE_BY_CODE[result.error] ?? ERROR_MESSAGES.work_action_failed); return; }
       await onChanged();
       onClose();
     });
@@ -813,11 +814,11 @@ export function WorkLifecycleCard({
       "job_material_lines",
       "inventory_stock_levels",
     ],
-    read: async () => {
-      const result = await getWorkLifecycleSnapshot({
+    read: async ({ signal }) => {
+      const result = await readInBackground("work-lifecycle-snapshot", {
         targetType: initialSnapshot.targetType,
         targetId: initialSnapshot.targetId,
-      });
+      }, signal);
       return result.success ? { ok: true, data: result.snapshot } : { ok: false };
     },
     initialData: initialSnapshot,
@@ -1340,7 +1341,7 @@ export function WorkLifecycleCard({
         </div>
       </FormDisclosure>
       {unmetDependencies > 0 && (
-        <p className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-300">
+        <p className="flex items-center gap-2 text-sm text-warning-text">
           <LockKeyhole className="size-4" />
           {unmetDependencies} offene Voraussetzung(en) beeinflussen die nächste
           Änderung.

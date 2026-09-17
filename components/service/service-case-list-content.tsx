@@ -1,5 +1,6 @@
 "use client";
 
+import { normalizeSearchText } from '@/lib/ui/search';
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactElement } from "react";
@@ -99,7 +100,7 @@ export function ServiceCaseListContent({
   // The list is newest first, so a new record leads; a Realtime read that
   // arrives before the settle read drops the placeholder by id.
   const visiblePending = pendingCreates.filter((draft) => !cases.some((item) => item.id === draft.id));
-  const needle = search.trim().toLocaleLowerCase("de-DE");
+  const needle = normalizeSearchText(search);
   const filtered = useMemo(
     () =>
       cases.filter((item) => {

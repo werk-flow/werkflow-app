@@ -14,11 +14,7 @@ import { InlinePending } from '@/components/ui/inline-pending';
 import { ListRow } from '@/components/ui/list-row';
 import { PendingRow } from '@/components/ui/pending-row';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  SkeletonList,
-  SkeletonRows,
-  type SkeletonColumn,
-} from '@/components/ui/skeleton-table';
+import { type SkeletonColumn } from '@/components/ui/skeleton-table';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import type { OptimisticListItem } from '@/hooks/use-optimistic-list';
 import { useSettleOnChange } from '@/hooks/use-settle-on-change';
@@ -38,28 +34,29 @@ export type Invite = {
 
 const PENDING_LABEL = 'Einladung wird gesendet';
 
-const STATUS_LABELS: Record<string, { label: string; className: string }> = {
+const STATUS_LABELS = {
   pending: {
     label: 'Ausstehend',
-    className: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
+    className: 'bg-warning-soft text-warning-soft-foreground',
   },
   accepted: {
     label: 'Akzeptiert',
-    className: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+    className: 'bg-success-soft text-success-soft-foreground',
   },
   expired: {
     label: 'Abgelaufen',
-    className: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200',
+    className: 'bg-muted text-muted-foreground',
   },
   cancelled: {
     label: 'Storniert',
-    className: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+    className: 'bg-destructive-soft text-destructive-soft-foreground',
   },
-};
+} satisfies Record<string, { label: string; className: string }>;
+const STATUS_LABEL_BY_CODE: Record<string, { label: string; className: string }> = STATUS_LABELS;
 
 // One column definition for the loaded table and its skeleton (design canon).
 // Invitation rows do nothing on click, so neither rows nor skeletons hover.
-export const INVITATION_COLUMNS: readonly SkeletonColumn[] = [
+const INVITATION_COLUMNS: readonly SkeletonColumn[] = [
   { id: 'email', header: 'E-Mail', skeleton: <Skeleton className="h-5 w-48" /> },
   {
     id: 'role',
@@ -107,37 +104,8 @@ function InvitationsTableHeader() {
   );
 }
 
-export function InvitationsTableSkeleton({ count }: { count: number }) {
-  return (
-    <>
-      <SkeletonList count={count} className="md:hidden">
-        <div className="flex-1 min-w-0 space-y-1">
-          <div className="flex items-center gap-2">
-            <Skeleton className="h-[20px] w-[180px]" />
-            <Skeleton className="h-[18px] w-[75px] rounded-full" />
-          </div>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            <Skeleton className="h-[18px] w-[70px] rounded-full" />
-            <Skeleton className="h-[16px] w-[110px]" />
-            <Skeleton className="h-[16px] w-[95px]" />
-          </div>
-        </div>
-        <Skeleton className="size-8 rounded shrink-0" />
-      </SkeletonList>
-      <div className="hidden md:block">
-        <Table>
-          <InvitationsTableHeader />
-          <TableBody>
-            <SkeletonRows columns={INVITATION_COLUMNS} rows={count} />
-          </TableBody>
-        </Table>
-      </div>
-    </>
-  );
-}
-
 function displayStatusFor(invite: Invite) {
-  const statusInfo = STATUS_LABELS[invite.status] || STATUS_LABELS.pending;
+  const statusInfo = STATUS_LABEL_BY_CODE[invite.status] || STATUS_LABELS.pending;
   const isExpired =
     invite.status === 'pending' && new Date(invite.expires_at) < new Date();
   return { isExpired, displayStatus: isExpired ? STATUS_LABELS.expired : statusInfo };
@@ -246,7 +214,7 @@ interface InvitationsTableProps {
 }
 
 // No loading prop on purpose: the list never turns into a skeleton over data
-// it already has (feedback canon); `InvitationsTableSkeleton` serves loading.tsx.
+// it already has (feedback canon).
 export function InvitationsTable({ rows }: InvitationsTableProps) {
   // Row actions mark only their row; after the server confirms, the row stays
   // marked until the refreshed list lands. `rows` changes identity with the

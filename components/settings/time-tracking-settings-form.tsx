@@ -34,14 +34,15 @@ import {
   type TimeTrackingSettingsValues,
 } from '@/lib/time-tracking/settings'
 
-const ERROR_MESSAGES: Record<string, string> = {
+const ERROR_MESSAGES = {
   not_authenticated: 'Du bist nicht angemeldet.',
   org_not_found: 'Die aktive Organisation konnte nicht gefunden werden.',
   not_authorized: 'Nur Admins können diese Regeln ändern.',
   invalid_input: 'Bitte prüfe die Pausenregeln.',
   no_changes: 'Es wurden keine Änderungen vorgenommen.',
   update_failed: 'Die Zeiterfassungsregeln konnten nicht gespeichert werden.',
-}
+} satisfies Record<string, string>
+const ERROR_MESSAGE_BY_CODE: Record<string, string> = ERROR_MESSAGES
 
 type TimeTrackingSettingsFormProps = {
   initialSettings: TimeTrackingSettingsValues
@@ -102,7 +103,7 @@ export function TimeTrackingSettingsForm({
 
       if (!result.success) {
         showBanner({
-          message: ERROR_MESSAGES[result.error] ?? ERROR_MESSAGES.update_failed,
+          message: ERROR_MESSAGE_BY_CODE[result.error] ?? ERROR_MESSAGES.update_failed,
           variant: 'error',
         })
         return
@@ -151,7 +152,7 @@ export function TimeTrackingSettingsForm({
                     required
                     description={
                       BREAK_MODE_OPTIONS.find((option) => option.value === field.value)
-                        ?.description ?? BREAK_MODE_OPTIONS[0].description
+                        ?.description ?? BREAK_MODE_OPTIONS[0]?.description
                     }
                     error={fieldState.error?.message}
                   >

@@ -12,6 +12,29 @@ export type GroupQualificationContext = {
   qualify: (group: TestGroup) => { inputs: string[]; fingerprint: string };
 };
 
+/**
+ * Files a kind executes for every one of its groups but no other kind reaches:
+ * each business suite's Playwright config, the component runner and its
+ * fixtures, the lint rule modules, Bun's test configuration. Before
+ * 2026-09-14 these were unowned and therefore inputs of every browser group
+ * (`tests/ui-contracts/run.ts` alone charged four `lib/testing` modules to all
+ * 52 local groups). The three-suite global setup files stay global on purpose.
+ */
+const KIND_OWNED_PREFIXES: Readonly<Record<TestGroup["kind"], readonly string[]>> = {
+  golden: ["playwright.config.ts"],
+  audit: ["playwright.audit.config.ts"],
+  // Provider-only helpers are not shared app inputs. Actual imports still
+  // qualify any other consumer, and convention units retain every file.
+  canary: ["tests/canary/support/", "playwright.canary.config.ts"],
+  ui: ["tests/ui-contracts/"],
+  unit: ["bunfig.toml"],
+  sql: [],
+  static: [],
+};
+const GROUP_OWNED_PREFIXES: Readonly<Record<string, readonly string[]>> = {
+  "static:lint": ["eslint-rules/"],
+};
+
 /** Direct commands and the orchestrator must qualify exactly the same inputs. */
 export function createGroupQualification(
   repositoryRoot: string,
@@ -23,9 +46,12 @@ export function createGroupQualification(
   const definitions: EvidenceGroup[] = groups.map((group) => ({
     id: group.id,
     files: getGroupExecutionFiles(group, groups),
-    sourcePrefixes: group.scopes.includes("*")
+    sourcePrefixes: [...(group.scopes.includes("*")
       ? Object.values(TEST_SCOPE_PREFIXES).flat()
-      : group.scopes.flatMap((scope) => TEST_SCOPE_PREFIXES[scope] ?? []),
+      : group.scopes.flatMap((scope) => TEST_SCOPE_PREFIXES[scope] ?? [])),
+      ...KIND_OWNED_PREFIXES[group.kind],
+      ...(GROUP_OWNED_PREFIXES[group.id] ?? []),
+    ],
   }));
   const byId = new Map(definitions.map((definition) => [definition.id, definition]));
   return {

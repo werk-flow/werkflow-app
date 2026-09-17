@@ -49,11 +49,13 @@ Completion means the next experiment distinguishes explanations rather than mere
 
 Change one relevant variable at a time. Prefer existing logs, a debugger, or a focused read. Add temporary instrumentation only where it can distinguish the explanations. Prefix temporary logs with a unique marker and remove them before completion.
 
-For performance, record the start event, completion event, elapsed time, and required deadline. Do not start the clock after a loading delay or reload a receiving page to manufacture freshness. An emergency timeout does not define acceptable response time.
+For performance, record the start event, completion event, elapsed time, and required deadline. Do not start the clock after a loading delay or reload a receiving page to manufacture freshness. An emergency timeout does not define acceptable response time. Measure a repeatable interaction as a registered scenario (`lib/testing/measured-scenarios.ts`, recorded through `expectUsableWithin` or `expectScenarioLiveWithin` in `tests/golden/support/scenario-measurement.ts`) so the value gets a budget, a baseline comparison, and browser attribution instead of a one-off stopwatch. End a navigation or view-switch measurement on the actual usable renderer or control. Calendar month readiness requires both range coverage and `FullCalendarView` completion; the parent marker alone cannot certify a dynamic fallback. A server response, a dialog shell, or hydration of a parent does not prove child readiness.
 
 If a mutation response is unclear, inspect its exact persisted identity or version before any recovery. A repeat write is not an observation.
 
 ## 5. Repair and prevent recurrence
+
+For reconnect defects, hold a read across the disconnected gap and introduce a later change before rejoining. Recovery must read after the database listener becomes ready. Supabase channel `SUBSCRIBED` can precede that boundary; the provider owns recovery on the `postgres_changes` system-ready message. A read during the gap proves no coverage of later writes. The same-scope, post-invalidation reuse rule lives in `docs/technical/realtime-and-caching.md`.
 
 Repair the smallest confirmed cause without weakening the promised behavior. Exercise the real failing boundary in the regression check. A test that simulates away the cause does not establish prevention.
 
@@ -74,3 +76,5 @@ Before closing the finding, confirm:
 - No required selected group is falsely reported green while failed, blocked, or too slow.
 
 Do not restart all passing groups, enlarge a timeout, or reset attempt history to obtain a clean-looking report. The result can be a confirmed repair, a disproved hypothesis, or an unresolved observation with a precise next step. Report which conclusion the evidence supports.
+
+Calendar save ownership is per operation: `beginMutation()` returns an idempotent release callback used in `finally`. A manual refresh or child success must never decrement another save. Check thrown transport failures as well as returned errors, and offer Undo only after confirmed persistence. Entries and correction metadata commit together through `completeCalendarEntryRead`; a missing badge read is a failed window, not ready data. The inner calendar scope includes organization, caller, and role, including auxiliary Parkplatz state.

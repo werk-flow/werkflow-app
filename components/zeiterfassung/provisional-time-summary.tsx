@@ -3,7 +3,7 @@
 import { ClockAlert } from 'lucide-react';
 
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
-import { getProvisionalTimeSummary } from '@/lib/time-corrections/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
 
 function formatMinutes(value: number): string {
   const absolute = Math.abs(value);
@@ -29,12 +29,12 @@ export function ProvisionalTimeSummary({
     proposedMinutes: number;
   }>({
     tables: ['time_correction_requests'],
-    read: async (): Promise<LiveViewResult<{
+    read: async ({ signal }): Promise<LiveViewResult<{
       count: number;
       beforeMinutes: number;
       proposedMinutes: number;
     }>> => {
-      const result = await getProvisionalTimeSummary({ organizationId, userId });
+      const result = await readInBackground('provisional-time-summary', { organizationId, userId }, signal);
       return result.success ? { ok: true, data: result } : { ok: false };
     },
     resetKey: `${organizationId}:${userId}`,
@@ -43,8 +43,8 @@ export function ProvisionalTimeSummary({
   if (!summary || summary.count === 0) return null;
   const delta = summary.proposedMinutes - summary.beforeMinutes;
   return (
-    <div className="mb-4 flex items-start gap-3 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm">
-      <ClockAlert className="mt-0.5 size-4 shrink-0 text-yellow-700 dark:text-yellow-300" />
+    <div className="mb-4 flex items-start gap-3 rounded-lg border border-warning/30 bg-warning-soft p-3 text-sm">
+      <ClockAlert className="mt-0.5 size-4 shrink-0 text-warning-soft-foreground" />
       <div>
         <p className="font-medium">Vorgemerkte Zeit: {formatMinutes(delta)}</p>
         <p className="text-muted-foreground">

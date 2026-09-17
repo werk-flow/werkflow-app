@@ -26,6 +26,7 @@ import {
 } from '@/lib/time-tracking/actions';
 import { getTimeCorrectionRequests } from '@/lib/time-corrections/actions';
 import { TIME_CORRECTION_KIND_LABELS } from '@/lib/time-corrections/types';
+import { readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import {
   getOwnVacationOverview,
   getPendingVacationRequestsForApprover,
@@ -98,10 +99,17 @@ async function deriveApprovalTasks(
 ): Promise<{ tasks: AttentionTask[]; failed: boolean }> {
   const tasks: AttentionTask[] = [];
   let failed = false;
+  // Independent authorized readers share no intermediate result. Run them
+  // together so badges do not queue four database round trips before counting.
+  const [sessionsResult, changeRequestsResult, correctionsResult, vacationResult] = await Promise.all([
+    getPendingSessions(context.orgId),
+    context.role === 'admin' ? getPendingChangeRequests(context.orgId) : Promise.resolve({ success: true as const, requests: [] }),
+    getTimeCorrectionRequests(context.orgId),
+    getPendingVacationRequestsForApprover(),
+  ]);
 
   // Pending time sessions: getPendingSessions resolves the caller's
   // time_approval responsibility itself and returns [] for non-holders.
-  const sessionsResult = await getPendingSessions(context.orgId);
   if (sessionsResult.success) {
     for (const session of sessionsResult.sessions) {
       tasks.push({
@@ -120,7 +128,6 @@ async function deriveApprovalTasks(
 
   // Pending change requests remain the admin recovery surface (P1-05).
   if (context.role === 'admin') {
-    const changeRequestsResult = await getPendingChangeRequests(context.orgId);
     if (changeRequestsResult.success) {
       for (const request of changeRequestsResult.requests) {
         tasks.push({
@@ -138,7 +145,6 @@ async function deriveApprovalTasks(
     }
   }
 
-  const correctionsResult = await getTimeCorrectionRequests(context.orgId);
   if (correctionsResult.success) {
     for (const request of correctionsResult.requests) {
       if (!request.canReview || request.status !== 'submitted') continue;
@@ -156,7 +162,6 @@ async function deriveApprovalTasks(
 
   // Pending vacation requests: the approver loader filters per target through
   // leave_approval at derivation time (four eyes included).
-  const vacationResult = await getPendingVacationRequestsForApprover();
   if (vacationResult.success) {
     for (const item of vacationResult.requests) {
       tasks.push({
@@ -381,12 +386,12 @@ async function deriveDispatchAcknowledgementTasks(
   // Scope to the viewer from the start: their recipient rows, then only the
   // referenced revisions/dispatches. An unrelated large dispatch volume can
   // never turn this viewer's attention into a failure.
-  const { data: myRecipients, error: recipientError } = await admin
+  const { data: myRecipients, error: recipientError } = await readCompleteRows((from,to) => admin
     .from('planning_dispatch_recipients')
     .select('revision_id, dispatch_id')
     .eq('organization_id', context.orgId)
     .eq('employee_record_id', record.id)
-    .limit(1001);
+    .order('id').range(from,to),1000);
   if (recipientError || (myRecipients?.length ?? 0) > 1000) {
     console.error('Failed to load dispatch recipients for tasks:', {
       code: recipientError?.code ?? 'overflow',
@@ -942,10 +947,8 @@ async function deriveWorkArtifactTasks(
   const jobIds = [...new Set(artifacts.flatMap((artifact) => artifact.job_id ? [artifact.job_id] : []))];
   const projectIds = [...new Set(artifacts.flatMap((artifact) => artifact.project_id ? [artifact.project_id] : []))];
   const [jobsResult, projectsResult, ownRecordResult, assignmentsResult] = await Promise.all([
-    jobIds.length
-      ? admin.from('jobs').select('id, project_id, title, description, job_number')
-          .eq('organization_id', context.orgId).in('id', jobIds)
-      : { data: [], error: null },
+    readInBatches(jobIds, (batch) => admin.from('jobs').select('id, project_id, title, description, job_number')
+      .eq('organization_id', context.orgId).in('id', [...batch])),
     projectIds.length
       ? admin.from('projects').select('id, name, description, project_number')
           .eq('organization_id', context.orgId).in('id', projectIds)
@@ -1038,14 +1041,14 @@ async function deriveWorkHandoverTasks(
       .eq('organization_id', context.orgId)
       .or('execution_state.eq.execution_complete,and(execution_state.is.null,status.eq.fertig)')
       .order('updated_at', { ascending: true }).limit(301),
-    admin.from('jobs').select('project_id')
+    readCompleteRows((from,to) => admin.from('jobs').select('project_id')
       .eq('organization_id', context.orgId)
       .not('project_id', 'is', null)
       .or(
         'execution_state.in.(execution_complete,handed_over,cancelled),and(execution_state.is.null,status.eq.fertig)'
       )
-      .order('updated_at', { ascending: true })
-      .limit(5001),
+      .order('updated_at', { ascending: true }).order('id')
+      .range(from,to),5000),
     admin.from('projects').select(
       'id, project_number, name, execution_version, execution_state_override, status_override'
     )
@@ -1107,8 +1110,8 @@ async function deriveWorkHandoverTasks(
   }
   const possibleProjectIds = possibleProjects.map((project) => project.id);
   const projectJobsResult = possibleProjectIds.length
-    ? await admin.from('jobs').select('project_id, execution_state, status')
-        .eq('organization_id', context.orgId).in('project_id', possibleProjectIds).limit(5001)
+    ? await readInBatches(possibleProjectIds, batch => readCompleteRows((from,to) => admin.from('jobs').select('project_id, execution_state, status')
+        .eq('organization_id', context.orgId).in('project_id', [...batch]).order('id').range(from,to),5000))
     : { data: [], error: null };
   if (projectJobsResult.error || (projectJobsResult.data?.length ?? 0) > 5000) {
     console.error('Failed to load bounded project handover states:', {
@@ -1139,18 +1142,12 @@ async function deriveWorkHandoverTasks(
     (jobsResult.data ?? []).flatMap((job) => job.project_id ? [job.project_id] : [])
   )];
   const [jobPackagesResult, projectPackagesResult, parentProjectsResult] = await Promise.all([
-    jobIds.length
-      ? admin.from('work_handover_packages').select('id, job_id, state, version')
-          .eq('organization_id', context.orgId).in('job_id', jobIds)
-      : { data: [], error: null },
-    projectIds.length
-      ? admin.from('work_handover_packages').select('id, project_id, state, version')
-          .eq('organization_id', context.orgId).in('project_id', projectIds)
-      : { data: [], error: null },
-    parentProjectIds.length
-      ? admin.from('projects').select('id, project_number')
-          .eq('organization_id', context.orgId).in('id', parentProjectIds)
-      : { data: [], error: null },
+    readInBatches(jobIds, (batch) => admin.from('work_handover_packages').select('id, job_id, state, version')
+      .eq('organization_id', context.orgId).in('job_id', [...batch])),
+    readInBatches(projectIds, (batch) => admin.from('work_handover_packages').select('id, project_id, state, version')
+      .eq('organization_id', context.orgId).in('project_id', [...batch])),
+    readInBatches(parentProjectIds, (batch) => admin.from('projects').select('id, project_number')
+      .eq('organization_id', context.orgId).in('id', [...batch])),
   ]);
   if (jobPackagesResult.error || projectPackagesResult.error || parentProjectsResult.error) {
     console.error('Failed to load work handover attention package states:', {

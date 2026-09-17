@@ -1,9 +1,10 @@
 import { createServerClient } from '@supabase/ssr';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { getSupabasePublishableKey, getSupabaseUrl } from '@/lib/env/public';
 import { fetchWithTimeout } from './fetch-with-timeout';
 
-export async function createSupabaseServerClient() {
+export async function createSupabaseServerClient(): Promise<SupabaseClient> {
   const cookieStore = await cookies();
 
   return createServerClient(
@@ -69,7 +70,7 @@ export async function createSupabaseServerClient() {
  * validates via getUser()). For server actions that bypass RLS,
  * use getAuthenticatedUser().
  */
-export async function getSupabaseServerSession() {
+export async function getSupabaseServerSession(): Promise<{ supabase: SupabaseClient; session: boolean }> {
   const supabase = await createSupabaseServerClient();
 
   const {

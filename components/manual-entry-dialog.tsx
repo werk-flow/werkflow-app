@@ -15,15 +15,15 @@ import { ManualEntryFormContent } from '@/components/manual-entry-form-content';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 
 interface ManualEntryDialogProps {
-  onSuccess?: (entries: TimeEntry[]) => void | Promise<void>;
-  preselectedUserId?: string;
-  preselectedDate?: Date;
-  trigger?: React.ReactNode;
-  preselectedClockInTime?: string;
-  preselectedClockOutTime?: string;
-  lockEntryMode?: boolean;
-  controlledOpen?: boolean;
-  onOpenChange?: (open: boolean) => void;
+  onSuccess?: ((entries: TimeEntry[]) => void | Promise<void>) | undefined;
+  preselectedUserId?: string | undefined;
+  preselectedDate?: Date | undefined;
+  trigger?: React.ReactNode | undefined;
+  preselectedClockInTime?: string | undefined;
+  preselectedClockOutTime?: string | undefined;
+  lockEntryMode?: boolean | undefined;
+  controlledOpen?: boolean | undefined;
+  onOpenChange?: ((open: boolean) => void) | undefined;
 }
 
 export function ManualEntryDialog({

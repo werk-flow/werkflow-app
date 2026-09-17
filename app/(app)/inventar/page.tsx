@@ -3,8 +3,8 @@ import { redirect } from 'next/navigation';
 import { InventoryContent } from '@/components/inventar/inventory-content';
 import { getInventoryOverview } from '@/lib/inventory/actions';
 
-export default async function InventoryPage() {
-  const result = await getInventoryOverview();
+export default async function InventoryPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const result = await getInventoryOverview(await searchParams);
 
   if (!result.success) {
     if (

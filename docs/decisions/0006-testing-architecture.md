@@ -2,7 +2,7 @@
 
 - **Status:** accepted (2026-08-28)
 - **Date:** 2026-08-28
-- **Owner:** Product owner (Tamay), designed in the platform-hardening sessions ([plan](../plans/platform-hardening.md))
+- **Owner:** Product owner (Tamay), designed in the platform-hardening sessions ([plan](../plans/phase-1/consolidation-2026-08/platform-hardening.md))
 - **Affects:** The browser-test harness, slice acceptance, wave-end certification
 
 ## Supersession on 2026-09-06
@@ -29,7 +29,7 @@ The full Golden battery is a ~57-minute serial run. Against live cloud providers
 - Local parity gaps are resolved explicitly, never silently: each one is either configured to match the cloud posture (`supabase/config.toml`), owned by the canary (HIBP, real mail delivery), or recorded in the plan's open decisions. Auth mail lands in the stack's Mailpit capture; the invite edge function runs locally without a Resend key and logs instead of sending.
 - The canary is open to additions but must stay short; the growth rule lives in [testing.md](../technical/testing.md).
 
-Execution detail, stage history, and the work ledger live in [docs/plans/platform-hardening.md](../plans/platform-hardening.md). Operational setup for the local stack lives in [environments.md](../technical/environments.md); running instructions live in [testing.md](../technical/testing.md).
+Execution detail, stage history, and the work ledger live in [docs/plans/phase-1/consolidation-2026-08/platform-hardening.md](../plans/phase-1/consolidation-2026-08/platform-hardening.md). Operational setup for the local stack lives in [environments.md](../technical/environments.md); running instructions live in [testing.md](../technical/testing.md).
 
 ## Amendment 2026-09-05: reset evidence and living follow-ups
 
@@ -39,7 +39,7 @@ The original canary size and duration above describe the accepted design. Curren
 
 ## Amendment 2026-09-05: isolated audit groups and trustworthy run evidence
 
-The [UI/UX Phase 6 retrospective](../plans/uiux-hardening-2026-09.md#phase-6-retrospective-and-corrected-closure-method) showed two different outcomes. The audit found real product defects, while repeated complete runs spent hours rediscovering stale selectors and coupled setup. The following mechanisms change how tests establish evidence. They preserve the local/cloud split, business assertions, stable flow IDs, security checks, and existing acceptance scope.
+The [UI/UX Phase 6 retrospective](../plans/phase-1/hardening-2026-09/02-uiux-hardening.md#phase-6-retrospective-and-corrected-closure-method) showed two different outcomes. The audit found real product defects, while repeated complete runs spent hours rediscovering stale selectors and coupled setup. The following mechanisms change how tests establish evidence. They preserve the local/cloud split, business assertions, stable flow IDs, security checks, and existing acceptance scope.
 
 - Audit files own separate disposable worlds. Tests within a file remain serial. Successful groups are cleaned before the next group; a failed group remains available for diagnosis. Golden keeps its intentional cross-domain shared-world journeys.
 - Static prerequisite annotations describe producer stages. Discovery resolves exact test identities and rejects incomplete fresh selections before setup. Typed, world-bound checkpoints preserve assigned IDs and observed facts across diagnostic worker restarts. Retained replay also verifies backend provenance and the recorded business date.
@@ -55,6 +55,10 @@ Under [decision 0005](0005-enforcement-ladder.md), the ownership and preparation
 
 ## Amendment 2026-09-05: qualification of this hardening review
 
-After the owner challenged the repeated verification cost, the [UI/UX and test-reliability review](../plans/uiux-and-test-reliability-2026-09.md#task-specific-closure-amendment-2026-09-05) adopted a bounded closure record: the completed 149-case local audit baseline, explicitly attributed Golden results, fresh evidence for subsequent affected behavior, component and static checks, and the DEV canary. Its change table owns the exact obligations and remaining limits. This exception applies only to that review; it changes no slice acceptance, wave-end, or production-release gate above.
+After the owner challenged the repeated verification cost, the [UI/UX and test-reliability review](../plans/phase-1/hardening-2026-09/03-uiux-and-test-reliability.md#task-specific-closure-amendment-2026-09-05) adopted a bounded closure record: the completed 149-case local audit baseline, explicitly attributed Golden results, fresh evidence for subsequent affected behavior, component and static checks, and the DEV canary. Its change table owns the exact obligations and remaining limits. This exception applies only to that review; it changes no slice acceptance, wave-end, or production-release gate above.
 
 A candidate digest identifies inputs. It does not prove which behaviors a change affects. Preserve passing evidence with its original provenance and review the change impact before repeating expensive tests. A collection of partial or mixed-candidate passes must never be reported as a complete certification run. The runner continues to enforce that distinction, and this review does not reset its accumulated campaign cost.
+
+## Amendment 2026-09-13: local invite mail
+
+The September 2026 security follow-up replaced the invite function's original log-only local simulation with explicit Mailpit delivery through the local capture transport. [Environments](../technical/environments.md#the-local-test-stack) owns the current local mail configuration and failure behavior; the consequence bullet above keeps its 2026-08-28 wording as history.

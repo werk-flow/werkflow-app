@@ -84,15 +84,15 @@ function displayNameForEmployee(row: {
 export async function loadAssignmentEvaluation(input: {
   admin: AdminClient;
   orgId: string;
-  jobId?: string | null;
+  jobId?: string | null | undefined;
   selectedUserIds?: string[];
   selectedEmployeeRecordIds?: string[];
-  assessedForDate?: string | null;
+  assessedForDate?: string | null | undefined;
   requirementRows?: Array<{
     id: string;
     capability_id: string;
     require_confirmation: boolean;
-  }>;
+  }> | undefined;
 }): Promise<
   | { success: true; evaluation: AssignmentEvaluation }
   | { success: false; error: string }

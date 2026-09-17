@@ -12,7 +12,7 @@ import { getOrgMembersForUser, getProfileNamesVisibleTo } from './queries';
 
 // Role hierarchy for permission checks
 // Lower number = higher rank
-const ROLE_HIERARCHY: Record<string, number> = {
+const ROLE_HIERARCHY: Record<OrgRole, number> = {
   admin: 1,
   buero: 2,
   employee: 3

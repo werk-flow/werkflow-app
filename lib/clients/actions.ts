@@ -1,6 +1,7 @@
 'use server';
 
 import { updateTag } from 'next/cache';
+import { readCompleteRows, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { CACHE_TAGS } from '@/lib/data/cached';
@@ -81,7 +82,6 @@ export async function createClient(
       return { success: false, error: 'create_failed' };
     }
 
-    updateTag(CACHE_TAGS.clients(orgId));
 
     return { success: true, client: toClient(data) };
   } catch (error) {
@@ -146,7 +146,6 @@ export async function updateClient(
       return { success: false, error: 'update_failed' };
     }
 
-    updateTag(CACHE_TAGS.clients(orgId));
 
     return { success: true, client: toClient(data) };
   } catch (error) {
@@ -191,7 +190,6 @@ export async function deleteClient(
       return { success: false, error: 'delete_failed' };
     }
 
-    updateTag(CACHE_TAGS.clients(orgId));
     updateTag(CACHE_TAGS.jobs(orgId));
     updateTag(CACHE_TAGS.projects(orgId));
 
@@ -363,7 +361,6 @@ export async function createClientContact(
       }
     }
 
-    updateTag(CACHE_TAGS.clients(orgId));
     return { success: true, contact: toClientContact(data) };
   } catch (error) {
     console.error('Unexpected error in createClientContact:', error);
@@ -437,7 +434,6 @@ export async function updateClientContact(
       }
     }
 
-    updateTag(CACHE_TAGS.clients(orgId));
     return { success: true, contact: toClientContact(data) };
   } catch (error) {
     console.error('Unexpected error in updateClientContact:', error);
@@ -494,7 +490,6 @@ export async function createClientSite(
       }
     }
 
-    updateTag(CACHE_TAGS.clients(orgId));
     return { success: true, site: toClientSite(data) };
   } catch (error) {
     console.error('Unexpected error in createClientSite:', error);
@@ -573,7 +568,6 @@ export async function updateClientSite(
       }
     }
 
-    updateTag(CACHE_TAGS.clients(orgId));
     return { success: true, site: toClientSite(data) };
   } catch (error) {
     console.error('Unexpected error in updateClientSite:', error);
@@ -631,8 +625,8 @@ export async function getClientRelations(
     }
 
     const [contactsResult, sitesResult] = await Promise.all([
-      contactsQuery,
-      sitesQuery,
+      readCompleteRows((from, to) => contactsQuery.order('id').range(from, to), LIST_ROW_CAP),
+      readCompleteRows((from, to) => sitesQuery.order('id').range(from, to), LIST_ROW_CAP),
     ]);
 
     if (contactsResult.error || sitesResult.error) {
@@ -668,11 +662,11 @@ export async function getOrgClients(): Promise<
 
     const admin = createSupabaseAdminClient();
 
-    const { data, error } = await admin
+    const { data, error } = await readCompleteRows((from, to) => admin
       .from('clients')
       .select('*')
       .eq('organization_id', orgId)
-      .order('name', { ascending: true });
+      .order('name', { ascending: true }).order('id').range(from, to), LIST_ROW_CAP);
 
     if (error) {
       console.error('Error fetching clients:', error);

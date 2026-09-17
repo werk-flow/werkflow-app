@@ -40,7 +40,7 @@ const ERROR_MESSAGES: Record<string, { title: string; description: string }> = {
 // Helper to mask email for privacy (e.g., "test@example.com" -> "t***@example.com")
 function maskEmail(email: string): string {
   const [localPart, domain] = email.split('@');
-  if (!domain) return email;
+  if (localPart === undefined || !domain) return email;
   const maskedLocal =
     localPart.length > 1 ? localPart[0] + '***' : localPart + '***';
   return `${maskedLocal}@${domain}`;

@@ -22,5 +22,5 @@ Implemented and accepted 2026-08-07. Migration `add_attention_pattern_state`: at
 
 ## Links
 
-- Gate runs: [golden-gate-log.md](../../golden-gate-log.md)
+- Gate runs: [golden-gate-log.md](../audits/golden-gate-log.md)
 - Progress log: [../log.md](../log.md)

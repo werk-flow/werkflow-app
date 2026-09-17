@@ -171,6 +171,7 @@ function missingFields(
 function toDate(value: string | null | undefined): Date | undefined {
   if (!value) return undefined;
   const [year, month, day] = value.split("-").map(Number);
+  if (year === undefined || month === undefined || day === undefined) return undefined;
   return new Date(year, month - 1, day);
 }
 
@@ -475,10 +476,9 @@ export function EquipmentFormDialog({
                       ...current,
                       category: value,
                       subtype: null,
-                      parentEquipmentId:
-                        value === "system_component"
-                          ? current.parentEquipmentId
-                          : null,
+                      ...(value === "system_component"
+                        ? {}
+                        : { parentEquipmentId: null }),
                     }))
                   }
                 >

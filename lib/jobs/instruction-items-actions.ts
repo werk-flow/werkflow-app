@@ -211,10 +211,11 @@ async function hydrateInstructionItems(
     console.error('Failed to hydrate instruction item template metadata:', evidenceResult.error ?? dependencyResult.error);
   }
   const requirementIds = (evidenceResult.data ?? []).map((requirement) => requirement.id);
-  const fulfillmentResult = requirementIds.length
+  const [firstRow] = rows;
+  const fulfillmentResult = firstRow && requirementIds.length
     ? await admin.from('job_instruction_item_evidence_fulfillments')
         .select('id, evidence_requirement_id, document_id, artifact_revision_id, version')
-        .eq('organization_id', rows[0].organization_id)
+        .eq('organization_id', firstRow.organization_id)
         .in('evidence_requirement_id', requirementIds).is('removed_at', null)
     : { data: [], error: null };
   if (fulfillmentResult.error) {

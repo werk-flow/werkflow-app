@@ -83,6 +83,7 @@ function formatGermanDate(dateIso: string): string {
 
 function isWeekday(dateIso: string): boolean {
   const [year, month, day] = dateIso.split('-').map(Number);
+  if (year === undefined || month === undefined || day === undefined) throw new Error(`Invalid ISO date: ${dateIso}`);
   const jsWeekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
   return jsWeekday !== 0 && jsWeekday !== 6;
 }
@@ -219,6 +220,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
   }) => {
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
     const [firstDayIso, secondDayIso] = ownedWeekdayDates(2);
+    if (!firstDayIso || !secondDayIso) throw new Error('A5: expected two owned weekday dates');
     const rejectionReason = `A5 Personalplanung im Zeitraum ${world.runId}`;
 
     // Baseline before any A5 fact exists: inherited state is never assumed
@@ -700,7 +702,9 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
       approachingCert
     );
     expect(approachingHistory.rows).toHaveLength(1);
-    const approachingRecordId = approachingHistory.rows[0].id;
+    const [approachingRow] = approachingHistory.rows;
+    if (!approachingRow) throw new Error('A5: expected one approaching certification row');
+    const approachingRecordId = approachingRow.id;
     for (const page of [adminPage, bueroPage]) {
       await openAufgaben(page);
       const notice = notificationRow(page, approachingRecordId);
@@ -876,7 +880,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     const jobEvent = plannedCalendarEvent(adminPage, `A5 Qualifikationsmatrix ${world.runId}`);
     await expect(jobEvent).toBeVisible({ timeout: 20_000 });
     const stateBeforeDrag = await getPlanningState(world.orgId, { jobNumber });
-    expect(stateBeforeDrag.occurrences[0].startDate).toBe(plannedDateIso);
+    expect(stateBeforeDrag.occurrences[0]?.startDate).toBe(plannedDateIso);
     const dragWarning = adminPage.getByRole('dialog').filter({
       has: adminPage.getByRole('heading', { name: 'Planungshinweise prüfen' }),
     });
@@ -890,7 +894,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
       })
     ).toBeVisible({ timeout: 20_000 });
     const stateAfterCancel = await getPlanningState(world.orgId, { jobNumber });
-    expect(stateAfterCancel.occurrences[0].startDate).toBe(plannedDateIso);
+    expect(stateAfterCancel.occurrences[0]?.startDate).toBe(plannedDateIso);
     expect(stateAfterCancel.occurrenceCount).toBe(stateBeforeDrag.occurrenceCount);
     expect(stateAfterCancel.eventTypes).toEqual(stateBeforeDrag.eventTypes);
     expect(stateAfterCancel.overrideReasons.length).toBe(stateBeforeDrag.overrideReasons.length);
@@ -906,7 +910,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     await expect(dragWarning).toHaveCount(0, { timeout: 20_000 });
     await expect
       .poll(
-        async () => (await getPlanningState(world.orgId, { jobNumber })).occurrences[0].startDate,
+        async () => (await getPlanningState(world.orgId, { jobNumber })).occurrences[0]?.startDate,
         { timeout: 20_000 }
       )
       .toBe(dragTargetIso);

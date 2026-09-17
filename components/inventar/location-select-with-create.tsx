@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 
 import { useServerAction } from '@/hooks/use-server-action';
@@ -108,6 +108,13 @@ function CreateLocationDialog({
   const [description, setDescription] = useState('');
   const [locationType, setLocationType] = useState<InventoryLocationType>('room');
   const [error, setError] = useState<string | null>(null);
+  // The save completes after later renders; the parent's latest handler must
+  // receive the location, or a handler from the submit-time render replays a
+  // stale snapshot of the parent's state (P1-13 material row, 2026-09-13).
+  const onCreatedRef = useRef(onCreated);
+  useLayoutEffect(() => {
+    onCreatedRef.current = onCreated;
+  });
   // `isPending` is set before the first await, so the button spins in the
   // first frame; the parent select adopts the new location via onCreated.
   const { run: runCreateLocation, isPending } = useServerAction(
@@ -129,7 +136,7 @@ function CreateLocationDialog({
         return;
       }
 
-      onCreated(result.location);
+      onCreatedRef.current(result.location);
       setName('');
       setDescription('');
       setLocationType('room');

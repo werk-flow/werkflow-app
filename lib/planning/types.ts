@@ -1,19 +1,18 @@
-import type { Database, Json } from '@/lib/supabase/database.types';
+import type { Database } from '@/lib/supabase/database.types';
 
-export type PlanningEntryKind =
+type PlanningEntryKind =
   Database['public']['Enums']['planning_entry_kind'];
-export type PlanningInternalType =
+type PlanningInternalType =
   Database['public']['Enums']['planning_internal_type'];
-export type PlanningTimeKind =
+type PlanningTimeKind =
   Database['public']['Enums']['planning_time_kind'];
 export type PlanningOccurrenceStatus =
   Database['public']['Enums']['planning_occurrence_status'];
 
-export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly';
-export type PlanningMutationScope = 'one' | 'future' | 'series';
+type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly';
 export type DstResolution = 'exact' | 'shifted_forward' | 'first_ambiguous';
 
-export type PlanningRecurrenceRule = {
+type PlanningRecurrenceRule = {
   frequency: RecurrenceFrequency;
   interval: number;
   weekdays: number[] | null;
@@ -51,15 +50,7 @@ export type PlanningAssignmentDraft = {
   teamSourceId: string | null;
 };
 
-export type PlanningAssessmentSnapshot = {
-  capacityFingerprint: string;
-  capacitySnapshot: Json;
-  qualificationFingerprint: string;
-  qualificationSnapshot: Json;
-  overrideReason: string | null;
-};
-
-export type PlanningConflictKind =
+type PlanningConflictKind =
   | 'no_schedule'
   | 'holiday_or_closure'
   | 'approved_absence'

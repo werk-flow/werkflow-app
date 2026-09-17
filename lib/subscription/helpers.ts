@@ -1,8 +1,8 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
-export type SubscriptionStatus = 'active' | 'inactive' | 'canceled' | 'trialing';
+type SubscriptionStatus = 'active' | 'inactive' | 'canceled' | 'trialing';
 
-export type Subscription = {
+type Subscription = {
   id: string;
   user_id: string;
   status: SubscriptionStatus;
@@ -14,7 +14,7 @@ export type Subscription = {
 /**
  * Fetches the subscription record for a given user
  */
-export async function getUserSubscription(
+async function getUserSubscription(
   userId: string
 ): Promise<Subscription | null> {
   const supabase = await createSupabaseServerClient();

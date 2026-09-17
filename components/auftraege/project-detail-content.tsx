@@ -1,5 +1,6 @@
 'use client';
 
+import { formatDuration } from '@/lib/time-tracking/helpers';
 import { usePendingTask } from '@/hooks/use-server-action';
 import {
   useState,
@@ -106,9 +107,9 @@ import { WorkHandoverSummary } from './work-handover-section';
 const PROJECT_STATUS_CLASSES: Record<ProjectStatus, string> = {
   nicht_begonnen: 'bg-secondary text-secondary-foreground',
   in_bearbeitung:
-    'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+    'bg-warning-soft text-warning-soft-foreground',
   abgeschlossen:
-    'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+    'bg-success-soft text-success-soft-foreground',
   geparkt:
     'bg-brand-purple/15 text-brand-purple-dark dark:text-brand-purple-light',
 };
@@ -116,17 +117,17 @@ const PROJECT_STATUS_CLASSES: Record<ProjectStatus, string> = {
 const JOB_STATUS_CLASSES: Record<JobStatus, string> = {
   nicht_bearbeitet: 'bg-secondary text-secondary-foreground',
   in_bearbeitung:
-    'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+    'bg-warning-soft text-warning-soft-foreground',
   fertig:
-    'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+    'bg-success-soft text-success-soft-foreground',
   geparkt:
     'bg-brand-purple/15 text-brand-purple-dark dark:text-brand-purple-light',
 };
 
 const PRIORITY_CLASSES: Record<string, string> = {
   niedrig: 'bg-secondary text-secondary-foreground',
-  mittel: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
-  hoch: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+  mittel: 'bg-info-soft text-info-soft-foreground',
+  hoch: 'bg-destructive-soft text-destructive-soft-foreground',
 };
 
 function TrafficLight({ status }: { status: 'green' | 'yellow' | 'red' }) {
@@ -143,12 +144,12 @@ function TrafficLight({ status }: { status: 'green' | 'yellow' | 'red' }) {
             : 'Stark verzögert'
       }
     >
-      <span className={cn(base, status === 'red' ? 'bg-red-500' : inactive)} />
+      <span className={cn(base, status === 'red' ? 'bg-destructive' : inactive)} />
       <span
-        className={cn(base, status === 'yellow' ? 'bg-yellow-500' : inactive)}
+        className={cn(base, status === 'yellow' ? 'bg-warning' : inactive)}
       />
       <span
-        className={cn(base, status === 'green' ? 'bg-green-500' : inactive)}
+        className={cn(base, status === 'green' ? 'bg-success' : inactive)}
       />
     </div>
   );
@@ -403,8 +404,9 @@ export function ProjectDetailContent({
     for (const { jobId, jobTitle, entries } of projectTimeEntries) {
       const entriesByUser: Record<string, TimeEntry[]> = {};
       for (const e of entries) {
-        if (!entriesByUser[e.userId]) entriesByUser[e.userId] = [];
-        entriesByUser[e.userId].push(e);
+        const userEntries = entriesByUser[e.userId];
+        if (userEntries) userEntries.push(e);
+        else entriesByUser[e.userId] = [e];
       }
       const sessions = Object.values(entriesByUser)
         .flatMap((ue) => calculateWorkSessions(ue))
@@ -444,13 +446,6 @@ export function ProjectDetailContent({
     [projectTimeEntries]
   );
 
-  function formatDurationMins(mins: number): string {
-    const h = Math.floor(mins / 60);
-    const m = Math.round(mins % 60);
-    if (h === 0) return `${m} Min.`;
-    if (m === 0) return `${h} Std.`;
-    return `${h} Std. ${m} Min.`;
-  }
 
   const completedCount = liveJobs.filter((j) => j.status === 'fertig').length;
   const inProgressCount = liveJobs.filter(
@@ -512,7 +507,7 @@ export function ProjectDetailContent({
       );
       const assignedJobIds = jobIds.filter((_, index) => {
         const result = results[index];
-        return result.status === 'fulfilled' && result.value.success;
+        return result?.status === 'fulfilled' && result.value.success;
       });
       setLiveJobs((prev) => {
         const knownIds = new Set(prev.map((job) => job.id));
@@ -915,7 +910,7 @@ export function ProjectDetailContent({
                       Gesamtstunden (alle Aufträge)
                     </p>
                     <p className="text-lg font-bold tabular-nums">
-                      {formatDurationMins(
+                      {formatDuration(
                         Math.round(projectTimeSummary.totalMinutes)
                       )}
                     </p>
@@ -963,15 +958,15 @@ export function ProjectDetailContent({
                                     {pj.title}
                                   </span>
                                   <span className="shrink-0 tabular-nums text-muted-foreground">
-                                    {formatDurationMins(Math.round(pj.minutes))}
+                                    {formatDuration(Math.round(pj.minutes))}
                                   </span>
                                 </div>
                                 {hasTarget ? (
                                   <>
                                     <div className="flex items-center justify-between text-xs text-muted-foreground">
                                       <span>
-                                        {formatDurationMins(Math.round(pj.minutes))} /{' '}
-                                        {formatDurationMins(targetMinutes)}
+                                        {formatDuration(Math.round(pj.minutes))} /{' '}
+                                        {formatDuration(targetMinutes)}
                                       </span>
                                       <span className="tabular-nums">
                                         {Math.round((pj.minutes / targetMinutes) * 100)}
@@ -985,8 +980,8 @@ export function ProjectDetailContent({
                                       />
                                     </div>
                                     {overrunMinutes > 0 && (
-                                      <p className="text-xs text-amber-700 dark:text-amber-300">
-                                        {formatDurationMins(overrunMinutes)} über dem
+                                      <p className="text-xs text-warning-text">
+                                        {formatDuration(overrunMinutes)} über dem
                                         geplanten Arbeitsaufwand
                                       </p>
                                     )}
@@ -1137,8 +1132,8 @@ function ActiveWorkIndicator() {
       className="relative ml-2 inline-flex h-2.5 w-2.5 shrink-0"
       title="Jemand arbeitet gerade an diesem Auftrag"
     >
-      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-500" />
+      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
+      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-success" />
     </span>
   );
 }

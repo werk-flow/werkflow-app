@@ -1,5 +1,6 @@
 "use client";
 
+import { formatFileSize } from '@/lib/documents/format';
 import { useEffect, useState } from "react";
 import { Check, FileText, LinkIcon, Loader2, Search } from "lucide-react";
 
@@ -34,7 +35,7 @@ type AttachDocumentDialogProps = {
     | "service_case"
     | "maintenance_coverage";
   targetId: string;
-  targetLabel?: string;
+  targetLabel?: string | undefined;
   onAttached: (variant: "success" | "error", message: string) => void;
 };
 
@@ -50,12 +51,6 @@ const TARGET_TYPE_LABELS: Record<
   service_case: "Servicefall",
   maintenance_coverage: "die operative Abdeckung",
 };
-
-function formatFileSize(sizeBytes: number): string {
-  if (sizeBytes < 1024) return `${sizeBytes} B`;
-  if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
-  return `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`;
-}
 
 export function AttachDocumentDialog({
   open,
@@ -139,14 +134,15 @@ export function AttachDocumentDialog({
       try {
         result = await runLinkDocuments({
           documentIds,
-          jobId: targetType === "job" ? targetId : undefined,
-          projectId: targetType === "project" ? targetId : undefined,
-          clientId: targetType === "client" ? targetId : undefined,
-          employeeId: targetType === "employee" ? targetId : undefined,
-          equipmentId: targetType === "equipment" ? targetId : undefined,
-          serviceCaseId: targetType === "service_case" ? targetId : undefined,
-          maintenanceCoverageId:
-            targetType === "maintenance_coverage" ? targetId : undefined,
+          ...(targetType === "job" ? { jobId: targetId } : {}),
+          ...(targetType === "project" ? { projectId: targetId } : {}),
+          ...(targetType === "client" ? { clientId: targetId } : {}),
+          ...(targetType === "employee" ? { employeeId: targetId } : {}),
+          ...(targetType === "equipment" ? { equipmentId: targetId } : {}),
+          ...(targetType === "service_case" ? { serviceCaseId: targetId } : {}),
+          ...(targetType === "maintenance_coverage"
+            ? { maintenanceCoverageId: targetId }
+            : {}),
         });
       } catch {
         setAttachError("Die Dokumente konnten nicht verknüpft werden.");

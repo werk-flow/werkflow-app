@@ -5,6 +5,7 @@ import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import { CheckIcon, ChevronRightIcon, CircleIcon } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { RegisterOpenDialog } from '@/components/ui/open-dialog-context';
 
 function DropdownMenu({
   ...props
@@ -34,6 +35,7 @@ function DropdownMenuTrigger({
 function DropdownMenuContent({
   className,
   sideOffset = 4,
+  children,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
   return (
@@ -46,7 +48,14 @@ function DropdownMenuContent({
           className
         )}
         {...props}
-      />
+      >
+        {/* An open menu suspends Realtime route refreshes and live reads like a
+            dialog; a refresh 1.5 s after page load closed the job actions menu
+            under the user's cursor (A2-06, 2026-09-13). Presence-gated content
+            only, as in dialog.tsx. */}
+        <RegisterOpenDialog />
+        {children}
+      </DropdownMenuPrimitive.Content>
     </DropdownMenuPrimitive.Portal>
   );
 }
@@ -85,7 +94,6 @@ function DropdownMenuItem({
 function DropdownMenuCheckboxItem({
   className,
   children,
-  checked,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.CheckboxItem>) {
   return (
@@ -95,7 +103,6 @@ function DropdownMenuCheckboxItem({
         'focus:bg-accent focus:text-accent-foreground relative flex cursor-default items-center gap-2 rounded-sm py-1.5 pr-2 pl-8 text-sm outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*=\'size-\'])]:size-4',
         className
       )}
-      checked={checked}
       {...props}
     >
       <span className="pointer-events-none absolute left-2 flex size-3.5 items-center justify-center">

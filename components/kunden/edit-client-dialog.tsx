@@ -104,10 +104,10 @@ export function EditClientDialog({
       const input: UpdateClientInput = {
         name: name.trim(),
         clientType,
-        email: email.trim() || undefined,
-        phone: phone.trim() || undefined,
-        address: address.trim() || undefined,
-        notes: notes.trim() || undefined
+        ...(email.trim() ? { email: email.trim() } : {}),
+        ...(phone.trim() ? { phone: phone.trim() } : {}),
+        ...(address.trim() ? { address: address.trim() } : {}),
+        ...(notes.trim() ? { notes: notes.trim() } : {})
       };
 
       const result = await updateClient(client.id, input);

@@ -45,10 +45,10 @@ function resolveAutoDismissMs(banner: Omit<BannerState, 'id'>): number | null {
 
 const VARIANT_CLASSES: Record<BannerVariant, string> = {
   success:
-    'bg-green-50 text-green-800 ring-green-200/50 dark:bg-green-950 dark:text-green-200 dark:ring-green-800/50',
+    'bg-success-soft text-success-soft-foreground ring-success/40',
   error:
-    'bg-red-50 text-red-800 ring-red-200/50 dark:bg-red-950 dark:text-red-200 dark:ring-red-800/50',
-  info: 'bg-blue-50 text-blue-800 ring-blue-200/50 dark:bg-blue-950 dark:text-blue-200 dark:ring-blue-800/50',
+    'bg-destructive-soft text-destructive-soft-foreground ring-destructive/40',
+  info: 'bg-info-soft text-info-soft-foreground ring-info/40',
   progress: 'bg-background text-foreground ring-border',
 };
 

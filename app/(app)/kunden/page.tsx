@@ -3,10 +3,11 @@ import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { parseListPage } from '@/lib/ui/list-pagination';
+import { type ListSearchParams } from '@/lib/jobs/list-page';
+import { readCustomerPage } from '@/lib/clients/list-page-server';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
-import { toClient } from '@/lib/jobs/types';
 import { CreateClientDialog } from '@/components/kunden/create-client-dialog';
 import { KundenContent } from '@/components/kunden/kunden-content';
 import { KundenContentSkeleton } from '@/components/loading-states/kunden-content-skeleton';
@@ -15,62 +16,17 @@ import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { UrlFlashBanner } from '@/components/ui/banner';
 import type { OrgRole } from '@/lib/members/actions';
 
-async function KundenData({ activeOrgId }: { activeOrgId: string }) {
-  const admin = createSupabaseAdminClient();
-
-  const [clientsResult, contactsResult, sitesResult] = await Promise.all([
-    admin
-      .from('clients')
-      .select('*')
-      .eq('organization_id', activeOrgId)
-      .order('name', { ascending: true }),
-    admin
-      .from('client_contacts')
-      .select('client_id, name')
-      .eq('organization_id', activeOrgId)
-      .eq('is_active', true),
-    admin
-      .from('client_sites')
-      .select('client_id, name, street, postal_code, city')
-      .eq('organization_id', activeOrgId)
-      .eq('is_active', true),
-  ]);
-
-  if (clientsResult.error) {
-    console.error('Error fetching clients:', clientsResult.error);
-    return (
-      <SectionError>
-        Fehler beim Laden der Kunden:{' '}
-        {clientsResult.error.message || 'Unbekannter Fehler'}
-      </SectionError>
-    );
-  }
-
-  const clientList = (clientsResult.data ?? []).map(toClient);
-
-  if (contactsResult.error) {
-    console.error('Error fetching client contacts for search:', contactsResult.error);
-  }
-  if (sitesResult.error) {
-    console.error('Error fetching client sites for search:', sitesResult.error);
-  }
-
-  // Per-customer search haystack so the list search also finds customers via
-  // contact names and site addresses (CRM spec §3).
-  const searchIndex: Record<string, string> = {};
-  for (const contact of contactsResult.data ?? []) {
-    searchIndex[contact.client_id] =
-      `${searchIndex[contact.client_id] ?? ''} ${contact.name}`;
-  }
-  for (const site of sitesResult.data ?? []) {
-    searchIndex[site.client_id] =
-      `${searchIndex[site.client_id] ?? ''} ${site.name} ${site.street ?? ''} ${site.postal_code ?? ''} ${site.city ?? ''}`;
-  }
-
-  return <KundenContent clients={clientList} searchIndex={searchIndex} />;
+async function KundenData({ activeOrgId, scopeKey, searchParams }: { activeOrgId: string; scopeKey: string; searchParams: Promise<ListSearchParams> }) {
+  const params = await searchParams;
+  const search = typeof params.q === 'string' ? params.q.trim().slice(0, 250) : '';
+  const page = parseListPage(typeof params.page === 'string' ? params.page : undefined);
+  const data = await readCustomerPage({ organizationId: activeOrgId, page, search }).catch(() => null);
+  if (!data) return <SectionError>Kunden konnten nicht geladen werden. Bitte aktualisiere die Seite.</SectionError>;
+  // The component keys its list by scope, page and search itself so the
+  // search input and pending navigation survive each committed change.
+  return <KundenContent scopeKey={scopeKey} organizationId={activeOrgId} clients={data.clients} page={page} total={data.total} searchQuery={search} />;
 }
-
-export default async function KundenPage() {
+export default async function KundenPage({ searchParams = Promise.resolve({}) }: { searchParams?: Promise<ListSearchParams> }) {
   const [{ data: { user } }, cookieStore] = await Promise.all([
     getCachedUser(),
     cookies()
@@ -120,7 +76,7 @@ export default async function KundenPage() {
 
       <PageBody>
         <Suspense fallback={<KundenContentSkeleton />}>
-          <KundenData activeOrgId={activeOrgId} />
+          <KundenData activeOrgId={activeOrgId} scopeKey={`${activeOrgId}:${user.id}:${currentUserRole}`} searchParams={searchParams} />
         </Suspense>
       </PageBody>
     </PageShell>

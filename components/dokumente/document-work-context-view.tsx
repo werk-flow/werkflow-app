@@ -1,5 +1,7 @@
 'use client';
 
+import { formatGermanDate as formatDate } from '@/lib/utils';
+import { formatFileSize } from '@/lib/documents/format';
 import { Fragment, useMemo, useState, type MouseEvent } from 'react';
 import Link from 'next/link';
 import {
@@ -111,7 +113,7 @@ type WorkContextGroups = {
 
 // One column definition for the loaded header and the skeleton (design canon):
 // widths, breakpoints and cell count cannot drift apart.
-export const WORK_CONTEXT_COLUMNS: readonly SkeletonColumn[] = [
+const WORK_CONTEXT_COLUMNS: readonly SkeletonColumn[] = [
   {
     id: 'expand',
     header: null,
@@ -166,26 +168,12 @@ function WorkContextTableHeader() {
   );
 }
 
-function formatFileSize(sizeBytes: number): string {
-  if (sizeBytes < 1024) return `${sizeBytes} B`;
-  if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
-  return `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function formatDate(date: string): string {
-  return new Intl.DateTimeFormat('de-DE', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }).format(new Date(date));
-}
-
 function getLatestUpdatedAt(documents: OrganizationDocument[]): string | null {
   if (documents.length === 0) return null;
 
   return documents
     .map((document) => document.updatedAt)
-    .sort((firstDate, secondDate) => secondDate.localeCompare(firstDate))[0];
+    .sort((firstDate, secondDate) => secondDate.localeCompare(firstDate))[0] ?? null;
 }
 
 function renderFileIcon(document: OrganizationDocument) {
@@ -310,10 +298,7 @@ function buildWorkContextGroups({
 
   const employeeGroups = employees
     .map((employee): SimpleDocumentGroup => {
-      const title =
-        [employee.firstName, employee.lastName].filter(Boolean).join(' ') ||
-        employee.email ||
-        'Mitarbeiter';
+      const title = employee.name || employee.email || 'Mitarbeiter';
 
       return {
         id: employee.userId,
@@ -752,7 +737,7 @@ export function DocumentWorkContextView({
             {standaloneJobGroups.map((group) => {
               const rowId = `job:${group.job.id}`;
               const isExpanded = expandedIds.has(rowId);
-              const project = group.job.projectId ? projectById.get(group.job.projectId) : null;
+              const project = group.job.projectId ? projectById.get(group.job.projectId) ?? null : null;
               const jobHref = getJobHref({ job: group.job, project });
 
               return (
@@ -993,7 +978,7 @@ export function DocumentWorkContextView({
         {standaloneJobGroups.map((group) => {
           const rowId = `job:${group.job.id}`;
           const isExpanded = expandedIds.has(rowId);
-          const project = group.job.projectId ? projectById.get(group.job.projectId) : null;
+          const project = group.job.projectId ? projectById.get(group.job.projectId) ?? null : null;
           const jobHref = getJobHref({ job: group.job, project });
 
           return (

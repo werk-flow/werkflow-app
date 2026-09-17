@@ -19,7 +19,7 @@ export function InlinePending({
   /** German status text for assistive tech. */
   label?: string;
   keepSpace?: boolean;
-  className?: string;
+  className?: string | undefined;
 }) {
   if (!active && !keepSpace) return null;
   return (

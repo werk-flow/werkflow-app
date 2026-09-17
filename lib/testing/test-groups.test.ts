@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { resolve } from "node:path";
-import { getGroupExecutionFiles, getGroupTimingRequirements, getTestGroups, readGoldenPrerequisiteFiles, validateNamedTestPrerequisites, validateTestGroupInventory, type TestGroup } from "./test-groups";
+import { getGroupExecutionFiles, getGroupTimingRequirements, getTestGroups, listTestFiles, readGoldenPrerequisiteFiles, validateNamedTestPrerequisites, validateTestGroupInventory, type TestGroup } from "./test-groups";
 
 function group(id: string, files: string[], prerequisites: string[] = []): TestGroup {
   return { id, files, prerequisites, kind: "golden", scopes: ["personnel"], isolation: "integrated-world", timing: { requireFreshness: false, requireReadiness: false, exclusive: false } };
@@ -38,7 +38,8 @@ describe("independent group registry", () => {
 
   test("current audit groups are independent and the recorded Golden dependency is preserved", () => {
     const groups = getTestGroups(resolve(import.meta.dir, "../.."));
-    expect(groups.filter((entry) => entry.kind === "audit")).toHaveLength(20);
+    const auditFiles = groups.filter((entry) => entry.kind === "audit").flatMap((entry) => entry.files).sort();
+    expect(auditFiles).toEqual(listTestFiles(resolve(import.meta.dir, "../.."), "tests/audit", /\.spec\.ts$/));
     expect(groups.filter((entry) => entry.kind === "audit").every((entry) => entry.isolation === "group-world" && !entry.prerequisites.length)).toBe(true);
     const schedules = groups.find((entry) => entry.id === "golden:p1-04")!;
     expect(getGroupExecutionFiles(schedules, groups)).toEqual(["tests/golden/p1-03.spec.ts", "tests/golden/p1-04.spec.ts"]);
@@ -48,19 +49,36 @@ describe("independent group registry", () => {
     const root = resolve(import.meta.dir, "../..");
     const groups = getTestGroups(root);
     const audit = groups.find((entry) => entry.id === "audit:wave-2:p1-22")!;
-    expect(audit.timing).toEqual({ requireFreshness: false, requireReadiness: true, exclusive: true });
+    expect(audit.timing).toEqual({ requireFreshness: false, requireReadiness: true, requiredScenarios: [], exclusive: true });
     // Clearing incidental caller metadata cannot erase the required helper contract.
     expect(getGroupTimingRequirements({ ...audit, timing: { requireFreshness: false, requireReadiness: false, exclusive: false } }, groups, root))
-      .toEqual({ requireFreshness: false, requireReadiness: true, exclusive: true });
+      .toEqual({ requireFreshness: false, requireReadiness: true, requiredScenarios: [], exclusive: true });
     expect(getGroupTimingRequirements(groups.find((entry) => entry.id === "golden:p1-22")!, groups, root).requireReadiness).toBe(true);
     expect(getGroupTimingRequirements(groups.find((entry) => entry.id === "golden:integrated")!, groups, root))
-      .toEqual({ requireFreshness: true, requireReadiness: true, exclusive: true });
+      .toEqual({ requireFreshness: true, requireReadiness: true, requiredScenarios: [], exclusive: true });
   });
 
-  test("all seven declared freshness scopes reserve exclusive measurement time", () => {
+  test("all declared freshness scopes reserve exclusive measurement time", () => {
     const groups = getTestGroups(resolve(import.meta.dir, "../.."));
     const measured = groups.filter((entry) => entry.id !== "golden:integrated" && entry.timing.requireFreshness);
-    expect(measured).toHaveLength(7);
+    expect(measured).toHaveLength(10);
     expect(measured.every((entry) => entry.timing.exclusive)).toBe(true);
+  });
+
+  test("measured scenarios pin their spec, force exclusive scheduling, and cannot drift from source", () => {
+    const root = resolve(import.meta.dir, "../..");
+    const groups = getTestGroups(root);
+    const performance = groups.find((entry) => entry.id === "audit:performance:calendar")!;
+    expect(performance.timing.exclusive).toBe(true);
+    expect(performance.timing.requiredScenarios).toContain("calendar.week-to-day.covered");
+    const planning = getGroupTimingRequirements(groups.find((entry) => entry.id === "golden:p1-11")!, groups, root);
+    expect(planning.requireFreshness).toBe(true);
+    expect(planning.requireReadiness).toBe(true);
+    expect(planning.requiredScenarios).toEqual([]);
+    const benchmark = getGroupTimingRequirements(groups.find((entry) => entry.id === "audit:performance:planning")!, groups, root);
+    expect(benchmark.exclusive).toBe(true);
+    expect(benchmark.requiredScenarios).toEqual(["planning.occurrence.cross-session", "calendar.month.employee-open-to-event", "calendar.month.admin-open-to-legacy-event"]);
+    const untimed = groups.find((entry) => entry.id === "audit:wave-1:a2")!;
+    expect(getGroupTimingRequirements(untimed, groups, root).requiredScenarios).toEqual([]);
   });
 });

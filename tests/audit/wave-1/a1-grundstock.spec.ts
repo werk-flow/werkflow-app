@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import type { Locator, Page } from "@playwright/test";
 
 import { auditCheckpoint, saveAuditCheckpoint } from "../support/checkpoints";
 
@@ -9,8 +10,8 @@ import {
   findLatestManualTimeEntryState,
   getJobCountByNumber,
   getJobProjectNumber,
-  getLatestMembershipRemovalEvent,
   getOrganizationTimeEntrySnapshot,
+  getTimeCaptureState,
   getPendingInviteCode,
 } from "../../golden/support/db";
 import {
@@ -67,6 +68,7 @@ import {
 import {
   bookMaterialDialog,
   calendarDay,
+  calendarDayNumber,
   calendarDayJobEvent,
   calendarTimeline,
   clockInConfirmationButton,
@@ -93,6 +95,22 @@ import {
   visibleMatchingText,
   visibleSortButton,
 } from "../support/a1-steps";
+
+async function moveCalendarBlockToMember(page: Page, block: Locator, memberName: string): Promise<void> {
+  const member = page.getByRole("main").getByText(memberName, { exact: true }).filter({ visible: true });
+  await expect(member).toBeVisible();
+  const sourceBox = await block.boundingBox();
+  const targetBox = await member.boundingBox();
+  if (!sourceBox || !targetBox) throw new Error("Calendar drag source or named member has no bounding box");
+  const horizontalPosition = sourceBox.x + sourceBox.width / 2;
+  await page.mouse.move(horizontalPosition, sourceBox.y + sourceBox.height / 2);
+  await page.mouse.down();
+  try {
+    await page.mouse.move(horizontalPosition, targetBox.y + targetBox.height / 2, { steps: 12 });
+  } finally {
+    await page.mouse.up();
+  }
+}
 
 test.describe.configure({ mode: "serial" });
 
@@ -281,7 +299,10 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
       .filter({
         hasText: world.orgName,
       });
-    await expect(employeeOrganizationSwitcher).toBeDisabled();
+    // The switcher's disabled state while a switch is pending is held by the
+    // organization component contract with a held switch. A real switch here
+    // completes in about 450 ms, before the first poll (2026-09-13); assert
+    // the settled state and the data isolation instead.
     await expect(employeeOrganizationSwitcher).toBeEnabled({ timeout: 30_000 });
     await employeePage.goto("/auftraege");
     await expect(
@@ -300,7 +321,6 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     const primaryOrganizationSwitcher = adminPage.getByRole("combobox").filter({
       hasText: world.orgName,
     });
-    await expect(primaryOrganizationSwitcher).toBeDisabled();
     await expect(primaryOrganizationSwitcher).toBeEnabled({ timeout: 30_000 });
     await adminPage.goto("/kunden");
     await expect(
@@ -317,7 +337,6 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
       .filter({
         hasText: secondaryOrganizationName,
       });
-    await expect(secondaryOrganizationSwitcher).toBeDisabled();
     await expect(secondaryOrganizationSwitcher).toBeEnabled({
       timeout: 30_000,
     });
@@ -336,7 +355,6 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
       world.orgName,
       { searchFirst: false },
     );
-    await expect(primaryOrganizationSwitcher).toBeDisabled();
     await expect(primaryOrganizationSwitcher).toBeEnabled({ timeout: 30_000 });
   });
 
@@ -448,6 +466,9 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     await expect(joinedInviteeRow).toContainText("Arbeitet", {
       timeout: 30_000,
     });
+    const timeBeforeRemoval = await getTimeCaptureState(world.orgId, world.invitee.id);
+    expect(timeBeforeRemoval.sessions.filter((session) => session.status === "open")).toHaveLength(1);
+    expect(timeBeforeRemoval.segments.length).toBeGreaterThan(0);
     await joinedInviteeRow
       .getByRole("button", { name: "Aktionen öffnen" })
       .click();
@@ -456,14 +477,18 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
       .getByRole("alertdialog")
       .getByRole("button", { name: "Entfernen" })
       .click();
-    await expect(adminPage).toHaveURL(/\/mitarbeiter\?removed_member=/, {
-      timeout: 20_000,
-    });
-    await expect
-      .poll(() =>
-        getLatestMembershipRemovalEvent(world.orgId, world.invitee.id),
-      )
-      .toEqual({ autoClockedOut: true });
+    // SI-006 protects recorded time. A denied removal must not clock out or erase history.
+    const removalDialog = adminPage.getByRole("alertdialog");
+    await expect(removalDialog.getByRole("alert")).toContainText(
+      "Es kann nicht entfernt werden; beende stattdessen das Beschäftigungsverhältnis über die Personalakte.",
+    );
+    expect(await getTimeCaptureState(world.orgId, world.invitee.id)).toEqual(timeBeforeRemoval);
+    await removalDialog.getByRole("button", { name: "Abbrechen" }).click();
+    await adminPage.reload();
+    await expect(joinedInviteeRow).toContainText("Büro");
+    await expect(joinedInviteeRow).toContainText("Arbeitet");
+    await signOutViaUi(inviteePage);
+    await expect(joinedInviteeRow).toContainText("Nicht eingestempelt");
     await inviteeContext.close();
     await expect(visibleText(adminPage, world.orgName)).toBeVisible();
   });
@@ -694,6 +719,19 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     await adminPage.getByLabel("Kunden durchsuchen").fill("kein-a1-kunde");
     await expect(customerRow).toHaveCount(0);
     await adminPage.getByLabel("Kunden durchsuchen").fill("");
+    await expect(customerRow).toBeVisible();
+    // Typed search: each pause beyond the 250 ms debounce commits a URL and
+    // remounts the keyed list. Keystrokes, the pending navigation and focus
+    // must survive those commits (review finding, 2026-09-13).
+    const customerSearch = adminPage.getByLabel("Kunden durchsuchen");
+    await customerSearch.click();
+    await customerSearch.pressSequentially("kein-a1-kunde", { delay: 300 });
+    await expect(customerSearch).toHaveValue("kein-a1-kunde");
+    await expect(customerSearch).toBeFocused();
+    await expect(adminPage).toHaveURL(/[?&]q=kein-a1-kunde(&|$)/);
+    await expect(customerRow).toHaveCount(0);
+    await customerSearch.fill("");
+    await expect(customerRow).toBeVisible();
     await openCustomerDetail(adminPage, customerName);
     await expect(
       visibleText(adminPage, "Werkstraße 42, 10115 Berlin"),
@@ -752,6 +790,11 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
         name: "Neuen Auftrag oder Projekt erstellen",
       }),
     ).toBeHidden();
+    // Deferred creation closes the dialog before persistence. Navigation must
+    // not abort its queued save, and a visible optimistic draft is insufficient.
+    await expect.poll(() => getJobCountByNumber(world.orgId, inlineJobNumber)).toBe(1);
+    await expect(adminPage.getByRole("row").filter({ hasText: inlineJobNumber }))
+      .toContainText(inlineCustomer);
     await adminPage.goto(`/auftraege/${inlineJobNumber}`);
     await expect(visibleText(adminPage, inlineCustomer)).toBeVisible();
   });
@@ -864,6 +907,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
       .click();
     await expect(createDialog).toHaveCount(0, { timeout: 20_000 });
 
+    await expect.poll(() => getJobCountByNumber(world.orgId, jobNumber)).toBe(1);
     await adminPage.goto(`/auftraege/${jobNumber}`);
     const details = adminPage
       .getByRole("heading", { name: "Details" })
@@ -1746,7 +1790,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     await expect(createDialog).toHaveCount(0, { timeout: 20_000 });
 
     await showPlanningMonth(adminPage, plannedDate);
-    await calendarDay(adminPage, plannedDate).click();
+    await calendarDayNumber(adminPage, plannedDate).click();
     await expect(
       adminPage.getByRole("tab", { name: "Tag", exact: true }),
     ).toHaveAttribute("data-state", "active");
@@ -1774,19 +1818,8 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
       .poll(async () => (await jobBlock.boundingBox())?.width ?? 0)
       .toBeGreaterThan(widthBefore + 30);
 
-    let blockBox = await jobBlock.boundingBox();
-    if (!blockBox) throw new Error("A1-23 job block has no bounding box");
-    await adminPage.mouse.move(
-      blockBox.x + blockBox.width / 2,
-      blockBox.y + blockBox.height / 2,
-    );
-    await adminPage.mouse.down();
-    await adminPage.mouse.move(
-      blockBox.x + blockBox.width / 2,
-      blockBox.y - 72,
-      { steps: 12 },
-    );
-    await adminPage.mouse.up();
+    await moveCalendarBlockToMember(adminPage, jobBlock,
+      `${world.users.buero.firstName} ${world.users.buero.lastName}`);
     await confirmPlanningWarning(
       adminPage,
       "A1 Umplanung zu Bruno bewusst bestätigt",
@@ -1798,7 +1831,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
       ),
     ).toBeVisible({ timeout: 20_000 });
 
-    blockBox = await jobBlock.boundingBox();
+    const blockBox = await jobBlock.boundingBox();
     const parkplatzButton = adminPage.getByRole("button", {
       name: /Parkplatz/,
     });
@@ -1847,7 +1880,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     });
     await adminPage.reload();
     await showPlanningMonth(adminPage, plannedDate);
-    await calendarDay(adminPage, plannedDate).click();
+    await calendarDayNumber(adminPage, plannedDate).click();
     await parkplatzButton.click();
     const parkedPill = parkedJobPill(adminPage, title);
     await expect(parkedPill).toBeVisible();
@@ -2164,20 +2197,8 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
       adminPage,
       /10:00.*11:30/,
     ).getByRole("button");
-    const sourceBox = await source.boundingBox();
-    if (!sourceBox)
-      throw new Error("A1-30 source work block has no bounding box");
-    await adminPage.mouse.move(
-      sourceBox.x + sourceBox.width / 2,
-      sourceBox.y + sourceBox.height / 2,
-    );
-    await adminPage.mouse.down();
-    await adminPage.mouse.move(
-      sourceBox.x + sourceBox.width / 2,
-      sourceBox.y - 72,
-      { steps: 12 },
-    );
-    await adminPage.mouse.up();
+    await moveCalendarBlockToMember(adminPage, source,
+      `${world.users.buero.firstName} ${world.users.buero.lastName}`);
     await expect(
       visibleText(
         adminPage,
@@ -2881,6 +2902,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
       .getByRole("button", { name: "Endgültig löschen" })
       .click();
     await expect(textInDom(adminPage, fileName)).toHaveCount(0);
+    await expect(visibleText(adminPage, "Datei wurde endgültig gelöscht.")).toBeVisible();
 
     await adminPage.goto("/dokumente");
     await adminPage

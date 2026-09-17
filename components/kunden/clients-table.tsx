@@ -36,7 +36,7 @@ const PENDING_LABEL = "Kunde wird gespeichert";
 
 // One column definition for the loaded table and its skeleton (design canon):
 // header count, widths and hover cannot drift apart.
-export const CLIENT_COLUMNS: readonly SkeletonColumn[] = [
+const CLIENT_COLUMNS: readonly SkeletonColumn[] = [
   {
     id: "name",
     header: "Name",

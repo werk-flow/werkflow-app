@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import type { Json } from '@/lib/supabase/database.types';
 import type { WorkHandoverTargetSnapshot } from './types';
 
-export const WORK_HANDOVER_RENDERER_VERSION = 'p1-17-html-v1';
+const WORK_HANDOVER_RENDERER_VERSION = 'p1-17-html-v1';
 // Objects are serialized with recursively sorted keys. Arrays retain their
 // business order, so equivalent payloads always produce identical bytes.
 
@@ -23,7 +23,7 @@ function canonicalStringify(value: unknown): string {
   return JSON.stringify(canonicalize(value));
 }
 
-export type WorkHandoverExportSource = {
+type WorkHandoverExportSource = {
   label: string;
   customerPayload: Json;
 };

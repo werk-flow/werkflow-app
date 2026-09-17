@@ -37,6 +37,7 @@ import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
 function isoToLocalDate(value: string): Date | undefined {
   if (!value) return undefined;
   const [year, month, day] = value.split('-').map(Number);
+  if (year === undefined || month === undefined || day === undefined) return undefined;
   return new Date(year, month - 1, day);
 }
 
@@ -62,7 +63,7 @@ export function TeamManagementSection({
   const [addErrorByTeam, setAddErrorByTeam] = useState<Record<string, string>>({});
   const [nameError, setNameError] = useState<string | null>(null);
   const [addFieldErrorsByTeam, setAddFieldErrorsByTeam] = useState<
-    Record<string, { member?: string; validUntil?: string }>
+    Record<string, { member?: string | undefined; validUntil?: string | undefined }>
   >({});
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [selectedEmployeeByTeam, setSelectedEmployeeByTeam] = useState<

@@ -62,7 +62,7 @@ export function compareTimelineItems(
   return right.stableKey.localeCompare(left.stableKey);
 }
 
-export function encodeTimelineCursor(
+function encodeTimelineCursor(
   item: Pick<TimelineItem, 'occurredAt' | 'stableKey'>
 ): string {
   const cursor: TimelineCursor = {
@@ -102,7 +102,7 @@ export function decodeTimelineCursor(value?: string | null): TimelineCursor | nu
   }
 }
 
-export function isTimelineItemAfterCursor(
+function isTimelineItemAfterCursor(
   item: Pick<TimelineItem, 'occurredAt' | 'stableKey'>,
   cursor: TimelineCursor
 ): boolean {

@@ -31,6 +31,7 @@ import { cn } from '@/lib/utils';
 import { useBanner } from '@/components/ui/banner';
 import { useUserProfile } from '@/components/user/user-profile-context';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import {
   Card,
   CardContent,
@@ -127,6 +128,8 @@ function translateActionError(error?: EmailChangeActionError) {
       return 'Du bist nicht mehr angemeldet. Bitte lade die Seite neu.';
     case 'no_active_email':
       return 'Für dieses Konto ist aktuell keine bestätigte E-Mail-Adresse verfügbar.';
+    case 'completion_pending':
+      return 'Die E-Mail-Änderung wurde angefragt, aber noch nicht bestätigt. Bitte prüfe den Status. Bleibt er unverändert, wende dich an den WerkFlow-Support.';
     default:
       return 'Es ist ein unerwarteter Fehler aufgetreten. Bitte versuche es erneut.';
   }
@@ -543,7 +546,21 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6 break-words">
-        {completionState ? (
+        {wizardState.step === 'completion_pending' ? (
+          <div className="space-y-3" role="status">
+            <p className="font-medium">Bestätigung der E-Mail-Änderung steht aus</p>
+            <p className="text-sm text-muted-foreground">
+              Die Änderung auf {wizardState.newEmail} wurde angefragt. Die Bestätigung
+              fehlt noch. Bis der Vorgang geklärt ist, kannst du keine weitere
+              E-Mail-Änderung starten. Bleibt der Status unverändert, wende dich
+              bitte an den WerkFlow-Support.
+            </p>
+            <div className="flex items-center gap-2 text-sm">
+              <span>Status prüfen</span>
+              <RefreshButton label="Status der E-Mail-Änderung prüfen" />
+            </div>
+          </div>
+        ) : completionState ? (
           <div className="rounded-lg border bg-primary/5 p-5">
             <div className="flex items-start gap-3">
               <div className="rounded-full bg-primary/10 p-2 text-primary">
@@ -619,7 +636,7 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
           </div>
         </div>
 
-        {wizardState.step !== 'idle' ? (
+        {wizardState.step !== 'idle' && wizardState.step !== 'completion_pending' ? (
           <div className="grid gap-6 lg:grid-cols-[14rem_minmax(0,1fr)]">
             <StepIndicator
               currentStep={wizardState.step}

@@ -27,14 +27,15 @@ import {
 } from '@/lib/personnel/actions';
 import { toLocalDateString } from '@/lib/utils';
 
-const ERROR_MESSAGES: Record<string, string> = {
+const ERROR_MESSAGES = {
   last_name_required: 'Bitte gib mindestens einen Nachnamen an.',
   invalid_entry_date: 'Bitte gib ein gültiges Eintrittsdatum an.',
   number_taken: 'Diese Personalnummer ist bereits vergeben.',
   not_authorized: 'Du bist nicht berechtigt, Personalakten anzulegen.',
   create_failed: 'Die Personalakte konnte nicht angelegt werden.',
   unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.',
-};
+} satisfies Record<string, string>;
+const ERROR_MESSAGE_BY_CODE: Record<string, string> = ERROR_MESSAGES;
 
 export function CreatePersonnelDialog() {
   const router = useRouter();
@@ -104,11 +105,11 @@ export function CreatePersonnelDialog() {
 
     setIsSaving(true);
     const result = await createPersonnelRecord({
-      firstName: firstName.trim() || undefined,
+      ...(firstName.trim() ? { firstName: firstName.trim() } : {}),
       lastName: lastName.trim(),
-      employeeNumber: employeeNumber.trim() || undefined,
-      entryDate: entryDate || undefined,
-      notes: notes.trim() || undefined,
+      ...(employeeNumber.trim() ? { employeeNumber: employeeNumber.trim() } : {}),
+      ...(entryDate ? { entryDate } : {}),
+      ...(notes.trim() ? { notes: notes.trim() } : {}),
     });
     setIsSaving(false);
 
@@ -122,7 +123,7 @@ export function CreatePersonnelDialog() {
       router.push(`/mitarbeiter/${result.recordId}`);
     } else {
       setError(
-        ERROR_MESSAGES[result.error] ?? ERROR_MESSAGES.unexpected_error
+        ERROR_MESSAGE_BY_CODE[result.error] ?? ERROR_MESSAGES.unexpected_error
       );
     }
   };

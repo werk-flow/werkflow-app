@@ -26,9 +26,10 @@ import {
   writeJsonAtomically,
 } from "../../../lib/testing/file-lock";
 import { assertWorldSeedComplete } from "../../../lib/testing/seed-world-plan";
+import { backendIdentity } from "../../../lib/testing/proof-environment";
 import { browserRunPaths, configuredRunKey, manifestActiveStateDirectory } from "../../../lib/testing/run-paths";
 import type { SessionRole } from "./sessions";
-import { mirrorOwnedStateFiles, readRetainedWorldState } from "../../../lib/testing/archive-state";
+import { mirrorOwnedStateFiles, readRetainedWorldState, restoreRetainedWorkloads } from "../../../lib/testing/archive-state";
 import { backendOriginFromUrl, validateDiagnosticProvenance, type BackendProvenance, type TestOutcomeEvidence } from "../../../lib/testing/test-evidence";
 import { assertRetainedBusinessDate } from '../../../lib/testing/business-date';
 import { assertInterruptedRecoveryOwnership, archiveRecoveryActiveState, recoverInterruptedEvidence, type InterruptionRecovery } from '../../../lib/testing/interrupted-run-recovery';
@@ -41,7 +42,7 @@ import {
 } from "./world";
 import { worldUserIds } from "./seed";
 
-export type ArchivedRunStatus =
+type ArchivedRunStatus =
   | "starting"
   | "running"
   | "passed"
@@ -61,8 +62,8 @@ export type RunFailure = {
 export type RunManifest = {
   version: 1;
   artifactLayout?: "run-owned-v1";
-  groupId?: string;
-  groupFingerprint?: string;
+  groupId?: string | undefined;
+  groupFingerprint?: string | undefined;
   runKey: string;
   sourceRunKey: string | null;
   lane: PlaywrightLane;
@@ -77,7 +78,7 @@ export type RunManifest = {
   completedAt: string | null;
   gitHead: string;
   sourceFingerprint: string;
-  candidateFingerprint?: string;
+  candidateFingerprint?: string | undefined;
   buildId: string | null;
   baseUrl: string;
   projectRef: string;
@@ -98,22 +99,27 @@ export type RunManifest = {
   classifiedAt: string | null;
   rootCause: string | null;
   prevention: string | null;
+  /** Retired certification-lane fields, kept so historical manifests parse. */
   rerunOverrideReason: string | null;
   campaignId?: string;
   rerunGrantId?: string | null;
   backendProvenance?: BackendProvenance;
+  /** Cleanup-only verification after a local transport change. Original provenance stays immutable. */
+  cleanupRelocation?: { verifiedAt: string; reason: string; backend: BackendProvenance };
   selectedTestIds?: string[];
   outcomes?: TestOutcomeEvidence[];
   currentTestId?: string | null;
   currentTestStartedAt?: string | null;
   interruptionRecovery?: InterruptionRecovery;
-  businessDate?: string;
+  businessDate?: string | undefined;
+  /** Traces, reports and active state removed by `test:runs prune`; evidence files stay. */
+  prunedAt?: string | null;
   auditGroup?: string;
   completedAuditGroups?: Array<{ group: string; runId: string; organizationIds: string[]; cleanedAt: string }>;
 };
 
 const REPOSITORY_ROOT = resolve(__dirname, "../../..");
-export const RUN_ARCHIVE_ROOT = resolve(
+const RUN_ARCHIVE_ROOT = resolve(
   REPOSITORY_ROOT,
   ".agent-logs/playwright-runs",
 );
@@ -174,7 +180,7 @@ export function manifestPath(runKey: string): string {
   return resolve(runDirectory(runKey), "manifest.json");
 }
 
-export function calculateSourceFingerprint(): string {
+function calculateSourceFingerprint(): string {
   const hash = createHash("sha256");
   hash.update(commandOutput("git", ["rev-parse", "HEAD"]));
   hash.update(
@@ -199,14 +205,6 @@ export function calculateSourceFingerprint(): string {
   return hash.digest("hex");
 }
 
-function projectRefFromUrl(value: string): string {
-  try {
-    return new URL(value).hostname.split(".")[0] ?? "unknown";
-  } catch {
-    return "invalid";
-  }
-}
-
 function parseEnvironmentValue<T extends string>(
   value: string | undefined,
   allowed: readonly T[],
@@ -223,9 +221,6 @@ function parseEnvironmentValue<T extends string>(
 export function createRunManifest(input?: {
   command?: string;
   grep?: string | null;
-  rerunOverrideReason?: string | null;
-  campaignId?: string;
-  rerunGrantId?: string | null;
   selectedTestIds?: string[];
   candidateFingerprint?: string;
   groupFingerprint?: string;
@@ -271,7 +266,7 @@ export function createRunManifest(input?: {
     candidateFingerprint: input?.candidateFingerprint,
     buildId: readOptionalFile(resolve(REPOSITORY_ROOT, ".next/BUILD_ID")),
     baseUrl: process.env.GOLDEN_BASE_URL ?? "http://localhost:3000",
-    projectRef: projectRefFromUrl(supabaseUrl),
+    projectRef: backendIdentity(supabaseUrl, REPOSITORY_ROOT),
     r2Bucket: process.env.R2_BUCKET_NAME ?? "missing",
     total: 0,
     passed: 0,
@@ -285,11 +280,9 @@ export function createRunManifest(input?: {
     classifiedAt: null,
     rootCause: null,
     prevention: null,
-    rerunOverrideReason: input?.rerunOverrideReason ?? null,
-    campaignId: input?.campaignId,
-    rerunGrantId: input?.rerunGrantId ?? null,
+    rerunOverrideReason: null,
     backendProvenance: currentBackendProvenance(suite),
-    selectedTestIds: input?.selectedTestIds,
+    ...(input?.selectedTestIds !== undefined ? { selectedTestIds: input.selectedTestIds } : {}),
     outcomes: [],
     businessDate: process.env.WERKFLOW_TEST_BUSINESS_DATE,
   };
@@ -438,6 +431,7 @@ export function restoreArchivedState(sourceRunKey: string): TestWorld {
   }
   const checkpoints = resolve(stateDirectory, "checkpoints.json");
   if (existsSync(checkpoints)) copyFileSync(checkpoints, resolve(artifactsDirectory(), "checkpoints.json"));
+  restoreRetainedWorkloads(runDirectory(sourceRunKey), runDirectory(currentRunKey()));
   return loadWorld();
 }
 
@@ -483,17 +477,6 @@ export function listRunManifests(): RunManifest[] {
     )
     .map((entry) => readRunManifest(entry.name))
     .sort((left, right) => left.startedAt.localeCompare(right.startedAt));
-}
-
-export function listRetainedWorlds(): TestWorld[] {
-  const worlds = new Map<string, TestWorld>();
-  for (const manifest of listRunManifests()) {
-    if (!manifest.retainedAt || manifest.cleanedAt) continue;
-    const path = resolve(runDirectory(manifest.runKey), "state/world.json");
-    const world = readRetainedWorldState(manifest, path);
-    worlds.set(world.orgId, world);
-  }
-  return [...worlds.values()];
 }
 
 export function markWorldCleaned(world: TestWorld): void {

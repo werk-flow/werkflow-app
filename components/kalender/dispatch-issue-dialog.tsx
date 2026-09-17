@@ -107,7 +107,7 @@ export function DispatchIssueDialog({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one readiness load when the dialog mounts; later changes go through its own actions
   }, []);
 
   // Disabled only while the readiness check or the send is in flight; a
@@ -183,13 +183,13 @@ export function DispatchIssueDialog({
                   <p className="flex items-center gap-1.5 font-medium">
                     {dimension.state === 'ok' ? (
                       <CircleCheck
-                        className="size-4 text-green-600 dark:text-green-400"
+                        className="size-4 text-success-text"
                         data-readiness-icon="ok"
                         aria-hidden="true"
                       />
                     ) : dimension.state === 'warning' ? (
                       <AlertTriangle
-                        className="size-4 text-yellow-600 dark:text-yellow-400"
+                        className="size-4 text-warning-text"
                         data-readiness-icon="warning"
                         aria-hidden="true"
                       />

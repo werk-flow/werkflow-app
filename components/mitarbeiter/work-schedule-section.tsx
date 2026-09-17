@@ -58,7 +58,7 @@ import {
 import { formatDuration } from '@/lib/time-tracking/helpers';
 import { cn, toLocalDateString } from '@/lib/utils';
 
-const SCHEDULE_ERROR_MESSAGES: Record<string, string> = {
+const SCHEDULE_ERROR_MESSAGES = {
   invalid_valid_from: 'Bitte gib ein gültiges Datum an.',
   invalid_day_minutes:
     'Bitte gib für jeden Wochentag eine Stundenzahl zwischen 0 und 24 an.',
@@ -67,7 +67,8 @@ const SCHEDULE_ERROR_MESSAGES: Record<string, string> = {
   not_authorized: 'Du bist nicht berechtigt, Arbeitszeitmodelle zu ändern.',
   record_not_found: 'Die Personalakte wurde nicht gefunden.',
   schedule_not_found: 'Der Wochenplan wurde nicht gefunden.',
-};
+} satisfies Record<string, string>;
+const SCHEDULE_ERROR_MESSAGE_BY_CODE: Record<string, string> = SCHEDULE_ERROR_MESSAGES;
 
 function formatDate(value: string): string {
   return new Date(`${value}T00:00:00`).toLocaleDateString('de-DE', {
@@ -81,7 +82,7 @@ function formatScheduleDays(schedule: WorkSchedule): string {
   const parts: string[] = [];
   for (let i = 0; i < 7; i++) {
     const minutes = schedule.dayMinutes[i];
-    if (minutes > 0) {
+    if (minutes !== undefined && minutes > 0) {
       parts.push(`${WEEKDAY_SHORT_LABELS[i]} ${formatHoursShort(minutes)}`);
     }
   }
@@ -152,7 +153,7 @@ export function WorkScheduleSection({
       router.refresh();
     } else {
       setDeleteError(
-        SCHEDULE_ERROR_MESSAGES[result.error ?? ''] ??
+        SCHEDULE_ERROR_MESSAGE_BY_CODE[result.error ?? ''] ??
           'Der Wochenplan konnte nicht gelöscht werden.'
       );
     }
@@ -412,7 +413,7 @@ function ScheduleDialog({
       onClose(true);
     } else {
       setError(
-        SCHEDULE_ERROR_MESSAGES[result.error ?? ''] ??
+        SCHEDULE_ERROR_MESSAGE_BY_CODE[result.error ?? ''] ??
           'Der Wochenplan konnte nicht gespeichert werden.'
       );
     }

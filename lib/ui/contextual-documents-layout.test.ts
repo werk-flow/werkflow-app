@@ -138,7 +138,7 @@ test("loaded and loading upload controls consume the same emphasis default", () 
       "components/dokumente/contextual-documents-layout.tsx",
       "ContextualDocumentsSkeleton",
     ],
-  ]) {
+  ] as const) {
     const syntax = syntaxFor(file);
     const component = syntax.statements.find(
       (node): node is ts.FunctionDeclaration =>
@@ -170,7 +170,7 @@ test("coverage and both service detail loading states compose the contextual ske
       "components/loading-states/service-cases-page-skeleton.tsx",
       "ServiceCaseDetailSkeleton",
     ],
-  ])
+  ] as const)
     expect(
       componentUses(syntaxFor(file), owner, "ContextualDocumentsSkeleton"),
     ).toBe(true);

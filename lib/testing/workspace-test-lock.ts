@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { closeSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-export type WorkspaceLockOwner = {
+type WorkspaceLockOwner = {
   token: string;
   processId: number;
   operation: string;

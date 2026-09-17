@@ -4,6 +4,7 @@ import { updateTag } from 'next/cache';
 import { cookies } from 'next/headers';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { readCompleteRows, readInBatches, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import {
   CACHE_TAGS,
@@ -15,6 +16,7 @@ import {
   shiftIsoDateByDays,
 } from '@/lib/personnel/types';
 import type { OrgRole } from '@/lib/members/actions';
+import { parseIsoDateRange, type IsoDateRange } from '@/lib/calendar/date-range';
 import { loadSicknessReportsForRecord } from './server';
 import {
   toSicknessReport,
@@ -761,29 +763,42 @@ export type SicknessCalendarEntry = {
   dayPortion: VacationDayPortion;
 };
 
+function defaultCalendarWindow(): IsoDateRange {
+  const businessDate = getBusinessTodayIso();
+  return {
+    from: shiftIsoDateByDays(businessDate, -365),
+    to: shiftIsoDateByDays(businessDate, 730),
+  };
+}
+
 export type SicknessCalendarEntriesResult =
   | { success: true; entries: SicknessCalendarEntry[] }
   | { success: false; error: string };
 
-export async function getSicknessCalendarEntries(): Promise<SicknessCalendarEntriesResult> {
+export async function getSicknessCalendarEntries(
+  range?: IsoDateRange
+): Promise<SicknessCalendarEntriesResult> {
   try {
     const auth = await resolveActionContext();
     if (!auth.success) return auth;
     const { userId, orgId, role } = auth.context;
     const isManager = isManagerRole(role);
 
+    // Same window contract as the vacation calendar read (PF-05).
+    const window =
+      range === undefined ? defaultCalendarWindow() : parseIsoDateRange(range);
+    if (!window) return { success: false, error: 'invalid_input' };
+    const { from: windowStartIso, to: windowEndIso } = window;
+
     const admin = createSupabaseAdminClient();
-    // Same bounded window as the vacation calendar payload.
-    const businessDate = getBusinessTodayIso();
-    const windowStartIso = shiftIsoDateByDays(businessDate, -365);
-    const windowEndIso = shiftIsoDateByDays(businessDate, 730);
     let query = admin
       .from('sickness_reports')
       .select('id, employee_record_id, start_date, end_date, day_portion')
       .eq('organization_id', orgId)
       .eq('status', 'reported')
       .lte('start_date', windowEndIso)
-      .or(`end_date.gte.${windowStartIso},end_date.is.null`);
+      .or(`end_date.gte.${windowStartIso},end_date.is.null`)
+      .order('start_date').order('id');
 
     if (!isManager) {
       const { recordId, failed } = await loadOwnEmployeeRecordId(orgId, userId);
@@ -792,7 +807,9 @@ export async function getSicknessCalendarEntries(): Promise<SicknessCalendarEntr
       query = query.eq('employee_record_id', recordId);
     }
 
-    const { data: rows, error } = await query;
+    const { data: rows, error } = await readCompleteRows(
+      (from, to) => query.range(from, to), LIST_ROW_CAP,
+    );
     if (error) {
       console.error('Failed to load sickness calendar entries:', error);
       return { success: false, error: 'load_failed' };
@@ -800,10 +817,11 @@ export async function getSicknessCalendarEntries(): Promise<SicknessCalendarEntr
     if (!rows || rows.length === 0) return { success: true, entries: [] };
 
     const recordIds = [...new Set(rows.map((row) => row.employee_record_id))];
-    const { data: records, error: recordsError } = await admin
+    const { data: records, error: recordsError } = await readInBatches(recordIds, (ids) => admin
       .from('employee_records')
       .select('id, user_id, first_name, last_name')
-      .in('id', recordIds);
+      .eq('organization_id', orgId)
+      .in('id', [...ids]));
     if (recordsError) {
       console.error('Failed to load sickness calendar records:', recordsError);
       return { success: false, error: 'load_failed' };
@@ -817,10 +835,10 @@ export async function getSicknessCalendarEntries(): Promise<SicknessCalendarEntr
     ];
     const profilesResult =
       userIds.length > 0
-        ? await admin
+        ? await readInBatches(userIds, (ids) => admin
             .from('profiles')
             .select('id, first_name, last_name')
-            .in('id', userIds)
+            .in('id', [...ids]))
         : { data: [], error: null };
     if (profilesResult.error) {
       console.error(

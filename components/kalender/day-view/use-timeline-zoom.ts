@@ -1,18 +1,18 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react';
+import { BASE_HOUR_WIDTH } from './timeline-grid';
 
-export const BASE_HOUR_WIDTH = 60;
 const VISIBLE_HOURS = 13; // 5am to 6pm
 const DEFAULT_START_HOUR = 5;
 const MAX_ZOOM_MULTIPLIER = 4;
 const MAX_ZOOM_STEP = 0.08;
 
-export function getEffectiveHourWidth(zoom: number) {
+function getEffectiveHourWidth(zoom: number) {
   return BASE_HOUR_WIDTH * zoom;
 }
 
-export function getTimelineWidth(zoom: number) {
+function getTimelineWidth(zoom: number) {
   return 24 * getEffectiveHourWidth(zoom);
 }
 

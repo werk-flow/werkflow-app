@@ -3,7 +3,6 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { assertInterruptedRecoveryOwnership, archiveRecoveryActiveState, interruptedRecoveryPatch, recoverInterruptedEvidence, INTERRUPTED_RECOVERY_OPERATION } from './interrupted-run-recovery';
-import { campaignSummary } from './run-campaign';
 import { withWorkspaceTestLock } from './workspace-test-lock';
 import type { RunManifest } from '../../tests/golden/support/run-state';
 
@@ -39,7 +38,7 @@ function manifestStore(directory: string): {
 }
 
 describe('explicit interrupted-run recovery', () => {
-  test('preserves real outcomes and consumed campaign cost without inventing a failed stage', () => {
+  test('preserves real outcomes and historical grant fields without inventing a failed stage', () => {
     const patch = interruptedRecoveryPatch(unfinished, 'Operator stopped the process tree after finding an omitted UI form.', '2026-09-05T06:30:00Z');
     const recovered = { ...unfinished, ...patch };
     expect(recovered.status).toBe('interrupted');
@@ -51,10 +50,6 @@ describe('explicit interrupted-run recovery', () => {
     expect(recovered.failures).toMatchObject([{ file: null }]);
     expect(recovered.failures?.[0]).not.toHaveProperty('testId');
     expect(patch).not.toHaveProperty('currentTestId');
-    expect(campaignSummary({ id: 'campaign', name: 'Browser verification', startedAt: unfinished.startedAt, closedAt: null, grants: [] }, [{
-      runKey: unfinished.runKey, campaignId: 'campaign', lane: 'certification', suite: 'audit', target: 'local',
-      startedAt: unfinished.startedAt, completedAt: patch.completedAt ?? null,
-    }])).toMatchObject({ fullAttempts: 1, fullMinutes: 30 });
   });
 
   test('rejects completed runs, weak explanations and invalid completion times', () => {

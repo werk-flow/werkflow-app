@@ -8,6 +8,7 @@ import {
   useCallback,
   useRef
 } from 'react';
+import { calendarActionResult } from '@/lib/calendar/action-result';
 import { Briefcase, Clock, ParkingSquare, Undo2 } from 'lucide-react';
 import { TimelineHeader } from './timeline-header';
 import { EmployeeTimelineRow } from './employee-timeline-row';
@@ -29,10 +30,10 @@ import {
 import { cn, toLocalDateString } from '@/lib/utils';
 import { CalendarEntryDialog } from '../calendar-entry-dialog';
 import {
-  updateEntry,
-  cancelOwnChangeRequest,
-  reassignEntries,
-  reassignEntryBatch
+  updateEntry as updateEntryAction,
+  cancelOwnChangeRequest as cancelOwnChangeRequestAction,
+  reassignEntries as reassignEntriesAction,
+  reassignEntryBatch as reassignEntryBatchAction
 } from '@/lib/time-tracking/actions';
 import { updateJob } from '@/lib/jobs/actions';
 import type { JobMoveResizeResult } from './job-block';
@@ -52,6 +53,11 @@ import { clearCalendarDragState, startCalendarDragState } from '../drag-state';
 import { PARKPLATZ_MIME, getDragGhost, type DragJobPayload } from '../parkplatz-panel';
 import { useCurrentTimePosition } from './use-current-time-position';
 import type { CalendarEntryDraft } from '../calendar-entry-draft';
+
+const updateEntry = (...args: Parameters<typeof updateEntryAction>) => calendarActionResult(() => updateEntryAction(...args));
+const cancelOwnChangeRequest = (...args: Parameters<typeof cancelOwnChangeRequestAction>) => calendarActionResult(() => cancelOwnChangeRequestAction(...args));
+const reassignEntries = (...args: Parameters<typeof reassignEntriesAction>) => calendarActionResult(() => reassignEntriesAction(...args));
+const reassignEntryBatch = (...args: Parameters<typeof reassignEntryBatchAction>) => calendarActionResult(() => reassignEntryBatchAction(...args));
 
 type SessionCollisionBlock = {
   id: string;
@@ -114,7 +120,8 @@ interface DayViewProps {
   isLoading: boolean;
   onRefresh: () => void;
   onSilentRefresh?: () => void;
-  onOperationStart?: () => void;
+  onOperationStart?: () => () => void;
+  isScopeActive?: () => boolean;
   onUpdateJob?: (
     jobId: string,
     input: Parameters<typeof updateJob>[1]
@@ -126,7 +133,7 @@ interface DayViewProps {
   jobs?: CalendarJob[];
   onParkJob?: (jobId: string) => void;
   onUnparkJob?: (jobId: string, date: string, time?: string, memberId?: string, durationMinutes?: number) => void;
-  onScheduleJob?: (jobId: string, date: string, time: string, memberId: string, durationMinutes: number) => void;
+  onScheduleJob?: (jobId: string, time: string, memberId: string, durationMinutes: number) => void;
   parkplatzButtonRef?: React.RefObject<HTMLElement | null>;
   parkplatzDragJob?: CalendarJob | null;
 }
@@ -143,7 +150,8 @@ export function DayView({
   onRefresh,
   onSilentRefresh,
   onOperationStart,
-  onUpdateJob: updateCalendarJob = updateJob,
+  isScopeActive,
+  onUpdateJob: updateCalendarJobAction = updateJob,
   onManualEntrySuccess,
   onJobSuccess,
   changeRequestMap = {},
@@ -195,6 +203,8 @@ export function DayView({
     }
   }, []);
 
+  const updateCalendarJob = useCallback((...args: Parameters<typeof updateCalendarJobAction>) =>
+    calendarActionResult(() => updateCalendarJobAction(...args)), [updateCalendarJobAction]);
   const silentRefresh = onSilentRefresh ?? onRefresh;
 
   const { showBanner } = useBanner();
@@ -208,6 +218,7 @@ export function DayView({
       message: string;
       onUndo?: () => Promise<void>;
     }) => {
+      if (isScopeActive && !isScopeActive()) return;
       showBanner({
         variant: banner.variant,
         message: banner.message,
@@ -216,6 +227,7 @@ export function DayView({
               actionLabel: 'Rückgängig',
               actionIcon: <Undo2 className="size-3.5" />,
               onAction: () => {
+                if (isScopeActive && !isScopeActive()) return;
                 void banner.onUndo?.().catch(() => {
                   silentRefresh();
                   showBanner({
@@ -229,7 +241,7 @@ export function DayView({
           : {}),
       });
     },
-    [showBanner, silentRefresh]
+    [showBanner, silentRefresh, isScopeActive]
   );
 
   const {
@@ -293,7 +305,7 @@ export function DayView({
 
   useEffect(() => {
     resetZoom();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the zoom resets only when the displayed day changes
   }, [dateKey]);
 
   // ── Optimistic entry overrides (instant UI before server round-trip) ──
@@ -392,146 +404,157 @@ export function DayView({
       reverseOv.set(update.entryId, { timestamp: update.originalTimestamp });
     }
 
-    onOperationStart?.();
-    setOptimisticOverrides(prev => {
-      const next = new Map(prev);
-      for (const [id, val] of forwardOv) next.set(id, val);
-      return next;
-    });
-
-    const undone = { current: false };
-
-    const message = isMove
-      ? 'Zeiteintrag wurde verschoben.'
-      : 'Zeiteintrag wurde geändert.';
-    showActionBanner({
-      variant: 'success',
-      message,
-      onUndo: async () => {
-        undone.current = true;
-        onOperationStart?.();
-        setOptimisticOverrides(prev => {
-          const next = new Map(prev);
-          for (const [id, val] of reverseOv) next.set(id, val);
-          return next;
-        });
-        const revUpdates: Promise<unknown>[] = [];
-        for (const [entryId, { timestamp }] of reverseOv) {
-          revUpdates.push(updateEntry(entryId, { timestamp }));
-        }
-        await Promise.all(revUpdates);
-        silentRefresh();
-      },
-    });
-
-    type UpdateItem = { entryId: string; newTs: string; origTs: string };
-    const updates: UpdateItem[] = [];
-
-    if (clockInChanged && clockOutChanged) {
-      const movingLater =
-        new Date(result.newClockInTimestamp).getTime() >
-        new Date(result.originalClockInTimestamp).getTime();
-      const ciItem: UpdateItem = {
-        entryId: result.clockInEntryId!,
-        newTs: result.newClockInTimestamp,
-        origTs: result.originalClockInTimestamp,
-      };
-      const coItem: UpdateItem = {
-        entryId: result.clockOutEntryId!,
-        newTs: result.newClockOutTimestamp,
-        origTs: result.originalClockOutTimestamp,
-      };
-      updates.push(movingLater ? coItem : ciItem, movingLater ? ciItem : coItem);
-    } else {
-      if (clockInChanged) {
-        updates.push({ entryId: result.clockInEntryId!, newTs: result.newClockInTimestamp, origTs: result.originalClockInTimestamp });
-      }
-      if (clockOutChanged) {
-        updates.push({ entryId: result.clockOutEntryId!, newTs: result.newClockOutTimestamp, origTs: result.originalClockOutTimestamp });
-      }
-    }
-    for (const update of result.additionalEntryUpdates ?? []) {
-      updates.push({
-        entryId: update.entryId,
-        newTs: update.newTimestamp,
-        origTs: update.originalTimestamp
+    const releaseOperation = onOperationStart?.();
+    try {
+      setOptimisticOverrides(prev => {
+        const next = new Map(prev);
+        for (const [id, val] of forwardOv) next.set(id, val);
+        return next;
       });
-    }
 
-    const results: Array<{ entryId: string; success: boolean; requestId?: string }> = [];
+      const message = isMove
+        ? 'Zeiteintrag wurde verschoben.'
+        : 'Zeiteintrag wurde geändert.';
+      const showConfirmedSuccess = () => showActionBanner({
+        variant: 'success',
+        message,
+        onUndo: async () => {
+          const releaseOperation = onOperationStart?.();
+          try {
+            setOptimisticOverrides(prev => {
+              const next = new Map(prev);
+              for (const [id, val] of reverseOv) next.set(id, val);
+              return next;
+            });
+            const revUpdates: ReturnType<typeof updateEntry>[] = [];
+            for (const [entryId, { timestamp }] of reverseOv) {
+              revUpdates.push(updateEntry(entryId, { timestamp }));
+            }
+            const undoResults = await Promise.all(revUpdates);
+            if (undoResults.some((result) => !result.success)) {
+              setOptimisticOverrides(previous => { const next = new Map(previous); for (const id of reverseOv.keys()) next.delete(id); return next; });
+              throw new Error('calendar_undo_failed');
+            }
 
-    if ((result.additionalEntryUpdates?.length ?? 0) > 0) {
-      const targetUserId =
-        entries.find((entry) => entry.id === result.clockInEntryId)?.userId ??
-        currentUserId;
-      const batchResult = await reassignEntryBatch(
-        updates.map((update) => ({
+          } finally {
+            if (releaseOperation) releaseOperation();
+            else silentRefresh();
+          }
+        },
+      });
+
+      type UpdateItem = { entryId: string; newTs: string; origTs: string };
+      const updates: UpdateItem[] = [];
+
+      if (clockInChanged && clockOutChanged) {
+        const movingLater =
+          new Date(result.newClockInTimestamp).getTime() >
+          new Date(result.originalClockInTimestamp).getTime();
+        const ciItem: UpdateItem = {
+          entryId: result.clockInEntryId!,
+          newTs: result.newClockInTimestamp,
+          origTs: result.originalClockInTimestamp,
+        };
+        const coItem: UpdateItem = {
+          entryId: result.clockOutEntryId!,
+          newTs: result.newClockOutTimestamp,
+          origTs: result.originalClockOutTimestamp,
+        };
+        updates.push(movingLater ? coItem : ciItem, movingLater ? ciItem : coItem);
+      } else {
+        if (clockInChanged) {
+          updates.push({ entryId: result.clockInEntryId!, newTs: result.newClockInTimestamp, origTs: result.originalClockInTimestamp });
+        }
+        if (clockOutChanged) {
+          updates.push({ entryId: result.clockOutEntryId!, newTs: result.newClockOutTimestamp, origTs: result.originalClockOutTimestamp });
+        }
+      }
+      for (const update of result.additionalEntryUpdates ?? []) {
+        updates.push({
           entryId: update.entryId,
-          newUserId: targetUserId,
-          newTimestamp: update.newTs
-        }))
-      );
+          newTs: update.newTimestamp,
+          origTs: update.originalTimestamp
+        });
+      }
 
-      if (undone.current) { silentRefresh(); return; }
+      const results: Array<{ entryId: string; success: boolean; requestId?: string | undefined }> = [];
 
-      if (batchResult.success) {
-        silentRefresh();
+      if ((result.additionalEntryUpdates?.length ?? 0) > 0) {
+        // A same-row move or resize changes timestamps only: each entry keeps
+        // its recorded owner. The acting user must never become the owner of
+        // another person's entries through a lookup miss.
+        const ownerByEntryId = new Map(entries.map((entry) => [entry.id, entry.userId] as const));
+        const batchUpdates = updates.map((update) => {
+          const ownerId = ownerByEntryId.get(update.entryId);
+          return ownerId ? { entryId: update.entryId, newUserId: ownerId, newTimestamp: update.newTs } : null;
+        });
+        // An entry without a known owner fails the whole batch: moving fewer
+        // entries than the user dragged and reporting success would be a
+        // silent partial failure.
+        const batchResult = batchUpdates.every((update) => update !== null)
+          ? await reassignEntryBatch(batchUpdates.filter((update) => update !== null))
+          : null;
+
+        if (batchResult?.success) {
+          showConfirmedSuccess();
+        } else {
+          setOptimisticOverrides(prev => {
+            const next = new Map(prev);
+            for (const [id, val] of reverseOv) next.set(id, val);
+            return next;
+          });
+
+          showActionBanner({
+            variant: 'error',
+            message: isMove
+              ? 'Zeiteintrag konnte nicht verschoben werden.'
+              : 'Zeiteintrag konnte nicht geändert werden.',
+          });
+        }
+        return;
+      }
+
+      for (const update of updates) {
+        if (isScopeActive && !isScopeActive()) return;
+        const r = await updateEntry(update.entryId, { timestamp: update.newTs });
+        const requestId = r.success && 'request' in r ? r.request.id : undefined;
+        results.push({ entryId: update.entryId, success: r.success, requestId });
+
+        if (!r.success) {
+          for (const prev of results) {
+            if (!prev.success) continue;
+            if (prev.requestId) {
+              await cancelOwnChangeRequest(prev.requestId);
+            } else {
+              const orig = updates.find((u) => u.entryId === prev.entryId)?.origTs;
+              if (orig) await updateEntry(prev.entryId, { timestamp: orig });
+            }
+          }
+          break;
+        }
+      }
+
+      const allOk = results.length > 0 && results.every((r) => r.success);
+
+      if (allOk) {
+        showConfirmedSuccess();
       } else {
         setOptimisticOverrides(prev => {
           const next = new Map(prev);
           for (const [id, val] of reverseOv) next.set(id, val);
           return next;
         });
-        silentRefresh();
-        showActionBanner({
-          variant: 'error',
-          message: isMove
-            ? 'Zeiteintrag konnte nicht verschoben werden.'
-            : 'Zeiteintrag konnte nicht geändert werden.',
-        });
+
+        const errorMsg = isMove
+          ? 'Zeiteintrag konnte nicht verschoben werden.'
+          : 'Zeiteintrag konnte nicht geändert werden.';
+        showActionBanner({ variant: 'error', message: errorMsg });
       }
-      return;
+    } finally {
+      if (releaseOperation) releaseOperation();
+      else silentRefresh();
     }
-
-    for (const update of updates) {
-      if (undone.current) { silentRefresh(); return; }
-      const r = await updateEntry(update.entryId, { timestamp: update.newTs });
-      const requestId = r.success && 'request' in r ? r.request.id : undefined;
-      results.push({ entryId: update.entryId, success: r.success, requestId });
-
-      if (!r.success) {
-        for (const prev of results) {
-          if (!prev.success) continue;
-          if (prev.requestId) {
-            await cancelOwnChangeRequest(prev.requestId);
-          } else {
-            const orig = updates.find((u) => u.entryId === prev.entryId)?.origTs;
-            if (orig) await updateEntry(prev.entryId, { timestamp: orig });
-          }
-        }
-        break;
-      }
-    }
-
-    if (undone.current) { silentRefresh(); return; }
-
-    const allOk = results.length > 0 && results.every((r) => r.success);
-
-    if (allOk) {
-      silentRefresh();
-    } else {
-      setOptimisticOverrides(prev => {
-        const next = new Map(prev);
-        for (const [id, val] of reverseOv) next.set(id, val);
-        return next;
-      });
-      silentRefresh();
-      const errorMsg = isMove
-        ? 'Zeiteintrag konnte nicht verschoben werden.'
-        : 'Zeiteintrag konnte nicht geändert werden.';
-      showActionBanner({ variant: 'error', message: errorMsg });
-    }
-  }, [currentUserId, entries, silentRefresh, onOperationStart, showActionBanner]);
+  }, [currentUserId, entries, silentRefresh, onOperationStart, showActionBanner, isScopeActive]);
 
   const handleInvalidSessionPlacement = useCallback((message: string) => {
     showActionBanner({
@@ -547,55 +570,63 @@ export function DayView({
 
     const isMove = newPlannedTime !== originalPlannedTime;
 
-    onOperationStart?.();
-    setJobOverrides(prev => {
-      const next = new Map(prev);
-      next.set(jobId, { plannedTime: newPlannedTime, estimatedDurationMinutes: newDurationMinutes });
-      return next;
-    });
+    const releaseOperation = onOperationStart?.();
+    try {
+      setJobOverrides(prev => {
+        const next = new Map(prev);
+        next.set(jobId, { plannedTime: newPlannedTime, estimatedDurationMinutes: newDurationMinutes });
+        return next;
+      });
 
-    const undone = { current: false };
+      const showConfirmedSuccess = () => showActionBanner({
+        variant: 'success',
+        message: isMove ? 'Auftrag wurde verschoben.' : 'Auftrag wurde geändert.',
+        onUndo: async () => {
+          const releaseOperation = onOperationStart?.();
+          try {
+            setJobOverrides(prev => {
+              const next = new Map(prev);
+              next.set(jobId, { plannedTime: originalPlannedTime, estimatedDurationMinutes: originalDurationMinutes });
+              return next;
+            });
+            const undoResult = await updateCalendarJob(jobId, {
+              plannedTime: originalPlannedTime,
+              estimatedDurationMinutes: originalDurationMinutes,
+            });
+            if (!undoResult.success) {
+              setJobOverrides(previous => { const next = new Map(previous); next.delete(jobId); return next; });
+              throw new Error('calendar_undo_failed');
+            }
+          } finally {
+            if (releaseOperation) releaseOperation();
+            else silentRefresh();
+          }
+        },
+      });
 
-    showActionBanner({
-      variant: 'success',
-      message: isMove ? 'Auftrag wurde verschoben.' : 'Auftrag wurde geändert.',
-      onUndo: async () => {
-        undone.current = true;
-        onOperationStart?.();
+      const updateResult = await updateCalendarJob(jobId, {
+        plannedTime: newPlannedTime,
+        estimatedDurationMinutes: newDurationMinutes,
+      });
+
+      if (updateResult.success) {
+        showConfirmedSuccess();
+      } else {
         setJobOverrides(prev => {
           const next = new Map(prev);
           next.set(jobId, { plannedTime: originalPlannedTime, estimatedDurationMinutes: originalDurationMinutes });
           return next;
         });
-        await updateCalendarJob(jobId, {
-          plannedTime: originalPlannedTime,
-          estimatedDurationMinutes: originalDurationMinutes,
+
+        if (updateResult.error === 'qualification_declined') return;
+        showActionBanner({
+          variant: 'error',
+          message: isMove ? 'Auftrag konnte nicht verschoben werden.' : 'Auftrag konnte nicht geändert werden.',
         });
-        silentRefresh();
-      },
-    });
-
-    const updateResult = await updateCalendarJob(jobId, {
-      plannedTime: newPlannedTime,
-      estimatedDurationMinutes: newDurationMinutes,
-    });
-
-    if (undone.current) { silentRefresh(); return; }
-
-    if (updateResult.success) {
-      silentRefresh();
-    } else {
-      setJobOverrides(prev => {
-        const next = new Map(prev);
-        next.set(jobId, { plannedTime: originalPlannedTime, estimatedDurationMinutes: originalDurationMinutes });
-        return next;
-      });
-      silentRefresh();
-      if (updateResult.error === 'qualification_declined') return;
-      showActionBanner({
-        variant: 'error',
-        message: isMove ? 'Auftrag konnte nicht verschoben werden.' : 'Auftrag konnte nicht geändert werden.',
-      });
+      }
+    } finally {
+      if (releaseOperation) releaseOperation();
+      else silentRefresh();
     }
   }, [silentRefresh, onOperationStart, updateCalendarJob, showActionBanner]);
 
@@ -629,7 +660,7 @@ export function DayView({
     jobId: string;
     left: number;
     width: number;
-    sourceMemberId?: string;
+    sourceMemberId?: string | undefined;
   } | null>(null);
   const dragStartPosRef = useRef({ x: 0, y: 0 });
   const dragThresholdMetRef = useRef(false);
@@ -930,105 +961,111 @@ export function DayView({
           ? `${targetMember.first_name || ''} ${targetMember.last_name || ''}`.trim()
           : targetMember.email;
 
-      onOperationStart?.();
-      setOptimisticOverrides(prev => {
-        const next = new Map(prev);
-        const sourceEntries = session.sourceEntries ?? [];
-        const clockInDelta =
-          new Date(newClockIn).getTime() - new Date(origClockIn).getTime();
-        next.set(clockInId, { timestamp: newClockIn, userId: targetMember.user_id });
-        next.set(clockOutId, { timestamp: newClockOut, userId: targetMember.user_id });
-        for (const entry of sourceEntries) {
-          if (entry.id === clockInId || entry.id === clockOutId) continue;
-          next.set(entry.id, {
-            timestamp: new Date(
-              new Date(entry.timestamp).getTime() + clockInDelta
-            ).toISOString(),
-            userId: targetMember.user_id
-          });
-        }
-        return next;
-      });
+      const releaseOperation = onOperationStart?.();
+      try {
+        setOptimisticOverrides(prev => {
+          const next = new Map(prev);
+          const sourceEntries = session.sourceEntries ?? [];
+          const clockInDelta =
+            new Date(newClockIn).getTime() - new Date(origClockIn).getTime();
+          next.set(clockInId, { timestamp: newClockIn, userId: targetMember.user_id });
+          next.set(clockOutId, { timestamp: newClockOut, userId: targetMember.user_id });
+          for (const entry of sourceEntries) {
+            if (entry.id === clockInId || entry.id === clockOutId) continue;
+            next.set(entry.id, {
+              timestamp: new Date(
+                new Date(entry.timestamp).getTime() + clockInDelta
+              ).toISOString(),
+              userId: targetMember.user_id
+            });
+          }
+          return next;
+        });
 
-      const undone = { current: false };
+        const showConfirmedSuccess = () => showActionBanner({
+          variant: 'success',
+          message: `Zeiteintrag wurde zu ${targetName} verschoben.`,
+          onUndo: async () => {
+            const releaseOperation = onOperationStart?.();
+            try {
+              setOptimisticOverrides(prev => {
+                const next = new Map(prev);
+                next.set(clockInId, { timestamp: origClockIn, userId: origUserId });
+                next.set(clockOutId, { timestamp: origClockOut, userId: origUserId });
+              for (const entry of session.sourceEntries ?? []) {
+                if (entry.id === clockInId || entry.id === clockOutId) continue;
+                next.set(entry.id, { timestamp: entry.timestamp, userId: entry.userId });
+              }
+                return next;
+              });
+            const undoResult = (session.sourceEntries?.length ?? 0) > 2
+              ? await reassignEntryBatch(
+                (session.sourceEntries ?? []).map((entry) => ({
+                  entryId: entry.id,
+                  newUserId: origUserId,
+                  newTimestamp: entry.timestamp
+                }))
+              )
+              : await reassignEntries(clockInId, clockOutId, origUserId, origClockIn, origClockOut);
+            if (!undoResult.success) {
+              setOptimisticOverrides(previous => { const next = new Map(previous); next.delete(clockInId); next.delete(clockOutId); for (const entry of session.sourceEntries ?? []) next.delete(entry.id); return next; });
+              throw new Error('calendar_undo_failed');
+            }
+            } finally {
+              if (releaseOperation) releaseOperation();
+              else silentRefresh();
+            }
+          },
+        });
 
-      showActionBanner({
-        variant: 'success',
-        message: `Zeiteintrag wurde zu ${targetName} verschoben.`,
-        onUndo: async () => {
-          undone.current = true;
-          onOperationStart?.();
+        const result =
+          (session.sourceEntries?.length ?? 0) > 2
+            ? await reassignEntryBatch(
+                (session.sourceEntries ?? []).map((entry) => {
+                  const shiftedTimestamp =
+                    entry.id === clockInId
+                      ? newClockIn
+                      : entry.id === clockOutId
+                        ? newClockOut
+                        : new Date(
+                            new Date(entry.timestamp).getTime() +
+                              (new Date(newClockIn).getTime() -
+                                new Date(origClockIn).getTime())
+                          ).toISOString();
+
+                  return {
+                    entryId: entry.id,
+                    newUserId: targetMember.user_id,
+                    newTimestamp: shiftedTimestamp
+                  };
+                })
+              )
+            : await reassignEntries(clockInId, clockOutId, targetMember.user_id, newClockIn, newClockOut);
+
+        if (result.success) {
+          showConfirmedSuccess();
+        } else {
           setOptimisticOverrides(prev => {
             const next = new Map(prev);
             next.set(clockInId, { timestamp: origClockIn, userId: origUserId });
             next.set(clockOutId, { timestamp: origClockOut, userId: origUserId });
-          for (const entry of session.sourceEntries ?? []) {
-            if (entry.id === clockInId || entry.id === clockOutId) continue;
-            next.set(entry.id, { timestamp: entry.timestamp, userId: entry.userId });
-          }
+            for (const entry of session.sourceEntries ?? []) {
+              if (entry.id === clockInId || entry.id === clockOutId) continue;
+              next.set(entry.id, { timestamp: entry.timestamp, userId: entry.userId });
+            }
             return next;
           });
-        if ((session.sourceEntries?.length ?? 0) > 2) {
-          await reassignEntryBatch(
-            (session.sourceEntries ?? []).map((entry) => ({
-              entryId: entry.id,
-              newUserId: origUserId,
-              newTimestamp: entry.timestamp
-            }))
-          );
-        } else {
-          await reassignEntries(clockInId, clockOutId, origUserId, origClockIn, origClockOut);
+
+          showActionBanner({
+            variant: 'error',
+            message: result.error === 'overlapping_session'
+              ? `Überschneidung mit bestehendem Eintrag von ${targetName}.`
+              : 'Zeiteintrag konnte nicht verschoben werden.',
+          });
         }
-          silentRefresh();
-        },
-      });
-
-      const result =
-        (session.sourceEntries?.length ?? 0) > 2
-          ? await reassignEntryBatch(
-              (session.sourceEntries ?? []).map((entry) => {
-                const shiftedTimestamp =
-                  entry.id === clockInId
-                    ? newClockIn
-                    : entry.id === clockOutId
-                      ? newClockOut
-                      : new Date(
-                          new Date(entry.timestamp).getTime() +
-                            (new Date(newClockIn).getTime() -
-                              new Date(origClockIn).getTime())
-                        ).toISOString();
-
-                return {
-                  entryId: entry.id,
-                  newUserId: targetMember.user_id,
-                  newTimestamp: shiftedTimestamp
-                };
-              })
-            )
-          : await reassignEntries(clockInId, clockOutId, targetMember.user_id, newClockIn, newClockOut);
-
-      if (undone.current) { silentRefresh(); return; }
-
-      if (result.success) {
-        silentRefresh();
-      } else {
-        setOptimisticOverrides(prev => {
-          const next = new Map(prev);
-          next.set(clockInId, { timestamp: origClockIn, userId: origUserId });
-          next.set(clockOutId, { timestamp: origClockOut, userId: origUserId });
-          for (const entry of session.sourceEntries ?? []) {
-            if (entry.id === clockInId || entry.id === clockOutId) continue;
-            next.set(entry.id, { timestamp: entry.timestamp, userId: entry.userId });
-          }
-          return next;
-        });
-        silentRefresh();
-        showActionBanner({
-          variant: 'error',
-          message: result.error === 'overlapping_session'
-            ? `Überschneidung mit bestehendem Eintrag von ${targetName}.`
-            : 'Zeiteintrag konnte nicht verschoben werden.',
-        });
+      } finally {
+        if (releaseOperation) releaseOperation();
+        else silentRefresh();
       }
     },
     [effectiveHourWidth, date, silentRefresh, onOperationStart, showActionBanner]
@@ -1058,25 +1095,58 @@ export function DayView({
         .filter((uid) => uid !== origUserId)
         .concat(targetMember.user_id);
 
-      onOperationStart?.();
-      setJobOverrides(prev => {
-        const next = new Map(prev);
-        next.set(job.id, {
+      const releaseOperation = onOperationStart?.();
+      try {
+        setJobOverrides(prev => {
+          const next = new Map(prev);
+          next.set(job.id, {
+            plannedTime: newTime,
+            estimatedDurationMinutes: newDuration,
+            assignedUserIds: newAssignedUserIds,
+          });
+          return next;
+        });
+
+        const showConfirmedSuccess = () => showActionBanner({
+          variant: 'success',
+          message: `Auftrag wurde zu ${targetName} verschoben.`,
+          onUndo: async () => {
+            const releaseOperation = onOperationStart?.();
+            try {
+              setJobOverrides(prev => {
+                const next = new Map(prev);
+                next.set(job.id, {
+                  plannedTime: origTime,
+                  estimatedDurationMinutes: origDuration,
+                  assignedUserIds: job.assignedUserIds,
+                });
+                return next;
+              });
+              const undoResult = await updateCalendarJob(job.id, {
+                selectedUserIds: job.assignedUserIds,
+                plannedTime: origTime,
+                estimatedDurationMinutes: origDuration,
+              });
+            if (!undoResult.success) {
+              setJobOverrides(previous => { const next = new Map(previous); next.delete(job.id); return next; });
+              throw new Error('calendar_undo_failed');
+            }
+            } finally {
+              if (releaseOperation) releaseOperation();
+              else silentRefresh();
+            }
+          },
+        });
+
+        const moveResult = await updateCalendarJob(job.id, {
+          selectedUserIds: newAssignedUserIds,
           plannedTime: newTime,
           estimatedDurationMinutes: newDuration,
-          assignedUserIds: newAssignedUserIds,
         });
-        return next;
-      });
 
-      const undone = { current: false };
-
-      showActionBanner({
-        variant: 'success',
-        message: `Auftrag wurde zu ${targetName} verschoben.`,
-        onUndo: async () => {
-          undone.current = true;
-          onOperationStart?.();
+        if (moveResult.success) {
+          showConfirmedSuccess();
+        } else {
           setJobOverrides(prev => {
             const next = new Map(prev);
             next.set(job.id, {
@@ -1086,40 +1156,16 @@ export function DayView({
             });
             return next;
           });
-          await updateCalendarJob(job.id, {
-            selectedUserIds: job.assignedUserIds,
-            plannedTime: origTime,
-            estimatedDurationMinutes: origDuration,
-          });
-          silentRefresh();
-        },
-      });
 
-      const moveResult = await updateCalendarJob(job.id, {
-        selectedUserIds: newAssignedUserIds,
-        plannedTime: newTime,
-        estimatedDurationMinutes: newDuration,
-      });
-      if (undone.current) { silentRefresh(); return; }
-
-      if (moveResult.success) {
-        silentRefresh();
-      } else {
-        setJobOverrides(prev => {
-          const next = new Map(prev);
-          next.set(job.id, {
-            plannedTime: origTime,
-            estimatedDurationMinutes: origDuration,
-            assignedUserIds: job.assignedUserIds,
+          if (moveResult.error === 'qualification_declined') return;
+          showActionBanner({
+            variant: 'error',
+            message: `Auftrag konnte nicht zu ${targetName} verschoben werden.`,
           });
-          return next;
-        });
-        silentRefresh();
-        if (moveResult.error === 'qualification_declined') return;
-        showActionBanner({
-          variant: 'error',
-          message: `Auftrag konnte nicht zu ${targetName} verschoben werden.`,
-        });
+        }
+      } finally {
+        if (releaseOperation) releaseOperation();
+        else silentRefresh();
       }
     },
     [effectiveHourWidth, silentRefresh, onOperationStart, updateCalendarJob, showActionBanner]
@@ -1376,10 +1422,9 @@ export function DayView({
   const entriesByUser = useMemo(() => {
     const grouped: Record<string, TimeEntry[]> = {};
     for (const entry of effectiveEntries) {
-      if (!grouped[entry.userId]) {
-        grouped[entry.userId] = [];
-      }
-      grouped[entry.userId].push(entry);
+      const userEntries = grouped[entry.userId];
+      if (userEntries) userEntries.push(entry);
+      else grouped[entry.userId] = [entry];
     }
     return grouped;
   }, [effectiveEntries]);
@@ -1737,8 +1782,8 @@ export function DayView({
                       : activeDrag.canDrop
                         ? activeDrag.payload.type === 'job'
                           ? 'bg-brand-purple/70 text-white shadow-lg'
-                          : 'bg-green-500/70 text-white shadow-lg'
-                        : 'bg-red-400/50 text-red-900 shadow-lg'
+                          : 'bg-success/70 text-success-foreground shadow-lg'
+                        : 'bg-destructive/50 text-destructive-soft-foreground shadow-lg'
                   )}
                   style={{
                     left: activeDrag.currentLeft,
@@ -1778,8 +1823,8 @@ export function DayView({
                     className={cn(
                       'absolute left-0 right-0 pointer-events-none',
                       activeDrag.canDrop
-                        ? 'bg-green-500/5 ring-1 ring-inset ring-green-500/20'
-                        : 'bg-red-500/5 ring-1 ring-inset ring-red-500/20'
+                        ? 'bg-success/5 ring-1 ring-inset ring-success/20'
+                        : 'bg-destructive/5 ring-1 ring-inset ring-destructive/20'
                     )}
                     style={{
                       top: activeDrag.currentRowIndex * ROW_HEIGHT,

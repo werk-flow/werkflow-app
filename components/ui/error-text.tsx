@@ -11,7 +11,7 @@ export function ErrorText({
   className,
   children,
 }: {
-  id?: string;
+  id?: string | undefined;
   className?: string;
   children?: React.ReactNode;
 }) {

@@ -12,7 +12,7 @@ const runPaths = browserRunPaths(__dirname, currentRunKey());
 const quietReporter = process.env.WERKFLOW_QUIET_REPORTER === '1';
 const listingTests = process.argv.includes('--list');
 
-// Wave-audit battery (docs/plans/wave-1-audit.md, wave-2-audit.md, …). Runs
+// Wave-audit battery (docs/plans/phase-1/audits/wave-1-audit.md, wave-2-audit.md, …). Runs
 // the exhaustive user-flow audit specs against a locally running app and the
 // selected Supabase target, local by default, reusing the golden harness (world seeder, steps, db
 // helpers). testDir covers every wave; scope runs with --grep @AUDIT-W<N>
@@ -56,6 +56,6 @@ export default defineConfig({
     locale: 'de-DE',
     timezoneId: 'Europe/Berlin',
     screenshot: 'only-on-failure',
-    trace: 'retain-on-failure',
+    trace: process.env.WERKFLOW_RETAIN_PERFORMANCE_TRACE === '1' ? 'on' : 'retain-on-failure',
   },
 });

@@ -12,7 +12,7 @@ export function resolveTestPrerequisites(tests: readonly {
   id: string;
   file: string;
   title: string;
-  annotations: readonly { type: string; description?: string }[];
+  annotations: readonly { type: string; description?: string | undefined }[];
 }[]): DiscoveredTest[] {
   return tests.map((test, testIndex) => {
     const required = new Set<string>();

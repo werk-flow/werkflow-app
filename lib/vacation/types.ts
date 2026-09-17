@@ -6,8 +6,6 @@ import type { Database } from '@/lib/supabase/database.types';
 
 export type VacationRequestRow =
   Database['public']['Tables']['vacation_requests']['Row'];
-export type VacationRequestEventRow =
-  Database['public']['Tables']['vacation_request_events']['Row'];
 
 // status and day_portion are text columns with CHECK constraints; keep these
 // unions in sync with the database (migration add_vacation_requests).
@@ -82,7 +80,7 @@ export function toVacationRequest(row: VacationRequestRow): VacationRequest {
   };
 }
 
-export function parseApprovedDaysByYear(
+function parseApprovedDaysByYear(
   value: unknown
 ): Record<string, number> | null {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {

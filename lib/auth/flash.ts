@@ -1,6 +1,6 @@
 export const AUTH_FLASH_COOKIE = 'auth_flash';
 
-export const AUTH_FLASH_MESSAGES = {
+const AUTH_FLASH_MESSAGES = {
   passwordResetRequested:
     'Wenn eine E-Mail existiert, haben wir dir einen Link geschickt.',
   passwordResetRequestedKnownUser:

@@ -53,6 +53,7 @@ interface PlanningOccurrenceEditDialogProps {
 function isoToLocalDate(value: string): Date | undefined {
   if (!value) return undefined;
   const [year, month, day] = value.split('-').map(Number);
+  if (year === undefined || month === undefined || day === undefined) return undefined;
   return new Date(year, month - 1, day);
 }
 
@@ -181,18 +182,20 @@ export function PlanningOccurrenceEditDialog({
     if (!date) missing.push(['date', 'Bitte wähle ein Datum.', 'planning-edit-date']);
     if (durationInvalid) missing.push(['duration', 'Bitte eine gültige Dauer angeben.', 'planning-edit-duration']);
     if (conflicts.length > 0 && reason.trim().length < 8) missing.push(['reason', 'Bitte begründe die Änderung mit mindestens 8 Zeichen.', 'planning-edit-reason']);
-    if (missing.length > 0) {
+    const [firstMissing] = missing;
+    if (firstMissing) {
       setFieldErrors(Object.fromEntries(missing.map(([key, message]) => [key, message])));
-      document.getElementById(missing[0][2])?.focus();
+      document.getElementById(firstMissing[2])?.focus();
       return;
     }
     setSubmitting(true);
     setSubmitError(null);
     const input = {
       plannedDate: date,
-      plannedTime: job.timeKind === 'all_day' ? undefined : time,
-      estimatedDurationMinutes:
-        job.timeKind === 'all_day' ? undefined : durationMinutes ?? undefined,
+      ...(job.timeKind === 'all_day' ? {} : { plannedTime: time }),
+      ...(job.timeKind === 'all_day' || durationMinutes === null
+        ? {}
+        : { estimatedDurationMinutes: durationMinutes }),
       selectedEmployeeRecordIds: employeeRecordIds,
       overrideReason: conflicts.length ? reason || null : null,
       assessmentFingerprint: conflicts.length ? fingerprint : null,
@@ -414,7 +417,7 @@ export function PlanningOccurrenceEditDialog({
                     <div
                       data-planning-warning
                       role="status"
-                      className="space-y-2 rounded-md border border-yellow-500/40 bg-yellow-500/5 p-2.5"
+                      className="space-y-2 rounded-md border border-warning/40 bg-warning-soft p-2.5"
                     >
                       <p className="text-sm font-medium">Planungshinweise</p>
                       <ul className="space-y-1 text-sm">
@@ -501,9 +504,9 @@ export function PlanningOccurrenceEditDialog({
               />
             </Field>
             {conflicts.length > 0 && (
-              <div data-planning-warning role="status" className="space-y-3 rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-3">
+              <div data-planning-warning role="status" className="space-y-3 rounded-lg border border-warning/40 bg-warning-soft p-3">
                 <p className="flex items-center gap-2 font-medium">
-                  <AlertTriangle className="size-4 text-yellow-600 dark:text-yellow-400" />
+                  <AlertTriangle className="size-4 text-warning-text" />
                   Planungshinweise
                 </p>
                 <ul className="space-y-1 text-sm">

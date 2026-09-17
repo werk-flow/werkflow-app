@@ -62,12 +62,14 @@ function berlinTodayIso(): string {
 
 function weekdayIndex(dateIso: string): number {
   const [year, month, day] = dateIso.split('-').map(Number);
+  if (year === undefined || month === undefined || day === undefined) throw new Error(`Invalid ISO date: ${dateIso}`);
   const jsWeekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
   return jsWeekday === 0 ? 6 : jsWeekday - 1;
 }
 
 function shiftIsoDate(dateIso: string, days: number): string {
   const [year, month, day] = dateIso.split('-').map(Number);
+  if (year === undefined || month === undefined || day === undefined) throw new Error(`Invalid ISO date: ${dateIso}`);
   const shifted = new Date(Date.UTC(year, month - 1, day) + days * 86_400_000);
   return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, '0')}-${String(shifted.getUTCDate()).padStart(2, '0')}`;
 }
@@ -198,6 +200,7 @@ test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
     // Target effect on the employee's own dashboard (only asserted when today
     // is a working day — on weekends/holidays the day never had a target).
     const [todayTargetWithoutAbsence] = resolveDailyTargets([todayIso], context);
+    if (!todayTargetWithoutAbsence) throw new Error('P1-06: no daily target resolved for today');
     await openOwnVacationSection(employeePage);
     if (todayTargetWithoutAbsence.targetMinutes > 0) {
       await expectVisibleAfterSave(employeePage, 'Urlaub genehmigt – heute keine Sollarbeitszeit.');

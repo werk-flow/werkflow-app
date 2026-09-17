@@ -11,8 +11,6 @@ import { uuidSchema } from '@/lib/validation/uuid';
 import { CACHE_TAGS } from '@/lib/data/cached';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { formatProfileName } from '@/lib/members/profile-name';
-import type { CustomerCommitment } from './types';
 
 const recordCommitmentSchema = z
   .object({
@@ -49,8 +47,6 @@ const recordCommitmentSchema = z
       });
     }
   });
-
-export type RecordCommitmentInput = z.infer<typeof recordCommitmentSchema>;
 
 export async function recordCustomerCommitment(
   rawInput: unknown
@@ -130,102 +126,4 @@ export async function withdrawCustomerCommitment(
   revalidatePath('/kalender');
   updateTag(CACHE_TAGS.jobs(auth.context.orgId));
   return { success: true };
-}
-
-export async function getActiveCommitmentsForOccurrences(
-  occurrenceIds: string[]
-): Promise<
-  | { success: true; commitments: CustomerCommitment[] }
-  | { success: false; error: string }
-> {
-  // Malformed ids reject the whole call rather than being silently dropped.
-  if (
-    occurrenceIds.some((id) => !uuidSchema.safeParse(id).success)
-  ) {
-    return { success: false, error: 'invalid_input' };
-  }
-  const uniqueIds = [...new Set(occurrenceIds)];
-  if (uniqueIds.length === 0) return { success: true, commitments: [] };
-  if (uniqueIds.length > 500) return { success: false, error: 'invalid_input' };
-  const auth = await authenticateAndAuthorize();
-  if (!auth.success) return auth;
-  if (!auth.context.isManagerOrAbove) {
-    return { success: false, error: 'not_authorized' };
-  }
-  const admin = createSupabaseAdminClient();
-  const { data: rows, error } = await admin
-    .from('planning_customer_commitments')
-    .select(
-      'id, occurrence_id, committed_date, window_start_time, window_end_time, source, contact_id, status, withdrawal_reason, recorded_by, recorded_at'
-    )
-    .eq('organization_id', auth.context.orgId)
-    .eq('status', 'active')
-    .in('occurrence_id', uniqueIds);
-  if (error) {
-    console.error('Failed to load customer commitments:', { code: error.code ?? 'unknown' });
-    return { success: false, error: 'load_failed' };
-  }
-
-  const contactIds = [
-    ...new Set(
-      (rows ?? []).flatMap((row) => (row.contact_id ? [row.contact_id] : []))
-    ),
-  ];
-  const recorderIds = [
-    ...new Set(
-      (rows ?? []).flatMap((row) => (row.recorded_by ? [row.recorded_by] : []))
-    ),
-  ];
-  const [contactsResult, profilesResult] = await Promise.all([
-    contactIds.length
-      ? admin
-          .from('client_contacts')
-          .select('id, name')
-          .eq('organization_id', auth.context.orgId)
-          .in('id', contactIds)
-      : { data: [], error: null },
-    recorderIds.length
-      ? admin
-          .from('profiles')
-          .select('id, first_name, last_name, email')
-          .in('id', recorderIds)
-      : { data: [], error: null },
-  ]);
-  if (contactsResult.error || profilesResult.error) {
-    console.error('Failed to resolve commitment references:', {
-      code: (contactsResult.error ?? profilesResult.error)?.code ?? 'unknown',
-    });
-    return { success: false, error: 'load_failed' };
-  }
-  const contactNames = new Map(
-    (contactsResult.data ?? []).map((contact) => [contact.id, contact.name])
-  );
-  const recorderNames = new Map(
-    (profilesResult.data ?? []).map((profile) => [
-      profile.id,
-      formatProfileName(profile),
-    ])
-  );
-
-  return {
-    success: true,
-    commitments: (rows ?? []).map((row) => ({
-      id: row.id,
-      occurrenceId: row.occurrence_id,
-      committedDate: row.committed_date,
-      windowStartTime: row.window_start_time,
-      windowEndTime: row.window_end_time,
-      source: row.source,
-      contactId: row.contact_id,
-      contactName: row.contact_id
-        ? (contactNames.get(row.contact_id) ?? null)
-        : null,
-      status: row.status,
-      withdrawalReason: row.withdrawal_reason,
-      recordedAt: row.recorded_at,
-      recordedByName: row.recorded_by
-        ? (recorderNames.get(row.recorded_by) ?? null)
-        : null,
-    })),
-  };
 }

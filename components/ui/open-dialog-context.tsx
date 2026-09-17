@@ -50,23 +50,16 @@ export function OpenDialogProvider({ children }: { children: ReactNode }) {
 }
 
 /**
- * Call from a component that only mounts while its overlay is open.
- * Registration lasts mount-to-unmount.
- *
- * Caution: the shared wrapper components (DialogContent etc.) render their
- * hooks whenever they are in the React tree, even while the dialog is closed —
- * only the Radix primitive content inside them is presence-gated. Register via
- * <RegisterOpenDialog /> placed INSIDE the primitive content, never from the
- * wrapper body (that mistake suspended Realtime refresh app-wide once).
+ * Renders nothing; registers an open overlay while mounted. Registration lasts
+ * mount-to-unmount, so place it INSIDE the Radix primitive content, which is
+ * presence-gated, never in a wrapper body (DialogContent etc.) that renders
+ * while the dialog is closed (that mistake suspended Realtime refresh
+ * app-wide once). The primitives render it themselves; there is deliberately
+ * no hook to call from elsewhere.
  */
-export function useRegisterOpenDialog(): void {
+export function RegisterOpenDialog() {
   const { register } = useContext(OpenDialogContext);
   useEffect(() => register(), [register]);
-}
-
-/** Renders nothing; registers an open overlay while mounted. */
-export function RegisterOpenDialog() {
-  useRegisterOpenDialog();
   return null;
 }
 

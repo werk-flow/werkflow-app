@@ -93,6 +93,7 @@ describe('field work pack projection', () => {
     } as unknown as JobInstructionItemWithDetails;
 
     const [sanitized] = sanitizeFieldInstructionItems([item]);
+    if (!sanitized) throw new Error('Expected one sanitized instruction item');
     expect(sanitized.creator).toEqual({
       userId: 'user-1',
       firstName: 'Kim',

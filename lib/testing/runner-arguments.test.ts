@@ -8,15 +8,15 @@ describe("runner argument and evidence boundaries", () => {
     for (const value of ['not-a-url', 'invalid://missing', 'file:///private']) expect(backendOriginFromUrl(value)).toBe('invalid');
     expect(backendOriginFromUrl(' https://example.test/path ')).toBe('https://example.test');
   });
-  for (const argument of ["p1-16.spec.ts", "--shard=1/2", "--grep-invert=x", "--retries=2", "--workers=4", "--fully-parallel", "--config=other.ts", "--output=temp", "--reporter=list", "--project=smoke", "--repeat-each=2", "--list", "--override-rerun-budget=again"]) {
-    test(`rejects certification bypass ${argument}`, () => {
-      expect(() => parseRunnerArguments("certification", [argument])).toThrow("Unsupported runner argument");
+  for (const argument of ["p1-16.spec.ts", "--shard=1/2", "--grep-invert=x", "--retries=2", "--workers=4", "--fully-parallel", "--config=other.ts", "--output=temp", "--reporter=list", "--project=smoke", "--repeat-each=2", "--list", "--rerun-grant=retired"]) {
+    test(`rejects runner bypass ${argument}`, () => {
+      expect(() => parseRunnerArguments("group", [argument])).toThrow("Unsupported runner argument");
     });
   }
   test("accepts only an explicit focused selection and rejects ambiguous repeated flags", () => {
     expect(parseRunnerArguments("iteration", ["--grep", "@P1-16", "--target=local"])).toEqual({ "--grep": "@P1-16", "--target": "local" });
     expect(() => parseRunnerArguments("iteration", ["--grep=x", "--grep=y"])).toThrow("cannot be repeated");
-    expect(() => parseRunnerArguments("certification", ["--grep=x"])).toThrow("cannot select a subset");
+    expect(() => parseRunnerArguments("group", ["--group=golden:gg-00", "--grep=x"])).toThrow("Group acceptance requires --group");
   });
   test("requires exact execution once per selected identity", () => {
     const outcome = { id: "scenario-a", status: "passed" as const, durationMilliseconds: 10 };

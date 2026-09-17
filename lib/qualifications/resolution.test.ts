@@ -160,7 +160,7 @@ describe('qualification coverage resolution', () => {
       apprenticeWarningEnabled: true,
     });
 
-    expect(result.requirementCoverage[0].status).toBe('missing');
+    expect(result.requirementCoverage[0]?.status).toBe('missing');
     expect(result.requiresOverride).toBe(false);
   });
 
@@ -173,7 +173,7 @@ describe('qualification coverage resolution', () => {
       apprenticeWarningEnabled: false,
     });
 
-    expect(result.requirementCoverage[0].status).toBe('missing');
+    expect(result.requirementCoverage[0]?.status).toBe('missing');
     expect(result.requiresOverride).toBe(true);
   });
 });

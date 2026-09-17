@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 
 export type SettingsSectionGroup = 'account' | 'organization';
-export type SettingsSectionScope = 'user' | 'organization';
+type SettingsSectionScope = 'user' | 'organization';
 
 export type SettingsSection = {
   slug: string;
@@ -26,7 +26,7 @@ export type SettingsSection = {
   implemented: boolean;
 };
 
-export const SETTINGS_SECTIONS: SettingsSection[] = [
+const SETTINGS_SECTIONS: SettingsSection[] = [
   {
     slug: 'profil',
     label: 'Profil',
@@ -138,14 +138,14 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
 
 export const DEFAULT_SETTINGS_SECTION_SLUG = 'profil';
 
-export function getSettingsHref(slug: string) {
+export function getSettingsHref(slug: string): string {
   return `/einstellungen/${slug}`;
 }
 
-export function getSettingsSectionBySlug(slug: string) {
+export function getSettingsSectionBySlug(slug: string): SettingsSection | null {
   return SETTINGS_SECTIONS.find((section) => section.slug === slug) ?? null;
 }
 
-export function getSettingsSectionsByGroup(group: SettingsSectionGroup) {
+export function getSettingsSectionsByGroup(group: SettingsSectionGroup): SettingsSection[] {
   return SETTINGS_SECTIONS.filter((section) => section.group === group);
 }

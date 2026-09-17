@@ -7,7 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 type DokumenteSkeletonView = 'folders' | 'work' | 'all' | 'trash';
 
-export function DokumenteTableRowsSkeleton({
+function DokumenteTableRowsSkeleton({
   rowCount = 10,
 }: {
   rowCount?: number;

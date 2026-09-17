@@ -114,6 +114,7 @@ type ActionScope =
 function formatDate(value: string | null | undefined): string {
   if (!value) return "Nicht erfasst";
   const [year, month, day] = value.split("-").map(Number);
+  if (year === undefined || month === undefined || day === undefined) return value;
   return new Intl.DateTimeFormat("de-DE", { dateStyle: "medium" }).format(
     new Date(year, month - 1, day),
   );
@@ -932,7 +933,9 @@ export function EquipmentDetailContent({
                     expectedVersion: item.version,
                     targetType: option.targetType,
                     targetId: option.targetId,
-                    documentVersionNumber: option.documentVersionNumber,
+                    ...(option.documentVersionNumber !== undefined
+                      ? { documentVersionNumber: option.documentVersionNumber }
+                      : {}),
                     reason,
                     idempotencyKey: crypto.randomUUID(),
                   }),

@@ -69,11 +69,11 @@ interface EntryDetailsDialogProps {
   onOpenChange: (open: boolean) => void;
   session: WorkSession;
   currentUserRole: OrgRole;
-  currentUserId?: string;
+  currentUserId?: string | undefined;
   onRefresh: () => void;
-  startInEditMode?: boolean;
-  jobName?: string | null;
-  entryUserRole?: OrgRole;
+  startInEditMode?: boolean | undefined;
+  jobName?: string | null | undefined;
+  entryUserRole?: OrgRole | undefined;
 }
 
 type EditableBreak = {
@@ -87,24 +87,25 @@ type EditableBreak = {
 
 type StatusConfig = { label: string; className: string };
 
-const STATUS_LABELS: Record<string, StatusConfig> = {
+const STATUS_LABELS = {
   approved: {
     label: 'Genehmigt',
-    className: 'bg-green-500/20 text-green-700 dark:text-green-300'
+    className: 'bg-success-soft text-success-soft-foreground'
   },
   pending: {
     label: 'Ausstehend',
-    className: 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300'
+    className: 'bg-warning-soft text-warning-soft-foreground'
   },
   rejected: {
     label: 'Abgelehnt',
-    className: 'bg-red-500/20 text-red-700 dark:text-red-300'
+    className: 'bg-destructive-soft text-destructive-soft-foreground'
   },
   draft: {
     label: 'Neu',
-    className: 'bg-blue-500/15 text-blue-700 dark:text-blue-300'
+    className: 'bg-info-soft text-info-soft-foreground'
   }
-};
+} satisfies Record<string, StatusConfig>;
+const STATUS_LABEL_BY_CODE: Record<string, StatusConfig> = STATUS_LABELS;
 
 function formatDateTime(date: Date): string {
   return date.toLocaleString('de-DE', {
@@ -246,7 +247,7 @@ function buildDefaultBreakRange(start: Date, end: Date) {
 
 function getStatusConfig(entry?: TimeEntry | null): StatusConfig {
   if (!entry) return STATUS_LABELS.draft;
-  return STATUS_LABELS[entry.status] ?? STATUS_LABELS.approved;
+  return STATUS_LABEL_BY_CODE[entry.status] ?? STATUS_LABELS.approved;
 }
 
 function getEntryLabel(entry: TimeEntry, index = 0): string {
@@ -269,7 +270,7 @@ function buildDraftEntry(
   entryType: TimeEntry['entryType'],
   timestamp: Date,
   userId?: string,
-  organizationId?: string
+  organizationId?: string | null
 ): TimeEntry {
   const isoTimestamp = timestamp.toISOString();
 
@@ -293,7 +294,7 @@ interface DateTimePickerProps {
   value: Date;
   onChange: (date: Date) => void;
   label: string;
-  dateLabel?: string;
+  dateLabel?: string | undefined;
   disableDateEditing?: boolean;
 }
 
@@ -322,7 +323,7 @@ function DateTimePicker({
   const handleTimeChange = (newTime: string) => {
     setTimeValue(newTime);
     const [hours, minutes] = newTime.split(':').map(Number);
-    if (!isNaN(hours) && !isNaN(minutes)) {
+    if (hours !== undefined && minutes !== undefined && !isNaN(hours) && !isNaN(minutes)) {
       const newDate = new Date(value);
       newDate.setHours(hours);
       newDate.setMinutes(minutes);
@@ -365,7 +366,7 @@ function DetailCard({
   icon: React.ReactNode;
   label: string;
   value: string;
-  onClick?: () => void;
+  onClick?: (() => void) | undefined;
   disabled?: boolean;
 }) {
   const interactive = !!onClick && !disabled;
@@ -944,8 +945,12 @@ export function EntryDetailsDialog({
         for (const rollback of [...appliedUpdates].reverse()) {
           await updateEntry(rollback.entryId, {
             timestamp: rollback.originalTimestamp,
-            entryType: rollback.originalEntryType,
-            jobId: rollback.originalJobId
+            ...(rollback.originalEntryType !== undefined
+              ? { entryType: rollback.originalEntryType }
+              : {}),
+            ...(rollback.originalJobId !== undefined
+              ? { jobId: rollback.originalJobId }
+              : {})
           });
         }
 
@@ -1381,16 +1386,16 @@ export function EntryDetailsDialog({
       {!isOrphan && totalWorkMinutes !== null && (
         <div
           className={cn(
-            "rounded-md border border-green-500/30 bg-green-500/8 px-3 py-3",
+            "rounded-md border border-success/30 bg-success-soft px-3 py-3",
             isActiveBlock && "animate-pulse",
           )}
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-green-600 dark:text-green-400" />
+              <Clock className="h-4 w-4 text-success-soft-foreground" />
               <span className="text-sm font-medium">Arbeitszeit gesamt</span>
             </div>
-            <span className="text-base font-semibold text-green-700 dark:text-green-300">
+            <span className="text-base font-semibold text-success-soft-foreground">
               {formatDuration(totalWorkMinutes)}
             </span>
           </div>
@@ -1488,14 +1493,14 @@ export function EntryDetailsDialog({
         return (
           <div
             key={workBreak.key}
-            className="space-y-3 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-3"
+            className="space-y-3 rounded-md border border-warning/30 bg-warning-soft px-3 py-3"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-medium">
-                <Coffee className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <Coffee className="h-4 w-4 text-warning-soft-foreground" />
                 <span>Pause</span>
               </div>
-              <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300">
+              <span className="rounded-full bg-warning/15 px-2 py-0.5 text-xs font-medium text-warning-soft-foreground">
                 {formatDuration(getBreakDurationMinutes(workBreak))}
               </span>
               {isEditing && canEdit && !isAutomaticBreakMode && (
@@ -1653,13 +1658,13 @@ export function EntryDetailsDialog({
       })}
 
       {displayedBreaks.length > 1 && (
-        <div className="rounded-md border border-amber-500/30 bg-amber-500/8 px-3 py-3">
+        <div className="rounded-md border border-warning/30 bg-warning-soft px-3 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Coffee className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <Coffee className="h-4 w-4 text-warning-soft-foreground" />
               <span className="text-sm font-medium">Pausenzeit gesamt</span>
             </div>
-            <span className="text-base font-semibold text-amber-700 dark:text-amber-300">
+            <span className="text-base font-semibold text-warning-soft-foreground">
               {formatDuration(totalBreakMinutes)}
             </span>
           </div>
@@ -1667,7 +1672,7 @@ export function EntryDetailsDialog({
       )}
 
       {isAutomaticBreakMode && canEdit && !isOrphan && (
-        <div className="space-y-2 rounded-md border border-amber-500/20 bg-amber-500/6 px-3 py-3">
+        <div className="space-y-2 rounded-md border border-warning/20 bg-warning-soft px-3 py-3">
           <Button
             type="button"
             variant="outline"
@@ -1774,9 +1779,9 @@ export function EntryDetailsDialog({
         )}
 
       {showBoundaryExplanation && (
-        <div className="rounded-md border border-blue-500/30 bg-blue-500/8 px-3 py-3">
+        <div className="rounded-md border border-info/30 bg-info-soft px-3 py-3">
           <div className="flex items-start gap-2">
-            <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+            <Info className="mt-0.5 h-4 w-4 shrink-0 text-info-soft-foreground" />
             <p className="text-xs text-muted-foreground">
               Dieser Arbeitsblock endet hier, weil danach die Arbeit in einem
               neuen Arbeitsblock oder Auftrag weitergeführt wurde. Das ist kein
@@ -1796,7 +1801,7 @@ export function EntryDetailsDialog({
       )}
 
       {successMessage && (
-        <div className="rounded-md bg-green-500/10 px-3 py-2 text-sm text-green-700 dark:text-green-300">
+        <div className="rounded-md bg-success-soft px-3 py-2 text-sm text-success-soft-foreground">
           {successMessage}
         </div>
       )}

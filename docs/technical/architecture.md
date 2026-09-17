@@ -1,6 +1,6 @@
 # Technical Architecture
 
-Status: living — last reviewed 2026-09-05
+Status: living — last reviewed 2026-09-17
 
 This document describes the current high-level architecture of WerkFlow. It intentionally avoids duplicating exact database schema details; for exact schema, inspect the live Supabase project and `lib/supabase/database.types.ts`. Coding standards, including the implementation-simplicity rules, live in `AGENTS.md` and are not repeated here.
 
@@ -49,7 +49,7 @@ The app uses the Next.js App Router. The top-level trees under `app/` are:
 - `app/(auth)/`: login, signup, verification, forgot-password, and reset-password pages.
 - `app/onboarding/`: create or join an organization, plus `meine-aufgaben`, the bounded own-onboarding view a future starter sees before access activates.
 - `app/(app)/`: authenticated product shell and operational pages.
-- `app/api/`: active route handlers for invite redemption and the authenticated time-entry read used by the member-status hook. Retired member/profile lookup and active-organization-cookie handlers still exist as dead endpoints pending deletion; the enforcement backlog tracks that cleanup.
+- `app/api/`: route handlers for invite redemption (`redeem-invite`), the bounded customer page (`customer-page`), and the authorized reads kept outside the client Server Action queue: attention counts (`attention-counts`), the calendar window (`calendar-window`), time-tracking state (`time-tracking-state`), and the closed registry of background page reads (`background-read`, backed by `lib/data/background-reads.ts`). Step 1 removed the retired member/profile lookup and active-organization-cookie endpoints; the authenticated time-entry read (`POST /api/time-entries`) was deleted on 2026-09-15. The security route inventory checks the current handler set.
 - `app/auth/`: `callback` handles the Supabase auth callback and `flash` sets the short-lived auth flash cookie. Both are route handlers, so route handlers are not confined to `app/api/`.
 - `app/upgrade/` and `app/invite-error/`: standalone pages outside the product shell for the subscription upgrade and for a failed invite redemption.
 
@@ -57,7 +57,7 @@ Authenticated product areas are Dashboard, Aufgaben, Kalender, Zeiterfassung wit
 
 ### Page shell and area layouts
 
-Since 2026-09-03 every authenticated page renders one column: `PageShell` → `PageHeader` → `PageBody` from `components/shared/page-shell.tsx` and `page-header.tsx`. The app shell's `<main>` carries no padding and no scroll region; `PageBody` owns both, hides horizontal overflow, and reserves the bottom clearance for the clock button. Areas with subpages (`/service`, `/zeiterfassung`, `/einstellungen`) render the shell and a persistent header with `AreaNav` route tabs in a `layout.tsx`; their pages render content only, and their `loading.tsx` files render content-only skeletons so the header never blinks. Full-height shells and standalone states use the dynamic viewport (`h-dvh`/`min-h-dvh`), never the browser-chrome-sensitive `h-screen`/`min-h-screen`. ESLint bans the raw page-column and static-viewport literals outside their owners, and the `@AUDIT-LAYOUT` browser audit walks every area at 375 px. The design rules behind this live in the `werkflow-design` skill; the record of the change is [uiux-hardening-2026-09.md](../plans/uiux-hardening-2026-09.md).
+Since 2026-09-03 every authenticated page renders one column: `PageShell` → `PageHeader` → `PageBody` from `components/shared/page-shell.tsx` and `page-header.tsx`. The app shell's `<main>` carries no padding and no scroll region; `PageBody` owns both, hides horizontal overflow, and reserves the bottom clearance for the clock button. Areas with subpages (`/service`, `/zeiterfassung`, `/einstellungen`) render the shell and a persistent header with `AreaNav` route tabs in a `layout.tsx`; their pages render content only, and their `loading.tsx` files render content-only skeletons so the header never blinks. Full-height shells and standalone states use the dynamic viewport (`h-dvh`/`min-h-dvh`), never the browser-chrome-sensitive `h-screen`/`min-h-screen`. ESLint bans the raw page-column and static-viewport literals outside their owners, and the `@AUDIT-LAYOUT` browser audit walks every area at 375 px. The design rules behind this live in the `werkflow-design` skill; the record of the change is [02-uiux-hardening.md](../plans/phase-1/hardening-2026-09/02-uiux-hardening.md).
 
 Tailwind v4 scans an explicit application boundary from `app/globals.css`: `@import 'tailwindcss' source(none)` followed by `@source` entries for `app`, `components`, `hooks`, `lib`, and `proxy.ts`. This keeps repository-local build backups, retained browser evidence, and other generated trees out of candidate discovery. `lib/ui/tailwind-source.test.ts` pins that boundary; add a source entry there when a new product-code root starts emitting Tailwind classes.
 
@@ -71,13 +71,13 @@ Refresh controls retain loaded rows. `RefreshButton` owns the router transition;
 
 Searchable controls expose named listboxes with selected options and shared keyboard navigation. Search, clear, and inline-create actions remain keyboard-reachable. Mobile record navigation includes a semantic link or button. `RowActionsMenu` restores trigger focus before selection, preserves a newly opened dialog's focus, and supports Tab traversal out of the menu.
 
-These shared owners provide Tier 1 behavior. Lint probes, rendered field tests, enum-bound checks, and isolated component browser contracts provide Tier 2 regression detection. Domain meaning, visual balance, and feedback-policy exceptions still require Tier 3 review and the relevant application proofs. [Testing](testing.md) owns execution procedures; the [current reconciliation](../plans/uiux-and-test-reliability-2026-09.md) records coverage and acceptance limits.
+These shared owners provide Tier 1 behavior. Lint probes, rendered field tests, enum-bound checks, and isolated component browser contracts provide Tier 2 regression detection. Domain meaning, visual balance, and feedback-policy exceptions still require Tier 3 review and the relevant application proofs. [Testing](testing.md) owns execution procedures; the [current reconciliation](../plans/phase-1/hardening-2026-09/03-uiux-and-test-reliability.md) records coverage and acceptance limits.
 
 ### Request-edge routing
 
 `proxy.ts` at the repository root is the Next.js 16 replacement for `middleware.ts`. It calls `getSession()` for a cookie-only session check with no network call and no JWT validation, then redirects an unauthenticated request to `/login` when the path is `/` or starts with a prefix in its hardcoded `PROTECTED_PREFIXES` list. It is a routing convenience. Authorization lives in the `app/(app)/layout.tsx` redirect, in the server actions, and in RLS.
 
-The prefix list and the `matcher` currently lag the route tree. `/anfragen`, `/aufgaben`, `/qualifikationen`, `/arbeitsvorlagen`, and `/service` are missing, so an unauthenticated request to those routes reaches the layout redirect instead of the proxy. The gap is tracked for the hardening pass.
+Step 1 added the previously missing route areas to the prefix list and matcher. `lib/security/proxy-prefixes.test.ts` derives the required areas from `app/(app)` and checks their coverage. This routing check does not replace server authorization.
 
 ## Supabase Access Model
 
@@ -89,7 +89,7 @@ The app has five Supabase client factories, one per trust boundary:
 - `lib/supabase/implicit-client.ts`: a browser client with `flowType: 'implicit'`. Only the forgot-password form uses it, because the client that sends the recovery email decides which flow the link opens.
 - `lib/supabase/transient-client.ts`: a browser client that persists no session. The password-change card uses it to re-verify the current password without replacing the signed-in session.
 
-Server code that uses the admin client must establish identity and authorization first. `getAuthenticatedUser()` in `lib/data/cached.ts` calls `auth.getUser()` and React `cache()` memoizes the result per request. Many feature actions use `authenticateAndAuthorize()` in `lib/jobs/auth.ts`; it returns a typed `AuthContext` or failure using the active organization and `getCachedMemberships()`. Other actions resolve authorization separately, and newer business RPCs reauthorize inside the transaction. These paths do not all provide the same freshness guarantee. In particular, the shared helper consumes cross-request membership candidates. Audit each privileged entry point before relying on immediate role or access revocation. Server-only domain readers live in `lib/<feature>/server.ts`; Server Actions commonly live in `actions.ts`.
+Server code that uses the admin client must establish identity and authorization first. `getAuthenticatedUser()` in `lib/data/cached.ts` calls `auth.getUser()` and React `cache()` memoizes the result while rendering. The calendar-window, attention-count and time-tracking-state GET handlers instead enter `withReadRequest`, because route handlers have no React memoization context. Within that GET only, `memoizeRequestRead` shares in-flight identity and membership wrapper reads. Each request gets a separate store; Server Actions never enter it. Many feature actions use `authenticateAndAuthorize()` in `lib/jobs/auth.ts`; it returns a typed `AuthContext` or failure using the active organization and `getCachedMemberships()`. Other actions resolve authorization separately, and newer business RPCs reauthorize inside the transaction. Membership candidates are loaded fresh per request/render, including lifecycle restrictions. An in-flight request is still a snapshot; business RPCs that reauthorize within their write transaction remain necessary for atomic authorization. Server-only domain readers live in `lib/<feature>/server.ts`; Server Actions commonly live in `actions.ts`.
 
 Supabase environment values are read only through `lib/env/public.ts` for the URL and publishable key and `lib/env/server.ts` for the secret key and site URL; the server file is itself `server-only`. The R2 credentials are the recorded exception, read directly in `lib/storage/r2.ts`.
 
@@ -129,25 +129,27 @@ P1-17 follows the existing storage boundary: the server renders deterministic cu
 
 The app has three caching layers:
 
-- `react.cache()` deduplicates work within a request.
+- `react.cache()` deduplicates work within a Server Component render pass. The reviewed GET handlers use [a separate request scope](security.md#read-request-authorization-reuse).
 - `unstable_cache()` caches data across requests behind tags.
 - The Next.js 16 `'use cache'` directive with `cacheTag()` caches a function's result behind the same tag names. `lib/work-templates/server.ts` is the current user.
 
 The `CACHE_TAGS` registry in `lib/data/cached.ts` is the single list of tag names. Server Actions that mutate cached data call `updateTag()` for the affected tags. `updateTag()` is Server-Action-only; a route handler such as `app/api/redeem-invite/route.ts` calls `revalidateTag(tag, 'max')` instead.
 
-The product principle is fast initial load with fresh operational data. Avoid adding client-side fetching or polling when existing server rendering, cache invalidation, and Realtime patterns can support the workflow.
+The product principle is fast initial load with fresh operational data. Avoid adding client-side fetching or polling when existing server rendering, cache invalidation, and Realtime patterns can support the workflow. The [reader inventory](realtime-and-caching.md#cross-request-reader-inventory) lists every cross-request cache with its key and invalidating writes; everything else, including the calendar, the large lists, and the attention derivations, reads per request after authorization.
+
+Surfaces that read a window of data (the calendar) own that window through a typed range state: coverage per dataset, request generations, and derived readiness, so a view switch shows either covered data or an honest loading state and never another range's rows. The [calendar data owner](realtime-and-caching.md#range-scoped-data-owner-calendar) describes the mechanism. Optional shell content such as attention counts loads after mount through its provider instead of blocking the app layout.
 
 ## Realtime
 
 Supabase Realtime is centralized through `components/realtime/realtime-provider.tsx`.
 
-The published table list has one home: `REALTIME_TABLES` in `lib/realtime/tables.ts`. The provider generates its bindings, including organization filters except for `profiles`, debounces events centrally, and owns focus/visibility catch-up. Most immutable ledgers refetch behind a root signal; ordinary documents and attention retain published history tables. `bun run realtime:check` verifies publication and replica-identity configuration, not cross-tenant delivery guarantees. The [transport reference](realtime-and-caching.md) owns that distinction. ESLint bans `onAuthStateChange` outside the provider, with a named exception for the password-recovery form.
+The published table list has one home: `REALTIME_TABLES` in `lib/realtime/tables.ts`. The provider generates its bindings, including organization filters except for `profiles`, delivers every authorized event to the shared refresh hooks, and owns focus/visibility catch-up. Most immutable ledgers refetch behind a root signal; ordinary documents and attention retain published history tables. `bun run realtime:check` verifies publication and replica-identity configuration, not cross-tenant delivery guarantees. The [transport reference](realtime-and-caching.md) owns that distinction. ESLint bans `onAuthStateChange` outside the provider, with a named exception for the password-recovery form.
 
 Surfaces consume through the live-view family: `hooks/use-live-view.ts` for client refetch views (shared debounce, generation guards, keep-last-known, dialog suspension, catch-up) and `hooks/use-realtime-router-refresh.ts` for route refreshes. Pending state on server actions comes from `hooks/use-server-action.ts`. The full freshness and latency contract lives in [realtime-and-caching.md](realtime-and-caching.md).
 
 When adding new operational data that must stay live:
 
-- One migration (publication membership plus minimal `USING INDEX` replica identity) and one `REALTIME_TABLES` line; the provider binds and org-filters it automatically.
+- Add publication membership, minimal replica identity, and the protected deletion trigger through the [Realtime procedure](realtime-and-caching.md#adding-new-realtime-data), then register the table in `REALTIME_TABLES`.
 - Consume through the live-view family; debounce, batching, suspension, and catch-up come with the primitive, never per surface.
 - Keep employee views lightweight and manager views efficient.
 

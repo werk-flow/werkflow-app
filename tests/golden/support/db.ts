@@ -489,7 +489,8 @@ export async function getEmployeeRecordStateByUser(
     .eq("user_id", userId)
     .maybeSingle();
 
-  const row = data[0];
+  const [row] = data;
+  if (!row) throw new Error(`No employee record found for user ${userId}`);
   return {
     id: row.id as string,
     userId: (row.user_id as string | null) ?? null,
@@ -535,10 +536,9 @@ export async function getEmployeeRecordEventStates(
 // scope-local, so a proof can never revoke the user's sessions in the browser
 // fixtures — the bare global default did exactly that at test 102 and failed
 // four full certifications at the P1-16 boundary (test-incident-log.md,
-// 2026-08-27). New as-credentials helpers use this instead of hand-rolling
-// createClient + signInWithPassword; the pre-existing hand-rolled helpers
-// below migrate here during the Realtime/testing consolidation.
-export async function withRoleClient<T>(
+// 2026-08-27). Every as-credentials helper in this file signs in through it;
+// do not hand-roll createClient + signInWithPassword for a scoped RLS read.
+async function withRoleClient<T>(
   user: { email: string; password: string },
   operation: (client: SupabaseClient) => Promise<T>,
 ): Promise<T> {
@@ -563,39 +563,24 @@ export async function withRoleClient<T>(
 // P1-04: which work-schedule rows a real signed-in user can see under RLS.
 // The UI never shows foreign schedules, so the self-or-manager SELECT policy
 // (managers all org rows, a person exactly their own) is proved here.
-// Deliberately no signOut: the default scope would revoke the user's other
-// sessions and break the browser fixtures of later tests.
 export async function getVisibleWorkScheduleRecordIdsAs(
   user: { email: string; password: string },
   orgId: string,
 ): Promise<string[]> {
-  const client = createClient(
-    requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
-    requireEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
-    testSupabaseClientOptions,
-  );
-
-  const { error: signInError } = await client.auth.signInWithPassword({
-    email: user.email,
-    password: user.password,
+  return withRoleClient(user, async (client) => {
+    const { data, error } = await client
+      .from("work_schedules")
+      .select("employee_record_id")
+      .eq("organization_id", orgId);
+    if (error) {
+      throw new Error(
+        `work_schedules query failed for ${user.email}: ${error.message}`,
+      );
+    }
+    return [
+      ...new Set((data ?? []).map((row) => row.employee_record_id as string)),
+    ];
   });
-  if (signInError) {
-    throw new Error(`Sign-in failed for ${user.email}: ${signInError.message}`);
-  }
-
-  const { data, error } = await client
-    .from("work_schedules")
-    .select("employee_record_id")
-    .eq("organization_id", orgId);
-  if (error) {
-    throw new Error(
-      `work_schedules query failed for ${user.email}: ${error.message}`,
-    );
-  }
-
-  return [
-    ...new Set((data ?? []).map((row) => row.employee_record_id as string)),
-  ];
 }
 
 export type ResponsibilityConfigurationState = {
@@ -645,35 +630,23 @@ export async function getVisibleResponsibilityEmployeeRecordIdsAs(
   user: { email: string; password: string },
   orgId: string,
 ): Promise<string[]> {
-  const client = createClient(
-    requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
-    requireEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
-    testSupabaseClientOptions,
-  );
-  const { error: signInError } = await client.auth.signInWithPassword({
-    email: user.email,
-    password: user.password,
+  return withRoleClient(user, async (client) => {
+    const { data, error } = await client
+      .from("organization_responsibility_assignments")
+      .select("employee_record_id")
+      .eq("organization_id", orgId);
+    if (error) {
+      throw new Error(
+        `Responsibility RLS query failed for ${user.email}: ${error.message}`,
+      );
+    }
+    return [
+      ...new Set((data ?? []).map((row) => row.employee_record_id as string)),
+    ].sort();
   });
-  if (signInError) {
-    throw new Error(`Sign-in failed for ${user.email}: ${signInError.message}`);
-  }
-
-  const { data, error } = await client
-    .from("organization_responsibility_assignments")
-    .select("employee_record_id")
-    .eq("organization_id", orgId);
-  if (error) {
-    throw new Error(
-      `Responsibility RLS query failed for ${user.email}: ${error.message}`,
-    );
-  }
-
-  return [
-    ...new Set((data ?? []).map((row) => row.employee_record_id as string)),
-  ].sort();
 }
 
-export class MissingTestFixtureError extends Error {
+class MissingTestFixtureError extends Error {
   override readonly name = "MissingTestFixtureError";
 }
 
@@ -715,42 +688,6 @@ export async function findLatestManualTimeEntryState(
     if (error instanceof MissingTestFixtureError) return null;
     throw error;
   }
-}
-
-export async function getLatestMembershipRemovalEvent(
-  orgId: string,
-  userId: string,
-): Promise<{ autoClockedOut: boolean }> {
-  const admin = createAdminClient();
-  const { data: employeeRecord, error: employeeError } = await admin
-    .from("employee_records")
-    .select("id")
-    .eq("organization_id", orgId)
-    .eq("user_id", userId)
-    .single();
-  if (employeeError || !employeeRecord) {
-    throw new Error(
-      `Employee record missing for ${userId}: ${employeeError?.message}`,
-    );
-  }
-
-  const { data, error } = await admin
-    .from("employee_record_events")
-    .select("event_payload")
-    .eq("organization_id", orgId)
-    .eq("employee_record_id", employeeRecord.id)
-    .eq("event_type", "membership_removed")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .single();
-  if (error || !data) {
-    throw new Error(
-      `Membership removal event missing for ${userId}: ${error?.message}`,
-    );
-  }
-
-  const payload = data.event_payload as Record<string, unknown>;
-  return { autoClockedOut: payload.auto_clocked_out === true };
 }
 
 export async function getJobProjectNumber(
@@ -955,32 +892,22 @@ export async function getVisibleVacationRequestRecordIdsAs(
   user: { email: string; password: string },
   orgId: string,
 ): Promise<string[]> {
-  const client = createClient(
-    requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
-    requireEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
-    testSupabaseClientOptions,
-  );
-  const { error: signInError } = await client.auth.signInWithPassword({
-    email: user.email,
-    password: user.password,
+  return withRoleClient(user, async (client) => {
+
+    const { data, error } = await client
+      .from("vacation_requests")
+      .select("employee_record_id")
+      .eq("organization_id", orgId);
+    if (error) {
+      throw new Error(
+        `vacation_requests query failed for ${user.email}: ${error.message}`,
+      );
+    }
+
+    return [
+      ...new Set((data ?? []).map((row) => row.employee_record_id as string)),
+    ].sort();
   });
-  if (signInError) {
-    throw new Error(`Sign-in failed for ${user.email}: ${signInError.message}`);
-  }
-
-  const { data, error } = await client
-    .from("vacation_requests")
-    .select("employee_record_id")
-    .eq("organization_id", orgId);
-  if (error) {
-    throw new Error(
-      `vacation_requests query failed for ${user.email}: ${error.message}`,
-    );
-  }
-
-  return [
-    ...new Set((data ?? []).map((row) => row.employee_record_id as string)),
-  ].sort();
 }
 
 // P1-07: pattern-level attention state — read markers and append-only pattern
@@ -1042,70 +969,37 @@ export async function getVisibleAttentionOwnersAs(
   user: { email: string; password: string },
   orgId: string,
 ): Promise<{ readStateUserIds: string[]; eventUserIds: string[] }> {
-  const client = createClient(
-    requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
-    requireEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
-    testSupabaseClientOptions,
-  );
-  const { error: signInError } = await client.auth.signInWithPassword({
-    email: user.email,
-    password: user.password,
+  return withRoleClient(user, async (client) => {
+
+    const [readStatesResult, eventsResult] = await Promise.all([
+      client
+        .from("attention_read_states")
+        .select("user_id")
+        .eq("organization_id", orgId),
+      client
+        .from("attention_events")
+        .select("user_id")
+        .eq("organization_id", orgId),
+    ]);
+    if (readStatesResult.error || eventsResult.error) {
+      throw new Error(
+        `Attention RLS query failed for ${user.email}: ${
+          readStatesResult.error?.message ?? eventsResult.error?.message
+        }`,
+      );
+    }
+
+    return {
+      readStateUserIds: [
+        ...new Set(
+          (readStatesResult.data ?? []).map((row) => row.user_id as string),
+        ),
+      ].sort(),
+      eventUserIds: [
+        ...new Set((eventsResult.data ?? []).map((row) => row.user_id as string)),
+      ].sort(),
+    };
   });
-  if (signInError) {
-    throw new Error(`Sign-in failed for ${user.email}: ${signInError.message}`);
-  }
-
-  const [readStatesResult, eventsResult] = await Promise.all([
-    client
-      .from("attention_read_states")
-      .select("user_id")
-      .eq("organization_id", orgId),
-    client
-      .from("attention_events")
-      .select("user_id")
-      .eq("organization_id", orgId),
-  ]);
-  if (readStatesResult.error || eventsResult.error) {
-    throw new Error(
-      `Attention RLS query failed for ${user.email}: ${
-        readStatesResult.error?.message ?? eventsResult.error?.message
-      }`,
-    );
-  }
-
-  return {
-    readStateUserIds: [
-      ...new Set(
-        (readStatesResult.data ?? []).map((row) => row.user_id as string),
-      ),
-    ].sort(),
-    eventUserIds: [
-      ...new Set((eventsResult.data ?? []).map((row) => row.user_id as string)),
-    ].sort(),
-  };
-}
-
-// P1-07: the one open client request GG-01 leaves behind, by number.
-export async function getClientRequestByNumber(
-  orgId: string,
-  requestNumber: string,
-): Promise<{ id: string; status: string; assignedTo: string | null }> {
-  const { data, error } = await createAdminClient()
-    .from("client_requests")
-    .select("id, status, assigned_to")
-    .eq("organization_id", orgId)
-    .eq("request_number", requestNumber)
-    .single();
-  if (error || !data) {
-    throw new Error(
-      `No client request found with number ${requestNumber}: ${error?.message}`,
-    );
-  }
-  return {
-    id: data.id as string,
-    status: data.status as string,
-    assignedTo: (data.assigned_to as string | null) ?? null,
-  };
 }
 
 export async function getRequestAuditState(
@@ -1448,32 +1342,22 @@ export async function getVisibleSicknessRecordIdsAs(
   user: { email: string; password: string },
   orgId: string,
 ): Promise<string[]> {
-  const client = createClient(
-    requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
-    requireEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
-    testSupabaseClientOptions,
-  );
-  const { error: signInError } = await client.auth.signInWithPassword({
-    email: user.email,
-    password: user.password,
+  return withRoleClient(user, async (client) => {
+
+    const { data, error } = await client
+      .from("sickness_reports")
+      .select("employee_record_id")
+      .eq("organization_id", orgId);
+    if (error) {
+      throw new Error(
+        `sickness_reports query failed for ${user.email}: ${error.message}`,
+      );
+    }
+
+    return [
+      ...new Set((data ?? []).map((row) => row.employee_record_id as string)),
+    ].sort();
   });
-  if (signInError) {
-    throw new Error(`Sign-in failed for ${user.email}: ${signInError.message}`);
-  }
-
-  const { data, error } = await client
-    .from("sickness_reports")
-    .select("employee_record_id")
-    .eq("organization_id", orgId);
-  if (error) {
-    throw new Error(
-      `sickness_reports query failed for ${user.email}: ${error.message}`,
-    );
-  }
-
-  return [
-    ...new Set((data ?? []).map((row) => row.employee_record_id as string)),
-  ].sort();
 }
 
 // P1-08: the effective absence spans (approved vacation + active sickness,
@@ -1575,68 +1459,58 @@ export async function getVisibleQualificationStateAs(
   requirementCount: number;
   assessmentCount: number;
 }> {
-  const client = createClient(
-    requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
-    requireEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
-    testSupabaseClientOptions,
-  );
-  const { error: signInError } = await client.auth.signInWithPassword({
-    email: user.email,
-    password: user.password,
-  });
-  if (signInError) {
-    throw new Error(`Sign-in failed for ${user.email}: ${signInError.message}`);
-  }
+  return withRoleClient(user, async (client) => {
 
-  const [memberships, capabilities, requirements, assessments] =
-    await Promise.all([
-      client
-        .from("team_memberships")
-        .select("employee_record_id")
-        .eq("organization_id", orgId),
-      client
-        .from("employee_capabilities")
-        .select("employee_record_id, evidence_state")
-        .eq("organization_id", orgId),
-      client
-        .from("job_capability_requirements")
-        .select("id")
-        .eq("organization_id", orgId),
-      client
-        .from("job_qualification_assessments")
-        .select("id")
-        .eq("organization_id", orgId),
-    ]);
-  const firstError =
-    memberships.error ??
-    capabilities.error ??
-    requirements.error ??
-    assessments.error;
-  if (firstError) {
-    throw new Error(
-      `Qualification RLS query failed for ${user.email}: ${firstError.message}`,
-    );
-  }
+    const [memberships, capabilities, requirements, assessments] =
+      await Promise.all([
+        client
+          .from("team_memberships")
+          .select("employee_record_id")
+          .eq("organization_id", orgId),
+        client
+          .from("employee_capabilities")
+          .select("employee_record_id, evidence_state")
+          .eq("organization_id", orgId),
+        client
+          .from("job_capability_requirements")
+          .select("id")
+          .eq("organization_id", orgId),
+        client
+          .from("job_qualification_assessments")
+          .select("id")
+          .eq("organization_id", orgId),
+      ]);
+    const firstError =
+      memberships.error ??
+      capabilities.error ??
+      requirements.error ??
+      assessments.error;
+    if (firstError) {
+      throw new Error(
+        `Qualification RLS query failed for ${user.email}: ${firstError.message}`,
+      );
+    }
 
-  return {
-    teamEmployeeRecordIds: [
-      ...new Set(
-        (memberships.data ?? []).map((row) => row.employee_record_id as string),
-      ),
-    ].sort(),
-    capabilityEmployeeRecordIds: [
-      ...new Set(
-        (capabilities.data ?? []).map(
-          (row) => row.employee_record_id as string,
+    return {
+      teamEmployeeRecordIds: [
+        ...new Set(
+          (memberships.data ?? []).map((row) => row.employee_record_id as string),
         ),
-      ),
-    ].sort(),
-    evidenceStates: (capabilities.data ?? [])
-      .map((row) => row.evidence_state as string)
-      .sort(),
-    requirementCount: requirements.data?.length ?? 0,
-    assessmentCount: assessments.data?.length ?? 0,
-  };
+      ].sort(),
+      capabilityEmployeeRecordIds: [
+        ...new Set(
+          (capabilities.data ?? []).map(
+            (row) => row.employee_record_id as string,
+          ),
+        ),
+      ].sort(),
+      evidenceStates: (capabilities.data ?? [])
+        .map((row) => row.evidence_state as string)
+        .sort(),
+      requirementCount: requirements.data?.length ?? 0,
+      assessmentCount: assessments.data?.length ?? 0,
+    };
+  });
 }
 
 // P1-10: authoritative relationship records and their append-only histories.
@@ -1780,44 +1654,34 @@ export async function getVisibleCustomerRelationshipStateAs(
   user: { email: string; password: string },
   orgId: string,
 ): Promise<Record<string, number>> {
-  const client = createClient(
-    requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
-    requireEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
-    testSupabaseClientOptions,
-  );
-  const { error: signInError } = await client.auth.signInWithPassword({
-    email: user.email,
-    password: user.password,
-  });
-  if (signInError) {
-    throw new Error(`Sign-in failed for ${user.email}: ${signInError.message}`);
-  }
+  return withRoleClient(user, async (client) => {
 
-  const tableNames = [
-    "clients",
-    "client_contacts",
-    "client_sites",
-    "client_follow_ups",
-    "client_follow_up_events",
-    "client_communication_settings",
-    "client_communication_preferences",
-    "client_communication_preference_events",
-  ] as const;
-  const results = await Promise.all(
-    tableNames.map(async (tableName) => {
-      const { count, error } = await client
-        .from(tableName)
-        .select("id", { count: "exact", head: true })
-        .eq("organization_id", orgId);
-      if (error) {
-        throw new Error(
-          `Customer relationship RLS query ${tableName} failed for ${user.email}: ${error.message}`,
-        );
-      }
-      return [tableName, count ?? 0] as const;
-    }),
-  );
-  return Object.fromEntries(results);
+    const tableNames = [
+      "clients",
+      "client_contacts",
+      "client_sites",
+      "client_follow_ups",
+      "client_follow_up_events",
+      "client_communication_settings",
+      "client_communication_preferences",
+      "client_communication_preference_events",
+    ] as const;
+    const results = await Promise.all(
+      tableNames.map(async (tableName) => {
+        const { count, error } = await client
+          .from(tableName)
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", orgId);
+        if (error) {
+          throw new Error(
+            `Customer relationship RLS query ${tableName} failed for ${user.email}: ${error.message}`,
+          );
+        }
+        return [tableName, count ?? 0] as const;
+      }),
+    );
+    return Object.fromEntries(results);
+  });
 }
 
 export async function getCapabilityHistoryState(
@@ -2203,38 +2067,32 @@ export async function getVisiblePlanningStateAs(
     number
   >
 > {
-  const client = createClient(
-    requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
-    requireEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
-    testSupabaseClientOptions,
-  );
-  const { error: signInError } = await client.auth.signInWithPassword({
-    email: user.email,
-    password: user.password,
+  return withRoleClient(user, async (client) => {
+    const tables = [
+      "planning_series",
+      "planning_occurrences",
+      "planning_occurrence_assignments",
+      "planning_occurrence_assessments",
+      "planning_events",
+    ] as const;
+    const results = await Promise.all(
+      tables.map((table) =>
+        client
+          .from(table)
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", orgId),
+      ),
+    );
+    const error = results.find((result) => result.error)?.error;
+    if (error) throw new Error(`Planning RLS lookup failed: ${error.message}`);
+    return Object.fromEntries(
+      tables.map((table, index) => {
+        const result = results[index];
+        if (!result) throw new Error(`Planning RLS lookup returned no result for ${table}`);
+        return [table, result.count ?? 0];
+      }),
+    ) as Record<(typeof tables)[number], number>;
   });
-  if (signInError) {
-    throw new Error(`Planning RLS sign-in failed: ${signInError.message}`);
-  }
-  const tables = [
-    "planning_series",
-    "planning_occurrences",
-    "planning_occurrence_assignments",
-    "planning_occurrence_assessments",
-    "planning_events",
-  ] as const;
-  const results = await Promise.all(
-    tables.map((table) =>
-      client
-        .from(table)
-        .select("id", { count: "exact", head: true })
-        .eq("organization_id", orgId),
-    ),
-  );
-  const error = results.find((result) => result.error)?.error;
-  if (error) throw new Error(`Planning RLS lookup failed: ${error.message}`);
-  return Object.fromEntries(
-    tables.map((table, index) => [table, results[index].count ?? 0]),
-  ) as Record<(typeof tables)[number], number>;
 }
 
 export type InventoryLedgerState = {
@@ -2283,8 +2141,8 @@ export async function getInventoryLedgerState(
     (sum, row) => sum + Number(row.quantity_delta),
     0,
   );
-  const lastQuantityAfter =
-    rows.length > 0 ? Number(rows[rows.length - 1].quantity_after) : 0;
+  const lastRow = rows.at(-1);
+  const lastQuantityAfter = lastRow ? Number(lastRow.quantity_after) : 0;
 
   return {
     quantityOnHand: Number(stockLevel?.quantity_on_hand ?? 0),
@@ -2640,40 +2498,34 @@ export async function getVisibleWorkLifecycleCountsAs(
   user: { email: string; password: string },
   orgId: string,
 ) {
-  const client = createClient(
-    requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
-    requireEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
-    testSupabaseClientOptions,
-  );
-  const { error: signInError } = await client.auth.signInWithPassword(user);
-  if (signInError)
-    throw new Error(`Lifecycle RLS sign-in failed: ${signInError.message}`);
-  const tables = [
-    "work_blockers",
-    "work_blocker_events",
-    "work_dependencies",
-    "work_dependency_events",
-    "work_execution_events",
-  ] as const;
-  const counts: Record<(typeof tables)[number], number> = {
-    work_blockers: 0,
-    work_blocker_events: 0,
-    work_dependencies: 0,
-    work_dependency_events: 0,
-    work_execution_events: 0,
-  };
-  for (const table of tables) {
-    const { count, error } = await client
-      .from(table)
-      .select("id", { count: "exact", head: true })
-      .eq("organization_id", orgId);
-    if (error)
-      throw new Error(
-        `Lifecycle RLS lookup failed for ${table}: ${error.message}`,
-      );
-    counts[table] = count ?? 0;
-  }
-  return counts;
+  return withRoleClient(user, async (client) => {
+    const tables = [
+      "work_blockers",
+      "work_blocker_events",
+      "work_dependencies",
+      "work_dependency_events",
+      "work_execution_events",
+    ] as const;
+    const counts: Record<(typeof tables)[number], number> = {
+      work_blockers: 0,
+      work_blocker_events: 0,
+      work_dependencies: 0,
+      work_dependency_events: 0,
+      work_execution_events: 0,
+    };
+    for (const table of tables) {
+      const { count, error } = await client
+        .from(table)
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", orgId);
+      if (error)
+        throw new Error(
+          `Lifecycle RLS lookup failed for ${table}: ${error.message}`,
+        );
+      counts[table] = count ?? 0;
+    }
+    return counts;
+  });
 }
 
 export async function getWorkArtifactState(
@@ -2892,45 +2744,35 @@ export async function getVisibleDispatchStateAs(
     number
   >
 > {
-  const client = createClient(
-    requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
-    requireEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
-    testSupabaseClientOptions,
-  );
-  const { error: signInError } = await client.auth.signInWithPassword({
-    email: user.email,
-    password: user.password,
-  });
-  if (signInError) {
-    throw new Error(`Dispatch RLS sign-in failed: ${signInError.message}`);
-  }
-  const tables = [
-    "planning_dispatches",
-    "planning_dispatch_revisions",
-    "planning_dispatch_recipients",
-    "planning_dispatch_acknowledgements",
-    "planning_dispatch_events",
-    "work_blockers",
-    "planning_customer_commitments",
-  ] as const;
-  // Sequential on purpose: a parallel burst of head-count requests right
-  // after three sign-ins intermittently dropped a connection in suite runs.
-  const counts: number[] = [];
-  for (const table of tables) {
-    const { count, error } = await client
-      .from(table)
-      .select("id", { count: "exact", head: true })
-      .eq("organization_id", orgId);
-    if (error) {
-      throw new Error(
-        `Dispatch RLS lookup failed for ${table}: ${error.message || error.code || JSON.stringify(error)}`,
-      );
+  return withRoleClient(user, async (client) => {
+    const tables = [
+      "planning_dispatches",
+      "planning_dispatch_revisions",
+      "planning_dispatch_recipients",
+      "planning_dispatch_acknowledgements",
+      "planning_dispatch_events",
+      "work_blockers",
+      "planning_customer_commitments",
+    ] as const;
+    // Sequential on purpose: a parallel burst of head-count requests right
+    // after three sign-ins intermittently dropped a connection in suite runs.
+    const counts: number[] = [];
+    for (const table of tables) {
+      const { count, error } = await client
+        .from(table)
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", orgId);
+      if (error) {
+        throw new Error(
+          `Dispatch RLS lookup failed for ${table}: ${error.message || error.code || JSON.stringify(error)}`,
+        );
+      }
+      counts.push(count ?? 0);
     }
-    counts.push(count ?? 0);
-  }
-  return Object.fromEntries(
-    tables.map((table, index) => [table, counts[index]]),
-  ) as Record<(typeof tables)[number], number>;
+    return Object.fromEntries(
+      tables.map((table, index) => [table, counts[index]]),
+    ) as Record<(typeof tables)[number], number>;
+  });
 }
 
 export async function getWorkHandoverState(
@@ -3326,22 +3168,6 @@ export async function getServiceCaseCountsAs(
     counts.client_follow_ups = followUpCount ?? 0;
     return counts;
   });
-}
-
-export async function getMaintenanceCoverageByReference(
-  orgId: string,
-  reference: string,
-) {
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("maintenance_coverages")
-    .select("*")
-    .eq("organization_id", orgId)
-    .eq("reference", reference)
-    .maybeSingle();
-  if (error)
-    throw new Error(`Maintenance coverage lookup failed: ${error.message}`);
-  return data;
 }
 
 export async function getMaintenanceCoverageStateByReference(

@@ -32,13 +32,22 @@ const DialogOverlay = React.forwardRef<
 ));
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
+type DialogPlacement = 'center' | 'anchored';
+
 const DialogContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => {
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
+    /**
+     * `center` is the ordinary modal. `anchored` keeps the mobile sheet and,
+     * from the tablet breakpoint up, sits above the clock button at the bottom
+     * right like a popover, so the page stays in view behind a lighter overlay.
+     */
+    placement?: DialogPlacement;
+  }
+>(({ className, children, placement = 'center', ...props }, ref) => {
   return (
     <DialogPortal>
-      <DialogOverlay />
+      <DialogOverlay className={placement === 'anchored' ? 'sm:bg-black/30' : undefined} />
       <DialogPrimitive.Content
         ref={ref}
         className={cn(
@@ -51,11 +60,20 @@ const DialogContent = React.forwardRef<
           'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
           'data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom',
           'rounded-t-xl',
-          // Desktop: centered modal
-          'sm:inset-auto sm:left-[50%] sm:top-[50%] sm:max-h-[90vh] sm:max-w-lg sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-lg sm:border sm:border-t sm:p-6',
-          'sm:data-[state=closed]:slide-out-to-left-1/2 sm:data-[state=closed]:slide-out-to-top-[48%]',
-          'sm:data-[state=open]:slide-in-from-left-1/2 sm:data-[state=open]:slide-in-from-top-[48%]',
-          'sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95',
+          'sm:max-h-[90vh] sm:rounded-lg sm:border sm:border-t',
+          placement === 'center'
+            ? [
+                // Desktop: centered modal
+                'sm:inset-auto sm:left-[50%] sm:top-[50%] sm:max-w-lg sm:translate-x-[-50%] sm:translate-y-[-50%] sm:p-6',
+                'sm:data-[state=closed]:slide-out-to-left-1/2 sm:data-[state=closed]:slide-out-to-top-[48%]',
+                'sm:data-[state=open]:slide-in-from-left-1/2 sm:data-[state=open]:slide-in-from-top-[48%]',
+                'sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95',
+              ]
+            : [
+                // Desktop: anchored above the clock button
+                'sm:inset-auto sm:bottom-24 sm:right-6 sm:w-96 sm:max-w-[calc(100vw-3rem)] sm:p-6',
+                'sm:data-[state=closed]:slide-out-to-bottom-2 sm:data-[state=open]:slide-in-from-bottom-2',
+              ],
           className
         )}
         {...props}
@@ -80,7 +98,10 @@ DialogContent.displayName = DialogPrimitive.Content.displayName;
 /**
  * Scrollable middle region for long form dialogs (interaction canon in the
  * werkflow-design skill): DialogHeader and DialogFooter stay fixed, only this
- * body scrolls. The negative margin keeps the scrollbar at the dialog edge.
+ * body scrolls. The negative horizontal margin keeps the scrollbar at the
+ * dialog edge; the negative vertical margin with matching padding gives the
+ * first and last rows room for a 2 px focus or selection ring, which the
+ * scroll container would otherwise clip (pre-Wave-3 step 3 reproduction).
  */
 const DialogBody = ({
   className,
@@ -89,7 +110,7 @@ const DialogBody = ({
   <div
     data-slot="dialog-body"
     className={cn(
-      'min-h-0 flex-1 overflow-y-auto overscroll-contain -mx-4 px-4 sm:-mx-6 sm:px-6',
+      'min-h-0 flex-1 overflow-y-auto overscroll-contain -mx-4 -my-1 px-4 py-1 sm:-mx-6 sm:px-6',
       className
     )}
     {...props}

@@ -53,10 +53,17 @@ function berlinDateAfter(days: number): string {
     day: '2-digit',
   }).format(new Date());
   const [year, month, day] = today.split('-').map(Number);
+  if (year === undefined || month === undefined || day === undefined) throw new Error(`Invalid ISO date: ${today}`);
   return new Date(Date.UTC(year, month - 1, day) + days * 86_400_000).toISOString().slice(0, 10);
 }
 
-const DATES = Array.from({ length: 5 }, (_, index) => berlinDateAfter(90 + index));
+const DATES = [
+  berlinDateAfter(90),
+  berlinDateAfter(91),
+  berlinDateAfter(92),
+  berlinDateAfter(93),
+  berlinDateAfter(94),
+] as const;
 
 function names(world: TestWorld) {
   return {
@@ -431,22 +438,24 @@ test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
       jobNumber: fixture.jobNumber,
     });
     expect(handover.target).toMatchObject({ execution_state: 'handed_over' });
+    const [release] = handover.releases;
+    if (!release) throw new Error('P1-17: expected a released handover');
     expect(handover.package).toMatchObject({
       state: 'released',
-      current_release_id: handover.releases[0].id,
+      current_release_id: release.id,
     });
     expect(handover.releases).toHaveLength(1);
     expect(handover.releaseItems.length).toBeGreaterThanOrEqual(5);
     expect(handover.documents).toHaveLength(1);
-    expect(handover.releases[0].commercial_readiness).toBe('ready_with_exceptions');
-    expect(handover.releases[0].target_snapshot).toMatchObject({
+    expect(release.commercial_readiness).toBe('ready_with_exceptions');
+    expect(release.target_snapshot).toMatchObject({
       customerName: fixture.customerName,
       contactName: fixture.contactName,
     });
-    expect(handover.releases[0].time_summary).toMatchObject({
+    expect(release.time_summary).toMatchObject({
       Quellenfingerabdruck: expect.stringMatching(/^[0-9a-f]{64}$/),
     });
-    expect(handover.releases[0].material_summary).toMatchObject({
+    expect(release.material_summary).toMatchObject({
       Quellenfingerabdruck: expect.stringMatching(/^[0-9a-f]{64}$/),
     });
 
@@ -488,7 +497,9 @@ test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
       jobNumber: fixture.jobNumber,
     });
     expect(state.releases).toHaveLength(2);
-    expect(state.releases[1].previous_release_id).toBe(state.releases[0].id);
+    const [firstRelease, secondRelease] = state.releases;
+    if (!firstRelease || !secondRelease) throw new Error('P1-17: expected two releases');
+    expect(secondRelease.previous_release_id).toBe(firstRelease.id);
     expect(state.events.map((event) => event.event_type)).toEqual(
       expect.arrayContaining([
         'released',

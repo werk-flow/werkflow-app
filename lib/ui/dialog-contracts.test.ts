@@ -268,7 +268,8 @@ type DialogException = { kind: ExceptionKind; reason: string };
 // Exact owners/titles make additions and changed responsibilities require review.
 // Search, upload, override and multi-operation dialogs must not acquire an accidental default action.
 const exceptions: Record<string, DialogException> = {
-  'components/time-activity-dialog.tsx#TimeActivityDialogForm|{state?.isClockedIn ? \'Aktivität wechseln\' : \'Zeiterfassung starten\'}': { kind: 'multiple-actions', reason: 'Starting, switching and recovering activity have separate explicit commands.' },
+  'components/clock-fab.tsx#ClockFAB|{isClockedIn ? \'Laufende Zeiterfassung\' : \'Zeiterfassung starten\'}': { kind: 'command', reason: 'A list of next clock actions; each button performs its transition on activation, there is nothing to submit.' },
+  'components/time-activity-dialog.tsx#TimeActivityDialogForm|{state?.isClockedIn ? \'Aktivität wechseln\' : \'Aktivität wählen\'}': { kind: 'multiple-actions', reason: 'Starting, switching and recovering activity have separate explicit commands.' },
   'components/anfragen/convert-request-to-service-dialog.tsx#ConvertRequestToServiceDialog|Anfrage als Servicefall übernehmen?': { kind: 'command', reason: 'Confirms conversion of existing request data; there are no editable fields.' },
   'components/anfragen/request-detail-content.tsx#RequestDetailContent|Kunden zuordnen': { kind: 'command', reason: 'Enter in the staged customer picker selects a result; assignment is explicit.' },
   'components/arbeitsvorlagen/apply-work-template-card.tsx#ApplyWorkTemplateCard|Arbeitsvorlage anwenden': { kind: 'command', reason: 'Version selection, preview and additional-application acknowledgement precede explicit application.' },
@@ -364,10 +365,13 @@ test('every application dialog has an owned form or a reasoned interaction excep
     }
   }
   const dialogs = inspectDialogs(files);
-  const failures = dialogs.flatMap((dialog) => [
-    ...violations(dialog, exceptions[dialog.key], longDialogOwners.has(dialog.owner)),
-    ...(editingModes[dialog.owner] ? editingViolations(dialog, editingModes[dialog.owner]) : []),
-  ].map((message) => `${dialog.key}: ${message}`));
+  const failures = dialogs.flatMap((dialog) => {
+    const editingMode = editingModes[dialog.owner];
+    return [
+      ...violations(dialog, exceptions[dialog.key], longDialogOwners.has(dialog.owner)),
+      ...(editingMode ? editingViolations(dialog, editingMode) : []),
+    ].map((message) => `${dialog.key}: ${message}`);
+  });
   for (const [key, exception] of Object.entries(exceptions)) {
     if (!dialogs.some((dialog) => dialog.key === key)) failures.push(`stale dialog exception: ${key}`);
     expect(exception.reason.length).toBeGreaterThan(30);

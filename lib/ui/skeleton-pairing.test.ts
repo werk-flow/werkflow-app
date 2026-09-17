@@ -121,8 +121,8 @@ describe('skeleton pairing (design canon, Loading states)', () => {
   const columnDeclaration = /const ([A-Z][A-Z0-9_]*_COLUMNS)\b[^=\n]*SkeletonColumn\[\]/g;
   const declared = new Map<string, string>();
   for (const [path, source] of sources) {
-    for (const match of source.matchAll(columnDeclaration)) {
-      declared.set(match[1], path);
+    for (const [, columnName] of source.matchAll(columnDeclaration)) {
+      if (columnName) declared.set(columnName, path);
     }
   }
 
@@ -136,6 +136,8 @@ describe('skeleton pairing (design canon, Loading states)', () => {
   const NO_LOADING_STATE: Record<string, string> = {
     INVENTORY_MOVEMENT_COLUMNS:
       'the movements tab renders from the inventory page payload; the route skeleton mirrors the items tab',
+    INVITATION_COLUMNS:
+      'the invitations tab renders from the members page payload; the route skeleton mirrors the members tab (its unused skeleton was removed 2026-09-14)',
   };
 
   for (const [identifier, path] of declared) {

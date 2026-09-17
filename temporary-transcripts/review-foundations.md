@@ -17,7 +17,7 @@ Source: [Production stack recap](infrastructure-video-subs/2026-05-31-full-produ
 | 07 | supply-chain | Candidate | Version control and CI/CD permissions belong in the audit. |
 | 08 | database-security | Candidate | RLS and its bypass paths need evidence. |
 | 09 | abuse-controls | Candidate | Rate limiting must cover actual expensive and sensitive operations. |
-| 10 | tenant-isolation | Candidate | Cache/CDN security boundaries first; performance tuning follows. |
+| 10 | tenant-isolation | Already covered | Verified 2026-09-12. Scope: the [cache inventory](../docs/technical/realtime-and-caching.md) and [security rules](../docs/technical/security.md) preserve current authorization and private/no-store operational responses. This covers code policy, not deployed CDN behaviour; Step 3 must verify deployed shells, RSC and asset headers. |
 | 11 | capacity | Candidate | Record managed load-balancing/scaling limits before adding infrastructure. |
 | 12 | observability | Candidate | Error tracking and safe logs need operational ownership. |
 | 13 | recovery | Candidate | Availability and recovery require restore evidence, not just provider names. |
@@ -180,7 +180,7 @@ Source: [Pooling and first users](database-video-subs/2026-05-20-connection-pool
 | Aspect | Topic | Status | Consideration |
 | --- | --- | --- | --- |
 | 01 | capacity | Candidate | Identify the real database connection path before changing pooler settings; HTTP data access and direct Postgres clients differ. |
-| 02 | performance | Deferred | Evaluate cache opportunities with authorization and freshness contracts during the speed pass; Redis is not automatically needed. |
+| 02 | performance | Already covered | Verified 2026-09-12. Scope: the [reader inventory](../docs/technical/realtime-and-caching.md#cross-request-reader-inventory) distinguishes tagged reuse from per-request identity reuse. Bounded list payloads and related reads reduce work without Redis or blanket response caching. New reuse still requires measured benefit and preserved authorization/freshness. |
 | 03 | capacity | Candidate | Design bounded representative load experiments on authorized environments if needed to test concurrency assumptions. |
 | 04 | evidence-quality | Verify | Fifty users, ten connections, 80% savings, and 800-to-50 ms are illustrative, not measured WerkFlow capacity. Verify tool availability before choosing a load tool. |
 
@@ -245,7 +245,7 @@ Source: [Table scans and query shape](database-video-subs/2026-08-30-full-table-
 
 | Aspect | Topic | Status | Consideration |
 | --- | --- | --- | --- |
-| 01 | performance | Deferred | Inspect query plans, filters, joins, existing indexes, and real data volumes in the speed pass. Sequential scans can be appropriate; do not index every filter automatically. |
+| 01 | performance | Deferred | Considered 2026-09-08: the Step 2 pass bounded the reads it changed with query-count tests and measured navigation against the typical profile; no query plan was inspected and no index was added. Revisit when a measured scenario regresses or the larger profile is generated. |
 | 02 | data-minimization | Candidate | Limit returned fields and rows to the caller's authorized need. |
 | 03 | observability | Candidate | Consider safe slow-query statistics, frequency, resource use, and thresholds; avoid logging sensitive parameter values. |
 | 04 | evidence-quality | Verify | Provider throttling and tenfold wasted work are source claims, not measurements of this app. |
@@ -342,34 +342,40 @@ Source: [Vendor deprecation and compliance](compliance-video-subs/2026-08-24-a-v
 
 Source: [Five speed ideas](performance-video-subs/2026-06-21-five-ways-to-make-a-vibecoded-app-faster.txt)
 
+Reconsidered 2026-09-12 after the measured repairs. Each row names its verified scope or a concrete revisit trigger. The [Step 2 record](../docs/plans/whole-app-performance-hardening-2026-09.md) owns final acceptance; partial evidence below does not certify the entire pass.
+
 | Aspect | Topic | Status | Consideration |
 | --- | --- | --- | --- |
-| 01 | performance | Deferred | Inspect response compression on the actual deployment during speed work. |
-| 02 | performance | Deferred | Evaluate batch database writes while preserving authorization, constraints, atomicity, and useful error handling. |
-| 03 | observability | Candidate | Break measured user latency into request, server, database, and rendering contributions rather than guessing the bottleneck. |
-| 04 | interaction-feedback | Deferred | Evaluate prompt pending/optimistic feedback with confirmed outcome and rollback behavior; no optimistic success for an unconfirmed sensitive action. |
-| 05 | caching | Deferred | Evaluate SSR/PPR/static work reuse without exposing personalized data or breaking freshness. |
+| 01 | performance | Deferred | Reconsidered 2026-09-12. Verify Vercel response compression during coordinated deployment acceptance in Step 3. Local responses cannot prove deployed CDN behavior; no deployment changed in this pass. |
+| 02 | performance | Already covered | Verified 2026-09-12. Scope: planning uses its existing transactional RPC boundary in [planning server operations](../lib/planning/server.ts). The performance repair batches bounded read identities and parallelizes independent reads. It does not replace business transactions with unsafe concurrent writes; revisit only for a measured write bottleneck. |
+| 03 | observability | Already covered | Verified 2026-09-08. Scope: measured browser scenarios record navigation timing, request count, transfer bytes, and RSC bytes beside each value (`tests/golden/support/live.ts`, `lib/testing/latency-evidence.ts`). Server-side spans per query are not recorded; the [Step 2 plan](../docs/plans/whole-app-performance-hardening-2026-09.md) lists that limit. |
+| 04 | interaction-feedback | Already covered | Verified 2026-09-12. Scope: [calendar component contracts](../tests/ui-contracts/calendar.spec.ts) and [day-view contracts](../tests/ui-contracts/day-view.spec.ts) cover pending ownership, rejected/held saves and confirmed Undo. The real calendar audit distinguishes retained staleness from unavailable data and verifies recovery. This does not certify every future form. |
+| 05 | caching | Deferred | Reconsidered 2026-09-12. Generic authenticated shells remain partially prerendered; authorized content streams separately. Keep the [cache inventory](../docs/technical/realtime-and-caching.md) and verify deployed shell confidentiality and streamed-script CSP together during Step 3. Cookie reads alone do not disable PPR. |
 
 ## PERF-002
 
 Source: [Five bottlenecks](performance-video-subs/2026-07-03-five-things-slowing-your-app-down.txt)
 
+Reconsidered 2026-09-12 after the measured repairs. Each row names its verified scope or a concrete revisit trigger. The [Step 2 record](../docs/plans/whole-app-performance-hardening-2026-09.md) owns final acceptance; partial evidence below does not certify the entire pass.
+
 | Aspect | Topic | Status | Consideration |
 | --- | --- | --- | --- |
-| 01 | data-minimization | Candidate | Bound queries on the server; rendering twenty of five thousand downloaded rows does not bound data exposure or transfer. |
-| 02 | architecture | Verify | A single database is not inherently a defect. Replica separation needs workload evidence and consistency design. |
-| 03 | performance | Deferred | Move genuinely CPU-heavy work off critical execution paths when measured. Async syntax alone does not create another thread. |
-| 04 | performance | Deferred | Measure Largest Contentful Paint with navigation and interaction readiness; the transcript misnames it "longest". |
-| 05 | performance | Deferred | Inspect scroll listeners, repeated calculations, cleanup, and frame work during speed profiling. |
+| 01 | data-minimization | Already covered | Verified 2026-09-12. Scope: [list pagination SQL](../supabase/tests/operational_list_pages.sql) and [inventory pagination SQL](../supabase/tests/inventory_pagination.sql) cover complete global filtering/counting before bounded pages. Calendar/correction reads use bounded complete pages and selectors use remote search. Other future readers still require their own bounds. |
+| 02 | architecture | Not applicable | Reconsidered 2026-09-12. No measured evidence justifies splitting the current database. The observed delays came from query fan-out, redundant authorization/approval-scope reads, event batching and rendering. Revisit topology only after measured capacity or consistency requirements change. |
+| 03 | performance | Deferred | Reconsidered 2026-09-12. Browser profiling identified calendar rendering cost; the repaired typical navigation cohort meets its budgets. A worker cannot move DOM rendering off the main thread. Revisit a worker for a separately measured CPU-only operation, without adding one speculatively. |
+| 04 | performance | Already covered | Verified 2026-09-12. Scope: [browser measurements](../tests/golden/support/live.ts) retain navigation attribution and actual usable-content timings. Largest Contentful Paint is the correct term; it does not establish interactive readiness or cross-user freshness. The [Step 2 record](../docs/plans/whole-app-performance-hardening-2026-09.md) retains measurement limits. |
+| 05 | performance | Deferred | Reconsidered 2026-09-12. Calendar profiling and navigation checks found no reason for a separate scroll subsystem rewrite. Revisit scroll/frame attribution when a rendered scrolling defect or larger workload demonstrates it; the current navigation cohort is not a full scroll benchmark. |
 
 ## PERF-003
 
 Source: [More speed ideas](performance-video-subs/2026-07-06-five-reasons-your-app-is-slow.txt)
 
+Reconsidered 2026-09-12 after the measured repairs. Each row names its verified scope or a concrete revisit trigger. The [Step 2 record](../docs/plans/whole-app-performance-hardening-2026-09.md) owns final acceptance; partial evidence below does not certify the entire pass.
+
 | Aspect | Topic | Status | Consideration |
 | --- | --- | --- | --- |
-| 01 | caching | Deferred | Browser and server caching require data-class and authorization-aware policy, not blanket caching. |
-| 02 | interaction-feedback | Deferred | Use established skeleton/pending patterns while distinguishing initial loading from refresh of existing data. |
-| 03 | data-minimization | Candidate | Check server-side pagination separately from UI pagination; overlap with PERF-002 does not dispose of the other four aspects. |
-| 04 | performance | Deferred | Inspect N+1 query paths using real traces and data sizes. |
-| 05 | performance | Deferred | Evaluate independent I/O concurrency and CPU blocking separately during the speed pass. |
+| 01 | caching | Already covered | Verified 2026-09-12. Scope: the [cache inventory](../docs/technical/realtime-and-caching.md) names keys, authorization and invalidation. The three private GET aggregates share identity only inside [one request scope](../lib/data/read-request-cache.ts); responses remain private/no-store. No blanket browser or server cache was introduced. |
+| 02 | interaction-feedback | Already covered | Verified 2026-09-12. Scope: the [calendar owner](../components/kalender/use-calendar-range-data.ts) retains authorized covered data, isolates caller/role/range generations and blocks stale edits. Component checks and the measured calendar owner pass failure/retry paths. Dedicated closure/correction live acceptance remains in the [Step 2 record](../docs/plans/whole-app-performance-hardening-2026-09.md). |
+| 03 | data-minimization | Already covered | Verified 2026-09-12. Scope: jobs/customers/documents/inventory use server pages and global filtering/counts; selectors search remotely. Local SQL covers more than 1,000 records and the measured customer/job browser owner passes search, pages and assignment labels. The [Step 2 record](../docs/plans/whole-app-performance-hardening-2026-09.md) still requires the dedicated document/inventory CRUD owner. |
+| 04 | performance | Already covered | Verified 2026-09-12. Scope: [planning reads](../lib/planning/server.ts) embed related rows with bounded pages, and [shared query helpers](../lib/supabase/query-batches.ts) bound identity batches and concurrency. Calendar traces identified repeated authorization and unused responsibility reads, repaired without removing permission checks. This is not a universal N+1 detector. |
+| 05 | performance | Already covered | Verified 2026-09-12. Scope: [time reads](../lib/time-tracking/actions.ts) start independent projections together; the [actual-reader fixture](../lib/testing/fixtures/calendar-complete-reads.ts) holds the legacy response and proves the other reads start. CPU/DOM rendering remains separate from I/O concurrency. |

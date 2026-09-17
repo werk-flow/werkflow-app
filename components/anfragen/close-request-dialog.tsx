@@ -80,7 +80,7 @@ export function CloseRequestDialog({
     try {
       const result = await closeClientRequest(requestId, {
         reason,
-        note: note.trim() || undefined,
+        ...(note.trim() ? { note: note.trim() } : {}),
       });
       if (!result.success) {
         setError(ERROR_MESSAGES[result.error] || 'Unbekannter Fehler');

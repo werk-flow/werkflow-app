@@ -1,4 +1,8 @@
 'use client';
+import { ListPagination } from '@/components/shared/list-pagination';
+import { useListNavigation } from '@/hooks/use-list-navigation';
+import { retainPageEntries, type JobListPagination, type JobListSection } from '@/lib/jobs/list-page';
+
 
 import { useState, useCallback, useMemo } from 'react';
 import { ChevronRight } from 'lucide-react';
@@ -29,6 +33,7 @@ import { useBusyIds } from '@/hooks/use-busy-id';
 import { useOptimisticList } from '@/hooks/use-optimistic-list';
 import { useServerAction } from '@/hooks/use-server-action';
 import { useSettleOnChange } from '@/hooks/use-settle-on-change';
+import { UsableContent } from '@/components/shared/usable-content';
 import { createJob, deleteJob, type CreateJobInput } from '@/lib/jobs/actions';
 import { JOB_DELETE_FAILED_MESSAGE } from '@/lib/jobs/messages';
 import {
@@ -82,6 +87,7 @@ interface AuftraegeContentProps {
   jobAssignmentMap: Record<string, string[]>;
   isAdminOrManager: boolean;
   visibleColumns: AuftraegeColumnId[];
+  pagination?: JobListPagination;
 }
 
 /** A deferred job create the server answered with a qualification confirm step. */
@@ -227,6 +233,7 @@ export function AuftraegeContent({
   jobAssignmentMap: initialJobAssignmentMap,
   isAdminOrManager,
   visibleColumns,
+  pagination,
 }: AuftraegeContentProps) {
   const {
     jobs,
@@ -240,29 +247,48 @@ export function AuftraegeContent({
     initialProjects,
     initialJobAssignmentMap,
     clients,
+    preserveProjectCounts: Boolean(pagination),
   });
 
+  const navigation = useListNavigation();
+  function navigateSection(section: JobListSection, changes: Record<string, string | number | null>, delay = 0): void {
+    navigation.navigate(Object.fromEntries(Object.entries({ page: 1, ...changes }).map(([key, value]) => [`${section}_${key}`, value])), delay);
+  }
   // Active section state
-  const [activeStatusFilter, setActiveStatusFilter] = useState<ActiveStatusFilter>('alle');
-  const [activeSearch, setActiveSearch] = useState('');
-  const [activeFilters, setActiveFilters] = useState<FilterState>(EMPTY_FILTER_STATE);
-  const [activeSortCol, setActiveSortCol] = useState<SortColumn>('datum');
-  const [activeSortDir, setActiveSortDir] = useState<'asc' | 'desc'>('desc');
+  const [activeStatusFilterState, setActiveStatusFilter] = useState<ActiveStatusFilter>(pagination?.queries.active.status ?? 'alle');
+  const [activeSearchState, setActiveSearch] = useState(pagination?.queries.active.search ?? '');
+  const [activeFiltersState, setActiveFilters] = useState<FilterState>(pagination ? { clientIds: pagination.queries.active.clientIds, employeeIds: pagination.queries.active.employeeIds, dateFrom: pagination.queries.active.dateFrom, dateTo: pagination.queries.active.dateTo, entryType: pagination.queries.active.entryType } : EMPTY_FILTER_STATE);
+  const [activeSortColState, setActiveSortCol] = useState<SortColumn>(pagination?.queries.active.sort ?? 'datum');
+  const [activeSortDirState, setActiveSortDir] = useState<'asc' | 'desc'>(pagination?.queries.active.direction ?? 'desc');
 
   // Parkplatz section state
   const [parkplatzExpanded, setParkplatzExpanded] = useState(true);
-  const [parkplatzSearch, setParkplatzSearch] = useState('');
-  const [parkplatzFilters, setParkplatzFilters] = useState<FilterState>(EMPTY_FILTER_STATE);
-  const [parkplatzSortCol, setParkplatzSortCol] = useState<SortColumn>('datum');
-  const [parkplatzSortDir, setParkplatzSortDir] = useState<'asc' | 'desc'>('desc');
+  const [parkplatzSearchState, setParkplatzSearch] = useState(pagination?.queries.parked.search ?? '');
+  const [parkplatzFiltersState, setParkplatzFilters] = useState<FilterState>(pagination ? { clientIds: pagination.queries.parked.clientIds, employeeIds: pagination.queries.parked.employeeIds, dateFrom: pagination.queries.parked.dateFrom, dateTo: pagination.queries.parked.dateTo, entryType: pagination.queries.parked.entryType } : EMPTY_FILTER_STATE);
+  const [parkplatzSortColState, setParkplatzSortCol] = useState<SortColumn>(pagination?.queries.parked.sort ?? 'datum');
+  const [parkplatzSortDirState, setParkplatzSortDir] = useState<'asc' | 'desc'>(pagination?.queries.parked.direction ?? 'desc');
 
   // Archive section state
-  const [archiveExpanded, setArchiveExpanded] = useState(false);
-  const [archiveSearch, setArchiveSearch] = useState('');
-  const [archiveFilters, setArchiveFilters] = useState<FilterState>(EMPTY_FILTER_STATE);
-  const [archiveSortCol, setArchiveSortCol] = useState<SortColumn>('datum');
-  const [archiveSortDir, setArchiveSortDir] = useState<'asc' | 'desc'>('desc');
+  const [archiveExpandedState, setArchiveExpanded] = useState(pagination?.queries.archived.enabled ?? false);
+  const [archiveSearchState, setArchiveSearch] = useState(pagination?.queries.archived.search ?? '');
+  const [archiveFiltersState, setArchiveFilters] = useState<FilterState>(pagination ? { clientIds: pagination.queries.archived.clientIds, employeeIds: pagination.queries.archived.employeeIds, dateFrom: pagination.queries.archived.dateFrom, dateTo: pagination.queries.archived.dateTo, entryType: pagination.queries.archived.entryType } : EMPTY_FILTER_STATE);
+  const [archiveSortColState, setArchiveSortCol] = useState<SortColumn>(pagination?.queries.archived.sort ?? 'datum');
+  const [archiveSortDirState, setArchiveSortDir] = useState<'asc' | 'desc'>(pagination?.queries.archived.direction ?? 'desc');
 
+  const activeSearch = pagination && !navigation.busy ? pagination.queries.active.search : activeSearchState;
+  const activeSortCol = pagination && !navigation.busy ? pagination.queries.active.sort : activeSortColState;
+  const activeSortDir = pagination && !navigation.busy ? pagination.queries.active.direction : activeSortDirState;
+  const activeFilters = pagination && !navigation.busy ? { clientIds: pagination.queries.active.clientIds, employeeIds: pagination.queries.active.employeeIds, dateFrom: pagination.queries.active.dateFrom, dateTo: pagination.queries.active.dateTo, entryType: pagination.queries.active.entryType } : activeFiltersState;
+  const parkplatzSearch = pagination && !navigation.busy ? pagination.queries.parked.search : parkplatzSearchState;
+  const parkplatzSortCol = pagination && !navigation.busy ? pagination.queries.parked.sort : parkplatzSortColState;
+  const parkplatzSortDir = pagination && !navigation.busy ? pagination.queries.parked.direction : parkplatzSortDirState;
+  const parkplatzFilters = pagination && !navigation.busy ? { clientIds: pagination.queries.parked.clientIds, employeeIds: pagination.queries.parked.employeeIds, dateFrom: pagination.queries.parked.dateFrom, dateTo: pagination.queries.parked.dateTo, entryType: pagination.queries.parked.entryType } : parkplatzFiltersState;
+  const archiveSearch = pagination && !navigation.busy ? pagination.queries.archived.search : archiveSearchState;
+  const archiveSortCol = pagination && !navigation.busy ? pagination.queries.archived.sort : archiveSortColState;
+  const archiveSortDir = pagination && !navigation.busy ? pagination.queries.archived.direction : archiveSortDirState;
+  const archiveFilters = pagination && !navigation.busy ? { clientIds: pagination.queries.archived.clientIds, employeeIds: pagination.queries.archived.employeeIds, dateFrom: pagination.queries.archived.dateFrom, dateTo: pagination.queries.archived.dateTo, entryType: pagination.queries.archived.entryType } : archiveFiltersState;
+  const activeStatusFilter = pagination && !navigation.busy ? pagination.queries.active.status : activeStatusFilterState;
+  const archiveExpanded = pagination && !navigation.busy ? pagination.queries.archived.enabled : archiveExpandedState;
   // The create button lives in the page header outside the data boundary.
   const { open: createDialogOpen, setOpen: setCreateDialogOpen } = usePageAction();
 
@@ -331,17 +357,22 @@ export function AuftraegeContent({
     [unifiedEntries]
   );
 
+  const initialIds = useMemo(() => new Set([...initialJobs, ...initialProjects].map((entry) => entry.id)), [initialJobs, initialProjects]);
+  const localPendingIds = useMemo(() => new Set([...rowFeedback.pendingIds, ...settlingIds]), [rowFeedback.pendingIds, settlingIds]);
+
   // Active section pipeline: status pills -> search -> dropdown filters -> sort
   const activeStatusCounts = useMemo(() => {
+    if (pagination) return pagination.pages.active.statusCounts;
     const counts: Record<string, number> = { alle: rawActive.length };
     for (const entry of rawActive) {
       const status = getEntryUnifiedStatus(entry);
       counts[status] = (counts[status] || 0) + 1;
     }
     return counts;
-  }, [rawActive]);
+  }, [rawActive, pagination]);
 
   const filteredActive = useMemo(() => {
+    if (pagination) return retainPageEntries(rawActive, pagination.pages.active.entries.map((entry) => entry.id), initialIds, localPendingIds);
     const effectiveSortColumn = resolveAuftraegeSortColumn(activeSortCol, visibleColumns);
     let result = rawActive;
     if (activeStatusFilter !== 'alle') {
@@ -355,10 +386,11 @@ export function AuftraegeContent({
     result = applyDropdownFilters(result, activeFilters, jobAssignmentMap);
     result = sortUnifiedEntries(result, effectiveSortColumn, activeSortDir, clientMap);
     return result;
-  }, [rawActive, activeStatusFilter, activeSearch, activeFilters, activeSortCol, activeSortDir, clientMap, jobAssignmentMap, visibleColumns]);
+  }, [rawActive, activeStatusFilter, activeSearch, activeFilters, activeSortCol, activeSortDir, clientMap, jobAssignmentMap, visibleColumns, pagination, initialIds, localPendingIds]);
 
   // Parkplatz section pipeline: search -> dropdown filters -> sort
   const filteredParked = useMemo(() => {
+    if (pagination) return retainPageEntries(rawParked, pagination.pages.parked.entries.map((entry) => entry.id), initialIds, localPendingIds);
     const effectiveSortColumn = resolveAuftraegeSortColumn(parkplatzSortCol, visibleColumns);
     let result = rawParked;
     if (parkplatzSearch) {
@@ -367,10 +399,11 @@ export function AuftraegeContent({
     result = applyDropdownFilters(result, parkplatzFilters, jobAssignmentMap);
     result = sortUnifiedEntries(result, effectiveSortColumn, parkplatzSortDir, clientMap);
     return result;
-  }, [rawParked, parkplatzSearch, parkplatzFilters, parkplatzSortCol, parkplatzSortDir, clientMap, jobAssignmentMap, visibleColumns]);
+  }, [rawParked, parkplatzSearch, parkplatzFilters, parkplatzSortCol, parkplatzSortDir, clientMap, jobAssignmentMap, visibleColumns, pagination, initialIds, localPendingIds]);
 
   // Archive section pipeline: search -> dropdown filters -> sort
   const filteredArchived = useMemo(() => {
+    if (pagination) return retainPageEntries(rawArchived, pagination.pages.archived.entries.map((entry) => entry.id), initialIds, localPendingIds);
     const effectiveSortColumn = resolveAuftraegeSortColumn(archiveSortCol, visibleColumns);
     let result = rawArchived;
     if (archiveSearch) {
@@ -379,16 +412,16 @@ export function AuftraegeContent({
     result = applyDropdownFilters(result, archiveFilters, jobAssignmentMap);
     result = sortUnifiedEntries(result, effectiveSortColumn, archiveSortDir, clientMap);
     return result;
-  }, [rawArchived, archiveSearch, archiveFilters, archiveSortCol, archiveSortDir, clientMap, jobAssignmentMap, visibleColumns]);
+  }, [rawArchived, archiveSearch, archiveFilters, archiveSortCol, archiveSortDir, clientMap, jobAssignmentMap, visibleColumns, pagination, initialIds, localPendingIds]);
 
   const handleParkplatzSort = useCallback((col: SortColumn) => {
     if (col === parkplatzSortCol) {
-      setParkplatzSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+      setParkplatzSortDir(parkplatzSortDir === 'asc' ? 'desc' : 'asc');
     } else {
       setParkplatzSortCol(col);
       setParkplatzSortDir('desc');
     }
-  }, [parkplatzSortCol]);
+  }, [parkplatzSortCol, parkplatzSortDir]);
 
   const handleJobUpsert = useCallback((job: Job) => {
     setJobs((prev) => {
@@ -653,23 +686,24 @@ export function AuftraegeContent({
 
   const handleActiveSort = useCallback((col: SortColumn) => {
     if (col === activeSortCol) {
-      setActiveSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+      setActiveSortDir(activeSortDir === 'asc' ? 'desc' : 'asc');
     } else {
       setActiveSortCol(col);
       setActiveSortDir('asc');
     }
-  }, [activeSortCol]);
+  }, [activeSortCol, activeSortDir]);
 
   const handleArchiveSort = useCallback((col: SortColumn) => {
     if (col === archiveSortCol) {
-      setArchiveSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+      setArchiveSortDir(archiveSortDir === 'asc' ? 'desc' : 'asc');
     } else {
       setArchiveSortCol(col);
       setArchiveSortDir('desc');
     }
-  }, [archiveSortCol]);
+  }, [archiveSortCol, archiveSortDir]);
 
   return (
+    <UsableContent name="auftraege" count={jobs.length}>
     <div className="space-y-6">
       {/* Active section */}
       <section>
@@ -684,7 +718,7 @@ export function AuftraegeContent({
           {ACTIVE_FILTER_OPTIONS.map((opt) => (
             <button
               key={opt.value}
-              onClick={() => setActiveStatusFilter(opt.value)}
+              onClick={() => { setActiveStatusFilter(opt.value); if (pagination) navigateSection('active', { status: opt.value }); }}
               className={cn(
                 'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
                 activeStatusFilter === opt.value
@@ -705,21 +739,21 @@ export function AuftraegeContent({
 
         <FilterBar
           searchQuery={activeSearch}
-          onSearchChange={setActiveSearch}
+          onSearchChange={(value) => { setActiveSearch(value); if (pagination) navigateSection('active', { q: value }, 250); }}
           filters={activeFilters}
-          onFiltersChange={setActiveFilters}
+          onFiltersChange={(value) => { setActiveFilters(value); if (pagination) navigateSection('active', { clients: value.clientIds.join(','), employees: value.employeeIds.join(','), from: value.dateFrom, to: value.dateTo, type: value.entryType }); }}
           clients={clients}
           members={members}
         />
 
         <div className="mt-3">
-          <UnifiedAuftraegeTable
+          <UnifiedAuftraegeTable pagedChildren={Boolean(pagination)} projectAssignmentMap={Object.fromEntries(pagination ? Object.values(pagination.pages).flatMap((page) => page.entries.filter((entry) => entry.type === 'project').map((entry) => [entry.id, entry.assignedUserIds])) : [])}
             entries={filteredActive}
             clientMap={clientMap}
             isAdminOrManager={isAdminOrManager}
             sortColumn={resolveAuftraegeSortColumn(activeSortCol, visibleColumns)}
             sortDirection={activeSortDir}
-            onSort={handleActiveSort}
+            onSort={(column) => { handleActiveSort(column); if (pagination) navigateSection('active', { sort: column, direction: column === activeSortCol ? (activeSortDir === 'asc' ? 'desc' : 'asc') : 'asc' }); }}
             jobAssignmentMap={jobAssignmentMap}
             clients={clients}
             members={members}
@@ -730,11 +764,12 @@ export function AuftraegeContent({
             onProjectUpdated={handleProjectEdited}
             onProjectDeleteRequested={handleProjectDeleteRequested}
           />
+          {pagination && <ListPagination label="Aktuelle Aufträge" page={pagination.queries.active.page} total={pagination.pages.active.total} busy={navigation.busy} onPageChange={(page) => navigateSection('active', { page })} />}
         </div>
       </section>
 
       {/* Parkplatz section */}
-      {rawParked.length > 0 && (
+      {(pagination ? pagination.pages.parked.sectionTotal > 0 : rawParked.length > 0) && (
         <section>
           <button
             onClick={() => setParkplatzExpanded((v) => !v)}
@@ -750,7 +785,7 @@ export function AuftraegeContent({
               Parkplatz
             </h2>
             <span className="text-xs tabular-nums text-muted-foreground/70">
-              ({rawParked.length})
+              ({pagination?.pages.parked.sectionTotal ?? rawParked.length})
             </span>
           </button>
 
@@ -758,19 +793,19 @@ export function AuftraegeContent({
             <div className="space-y-3">
               <FilterBar
                 searchQuery={parkplatzSearch}
-                onSearchChange={setParkplatzSearch}
+                onSearchChange={(value) => { setParkplatzSearch(value); if (pagination) navigateSection('parked', { q: value }, 250); }}
                 filters={parkplatzFilters}
-                onFiltersChange={setParkplatzFilters}
+                onFiltersChange={(value) => { setParkplatzFilters(value); if (pagination) navigateSection('parked', { clients: value.clientIds.join(','), employees: value.employeeIds.join(','), from: value.dateFrom, to: value.dateTo, type: value.entryType }); }}
                 clients={clients}
                 members={members}
               />
-              <UnifiedAuftraegeTable
+              <UnifiedAuftraegeTable pagedChildren={Boolean(pagination)} projectAssignmentMap={Object.fromEntries(pagination ? Object.values(pagination.pages).flatMap((page) => page.entries.filter((entry) => entry.type === 'project').map((entry) => [entry.id, entry.assignedUserIds])) : [])}
                 entries={filteredParked}
                 clientMap={clientMap}
                 isAdminOrManager={isAdminOrManager}
                 sortColumn={resolveAuftraegeSortColumn(parkplatzSortCol, visibleColumns)}
                 sortDirection={parkplatzSortDir}
-                onSort={handleParkplatzSort}
+                onSort={(column) => { handleParkplatzSort(column); if (pagination) navigateSection('parked', { sort: column, direction: column === parkplatzSortCol ? (parkplatzSortDir === 'asc' ? 'desc' : 'asc') : 'desc' }); }}
                 jobAssignmentMap={jobAssignmentMap}
                 clients={clients}
                 members={members}
@@ -781,16 +816,17 @@ export function AuftraegeContent({
                 onProjectUpdated={handleProjectEdited}
                 onProjectDeleteRequested={handleProjectDeleteRequested}
               />
+              {pagination && <ListPagination label="Parkplatz" page={pagination.queries.parked.page} total={pagination.pages.parked.total} busy={navigation.busy} onPageChange={(page) => navigateSection('parked', { page })} />}
             </div>
           )}
         </section>
       )}
 
       {/* Archive section */}
-      {rawArchived.length > 0 && (
+      {(pagination ? pagination.pages.archived.sectionTotal > 0 : rawArchived.length > 0) && (
         <section>
           <button
-            onClick={() => setArchiveExpanded((v) => !v)}
+            onClick={() => { setArchiveExpanded((value) => !value); if (pagination) navigateSection('archived', { open: archiveExpanded ? null : '1' }); }}
             className="flex items-center gap-2 mb-3 group"
           >
             <ChevronRight
@@ -803,7 +839,7 @@ export function AuftraegeContent({
               Archiv
             </h2>
             <span className="text-xs tabular-nums text-muted-foreground/70">
-              ({rawArchived.length})
+              ({pagination?.pages.archived.sectionTotal ?? rawArchived.length})
             </span>
           </button>
 
@@ -811,19 +847,19 @@ export function AuftraegeContent({
             <div className="space-y-3">
               <FilterBar
                 searchQuery={archiveSearch}
-                onSearchChange={setArchiveSearch}
+                onSearchChange={(value) => { setArchiveSearch(value); if (pagination) navigateSection('archived', { q: value }, 250); }}
                 filters={archiveFilters}
-                onFiltersChange={setArchiveFilters}
+                onFiltersChange={(value) => { setArchiveFilters(value); if (pagination) navigateSection('archived', { clients: value.clientIds.join(','), employees: value.employeeIds.join(','), from: value.dateFrom, to: value.dateTo, type: value.entryType }); }}
                 clients={clients}
                 members={members}
               />
-              <UnifiedAuftraegeTable
+              <UnifiedAuftraegeTable pagedChildren={Boolean(pagination)} projectAssignmentMap={Object.fromEntries(pagination ? Object.values(pagination.pages).flatMap((page) => page.entries.filter((entry) => entry.type === 'project').map((entry) => [entry.id, entry.assignedUserIds])) : [])}
                 entries={filteredArchived}
                 clientMap={clientMap}
                 isAdminOrManager={isAdminOrManager}
                 sortColumn={resolveAuftraegeSortColumn(archiveSortCol, visibleColumns)}
                 sortDirection={archiveSortDir}
-                onSort={handleArchiveSort}
+                onSort={(column) => { handleArchiveSort(column); if (pagination) navigateSection('archived', { sort: column, direction: column === archiveSortCol ? (archiveSortDir === 'asc' ? 'desc' : 'asc') : 'desc' }); }}
                 isArchive
                 jobAssignmentMap={jobAssignmentMap}
                 clients={clients}
@@ -835,6 +871,7 @@ export function AuftraegeContent({
                 onProjectUpdated={handleProjectEdited}
                 onProjectDeleteRequested={handleProjectDeleteRequested}
               />
+              {pagination && <ListPagination label="Archiv" page={pagination.queries.archived.page} total={pagination.pages.archived.total} busy={navigation.busy} onPageChange={(page) => navigateSection('archived', { page })} />}
             </div>
           )}
         </section>
@@ -865,5 +902,6 @@ export function AuftraegeContent({
         </>
       )}
     </div>
+    </UsableContent>
   );
 }

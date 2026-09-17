@@ -49,6 +49,7 @@ const WEEKDAY_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'] as const;
 
 function shiftIsoDate(dateIso: string, days: number): string {
   const [year, month, day] = dateIso.split('-').map(Number);
+  if (year === undefined || month === undefined || day === undefined) throw new Error(`Invalid ISO date: ${dateIso}`);
   const shifted = new Date(Date.UTC(year, month - 1, day) + days * 86_400_000);
   return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, '0')}-${String(shifted.getUTCDate()).padStart(2, '0')}`;
 }
@@ -72,6 +73,7 @@ function originalStartMinute(occurrence: { originalStartLocal: string | null;
 
 function isWeekday(dateIso: string): boolean {
   const [year, month, day] = dateIso.split('-').map(Number);
+  if (year === undefined || month === undefined || day === undefined) throw new Error(`Invalid ISO date: ${dateIso}`);
   const jsWeekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
   return jsWeekday !== 0 && jsWeekday !== 6;
 }
@@ -79,6 +81,7 @@ function isWeekday(dateIso: string): boolean {
 // Monday-based weekday index (0 = Monday … 6 = Sunday), matching the form.
 function mondayWeekdayIndex(dateIso: string): number {
   const [year, month, day] = dateIso.split('-').map(Number);
+  if (year === undefined || month === undefined || day === undefined) throw new Error(`Invalid ISO date: ${dateIso}`);
   const jsWeekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
   return jsWeekday === 0 ? 6 : jsWeekday - 1;
 }
@@ -111,14 +114,15 @@ function a6WeekdayOffsets(): {
   const remaining = weekdayOffsets.filter(
     (offset) => offset !== pairOffsets![0] && offset !== pairOffsets![1]
   );
-  if (remaining.length < 3) {
+  const [pendingOffset, closureOffset, vacationOffset] = remaining;
+  if (pendingOffset === undefined || closureOffset === undefined || vacationOffset === undefined) {
     throw new Error('A6: not enough distinct weekdays inside +45…+54');
   }
   return {
-    pendingOffset: remaining[0],
+    pendingOffset,
     pairOffsets,
-    closureOffset: remaining[1],
-    vacationOffset: remaining[2],
+    closureOffset,
+    vacationOffset,
   };
 }
 
@@ -355,9 +359,9 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       jobNumber: visitJobNumber,
     });
     expect(visitState.occurrenceCount).toBe(1);
-    expect(visitState.occurrences[0].startAt).toBeNull();
-    expect(visitState.occurrences[0].startDate).toBe(visitDate);
-    expect(visitState.occurrences[0].endDateExclusive).toBe(shiftIsoDate(visitDate, 2));
+    expect(visitState.occurrences[0]?.startAt).toBeNull();
+    expect(visitState.occurrences[0]?.startDate).toBe(visitDate);
+    expect(visitState.occurrences[0]?.endDateExclusive).toBe(shiftIsoDate(visitDate, 2));
     await showPlanningMonth(adminPage, visitDate);
     await expect(plannedCalendarEvent(adminPage, visitTitle)).toBeVisible({
       timeout: 20_000,
@@ -375,6 +379,8 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     const weeklyStart = berlinDateAtOffset(70);
     const startWeekdayIndex = mondayWeekdayIndex(weeklyStart);
     const secondWeekdayIndex = (startWeekdayIndex + 1) % 7;
+    const secondWeekdayLabel = WEEKDAY_LABELS[secondWeekdayIndex];
+    if (!secondWeekdayLabel) throw new Error(`A6: no weekday label at index ${secondWeekdayIndex}`);
     await createPlannedCalendarEntry(adminPage, {
       kind: 'internal',
       internalTitle: weeklyTitle,
@@ -385,7 +391,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       recurrence: {
         frequency: 'weekly',
         count: 6,
-        weekdayLabels: [WEEKDAY_LABELS[secondWeekdayIndex]],
+        weekdayLabels: [secondWeekdayLabel],
       },
     });
     const expectedWeeklyDates: string[] = [];
@@ -408,6 +414,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     let monthlyStart: string | null = null;
     for (let monthOffset = 2; monthOffset <= 14 && !monthlyStart; monthOffset++) {
       const [year, month] = todayIso.split('-').map(Number);
+      if (year === undefined || month === undefined) throw new Error(`Invalid ISO date: ${todayIso}`);
       const anchor = new Date(Date.UTC(year, month - 1 + monthOffset, 31));
       if (anchor.getUTCDate() !== 31) continue;
       const candidate = `${anchor.getUTCFullYear()}-${String(anchor.getUTCMonth() + 1).padStart(2, '0')}-31`;
@@ -416,6 +423,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     if (!monthlyStart) throw new Error('A6: no month with a 31st found');
     const expectedMonthlyDates: string[] = [];
     const [startYear, startMonth] = monthlyStart.split('-').map(Number);
+    if (startYear === undefined || startMonth === undefined) throw new Error(`Invalid ISO date: ${monthlyStart}`);
     for (let monthOffset = 0; expectedMonthlyDates.length < 4; monthOffset += 1) {
       const candidate = new Date(Date.UTC(startYear, startMonth - 1 + monthOffset, 31));
       if (candidate.getUTCDate() !== 31) continue;
@@ -483,7 +491,8 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     // One click adds exactly the next six months of occurrences — twice, and
     // every occurrence identity stays unique (no duplicates on repetition).
     const computeExtension = (currentDates: string[]): string[] => {
-      const generatedThrough = currentDates[currentDates.length - 1];
+      const generatedThrough = currentDates.at(-1);
+      if (!generatedThrough) throw new Error('A6: the series has no generated dates to extend from');
       const extensionHorizon = addLocalMonthsClamped(generatedThrough, 6);
       const added: string[] = [];
       for (
@@ -965,8 +974,10 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       internalTitle: noLoginTitle,
     });
     expect(noLoginState.occurrenceCount).toBe(1);
+    const [noLoginOccurrence] = noLoginState.occurrences;
+    if (!noLoginOccurrence) throw new Error('A6: expected the no-login occurrence');
     expect(
-      await getOccurrenceAssignmentRecordIds(world.orgId, noLoginState.occurrences[0].id)
+      await getOccurrenceAssignmentRecordIds(world.orgId, noLoginOccurrence.id)
     ).toEqual([noLoginRecordId]);
 
     // Managers SEE the planned no-login person: the occurrence renders on the

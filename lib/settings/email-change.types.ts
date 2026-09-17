@@ -1,14 +1,13 @@
 export const CURRENT_EMAIL_OTP_LENGTH = 6;
 export const CURRENT_EMAIL_OTP_EXPIRY_MINUTES = 10;
 export const CURRENT_EMAIL_OTP_RESEND_COOLDOWN_SECONDS = 60;
-export const CURRENT_EMAIL_VERIFICATION_WINDOW_MINUTES = 10;
-export const CURRENT_EMAIL_MAX_ATTEMPTS = 5;
 
-export type EmailChangeWizardStep =
+type EmailChangeWizardStep =
   | 'idle'
   | 'verify_current'
   | 'enter_new'
-  | 'verify_new';
+  | 'verify_new'
+  | 'completion_pending';
 
 export type EmailChangeWizardState = {
   step: EmailChangeWizardStep;
@@ -36,10 +35,11 @@ export type EmailChangeActionError =
   | 'new_email_code_expired'
   | 'new_email_invalid_code'
   | 'new_email_too_many_attempts'
+  | 'completion_pending'
   | 'unexpected_error';
 
 export type EmailChangeActionResult = {
   success: boolean;
-  error?: EmailChangeActionError;
+  error?: EmailChangeActionError | undefined;
   state: EmailChangeWizardState;
 };

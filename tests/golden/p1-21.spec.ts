@@ -3,7 +3,7 @@ import { checkpointValue, saveCheckpoint } from "./support/checkpoints";
 
 import { expect, test } from "./support/fixtures";
 import { getTimeCaptureState, seedLegacyOpenTimeEntry } from "./support/db";
-import { clockInOnJob, clockOut, createJob } from "./support/steps";
+import { clockInOnJob, clockOut, createJob, openActivityDialogFromSheet } from "./support/steps";
 
 test.describe.configure({ mode: "serial" });
 
@@ -16,12 +16,7 @@ function requireCanonicalSessionId(): string {
 }
 
 async function switchActivity(page: Page, label: string): Promise<void> {
-  await page
-    .getByRole("button", { name: "Laufende Zeiterfassung öffnen" })
-    .click();
-  const dialog = page.getByRole("dialog").filter({
-    has: page.getByRole("heading", { name: "Aktivität wechseln" }),
-  });
+  const dialog = await openActivityDialogFromSheet(page);
   await dialog.getByRole("button", { name: label, exact: true }).click();
   await dialog.getByRole("button", { name: "Aktivität wechseln", exact: true }).click();
   await expect(dialog).toHaveCount(0, { timeout: 15_000 });
@@ -133,12 +128,7 @@ test.describe("P1-21 explicit time activities @P1-21", () => {
   }) => {
     await seedLegacyOpenTimeEntry(world.orgId, world.users.employee.id);
     await employeePage.goto("/dashboard");
-    await employeePage
-      .getByRole("button", { name: "Laufende Zeiterfassung öffnen" })
-      .click();
-    const dialog = employeePage.getByRole("dialog").filter({
-      has: employeePage.getByRole("heading", { name: "Aktivität wechseln" }),
-    });
+    const dialog = await openActivityDialogFromSheet(employeePage);
     await dialog.getByRole("button", { name: "Bereitschaft", exact: true }).click();
     await dialog.getByRole("button", { name: "Aktivität wechseln", exact: true }).click();
 

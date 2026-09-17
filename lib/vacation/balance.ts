@@ -74,6 +74,13 @@ export function countCalendarDaysInRange(
 ): number {
   const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
   const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
+  if (
+    !isValidIsoDate(startDate) || !isValidIsoDate(endDate) ||
+    startYear === undefined || startMonth === undefined || startDay === undefined ||
+    endYear === undefined || endMonth === undefined || endDay === undefined
+  ) {
+    throw new Error(`Invalid ISO date range: ${startDate} – ${endDate}`);
+  }
   const startUtc = Date.UTC(startYear, startMonth - 1, startDay);
   const endUtc = Date.UTC(endYear, endMonth - 1, endDay);
   return Math.round((endUtc - startUtc) / 86_400_000) + 1;
@@ -87,6 +94,13 @@ export function listIsoDatesInRange(
   const dates: string[] = [];
   const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
   const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
+  if (
+    !isValidIsoDate(startDate) || !isValidIsoDate(endDate) ||
+    startYear === undefined || startMonth === undefined || startDay === undefined ||
+    endYear === undefined || endMonth === undefined || endDay === undefined
+  ) {
+    throw new Error(`Invalid ISO date range: ${startDate} – ${endDate}`);
+  }
   const cursor = Date.UTC(startYear, startMonth - 1, startDay);
   const last = Date.UTC(endYear, endMonth - 1, endDay);
   for (let time = cursor; time <= last; time += 86_400_000) {

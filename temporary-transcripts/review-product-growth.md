@@ -195,7 +195,7 @@ Source: [2026-07-31-fix-what-is-broken-before-building-more ](product-growth-vid
 | --- | --- | --- | --- |
 | 01 | release-readiness | Candidate | Review live feature health and known failures before adding dependencies on broken behavior. |
 | 02 | security | Candidate | Session-dropping auth beneath notifications deserves investigation rather than unrelated feature expansion. |
-| 03 | performance | Candidate | A dashboard depending on poorly indexed queries is a concrete performance-investigation pattern, not proof our queries lack indexes. |
+| 03 | performance | Deferred | Reconsidered 2026-09-12. Poorly indexed dashboard queries are an investigation pattern, not an established defect here. Inspect representative safe query plans when a measured scenario identifies database cost or the larger workload is introduced. Do not add indexes based on a dashboard scan count alone. |
 | 04 | product-research | Candidate | Use support observations and actual usage to prioritize important broken workflows. |
 | 05 | product-scope | Not applicable | Automatically deleting unused/broken features would ignore rare mandatory workflows and contractual scope; require an owner decision. |
 | 06 | evidence-quality | Not applicable | The claims that customers never ask for features and AI never questions prerequisites are exaggerated. |

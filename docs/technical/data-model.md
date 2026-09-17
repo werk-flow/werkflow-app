@@ -1,6 +1,6 @@
 # Conceptual Data Model
 
-Status: living — last reviewed 2026-09-05
+Status: living — last reviewed 2026-09-17
 
 This document describes WerkFlow's domain model at a conceptual level. It is not a schema dump.
 
@@ -268,7 +268,7 @@ Inventory V1 is implemented. At a conceptual level it separates:
 - basic tool/asset instances;
 - import batches and inventory audit events.
 
-`inventory_movements` and `inventory_audit_events` are append-only by application convention only. The RLS policies in migration `20260706110018` grant inventory managers `FOR ALL`, and no immutability trigger exists on either table, unlike the ledgers of every slice since P1-14. The gap is flagged for the hardening pass.
+`inventory_movements` and `inventory_audit_events` are append-only by application convention only. The RLS policies in migration `20260706110018` grant inventory managers `FOR ALL`, and no immutability trigger exists on either table, unlike the ledgers of every slice since P1-14. The September 2026 hardening (migration `20260907010100_protect_existing_event_ledgers`) guarded eleven event ledgers and left the inventory pair to Wave 3: `P1-27`, the first slice that writes movements from the field at volume, adds the same `guard_event_ledger_history` trigger to both tables (owner decision 2026-09-17).
 
 Future procurement, reservation, transfer, lifecycle, valuation, commercial, and automation capabilities are defined in [inventory.md](../features/inventory.md). Inspect live Supabase and generated types before schema-aware work.
 

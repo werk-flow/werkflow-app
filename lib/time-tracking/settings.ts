@@ -5,8 +5,8 @@ import { computeTimeBreakdown, type TimeBreakdown } from '@/lib/time-tracking/he
 
 export type OrgBreakMode = Database['public']['Enums']['time_tracking_break_mode']
 
-export const DEFAULT_AUTO_BREAK_THRESHOLD_MINUTES = 360
-export const DEFAULT_AUTO_BREAK_DURATION_MINUTES = 30
+const DEFAULT_AUTO_BREAK_THRESHOLD_MINUTES = 360
+const DEFAULT_AUTO_BREAK_DURATION_MINUTES = 30
 
 export const BREAK_MODE_OPTIONS: Array<{
   value: OrgBreakMode
@@ -126,8 +126,9 @@ export function resolveBreakPolicyAtTimestamp(
   'breakMode' | 'autoBreakThresholdMinutes' | 'autoBreakDurationMinutes'
 > {
   const history = settings.breakPolicyHistory
+  const [earliestEntry] = history
 
-  if (history.length === 0 || !referenceTimestamp) {
+  if (!earliestEntry || !referenceTimestamp) {
     return {
       breakMode: settings.breakMode,
       autoBreakThresholdMinutes: settings.autoBreakThresholdMinutes,
@@ -152,7 +153,7 @@ export function resolveBreakPolicyAtTimestamp(
     [...history]
       .reverse()
       .find((entry) => new Date(entry.effectiveFrom).getTime() <= referenceMs) ??
-    history[0]
+    earliestEntry
 
   return {
     breakMode: matchingEntry.breakMode,

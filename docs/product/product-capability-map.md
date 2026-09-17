@@ -278,6 +278,8 @@ Phase 2 should advance through controlled levels:
 
 Skipping directly to a generic agent builder would increase complexity and risk before the product has stable actions or understandable failure handling.
 
+The owner decided on 2026-09-17 that a bounded pilot lane for two Level 1 assist slices opens after Wave 4, before Phase 1 closes; the [AI spec](../features/ai-automations.md#the-pilot-lane-after-wave-4) defines it and the roadmap carries it as the one exception to its Phase 2 rule.
+
 ## What WerkFlow Should Learn, Not Copy
 
 The competitor research supports several product guardrails:
@@ -336,7 +338,7 @@ Every feature spec should keep these sections current:
 8. **Open Product Decisions**
 9. **Related Docs**
 
-One spec carries extra sections by design. `document-management.md` keeps the nine standard sections since 2026-09-03; its implementation reference lives in [document-storage-and-access.md](../technical/document-storage-and-access.md). `ai-automations.md` has foundations rather than features as its Phase 1 scope, so its Phase 1 section is titled "Phase 1 — Complete Operational Core Enabling Foundations" and it adds In-App And External Automation, Human-Control Levels, and Trust, Security, And Operational Requirements.
+One spec carries extra sections by design. [document-management.md](../features/document-management.md) keeps the nine standard sections since 2026-09-03; its implementation reference lives in [document-storage-and-access.md](../technical/document-storage-and-access.md). [ai-automations.md](../features/ai-automations.md) has foundations rather than features as its Phase 1 scope, so its Phase 1 section is titled "Phase 1 — Complete Operational Core Enabling Foundations" and it adds In-App And External Automation, Human-Control Levels, and Trust, Security, And Operational Requirements.
 
 When behavior is implemented:
 

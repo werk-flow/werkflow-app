@@ -3,6 +3,11 @@ import { retryBeforeSubmit } from "../../../lib/testing/retry-before-submit";
 
 // Pages often render the same text twice (desktop table + hidden mobile card);
 // assertions must target the visible instance.
+/** First visible match of a pattern; responsive views can render the same text twice. */
+export function visibleMatchingText(page: Page, text: RegExp): Locator {
+  return page.getByText(text).filter({ visible: true }).first();
+}
+
 export function visibleText(
   container: Page | Locator,
   text: string,
@@ -62,7 +67,7 @@ export async function retryDialogTransaction(input: {
     },
     submit: input.submit,
     canRetryPreparation: async () => (await input.dialog.count()) === 0,
-    attempts: input.attempts,
+    ...(input.attempts !== undefined ? { attempts: input.attempts } : {}),
   });
   await expect(input.dialog).toHaveCount(0, { timeout: 20_000 });
 }
@@ -111,9 +116,15 @@ export async function createCustomer(
   name: string,
   options?: { type?: "Privat" | "Gewerblich"; address?: string;
     beforeSubmit?: () => void | Promise<void>;
+    /**
+     * The caller already prepared the page on /kunden (for example after
+     * waiting for its own Realtime readiness). A fresh navigation would
+     * restart that page's load burst inside a measured window.
+     */
+    navigate?: boolean;
   },
 ): Promise<void> {
-  await page.goto("/kunden");
+  if (options?.navigate !== false) await page.goto("/kunden");
   await page.getByRole("button", { name: "Kunde hinzufügen" }).click();
   await expect(
     page.getByRole("heading", { name: "Neuen Kunden anlegen" }),
@@ -705,51 +716,74 @@ async function selectJobInPicker(
     .click();
 }
 
+// The clock button opens a sheet of next actions (pre-Wave-3 step 3); one tap
+// per transition, the job picker for job choices, "Weitere Aktivitäten …" for
+// the full activity dialog. These helpers are the one home per flow.
+function openClockSheet(page: Page, expectRunning: boolean): Locator {
+  return page.getByRole("dialog").filter({
+    has: page.getByRole("heading", {
+      name: expectRunning ? "Laufende Zeiterfassung" : "Zeiterfassung starten",
+    }),
+  });
+}
+
+async function openRunningClockSheet(page: Page): Promise<Locator> {
+  await page.locator('button[title="Zeiterfassung öffnen"]').click();
+  const sheet = openClockSheet(page, true);
+  await expect(sheet).toBeVisible();
+  return sheet;
+}
+
+/** Opens the full activity dialog from the running sheet ("Weitere Aktivitäten …"). */
+export async function openActivityDialogFromSheet(page: Page): Promise<Locator> {
+  const sheet = await openRunningClockSheet(page);
+  await sheet.getByRole("button", { name: "Weitere Aktivitäten …" }).click();
+  const dialog = page.getByRole("dialog").filter({
+    has: page.getByRole("heading", { name: "Aktivität wechseln" }),
+  });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
 export async function clockInOnJob(
   page: Page,
   jobTitle?: string,
 ): Promise<void> {
   await page.goto("/dashboard");
   await page.locator('button[title="Zeiterfassung starten"]').click();
-  const dialog = page.getByRole("dialog").filter({
-    has: page.getByRole("heading", { name: "Zeiterfassung starten" }),
-  });
-  await expect(dialog).toBeVisible();
+  const sheet = openClockSheet(page, false);
+  await expect(sheet).toBeVisible();
 
   if (jobTitle) {
-    await dialog.getByRole("button", { name: "Ohne Auftrag" }).click();
+    await sheet.getByRole("button", { name: "Arbeit an Auftrag …" }).click();
     const picker = page.getByRole("dialog").filter({
       has: page.getByRole("heading", { name: "Einstempeln" }),
     });
     await selectJobInPicker(picker, jobTitle);
     await picker.getByRole("button", { name: "Einstempeln", exact: true }).click();
+  } else {
+    await sheet.getByRole("button", { name: "Arbeit starten", exact: true }).click();
   }
 
-  await dialog.getByRole("button", { name: "Starten", exact: true }).click();
+  await expect(sheet).toHaveCount(0, { timeout: 15_000 });
   await expect(page.locator('button[title="Zeiterfassung öffnen"]')).toBeVisible({
     timeout: 15_000,
   });
 }
 
 export async function clockOut(page: Page): Promise<void> {
-  await page.locator('button[title="Zeiterfassung öffnen"]').click();
-  const dialog = page.getByRole("dialog").filter({
-    has: page.getByRole("heading", { name: "Aktivität wechseln" }),
-  });
-  await dialog.getByRole("button", { name: "Erfassung beenden" }).click();
+  const sheet = await openRunningClockSheet(page);
+  await sheet.getByRole("button", { name: "Erfassung beenden" }).click();
   await expect(page.locator('button[title="Zeiterfassung starten"]')).toBeVisible({
     timeout: 15_000,
   });
 }
 
 export async function startClockBreak(page: Page): Promise<void> {
-  await page.locator('button[title="Zeiterfassung öffnen"]').click();
-  const dialog = page.getByRole("dialog").filter({
-    has: page.getByRole("heading", { name: "Aktivität wechseln" }),
-  });
-  await dialog.getByRole("button", { name: "Pause", exact: true }).click();
-  await dialog.getByRole("button", { name: "Aktivität wechseln", exact: true }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+  const sheet = await openRunningClockSheet(page);
+  await sheet.getByRole("button", { name: "Pause", exact: true }).click();
+  await expect(sheet).toHaveCount(0, { timeout: 15_000 });
+  // The pill above the button names the running break.
   await expect(page.getByRole("button", { name: /^Pause/ })).toBeVisible({
     timeout: 15_000,
   });
@@ -759,44 +793,32 @@ export async function endClockBreak(
   page: Page,
   jobTitle?: string,
 ): Promise<void> {
-  await page.locator('button[title="Zeiterfassung öffnen"]').click();
-  const dialog = page.getByRole("dialog").filter({
-    has: page.getByRole("heading", { name: "Aktivität wechseln" }),
-  });
-  await dialog.getByRole("button", { name: "Arbeit", exact: true }).click();
+  const sheet = await openRunningClockSheet(page);
   if (jobTitle) {
-    await dialog.getByRole("button", {
-      name: /^Auftrag auswählen:/,
-    }).click();
+    await sheet.getByRole("button", { name: "Anderer Auftrag …" }).click();
     const picker = page.getByRole("dialog").filter({
-      has: page.getByRole("heading", { name: "Auftrag wechseln" }),
+      has: page.getByRole("heading", { name: "Arbeit fortsetzen" }),
     });
     await selectJobInPicker(picker, jobTitle);
-    await picker.getByRole("button", { name: "Wechseln", exact: true }).click();
+    await picker.getByRole("button", { name: "Fortsetzen", exact: true }).click();
+  } else {
+    await sheet.getByRole("button", { name: /^Weiter/ }).first().click();
   }
-  await dialog.getByRole("button", { name: "Aktivität wechseln", exact: true }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+  await expect(sheet).toHaveCount(0, { timeout: 15_000 });
 }
 
 export async function switchClockJob(
   page: Page,
   jobTitle: string,
 ): Promise<void> {
-  await page.locator('button[title="Zeiterfassung öffnen"]').click();
-  const dialog = page.getByRole("dialog").filter({
-    has: page.getByRole("heading", { name: "Aktivität wechseln" }),
-  });
-  await dialog.getByRole("button", { name: "Arbeit", exact: true }).click();
-  await dialog.getByRole("button", {
-    name: /^Auftrag auswählen:/,
-  }).click();
+  const sheet = await openRunningClockSheet(page);
+  await sheet.getByRole("button", { name: /^Auftrag (wechseln|zuordnen) …$/ }).click();
   const picker = page.getByRole("dialog").filter({
     has: page.getByRole("heading", { name: "Auftrag wechseln" }),
   });
   await selectJobInPicker(picker, jobTitle);
   await picker.getByRole("button", { name: "Wechseln", exact: true }).click();
-  await dialog.getByRole("button", { name: "Aktivität wechseln", exact: true }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+  await expect(sheet).toHaveCount(0, { timeout: 15_000 });
 }
 
 export async function createInventoryLocation(
@@ -1741,13 +1763,13 @@ export async function createRequestViaDialog(
     timeout: 15_000,
   });
 
-  const match = page.url().match(/\/anfragen\/([0-9a-f-]{36})/);
-  if (!match) {
+  const requestId = page.url().match(/\/anfragen\/([0-9a-f-]{36})/)?.[1];
+  if (!requestId) {
     throw new Error(
       "createRequestViaDialog: could not read the request id from the URL",
     );
   }
-  return match[1];
+  return requestId;
 }
 
 export async function uploadDocumentOnRequestDetail(
@@ -2042,13 +2064,11 @@ export async function typeIntoDatePickerById(
 ): Promise<void> {
   const digits = `${isoDate.slice(8, 10)}${isoDate.slice(5, 7)}${isoDate.slice(0, 4)}`;
   const group = scope.locator(`#${id}`);
-  await group.click({ timeout: options?.timeout });
-  await group.press("ArrowLeft", { timeout: options?.timeout });
-  await group.press("ArrowLeft", { timeout: options?.timeout });
-  await group.pressSequentially(digits, {
-    delay: 50,
-    timeout: options?.timeout,
-  });
+  const timeoutOptions = options?.timeout !== undefined ? { timeout: options.timeout } : {};
+  await group.click(timeoutOptions);
+  await group.press("ArrowLeft", timeoutOptions);
+  await group.press("ArrowLeft", timeoutOptions);
+  await group.pressSequentially(digits, { delay: 50, ...timeoutOptions });
 }
 
 // DateTimeField (DatePicker + TimeInput over one combined value). Accepts the
@@ -2060,6 +2080,7 @@ export async function typeIntoDateTimeField(
   options?: { timeout?: number },
 ): Promise<void> {
   const [datePart, timePart] = localValue.split("T");
+  if (!datePart) throw new Error("typeIntoDateTimeField requires a 'YYYY-MM-DD[THH:mm]' value");
   await typeIntoDatePickerById(scope, `${idPrefix}-date`, datePart, options);
   if (timePart) {
     await typeIntoTimeInput(
@@ -2330,19 +2351,14 @@ export async function typeIntoTimeInput(
     throw new Error("typeIntoTimeInput requires exactly four HHMM digits");
   }
   const group = dialog.locator(`#${id}`);
-  await group.focus({ timeout: options?.timeout });
-  await group.press("ArrowLeft", { timeout: options?.timeout });
-  await group.press("Delete", { timeout: options?.timeout });
-  await group.pressSequentially(digits.slice(0, 2), {
-    delay: 50,
-    timeout: options?.timeout,
-  });
-  await group.press("ArrowRight", { timeout: options?.timeout });
-  await group.press("Delete", { timeout: options?.timeout });
-  await group.pressSequentially(digits.slice(2), {
-    delay: 50,
-    timeout: options?.timeout,
-  });
+  const timeoutOptions = options?.timeout !== undefined ? { timeout: options.timeout } : {};
+  await group.focus(timeoutOptions);
+  await group.press("ArrowLeft", timeoutOptions);
+  await group.press("Delete", timeoutOptions);
+  await group.pressSequentially(digits.slice(0, 2), { delay: 50, ...timeoutOptions });
+  await group.press("ArrowRight", timeoutOptions);
+  await group.press("Delete", timeoutOptions);
+  await group.pressSequentially(digits.slice(2), { delay: 50, ...timeoutOptions });
 }
 
 export async function createOwnManualTimeEntry(
@@ -2631,13 +2647,13 @@ export async function createPersonnelRecordViaDialog(
     await page.waitForURL(/\/mitarbeiter\/[0-9a-f-]{36}/, { timeout: 20_000 });
   }
 
-  const match = page.url().match(/\/mitarbeiter\/([0-9a-f-]{36})/);
-  if (!match) {
+  const recordId = page.url().match(/\/mitarbeiter\/([0-9a-f-]{36})/)?.[1];
+  if (!recordId) {
     throw new Error(
       "createPersonnelRecordViaDialog: could not read the record id",
     );
   }
-  return match[1];
+  return recordId;
 }
 
 export async function sendInviteFromPersonnelRecord(
@@ -2702,10 +2718,10 @@ export async function addWorkScheduleViaDialog(
         );
       }
       if (options.dayHours) {
-        for (let index = 0; index < options.dayHours.length; index++) {
+        for (const [index, hours] of options.dayHours.entries()) {
           await dialog
             .locator(`#schedule-day-${index}`)
-            .fill(options.dayHours[index], { timeout: 5_000 });
+            .fill(hours, { timeout: 5_000 });
         }
       }
       if (options.note !== undefined) {
@@ -2752,7 +2768,7 @@ export async function setHolidayRegionViaSettings(
 
 export async function addClosureDayViaSettings(
   page: Page,
-  options: { dateDigits: string; label?: string },
+  options: { dateDigits: string; label?: string; beforeSubmit?: () => Promise<void> },
 ): Promise<void> {
   await page.goto("/einstellungen/zeiterfassung");
   await typeIntoDatePicker(
@@ -2763,6 +2779,7 @@ export async function addClosureDayViaSettings(
   if (options.label !== undefined) {
     await page.locator("#closure-label").fill(options.label);
   }
+  await options.beforeSubmit?.();
   await page.getByRole("button", { name: "Eintragen" }).click();
   await expect(
     page.getByText("Der Betriebsruhe-Tag wurde eingetragen."),
@@ -2776,9 +2793,11 @@ export async function addClosureDayViaSettings(
 export async function removeClosureDayViaSettings(
   page: Page,
   dateLabel: string,
+  beforeSubmit?: () => Promise<void>,
 ): Promise<void> {
   await page.goto("/einstellungen/zeiterfassung");
   const escaped = dateLabel.replace(/\./g, "\\.");
+  await beforeSubmit?.();
   await page
     .getByRole("button", {
       name: new RegExp(`Betriebsruhe am .*${escaped} entfernen`),
@@ -3148,7 +3167,7 @@ export async function expectClockInBlockedByVacation(
   await expect(
     page.getByRole("heading", { name: "Zeiterfassung starten" }),
   ).toBeVisible();
-  await page.getByRole("dialog").getByRole("button", { name: "Starten", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Arbeit starten", exact: true }).click();
   await expect(visibleText(page, "Heute ist Urlaub genehmigt")).toBeVisible({
     timeout: 15_000,
   });
@@ -3372,19 +3391,6 @@ export async function setSicknessEvidenceViaMenu(
   await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 15_000 });
 }
 
-export async function endSicknessReportViaMenu(
-  page: Page,
-  rangeText: string,
-  endDigits: string,
-): Promise<void> {
-  await openSicknessReportMenu(page, rangeText, /Enddatum (setzen|ändern)/);
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toBeVisible();
-  await typeIntoDatePicker(dialog, "Letzter Tag", endDigits);
-  await dialog.getByRole("button", { name: "Enddatum speichern" }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 15_000 });
-}
-
 export async function cancelSicknessReportViaMenuWithReason(
   page: Page,
   rangeText: string,
@@ -3416,7 +3422,7 @@ export async function expectClockInNoticeForSickness(
   await expect(
     page.getByRole("heading", { name: "Zeiterfassung starten" }),
   ).toBeVisible();
-  await page.getByRole("dialog").getByRole("button", { name: "Starten", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Arbeit starten", exact: true }).click();
   await expect(
     visibleText(page, "Für heute liegt eine Krankmeldung vor"),
   ).toBeVisible({
@@ -3761,6 +3767,13 @@ export type PlanningEntryStepOptions = {
     weekdayLabels?: string[];
   };
   overrideReason?: string;
+  /**
+   * Submission boundary for measured freshness: runs immediately before the
+   * click that persists the entry. With an override reason it runs before
+   * the override click; a save that closes without the expected warning
+   * then fails the measurement instead of starting its clock late.
+   */
+  beforeSubmit?: () => void | Promise<void>;
 };
 
 async function selectPlanningOption(
@@ -3792,7 +3805,9 @@ async function finishPlanningSave(
   dialog: Locator,
   firstButtonName: RegExp,
   overrideReason?: string,
+  beforeSubmit?: () => void | Promise<void>,
 ): Promise<void> {
+  if (!overrideReason) await beforeSubmit?.();
   await dialog.getByRole("button", { name: firstButtonName }).click();
   await expect
     .poll(
@@ -3812,7 +3827,14 @@ async function finishPlanningSave(
     )
     .not.toBe("pending");
 
-  if (!(await dialog.isVisible().catch(() => false))) return;
+  if (!(await dialog.isVisible().catch(() => false))) {
+    if (overrideReason && beforeSubmit) {
+      throw new Error(
+        "Planning saved without the expected warning; the measured submission boundary was never marked.",
+      );
+    }
+    return;
+  }
   if (!overrideReason) {
     throw new Error(
       "Planning produced warnings but no override reason was supplied",
@@ -3822,6 +3844,7 @@ async function finishPlanningSave(
     .locator("#planning-override, #planning-edit-reason")
     .first();
   await reasonInput.fill(overrideReason);
+  await beforeSubmit?.();
   await dialog
     .getByRole("button", {
       name: /Mit Begr.ndung planen|.nderung speichern/,
@@ -3943,6 +3966,7 @@ export async function createPlannedCalendarEntry(
     dialog,
     /Planung pr.fen und speichern/,
     options.overrideReason,
+    options.beforeSubmit,
   );
 }
 
@@ -4046,11 +4070,12 @@ export async function showPlanningMonth(
         .filter((date): date is string => Boolean(date)),
     );
     if (primaryMonthDates.includes(targetDate)) return;
-    if (primaryMonthDates.length === 0) {
+    const [firstPrimaryMonthDate] = primaryMonthDates;
+    if (!firstPrimaryMonthDate) {
       throw new Error("The planning month grid has no primary-month cells.");
     }
     const previousGrid = primaryMonthDates.join(",");
-    const direction = targetDate < primaryMonthDates[0] ? /Zur.ck/ : "Weiter";
+    const direction = targetDate < firstPrimaryMonthDate ? /Zur.ck/ : "Weiter";
     await page.getByRole("button", { name: direction }).click();
     await expect
       .poll(
@@ -4290,50 +4315,6 @@ export function parkplatzCard(page: Page, title: string): Locator {
   return page
     .locator("[data-parkplatz-pill]")
     .filter({ has: page.getByText(title, { exact: true }) });
-}
-
-export async function setParkingContextFromParkplatz(
-  page: Page,
-  options: {
-    jobTitle: string;
-    reasonLabel: string;
-    note?: string;
-    responsibleName?: string;
-    reviewDigits?: string;
-  },
-): Promise<void> {
-  const card = parkplatzCard(page, options.jobTitle);
-  await expect(card).toBeVisible({ timeout: 20_000 });
-  // The buttons carry job-specific aria-labels ("Parkplatz-Kontext für <Titel>
-  // ergänzen"); match the full accessible name.
-  await card
-    .getByRole("button", { name: /Kontext.*(ergänzen|bearbeiten)/ })
-    .click();
-  const dialog = page
-    .getByRole("dialog")
-    .filter({ has: page.getByRole("heading", { name: "Parkplatz-Kontext" }) });
-  await selectFromSearchable(
-    page,
-    dialog.locator("#parking-reason"),
-    options.reasonLabel,
-  );
-  if (options.note) await dialog.locator("#parking-note").fill(options.note);
-  if (options.responsibleName) {
-    await selectFromSearchable(
-      page,
-      dialog.locator("#parking-responsible"),
-      options.responsibleName,
-    );
-  }
-  if (options.reviewDigits) {
-    await typeIntoDatePicker(
-      dialog,
-      "Wiedervorlagedatum",
-      options.reviewDigits,
-    );
-  }
-  await dialog.getByRole("button", { name: "Kontext speichern" }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
 }
 
 export async function dispatchParkedJobFromParkplatz(
@@ -4864,13 +4845,13 @@ export async function createDirectServiceCase(
   await page.waitForURL(/\/service\/faelle\/SRV-\d{4}-\d{3}/, {
     timeout: 20_000,
   });
-  const match = page.url().match(/\/service\/faelle\/(SRV-\d{4}-\d{3})/);
-  if (!match)
+  const serviceCaseNumber = page.url().match(/\/service\/faelle\/(SRV-\d{4}-\d{3})/)?.[1];
+  if (!serviceCaseNumber)
     throw new Error("createDirectServiceCase: service case number missing");
   await expect(visibleText(page, options.statement)).toBeVisible({
     timeout: 15_000,
   });
-  return match[1];
+  return serviceCaseNumber;
 }
 
 export async function convertRequestToServiceCase(page: Page): Promise<string> {
@@ -4887,10 +4868,10 @@ export async function convertRequestToServiceCase(page: Page): Promise<string> {
   await page.waitForURL(/\/service\/faelle\/SRV-\d{4}-\d{3}/, {
     timeout: 20_000,
   });
-  const match = page.url().match(/\/service\/faelle\/(SRV-\d{4}-\d{3})/);
-  if (!match)
+  const serviceCaseNumber = page.url().match(/\/service\/faelle\/(SRV-\d{4}-\d{3})/)?.[1];
+  if (!serviceCaseNumber)
     throw new Error("convertRequestToServiceCase: service case number missing");
-  return match[1];
+  return serviceCaseNumber;
 }
 
 export async function updateServiceCaseViaDialog(

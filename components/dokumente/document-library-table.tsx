@@ -1,5 +1,7 @@
 "use client";
 
+import { formatGermanDate as formatDate } from '@/lib/utils';
+import { formatFileSize } from '@/lib/documents/format';
 import {
   useEffect,
   useMemo,
@@ -76,7 +78,7 @@ function SkeletonSelectionCircle({ visible = false }: { visible?: boolean }) {
 // One column definition for the loaded header, the empty row and the skeleton
 // (design canon): widths, breakpoints and cell count cannot drift apart. The
 // loaded header swaps in the live selection control and sort buttons.
-export const DOCUMENT_COLUMNS: readonly DocumentColumn[] = [
+const DOCUMENT_COLUMNS: readonly DocumentColumn[] = [
   {
     id: "selection",
     header: <SkeletonSelectionCircle visible />,
@@ -263,20 +265,6 @@ function startDocumentDragState() {
 
 function clearDocumentDragState() {
   document.body.style.userSelect = "";
-}
-
-function formatFileSize(sizeBytes: number): string {
-  if (sizeBytes < 1024) return `${sizeBytes} B`;
-  if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
-  return `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function formatDate(date: string): string {
-  return new Intl.DateTimeFormat("de-DE", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(new Date(date));
 }
 
 function getUploaderName(document: OrganizationDocument): string {
@@ -496,7 +484,7 @@ function SortableHeader({
   currentColumn: DocumentTableSortColumn;
   currentDirection: SortDirection;
   onSort: (column: DocumentTableSortColumn) => void;
-  className?: string;
+  className?: string | undefined;
 }) {
   const isActive = currentColumn === column;
 

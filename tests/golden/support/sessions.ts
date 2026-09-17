@@ -39,7 +39,7 @@ function storageStateHasOrganization(path: string, organizationId: string): bool
   }
 }
 
-export async function loginAndSaveRoleSession(input: {
+async function loginAndSaveRoleSession(input: {
   browser: Browser;
   baseUrl: string;
   user: TestUser;
@@ -96,7 +96,7 @@ export async function loginAndSaveRoleSession(input: {
   }
 }
 
-export async function verifyStoredRoleSession(input: {
+async function verifyStoredRoleSession(input: {
   browser: Browser;
   baseUrl: string;
   organizationId: string;

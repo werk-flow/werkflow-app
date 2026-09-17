@@ -15,9 +15,10 @@ type JobAssignmentMap = Record<string, string[]>;
 type UseLiveAuftraegeDataArgs = {
   initialJobs: Job[];
   initialProjects: ProjectWithDetails[];
-  supportProjects?: ProjectWithDetails[];
+  supportProjects?: ProjectWithDetails[] | undefined;
   initialJobAssignmentMap: JobAssignmentMap;
   clients: Client[];
+  preserveProjectCounts?: boolean;
 };
 
 function mergeProjects(
@@ -113,6 +114,7 @@ export function useLiveAuftraegeData({
   supportProjects,
   initialJobAssignmentMap,
   clients,
+  preserveProjectCounts = false,
 }: UseLiveAuftraegeDataArgs) {
   const [jobs, setJobs] = useState<Job[]>(initialJobs);
   const [rawProjects, setRawProjects] = useState<Project[]>(
@@ -142,8 +144,8 @@ export function useLiveAuftraegeData({
   }, [initialJobAssignmentMap]);
 
   const projects = useMemo(
-    () => deriveProjects(rawProjects, jobs, clients),
-    [rawProjects, jobs, clients]
+    () => preserveProjectCounts ? rawProjects.map((project) => ({ ...project, ...(initialProjects.find((initial) => initial.id === project.id) ?? { client: null, jobCount: 0, completedJobCount: 0, inProgressJobCount: 0, parkedJobCount: 0 }), ...project })) : deriveProjects(rawProjects, jobs, clients),
+    [rawProjects, jobs, clients, preserveProjectCounts, initialProjects]
   );
 
   return {

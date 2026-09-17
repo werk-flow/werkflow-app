@@ -26,9 +26,9 @@ describe('batch reschedule math', () => {
     });
     expect(result.success).toBe(true);
     if (!result.success) return;
-    expect(result.items[0].startAt).toBe('2026-09-09T07:00:00.000Z');
-    expect(result.items[0].endAt).toBe('2026-09-09T09:00:00.000Z');
-    expect(result.items[0].expectedVersion).toBe(3);
+    expect(result.items[0]?.startAt).toBe('2026-09-09T07:00:00.000Z');
+    expect(result.items[0]?.endAt).toBe('2026-09-09T09:00:00.000Z');
+    expect(result.items[0]?.expectedVersion).toBe(3);
   });
 
   test('a uniform new time replaces the wall time for every item', () => {
@@ -45,11 +45,11 @@ describe('batch reschedule math', () => {
     );
     expect(result.success).toBe(true);
     if (!result.success) return;
-    expect(result.items[0].startAt).toBe('2026-09-07T04:30:00.000Z');
-    expect(result.items[1].startAt).toBe('2026-09-08T04:30:00.000Z');
+    expect(result.items[0]?.startAt).toBe('2026-09-07T04:30:00.000Z');
+    expect(result.items[1]?.startAt).toBe('2026-09-08T04:30:00.000Z');
     // Durations preserved: 2h and 1h.
-    expect(result.items[0].endAt).toBe('2026-09-07T06:30:00.000Z');
-    expect(result.items[1].endAt).toBe('2026-09-08T05:30:00.000Z');
+    expect(result.items[0]?.endAt).toBe('2026-09-07T06:30:00.000Z');
+    expect(result.items[1]?.endAt).toBe('2026-09-08T05:30:00.000Z');
   });
 
   test('shifting across the autumn DST change keeps 09:00 wall time', () => {
@@ -66,9 +66,9 @@ describe('batch reschedule math', () => {
     );
     expect(result.success).toBe(true);
     if (!result.success) return;
-    expect(result.items[0].startAt).toBe('2026-10-26T08:00:00.000Z');
+    expect(result.items[0]?.startAt).toBe('2026-10-26T08:00:00.000Z');
     // The absolute one-hour duration survives the DST transition.
-    expect(result.items[0].endAt).toBe('2026-10-26T09:00:00.000Z');
+    expect(result.items[0]?.endAt).toBe('2026-10-26T09:00:00.000Z');
   });
 
   test('a shift into the spring-forward gap resolves to the shifted wall time', () => {
@@ -85,9 +85,9 @@ describe('batch reschedule math', () => {
     );
     expect(result.success).toBe(true);
     if (!result.success) return;
-    expect(result.items[0].startAt).toBe('2026-03-29T01:30:00.000Z');
-    expect(result.items[0].endAt).toBe('2026-03-29T02:30:00.000Z');
-    expect(result.items[0].dstResolution).toBe('shifted_forward');
+    expect(result.items[0]?.startAt).toBe('2026-03-29T01:30:00.000Z');
+    expect(result.items[0]?.endAt).toBe('2026-03-29T02:30:00.000Z');
+    expect(result.items[0]?.dstResolution).toBe('shifted_forward');
   });
 
   test('a non-positive timed source duration is rejected with its occurrence id', () => {
@@ -149,9 +149,9 @@ describe('batch reschedule math', () => {
     );
     expect(result.success).toBe(true);
     if (!result.success) return;
-    expect(result.items[0].startDate).toBe('2026-09-14');
-    expect(result.items[0].endDateExclusive).toBe('2026-09-17');
-    expect(result.items[0].startAt).toBeNull();
+    expect(result.items[0]?.startDate).toBe('2026-09-14');
+    expect(result.items[0]?.endDateExclusive).toBe('2026-09-17');
+    expect(result.items[0]?.startAt).toBeNull();
   });
 
   test('a no-op shift and invalid inputs are rejected deterministically', () => {

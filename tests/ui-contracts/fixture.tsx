@@ -1,3 +1,13 @@
+import { RouteRefreshFixture } from './route-refresh-boundaries';
+import { CustomerContractFixture } from './customer-boundaries';
+import { ClockContractFixture } from './clock-boundaries';
+import { MonthViewContractFixture } from './month-view-boundaries';
+import { SidebarContractFixture } from './sidebar-boundaries';
+import { DayViewContractFixture } from './day-view-boundaries';
+import { OptionContractFixture } from './option-boundaries';
+import { ListNavigationFixture } from './list-navigation-boundaries';
+import { OrganizationContractFixture } from './organization-boundaries';
+import { CalendarContractFixture } from "./calendar-boundaries";
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -27,6 +37,7 @@ import {
 } from "@/components/ui/searchable-select";
 import { TimeInput } from "@/components/ui/time-input";
 import { useSettleOnChange } from "@/hooks/use-settle-on-change";
+import { useLiveView, type LiveViewResult } from "@/hooks/use-live-view";
 import { useSignOut } from "@/hooks/use-sign-out";
 import { SimulatePaymentButton } from "@/app/upgrade/simulate-payment-button";
 import { SignOutAndRedirectButton } from "@/app/invite-error/sign-out-redirect-button";
@@ -189,6 +200,38 @@ function SettlementFixture({
   );
 }
 
+function LiveViewEnableFixture(): React.JSX.Element {
+  const [enabled, setEnabled] = useState(false);
+  const [aborted, setAborted] = useState(0);
+  const [requests, setRequests] = useState<Array<{ signal: AbortSignal; complete: () => void; fail: () => void }>>([]);
+  const view = useLiveView<number>({
+    tables: [],
+    enabled,
+    read: ({ signal }) => new Promise<LiveViewResult<number>>((resolve) => {
+      signal.addEventListener('abort', () => setAborted((count) => count + 1), { once: true });
+      setRequests((previous) => [...previous, {
+        signal,
+        complete: () => resolve({ ok: true, data: previous.length + 1 }),
+        fail: () => resolve({ ok: false, error: 'Lesen fehlgeschlagen' }),
+      }]);
+    }),
+  });
+  return <section aria-label="Leseaktivierung">
+    <button type="button" onClick={() => setEnabled((previous) => !previous)}>{enabled ? 'Lesen deaktivieren' : 'Lesen aktivieren'}</button>
+    <button type="button" onClick={() => void view.refresh()}>Erneut lesen</button>
+    <output aria-label="Lesevorgänge">{requests.length}</output>
+    <output aria-label="Lesezustand">{view.isRefreshing ? 'Lädt' : 'Ruhend'}</output>
+    <output aria-label="Abgebrochene Lesevorgänge">{aborted}</output>
+    <output aria-label="Leseergebnis">{view.data ?? 'Unbekannt'}</output>
+    <output aria-label="Lesestatus">{view.isStale ? 'Veraltet' : 'Aktuell'}</output>
+    {requests.map((request, index) => <div key={index}>
+      <output aria-label={`Lesesignal ${index + 1}`}>{request.signal.aborted ? 'Abgebrochen' : 'Aktiv'}</output>
+      <button type="button" onClick={request.complete}>Lesen {index + 1} abschließen</button>
+      <button type="button" onClick={request.fail}>Lesen {index + 1} fehlschlagen</button>
+    </div>)}
+  </section>;
+}
+
 function ContractFixture(): React.JSX.Element {
   const [single, setSingle] = useState("");
   const [multiple, setMultiple] = useState<string[]>([]);
@@ -336,7 +379,12 @@ function ContractFixture(): React.JSX.Element {
 const root = document.getElementById("root");
 if (!root) throw new Error("UI contract fixture root is missing.");
 createRoot(root).render(
-  window.uiContractFixture === "lifecycle" ? (
+  window.uiContractFixture === "customer" ? <CustomerContractFixture /> :
+  window.uiContractFixture === "route-refresh" ? <RouteRefreshFixture /> :
+  window.uiContractFixture === "live-view" ? <main><h1>Komponentenverträge</h1><LiveViewEnableFixture /></main> :
+  window.uiContractFixture === "clock" ? <ClockContractFixture /> :
+  window.uiContractFixture === "sidebar" ? <SidebarContractFixture /> :
+  window.uiContractFixture === "organization" ? <OrganizationContractFixture /> : window.uiContractFixture === "month-view" ? <MonthViewContractFixture /> : window.uiContractFixture === "day-view" ? <DayViewContractFixture /> : window.uiContractFixture === "list-navigation" ? <ListNavigationFixture /> : window.uiContractFixture === "options" ? <OptionContractFixture /> : window.uiContractFixture === "calendar" ? <CalendarContractFixture /> : window.uiContractFixture === "lifecycle" ? (
     <BannerProvider>
       <main>
         <h1>Komponentenverträge</h1>

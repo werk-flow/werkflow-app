@@ -27,15 +27,26 @@ async function openActivityDialog(page: Page): Promise<{
   const clockControl = openButton.or(startButton);
   await expect(clockControl).toHaveCount(1);
   await expect(clockControl).toBeVisible();
+  // The button is disabled and labelled "starten" until the background clock
+  // read lands; the real label is only known once it is enabled.
+  await expect(clockControl).toBeEnabled();
   const isOpen = await openButton.isVisible();
   await (isOpen
     ? openButton
     : startButton
   ).click();
+  // The button opens the sheet of next actions; the full activity dialog with
+  // every kind and qualifier sits behind "Weitere Aktivitäten …".
+  const sheet = page.getByRole("dialog").filter({
+    has: page.getByRole("heading", {
+      name: isOpen ? "Laufende Zeiterfassung" : "Zeiterfassung starten",
+    }),
+  });
+  await sheet.getByRole("button", { name: "Weitere Aktivitäten …" }).click();
   return {
     dialog: page.getByRole("dialog").filter({
     has: page.getByRole("heading", {
-      name: isOpen ? "Aktivität wechseln" : "Zeiterfassung starten",
+      name: isOpen ? "Aktivität wechseln" : "Aktivität wählen",
     }),
     }),
     confirmButtonName: isOpen ? "Aktivität wechseln" : "Starten",

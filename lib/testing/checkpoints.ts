@@ -23,6 +23,11 @@ const valuesSchema = z
     "p1-21.canonicalSessionId": z.string().min(1).optional(),
     "p1-23.missingClockObserved": z.boolean().optional(),
     "p1-20.overlapValidationObserved": z.boolean().optional(),
+    // Step 2 performance profile: the seeded window and the job whose assignee the list must render.
+    "performance.typicalProfile": z.object({
+      windowFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      assignedJobNumber: z.string().min(1),
+    }).strict().optional(),
   })
   .strict();
 

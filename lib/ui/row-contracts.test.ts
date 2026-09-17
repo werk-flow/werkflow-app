@@ -28,7 +28,6 @@ const PAIRS = [
     "components/loading-states/inventar-page-skeleton.tsx",
   ],
   ["components/kunden/clients-table.tsx"],
-  ["components/mitarbeiter/invitations-table.tsx"],
   ["components/mitarbeiter/members-table.tsx"],
   [
     "components/service/equipment-list-content.tsx",
@@ -47,6 +46,8 @@ const PAIRS = [
 // initial member tab owns its skeleton; personnel rows still require cards.
 const SYNCHRONOUS_TABLES = [
   "components/mitarbeiter/personnel-records-section.tsx",
+  // Renders from the members page payload; its unused skeleton was removed on 2026-09-14.
+  "components/mitarbeiter/invitations-table.tsx",
 ];
 
 type Opening = ts.JsxOpeningElement | ts.JsxSelfClosingElement;
@@ -214,7 +215,7 @@ describe("row interaction and mobile-table contracts", () => {
       { kind: "card", skeleton: false, value: "true" },
       { kind: "card", skeleton: true, value: "false" },
     ]);
-    expect(rows[0].value).not.toBe(rows[1].value);
+    expect(rows[0]?.value).not.toBe(rows[1]?.value);
   });
 
   for (const pair of PAIRS) {

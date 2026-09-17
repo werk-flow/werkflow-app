@@ -7,6 +7,7 @@ import {
   calculateTotalMinutes
 } from '@/lib/time-tracking/helpers';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
+import { readInBackground, type BackgroundReadFailure } from '@/lib/data/background-read-client';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import {
   computeBreakdownForSettings,
@@ -36,20 +37,11 @@ type MemberStatusMap = Record<string, MemberStatus>;
 
 const EMPTY_STATUS_MAP: MemberStatusMap = {};
 
-async function fetchTimeEntries(
-  params: GetTimeEntriesParams
-): Promise<GetTimeEntriesResult> {
-  const response = await fetch('/api/time-entries', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  });
-
-  if (!response.ok) {
-    return { success: false, error: 'fetch_failed' };
-  }
-
-  return (await response.json()) as GetTimeEntriesResult;
+function fetchTimeEntries(
+  params: GetTimeEntriesParams,
+  signal: AbortSignal
+): Promise<GetTimeEntriesResult | BackgroundReadFailure> {
+  return readInBackground('time-entries', params, signal);
 }
 
 interface UseMemberStatusOptions {
@@ -82,7 +74,7 @@ export function useMemberStatus({
       'time_segments',
       'organization_settings',
     ],
-    read: async (): Promise<LiveViewResult<MemberStatusMap>> => {
+    read: async ({ signal }): Promise<LiveViewResult<MemberStatusMap>> => {
       if (!organizationId || memberIds.length === 0) {
         return { ok: true, data: EMPTY_STATUS_MAP };
       }
@@ -102,7 +94,7 @@ export function useMemberStatus({
           organizationId,
           from: today.toISOString(),
           to: tomorrow.toISOString()
-        });
+        }, signal);
 
         if (!result.success) {
           return { ok: false, error: result.error };

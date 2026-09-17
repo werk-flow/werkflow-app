@@ -8,7 +8,7 @@ import {
   buildClockTimelineSegments,
   formatDuration
 } from '@/lib/time-tracking/helpers';
-import { HOUR_WIDTH } from './timeline-grid';
+import { BASE_HOUR_WIDTH } from './timeline-grid';
 import { useBlockDrag, type DragMode } from './use-block-drag';
 
 const EntryDetailsDialog = dynamic(
@@ -29,22 +29,24 @@ import type {
 import type { OrgRole } from '@/lib/members/actions';
 
 export interface MoveResizeResult {
-  clockInEntryId?: string;
-  clockOutEntryId?: string;
+  clockInEntryId?: string | undefined;
+  clockOutEntryId?: string | undefined;
   newClockInTimestamp: string;
   newClockOutTimestamp: string;
   originalClockInTimestamp: string;
   originalClockOutTimestamp: string;
-  additionalEntryUpdates?: Array<{
-    entryId: string;
-    newTimestamp: string;
-    originalTimestamp: string;
-  }>;
+  additionalEntryUpdates?:
+    | Array<{
+        entryId: string;
+        newTimestamp: string;
+        originalTimestamp: string;
+      }>
+    | undefined;
 }
 
 interface WorkSessionBlockProps {
   session: WorkSession;
-  blockId?: string;
+  blockId?: string | undefined;
   left: number;
   width: number;
   isPending: boolean;
@@ -55,42 +57,44 @@ interface WorkSessionBlockProps {
     type: 'work' | 'break';
   }>;
   currentUserRole: OrgRole;
-  currentUserId?: string;
+  currentUserId?: string | undefined;
   onRefresh: () => void;
-  changeRequestMap?: EntryChangeRequestMap;
-  usePercentage?: boolean;
-  entryUserRole?: OrgRole;
-  effectiveHourWidth?: number;
+  changeRequestMap?: EntryChangeRequestMap | undefined;
+  usePercentage?: boolean | undefined;
+  entryUserRole?: OrgRole | undefined;
+  effectiveHourWidth?: number | undefined;
   /** Called when user drags to move or resize the block. */
-  onMoveResize?: (result: MoveResizeResult) => void;
+  onMoveResize?: ((result: MoveResizeResult) => void) | undefined;
   /** The date of the current day view (needed to build timestamps). */
-  viewDate?: Date;
+  viewDate?: Date | undefined;
   /** Called on pointer-down in the move area when DayView handles cross-row moves. */
-  onBlockMoveStart?: (
-    session: WorkSession,
-    memberId: string,
-    left: number,
-    width: number,
-    e: React.PointerEvent
-  ) => void;
+  onBlockMoveStart?:
+    | ((
+        session: WorkSession,
+        memberId: string,
+        left: number,
+        width: number,
+        e: React.PointerEvent
+      ) => void)
+    | undefined;
   /** The member id that owns this block. Required for cross-row drag. */
-  memberId?: string;
+  memberId?: string | undefined;
   /** When true, hide this block because DayView is rendering a floating preview. */
-  isDraggedAway?: boolean;
+  isDraggedAway?: boolean | undefined;
   /** Ref that DayView sets to true when a cross-row drag occurred (prevents click opening dialog). */
-  dayViewDragDidOccurRef?: React.RefObject<boolean>;
+  dayViewDragDidOccurRef?: React.RefObject<boolean> | undefined;
   /** Vertical offset within the row (from overlap layout). */
-  layoutTop?: number;
+  layoutTop?: number | undefined;
   /** Height of the block (from overlap layout). */
-  layoutHeight?: number;
+  layoutHeight?: number | undefined;
   blockedRanges?: Array<{
     id: string;
     left: number;
     width: number;
   }>;
-  isConflictTarget?: boolean;
-  onConflictTargetsChange?: (sourceBlockId: string, targetIds: string[]) => void;
-  onInvalidPlacement?: (message: string) => void;
+  isConflictTarget?: boolean | undefined;
+  onConflictTargetsChange?: ((sourceBlockId: string, targetIds: string[]) => void) | undefined;
+  onInvalidPlacement?: ((message: string) => void) | undefined;
 }
 
 function formatTime(date: Date): string {
@@ -102,7 +106,7 @@ function formatTime(date: Date): string {
 
 function getPositionFromTime(
   date: Date,
-  hourWidth: number = HOUR_WIDTH
+  hourWidth: number = BASE_HOUR_WIDTH
 ): number {
   return (
     (date.getHours() +
@@ -139,7 +143,7 @@ function analyzeEditRequest(
   changeRequest: ChangeRequest,
   entryType: 'clock_in' | 'clock_out',
   currentTimestamp: string,
-  hourWidth: number = HOUR_WIDTH
+  hourWidth: number = BASE_HOUR_WIDTH
 ): {
   editType: 'add_time' | 'remove_time';
   originalPos: number;
@@ -257,7 +261,7 @@ export function WorkSessionBlock({
   changeRequestMap = {},
   usePercentage = false,
   entryUserRole,
-  effectiveHourWidth = HOUR_WIDTH,
+  effectiveHourWidth = BASE_HOUR_WIDTH,
   onMoveResize,
   viewDate,
   onBlockMoveStart,
@@ -481,27 +485,29 @@ export function WorkSessionBlock({
     const deltaWidth = displayWidth - width;
 
     if (drag.dragMode === 'resize-left' && adjusted.length > 0) {
-      if (adjusted[0].type === 'work') {
-        adjusted[0].width = Math.max(2, adjusted[0].width - deltaLeft);
+      const [firstSegment] = adjusted;
+      if (firstSegment?.type === 'work') {
+        firstSegment.width = Math.max(2, firstSegment.width - deltaLeft);
       }
-      for (let index = 1; index < adjusted.length; index += 1) {
-        adjusted[index].left = adjusted[index].left - deltaLeft;
+      for (const segment of adjusted.slice(1)) {
+        segment.left = segment.left - deltaLeft;
       }
     }
 
     if (drag.dragMode === 'resize-right' && adjusted.length > 0) {
       const lastIndex = adjusted.length - 1;
       const lastSegment = adjusted[lastIndex];
-      if (lastSegment.type === 'break' && lastIndex > 0) {
-        adjusted[lastIndex].left = adjusted[lastIndex].left + deltaWidth;
-        if (adjusted[lastIndex - 1].type === 'work') {
-          adjusted[lastIndex - 1].width = Math.max(
+      const previousSegment = adjusted[lastIndex - 1];
+      if (lastSegment?.type === 'break' && previousSegment) {
+        lastSegment.left = lastSegment.left + deltaWidth;
+        if (previousSegment.type === 'work') {
+          previousSegment.width = Math.max(
             2,
-            adjusted[lastIndex - 1].width + deltaWidth
+            previousSegment.width + deltaWidth
           );
         }
-      } else if (lastSegment.type === 'work') {
-        adjusted[lastIndex].width = Math.max(2, adjusted[lastIndex].width + deltaWidth);
+      } else if (lastSegment?.type === 'work') {
+        lastSegment.width = Math.max(2, lastSegment.width + deltaWidth);
       }
     }
 
@@ -562,12 +568,12 @@ export function WorkSessionBlock({
             !hasLayout && 'top-1 h-8',
             'flex items-center justify-center gap-1 overflow-hidden',
             'hover:shadow-md hover:z-20 hover:scale-[1.02]',
-            'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
+            'focus:outline-none focus:ring-2 focus:ring-ring',
             isPendingDelete
-              ? 'bg-yellow-200/80 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200'
+              ? 'bg-warning-soft/80 text-warning-soft-foreground'
               : isNewPending
-                ? 'bg-yellow-400/80 text-yellow-900 dark:bg-yellow-500/80 dark:text-yellow-100'
-                : 'bg-red-500/20 text-red-700 dark:bg-red-600/20 dark:text-red-300 border border-red-500/40'
+                ? 'bg-warning/80 text-warning-foreground'
+                : 'bg-destructive/20 text-destructive-soft-foreground border border-destructive/40'
           )}
           style={{
             left: `${left}${posUnit}`,
@@ -611,12 +617,12 @@ export function WorkSessionBlock({
             !hasLayout && 'top-1 h-8',
             'flex items-center justify-center gap-1 overflow-hidden',
             'hover:shadow-md hover:z-20 hover:scale-[1.02]',
-            'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
+            'focus:outline-none focus:ring-2 focus:ring-ring',
             isPendingDelete
-              ? 'bg-yellow-200/80 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200'
+              ? 'bg-warning-soft/80 text-warning-soft-foreground'
               : isNewPending
-                ? 'bg-yellow-400/80 text-yellow-900 dark:bg-yellow-500/80 dark:text-yellow-100'
-                : 'bg-red-500/20 text-red-700 dark:bg-red-600/20 dark:text-red-300 border border-red-500/40'
+                ? 'bg-warning/80 text-warning-foreground'
+                : 'bg-destructive/20 text-destructive-soft-foreground border border-destructive/40'
           )}
           style={{
             left: `${left}${posUnit}`,
@@ -733,8 +739,8 @@ export function WorkSessionBlock({
             !hasLayout && 'top-1 h-14',
             'flex flex-col items-center justify-center overflow-hidden',
             'hover:shadow-md hover:z-20 hover:scale-[1.02]',
-            'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
-            'bg-yellow-200/80 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200'
+            'focus:outline-none focus:ring-2 focus:ring-ring',
+            'bg-warning-soft/80 text-warning-soft-foreground'
           )}
           style={{
             left: `${left}${posUnit}`,
@@ -790,8 +796,8 @@ export function WorkSessionBlock({
               'absolute rounded-md',
               !hasLayout && 'top-1 h-14',
               block.type === 'add'
-                ? 'bg-yellow-400/80 dark:bg-yellow-500/80'
-                : 'bg-yellow-200/80 dark:bg-yellow-900/50'
+                ? 'bg-warning/80'
+                : 'bg-warning-soft/80'
             )}
             style={{
               left: `${block.left}px`,
@@ -814,10 +820,10 @@ export function WorkSessionBlock({
             !hasLayout && 'top-1 h-14',
             'flex flex-col items-center justify-center overflow-hidden',
             'hover:shadow-md hover:z-20 hover:scale-[1.02]',
-            'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
+            'focus:outline-none focus:ring-2 focus:ring-ring',
             isOpen
-              ? 'bg-green-500/60 text-white dark:bg-green-600/60 animate-pulse'
-              : 'bg-green-500/80 text-white dark:bg-green-600/80'
+              ? 'bg-success/60 text-success-foreground animate-pulse'
+              : 'bg-success/80 text-success-foreground'
           )}
           style={{
             left: `${mainBlockLeft}px`,
@@ -919,7 +925,7 @@ export function WorkSessionBlock({
             'absolute rounded-md border-2 border-dashed pointer-events-none',
             !hasLayout && 'top-1 h-14',
             isOwnEntryNeedingApproval
-              ? 'border-green-400/60 bg-green-500/15'
+              ? 'border-success/60 bg-success/15'
               : 'border-muted-foreground/30 bg-muted/20'
           )}
           style={{
@@ -935,16 +941,16 @@ export function WorkSessionBlock({
           'absolute rounded-md text-xs font-medium transition-shadow z-10',
           !hasLayout && 'top-1 h-14',
           'flex items-stretch overflow-hidden',
-          'focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-1',
+          'focus-within:ring-2 focus-within:ring-ring',
           // Colors
           !isNewPendingEntry &&
             !isOpen &&
             !hasBackgroundSegments &&
-            'bg-green-500/80 text-white dark:bg-green-600/80',
+            'bg-success/80 text-success-foreground',
           isOpen &&
             !isNewPendingEntry &&
             !hasBackgroundSegments &&
-            'bg-green-500/60 text-white dark:bg-green-600/60 animate-pulse',
+            'bg-success/60 text-success-foreground animate-pulse',
           hasBackgroundSegments &&
             !isNewPendingEntry &&
             'text-white',
@@ -953,14 +959,14 @@ export function WorkSessionBlock({
             !isNewPendingEntry &&
             'animate-pulse',
           isNewPendingEntry &&
-            'bg-yellow-400/80 text-yellow-900 dark:bg-yellow-500/80 dark:text-yellow-100',
+            'bg-warning/80 text-warning-foreground',
           isConflictTarget &&
             !drag.isDragging &&
-            'ring-2 ring-red-500/70 bg-red-500/10',
+            'ring-2 ring-destructive/70 bg-destructive/10',
           // Drag state
           drag.isDragging &&
             'opacity-90 shadow-lg ring-2 ring-white/30 scale-[0.990]',
-          hasDropConflict && 'ring-red-500/80 bg-red-500/10',
+          hasDropConflict && 'ring-destructive/80 bg-destructive/10',
           !drag.isDragging &&
             'hover:shadow-md hover:z-20 cursor-pointer'
         )}
@@ -986,10 +992,10 @@ export function WorkSessionBlock({
                 className={cn(
                   'absolute inset-y-0',
                   segment.type === 'break'
-                    ? 'bg-yellow-500/80'
+                    ? 'bg-warning/80'
                     : isOpen
-                      ? 'bg-green-500/60 dark:bg-green-600/60'
-                      : 'bg-green-500/80 dark:bg-green-600/80'
+                      ? 'bg-success/60'
+                      : 'bg-success/80'
                 )}
                 style={{ left: segment.left, width: segment.width }}
               />
@@ -997,7 +1003,7 @@ export function WorkSessionBlock({
           </div>
         )}
         {(isConflictTarget || hasDropConflict) && (
-          <div className="pointer-events-none absolute inset-0 rounded-md border border-red-500/80 bg-red-500/10" />
+          <div className="pointer-events-none absolute inset-0 rounded-md border border-destructive/80 bg-destructive/10" />
         )}
 
         {/* Left resize handle */}

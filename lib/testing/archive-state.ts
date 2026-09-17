@@ -3,20 +3,6 @@ import { basename, resolve } from 'node:path';
 import type { RunManifest } from '../../tests/golden/support/run-state';
 import type { TestWorld } from '../../tests/golden/support/world';
 
-/** An incomplete archive never cancels the manifest's resource ownership. */
-export function assertNoRetainedManifests(
-  manifests: readonly Pick<RunManifest, 'runKey' | 'retainedAt' | 'cleanedAt'>[],
-  hasArchivedWorld: (runKey: string) => boolean,
-): void {
-  const retained = manifests.filter((manifest) => manifest.retainedAt && !manifest.cleanedAt);
-  if (!retained.length) return;
-  const missing = retained.filter((manifest) => !hasArchivedWorld(manifest.runKey));
-  throw new Error(
-    `Certification requires zero retained worlds; ${retained.length} open retained manifest record(s): ${retained.map((manifest) => manifest.runKey).join(', ')}.` +
-    (missing.length ? ` Missing archived world.json for ${missing.map((manifest) => manifest.runKey).join(', ')}; recover ownership from the manifest before cleanup. Do not treat missing state as a cleaned world.` : ' Clean these worlds first.')
-  );
-}
-
 export function readRetainedWorldState(
   manifest: Pick<RunManifest, 'runKey' | 'world'>,
   path: string,
@@ -35,6 +21,14 @@ export function mirrorOwnedStateFiles(sources: readonly string[], targetDirector
     if (existsSync(source)) copyFileSync(source, target);
     else rmSync(target, { force: true });
   }
+}
+
+/** Restore workload inputs, never outcomes that could masquerade as diagnostic evidence. */
+export function restoreRetainedWorkloads(sourceDirectory: string, targetDirectory: string): void {
+  mirrorOwnedStateFiles([
+    resolve(sourceDirectory, 'performance-workload.json'),
+    resolve(sourceDirectory, 'planning-benchmark-workload.json'),
+  ], targetDirectory);
 }
 
 export function validateRetainedWorldIdentity(

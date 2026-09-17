@@ -265,7 +265,7 @@ function RecordSicknessDialog({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [overlapHint, setOverlapHint] = useState(false);
-  const [dateErrors, setDateErrors] = useState<{ start?: string; end?: string }>({});
+  const [dateErrors, setDateErrors] = useState<{ start?: string | undefined; end?: string | undefined }>({});
 
   const isSingleDay = endKnown && startDate === endDate;
 
@@ -617,9 +617,9 @@ function CorrectSicknessDialog({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{
-    start?: string;
-    end?: string;
-    reason?: string;
+    start?: string | undefined;
+    end?: string | undefined;
+    reason?: string | undefined;
   }>({});
 
   const isSingleDay = endKnown && startDate === endDate;

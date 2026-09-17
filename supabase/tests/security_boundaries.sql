@@ -1,4 +1,4 @@
--- Security boundary assertions (docs/plans/security-infrastructure-hardening-2026-09.md).
+-- Security boundary assertions (docs/plans/phase-1/hardening-2026-09/05-step-1-security-infrastructure.md).
 -- Runs inside one transaction against the local stack and rolls back.
 -- Each block raises on violation; ON_ERROR_STOP turns that into a failed group.
 begin;
@@ -147,6 +147,23 @@ $$;
 
 -- SI-006: a member with recorded time cannot be removed; the membership and the
 -- history stay in place (containment until P1-33).
+insert into public.organization_members (organization_id, user_id, role) values
+('51000000-0000-0000-0000-000000000010', '51000000-0000-0000-0000-000000000002', 'employee');
+-- The same member can be removed before recording time. Rejoin before the denial case.
+do $$
+begin
+  if public.remove_member_with_time_capture(
+    '51000000-0000-0000-0000-000000000010',
+    '51000000-0000-0000-0000-000000000002',
+    '51000000-0000-0000-0000-000000000001',
+    gen_random_uuid()
+  ) is distinct from false then raise exception 'unused member removal reported a clock-out'; end if;
+  if exists (select 1 from public.organization_members
+    where organization_id = '51000000-0000-0000-0000-000000000010'
+      and user_id = '51000000-0000-0000-0000-000000000002'
+  ) then raise exception 'unused member was not removed'; end if;
+end;
+$$;
 insert into public.organization_members (organization_id, user_id, role) values
 ('51000000-0000-0000-0000-000000000010', '51000000-0000-0000-0000-000000000002', 'employee');
 insert into public.time_entries (organization_id, user_id, entry_type, timestamp) values

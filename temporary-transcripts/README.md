@@ -63,6 +63,18 @@ For security and infrastructure fact gathering, run separate `--topic` queries a
 
 These are discovery terms, not approved control requirements. Check the row's scope and revisit trigger, especially for payments, product AI, mobile, and enterprise features.
 
+For performance work, search across folders with the terms below. The three `PERF` sources are a starting point; related UX, database, infrastructure, security, and engineering sources contain distinct qualifications.
+
+| Research area | Topic/search terms and purpose |
+| --- | --- |
+| Rendering and usable content | `performance`, `streaming`, `hydration`, `loading-states`, `layout-stability`: initial rendering, client work, usable controls, and retained content during refresh. |
+| Reuse and freshness | `caching`, `cache-correctness`, `data-consistency`, `tenant-isolation`, `polling`: cache scope, invalidation, Realtime, stale results, and permission changes. |
+| Feedback and recovery | `interaction-feedback`, `optimistic-ui`, `progress-feedback`, `error-isolation`, `error-recovery`: acknowledgement, confirmed completion, partial failure, and truthful progress. |
+| Database and resource use | `data-minimization`, `pagination`, `query`, `capacity`, `resilience`: bounded rows and fields, repeated queries, indexes, concurrency, timeouts, and retries. |
+| Measurement and safe diagnostics | `observability`, `performance-targets`, `performance-metrics`, `data-privacy`, `browser-security`: meaningful deadlines, representative evidence, telemetry privacy, and script restrictions. |
+
+Performance planning review on 2026-09-08 covered relevance triage of all 1,144 indexed aspects across 230 sources. Fifty relevant raw sources were reread with their captions and extra sections. The inventory check passed with four URL-only inbox/history files excluded. This was indexed-aspect triage plus focused source review, not a claim that unavailable video visuals were inspected. The [Step 2 performance record](../docs/plans/whole-app-performance-hardening-2026-09.md) now owns the plan, reviewed repairs and dated acceptance evidence. Its current checkpoint distinguishes completed proof from pending work and historical failures. Individual aspect dispositions were reconciled again on 2026-09-12 against the repaired code and focused tests. Recheck their scope and linked evidence before reuse; a plan entry or transcript disposition alone cannot prove implementation. Retain missing visuals and unsupported claims as `Verify`, and retain unrelated future-scope triggers.
+
 Keep retired aspect rows with their IDs and a reason, using `Not applicable` where appropriate. The check detects removed/renumbered ID lists, and `--record` rejects removal of a previously recorded ID. It cannot detect someone reusing the same ID for a different meaning; review the text diff and retain the original meaning when consolidating duplicates.
 
 For a newly added or edited source, add or revise its review rows and run:

@@ -3,8 +3,8 @@
 // Audit spec groups own separate worlds. Date windows still keep integration
 // fixtures explicit where dates affect uniqueness, employment conditions,
 // closure days, absence overlaps, or planning. The windows
-// below encode the partition from docs/plans/wave-1-audit.md (+20…+69,
-// including the R1 reconciliation reserve) and docs/plans/wave-2-audit.md
+// below encode the partition from docs/plans/phase-1/audits/wave-1-audit.md (+20…+69,
+// including the R1 reconciliation reserve) and docs/plans/phase-1/audits/wave-2-audit.md
 // (+70 onward, five days per slice). The module throws on overlapping
 // registry entries at import and on any out-of-window claim at call time,
 // so a new spec cannot silently squat on another spec's dates.
@@ -51,6 +51,7 @@ const AUDIT_DATE_WINDOWS = {
   "p1-22": [{ from: 115, to: 119 }],
   "p1-23": [{ from: 120, to: 124 }],
   "p1-24": [{ from: 125, to: 129 }],
+  "performance-calendar-live": [{ from: -7, to: -7 }, { from: 130, to: 130 }],
 } as const satisfies Record<string, readonly OffsetRange[]>;
 
 export type AuditSpecName = keyof typeof AUDIT_DATE_WINDOWS;
@@ -115,7 +116,7 @@ export function ownedBerlinDateAtOffset(
       )
       .join(", ");
     throw new Error(
-      `Spec "${spec}" claimed run-day offset +${offsetDays} for a uniqueness-constrained fixture, but owns only ${windows} (docs/plans/wave-1-audit.md / wave-2-audit.md). Pick a date inside the owned window or renegotiate the partition in the docs first.`,
+      `Spec "${spec}" claimed run-day offset +${offsetDays} for a uniqueness-constrained fixture, but owns only ${windows} (docs/plans/phase-1/audits/wave-1-audit.md / wave-2-audit.md). Pick a date inside the owned window or renegotiate the partition in the docs first.`,
     );
   }
   return berlinDateAtOffset(offsetDays);

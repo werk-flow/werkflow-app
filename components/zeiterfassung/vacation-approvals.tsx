@@ -21,10 +21,9 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   cancelApprovedVacationRequest,
   decideVacationRequest,
-  getDecidableApprovedVacationRequests,
-  getPendingVacationRequestsForApprover,
   type ApproverVacationRequest,
 } from '@/lib/vacation/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
 import { formatVacationDays } from '@/lib/vacation/balance';
 import { VACATION_PORTION_LABELS } from '@/lib/vacation/types';
 import { useBusyIds } from '@/hooks/use-busy-id';
@@ -84,10 +83,10 @@ export function VacationApprovals() {
 
   const view = useLiveView<ApproverVacationLists>({
     tables: ['vacation_requests'],
-    read: async (): Promise<LiveViewResult<ApproverVacationLists>> => {
+    read: async ({ signal }): Promise<LiveViewResult<ApproverVacationLists>> => {
       const [pendingResult, approvedResult] = await Promise.all([
-        getPendingVacationRequestsForApprover(),
-        getDecidableApprovedVacationRequests(),
+        readInBackground('pending-vacation-for-approver', {}, signal),
+        readInBackground('decidable-approved-vacation', {}, signal),
       ]);
       if (!pendingResult.success || !approvedResult.success) {
         return { ok: false };
@@ -240,7 +239,7 @@ export function VacationApprovals() {
                       {formatVacationDays(item.balance.entitlementDays)}
                     </p>
                   ) : (
-                    <p className="mt-0.5 text-xs font-medium text-yellow-700 dark:text-yellow-300">
+                    <p className="mt-0.5 text-xs font-medium text-warning-text">
                       Kein Urlaubsanspruch hinterlegt – Anspruch in der
                       Personalakte unter Beschäftigung pflegen.
                     </p>
@@ -252,7 +251,7 @@ export function VacationApprovals() {
                   </p>
                 )}
                 {item.hasAbsenceOverlap && (
-                  <p className="mt-1 text-xs font-medium text-yellow-700 dark:text-yellow-300">
+                  <p className="mt-1 text-xs font-medium text-warning-text">
                     Hinweis: Für diese Person liegt im beantragten Zeitraum eine
                     weitere Abwesenheit vor.
                   </p>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouterRefresh } from '@/components/ui/refresh-button';
 import {
   useRealtimeSubscribe,
   type RealtimeChangeEvent,
@@ -9,8 +9,13 @@ import {
 } from '@/components/realtime/realtime-provider';
 import {
   REALTIME_DEBOUNCE_MS,
+  REALTIME_MAX_DEFER_MS,
   shouldScheduleRealtimeRefresh,
 } from '@/lib/realtime/events';
+import {
+  createTrailingScheduler,
+  type TrailingScheduler,
+} from '@/lib/realtime/scheduler';
 import { useAnyDialogOpen } from '@/components/ui/open-dialog-context';
 
 type UseRealtimeRouterRefreshOptions = {
@@ -27,8 +32,8 @@ type UseRealtimeRouterRefreshOptions = {
  * The route-refresh member of the live-view family: server-rendered surfaces
  * reload the route when one of their tables changes. Debounce is the shared
  * REALTIME_DEBOUNCE_MS — there is deliberately no per-surface knob. While any
- * Dialog/AlertDialog/Sheet is open, refreshes are suspended so they cannot
- * remount the dialog mid-interaction; one catch-up refresh fires after close.
+ * Dialog/AlertDialog/Sheet is open or a route render is pending, refreshes wait
+ * so they cannot interrupt that work. One catch-up runs when enabled and idle.
  * For narrower client refetches use `useLiveView` (hooks/use-live-view.ts).
  */
 export function useRealtimeRouterRefresh({
@@ -36,12 +41,13 @@ export function useRealtimeRouterRefresh({
   enabled = true,
   eventFilter,
 }: UseRealtimeRouterRefreshOptions): void {
-  const router = useRouter();
+  const { refresh, isPending } = useRouterRefresh();
   const subscribe = useRealtimeSubscribe();
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const schedulerRef = useRef<TrailingScheduler | null>(null);
 
   const anyDialogOpen = useAnyDialogOpen();
-  const anyDialogOpenRef = useRef(anyDialogOpen);
+  const suspended = anyDialogOpen || isPending || !enabled;
+  const suspendedRef = useRef(suspended);
   const pendingWhileSuspendedRef = useRef(false);
   const enabledRef = useRef(enabled);
   const eventFilterRef = useRef(eventFilter);
@@ -62,31 +68,28 @@ export function useRealtimeRouterRefresh({
         return;
       }
 
-      if (anyDialogOpenRef.current) {
+      if (suspendedRef.current) {
         pendingWhileSuspendedRef.current = true;
         return;
       }
 
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-      }
-
-      timerRef.current = setTimeout(() => {
-        timerRef.current = null;
-        router.refresh();
-      }, REALTIME_DEBOUNCE_MS);
+      // Shared debounce with a bounded maximum deferral (PF-12).
+      schedulerRef.current ??= createTrailingScheduler({
+        delayMs: REALTIME_DEBOUNCE_MS,
+        maxWaitMs: REALTIME_MAX_DEFER_MS,
+        run: refresh,
+      });
+      schedulerRef.current.schedule();
     },
-    [router]
+    [refresh]
   );
 
   useEffect(() => {
-    anyDialogOpenRef.current = anyDialogOpen;
+    suspendedRef.current = suspended;
 
-    if (anyDialogOpen) {
-      // Drop an already-scheduled refresh so it can't land mid-dialog.
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
+    if (suspended) {
+      // Preserve queued work until the current interaction or render settles.
+      if (schedulerRef.current?.cancel()) {
         pendingWhileSuspendedRef.current = true;
       }
       return;
@@ -96,20 +99,17 @@ export function useRealtimeRouterRefresh({
       pendingWhileSuspendedRef.current = false;
       scheduleRefresh();
     }
-  }, [anyDialogOpen, scheduleRefresh]);
+  }, [suspended, scheduleRefresh]);
 
   useEffect(() => {
     return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-      }
+      schedulerRef.current?.cancel();
     };
   }, []);
 
   useEffect(() => {
-    if (enabled || !timerRef.current) return;
-    clearTimeout(timerRef.current);
-    timerRef.current = null;
+    if (enabled) return;
+    schedulerRef.current?.cancel();
   }, [enabled]);
 
   const tablesKey = tables.join(',');

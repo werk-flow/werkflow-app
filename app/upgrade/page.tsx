@@ -72,7 +72,7 @@ export default async function UpgradePage() {
                 'Prioritäts-Support'
               ].map((feature) => (
                 <li key={feature} className="flex items-center gap-3">
-                  <Check className="size-4 text-green-500" />
+                  <Check className="size-4 text-success-text" />
                   <span className="text-sm">{feature}</span>
                 </li>
               ))}

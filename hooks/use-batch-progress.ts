@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * `progress` in a `role="progressbar"` element (feedback canon: determinate
  * work shows progress, never a bare spinner).
  */
-export type BatchRowStatus = 'queued' | 'running' | 'done' | 'error';
+type BatchRowStatus = 'queued' | 'running' | 'done' | 'error';
 
 export interface BatchRow<Item> {
   id: string;

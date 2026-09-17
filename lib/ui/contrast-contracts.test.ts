@@ -43,8 +43,8 @@ test("theme discovery rejects missing, empty and identical dark palettes", () =>
   }
 });
 
-function color(hex: string): Color {
-  if (!/^#[\da-f]{6}$/i.test(hex))
+function color(hex: string | undefined): Color {
+  if (hex === undefined || !/^#[\da-f]{6}$/i.test(hex))
     throw new Error(`Expected opaque sRGB token: ${hex}`);
   const channel = (offset: number): number =>
     parseInt(hex.slice(offset, offset + 2), 16) / 255;
@@ -52,16 +52,15 @@ function color(hex: string): Color {
 }
 
 function composite(foreground: Color, background: Color, alpha: number): Color {
-  const channel = (index: number): number =>
+  const channel = (index: 0 | 1 | 2): number =>
     foreground[index] * alpha + background[index] * (1 - alpha);
   return [channel(0), channel(1), channel(2)];
 }
 
 function luminance(value: Color): number {
-  const linear = value.map((channel) =>
-    channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
-  );
-  return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
+  const linear = (channel: number): number =>
+    channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  return linear(value[0]) * 0.2126 + linear(value[1]) * 0.7152 + linear(value[2]) * 0.0722;
 }
 
 function contrast(foreground: Color, background: Color): number {
@@ -88,7 +87,7 @@ describe.each([
       ["accent-foreground", "accent"],
       ["secondary-foreground", "secondary"],
       ["selection-foreground", "selection"],
-    ])
+    ] as const)
       assertReadable(color(theme[foreground]), color(theme[background]));
   });
 
@@ -130,6 +129,17 @@ describe.each([
     }
     // The filter counter deliberately reverses the filled primary pair.
     assertReadable(color(theme.primary), color(theme["primary-foreground"]));
+  });
+
+  test("status families read on their fills, their tints and the neutral surfaces", () => {
+    for (const family of ["success", "warning", "info"]) {
+      assertReadable(color(theme[`${family}-foreground`]), color(theme[family]));
+      assertReadable(color(theme[`${family}-soft-foreground`]), color(theme[`${family}-soft`]));
+      for (const surface of ["background", "card", "muted", "accent"]) {
+        assertReadable(color(theme[`${family}-text`]), color(theme[surface]));
+      }
+    }
+    assertReadable(color(theme["destructive-soft-foreground"]), color(theme["destructive-soft"]));
   });
 
   test("error text survives current tinted surfaces and destructive menu focus", () => {
@@ -240,9 +250,6 @@ function brightTextViolations(source: string, fileName: string): number[] {
       for (const specifier of bindings.elements) icons.add(specifier.name.text);
     }
   }
-  // MenuCard receives an icon component separately from its text content.
-  if (fileName === "components/zeiterfassung/zeiterfassung-dashboard.tsx")
-    icons.add("Icon");
   const violations: number[] = [];
   function visit(node: ts.Node): void {
     if (ts.isJsxAttribute(node) && node.name.getText(syntax) === "className") {

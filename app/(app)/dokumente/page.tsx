@@ -1,3 +1,5 @@
+import { loadDocumentPageContext } from '@/lib/documents/page-context';
+import { parseListPage } from '@/lib/ui/list-pagination';
 import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
@@ -10,7 +12,7 @@ import { getCachedMemberships, getCachedUser } from '@/lib/data/cached';
 import {
   getDocumentFolderOptions,
   getDocumentDetails,
-  getDocumentLinkCatalog,
+
   getDocumentLibrary,
 } from '@/lib/documents/actions';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
@@ -24,6 +26,8 @@ import type {
 
 type DokumentePageProps = {
   searchParams?: Promise<{
+    page?: string;
+    folderPage?: string;
     folder?: string;
     view?: string;
     q?: string;
@@ -103,6 +107,7 @@ function getDocumentLinkFilter(value?: string): DocumentLibraryLinkFilter {
 }
 
 async function DokumenteData({
+  page, folderPage,
   folderId,
   view,
   searchQuery,
@@ -111,6 +116,7 @@ async function DokumenteData({
   linkFilter,
   initialDocumentId,
 }: {
+  page: number; folderPage: number;
   folderId: string | null;
   view: DocumentLibraryView;
   searchQuery: string;
@@ -122,10 +128,11 @@ async function DokumenteData({
   const [
     libraryResult,
     folderOptionsResult,
-    linkCatalogResult,
+
     initialDocumentResult,
   ] = await Promise.all([
     getDocumentLibrary({
+      page, folderPage,
       folderId,
       view,
       searchQuery,
@@ -134,15 +141,6 @@ async function DokumenteData({
       linkFilter,
     }),
     getDocumentFolderOptions(),
-    view === 'work'
-      ? getDocumentLinkCatalog()
-      : Promise.resolve({
-          success: true as const,
-          jobs: [],
-          projects: [],
-          clients: [],
-          employees: [],
-        }),
     initialDocumentId
       ? getDocumentDetails(initialDocumentId)
       : Promise.resolve(null),
@@ -157,14 +155,11 @@ async function DokumenteData({
   }
 
   const allFolders = folderOptionsResult.success ? folderOptionsResult.folders : [];
-  const jobs = linkCatalogResult.success ? linkCatalogResult.jobs : [];
-  const projects = linkCatalogResult.success ? linkCatalogResult.projects : [];
-  const clients = linkCatalogResult.success ? linkCatalogResult.clients : [];
-  const employees = linkCatalogResult.success ? linkCatalogResult.employees : [];
+  const { jobs, projects, clients, employees } = view === 'work' ? await loadDocumentPageContext(libraryResult.documents) : { jobs: [], projects: [], clients: [], employees: [] };
   const initialDocument = initialDocumentResult?.document ?? null;
 
   return (
-    <DocumentLibraryContent
+    <DocumentLibraryContent page={page} total={libraryResult.total} folderPage={folderPage} folderTotal={libraryResult.folderTotal}
       view={view}
       searchQuery={searchQuery}
       category={category}
@@ -240,7 +235,7 @@ export default async function DokumentePage({
     <PageShell>
       <PageBody>
         <Suspense fallback={<DokumenteContentSkeleton />}>
-          <DokumenteData
+          <DokumenteData page={parseListPage(resolvedSearchParams.page)} folderPage={parseListPage(resolvedSearchParams.folderPage)}
             folderId={folderId}
             view={view}
             searchQuery={searchQuery}

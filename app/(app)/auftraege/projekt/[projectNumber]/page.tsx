@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import { readOrganizationClients } from '@/lib/clients/server';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 
@@ -11,7 +12,6 @@ import {
   getProjectMaterialSummary,
 } from '@/lib/inventory/actions';
 import { getProjectByNumber } from '@/lib/projects/actions';
-import { toClient, type Client } from '@/lib/jobs/types';
 import { UrlFlashBanner } from '@/components/ui/banner';
 import type { OrgRole } from '@/lib/members/actions';
 import { ProjectDetailContent } from '@/components/auftraege/project-detail-content';
@@ -85,13 +85,9 @@ async function ProjectDetailData({
       : null
   );
 
-  const [result, clientsResult, documentsResult, materialResult, inventoryOptionsResult, lifecycleResult, artifactsResult, instructionItemsResult, approvalHolder, handoverWorkspaceResult] = await Promise.all([
+  const [result, clients, documentsResult, materialResult, inventoryOptionsResult, lifecycleResult, artifactsResult, instructionItemsResult, approvalHolder, handoverWorkspaceResult] = await Promise.all([
     projectResultPromise,
-    admin
-      .from('clients')
-      .select('*')
-      .eq('organization_id', activeOrgId)
-      .order('name', { ascending: true }),
+    readOrganizationClients(admin, activeOrgId),
     documentsResultPromise,
     materialResultPromise,
     inventoryOptionsResultPromise,
@@ -110,17 +106,9 @@ async function ProjectDetailData({
     );
   }
 
-  if (clientsResult.error) {
-    console.error(
-      `clients query failed for organization_id=${activeOrgId}`,
-      clientsResult.error
-    );
-    throw new Error('Failed to load clients');
-  }
 
   const { project, client, jobs, derivedStatus } = result.details;
 
-  const clients: Client[] = (clientsResult.data ?? []).map(toClient);
   const projectDocuments =
     documentsResult && documentsResult.success ? documentsResult.projectDocuments : [];
   const jobDocumentGroups =

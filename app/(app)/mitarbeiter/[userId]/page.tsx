@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { readOrganizationClients } from '@/lib/clients/server';
 import { cookies } from 'next/headers';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -17,7 +18,7 @@ import { getMemberDetail, getProfilesByIds, type OrgRole } from '@/lib/members/a
 import { getOrgMembersForUser } from '@/lib/members/queries';
 import { getPersonnelDetail, type PersonnelDetail } from '@/lib/personnel/actions';
 import { getJobsForMember } from '@/lib/jobs/actions';
-import { toClient, toProject, type Client, type ProjectWithDetails } from '@/lib/jobs/types';
+import { toProject, type ProjectWithDetails } from '@/lib/jobs/types';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import { MitarbeiterDetailContent } from '@/components/mitarbeiter/mitarbeiter-detail-content';
 import { PersonnelRecordDetailContent } from '@/components/mitarbeiter/personnel-record-detail-content';
@@ -82,7 +83,7 @@ async function MitarbeiterDetailData({
     memberResult,
     personnelResult,
     jobsResult,
-    clientsResult,
+    clients,
     membersResult,
     allProjectsResult,
     allJobsResult,
@@ -95,11 +96,7 @@ async function MitarbeiterDetailData({
     getMemberDetail(targetUserId),
     getPersonnelDetail(targetUserId),
     getJobsForMember(targetUserId),
-    admin
-      .from('clients')
-      .select('*')
-      .eq('organization_id', activeOrgId)
-      .order('name', { ascending: true }),
+    readOrganizationClients(admin, activeOrgId),
     getOrgMembersForUser(activeOrgId, user.id),
     admin
       .from('projects')
@@ -173,7 +170,6 @@ async function MitarbeiterDetailData({
       }
     : { jobs: [], projects: [], clientMap: {}, jobAssignmentMap: {} };
 
-  const clients: Client[] = (clientsResult.data ?? []).map(toClient);
   const members: OrgMemberOption[] = membersResult.map(
     (m) => ({
       userId: m.user_id,

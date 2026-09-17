@@ -73,7 +73,7 @@ describe('browser spec conventions (testing.md)', () => {
     ).toThrow(
       'Serial precondition missing for A1-09: the app-assigned value created by A1-01. ' +
         'Earlier tests in this serial file create that state — run the chain in one world: ' +
-        'bun run test:audit:focused --grep "A1-01|A1-09". ' +
+        'bun run test:audit:focused --grep "A1-01|A1-09" (focused diagnostic lane; acceptance evidence comes from bun run test:verify --group <owning group>). ' +
         '(A partial grep of a serial file would otherwise fail after minutes on a misleading locator timeout.)'
     );
   });
@@ -92,6 +92,11 @@ describe('browser spec conventions (testing.md)', () => {
     );
   });
 
+  test('live correction fixtures own a past date rather than future worked time', () => {
+    expect(ownedBerlinDateAtOffset('performance-calendar-live', -7)).toBe(berlinDateAtOffset(-7));
+    expect(() => ownedBerlinDateAtOffset('performance-calendar-live', 131)).toThrow();
+  });
+
   test('found the spec inventory', () => {
     expect(goldenSpecs.length).toBeGreaterThanOrEqual(18);
     expect(auditSpecs.length).toBeGreaterThanOrEqual(12);
@@ -105,6 +110,19 @@ describe('browser spec conventions (testing.md)', () => {
       // Shared-world state makes parallel execution meaningless; every spec
       // declares it explicitly.
       expect(source).toMatch(/test\.describe\.configure\(\{\s*mode:\s*['"]serial['"]/);
+    });
+
+    test(`${name} never filters with a page-rooted main locator inside has:`, () => {
+      // Playwright evaluates `has:` inside the outer element, so a chain that
+      // starts at getByRole('main') can only match when main sits inside the
+      // outer element; two P1-20 panels silently matched nothing (Step 3, 2026-09-13).
+      const mainRooted = new Set(
+        [...source.matchAll(/const (\w+) = \w+\.getByRole\(['"]main['"]\)/g)].map((match) => match[1]),
+      );
+      const offenders = [...source.matchAll(/has:\s*(\w+)(\.getByRole\(['"]main['"]\))?/g)]
+        .filter((match) => match[2] || (match[1] !== undefined && mainRooted.has(match[1])))
+        .map((match) => match[0]);
+      expect(offenders, 'root the outer locator in main instead and keep the has: chain relative').toEqual([]);
     });
 
     test(`${name} contains at least one negative assertion`, () => {
@@ -135,8 +153,8 @@ describe('browser spec conventions (testing.md)', () => {
     const name = specName(path);
 
     test(`${name} carries an audit grep tag`, () => {
-      // Wave specs carry @AUDIT-W<N>; cross-wave layout audits carry @AUDIT-LAYOUT.
-      expect(source).toMatch(/@AUDIT-(W\d|LAYOUT)/);
+      // Cross-wave audits name their purpose instead of claiming a wave.
+      expect(source).toMatch(/@AUDIT-(W\d|LAYOUT|SECURITY|PERFORMANCE)(?:-|\b)/);
     });
   }
 });

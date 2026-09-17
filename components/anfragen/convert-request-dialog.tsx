@@ -51,7 +51,7 @@ import { WorkTemplatePicker } from '@/components/arbeitsvorlagen/work-template-p
 import { QualificationWarningDialog } from '@/components/auftraege/qualification-warning-dialog';
 import type { AssignmentApproval, AssignmentEvaluation } from '@/lib/qualifications/types';
 
-const ERROR_MESSAGES: Record<string, string> = {
+const ERROR_MESSAGES = {
   not_authenticated: 'Du bist nicht angemeldet.',
   no_active_org: 'Keine Organisation ausgewählt.',
   not_authorized: 'Du bist nicht berechtigt, Anfragen umzuwandeln.',
@@ -68,7 +68,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   work_template_reference_unavailable: 'Die Arbeitsvorlage verweist auf nicht mehr aktive Stammdaten.',
   template_apply_failed: 'Die Arbeitsvorlage konnte nicht übernommen werden.',
   unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.',
-};
+} satisfies Record<string, string>;
+const ERROR_MESSAGE_BY_CODE: Record<string, string> = ERROR_MESSAGES;
 
 type ConversionTarget = 'job' | 'project';
 
@@ -126,7 +127,7 @@ export function ConvertRequestDialog({
     setLocation('');
     setTemplateVersionId('');
     setError(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset the form only when the dialog opens or shows another request, not on every request field change
   }, [open, request.id]);
 
   const lastSuggestedNumberRef = useRef('');
@@ -187,16 +188,16 @@ export function ConvertRequestDialog({
       if (target === 'job') {
         const result = await convertRequestToJob(request.id, {
           title: title.trim(),
-          description: description.trim() || undefined,
+          ...(description.trim() ? { description: description.trim() } : {}),
           clientId,
-          siteId: siteId || undefined,
-          contactId: contactId || undefined,
+          ...(siteId ? { siteId } : {}),
+          ...(contactId ? { contactId } : {}),
           jobNumber: number.trim(),
           priority,
-          plannedDate: plannedDate || undefined,
-          plannedTime: plannedTime || undefined,
-          location: location.trim() || undefined,
-          templateVersionId: templateVersionId || undefined,
+          ...(plannedDate ? { plannedDate } : {}),
+          ...(plannedTime ? { plannedTime } : {}),
+          ...(location.trim() ? { location: location.trim() } : {}),
+          ...(templateVersionId ? { templateVersionId } : {}),
           assignmentApproval: approval ?? null,
         });
         if (!result.success) {
@@ -204,7 +205,7 @@ export function ConvertRequestDialog({
             setQualificationWarning(result.evaluation as AssignmentEvaluation);
             return;
           }
-          setError(ERROR_MESSAGES[result.error] || 'Unbekannter Fehler');
+          setError(ERROR_MESSAGE_BY_CODE[result.error] || 'Unbekannter Fehler');
           return;
         }
         onOpenChange(false);
@@ -217,15 +218,15 @@ export function ConvertRequestDialog({
       } else {
         const result = await convertRequestToProject(request.id, {
           name: title.trim(),
-          description: description.trim() || undefined,
+          ...(description.trim() ? { description: description.trim() } : {}),
           clientId,
-          siteId: siteId || undefined,
-          contactId: contactId || undefined,
-          projectNumber: number.trim() || undefined,
-          templateVersionId: templateVersionId || undefined,
+          ...(siteId ? { siteId } : {}),
+          ...(contactId ? { contactId } : {}),
+          ...(number.trim() ? { projectNumber: number.trim() } : {}),
+          ...(templateVersionId ? { templateVersionId } : {}),
         });
         if (!result.success) {
-          setError(ERROR_MESSAGES[result.error] || 'Unbekannter Fehler');
+          setError(ERROR_MESSAGE_BY_CODE[result.error] || 'Unbekannter Fehler');
           return;
         }
         onOpenChange(false);

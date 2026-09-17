@@ -13,7 +13,7 @@ interface ParkplatzButtonProps {
   isOpen: boolean;
   onToggle: () => void;
   onParkJob: (jobId: string) => void;
-  isPointerOverParkplatz?: boolean;
+  isPointerOverParkplatz?: boolean | undefined;
 }
 
 export const ParkplatzButton = forwardRef<HTMLButtonElement, ParkplatzButtonProps>(

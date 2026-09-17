@@ -23,12 +23,12 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import {
   createVacationRequest,
-  getOwnVacationOverview,
   previewVacationRequest,
   withdrawVacationRequest,
   type OwnVacationOverview,
   type VacationRequestListItem,
 } from '@/lib/vacation/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
 import { formatVacationDays } from '@/lib/vacation/balance';
 import {
   VACATION_PORTION_LABELS,
@@ -42,7 +42,7 @@ import { cn, toLocalDateString } from '@/lib/utils';
 // Settle key for a request that has no row yet; request ids are UUIDs.
 const NEW_REQUEST_ID = 'new';
 
-const REQUEST_ERROR_MESSAGES: Record<string, string> = {
+const REQUEST_ERROR_MESSAGES = {
   invalid_dates: 'Bitte gib gültige Daten an.',
   invalid_range: 'Das Enddatum darf nicht vor dem Startdatum liegen.',
   range_too_long:
@@ -60,19 +60,21 @@ const REQUEST_ERROR_MESSAGES: Record<string, string> = {
   not_authorized: 'Du darfst diesen Antrag nicht ändern.',
   insert_failed: 'Der Antrag konnte nicht gespeichert werden.',
   unexpected_error: 'Der Antrag konnte nicht gespeichert werden.',
-};
+} satisfies Record<string, string>;
+const REQUEST_ERROR_MESSAGE_BY_CODE: Record<string, string> = REQUEST_ERROR_MESSAGES;
 
-const PREVIEW_ERROR_MESSAGES: Record<string, string> = {
+const PREVIEW_ERROR_MESSAGES = {
   no_employee_record: REQUEST_ERROR_MESSAGES.no_employee_record,
   not_authenticated: REQUEST_ERROR_MESSAGES.not_authenticated,
   not_a_member: REQUEST_ERROR_MESSAGES.not_a_member,
   load_failed: 'Die Urlaubstage konnten nicht berechnet werden.',
   unexpected_error: 'Die Urlaubstage konnten nicht berechnet werden.',
-};
+} satisfies Record<string, string>;
+const PREVIEW_ERROR_MESSAGE_BY_CODE: Record<string, string> = PREVIEW_ERROR_MESSAGES;
 
 const STATUS_BADGE_CLASSES: Record<VacationRequestStatus, string> = {
-  pending: 'bg-brand-purple/15 text-brand-purple-dark dark:text-brand-purple-light',
-  approved: 'bg-green-500/10 text-green-600 dark:text-green-400',
+  pending: 'bg-warning-soft text-warning-soft-foreground',
+  approved: 'bg-success-soft text-success-soft-foreground',
   rejected: 'bg-destructive/10 text-destructive',
   withdrawn: 'bg-muted text-muted-foreground',
   cancelled: 'bg-muted text-muted-foreground',
@@ -107,8 +109,8 @@ export function VacationSection() {
 
   const view = useLiveView<OwnVacationOverview>({
     tables: ['vacation_requests', 'employment_conditions'],
-    read: async (): Promise<LiveViewResult<OwnVacationOverview>> => {
-      const result = await getOwnVacationOverview();
+    read: async ({ signal }): Promise<LiveViewResult<OwnVacationOverview>> => {
+      const result = await readInBackground('own-vacation-overview', {}, signal);
       return result.success
         ? { ok: true, data: result.overview }
         : { ok: false };
@@ -129,7 +131,7 @@ export function VacationSection() {
       const result = await withdrawVacationRequest({ requestId: request.id });
       if (!result.success) {
         setListError(
-          REQUEST_ERROR_MESSAGES[result.error] ??
+          REQUEST_ERROR_MESSAGE_BY_CODE[result.error] ??
             'Der Antrag konnte nicht zurückgezogen werden.'
         );
       }
@@ -326,7 +328,7 @@ function VacationRequestDialog({
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
   const previewGenerationRef = useRef(0);
-  const [dateErrors, setDateErrors] = useState<{ start?: string; end?: string }>({});
+  const [dateErrors, setDateErrors] = useState<{ start?: string | undefined; end?: string | undefined }>({});
 
   const isSingleDay = startDate === endDate;
   const dayPortion = halfDay && isSingleDay ? 'half_day' : 'full';
@@ -397,7 +399,7 @@ function VacationRequestDialog({
       startDate,
       endDate,
       dayPortion,
-      comment: comment.trim() || undefined,
+      ...(comment.trim() ? { comment: comment.trim() } : {}),
     });
     setIsSaving(false);
 
@@ -405,7 +407,7 @@ function VacationRequestDialog({
       onClose(true);
     } else {
       setError(
-        REQUEST_ERROR_MESSAGES[result.error] ??
+        REQUEST_ERROR_MESSAGE_BY_CODE[result.error] ??
           'Der Antrag konnte nicht gespeichert werden.'
       );
     }
@@ -506,7 +508,7 @@ function VacationRequestDialog({
                 </span>
               ) : rangePreviewError ? null : previewError ? (
                 <span className="flex items-center justify-between gap-3 text-destructive">
-                  {PREVIEW_ERROR_MESSAGES[previewError] ??
+                  {PREVIEW_ERROR_MESSAGE_BY_CODE[previewError] ??
                     'Die Urlaubstage konnten nicht berechnet werden.'}
                   {(previewError === 'load_failed' ||
                     previewError === 'unexpected_error') && (

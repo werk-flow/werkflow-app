@@ -75,7 +75,7 @@ export function buildWeeklyTimeData(
   const grouped = groupEntriesByDate(entries);
   const days: WeeklyTimeDataPoint[] = [];
 
-  for (let i = 0; i < 7; i++) {
+  for (const [i, label] of DAY_LABELS.entries()) {
     const day = new Date(monday);
     day.setDate(monday.getDate() + i);
     const key = formatDateKey(day);
@@ -103,7 +103,7 @@ export function buildWeeklyTimeData(
 
     days.push({
       date: key,
-      label: DAY_LABELS[i],
+      label,
       totalMinutes,
       workMinutes: breakdown.workMinutes,
       breakMinutes: breakdown.breakMinutes,

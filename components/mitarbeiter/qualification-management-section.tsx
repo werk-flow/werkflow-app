@@ -42,6 +42,7 @@ import { toLocalDateString } from '@/lib/utils';
 function isoToLocalDate(value: string): Date | undefined {
   if (!value) return undefined;
   const [year, month, day] = value.split('-').map(Number);
+  if (year === undefined || month === undefined || day === undefined) return undefined;
   return new Date(year, month - 1, day);
 }
 
@@ -79,14 +80,14 @@ export function QualificationManagementSection({
   const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
   const [grantError, setGrantError] = useState<string | null>(null);
   const [definitionFieldErrors, setDefinitionFieldErrors] = useState<{
-    name?: string;
-    warningDays?: string;
+    name?: string | undefined;
+    warningDays?: string | undefined;
   }>({});
   const [grantFieldErrors, setGrantFieldErrors] = useState<{
-    employee?: string;
-    capability?: string;
-    validFrom?: string;
-    validUntil?: string;
+    employee?: string | undefined;
+    capability?: string | undefined;
+    validFrom?: string | undefined;
+    validUntil?: string | undefined;
   }>({});
   const [pendingAction, setPendingAction] = useState<string | null>(null);
 

@@ -29,9 +29,13 @@ import { artifactsDirectory, type TestWorld } from "./support/world";
 
 test.describe.configure({ mode: "serial" });
 
-const DATES = Array.from({ length: 5 }, (_, index) =>
-  ownedBerlinDateAtOffset("p1-18", 95 + index),
-);
+const DATES = [
+  ownedBerlinDateAtOffset("p1-18", 95),
+  ownedBerlinDateAtOffset("p1-18", 96),
+  ownedBerlinDateAtOffset("p1-18", 97),
+  ownedBerlinDateAtOffset("p1-18", 98),
+  ownedBerlinDateAtOffset("p1-18", 99),
+] as const;
 
 function names(world: TestWorld) {
   return {
@@ -117,7 +121,7 @@ test.describe("P1-18 installed equipment vertical slice @P1-18", () => {
     expect(state.events.map((event) => event.event_type)).toEqual([
       "registered",
     ]);
-    expect(state.events[0].after_snapshot).toMatchObject({
+    expect(state.events[0]?.after_snapshot).toMatchObject({
       installation_date: DATES[0],
       commissioning_date: DATES[1],
       warranty_end_date: DATES[4],
@@ -228,6 +232,7 @@ test.describe("P1-18 installed equipment vertical slice @P1-18", () => {
     const liveModel = `WP 18 LIVE ${world.runId}-${Date.now()}`;
     await expectLiveWithin(visibleText(bueroPage, liveModel), {
       label: "P1-18 equipment detail cross-session refresh",
+      actingPage: adminPage,
       mutation: (beforeSubmit) =>
         updateInstalledEquipmentModel(
           adminPage,

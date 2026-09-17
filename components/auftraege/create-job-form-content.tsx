@@ -1,5 +1,6 @@
 'use client';
 
+import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 
@@ -55,7 +56,7 @@ const PRIORITY_OPTIONS: { value: JobPriority; label: string }[] = [
   { value: 'hoch', label: JOB_PRIORITY_LABELS.hoch }
 ];
 
-export const CREATE_JOB_ERROR_MESSAGES: Record<string, string> = {
+export const CREATE_JOB_ERROR_MESSAGES = {
   not_authenticated: 'Du bist nicht angemeldet.',
   no_active_org: 'Keine Organisation ausgewählt.',
   not_authorized: 'Du bist nicht berechtigt, Aufträge zu verwalten.',
@@ -71,7 +72,8 @@ export const CREATE_JOB_ERROR_MESSAGES: Record<string, string> = {
   work_template_reference_unavailable: 'Die Arbeitsvorlage verweist auf nicht mehr aktive Stammdaten.',
   template_apply_failed: 'Die Arbeitsvorlage konnte nicht übernommen werden.',
   unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.'
-};
+} satisfies Record<string, string>;
+const CREATE_JOB_ERROR_MESSAGE_BY_CODE: Record<string, string> = CREATE_JOB_ERROR_MESSAGES;
 
 /** A validated create request the landing list runs itself (deferred submit). */
 export type CreateJobSubmission = {
@@ -82,30 +84,30 @@ export type CreateJobSubmission = {
 export interface CreateJobFormContentProps {
   clients: Client[];
   members: OrgMemberOption[];
-  projects?: ProjectWithDetails[];
-  initialJobNumber?: string | null;
-  defaultProjectId?: string;
-  defaultClientId?: string;
-  defaultEmployeeIds?: string[];
-  readOnlyClient?: boolean;
-  readOnlyProject?: boolean;
-  defaultDate?: Date;
-  defaultTime?: string;
-  defaultDurationHours?: string;
+  projects?: ProjectWithDetails[] | undefined;
+  initialJobNumber?: string | null | undefined;
+  defaultProjectId?: string | undefined;
+  defaultClientId?: string | undefined;
+  defaultEmployeeIds?: string[] | undefined;
+  readOnlyClient?: boolean | undefined;
+  readOnlyProject?: boolean | undefined;
+  defaultDate?: Date | undefined;
+  defaultTime?: string | undefined;
+  defaultDurationHours?: string | undefined;
   onSuccess?: (payload: {
     job: Job;
     assignedUserIds: string[];
   }) => void | Promise<void>;
-  onDraftChange?: (draft: CalendarEntryDraft | null) => void;
+  onDraftChange?: ((draft: CalendarEntryDraft | null) => void) | undefined;
   /**
    * Deferred submit (feedback canon, create from a dialog): the form hands the
    * validated input over instead of awaiting the server, so the caller closes
    * the dialog at once and shows a pending row. The caller then owns the
    * result — the qualification confirm step, the banners, the rollback.
    */
-  onSubmitDeferred?: (submission: CreateJobSubmission) => void;
+  onSubmitDeferred?: ((submission: CreateJobSubmission) => void) | undefined;
   /** Whether the form is active/visible. Controls data-fetching effects. Defaults to true. */
-  isActive?: boolean;
+  isActive?: boolean | undefined;
 }
 
 export function CreateJobFormContent({
@@ -273,24 +275,24 @@ export function CreateJobFormContent({
 
     const input: CreateJobInput = {
       title: title.trim(),
-      description: description.trim() || undefined,
-      clientId: clientId || undefined,
-      projectId: projectId || undefined,
-      jobNumber: jobNumber.trim() || undefined,
+      ...(description.trim() ? { description: description.trim() } : {}),
+      ...(clientId ? { clientId } : {}),
+      ...(projectId ? { projectId } : {}),
+      ...(jobNumber.trim() ? { jobNumber: jobNumber.trim() } : {}),
       priority,
-      plannedDate: plannedDate
-        ? toLocalDateString(plannedDate)
-        : undefined,
-      plannedTime: plannedTime || undefined,
-      estimatedDurationMinutes: durationMinutes ?? undefined,
+      ...(plannedDate ? { plannedDate: toLocalDateString(plannedDate) } : {}),
+      ...(plannedTime ? { plannedTime } : {}),
+      ...(durationMinutes !== null && durationMinutes !== undefined
+        ? { estimatedDurationMinutes: durationMinutes }
+        : {}),
       plannedWorkingMinutes,
-      location: location.trim() || undefined,
+      ...(location.trim() ? { location: location.trim() } : {}),
       siteId,
       contactId,
       selectedUserIds: selectedEmployees,
       assignmentApproval: approval ?? null,
       assignmentTeamSourceId,
-      templateVersionId: templateVersionId || undefined,
+      ...(templateVersionId ? { templateVersionId } : {}),
     };
 
     if (onSubmitDeferred) {
@@ -321,7 +323,7 @@ export function CreateJobFormContent({
           setContentError(CREATE_JOB_ERROR_MESSAGES[result.error]);
         } else {
           setError(
-            CREATE_JOB_ERROR_MESSAGES[result.error] || result.error || 'Unbekannter Fehler'
+            CREATE_JOB_ERROR_MESSAGE_BY_CODE[result.error] || result.error || 'Unbekannter Fehler'
           );
         }
         return;
@@ -352,38 +354,19 @@ export function CreateJobFormContent({
   const siteContactDisabled = projectSelectionDisabled || projectDefaultsLoadFailed;
   const submitDisabled = formDisabled || isLoadingProjectDefaults || projectDefaultsLoadFailed;
 
-  const activeProjects = useMemo(
-    () =>
-      projects.filter((p) => {
-        const status = p.statusOverride ?? (p.completedJobCount === p.jobCount && p.jobCount > 0 ? 'abgeschlossen' : 'nicht_begonnen');
-        return status !== 'abgeschlossen';
-      }),
-    [projects]
+  const projectSearch = useJobEntityOptions(
+    { kind: 'projects', purpose: 'job-project', clientId: clientId || undefined },
+    projectId ? [projectId] : [],
+    projects.filter((project) => project.id === projectId || ((project.statusOverride ? project.statusOverride !== 'abgeschlossen' : !(project.jobCount > 0 && project.completedJobCount === project.jobCount)) && (!clientId || !project.clientId || project.clientId === clientId))).map((project) => ({ value: project.id, label: project.projectNumber ? `${project.projectNumber} – ${project.name}` : project.name, clientId: project.clientId })),
   );
+  const projectOptions = projectSearch.options;
+  const activeProjects = useMemo(() => projectOptions.map((option) => ({
+    id: option.value, clientId: option.clientId ?? null,
+    siteId: projects.find((project) => project.id === option.value)?.siteId ?? null,
+    contactId: projects.find((project) => project.id === option.value)?.contactId ?? null,
+  })), [projectOptions, projects]);
 
-  const filteredProjects = useMemo(
-    () => {
-      if (!clientId) return activeProjects;
-      return activeProjects.filter((p) => p.clientId === clientId || !p.clientId);
-    },
-    [activeProjects, clientId]
-  );
-
-  const projectOptions = useMemo(
-    () =>
-      filteredProjects.map((p) => ({
-        value: p.id,
-        label: p.projectNumber ? `${p.projectNumber} – ${p.name}` : p.name
-      })),
-    [filteredProjects]
-  );
-
-  const isClientLocked = useMemo(() => {
-    if (readOnlyClient) return true;
-    if (!projectId) return false;
-    const selected = activeProjects.find((p) => p.id === projectId);
-    return !!selected;
-  }, [readOnlyClient, projectId, activeProjects]);
+  const isClientLocked = Boolean(readOnlyClient || projectId);
 
   const lockedClientLabel = useMemo(() => {
     if (readOnlyClient && !projectId) {
@@ -396,7 +379,7 @@ export function CreateJobFormContent({
     if (!selected) return undefined;
     if (!selected.clientId) return 'Kein Kunde';
     const c = clients.find((cl) => cl.id === selected.clientId);
-    return c?.name ?? 'Kein Kunde';
+    return c?.name;
   }, [readOnlyClient, projectId, clientId, activeProjects, clients]);
 
   const handleClientChange = (newClientId: string) => {
@@ -466,7 +449,6 @@ export function CreateJobFormContent({
     }
   };
 
-  const noProjectsForClient = clientId && filteredProjects.length === 0;
 
   return (
     <>
@@ -544,19 +526,15 @@ export function CreateJobFormContent({
         <Field
           label="Projekt"
           htmlFor="job-project"
-          description={
-            noProjectsForClient
-              ? 'Dem ausgewählten Kunden sind keine aktiven Projekte zugeordnet.'
-              : undefined
-          }
         >
           <SearchableSelect
             options={projectOptions}
+                onSearchChange={projectSearch.onSearchChange} loading={projectSearch.loading} loadError={projectSearch.loadError} onLoadMore={projectSearch.onLoadMore}
             value={projectId}
             onChange={handleProjectChange}
             placeholder="Kein Projekt"
             searchPlaceholder="Projekt suchen..."
-            emptyMessage={noProjectsForClient ? 'Kein Projekt für diesen Kunden vorhanden' : 'Kein Projekt gefunden'}
+            emptyMessage="Kein Projekt gefunden"
             disabled={formDisabled}
             allowNone
             noneLabel="Kein Projekt"

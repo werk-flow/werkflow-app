@@ -28,12 +28,12 @@ test.describe('P1-13 versioned work templates @P1-13', () => {
     expect(state.template.target_type).toBe('job');
     expect(state.template.draft_version_id).toBeNull();
     expect(state.versions).toHaveLength(1);
-    expect(state.versions[0].status).toBe('published');
+    expect(state.versions[0]?.status).toBe('published');
     expect(state.items.map((item) => item.content)).toEqual([
       'Anlage prüfen',
       'Messwerte notieren',
     ]);
-    expect(state.items[1].requirement_state).toBe('optional');
+    expect(state.items[1]?.requirement_state).toBe('optional');
     expect(state.evidence.map((item) => item.description)).toEqual(['Foto der Messwerte']);
     expect(state.dependencies).toHaveLength(1);
     expect(state.events.map((event) => event.event_type)).toEqual(
@@ -75,7 +75,7 @@ test.describe('P1-13 versioned work templates @P1-13', () => {
       .poll(
         async () =>
           (await getAppliedWorkTemplateState(world.orgId, { jobNumber })).instructions[0]
-            .is_completed,
+            ?.is_completed,
         { timeout: 20_000 }
       )
       .toBe(true);
@@ -153,7 +153,7 @@ test.describe('P1-13 versioned work templates @P1-13', () => {
     });
     expect(state.applications).toHaveLength(1);
     expect(state.instructions.map((item) => item.content)).toEqual(['Baustelle vorbereiten']);
-    expect(state.instructions[0].work_template_application_id).not.toBeNull();
+    expect(state.instructions[0]?.work_template_application_id).not.toBeNull();
 
     await employeePage.goto('/arbeitsvorlagen');
     await expect(employeePage).toHaveURL(/\/dashboard/);

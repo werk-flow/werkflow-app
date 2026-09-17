@@ -1,5 +1,6 @@
 'use client';
 
+import { formatBerlinDateTime as formatDateTime } from '@/lib/utils';
 import { useEffect, useMemo, useState, type ReactElement } from 'react';
 import Link from 'next/link';
 import { CheckCircle2, Download, Eye, Loader2, RotateCcw, Save } from 'lucide-react';
@@ -32,7 +33,7 @@ import {
   type WorkHandoverWorkspace,
 } from '@/lib/work-handover/types';
 
-const ERROR_MESSAGES: Record<string, string> = {
+const ERROR_MESSAGES = {
   invalid_input: 'Bitte prüfe die Eingaben.',
   work_handover_not_authorized: 'Du bist für diese Übergabe nicht zuständig.',
   work_handover_target_not_found: 'Die Übergabe wurde nicht gefunden.',
@@ -55,7 +56,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   work_handover_sources_overflow: 'Für diese Übergabe sind zu viele Quellen verknüpft. Bitte bereinige die Zuordnung.',
   work_handover_summary_overflow: 'Für diese Übergabe sind zu viele Zeit- oder Materialbuchungen verknüpft.',
   work_handover_action_failed: 'Die Übergabe konnte nicht gespeichert werden.',
-};
+} satisfies Record<string, string>;
+const ERROR_MESSAGE_BY_CODE: Record<string, string> = ERROR_MESSAGES;
 
 /**
  * One key per button group. The busy state and the feedback line are scoped
@@ -86,7 +88,7 @@ const WARNING_GATES: Array<[string, string]> = [
   ['missingMaterialContext', 'Kein Materialkontext vorhanden'],
 ];
 
-const UNASSESSED_FACT_LABELS: Record<string, string> = {
+const UNASSESSED_FACT_LABELS = {
   time_segment_completeness: 'Vollständigkeit der Zeitsegmente',
   material_consumption: 'Materialverbrauch',
   tool_custody: 'Werkzeugverbleib',
@@ -95,13 +97,8 @@ const UNASSESSED_FACT_LABELS: Record<string, string> = {
   signature: 'Unterschrift',
   billability: 'Abrechenbarkeit',
   invoice_readiness: 'Rechnungsreife',
-};
-
-function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat('de-DE', {
-    dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Berlin',
-  }).format(new Date(value));
-}
+} satisfies Record<string, string>;
+const UNASSESSED_FACT_LABEL_BY_CODE: Record<string, string> = UNASSESSED_FACT_LABELS;
 
 function gateCount(snapshot: WorkHandoverWorkspace['gateSnapshot'], key: string): number {
   if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return 0;
@@ -114,8 +111,8 @@ function unassessedFacts(snapshot: WorkHandoverWorkspace['gateSnapshot']): strin
   const value = snapshot.notAssessable;
   return Array.isArray(value)
     ? value.flatMap((entry) => (
-        typeof entry === 'string' && UNASSESSED_FACT_LABELS[entry]
-          ? [UNASSESSED_FACT_LABELS[entry]]
+        typeof entry === 'string' && UNASSESSED_FACT_LABEL_BY_CODE[entry]
+          ? [UNASSESSED_FACT_LABEL_BY_CODE[entry]]
           : []
       ))
     : [];
@@ -145,7 +142,7 @@ async function openDocument(documentId: string): Promise<string | null> {
 function FeedbackText({ feedback }: { feedback: HandoverFeedback | null }): ReactElement | null {
   if (!feedback) return null;
   if (feedback.tone === 'error') return <ErrorText>{feedback.message}</ErrorText>;
-  return <p role="status" className="text-sm text-green-700 dark:text-green-400">{feedback.message}</p>;
+  return <p role="status" className="text-sm text-success-text">{feedback.message}</p>;
 }
 
 export function WorkHandoverSection({
@@ -199,7 +196,7 @@ export function WorkHandoverSection({
     );
     // This key represents every authoritative prop read above. Keeping typed
     // reasons outside the reset avoids losing reviewer input on refresh.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- workspaceAuthorityIdentity is the key over every authoritative prop read above
   }, [workspaceAuthorityIdentity]);
   const selectedKeySet = useMemo(() => new Set(selectedKeys), [selectedKeys]);
   const overrideable = useMemo(() => OVERRIDEABLE_GATES.flatMap(([key, label]) => {
@@ -224,7 +221,7 @@ export function WorkHandoverSection({
   const fail = (operation: HandoverOperation, message: string): void =>
     setFeedback({ operation, tone: 'error', message });
   const failWithCode = (operation: HandoverOperation, code: string): void => {
-    fail(operation, ERROR_MESSAGES[code] ?? ERROR_MESSAGES.work_handover_action_failed);
+    fail(operation, ERROR_MESSAGE_BY_CODE[code] ?? ERROR_MESSAGES.work_handover_action_failed);
     if (code.includes('stale')) refreshRoute();
   };
 
@@ -369,18 +366,23 @@ export function WorkHandoverSection({
 
         {initialWorkspace.commercialReadiness && (
           <div className="flex items-center gap-2 text-sm">
-            <CheckCircle2 className="size-4 text-green-600" aria-hidden="true" />
+            <CheckCircle2 className="size-4 text-success-text" aria-hidden="true" />
             {WORK_HANDOVER_READINESS_LABELS[initialWorkspace.commercialReadiness]}
           </div>
         )}
 
         {initialWorkspace.staleSourceCount > 0 && (
-          <p className="rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-900 dark:border-yellow-900 dark:bg-yellow-950/30 dark:text-yellow-200">
+          <p className="rounded-md border border-warning/40 bg-warning-soft p-3 text-sm text-warning-soft-foreground">
             {initialWorkspace.staleSourceCount === 1
               ? 'Eine gespeicherte Quelle ist nicht mehr aktuell und wird beim nächsten Speichern entfernt.'
               : `${initialWorkspace.staleSourceCount} gespeicherte Quellen sind nicht mehr aktuell und werden beim nächsten Speichern entfernt.`}
           </p>
         )}
+
+        {/* Release, withdrawal and correction change the package state, and the
+            route refresh that follows unmounts the block they were started from.
+            Their confirmation therefore lives at section level. */}
+        <FeedbackText feedback={feedbackFor('release', 'withdraw', 'correction')} />
 
         {canEdit ? (
           <div className="space-y-3">
@@ -453,7 +455,7 @@ export function WorkHandoverSection({
               </div>
             </div>
             {overrideable.length > 0 && (
-              <div className="space-y-2 rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm dark:border-yellow-900 dark:bg-yellow-950/30">
+              <div className="space-y-2 rounded-md border border-warning/40 bg-warning-soft p-3 text-sm">
                 <p className="font-medium">Offene Prüfpunkte</p>
                 <ul className="list-disc space-y-1 pl-5">
                   {overrideable.map((gate) => <li key={gate.key}>{gate.label}: {gate.count}</li>)}
@@ -491,7 +493,7 @@ export function WorkHandoverSection({
                 Freigeben und übergeben
               </Button>
             </div>
-            <FeedbackText feedback={feedbackFor('preview', 'release')} />
+            <FeedbackText feedback={feedbackFor('preview')} />
             {dirty && <p className="text-sm text-muted-foreground">Speichere die Auswahl, bevor du die Vorschau erstellst.</p>}
             {unassessedFacts(initialWorkspace.gateSnapshot).length > 0 && (
               <p className="text-xs text-muted-foreground">
@@ -529,7 +531,6 @@ export function WorkHandoverSection({
               {isBusy('withdraw') ? <Loader2 className="animate-spin" /> : <RotateCcw />}
               Übergabe zurücknehmen
             </Button>
-            <FeedbackText feedback={feedbackFor('withdraw')} />
           </div>
         )}
 
@@ -546,7 +547,6 @@ export function WorkHandoverSection({
               {isBusy('correction') ? <Loader2 className="animate-spin" /> : <RotateCcw />}
               Zur Korrektur in Ausführung geben
             </Button>
-            <FeedbackText feedback={feedbackFor('correction')} />
           </div>
         )}
 

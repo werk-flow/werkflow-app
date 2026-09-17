@@ -125,5 +125,5 @@ The run-to-prevention details live in [test-incident-log.md](../../../technical/
 
 ## Links
 
-- Gate runs: [golden-gate-log.md](../../golden-gate-log.md)
+- Gate runs: [golden-gate-log.md](../audits/golden-gate-log.md)
 - Progress log: [../log.md](../log.md)

@@ -1,5 +1,7 @@
 'use client';
 
+import { getInitials } from '@/lib/members/profile-name';
+import { formatDuration } from '@/lib/time-tracking/helpers';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { usePendingTask } from '@/hooks/use-server-action';
@@ -94,7 +96,7 @@ import type {
 } from '@/lib/qualifications/types';
 import { updateProject } from '@/lib/projects/actions';
 import { formatSiteAddress } from '@/lib/clients/types';
-import { getTimeEntriesForJob } from '@/lib/time-tracking/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import { getProfileAvatarUrl } from '@/lib/profile-avatar';
@@ -134,17 +136,17 @@ import { WorkHandoverSummary } from './work-handover-section';
 const JOB_STATUS_CLASSES: Record<JobStatus, string> = {
   nicht_bearbeitet: 'bg-secondary text-secondary-foreground',
   in_bearbeitung:
-    'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+    'bg-warning-soft text-warning-soft-foreground',
   fertig:
-    'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+    'bg-success-soft text-success-soft-foreground',
   geparkt:
     'bg-brand-purple/15 text-brand-purple-dark dark:text-brand-purple-light',
 };
 
 const PRIORITY_CLASSES: Record<JobPriority, string> = {
   niedrig: 'bg-secondary text-secondary-foreground',
-  mittel: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
-  hoch: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+  mittel: 'bg-info-soft text-info-soft-foreground',
+  hoch: 'bg-destructive-soft text-destructive-soft-foreground',
 };
 
 function formatDate(dateStr: string | null): string {
@@ -170,20 +172,9 @@ function formatPlannedTime(plannedTime: string | null): string {
   return normalizeJobPlannedTime(plannedTime) ?? '—';
 }
 
-function formatDuration(minutes: number | null): string {
+function formatDurationOrDash(minutes: number | null): string {
   if (minutes === null || minutes === undefined) return '—';
-  if (minutes === 0) return '0 Min.';
-  const h = Math.floor(minutes / 60);
-  const m = Math.round(minutes % 60);
-  if (h === 0) return `${m} Min.`;
-  if (m === 0) return `${h} Std.`;
-  return `${h} Std. ${m} Min.`;
-}
-
-function getInitials(firstName: string | null, lastName: string | null): string {
-  const f = firstName?.charAt(0) ?? '';
-  const l = lastName?.charAt(0) ?? '';
-  return (f + l).toUpperCase() || '?';
+  return formatDuration(minutes);
 }
 
 type SessionPerson = {
@@ -207,7 +198,7 @@ function PersonAvatar({
   className,
   fallbackClassName,
 }: {
-  person?: SessionPerson | null;
+  person?: SessionPerson | null | undefined;
   className?: string;
   fallbackClassName?: string;
 }) {
@@ -431,8 +422,8 @@ export function JobDetailContent({
     }>;
   }>({
     tables: ['time_entries', 'time_sessions', 'time_segments'],
-    read: async () => {
-      const result = await getTimeEntriesForJob(liveJob.id);
+    read: async ({ signal }) => {
+      const result = await readInBackground('time-entries-for-job', { jobId: liveJob.id }, signal);
       if (!result.success) return { ok: false };
       return {
         ok: true,
@@ -504,8 +495,9 @@ export function JobDetailContent({
   const allSessions = useMemo(() => {
     const entriesByUser: Record<string, TimeEntry[]> = {};
     for (const e of timeEntries) {
-      if (!entriesByUser[e.userId]) entriesByUser[e.userId] = [];
-      entriesByUser[e.userId].push(e);
+      const userEntries = entriesByUser[e.userId];
+      if (userEntries) userEntries.push(e);
+      else entriesByUser[e.userId] = [e];
     }
     return Object.values(entriesByUser)
       .flatMap((ue) => calculateWorkSessions(ue))
@@ -1131,7 +1123,7 @@ export function JobDetailContent({
     },
     {
       label: 'Geschätzte Dauer',
-      value: formatDuration(liveJob.estimatedDurationMinutes),
+      value: formatDurationOrDash(liveJob.estimatedDurationMinutes),
       editableConfig: isAdminOrManager
         ? {
             type: 'duration',
@@ -1160,7 +1152,7 @@ export function JobDetailContent({
     },
     {
       label: 'Geplanter Arbeitsaufwand',
-      value: formatDuration(liveJob.plannedWorkingMinutes),
+      value: formatDurationOrDash(liveJob.plannedWorkingMinutes),
       editableConfig: isAdminOrManager
         ? {
             type: 'duration',
@@ -1268,8 +1260,8 @@ export function JobDetailContent({
             <span className="line-clamp-2 break-words">{displayTitle}</span>
             {isJobActive && (
               <span className="relative ml-1 mr-1 inline-flex h-3 w-3 shrink-0" title="Jemand arbeitet gerade an diesem Auftrag">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-                <span className="relative inline-flex h-3 w-3 rounded-full bg-green-500" />
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
+                <span className="relative inline-flex h-3 w-3 rounded-full bg-success" />
               </span>
             )}
           </span>
@@ -1579,13 +1571,13 @@ export function JobDetailContent({
               ) : (
                 <div className="space-y-4">
                   {activeWorkers.length > 0 && (
-                    <div className="rounded-md border border-green-200 bg-green-50/80 p-3 dark:border-green-900/40 dark:bg-green-950/20">
+                    <div className="rounded-md border border-success/40 bg-success-soft/80 p-3">
                       <div className="mb-2 flex items-center gap-2">
                         <span className="relative inline-flex h-2.5 w-2.5 shrink-0">
-                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-                          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-500" />
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
+                          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-success" />
                         </span>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-green-700 dark:text-green-300">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-success-soft-foreground">
                           Aktiv in Arbeit
                         </p>
                       </div>
@@ -1598,7 +1590,7 @@ export function JobDetailContent({
                             <PersonAvatar
                               person={worker.person}
                               className="size-8"
-                              fallbackClassName="bg-green-500/10 text-[10px] font-medium text-green-700 dark:text-green-300"
+                              fallbackClassName="bg-success-soft text-[10px] font-medium text-success-soft-foreground"
                             />
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-sm font-medium">
@@ -1614,7 +1606,7 @@ export function JobDetailContent({
                                   }
                                 )}
                                 {' · '}
-                                {formatDuration(Math.round(worker.liveMinutes))}
+                                {formatDurationOrDash(Math.round(worker.liveMinutes))}
                                 {worker.isPending ? ' · ausstehend' : ''}
                               </p>
                             </div>
@@ -1632,8 +1624,8 @@ export function JobDetailContent({
                             Fortschritt nach Arbeitsaufwand
                           </p>
                           <p className="text-sm font-semibold tabular-nums">
-                            {formatDuration(Math.round(totalMinutes))} /{' '}
-                            {formatDuration(progressTargetMinutes)}
+                            {formatDurationOrDash(Math.round(totalMinutes))} /{' '}
+                            {formatDurationOrDash(progressTargetMinutes)}
                           </p>
                         </div>
                         <p className="text-xs font-medium text-muted-foreground tabular-nums">
@@ -1642,8 +1634,8 @@ export function JobDetailContent({
                       </div>
                       <Progress value={progressPercentage} />
                       {overrunMinutes > 0 && (
-                        <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-                          {formatDuration(overrunMinutes)} über dem geplanten
+                        <p className="mt-2 text-xs text-warning-text">
+                          {formatDurationOrDash(overrunMinutes)} über dem geplanten
                           Arbeitsaufwand
                         </p>
                       )}
@@ -1679,13 +1671,13 @@ export function JobDetailContent({
                               </span>
                               {emp.isLive && (
                                 <span className="relative inline-flex h-2 w-2 shrink-0">
-                                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-                                  <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
+                                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
+                                  <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
                                 </span>
                               )}
                             </div>
                             <span className="shrink-0 tabular-nums text-muted-foreground">
-                              {formatDuration(Math.round(emp.minutes))}
+                              {formatDurationOrDash(Math.round(emp.minutes))}
                             </span>
                           </div>
                         ))}
@@ -1756,7 +1748,7 @@ export function JobDetailContent({
                                   </p>
                                 </div>
                                 <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
-                                  {formatDuration(
+                                  {formatDurationOrDash(
                                     Math.round(getSessionDurationMinutes(session))
                                   )}
                                 </span>

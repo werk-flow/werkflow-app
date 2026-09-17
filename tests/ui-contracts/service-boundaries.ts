@@ -23,6 +23,7 @@ declare global {
 }
 
 export function initializeServiceBoundaries(): void {
+  const browserFetch = window.fetch.bind(window);
   window.uiContractServices = {
     authFailure: "returned",
     paymentFailure: "thrown",
@@ -32,7 +33,16 @@ export function initializeServiceBoundaries(): void {
     createdLocations: [],
   };
   window.fetch = Object.assign(
-    async (input: Parameters<typeof fetch>[0]): Promise<Response> => {
+    async (input: Parameters<typeof fetch>[0], init?: RequestInit): Promise<Response> => {
+      // The clock contract intercepts this GET at Playwright's network boundary.
+      if (window.uiContractFixture === 'customer' && typeof input === 'string'
+        && input.startsWith('/api/customer-page?') && (init?.method ?? 'GET') === 'GET') {
+        return browserFetch(input, init);
+      }
+      if (window.uiContractFixture === 'clock' && typeof input === 'string'
+        && input.startsWith('/api/time-tracking-state?') && (init?.method ?? 'GET') === 'GET') {
+        return browserFetch(input, init);
+      }
       if (input !== "/auth/callback")
         throw new Error("Unexpected request in isolated UI contracts.");
       window.uiContractServices.callbackCalls += 1;

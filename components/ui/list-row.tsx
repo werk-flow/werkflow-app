@@ -19,7 +19,7 @@ export const LIST_ROW_INTERACTIVE_CLASS =
 export type ListRowVariant = 'card' | 'plain';
 
 type ListRowProps = React.HTMLAttributes<HTMLDivElement> & {
-  interactive?: boolean;
+  interactive?: boolean | undefined;
   /** `card` (default) is the bordered mobile row; `plain` is a row inside a divided container. */
   variant?: ListRowVariant;
   /** Render as the child element (a `Link`), keeping the row classes. */

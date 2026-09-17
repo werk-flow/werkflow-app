@@ -1,5 +1,6 @@
 'use client';
 
+import { getRoleLabel } from '@/lib/roles';
 import { useMemo, useCallback, useState } from 'react';
 import {
   calculateBlockPosition,
@@ -51,27 +52,27 @@ interface EmployeeTimelineRowProps {
   member: CalendarMember;
   sessions: WorkSession[];
   entries: TimeEntry[];
-  date?: Date;
-  organizationSettings?: OrganizationTimeTrackingSettings;
-  currentUserRole?: OrgRole;
-  currentUserId?: string;
-  onRefresh?: () => void;
-  showNameOnly?: boolean;
-  showTimelineOnly?: boolean;
-  changeRequestMap?: EntryChangeRequestMap;
-  isHighlighted?: boolean;
+  date?: Date | undefined;
+  organizationSettings?: OrganizationTimeTrackingSettings | undefined;
+  currentUserRole?: OrgRole | undefined;
+  currentUserId?: string | undefined;
+  onRefresh?: (() => void) | undefined;
+  showNameOnly?: boolean | undefined;
+  showTimelineOnly?: boolean | undefined;
+  changeRequestMap?: EntryChangeRequestMap | undefined;
+  isHighlighted?: boolean | undefined;
   /** Effective pixel width per hour (zoom-aware). Falls back to BASE_HOUR_WIDTH. */
-  effectiveHourWidth?: number;
+  effectiveHourWidth?: number | undefined;
   /** Total pixel width of the timeline. */
-  timelineWidth?: number;
+  timelineWidth?: number | undefined;
   /** Shared current-time position calculated once by DayView. */
-  currentTimePosition?: number | null;
+  currentTimePosition?: number | null | undefined;
   /** Callback when user drags to create a new entry on this member's row. */
-  onDragCreate?: (memberId: string, startTime: string, endTime: string) => void;
+  onDragCreate?: ((memberId: string, startTime: string, endTime: string) => void) | undefined;
   /** Live creation draft shown while the calendar entry dialog is open. */
-  draftPreview?: { left: number; width: number } | null;
+  draftPreview?: { left: number; width: number } | null | undefined;
   /** Callback when user drags to move/resize a work session block. */
-  onMoveResize?: (result: MoveResizeResult) => void;
+  onMoveResize?: ((result: MoveResizeResult) => void) | undefined;
   /** Called when user starts a whole-block move drag (for cross-row support). */
   onBlockMoveStart?: (
     session: WorkSession,
@@ -81,54 +82,50 @@ interface EmployeeTimelineRowProps {
     e: React.PointerEvent<Element>
   ) => void;
   /** Session ID (clockIn or clockOut) that is currently being dragged across rows. */
-  activeDragSessionId?: string | null;
+  activeDragSessionId?: string | null | undefined;
   /** Calendar block IDs that the active drag currently conflicts with. */
-  activeConflictTargetIds?: string[];
+  activeConflictTargetIds?: string[] | undefined;
   /** Ref set by DayView when cross-row drag occurred (prevents click opening dialog). */
-  dayViewDragDidOccurRef?: React.RefObject<boolean>;
+  dayViewDragDidOccurRef?: React.RefObject<boolean> | undefined;
   /** Timed jobs to display as blocks on this member's row. */
-  jobs?: CalendarJob[];
+  jobs?: CalendarJob[] | undefined;
   /** Callback when a job block is clicked. */
-  onJobClick?: (job: CalendarJob, position: { x: number; y: number }) => void;
+  onJobClick?: ((job: CalendarJob, position: { x: number; y: number }) => void) | undefined;
   /** Callback when user drags to move/resize a job block. */
-  onJobMoveResize?: (result: JobMoveResizeResult) => void;
+  onJobMoveResize?: ((result: JobMoveResizeResult) => void) | undefined;
   /** Called when user starts a cross-row move on a job block. */
-  onJobBlockMoveStart?: (
-    job: CalendarJob,
-    memberId: string,
-    left: number,
-    width: number,
-    e: React.PointerEvent
-  ) => void;
+  onJobBlockMoveStart?:
+    | ((
+        job: CalendarJob,
+        memberId: string,
+        left: number,
+        width: number,
+        e: React.PointerEvent
+      ) => void)
+    | undefined;
   /** Job ID that is currently being dragged across rows. */
-  activeDragJobId?: string | null;
+  activeDragJobId?: string | null | undefined;
   /** Callback when a Parkplatz job is dropped onto this row. */
-  onUnparkJob?: (jobId: string, date: string, time: string, memberId: string, durationMinutes?: number) => void;
+  onUnparkJob?: ((jobId: string, date: string, time: string, memberId: string, durationMinutes?: number) => void) | undefined;
   /** Callback when an untimed day-row job is dropped onto this row to schedule it. */
-  onScheduleJob?: (jobId: string, date: string, time: string, memberId: string, durationMinutes: number) => void;
+  onScheduleJob?: ((jobId: string, time: string, memberId: string, durationMinutes: number) => void) | undefined;
   /** Shadow pill to render for parkplatz drag preview. */
-  parkplatzShadow?: { left: number; width: number } | null;
+  parkplatzShadow?: { left: number; width: number } | null | undefined;
   /** Whether this row is the target of a parkplatz drag (for highlight). */
-  isParkplatzDragTarget?: boolean;
+  isParkplatzDragTarget?: boolean | undefined;
   /** Callback when a parkplatz pill is dragged over this row. */
-  onParkplatzDragOver?: (memberId: string, snappedLeft: number) => void;
+  onParkplatzDragOver?: ((memberId: string, snappedLeft: number) => void) | undefined;
   /** Active job drag shadow state — renders shadow pills for matching jobs in this row */
-  jobDragShadow?: { jobId: string; left: number; width: number; sourceMemberId?: string } | null;
+  jobDragShadow?: { jobId: string; left: number; width: number; sourceMemberId?: string | undefined } | null | undefined;
   /** Callback during in-row job drag to report position for shadow mirroring */
-  onJobDragUpdate?: (jobId: string, left: number, width: number, memberId?: string) => void;
+  onJobDragUpdate?: ((jobId: string, left: number, width: number, memberId?: string) => void) | undefined;
   /** Callback when in-row job drag ends */
-  onJobDragEnd?: (jobId: string) => void;
+  onJobDragEnd?: ((jobId: string) => void) | undefined;
   /** Callback when a session move/resize is rejected locally before drop. */
-  onInvalidSessionPlacement?: (message: string) => void;
+  onInvalidSessionPlacement?: ((message: string) => void) | undefined;
 }
 
 const DEFAULT_DAY_SCHEDULE_DURATION_MINUTES = 240;
-
-const ROLE_LABELS: Record<string, string> = {
-  admin: 'Admin',
-  buero: 'Büro',
-  employee: 'Handwerker'
-};
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const MIN_LAYOUT_WIDTH = 0.5;
@@ -430,13 +427,13 @@ export function EmployeeTimelineRow({
           </span>
           {hasPendingEntries && (
             <span
-              className="h-2 w-2 rounded-full bg-yellow-500 shrink-0"
+              className="h-2 w-2 rounded-full bg-warning shrink-0"
               title="Ausstehende Einträge"
             />
           )}
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span>{ROLE_LABELS[member.role] || member.role}</span>
+          <span>{getRoleLabel(member.role)}</span>
           <span>•</span>
           <span>{totalMinutes > 0 ? formatDuration(totalMinutes) : '—'}</span>
         </div>
@@ -500,7 +497,7 @@ export function EmployeeTimelineRow({
             } else if (payload.source === 'day' && onScheduleJob) {
               const dur =
                 payload.durationMinutes ?? DEFAULT_DAY_SCHEDULE_DURATION_MINUTES;
-              onScheduleJob(payload.jobId, dateStr, time, member.user_id, dur);
+              onScheduleJob(payload.jobId, time, member.user_id, dur);
             }
           } catch { /* ignore parse errors */ }
         }}
@@ -552,13 +549,13 @@ export function EmployeeTimelineRow({
 
         {draftPreview && draftPreview.width > 0 && (
           <div
-            className="pointer-events-none absolute top-1 bottom-1 z-[7] flex items-center justify-center rounded-md border-2 border-dashed border-yellow-500/60 bg-yellow-400/40"
+            className="pointer-events-none absolute top-1 bottom-1 z-[7] flex items-center justify-center rounded-md border-2 border-dashed border-warning/60 bg-warning/40"
             style={{
               left: draftPreview.left,
               width: draftPreview.width
             }}
           >
-            <span className="rounded bg-yellow-400/60 px-1 text-[11px] font-medium whitespace-nowrap text-yellow-800 dark:text-yellow-200">
+            <span className="rounded bg-warning/60 px-1 text-[11px] font-medium whitespace-nowrap text-warning-foreground">
               {formatTimeFromPx(draftPreview.left, effectiveHourWidth)}
               {' – '}
               {formatTimeFromPx(

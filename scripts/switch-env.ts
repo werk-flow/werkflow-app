@@ -46,7 +46,7 @@ function resolveWslIp(): string {
     );
   }
   const ip = output.trim().split(/\s+/)[0];
-  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
+  if (ip === undefined || !/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
     throw new Error(`Unexpected WSL address output: ${output.trim()}`);
   }
   return ip;

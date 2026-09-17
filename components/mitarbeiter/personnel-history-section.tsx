@@ -80,18 +80,16 @@ function detailsFromValues(
   before: Record<string, unknown>,
   after: Record<string, unknown>
 ): HistoryDetail[] {
-  return Object.keys({ ...before, ...after })
-    .filter(
-      (field) =>
-        FIELD_LABELS[field] &&
-        formatValue(field, before[field]) !== formatValue(field, after[field])
-    )
-    .map((field) => ({
-      field,
-      label: FIELD_LABELS[field],
-      before: before[field],
-      after: after[field],
-    }));
+  return Object.keys({ ...before, ...after }).flatMap((field) => {
+    const label = FIELD_LABELS[field];
+    if (
+      !label ||
+      formatValue(field, before[field]) === formatValue(field, after[field])
+    ) {
+      return [];
+    }
+    return [{ field, label, before: before[field], after: after[field] }];
+  });
 }
 
 function historyDetails(event: EmployeeRecordEvent): HistoryDetail[] {

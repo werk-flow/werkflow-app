@@ -1,5 +1,6 @@
 "use client";
 
+import { normalizeSearchText } from '@/lib/ui/search';
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactElement } from "react";
@@ -143,7 +144,7 @@ export function EquipmentListContent({
   const visiblePending = pendingCreates.filter(
     (draft) => !equipment.some((item) => item.id === draft.id),
   );
-  const normalizedSearch = search.trim().toLocaleLowerCase("de-DE");
+  const normalizedSearch = normalizeSearchText(search);
   const filtered = useMemo(
     () =>
       equipment.filter((item) => {

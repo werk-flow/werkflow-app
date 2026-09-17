@@ -5,15 +5,14 @@ export type WorkArtifactStatus = Database['public']['Enums']['work_artifact_stat
 export type WorkArtifactVisibility = Database['public']['Enums']['work_artifact_visibility'];
 export type WorkArtifactActionType = Database['public']['Enums']['work_artifact_action_type'];
 export type WorkArtifactMeasurementUnit = Database['public']['Enums']['work_artifact_measurement_unit'];
-export type WorkArtifactDocumentRelation = Database['public']['Enums']['work_artifact_document_relation'];
-export type WorkArtifactRow = Database['public']['Tables']['work_artifacts']['Row'];
-export type WorkArtifactRevisionRow = Database['public']['Tables']['work_artifact_revisions']['Row'];
+type WorkArtifactRow = Database['public']['Tables']['work_artifacts']['Row'];
+type WorkArtifactRevisionRow = Database['public']['Tables']['work_artifact_revisions']['Row'];
 export type WorkArtifactActionRow = Database['public']['Tables']['work_artifact_actions']['Row'];
-export type WorkArtifactMeasurementLineRow = Database['public']['Tables']['work_artifact_measurement_lines']['Row'];
-export type WorkArtifactDefectDetailRow = Database['public']['Tables']['work_artifact_defect_details']['Row'];
-export type WorkArtifactChangeDetailRow = Database['public']['Tables']['work_artifact_change_details']['Row'];
-export type WorkArtifactDocumentRow = Database['public']['Tables']['work_artifact_revision_documents']['Row'];
-export type WorkArtifactSourceRow = Database['public']['Tables']['work_artifact_revision_sources']['Row'];
+type WorkArtifactMeasurementLineRow = Database['public']['Tables']['work_artifact_measurement_lines']['Row'];
+type WorkArtifactDefectDetailRow = Database['public']['Tables']['work_artifact_defect_details']['Row'];
+type WorkArtifactChangeDetailRow = Database['public']['Tables']['work_artifact_change_details']['Row'];
+type WorkArtifactDocumentRow = Database['public']['Tables']['work_artifact_revision_documents']['Row'];
+type WorkArtifactSourceRow = Database['public']['Tables']['work_artifact_revision_sources']['Row'];
 
 export type WorkArtifactSummary = WorkArtifactRow & {
   currentRevision: WorkArtifactRevisionRow;

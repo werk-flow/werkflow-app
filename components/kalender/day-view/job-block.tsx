@@ -22,20 +22,22 @@ interface JobBlockProps {
   layoutTop: number;
   layoutHeight: number;
   onClick: (job: CalendarJob, position: { x: number; y: number }) => void;
-  effectiveHourWidth?: number;
-  onMoveResize?: (result: JobMoveResizeResult) => void;
-  onBlockMoveStart?: (
-    job: CalendarJob,
-    memberId: string,
-    left: number,
-    width: number,
-    e: React.PointerEvent
-  ) => void;
-  memberId?: string;
-  isDraggedAway?: boolean;
-  dayViewDragDidOccurRef?: React.RefObject<boolean>;
-  onDragUpdate?: (jobId: string, left: number, width: number) => void;
-  onDragEnd?: (jobId: string) => void;
+  effectiveHourWidth?: number | undefined;
+  onMoveResize?: ((result: JobMoveResizeResult) => void) | undefined;
+  onBlockMoveStart?:
+    | ((
+        job: CalendarJob,
+        memberId: string,
+        left: number,
+        width: number,
+        e: React.PointerEvent
+      ) => void)
+    | undefined;
+  memberId?: string | undefined;
+  isDraggedAway?: boolean | undefined;
+  dayViewDragDidOccurRef?: React.RefObject<boolean> | undefined;
+  onDragUpdate?: ((jobId: string, left: number, width: number) => void) | undefined;
+  onDragEnd?: ((jobId: string) => void) | undefined;
 }
 
 function pixelToHHMM(px: number, hourWidth: number): string {
@@ -157,7 +159,7 @@ export function JobBlock({
                 'hover:shadow-md hover:z-20 hover:bg-brand-purple/25',
               ],
           inactiveStatusLabel && 'opacity-60',
-          'focus-within:outline-none focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-1'
+          'focus-within:outline-none focus-within:ring-2 focus-within:ring-ring'
         )}
         style={{
           left: displayLeft,

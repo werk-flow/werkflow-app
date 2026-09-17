@@ -41,12 +41,11 @@ export type DocumentUploader = {
   avatarPath: string | null;
 };
 
+/** What a document link records about an employee; no role or split name is read for it. */
 export type DocumentEmployee = {
   userId: string;
-  firstName: string | null;
-  lastName: string | null;
+  name: string;
   email: string | null;
-  role: string;
 };
 
 export type DocumentEquipment = {
@@ -162,6 +161,7 @@ export type DocumentLibrarySort =
 export type DocumentLibraryResult =
   | {
       success: true;
+      page: number; total: number; folderPage: number; folderTotal: number;
       breadcrumbs: DocumentFolder[];
       folders: DocumentFolder[];
       documents: OrganizationDocument[];
@@ -246,7 +246,7 @@ export type FolderResult =
 export type SignedDocumentUrlResult =
   { success: true; signedUrl: string } | { success: false; error: string };
 
-export type DocumentUploadTicket = {
+type DocumentUploadTicket = {
   documentId: string;
   storagePath: string;
   uploadUrl: string;
@@ -256,7 +256,7 @@ export type DocumentUploadTicketResult =
   | { success: true; ticket: DocumentUploadTicket }
   | { success: false; error: string };
 
-export type DocumentVersionUploadTicket = {
+type DocumentVersionUploadTicket = {
   documentId: string;
   versionNumber: number;
   storagePath: string;
@@ -309,16 +309,6 @@ export type DocumentDetailsResult =
 
 export type VersionResult =
   | { success: true; version: DocumentVersion }
-  | { success: false; error: string };
-
-export type StorageCleanupReport = {
-  orphanedStoragePaths: string[];
-  missingStoragePaths: string[];
-  deletedDocumentStoragePaths: string[];
-};
-
-export type StorageCleanupReportResult =
-  | { success: true; report: StorageCleanupReport }
   | { success: false; error: string };
 
 export function toDocumentFolder(

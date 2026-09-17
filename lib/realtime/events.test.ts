@@ -2,8 +2,8 @@ import { describe, expect, test } from 'bun:test';
 
 import type { RealtimeChangeEvent } from '@/components/realtime/realtime-provider';
 import {
-  coalesceRealtimeEvents,
   shouldScheduleRealtimeRefresh,
+  normalizeRealtimeDeletion,
 } from './events';
 
 function event(
@@ -42,11 +42,26 @@ describe('Realtime refresh event handling', () => {
     ).toBe(true);
   });
 
-  test('a matching event cannot be replaced by a later non-matching event', () => {
-    const combined = coalesceRealtimeEvents(
-      event('UPDATE', { client_id: 'client-1' }),
-      event('UPDATE', { client_id: 'client-2' })
-    );
-    expect(shouldScheduleRealtimeRefresh(combined, clientFilter)).toBe(true);
+
+});
+
+describe('authorized deletion transport', () => {
+  const organization = '10000000-0000-0000-0000-000000000001';
+  const row = '20000000-0000-0000-0000-000000000001';
+  test('retains the existing minimal DELETE shape without copying extra fields', () => {
+    expect(normalizeRealtimeDeletion({ table_name: 'clients', row_id: row, organization_id: organization, secret: 'never forwarded' }, organization))
+      .toEqual({ table: 'clients', eventType: 'DELETE', new: null, old: { id: row, organization_id: organization } });
+  });
+  test('rejects wrong organizations, unknown tables and malformed identities', () => {
+    for (const value of [null, {}, { table_name: 'realtime_deletions', row_id: row, organization_id: organization },
+      { table_name: 'clients', row_id: row, organization_id: 'foreign' },
+      { table_name: 'clients', row_id: 'invalid', organization_id: organization }]) {
+      expect(normalizeRealtimeDeletion(value, organization)).toBeNull();
+    }
+  });
+  test('organization-keyed tables and profile invalidations use the same contract', () => {
+    for (const table of ['organization_settings', 'organization_qualification_settings', 'profiles'] as const) {
+      expect(normalizeRealtimeDeletion({ table_name: table, row_id: organization, organization_id: organization }, organization)?.table).toBe(table);
+    }
   });
 });

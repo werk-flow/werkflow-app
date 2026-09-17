@@ -96,7 +96,7 @@ export function EmployeeMultiSelect({
                 try {
                   const result = await expandTeamForAssignment({
                     teamId: team.id,
-                    assessedForDate,
+                    ...(assessedForDate !== undefined ? { assessedForDate } : {}),
                   });
                   if (!result.success) {
                     showBanner({ variant: 'error', message: 'Das Team konnte nicht übernommen werden.' });

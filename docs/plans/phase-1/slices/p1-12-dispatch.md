@@ -22,7 +22,7 @@ Implemented and accepted 2026-08-14. Live migrations add the exclusive-target di
 
 ## Links
 
-- Gate runs: [golden-gate-log.md](../../golden-gate-log.md)
+- Gate runs: [golden-gate-log.md](../audits/golden-gate-log.md)
 - Progress log: [../log.md](../log.md)
 - Decision record: [0002 — dispatch revision and acknowledgement identity](../../../decisions/0002-dispatch-revision-acknowledgement-identity.md)
 

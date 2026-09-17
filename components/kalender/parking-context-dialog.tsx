@@ -42,6 +42,7 @@ function toLocalIsoDate(date: Date): string {
 function fromIsoDate(value: string | null): Date | undefined {
   if (!value) return undefined;
   const [year, month, day] = value.split('-').map(Number);
+  if (year === undefined || month === undefined || day === undefined) return undefined;
   return new Date(year, month - 1, day);
 }
 
@@ -62,7 +63,7 @@ export function ParkingContextDialog({
   expectedExecutionVersion: number;
   isAlreadyParked: boolean;
   onClose: () => void;
-  onSaveStart?: () => void;
+  onSaveStart?: () => (() => void);
   onSaveFailed?: () => void;
   onSaved: () => void;
 }) {
@@ -131,7 +132,7 @@ export function ParkingContextDialog({
     }
     setFieldErrors({});
     setIsSaving(true);
-    onSaveStart?.();
+    const releaseOperation = onSaveStart?.();
     try {
       const result = existingContext
         ? await setJobParkingContext({
@@ -146,7 +147,7 @@ export function ParkingContextDialog({
             targetId: jobId,
             expectedExecutionVersion,
             reason,
-            details: note.trim() || undefined,
+            ...(note.trim() ? { details: note.trim() } : {}),
             responsibleEmployeeRecordId: responsibleId,
             nextReviewDate: reviewDate ? toLocalIsoDate(reviewDate) : '',
           });
@@ -154,15 +155,17 @@ export function ParkingContextDialog({
         onSaveFailed?.();
         setError(
           PARKING_ERROR_MESSAGES[result.error] ??
-            PARKING_ERROR_MESSAGES.unexpected_error
+            PARKING_ERROR_MESSAGES.unexpected_error ??
+            null
         );
         return;
       }
       onSaved();
     } catch {
       onSaveFailed?.();
-      setError(PARKING_ERROR_MESSAGES.unexpected_error);
+      setError(PARKING_ERROR_MESSAGES.unexpected_error ?? null);
     } finally {
+      releaseOperation?.();
       setIsSaving(false);
     }
   };

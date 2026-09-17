@@ -1,5 +1,6 @@
 'use client';
 
+import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
@@ -34,7 +35,7 @@ import {
 } from '@/lib/jobs/types';
 import { toLocalDateString } from '@/lib/utils';
 
-const ERROR_MESSAGES: Record<string, string> = {
+const ERROR_MESSAGES = {
   not_authenticated: 'Du bist nicht angemeldet.',
   no_active_org: 'Keine Organisation ausgewählt.',
   not_authorized: 'Du bist nicht berechtigt, Projekte zu verwalten.',
@@ -45,7 +46,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   no_changes: 'Keine Änderungen vorgenommen.',
   update_failed: 'Fehler beim Aktualisieren des Projekts.',
   unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.',
-};
+} satisfies Record<string, string>;
+const ERROR_MESSAGE_BY_CODE: Record<string, string> = ERROR_MESSAGES;
 
 interface EditProjectDialogProps {
   project: ProjectWithDetails;
@@ -53,10 +55,10 @@ interface EditProjectDialogProps {
   onOpenChange: (open: boolean) => void;
   clients: Client[];
   jobs: Job[];
-  onSuccess?: (payload: {
+  onSuccess?: ((payload: {
     project: Project;
     selectedJobIds: string[];
-  }) => void | Promise<void>;
+  }) => void | Promise<void>) | undefined;
 }
 
 export function EditProjectDialog({
@@ -87,6 +89,12 @@ export function EditProjectDialog({
   const router = useRouter();
   const { showBanner } = useBanner();
 
+  const jobSearch = useJobEntityOptions(
+    { kind: 'jobs', purpose: 'project-jobs', clientId: clientId || undefined, projectId: project.id },
+    selectedJobIds,
+    jobs.filter((job) => selectedJobIds.includes(job.id) || ((!job.projectId || job.projectId === project.id) && (job.projectId === project.id || !clientId || !job.clientId || job.clientId === clientId))).map((job) => ({ value: job.id, label: job.title || job.description || 'Auftrag', description: job.jobNumber ?? undefined, clientId: job.clientId, projectId: job.projectId, status: job.status })),
+  );
+
   const availableJobs = useMemo(() => {
     const base = jobs.filter(
       (j) => !j.projectId || j.projectId === project.id
@@ -105,15 +113,12 @@ export function EditProjectDialog({
       setContactId('');
     }
     if (selectedJobIds.length > 0) {
-      const validJobIds = new Set(
-        jobs
-          .filter((j) =>
-            (!j.projectId || j.projectId === project.id) &&
-            (j.projectId === project.id || !newClientId || j.clientId === newClientId || !j.clientId)
-          )
-          .map((j) => j.id)
-      );
-      setSelectedJobIds((prev) => prev.filter((id) => validJobIds.has(id)));
+      // A list page is not the selection universe. Discard only hydrated,
+      // incompatible choices; unknown selected identities must not be unlinked.
+      const incompatible = new Set(jobSearch.options.filter((job) =>
+        job.clientId && newClientId && job.clientId !== newClientId && job.projectId !== project.id
+      ).map((job) => job.value));
+      setSelectedJobIds((previous) => previous.filter((id) => !incompatible.has(id)));
     }
   };
 
@@ -156,7 +161,7 @@ export function EditProjectDialog({
           setSelectedJobIds([]);
           setOriginalJobIds([]);
           setError(
-            ERROR_MESSAGES[result.error] ||
+            ERROR_MESSAGE_BY_CODE[result.error] ||
               'Die Projektaufträge konnten nicht geladen werden.'
           );
           return;
@@ -194,19 +199,23 @@ export function EditProjectDialog({
     setIsLoading(true);
 
     try {
+      // A field is sent when it differs from the project, an empty string
+      // included: the action stores '' as null, so clearing a description,
+      // customer, number or date is an update, not an omission.
+      const nextDescription = description.trim();
+      const nextClientId = clientId && clientId !== 'none' ? clientId : '';
+      const nextProjectNumber = projectNumber.trim();
+      const nextPlannedStartDate = plannedStartDate ? toLocalDateString(plannedStartDate) : '';
+      const nextPlannedEndDate = plannedEndDate ? toLocalDateString(plannedEndDate) : '';
       const input: UpdateProjectInput = {
         name: name.trim(),
-        description: description.trim() || undefined,
-        clientId: clientId && clientId !== 'none' ? clientId : undefined,
         siteId,
         contactId,
-        projectNumber: projectNumber.trim() || undefined,
-        plannedStartDate: plannedStartDate
-          ? toLocalDateString(plannedStartDate)
-          : undefined,
-        plannedEndDate: plannedEndDate
-          ? toLocalDateString(plannedEndDate)
-          : undefined,
+        ...(nextDescription !== (project.description ?? '') ? { description: nextDescription } : {}),
+        ...(nextClientId !== (project.clientId ?? '') ? { clientId: nextClientId } : {}),
+        ...(nextProjectNumber !== (project.projectNumber ?? '') ? { projectNumber: nextProjectNumber } : {}),
+        ...(nextPlannedStartDate !== (project.plannedStartDate ?? '') ? { plannedStartDate: nextPlannedStartDate } : {}),
+        ...(nextPlannedEndDate !== (project.plannedEndDate ?? '') ? { plannedEndDate: nextPlannedEndDate } : {}),
       };
 
       const result = await updateProject(project.id, input);
@@ -216,7 +225,7 @@ export function EditProjectDialog({
           setContentError(ERROR_MESSAGES[result.error]);
         } else {
           setError(
-            ERROR_MESSAGES[result.error] || result.error || 'Unbekannter Fehler'
+            ERROR_MESSAGE_BY_CODE[result.error] || result.error || 'Unbekannter Fehler'
           );
         }
         return;
@@ -375,6 +384,7 @@ export function EditProjectDialog({
             >
               <JobMultiSelect
                 jobs={availableJobs}
+                search={jobSearch}
                 selectedIds={selectedJobIds}
                 onSelectionChange={setSelectedJobIds}
                 disabled={formDisabled || isLoadingJobs}

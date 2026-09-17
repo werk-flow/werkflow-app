@@ -76,7 +76,7 @@ export function tableRowClassName(
 }
 
 type TableRowProps = React.HTMLAttributes<HTMLTableRowElement> & {
-  interactive?: TableRowInteractive
+  interactive?: TableRowInteractive | undefined
   /** Loading placeholder row: same classes as the loaded row, hidden from assistive tech. */
   skeleton?: boolean
 }

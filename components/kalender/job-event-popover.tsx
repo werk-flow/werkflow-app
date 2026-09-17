@@ -19,21 +19,29 @@ import type { CalendarJob } from '@/lib/jobs/types';
 import { PLANNING_OCCURRENCE_STATUS_LABELS } from '@/lib/planning/types';
 import { PlanningOccurrenceEditDialog } from './planning-occurrence-edit-dialog';
 
+const DEFAULT_STATUS_LABEL = {
+  label: 'Nicht bearbeitet',
+  className: 'bg-secondary text-secondary-foreground'
+};
+
 const STATUS_LABELS: Record<string, { label: string; className: string }> = {
-  nicht_bearbeitet: {
-    label: 'Nicht bearbeitet',
-    className: 'bg-secondary text-secondary-foreground'
-  },
+  nicht_bearbeitet: DEFAULT_STATUS_LABEL,
   in_bearbeitung: {
     label: 'In Bearbeitung',
     className:
-      'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400'
+      'bg-warning-soft text-warning-soft-foreground'
   },
   fertig: {
     label: 'Fertig',
     className:
-      'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+      'bg-success-soft text-success-soft-foreground'
   }
+};
+
+const DEFAULT_PRIORITY_LABEL = {
+  label: 'Mittel',
+  className:
+    'bg-info-soft text-info-soft-foreground'
 };
 
 const PRIORITY_LABELS: Record<string, { label: string; className: string }> = {
@@ -41,14 +49,10 @@ const PRIORITY_LABELS: Record<string, { label: string; className: string }> = {
     label: 'Niedrig',
     className: 'bg-secondary text-secondary-foreground'
   },
-  mittel: {
-    label: 'Mittel',
-    className:
-      'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
-  },
+  mittel: DEFAULT_PRIORITY_LABEL,
   hoch: {
     label: 'Hoch',
-    className: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+    className: 'bg-destructive-soft text-destructive-soft-foreground'
   }
 };
 
@@ -109,8 +113,8 @@ export function JobEventPopover({
     };
   }, [editOpen, onClose]);
 
-  const statusInfo = STATUS_LABELS[job.status] ?? STATUS_LABELS.nicht_bearbeitet;
-  const priorityInfo = PRIORITY_LABELS[job.priority] ?? PRIORITY_LABELS.mittel;
+  const statusInfo = STATUS_LABELS[job.status] ?? DEFAULT_STATUS_LABEL;
+  const priorityInfo = PRIORITY_LABELS[job.priority] ?? DEFAULT_PRIORITY_LABEL;
   // Skipped/cancelled occurrences stay visible for traceability but are
   // read-only: the status badge explains the state, editing is not offered.
   const inactiveStatusLabel = job.occurrenceStatus

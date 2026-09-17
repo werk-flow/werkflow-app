@@ -328,9 +328,6 @@ export async function FieldWorkPackPage({
           >
             {documentsResult.success ? (
               <ContextualDocumentsSection
-                key={
-                  documents.map((document) => document.id).join(":") || "empty"
-                }
                 title="Dokumente & Bilder"
                 description="Dateien zu diesem Auftrag ansehen oder direkt vom Einsatz hochladen."
                 documents={documents}
@@ -415,15 +412,10 @@ export async function FieldWorkPackPage({
               description="Materialbedarf und Bewegungen konnten nicht geladen werden. Es wird kein Bestand als verfügbar angenommen."
             >
               {materialLinesResult.success ? (
+                // Not keyed by the booked quantities: the section's live view
+                // reads fresh lines itself, and a remount on the next route
+                // refresh closed a dialog the worker had just opened (A1-39).
                 <JobMaterialsSection
-                  key={
-                    materialLines
-                      .map(
-                        (line) =>
-                          `${line.id}:${line.takenQuantity}:${line.returnedQuantity}`,
-                      )
-                      .join("|") || "empty"
-                  }
                   jobId={job.id}
                   initialLines={materialLines}
                   inventoryItems={[]}

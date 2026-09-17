@@ -6,7 +6,7 @@ type EffectiveEntryOptions = {
   sameLocalDayOnly?: boolean;
 };
 
-export function sortTimeEntries(entries: TimeEntry[]): TimeEntry[] {
+function sortTimeEntries(entries: TimeEntry[]): TimeEntry[] {
   return [...entries].sort((a, b) => {
     const diff = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
     if (diff !== 0) return diff;

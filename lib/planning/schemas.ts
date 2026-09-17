@@ -151,14 +151,6 @@ export const createPlanningEntrySchema = baseEntrySchema.and(
   }
 });
 
-export const updatePlanningOccurrenceSchema = baseEntrySchema.and(
-  z.object({
-    occurrenceId: uuidSchema,
-    expectedVersion: z.number().int().positive(),
-    scope: z.enum(['one', 'future', 'series']),
-  })
-);
-
 export const updatePlanningCalendarSchema = z
   .object({
     plannedDate: z.string().date().optional(),
@@ -188,7 +180,4 @@ export const planningOccurrenceStatusSchema = z.object({
 
 export type CreatePlanningEntryInput = z.infer<
   typeof createPlanningEntrySchema
->;
-export type UpdatePlanningOccurrenceInput = z.infer<
-  typeof updatePlanningOccurrenceSchema
 >;

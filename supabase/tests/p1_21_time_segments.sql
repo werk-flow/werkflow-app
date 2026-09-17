@@ -52,6 +52,12 @@ insert into auth.users (
   '00000000-0000-0000-0000-000000000000',
   'authenticated', 'authenticated', 'p1-21-employee-b@example.test', '', now(),
   '{}'::jsonb, '{"first_name":"Employee","last_name":"B"}'::jsonb, now(), now()
+),
+(
+  '21000000-0000-0000-0000-000000000009',
+  '00000000-0000-0000-0000-000000000000',
+  'authenticated', 'authenticated', 'p1-21-without-time@example.test', '', now(),
+  '{}'::jsonb, '{"first_name":"Without","last_name":"Time"}'::jsonb, now(), now()
 );
 insert into public.organization_members (organization_id, user_id, role)
 values
@@ -66,6 +72,10 @@ values
 (
   '21000000-0000-0000-0000-000000000002',
   '21000000-0000-0000-0000-000000000007', 'employee'
+),
+(
+  '21000000-0000-0000-0000-000000000002',
+  '21000000-0000-0000-0000-000000000009', 'employee'
 );
 
 -- Exercise the same deployment role as the Server Action. This catches a
@@ -79,6 +89,10 @@ declare
   v_version bigint;
   v_segment_count integer;
   v_previous_capture_write text;
+  v_legacy_entry public.time_entries%rowtype;
+  v_session_before jsonb;
+  v_segments_before jsonb;
+  v_events_before jsonb;
 begin
   if to_regprocedure(
     'public.transition_time_activity(uuid,uuid,uuid,text,time_operation_kind,uuid,bigint,time_segment_kind,time_allocation_kind,uuid,planning_internal_type,time_travel_route,time_travel_role,time_standby_context,boolean)'
@@ -334,10 +348,12 @@ begin
     p_segment_kind => 'work', p_allocation_kind => 'unallocated'
   );
   v_session_id := (v_result->>'sessionId')::uuid;
+  -- Authorization is tested against a history-free target so SI-006's earlier
+  -- history refusal does not hide the authorization boundary.
   begin
     perform public.remove_member_with_time_capture(
       '21000000-0000-0000-0000-000000000002',
-      '21000000-0000-0000-0000-000000000003',
+      '21000000-0000-0000-0000-000000000009',
       '21000000-0000-0000-0000-000000000099',
       '21000000-0000-0000-0000-000000000032'
     );
@@ -367,52 +383,83 @@ begin
   exception when others then
     if sqlerrm not like '%time_member_removal_target_missing%' then raise; end if;
   end;
+  if public.remove_member_with_time_capture(
+    '21000000-0000-0000-0000-000000000002',
+    '21000000-0000-0000-0000-000000000009',
+    '21000000-0000-0000-0000-000000000005',
+    '21000000-0000-0000-0000-000000000036'
+  ) is distinct from false then raise exception 'history-free removal reported a closed session'; end if;
+  if exists (
+    select 1 from public.organization_members
+    where organization_id = '21000000-0000-0000-0000-000000000002'
+      and user_id = '21000000-0000-0000-0000-000000000009'
+  ) then raise exception 'buero removal left the history-free employee membership'; end if;
+
+  -- SI-006 preserves recorded time and membership instead of deleting history.
   insert into public.time_entries (
     user_id, organization_id, entry_type, timestamp, is_manual, status
   ) values (
     '21000000-0000-0000-0000-000000000007',
     '21000000-0000-0000-0000-000000000002',
     'clock_in', now(), false, 'approved'
-  );
-  perform public.remove_member_with_time_capture(
-    '21000000-0000-0000-0000-000000000002',
-    '21000000-0000-0000-0000-000000000007',
-    '21000000-0000-0000-0000-000000000005',
-    '21000000-0000-0000-0000-000000000035'
-  );
-  if exists (
+  ) returning * into v_legacy_entry;
+  begin
+    perform public.remove_member_with_time_capture(
+      '21000000-0000-0000-0000-000000000002',
+      '21000000-0000-0000-0000-000000000007',
+      '21000000-0000-0000-0000-000000000005',
+      '21000000-0000-0000-0000-000000000035'
+    );
+    raise exception 'buero removed an employee with legacy time';
+  exception when raise_exception then
+    if sqlerrm <> 'time_member_removal_has_history' then raise; end if;
+  end;
+  if not exists (
     select 1 from public.organization_members
     where organization_id = '21000000-0000-0000-0000-000000000002'
       and user_id = '21000000-0000-0000-0000-000000000007'
-  ) then raise exception 'buero removal left the employee membership'; end if;
-  if exists (
-    select 1 from public.time_entries
-    where organization_id = '21000000-0000-0000-0000-000000000002'
-      and user_id = '21000000-0000-0000-0000-000000000007'
-  ) then raise exception 'buero removal left legacy employee time'; end if;
+  ) then raise exception 'legacy-history refusal removed the employee membership'; end if;
+  if (select to_jsonb(entry) from public.time_entries entry where id = v_legacy_entry.id)
+    is distinct from to_jsonb(v_legacy_entry)
+  then raise exception 'legacy-history refusal changed recorded time'; end if;
+
+  select to_jsonb(session) into v_session_before from public.time_sessions session where id = v_session_id;
+  select jsonb_agg(to_jsonb(segment) order by id) into v_segments_before
+    from public.time_segments segment where session_id = v_session_id;
+  select jsonb_agg(to_jsonb(event) order by id) into v_events_before
+    from public.time_segment_events event where session_id = v_session_id;
+  if v_session_before is null or v_session_before->>'ended_at' is not null
+    or v_segments_before is null or v_events_before is null
+  then raise exception 'canonical history fixture is missing its open session, segments, or events'; end if;
   perform set_config('app.time_capture_write', 'outer_scope', true);
-  if not public.remove_member_with_time_capture(
-    '21000000-0000-0000-0000-000000000002',
-    '21000000-0000-0000-0000-000000000003',
-    '21000000-0000-0000-0000-000000000001',
-    '21000000-0000-0000-0000-000000000031'
-  ) then raise exception 'atomic member removal did not report an open session'; end if;
+  begin
+    perform public.remove_member_with_time_capture(
+      '21000000-0000-0000-0000-000000000002',
+      '21000000-0000-0000-0000-000000000003',
+      '21000000-0000-0000-0000-000000000001',
+      '21000000-0000-0000-0000-000000000031'
+    );
+    raise exception 'admin removed a member with a canonical session';
+  exception when raise_exception then
+    if sqlerrm <> 'time_member_removal_has_history' then raise; end if;
+  end;
   if current_setting('app.time_capture_write', true) <> 'outer_scope'
-  then raise exception 'member-removal close did not restore capture scope'; end if;
-  if exists (
-    select 1 from public.time_sessions
-    where id = v_session_id and ended_at is null
-  ) then raise exception 'member-removal close left the session open'; end if;
+  then raise exception 'history refusal changed capture scope'; end if;
+  if (select to_jsonb(session) from public.time_sessions session where id = v_session_id)
+    is distinct from v_session_before
+    or (select jsonb_agg(to_jsonb(segment) order by id) from public.time_segments segment where session_id = v_session_id)
+      is distinct from v_segments_before
+    or (select jsonb_agg(to_jsonb(event) order by id) from public.time_segment_events event where session_id = v_session_id)
+      is distinct from v_events_before
+  then raise exception 'history refusal changed the session, segments, or events'; end if;
+  if exists (select 1 from public.time_operations
+    where id = '21000000-0000-0000-0000-000000000031')
+  then raise exception 'history refusal recorded a removal operation'; end if;
   if not exists (
-    select 1 from public.time_segment_events
-    where session_id = v_session_id and event_type = 'session_ended'
-      and event_payload->>'reason' = 'membership_removed'
-  ) then raise exception 'member-removal close event missing'; end if;
-  if exists (
     select 1 from public.organization_members
     where organization_id = '21000000-0000-0000-0000-000000000002'
       and user_id = '21000000-0000-0000-0000-000000000003'
-  ) then raise exception 'atomic member removal left the membership'; end if;
+  ) then raise exception 'canonical-history refusal removed the membership'; end if;
 end;
 $$;
 

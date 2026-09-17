@@ -10,23 +10,23 @@ import type { ClockTimelineSegment } from '@/lib/time-tracking/types';
 
 interface TimeProgressRingProps {
   totalMinutes: number;
-  breakMinutes?: number;
-  timelineSegments?: ClockTimelineSegment[];
+  breakMinutes?: number | undefined;
+  timelineSegments?: ClockTimelineSegment[] | undefined;
   /** Resolved daily target (P1-04); the overtime ring starts beyond it. */
-  targetMinutes?: number;
-  isActive?: boolean;
-  glowVariant?: 'work' | 'break';
-  size?: number;
-  strokeWidth?: number;
-  children?: React.ReactNode;
-  className?: string;
+  targetMinutes?: number | undefined;
+  isActive?: boolean | undefined;
+  glowVariant?: 'work' | 'break' | undefined;
+  size?: number | undefined;
+  strokeWidth?: number | undefined;
+  children?: React.ReactNode | undefined;
+  className?: string | undefined;
 }
 
 const SEGMENT_COLORS: Record<string, string> = {
-  work: '#22c55e',   // green-500
-  break: '#eab308',  // yellow-500
+  work: 'var(--status-work)',
+  break: 'var(--status-break)',
 };
-const OVERTIME_COLOR = '#3b82f6'; // blue-500
+const OVERTIME_COLOR = 'var(--status-overtime)';
 
 export function TimeProgressRing({
   totalMinutes,

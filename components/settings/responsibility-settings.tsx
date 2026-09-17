@@ -61,7 +61,7 @@ import {
 import { ROLE_LABELS } from '@/lib/roles';
 import { toLocalDateString } from '@/lib/utils';
 
-const ERROR_MESSAGES: Record<string, string> = {
+const ERROR_MESSAGES = {
   not_authorized: 'Nur der Admin kann Verantwortlichkeiten ändern.',
   organization_not_found: 'Die aktive Organisation wurde nicht gefunden.',
   load_failed: 'Die Verantwortlichkeiten konnten nicht geladen werden.',
@@ -84,7 +84,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   responsibility_delegation_not_found:
     'Die Vertretung wurde nicht gefunden.',
   save_failed: 'Die Änderung konnte nicht gespeichert werden.',
-};
+} satisfies Record<string, string>;
+const ERROR_MESSAGE_BY_CODE: Record<string, string> = ERROR_MESSAGES;
 
 function personName(
   people: ResponsibilityPerson[],
@@ -384,7 +385,7 @@ function DelegationList({
       const result = await endResponsibilityDelegation(delegationId);
       if (!result.success) {
         showBanner({
-          message: ERROR_MESSAGES[result.error] ?? ERROR_MESSAGES.save_failed,
+          message: ERROR_MESSAGE_BY_CODE[result.error] ?? ERROR_MESSAGES.save_failed,
           variant: 'error',
         });
         return;
@@ -500,7 +501,7 @@ function ConfigurationDialog({
       });
       if (!result.success) {
         showBanner({
-          message: ERROR_MESSAGES[result.error] ?? ERROR_MESSAGES.save_failed,
+          message: ERROR_MESSAGE_BY_CODE[result.error] ?? ERROR_MESSAGES.save_failed,
           variant: 'error',
         });
         return;
@@ -526,7 +527,7 @@ function ConfigurationDialog({
       });
       if (!result.success) {
         showBanner({
-          message: ERROR_MESSAGES[result.error] ?? ERROR_MESSAGES.save_failed,
+          message: ERROR_MESSAGE_BY_CODE[result.error] ?? ERROR_MESSAGES.save_failed,
           variant: 'error',
         });
         return;
@@ -727,8 +728,8 @@ function DelegationDialog({
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [personErrors, setPersonErrors] = useState<{
-    delegator?: string;
-    substitute?: string;
+    delegator?: string | undefined;
+    substitute?: string | undefined;
   }>({});
   const hasInvalidDateRange = validUntil < validFrom;
   const dateRangeError = hasInvalidDateRange
@@ -784,7 +785,7 @@ function DelegationDialog({
         note,
       });
       if (!result.success) {
-        setSaveError(ERROR_MESSAGES[result.error] ?? ERROR_MESSAGES.save_failed);
+        setSaveError(ERROR_MESSAGE_BY_CODE[result.error] ?? ERROR_MESSAGES.save_failed);
         return;
       }
       handleOpenChange(false);

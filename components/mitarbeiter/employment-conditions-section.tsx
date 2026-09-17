@@ -332,9 +332,9 @@ function ConditionDialog({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{
-    validFrom?: string;
-    weeklyHours?: string;
-    vacationDays?: string;
+    validFrom?: string | undefined;
+    weeklyHours?: string | undefined;
+    vacationDays?: string | undefined;
   }>({});
   const { showBanner } = useBanner();
 

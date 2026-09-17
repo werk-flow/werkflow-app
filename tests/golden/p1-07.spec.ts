@@ -83,12 +83,14 @@ function berlinTodayIso(): string {
 
 function weekdayIndex(dateIso: string): number {
   const [year, month, day] = dateIso.split('-').map(Number);
+  if (year === undefined || month === undefined || day === undefined) throw new Error(`Invalid ISO date: ${dateIso}`);
   const jsWeekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
   return jsWeekday === 0 ? 6 : jsWeekday - 1;
 }
 
 function shiftIsoDate(dateIso: string, days: number): string {
   const [year, month, day] = dateIso.split('-').map(Number);
+  if (year === undefined || month === undefined || day === undefined) throw new Error(`Invalid ISO date: ${dateIso}`);
   const shifted = new Date(Date.UTC(year, month - 1, day) + days * 86_400_000);
   return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, '0')}-${String(shifted.getUTCDate()).padStart(2, '0')}`;
 }
@@ -114,6 +116,9 @@ function monthsAhead(dateIso: string): number {
   const todayIso = berlinTodayIso();
   const [todayYear, todayMonth] = todayIso.split('-').map(Number);
   const [targetYear, targetMonth] = dateIso.split('-').map(Number);
+  if (todayYear === undefined || todayMonth === undefined || targetYear === undefined || targetMonth === undefined) {
+    throw new Error(`Invalid ISO date: ${dateIso}`);
+  }
   return (targetYear - todayYear) * 12 + (targetMonth - todayMonth);
 }
 

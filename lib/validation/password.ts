@@ -73,7 +73,7 @@ export function getPasswordStrengthLevel(password: string): number {
 
 export function getPasswordConfirmationError(
   values: PasswordWithConfirmationValues
-) {
+): string | null {
   if (!values.confirmPassword) {
     return 'Bitte bestätige dein neues Passwort.';
   }

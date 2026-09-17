@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, createContext, useContext, useMemo } from "react";
-import Link from "next/link";
+import { SidebarLink as Link } from "./sidebar-link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import dynamic from "next/dynamic";
@@ -215,7 +215,7 @@ function SidebarSkeleton() {
 }
 
 // Sidebar content component (shared between desktop and mobile)
-function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+function SidebarContent({ onNavigate }: { onNavigate?: (() => void) | undefined }) {
   const pathname = usePathname();
   const { activeOrg } = useOrganization();
   const { actionableCount, approvalsCount, unreadNotificationCount } =
@@ -335,7 +335,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 // Wraps SidebarContent with a loading check for provider hydration
-function DynamicSidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+function DynamicSidebarContent({ onNavigate }: { onNavigate?: (() => void) | undefined }) {
   const { isLoading } = useOrganization();
 
   if (isLoading) {

@@ -37,6 +37,7 @@ function berlinDateAfter(days: number): string {
     day: '2-digit',
   }).format(new Date());
   const [year, month, day] = today.split('-').map(Number);
+  if (year === undefined || month === undefined || day === undefined) throw new Error(`Invalid ISO date: ${today}`);
   return new Date(Date.UTC(year, month - 1, day) + days * 86_400_000).toISOString().slice(0, 10);
 }
 

@@ -1,24 +1,25 @@
 'use client';
 
+import { DEFAULT_DAILY_TARGET_MINUTES } from '@/lib/personnel/targets';
 import { useState, useEffect, useMemo } from 'react';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import type { DailyTarget } from '@/lib/personnel/targets';
 
 interface HoursDisplayProps {
-  status?: 'clocked_out' | 'working' | 'on_break';
+  status?: 'clocked_out' | 'working' | 'on_break' | undefined;
   isClockedIn: boolean;
   statusStartedAt: string | null;
   workMinutes: number;
   /** Whether the viewer has permission to see this member's progress */
-  canViewStatus?: boolean;
+  canViewStatus?: boolean | undefined;
   /** Resolved daily target (P1-04); without it the legacy 8h goal applies. */
-  target?: DailyTarget;
+  target?: DailyTarget | undefined;
 }
 
 // Legacy daily goal in minutes (8 hours); only used when no resolved target
 // is available — equals the labeled `default` target source.
-const DAILY_GOAL_MINUTES = 8 * 60; // 480 minutes
+const DAILY_GOAL_MINUTES = DEFAULT_DAILY_TARGET_MINUTES;
 
 /**
  * Calculate total minutes including live elapsed time
@@ -118,7 +119,7 @@ export function HoursDisplay({
 
   // Determine indicator color based on progress
   const getIndicatorColor = () => {
-    if (percentage >= 100) return 'bg-green-500';
+    if (percentage >= 100) return 'bg-success';
     return 'bg-brand-purple';
   };
 
@@ -173,7 +174,7 @@ export function HoursDisplay({
         className={cn(
           'text-xs font-medium tabular-nums w-8 text-right',
           percentage >= 100
-            ? 'text-green-600 dark:text-green-400'
+            ? 'text-success-text'
             : 'text-muted-foreground'
         )}
       >
@@ -182,7 +183,7 @@ export function HoursDisplay({
       {target?.source === 'default' && (
         <span
           aria-label="Kein Arbeitszeitmodell hinterlegt"
-          className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-yellow-500"
+          className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
         />
       )}
     </div>

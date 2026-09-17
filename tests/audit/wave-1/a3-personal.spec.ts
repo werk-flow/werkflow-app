@@ -55,6 +55,7 @@ function a3PersonnelName(runId: string): string {
 
 function shiftIsoDate(dateIso: string, days: number): string {
   const [year, month, day] = dateIso.split('-').map(Number);
+  if (year === undefined || month === undefined || day === undefined) throw new Error(`Invalid ISO date: ${dateIso}`);
   const shifted = new Date(Date.UTC(year, month - 1, day) + days * 86_400_000);
   return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, '0')}-${String(shifted.getUTCDate()).padStart(2, '0')}`;
 }
@@ -307,9 +308,9 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
       await adminPage.unroute('**/mitarbeiter');
     }
 
-    const recordMatch = adminPage.url().match(/\/mitarbeiter\/([0-9a-f-]{36})/);
-    if (!recordMatch) throw new Error('Could not read the A3 personnel record id.');
-    saveAuditCheckpoint("a3.personnelRecordId", recordMatch[1]);
+    const a3RecordId = adminPage.url().match(/\/mitarbeiter\/([0-9a-f-]{36})/)?.[1];
+    if (!a3RecordId) throw new Error('Could not read the A3 personnel record id.');
+    saveAuditCheckpoint("a3.personnelRecordId", a3RecordId);
 
     await editPersonnelTextField(adminPage, 'Telefon', '030 300030');
     await editPersonnelTextField(adminPage, 'Private E-Mail', privateEmail);
@@ -422,7 +423,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     ]) {
       await expectHistoryAttribution(adminPage, eventLabel, adminName);
     }
-    const eventStates = await getEmployeeRecordEventStates(world.orgId, recordMatch[1]);
+    const eventStates = await getEmployeeRecordEventStates(world.orgId, a3RecordId);
     for (const eventType of [
       'created',
       'master_data_updated',
@@ -456,7 +457,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     ).toBeVisible({ timeout: 15_000 });
     await adminPage.keyboard.press('Escape');
     await expect(duplicateDialog).toBeHidden({ timeout: 15_000 });
-    await adminPage.goto(`/mitarbeiter/${recordMatch[1]}`);
+    await adminPage.goto(`/mitarbeiter/${a3RecordId}`);
     await expect(visibleText(adminPage, employeeNumber)).toBeVisible();
   });
 
@@ -596,12 +597,13 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     });
 
     context = await getTargetContextForRecord(world.orgId, personnelRecordId);
-    const a3History = context.calendar.holidayRegionHistory.slice(-2);
-    expect(a3History.map((entry) => entry.region)).toEqual(['BE', 'TH']);
-    expect(new Date(a3History[0].effectiveFrom).getTime()).toBeLessThanOrEqual(
-      new Date(a3History[1].effectiveFrom).getTime()
+    const [firstA3Region, secondA3Region] = context.calendar.holidayRegionHistory.slice(-2);
+    if (!firstA3Region || !secondA3Region) throw new Error('A3 expects two holiday region history entries.');
+    expect([firstA3Region.region, secondA3Region.region]).toEqual(['BE', 'TH']);
+    expect(new Date(firstA3Region.effectiveFrom).getTime()).toBeLessThanOrEqual(
+      new Date(secondA3Region.effectiveFrom).getTime()
     );
-    const beforeFirstSelection = shiftIsoDate(toBerlinIsoDate(a3History[0].effectiveFrom), -1);
+    const beforeFirstSelection = shiftIsoDate(toBerlinIsoDate(firstA3Region.effectiveFrom), -1);
     expect(resolveHolidayRegionOnDate(context.calendar, beforeFirstSelection)).toBeNull();
     const currentYear = Number(today.slice(0, 4));
     const holidayYear = today <= `${currentYear}-09-20` ? currentYear : currentYear + 1;

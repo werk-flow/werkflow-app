@@ -40,7 +40,7 @@ type R2Config = {
   secretAccessKey: string;
   bucketName: string;
   jurisdiction: string;
-  // Optional full endpoint override (decision D9, docs/plans/platform-hardening.md):
+  // Optional full endpoint override (decision D9, docs/plans/phase-1/consolidation-2026-08/platform-hardening.md):
   // the local test stack serves an S3-compatible endpoint on localhost that the
   // account/jurisdiction URL scheme cannot express. Cloud environments leave it
   // unset; the test preflight rejects it outside the local target.
@@ -90,7 +90,7 @@ export function getR2Endpoint(): string {
   return `https://${config.accountId}.${jurisdictionSegment}r2.cloudflarestorage.com`;
 }
 
-export function getR2BucketName(): string {
+function getR2BucketName(): string {
   return getR2Config().bucketName;
 }
 
@@ -155,7 +155,7 @@ export async function createSignedDownloadUrl({
 }: {
   path: string;
   disposition?: 'inline' | 'attachment';
-  downloadFileName?: string;
+  downloadFileName?: string | undefined;
   expiresInSeconds?: number;
 }): Promise<string> {
   const command = new GetObjectCommand({

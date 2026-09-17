@@ -1,5 +1,6 @@
 'use client';
 
+import { formatDuration } from '@/lib/time-tracking/helpers';
 import { CalendarClock, ClipboardCopy, MapPin, Navigation, Phone, UserRound } from 'lucide-react';
 import { useEffect, useRef, type ReactElement } from 'react';
 
@@ -17,13 +18,8 @@ function formatSchedule(job: FieldWorkPackJob): string {
   return `${day}.${month}.${year}${time}`;
 }
 
-function formatDuration(minutes: number | null): string | null {
-  if (!minutes) return null;
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  return [hours > 0 ? `${hours} Std.` : null, rest > 0 ? `${rest} Min.` : null]
-    .filter(Boolean)
-    .join(' ');
+function formatDurationOrNull(minutes: number | null): string | null {
+  return minutes ? formatDuration(minutes) : null;
 }
 
 export function FieldWorkPackOverview({ job }: { job: FieldWorkPackJob }): ReactElement {
@@ -33,7 +29,7 @@ export function FieldWorkPackOverview({ job }: { job: FieldWorkPackJob }): React
   const telephoneHref = phone
     ? `${phone.trimStart().startsWith('+') ? '+' : ''}${phone.replace(/\D/g, '')}`
     : null;
-  const duration = formatDuration(job.plannedWorkingMinutes);
+  const duration = formatDurationOrNull(job.plannedWorkingMinutes);
 
   useRealtimeRouterRefresh({
     tables: [

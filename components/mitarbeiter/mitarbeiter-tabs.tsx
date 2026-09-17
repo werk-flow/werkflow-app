@@ -32,7 +32,7 @@ interface MitarbeiterTabsProps {
   invites: Invite[];
   personnelEntries: PersonnelListEntry[];
   personnelProfileNames: Record<string, string>;
-  targetsByUserId?: Record<string, DailyTarget>;
+  targetsByUserId?: Record<string, DailyTarget> | undefined;
   removalBlockedByUserId: Record<string, string>;
   currentUserId: string;
   currentUserRole: OrgRole;

@@ -192,11 +192,14 @@ export function OrganizationProvider({
       setMemberships(newMemberships)
 
       if (activeOrgId && !newMemberships.some((m) => m.orgId === activeOrgId)) {
+        // A selection the user makes meanwhile invalidates this fallback (see setActiveOrg).
+        if (generation !== refreshGenerationRef.current) return
         const newActiveId = newMemberships[0]?.orgId ?? null
-        setActiveOrgId(newActiveId)
         if (newActiveId) {
           await setActiveOrgCookie(newActiveId)
         }
+        if (generation !== refreshGenerationRef.current) return
+        setActiveOrgId(newActiveId)
       }
     } catch (error) {
       if (generation !== refreshGenerationRef.current) return
@@ -210,16 +213,20 @@ export function OrganizationProvider({
 
   const setActiveOrg = useCallback(
     async (orgId: string) => {
-      if (orgId === activeOrgId) {
+      if (orgId === activeOrgId || pendingOrgIdRef.current) {
         return
       }
 
       pendingOrgIdRef.current = orgId
       setIsSwitchingOrg(true)
-      setActiveOrgId(orgId)
+      // An in-flight membership refresh must not fall back over this selection.
+      refreshGenerationRef.current += 1
 
       try {
         await setActiveOrgCookie(orgId)
+        // GET readers authorize against this cookie. Publish the new scope only
+        // after its response commits, otherwise their first read is denied.
+        setActiveOrgId(orgId)
 
         const parentPath = getParentListPath(pathname)
 

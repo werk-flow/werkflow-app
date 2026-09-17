@@ -388,6 +388,6 @@ describe('resolveSicknessReportFacts (P1-08)', () => {
       { ...shared, isOwn: false },
     ]);
     expect(deduped).toHaveLength(1);
-    expect(deduped[0].isOwn).toBe(true);
+    expect(deduped[0]?.isOwn).toBe(true);
   });
 });

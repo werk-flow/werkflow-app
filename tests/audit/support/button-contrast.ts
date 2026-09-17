@@ -13,12 +13,13 @@ async function measureButtonContrast(button: Locator): Promise<ButtonContrast> {
 
     function parseColor(value: string): Color {
       const components = /^rgba?\(([^)]+)\)$/.exec(value)?.[1]
-        .split(/[\s,/]+/).filter(Boolean);
+        ?.split(/[\s,/]+/).filter(Boolean);
       if (components && (components.length === 3 || components.length === 4)) {
-        const channels = components.slice(0, 3).map((part) =>
-          part.endsWith('%') ? Number.parseFloat(part) / 100 : Number(part) / 255);
-        const alpha = components[3];
-        return [channels[0], channels[1], channels[2], alpha === undefined ? 1 :
+        const [red, green, blue, alpha] = components;
+        if (red === undefined || green === undefined || blue === undefined) throw new Error(`Malformed computed color: ${value}`);
+        const channel = (part: string): number =>
+          part.endsWith('%') ? Number.parseFloat(part) / 100 : Number(part) / 255;
+        return [channel(red), channel(green), channel(blue), alpha === undefined ? 1 :
           alpha.endsWith('%') ? Number.parseFloat(alpha) / 100 : Number(alpha)];
       }
       // Tailwind color-mix may compute to color(srgb ...). The browser's
@@ -27,22 +28,25 @@ async function measureButtonContrast(button: Locator): Promise<ButtonContrast> {
       context!.clearRect(0, 0, 1, 1);
       context!.fillStyle = value;
       context!.fillRect(0, 0, 1, 1);
-      const channels = context!.getImageData(0, 0, 1, 1).data;
-      return [channels[0] / 255, channels[1] / 255, channels[2] / 255, channels[3] / 255];
+      const [red, green, blue, alpha] = context!.getImageData(0, 0, 1, 1).data;
+      if (red === undefined || green === undefined || blue === undefined || alpha === undefined) {
+        throw new Error('Canvas pixel readback returned no color channels.');
+      }
+      return [red / 255, green / 255, blue / 255, alpha / 255];
     }
 
     function composite(front: Color, back: Color): Color {
       const alpha = front[3] + back[3] * (1 - front[3]);
       if (alpha === 0) return [0, 0, 0, 0];
-      const channel = (index: number): number =>
+      const channel = (index: 0 | 1 | 2): number =>
         (front[index] * front[3] + back[index] * back[3] * (1 - front[3])) / alpha;
       return [channel(0), channel(1), channel(2), alpha];
     }
 
     function luminance(color: Color): number {
-      const linear = color.slice(0, 3).map((channel) =>
-        channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
-      return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+      const linear = (channel: number): number =>
+        channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+      return 0.2126 * linear(color[0]) + 0.7152 * linear(color[1]) + 0.0722 * linear(color[2]);
     }
 
     const ancestors: Element[] = [];

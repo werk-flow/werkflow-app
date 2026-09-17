@@ -1,5 +1,6 @@
 'use client';
 
+import { formatBerlinDateTime as displayDateTime } from '@/lib/utils';
 import { useEffect, useId, useRef, useState, type ReactElement } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ClipboardList, Download, Loader2, Plus, Trash2 } from 'lucide-react';
@@ -34,10 +35,11 @@ import { uploadDocumentDirect } from '@/lib/documents/upload-client';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import {
   exportWorkArtifact, fulfillInstructionEvidence, getWorkArtifactDetail,
-  getWorkArtifacts, linkWorkArtifactDocument, linkWorkArtifactSource, recordWorkArtifactAction,
+  linkWorkArtifactDocument, linkWorkArtifactSource, recordWorkArtifactAction,
   removeInstructionEvidenceFulfillment, saveWorkArtifact, voidWorkArtifact,
   discardUnlinkedWorkArtifactSignature,
 } from '@/lib/work-artifacts/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
 import {
   WORK_ARTIFACT_KIND_LABELS, WORK_ARTIFACT_KINDS, WORK_ARTIFACT_LEGAL_NOTICE,
   WORK_ARTIFACT_STATUS_LABELS, WORK_ARTIFACT_UNIT_LABELS,
@@ -65,6 +67,12 @@ const DOCUMENT_RELATION_LABELS = {
   signature_mark: 'Unterschrift', rendered_export: 'Gerenderter Export',
 } as const;
 
+// Editor state: a patch may set a field to undefined to clear it; `compact` drops
+// those before the input reaches the server action.
+type WorkArtifactContentDraft = {
+  [Key in keyof WorkArtifactContentInput]: WorkArtifactContentInput[Key] | undefined;
+};
+
 const EMPTY_CONTENT: WorkArtifactContentInput = {
   summary: '', progress: '', performedWork: '', outstandingWork: '', materialsSummary: '',
   measurementLocation: '', measurementNotes: '', measurementLines: [],
@@ -84,12 +92,8 @@ function iso(value: string): string | undefined {
   return value ? new Date(value).toISOString() : undefined;
 }
 
-function displayDateTime(value: string): string {
-  return new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
-}
-
-function compact<T extends Record<string, unknown>>(value: T): T {
-  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== '' && entry !== undefined)) as T;
+function compact<T extends Record<string, unknown>>(value: T): { [Key in keyof T]: Exclude<T[Key], undefined> } {
+  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== '' && entry !== undefined)) as { [Key in keyof T]: Exclude<T[Key], undefined> };
 }
 
 function contentFromDetail(detail: WorkArtifactDetail): WorkArtifactContentInput {
@@ -137,7 +141,7 @@ export function WorkArtifactsSection({
   documents: OrganizationDocument[]; evidenceRequirements?: EvidenceRequirement[];
   timeEntryOptions?: WorkArtifactTimeSourceOption[];
   instructionOptions?: Array<{ id: string; label: string }>;
-  defaultSiteId?: string;
+  defaultSiteId?: string | undefined;
   readOnly?: boolean;
 }): ReactElement {
   const searchParams = useSearchParams();
@@ -151,8 +155,8 @@ export function WorkArtifactsSection({
   const editing = Boolean(selectedId || creating);
   const view = useLiveView<WorkArtifactSummary[]>({
     tables: ['work_artifacts'],
-    read: async () => {
-      const result = await getWorkArtifacts({ targetType, targetId });
+    read: async ({ signal }) => {
+      const result = await readInBackground('work-artifacts', { targetType, targetId }, signal);
       return result.success ? { ok: true, data: result.artifacts } : { ok: false };
     },
     initialData: initialArtifacts,
@@ -236,7 +240,7 @@ function WorkArtifactDialog({
   currentUserId: string; documents: OrganizationDocument[]; evidenceRequirements: EvidenceRequirement[];
   timeEntryOptions: WorkArtifactTimeSourceOption[];
   instructionOptions: Array<{ id: string; label: string }>;
-  defaultSiteId?: string;
+  defaultSiteId?: string | undefined;
   hasRemoteUpdate: boolean;
   onRemoteUpdateHandled: () => void;
   onClose: () => void;
@@ -251,7 +255,7 @@ function WorkArtifactDialog({
   const [visibility, setVisibility] = useState<WorkArtifactVisibility>(initialSummary?.currentRevision.visibility ?? 'internal_only');
   const [title, setTitle] = useState(initialSummary?.currentRevision.title ?? '');
   const [capturedAt, setCapturedAt] = useState(localDateTime(initialSummary?.currentRevision.captured_at) || localDateTime(new Date().toISOString()));
-  const [content, setContent] = useState<WorkArtifactContentInput>({ ...EMPTY_CONTENT, siteId: defaultSiteId });
+  const [content, setContent] = useState<WorkArtifactContentDraft>({ ...EMPTY_CONTENT, siteId: defaultSiteId });
   const [correctionReason, setCorrectionReason] = useState('');
   const [actionReason, setActionReason] = useState('');
   const [customerName, setCustomerName] = useState('');
@@ -315,7 +319,7 @@ function WorkArtifactDialog({
     || (detail.status === 'draft' && detail.created_by === currentUserId && detail.actions.length === 0)));
   const measurementLines = content.measurementLines ?? [];
 
-  function patchContent(patch: Partial<WorkArtifactContentInput>) {
+  function patchContent(patch: Partial<WorkArtifactContentDraft>) {
     setContent((current) => ({ ...current, ...patch }));
   }
 
@@ -345,9 +349,9 @@ function WorkArtifactDialog({
         targetType, targetId, kind, visibility, capturedAt: iso(capturedAt) ?? new Date().toISOString(), title,
         content: compact({ ...content, visitStartedAt: iso(content.visitStartedAt ?? ''),
           visitEndedAt: iso(content.visitEndedAt ?? ''), nextVisitAt: iso(content.nextVisitAt ?? '') }),
-        correctsRevisionId: requiresCorrectionReason ? currentRevision?.id : undefined,
-        correctionReason: requiresCorrectionReason ? correctionReason : undefined,
-        submit, submitActionId: submit ? crypto.randomUUID() : undefined,
+        ...(requiresCorrectionReason && currentRevision ? { correctsRevisionId: currentRevision.id } : {}),
+        ...(requiresCorrectionReason ? { correctionReason } : {}),
+        submit, ...(submit ? { submitActionId: crypto.randomUUID() } : {}),
       });
       if (!result.success) {
         if (result.error === 'invalid_input') setError('Bitte fülle die Pflichtangaben der gewählten Art aus.');
@@ -364,7 +368,7 @@ function WorkArtifactDialog({
     setError(null);
     void runArtifactTask(actionType, async () => {
       const result = await recordWorkArtifactAction({ artifactId: detail.id, revisionId: currentRevision.id,
-        actionId: crypto.randomUUID(), expectedVersion: detail.version, actionType, reason });
+        actionId: crypto.randomUUID(), expectedVersion: detail.version, actionType, ...(reason !== undefined ? { reason } : {}) });
       if (await handleMutationFailure(result, 'Die Aktion konnte nicht gespeichert werden. Prüfe Berechtigung und aktuellen Stand.')) return;
       await load(detail.id); setActionReason(''); showBanner({ variant: 'success', message: 'Aktion wurde gespeichert.' });
     });
@@ -377,8 +381,8 @@ function WorkArtifactDialog({
       const result = await recordWorkArtifactAction({
         artifactId: detail.id, revisionId: currentRevision.id, actionId: crypto.randomUUID(),
         expectedVersion: detail.version, actionType,
-        reason: actionType === 'customer_acknowledged' ? undefined : actionReason,
-        customerContext: { signerName: customerName, signerRole: customerRole || undefined,
+        ...(actionType === 'customer_acknowledged' ? {} : { reason: actionReason }),
+        customerContext: { signerName: customerName, ...(customerRole ? { signerRole: customerRole } : {}),
           signerRelationship: customerRelationship, captureMethod: 'Persönlich vor Ort',
           wordingSnapshot: WORK_ARTIFACT_LEGAL_NOTICE },
       });
@@ -401,7 +405,7 @@ function WorkArtifactDialog({
       }
       const result = await recordWorkArtifactAction({ artifactId: detail.id, revisionId: currentRevision.id,
         actionId: crypto.randomUUID(), expectedVersion: detail.version, actionType: 'signature_captured',
-        customerContext: { signerName: customerName, signerRole: customerRole || undefined,
+        customerContext: { signerName: customerName, ...(customerRole ? { signerRole: customerRole } : {}),
           signerRelationship: customerRelationship, captureMethod: 'Unterschrift auf dem Gerät',
           wordingSnapshot: WORK_ARTIFACT_LEGAL_NOTICE }, signatureDocumentId });
       if (await handleMutationFailure(result, 'Die Unterschrift konnte nicht abgeschlossen werden.')) return;
@@ -645,12 +649,12 @@ function WorkArtifactDialog({
 
 // Thin composites over the registry `Field`: the artifact form has ~40 free-text
 // slots that differ only in label and target key.
-function TextField({ id: providedId, label, value, onChange, textarea = false }: { id?: string; label: string; value?: string; onChange: (value: string) => void; textarea?: boolean }) {
+function TextField({ id: providedId, label, value, onChange, textarea = false }: { id?: string; label: string; value?: string | undefined; onChange: (value: string) => void; textarea?: boolean }) {
   const id = providedId ?? `artifact-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
   return <Field label={label} htmlFor={id}>{textarea ? <Textarea value={value ?? ''} onChange={(event) => onChange(event.target.value)} /> : <Input value={value ?? ''} onChange={(event) => onChange(event.target.value)} />}</Field>;
 }
 
-function DateField({ id, label, value, onChange }: { id: string; label: string; value?: string; onChange: (value: string) => void }) {
+function DateField({ id, label, value, onChange }: { id: string; label: string; value?: string | undefined; onChange: (value: string) => void }) {
   const date = value ? new Date(Number(value.slice(0, 4)), Number(value.slice(5, 7)) - 1, Number(value.slice(8, 10))) : undefined;
   return <Field label={label} htmlFor={id}><DatePicker value={date} onChange={(next) => onChange(next ? toLocalDateString(next) : '')} ariaLabel={label} /></Field>;
 }
@@ -663,7 +667,7 @@ function ArtifactForm({ kind, setKind, lockedKind, visibility, setVisibility, ti
   kind: WorkArtifactKind; setKind: (value: WorkArtifactKind) => void; lockedKind: boolean;
   visibility: WorkArtifactVisibility; setVisibility: (value: WorkArtifactVisibility) => void;
   title: string; setTitle: (value: string) => void; capturedAt: string; setCapturedAt: (value: string) => void;
-  content: WorkArtifactContentInput; patchContent: (patch: Partial<WorkArtifactContentInput>) => void;
+  content: WorkArtifactContentDraft; patchContent: (patch: Partial<WorkArtifactContentDraft>) => void;
   measurementLines: MeasurementLineInput[]; setMeasurementLines: (lines: MeasurementLineInput[]) => void;
   requiresCorrectionReason: boolean; correctionReason: string; setCorrectionReason: (value: string) => void;
   instructionOptions: Array<{ id: string; label: string }>;

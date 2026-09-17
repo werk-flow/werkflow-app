@@ -1,4 +1,9 @@
-import { INCIDENT_CLASSES, PLAYWRIGHT_SUITES, PLAYWRIGHT_TARGETS, type IncidentClass, type PlaywrightSuite, type PlaywrightTarget } from '../lib/testing/run-policy';
+import { createClient } from '@supabase/supabase-js';
+import type { Database } from '../lib/supabase/database.types';
+import { testSupabaseClientOptions } from '../tests/golden/support/client-options';
+import { requireEnv } from '../tests/golden/support/env';
+import { assertLocalCleanupRelocation, assertRelocatedWorldOwnership } from '../lib/testing/local-cleanup-relocation';
+import { INCIDENT_CLASSES, type IncidentClass } from '../lib/testing/run-policy';
 import { formatRunInventory } from '../lib/testing/run-inventory';
 import { loadEnvLocal } from '../tests/golden/support/env';
 import {
@@ -14,24 +19,24 @@ import { existsSync } from 'node:fs';
 import { readRetainedWorldState } from '../lib/testing/archive-state';
 import { resolve } from 'node:path';
 import { withWorkspaceTestLock } from '../lib/testing/workspace-test-lock';
-import { campaignSummary, closeCampaign, grantReferenceRunKey, issueRerunGrant, readCampaigns } from '../lib/testing/run-campaign';
 import { currentBackendProvenance } from '../tests/golden/support/run-state';
-import { calculateCandidateFingerprint } from '../lib/testing/candidate-identity';
+import { runSessionCommand, withLocalStackLease } from '../lib/testing/local-stack-lease';
+import { localMailpitUrl } from '../lib/testing/local-mailpit';
 import { validateDiagnosticProvenance } from '../lib/testing/test-evidence';
+import { backendIdentity } from '../lib/testing/proof-environment';
+import { citedRunKeys, prunableArchiveBytes, prunableRunKeys, PRUNABLE_RUN_DIRECTORIES } from '../lib/testing/run-retention';
+import { readPerformanceBaselines } from '../lib/testing/performance-baselines';
+import { readdirSync, readFileSync, rmSync } from 'node:fs';
 
 function printRuns(): void {
   for (const line of formatRunInventory(listRunManifests())) console.log(line);
-  for (const campaign of readCampaigns()) {
-    const summary = campaignSummary(campaign, listRunManifests());
-    console.log(`Campaign ${campaign.id} (${campaign.closedAt ? 'closed' : 'active'}): ${summary.fullAttempts} complete attempts / ${summary.fullMinutes.toFixed(1)} min; ${summary.totalMinutes.toFixed(1)} min total, ${summary.diagnosticMinutes.toFixed(1)} min diagnostic`);
-  }
 }
 
 function isIncidentClass(value: string): value is IncidentClass {
   return (INCIDENT_CLASSES as readonly string[]).includes(value);
 }
 
-async function cleanupRun(runKey: string): Promise<void> {
+async function cleanupRun(runKey: string, relocationReason?: string): Promise<void> {
   const manifest = readRunManifest(runKey);
   if (manifest.cleanedAt) {
     console.log(`[werkflow-test] ${runKey} was already cleaned`);
@@ -43,17 +48,29 @@ async function cleanupRun(runKey: string): Promise<void> {
   }
   // The seeder follows .env.local. Destroying a world recorded against a
   // different backend would silently "succeed" against the wrong project and
-  // leave the real rows behind — refuse instead.
-  const currentProjectRef = new URL(
-    process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'invalid://missing'
-  ).hostname.split('.')[0];
-  if (manifest.projectRef && manifest.projectRef !== currentProjectRef) {
+  // leave the real rows behind; refuse instead. The identity ignores the WSL
+  // address; the exact-origin provenance check below still governs replay.
+  const currentProjectRef = backendIdentity(process.env.NEXT_PUBLIC_SUPABASE_URL, resolve(import.meta.dir, '..'));
+  if (!relocationReason && manifest.projectRef && manifest.projectRef !== currentProjectRef) {
     throw new Error(
       `Run ${runKey} was recorded against project ${manifest.projectRef}, but .env.local points at ${currentProjectRef}. Switch env (bun run env:local / env:dev) before cleanup.`
     );
   }
   const world = readRetainedWorldState(manifest, worldPath);
-  if (manifest.backendProvenance) {
+  if (relocationReason) {
+    const requested = currentBackendProvenance(manifest.suite);
+    requested.target = manifest.target ?? 'cloud';
+    assertLocalCleanupRelocation(manifest.backendProvenance, requested);
+    // A verified cleanup may have removed one organization before another resource failed.
+    // Resume only against the exact backend previously verified for that cleanup.
+    if (!manifest.cleanupRelocation || validateDiagnosticProvenance(manifest.cleanupRelocation.backend, requested).length) {
+    const admin = createClient<Database>(requireEnv('NEXT_PUBLIC_SUPABASE_URL'), requireEnv('SUPABASE_SECRET_KEY'), testSupabaseClientOptions);
+    const { data, error } = await admin.from('organizations').select('id,name,admin_id').in('id', [world.orgId, world.outsider.orgId]);
+    if (error) throw new Error('Could not verify relocated test organization ownership.');
+    assertRelocatedWorldOwnership(world, data ?? []);
+    updateRunManifest(runKey, { cleanupRelocation: { verifiedAt: new Date().toISOString(), reason: relocationReason, backend: requested } });
+    }
+  } else if (manifest.backendProvenance) {
     const requested = currentBackendProvenance(manifest.suite);
     requested.target = manifest.target ?? 'cloud';
     const problems = validateDiagnosticProvenance(manifest.backendProvenance, requested);
@@ -75,35 +92,36 @@ async function main(): Promise<void> {
     const [runKey, reason, ...extra] = process.argv.slice(3);
     if (!runKey || !reason || extra.length) throw new Error('Usage: test:runs recover-interrupted <run-key> "<observed interruption reason>"');
     const recovered = recoverInterruptedRun(runKey, reason);
-    console.log(`[werkflow-test] recovered ${runKey} as interrupted; preserved ${recovered.passed} passes and ${recovered.failed} failures. Campaign cost remains anchored to the first recovery at ${recovered.interruptionRecovery?.recoveredAt}. ${recovered.retainedAt && !recovered.cleanedAt ? 'Owned world retained; inspect and clean explicitly.' : 'No unclean owned world recorded.'}`);
+    console.log(`[werkflow-test] recovered ${runKey} as interrupted; preserved ${recovered.passed} passes and ${recovered.failed} failures. Run cost remains anchored to the first recovery at ${recovered.interruptionRecovery?.recoveredAt}. ${recovered.retainedAt && !recovered.cleanedAt ? 'Owned world retained; inspect and clean explicitly.' : 'No unclean owned world recorded.'}`);
     return;
   }
-  if (command === 'campaign-extend') {
-    const [campaignId, referenceRunKey, reason, ...boundary] = process.argv.slice(3);
-    if (!campaignId || !referenceRunKey || !reason) throw new Error('Usage: test:runs campaign-extend <campaign-id> <latest-run-key> "<investigated reason>"');
-    const reference = readRunManifest(referenceRunKey);
-    if (boundary.length && (boundary.length !== 4 || boundary[0] !== '--suite' || !PLAYWRIGHT_SUITES.includes(boundary[1] as PlaywrightSuite) || boundary[2] !== '--target' || !PLAYWRIGHT_TARGETS.includes(boundary[3] as PlaywrightTarget))) throw new Error('A baseline grant requires --suite <golden|audit|canary> --target <local|cloud>.');
-    const suite = (boundary[1] as PlaywrightSuite | undefined) ?? reference.suite;
-    const target = (boundary[3] as PlaywrightTarget | undefined) ?? reference.target ?? 'cloud';
-    const lane = boundary.length ? 'certification' : reference.lane;
-    if (suite === 'canary' && target !== 'cloud') throw new Error('Canary grants require the cloud target.');
-    if (reference.campaignId !== campaignId || !reference.completedAt) throw new Error('The reference must be a completed run in this campaign.');
-    if (grantReferenceRunKey({ attempts: listRunManifests(), campaignId, suite, target, lane }) !== referenceRunKey) throw new Error('Reference the latest completed run for this boundary, or the latest completed campaign run before its first baseline.');
-    if (!['passed', 'diagnostic_passed'].includes(reference.status) && (!reference.classification || !reference.classifiedAt)) throw new Error('Classify the reference failure before issuing a rerun grant.');
-    const id = issueRerunGrant({ campaignId, referenceRunKey, suite, target, candidateFingerprint: calculateCandidateFingerprint(resolve(import.meta.dir, '..')), reason });
-    console.log(`Single-use rerun grant ${id}; pass --rerun-grant ${id} on the reviewed retry. Classification and exact focused proof requirements still apply.`);
+  if (command === 'prune') {
+    const planOnly = process.argv[3] === '--plan';
+    if (process.argv.length > (planOnly ? 4 : 3)) throw new Error('Usage: test:runs prune [--plan]');
+    const repositoryRoot = resolve(import.meta.dir, '..');
+    const archiveRoot = resolve(repositoryRoot, '.agent-logs/playwright-runs');
+    const verificationRoot = resolve(repositoryRoot, '.agent-logs/verification');
+    const reports = existsSync(verificationRoot) ? readdirSync(verificationRoot).flatMap((directory) => {
+      const file = resolve(verificationRoot, directory, 'report.json');
+      return existsSync(file) ? [JSON.parse(readFileSync(file, 'utf8')) as { target: string; results: { groupId: string; status: string; startedAt: string; runKey: string | null }[] }] : [];
+    }) : [];
+    const cited = citedRunKeys({ reports, baselineRunKeys: readPerformanceBaselines().baselines.flatMap((baseline) => baseline.source.runKeys) });
+    const runKeys = prunableRunKeys({ runs: listRunManifests(), cited, now: Date.now() });
+    const bytes = prunableArchiveBytes(archiveRoot, runKeys);
+    console.log(`[werkflow-test] ${runKeys.length} runs hold ${(bytes / 1024 ** 3).toFixed(2)} GB of prunable traces, reports and active state; ${cited.size} cited runs and every retained or unfinished run are kept.`);
+    if (planOnly) return;
+    const prunedAt = new Date().toISOString();
+    for (const runKey of runKeys) {
+      for (const name of PRUNABLE_RUN_DIRECTORIES) rmSync(resolve(runDirectory(runKey), name), { recursive: true, force: true });
+      updateRunManifest(runKey, { prunedAt });
+    }
+    console.log(`[werkflow-test] pruned ${runKeys.length} runs; manifests, logs, latency and workload archives and archived state stay.`);
     return;
   }
-  if (command === 'campaign-close') {
-    const id = process.argv[3];
-    if (!id) throw new Error('Usage: test:runs campaign-close <campaign-id>');
-    const runs = listRunManifests().filter((manifest) => manifest.campaignId === id);
-    if (runs.some((manifest) => !manifest.completedAt || (manifest.retainedAt && !manifest.cleanedAt))) throw new Error('Finish every run and clean retained worlds before closing a campaign.');
-    const latest = new Map<string, (typeof runs)[number]>();
-    for (const run of runs.filter((manifest) => manifest.lane === 'certification')) latest.set(`${run.suite}:${run.target}`, run);
-    if ([...latest.values()].some((run) => run.status !== 'passed')) throw new Error('A campaign with unresolved failed certification cannot be closed to reset its budget. Diagnose and use an explicit single-run extension.');
-    closeCampaign(id);
-    console.log(`Closed campaign ${id}. The next browser run starts a new campaign.`);
+  if (command === 'cleanup-local-relocated') {
+    const [runKey, reason, ...extra] = process.argv.slice(3);
+    if (!runKey || !reason?.trim() || extra.length) throw new Error('Usage: test:runs cleanup-local-relocated <run-key> "<observed local address change>"');
+    await cleanupRun(runKey, reason);
     return;
   }
   if (command === 'cleanup') {
@@ -159,8 +177,18 @@ async function main(): Promise<void> {
 }
 
 try {
-  if ((process.argv[2] ?? 'list') === 'list') await main();
-  else await withWorkspaceTestLock({ operation: `Playwright run management ${process.argv[2]}` }, main);
+  const command = process.argv[2] ?? 'list';
+  loadEnvLocal();
+  const localCleanup = ['cleanup', 'cleanup-all', 'cleanup-local-relocated'].includes(command)
+    && localMailpitUrl(requireEnv('NEXT_PUBLIC_SUPABASE_URL')) !== null;
+  if (localCleanup && process.env.WERKFLOW_CLEANUP_STACK_LEASE !== 'owned') {
+    // The child owns cleanup/lock; cancellation stops it before releasing WSL.
+    process.exitCode = await withLocalStackLease(true, (signal) => runSessionCommand(
+      [process.execPath, import.meta.filename, ...process.argv.slice(2)],
+      { signal, env: { ...process.env, WERKFLOW_CLEANUP_STACK_LEASE: 'owned' } },
+    ), { signal: AbortSignal.timeout(180_000) });
+  } else if (command === 'list') await main();
+  else await withWorkspaceTestLock({ operation: `Playwright run management ${command}` }, main);
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;

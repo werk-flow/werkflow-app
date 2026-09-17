@@ -1322,6 +1322,9 @@ export type Database = {
       };
       email_change_challenges: {
         Row: {
+          challenge_id: string;
+          completion_started_at: string | null;
+          completion_token: string | null;
           created_at: string;
           current_email: string;
           current_email_attempt_count: number;
@@ -1341,6 +1344,9 @@ export type Database = {
           user_id: string;
         };
         Insert: {
+          challenge_id?: string;
+          completion_started_at?: string | null;
+          completion_token?: string | null;
           created_at?: string;
           current_email: string;
           current_email_attempt_count?: number;
@@ -1360,6 +1366,9 @@ export type Database = {
           user_id: string;
         };
         Update: {
+          challenge_id?: string;
+          completion_started_at?: string | null;
+          completion_token?: string | null;
           created_at?: string;
           current_email?: string;
           current_email_attempt_count?: number;
@@ -7481,6 +7490,38 @@ export type Database = {
           },
           {
             foreignKeyName: "qualification_events_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      realtime_deletions: {
+        Row: {
+          created_at: string;
+          id: string;
+          organization_id: string;
+          row_id: string;
+          table_name: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          organization_id: string;
+          row_id: string;
+          table_name: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          organization_id?: string;
+          row_id?: string;
+          table_name?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "realtime_deletions_organization_id_fkey";
             columns: ["organization_id"];
             isOneToOne: false;
             referencedRelation: "organizations";
@@ -13794,6 +13835,43 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      list_customer_page: {
+        Args: {
+          p_organization_id: string;
+          p_page?: number;
+          p_page_size?: number;
+          p_search?: string;
+        };
+        Returns: Json;
+      };
+      list_document_page: {
+        Args: { p_filters: Json; p_organization_id: string };
+        Returns: Json;
+      };
+      list_inventory_page: {
+        Args: { p_organization_id: string; p_query?: Json };
+        Returns: Json;
+      };
+      list_job_entries_page: {
+        Args: {
+          p_is_manager: boolean;
+          p_organization_id: string;
+          p_queries: Json;
+          p_user_id: string;
+        };
+        Returns: Json;
+      };
+      list_project_job_page: {
+        Args: {
+          p_is_manager: boolean;
+          p_organization_id: string;
+          p_page?: number;
+          p_page_size?: number;
+          p_project_id: string;
+          p_user_id: string;
+        };
+        Returns: Json;
+      };
       open_time_account: {
         Args: {
           p_actor_id: string;
@@ -14911,6 +14989,18 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      transition_email_change: {
+        Args: {
+          p_code_hash?: string;
+          p_completion_token?: string;
+          p_current_email: string;
+          p_expected_challenge_id?: string;
+          p_new_email?: string;
+          p_operation: string;
+          p_user_id: string;
+        };
+        Returns: Json;
       };
       transition_installed_equipment: {
         Args: {

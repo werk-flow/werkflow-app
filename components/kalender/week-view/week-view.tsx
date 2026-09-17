@@ -103,7 +103,7 @@ function getMemberDisplayName(member: CalendarMember): string {
   if (member.first_name || member.last_name) {
     return `${member.first_name || ''} ${member.last_name || ''}`.trim();
   }
-  return member.email.split('@')[0];
+  return member.email.split('@')[0] || member.email;
 }
 
 function withMemberContext(
@@ -243,10 +243,9 @@ export function WeekView({
   const entriesByUser = useMemo(() => {
     const grouped: Record<string, TimeEntry[]> = {};
     for (const entry of entries) {
-      if (!grouped[entry.userId]) {
-        grouped[entry.userId] = [];
-      }
-      grouped[entry.userId].push(entry);
+      const userEntries = grouped[entry.userId];
+      if (userEntries) userEntries.push(entry);
+      else grouped[entry.userId] = [entry];
     }
     return grouped;
   }, [entries]);
@@ -575,8 +574,8 @@ export function WeekView({
                                       ? 'cursor-pointer hover:opacity-80'
                                       : 'cursor-default',
                                     session.isOpen && !session.isOnBreak
-                                      ? 'bg-green-500/60 text-white dark:bg-green-600/60 animate-pulse'
-                                      : 'bg-green-500/80 text-white dark:bg-green-600/80'
+                                      ? 'bg-success/60 text-success-foreground animate-pulse'
+                                      : 'bg-success/80 text-success-foreground'
                                   )}
                                 >
                                   <Clock className="h-3 w-3 shrink-0 opacity-70" />
@@ -646,10 +645,10 @@ export function WeekView({
                                   className={cn(
                                     'week-view-entry text-xs p-1 rounded-md flex items-center gap-1 shadow-sm w-full text-left transition-opacity cursor-pointer hover:opacity-80',
                                     isPendingDelete
-                                      ? 'bg-yellow-200/80 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200'
+                                      ? 'bg-warning-soft/80 text-warning-soft-foreground'
                                       : isPending
-                                      ? 'bg-yellow-400/80 text-yellow-900 dark:bg-yellow-500/80 dark:text-yellow-100'
-                                      : 'bg-red-500/20 text-red-700 dark:bg-red-600/20 dark:text-red-300 border border-red-500/40'
+                                      ? 'bg-warning/80 text-warning-foreground'
+                                      : 'bg-destructive/20 text-destructive-soft-foreground border border-destructive/40'
                                   )}
                                   style={hatchedStyle}
                                 >
@@ -692,10 +691,10 @@ export function WeekView({
                                   className={cn(
                                     'week-view-entry text-xs p-1 rounded-md flex items-center gap-1 shadow-sm w-full text-left transition-opacity cursor-pointer hover:opacity-80',
                                     isPendingDelete
-                                      ? 'bg-yellow-200/80 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200'
+                                      ? 'bg-warning-soft/80 text-warning-soft-foreground'
                                       : isPending
-                                      ? 'bg-yellow-400/80 text-yellow-900 dark:bg-yellow-500/80 dark:text-yellow-100'
-                                      : 'bg-red-500/20 text-red-700 dark:bg-red-600/20 dark:text-red-300 border border-red-500/40'
+                                      ? 'bg-warning/80 text-warning-foreground'
+                                      : 'bg-destructive/20 text-destructive-soft-foreground border border-destructive/40'
                                   )}
                                   style={hatchedStyle}
                                 >
@@ -765,12 +764,12 @@ export function WeekView({
                                 className={cn(
                                   'week-view-entry text-xs p-1.5 rounded-md flex items-center gap-1.5 shadow-sm w-full text-left transition-opacity cursor-pointer hover:opacity-80',
                                   isPendingDelete
-                                    ? 'bg-yellow-200/80 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200'
+                                    ? 'bg-warning-soft/80 text-warning-soft-foreground'
                                     : isPending
-                                    ? 'bg-yellow-400/80 text-yellow-900 dark:bg-yellow-500/80 dark:text-yellow-100'
+                                    ? 'bg-warning/80 text-warning-foreground'
                                     : isOpen
-                                    ? 'bg-green-500/60 text-white dark:bg-green-600/60 animate-pulse'
-                                    : 'bg-green-500/80 text-white dark:bg-green-600/80'
+                                    ? 'bg-success/60 text-success-foreground animate-pulse'
+                                    : 'bg-success/80 text-success-foreground'
                                 )}
                                 style={hatchedStyle}
                               >

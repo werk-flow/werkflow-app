@@ -24,7 +24,7 @@ const RESEND_COOLDOWN_SECONDS = 60;
 
 type OTPFormProps = React.ComponentProps<typeof Card> & {
   email: string;
-  inviteCode?: string;
+  inviteCode?: string | undefined;
 };
 
 export function OTPForm({

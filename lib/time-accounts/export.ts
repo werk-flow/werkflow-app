@@ -119,6 +119,7 @@ function buildStoredZip(
   if (Object.keys(files).length > 0xffff) throw new Error("zip64_required");
   for (const name of Object.keys(files).sort()) {
     const data = files[name];
+    if (data === undefined) throw new Error("zip_entry_missing");
     const nameBytes = encoder.encode(name);
     if (
       data.length > 0xffffffff ||

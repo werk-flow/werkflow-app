@@ -1,5 +1,6 @@
 'use client';
 
+import { normalizeSearchText } from '@/lib/ui/search';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
@@ -45,12 +46,12 @@ import {
   createProjectMaterialLine,
   deleteJobMaterialLine,
   getInventoryPickerOptionsForJob,
-  getJobMaterialLines,
   returnJobMaterial,
   takeJobMaterial,
   takeProjectMaterial,
   updateJobMaterialLine,
 } from '@/lib/inventory/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
 import type {
   InventoryLocation,
   InventoryPickerOption,
@@ -116,13 +117,13 @@ function quantityToInput(quantity: number): string {
 function statusClasses(status: JobMaterialLine['status']): string {
   switch (status) {
     case 'planned':
-      return 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300';
+      return 'bg-info-soft text-info-soft-foreground';
     case 'partially_taken':
-      return 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300';
+      return 'bg-warning-soft text-warning-soft-foreground';
     case 'taken':
-      return 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-300';
+      return 'bg-success-soft text-success-soft-foreground';
     case 'returned':
-      return 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-300';
+      return 'bg-success-soft text-success-soft-foreground';
     case 'cancelled':
       return 'bg-muted text-muted-foreground';
   }
@@ -159,7 +160,7 @@ function getActionErrorMessage(error: string, mode: MaterialDialogMode): string 
 
 function matchesItemSearch(item: InventoryPickerOption, search: string): boolean {
   if (!search.trim()) return true;
-  const query = search.trim().toLowerCase();
+  const query = normalizeSearchText(search);
   return [
     item.name,
     item.internalSku,
@@ -172,7 +173,7 @@ function matchesItemSearch(item: InventoryPickerOption, search: string): boolean
     ...item.stockByLocation.map((stock) => stock.locationName),
   ]
     .filter(Boolean)
-    .some((value) => value!.toLowerCase().includes(query));
+    .some((value) => value!.toLocaleLowerCase('de-DE').includes(query));
 }
 
 function getDefaultLocationId(
@@ -291,11 +292,11 @@ function MovementPill({
       className={cn(
         'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium tabular-nums',
         tone === 'planned' &&
-          'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300',
+          'bg-info-soft text-info-soft-foreground',
         tone === 'take' &&
-          'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300',
+          'bg-destructive-soft text-destructive-soft-foreground',
         tone === 'return' &&
-          'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-300'
+          'bg-success-soft text-success-soft-foreground'
       )}
     >
       {children}
@@ -327,9 +328,9 @@ export function JobMaterialsSection({
   // view refetches; managers keep the server-rendered props.
   const fieldView = useLiveView<JobMaterialLine[]>({
     tables: ['job_material_lines', 'inventory_movements', 'inventory_stock_levels'],
-    read: async (): Promise<LiveViewResult<JobMaterialLine[]>> => {
+    read: async ({ signal }): Promise<LiveViewResult<JobMaterialLine[]>> => {
       if (!jobId) return { ok: false };
-      const result = await getJobMaterialLines(jobId);
+      const result = await readInBackground('job-material-lines', { jobId }, signal);
       return result.success ? { ok: true, data: result.lines } : { ok: false };
     },
     initialData: initialLines,
@@ -396,7 +397,7 @@ export function JobMaterialsSection({
   const isDialogOpen = dialog !== null;
   useEffect(() => {
     if (isAdminOrManager || !jobId || !isDialogOpen || fieldSearch.length < 2) return;
-    const searchKey = fieldSearch.toLocaleLowerCase('de-DE');
+    const searchKey = normalizeSearchText(fieldSearch);
     if (loadedFieldSearchesRef.current.has(searchKey)) return;
 
     let cancelled = false;
@@ -985,8 +986,8 @@ function MaterialSelectionDialog({
   }
 
   function addItem(item: InventoryPickerOption) {
-    if (!canAddMultiple && currentDialog.rows.length > 0) {
-      const existing = currentDialog.rows[0];
+    const existing = currentDialog.rows[0];
+    if (!canAddMultiple && existing) {
       patchDialog({
         rows: [
           {
@@ -1238,11 +1239,11 @@ function MaterialSelectionDialog({
                           className={cn(
                             'rounded-md px-3 py-2 text-xs',
                             mode === 'take' &&
-                              'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300',
+                              'bg-destructive-soft text-destructive-soft-foreground',
                             mode === 'return' &&
-                              'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-300',
+                              'bg-success-soft text-success-soft-foreground',
                             (mode === 'plan' || mode === 'edit') &&
-                              'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300'
+                              'bg-info-soft text-info-soft-foreground'
                           )}
                         >
                           {mode === 'take'

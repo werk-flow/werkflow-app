@@ -9,7 +9,7 @@ interface EntityLinkCardProps {
   metadata?: { label: string; value: string }[];
   badge?: React.ReactNode;
   emptyState?: { text: string; action?: React.ReactNode };
-  onEmptyClick?: () => void;
+  onEmptyClick?: (() => void) | undefined;
 }
 
 export function EntityLinkCard({

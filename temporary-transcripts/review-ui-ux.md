@@ -186,7 +186,7 @@ Source: [build-for-good-UX-10 ](ui-ux-video-subs/build-for-good-UX-10.txt)
 | --- | --- | --- | --- |
 | 01 | error-isolation | Candidate | Consider section-owned loading, error and retry boundaries for independently useful content. |
 | 02 | cache-correctness | Candidate | Keeping old content during refresh can help, but stale operational or revoked-access data needs explicit safety rules. |
-| 03 | performance | Candidate | Do not duplicate requests merely to give every visual section its own fetch; preserve shared reads and real dependency boundaries. |
+| 03 | performance | Already covered | Verified 2026-09-12. Scope: [request-scoped reuse](../lib/data/read-request-cache.ts) and the [calendar data owner](../docs/technical/realtime-and-caching.md) avoid duplicate ownership. Independently useful reads may still run concurrently. No rule requires a separate fetch for each visual section. |
 | 04 | state-coverage | Candidate | Verify mixed ready/loading/failed combinations and the eventual refresh, not only full-page success. |
 
 ## UX-017

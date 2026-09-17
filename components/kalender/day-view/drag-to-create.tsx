@@ -211,10 +211,10 @@ export function DragToCreateOverlay({
     >
       {isDragging && selectionWidth > 0 && (
         <div
-          className="absolute top-1 bottom-1 rounded-md bg-yellow-400/40 border-2 border-dashed border-yellow-500/60 pointer-events-none flex items-center justify-center"
+          className="absolute top-1 bottom-1 rounded-md bg-warning/40 border-2 border-dashed border-warning/60 pointer-events-none flex items-center justify-center"
           style={{ left: selectionLeft, width: selectionWidth }}
         >
-          <span className="text-[11px] font-medium text-yellow-800 dark:text-yellow-200 whitespace-nowrap px-1 bg-yellow-400/60 rounded">
+          <span className="text-[11px] font-medium text-warning-foreground whitespace-nowrap px-1 bg-warning/60 rounded">
             {formatTimeHHMM(selectionStart.hours, selectionStart.minutes)} – {formatTimeHHMM(selectionEnd.hours, selectionEnd.minutes)}
           </span>
         </div>

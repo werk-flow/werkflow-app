@@ -1,5 +1,6 @@
 'use client';
 
+import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
 import { useState, useEffect, useMemo } from 'react';
 import { usePendingTask } from '@/hooks/use-server-action';
 import { Loader2, Clock } from 'lucide-react';
@@ -20,9 +21,7 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { useOrganization } from '@/components/organization/organization-context';
 import {
   addManualEntry,
-  getTimeEntries,
-  getAssignedJobs,
-  getAllOrgJobs
+  getTimeEntries
 } from '@/lib/time-tracking/actions';
 import { getOrgMembersAction } from '@/lib/members/actions';
 import type {
@@ -38,23 +37,30 @@ import { useUserProfile } from '@/components/user/user-profile-context';
 import { toLocalDateString } from '@/lib/utils';
 import type { CalendarEntryDraft } from '@/components/kalender/calendar-entry-draft';
 
+/** Minutes since midnight for `HH:MM`; an empty part is invalid rather than zero (`Number('')` is 0). */
+function clockTimeToMinutes(value: string): number {
+  const [hours, minutes] = value.split(':');
+  if (!hours || !minutes) return Number.NaN;
+  return Number(hours) * 60 + Number(minutes);
+}
+
 type EntryMode = 'clock_in' | 'clock_out' | 'both';
 
 type OrgMember = CalendarEntryDialogMember;
 type JobOption = CalendarEntryDialogJobOption;
 
 export interface ManualEntryFormContentProps {
-  onSuccess?: (entries: TimeEntry[]) => void | Promise<void>;
-  preselectedUserId?: string;
-  preselectedDate?: Date;
-  preselectedClockInTime?: string;
-  preselectedClockOutTime?: string;
-  prefetchedMembers?: OrgMember[];
-  prefetchedJobs?: JobOption[];
-  lockEntryMode?: boolean;
-  onDraftChange?: (draft: CalendarEntryDraft | null) => void;
+  onSuccess?: ((entries: TimeEntry[]) => void | Promise<void>) | undefined;
+  preselectedUserId?: string | undefined;
+  preselectedDate?: Date | undefined;
+  preselectedClockInTime?: string | undefined;
+  preselectedClockOutTime?: string | undefined;
+  prefetchedMembers?: OrgMember[] | undefined;
+  prefetchedJobs?: JobOption[] | undefined;
+  lockEntryMode?: boolean | undefined;
+  onDraftChange?: ((draft: CalendarEntryDraft | null) => void) | undefined;
   /** Whether the form is active/visible. Controls data-fetching effects. Defaults to true. */
-  isActive?: boolean;
+  isActive?: boolean | undefined;
 }
 
 export function ManualEntryFormContent({
@@ -89,8 +95,7 @@ export function ManualEntryFormContent({
 
   const [members, setMembers] = useState<OrgMember[]>(prefetchedMembers ?? []);
   const [isLoadingMembers, setIsLoadingMembers] = useState(false);
-  const [jobOptions, setJobOptions] = useState<JobOption[]>(prefetchedJobs ?? []);
-  const [isLoadingJobs, setIsLoadingJobs] = useState(false);
+
   const [selectedJobId, setSelectedJobId] = useState<string>('');
   const canAssignJob =
     entryMode === 'clock_in' || entryMode === 'both';
@@ -137,35 +142,6 @@ export function ManualEntryFormContent({
   }, [isActive, isAdminOrManager, activeOrgId, prefetchedMembers]);
 
   useEffect(() => {
-    if (!prefetchedJobs) return;
-    setJobOptions(prefetchedJobs);
-    setIsLoadingJobs(false);
-  }, [prefetchedJobs]);
-
-  useEffect(() => {
-    if (!isActive || !activeOrgId || prefetchedJobs) return;
-    const fetchJobs = async () => {
-      setIsLoadingJobs(true);
-      try {
-        const result = isAdminOrManager
-          ? await getAllOrgJobs(activeOrgId!)
-          : await getAssignedJobs(activeOrgId!);
-        if (result.success) {
-          setJobOptions(result.jobs);
-        } else {
-          setLoadError('Die Auftragsliste konnte nicht geladen werden.');
-        }
-      } catch (err) {
-        console.error('Error fetching jobs:', err);
-        setLoadError('Die Auftragsliste konnte nicht geladen werden.');
-      } finally {
-        setIsLoadingJobs(false);
-      }
-    };
-    fetchJobs();
-  }, [isActive, activeOrgId, isAdminOrManager, prefetchedJobs]);
-
-  useEffect(() => {
     if (canAssignJob) return;
     setSelectedJobId('');
   }, [canAssignJob]);
@@ -174,11 +150,8 @@ export function ManualEntryFormContent({
     if (!isActive || !onDraftChange) return;
 
     const targetUserId = isAdminOrManager ? selectedUserId : currentUserId;
-    const [clockInHours, clockInMinutes] = clockInTime.split(':').map(Number);
-    const [clockOutHours, clockOutMinutes] = clockOutTime.split(':').map(Number);
-    const startMinutes = clockInHours * 60 + clockInMinutes;
-    const endMinutes = clockOutHours * 60 + clockOutMinutes;
-    const durationMinutes = endMinutes - startMinutes;
+    // An invalid time yields NaN, which the finite check below rejects.
+    const durationMinutes = clockTimeToMinutes(clockOutTime) - clockTimeToMinutes(clockInTime);
 
     if (
       entryMode !== 'both' ||
@@ -283,7 +256,7 @@ export function ManualEntryFormContent({
           organizationId: activeOrgId,
           targetUserId,
           entries,
-          jobId: canAssignJob ? selectedJobId || undefined : undefined
+          ...(canAssignJob && selectedJobId ? { jobId: selectedJobId } : {})
         });
 
         if (result.success) {
@@ -336,16 +309,9 @@ export function ManualEntryFormContent({
     [members]
   );
 
-  const jobOpts = useMemo(
-    () =>
-      jobOptions.map((j) => ({
-        value: j.id,
-        label: j.title,
-        description:
-          [j.jobNumber, j.projectName].filter(Boolean).join(' · ') || undefined
-      })),
-    [jobOptions]
-  );
+  const jobSearch = useJobEntityOptions({ kind: 'jobs', purpose: 'manual-entry' }, selectedJobId ? [selectedJobId] : [],
+    (prefetchedJobs ?? []).map((job) => ({ value: job.id, label: job.title, description: job.jobNumber ?? undefined })));
+  const isLoadingJobs = jobSearch.loading;
   const isOwnBueroEntry =
     activeOrg?.role === 'buero' && selectedUserId === currentUserId;
 
@@ -399,7 +365,7 @@ export function ManualEntryFormContent({
         {canAssignJob && (
           <Field label="Auftrag (optional)">
             <SearchableSelect
-              options={jobOpts}
+              {...jobSearch}
               value={selectedJobId}
               onChange={(v) => setSelectedJobId(v)}
               placeholder={
@@ -407,7 +373,7 @@ export function ManualEntryFormContent({
               }
               searchPlaceholder="Auftrag suchen..."
               emptyMessage="Kein Auftrag gefunden"
-              disabled={isLoadingJobs}
+              disabled={isPending}
               allowNone
               noneLabel="Kein Auftrag"
             />

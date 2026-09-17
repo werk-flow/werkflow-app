@@ -1,6 +1,6 @@
 # Inventory Management
 
-Status: living — last reviewed 2026-09-05
+Status: living — last reviewed 2026-09-17
 
 Inventory is WerkFlow's operational system for SHK materials, consumables, tools, assets, Lager locations, stock movements, and job material usage.
 
@@ -24,6 +24,8 @@ The module should reduce paper lists, duplicate entry, emergency wholesaler trip
 
 As of 2026-09-02, Inventory V1 gives Admin and Büro an organization-scoped catalog, self-defined Lager locations, manual stock movements, CSV import, and material planning on jobs and projects. Assigned field workers take and return material on their jobs. V1 is a native foundation, not the complete operational core described below.
 
+- **Paging (Step 2, 2026-09-08).** The catalog and planned-material views page in sets of 50. Search, item type, stock status, location filtering, and summary counts cover the whole organization. The Lager view pages 12 locations with the existing six-item preview; movements retain the explicit latest-40 view. Creating an item confirms the saved record even when its name or active filter places it on another page. The Step 2 record owns browser acceptance.
+
 - **Central inventory.** Admin and Büro use `/inventar` with the `Alle Artikel`, `Lager`, `Geplant`, and `Bewegungen` views plus search and filters for type, stock status, and location; the views refresh live. Field workers do not see the route. The overview shows stock by item and by location, open planned quantity, and `Verfügbar` as total stock minus open planned demand. `Verfügbar` is not a committed reservation.
 - **Stock movements.** Managers record manual additions and removals at a location. Stock cannot be booked below zero. Every movement keeps quantity before and after, movement type, location, time, reason, and the linked job or project where applicable. Transfer movement types exist in the domain, but there is no user-facing transfer flow.
 - **Locations and categories.** Managers create their own locations labeled Lager, room, shelf, vehicle, or other; WerkFlow invents no default warehouse. Default editable SHK categories are seeded per organization, and category names carry no product logic.
@@ -34,13 +36,13 @@ As of 2026-09-02, Inventory V1 gives Admin and Büro an organization-scoped cata
 - **Read-only consumers.** Work templates prepare planned material lines with provenance and never move or reserve stock ([P1-13](../plans/phase-1/slices/p1-13-work-templates.md)). Dispatch readiness and the work lifecycle compare open demand with on-hand stock, label planned material „nicht reserviert“, and label tools „nicht bewertet“ until `P1-32` ([P1-12](../plans/phase-1/slices/p1-12-dispatch.md), [P1-14](../plans/phase-1/slices/p1-14-work-lifecycle.md)). Handover releases, service cases, and maintenance plans show or freeze existing material facts without reinterpreting them as reservation, consumption, billability, or cost ([P1-17](../plans/phase-1/slices/p1-17-office-handover.md), [P1-19](../plans/phase-1/slices/p1-19-reactive-service.md), [P1-20](../plans/phase-1/slices/p1-20-maintenance-plans.md)). None of these actions creates, reserves, consumes, returns, or repairs stock.
 - **Tools and assets.** Tools and assets are catalog items, and individual asset-instance records exist, but there is no instance register, checkout, custody, maintenance, inspection, loss, or retirement workflow yet.
 
-### Important current limitations
+### Important Current Limitations
 
 - There is no reservation, picking, approval, procurement, invoice, or full post-calculation workflow. Billable defaults and billable quantities exist, but no offer or invoice module consumes them.
 - There is no paired transfer flow, purchase requisition, supplier order, goods receipt, supplier return, reorder worklist, formal stock count, valuation report, or wholesale-standard integration.
 - The CSV flow has no row-by-row preview, duplicate-resolution workspace, reconciliation total, downloadable error report, or created/updated/skipped summary. Excel import is not implemented.
 
-The V1 planning record is the [Inventory V1 implementation plan](../plans/inventory-v1-implementation-plan.md). Current code and live database state override older plan wording where they differ.
+The V1 planning record is the [Inventory V1 implementation plan](../plans/phase-1/consolidation-2026-08/inventory-v1-implementation-plan.md). Current code and live database state override older plan wording where they differ.
 
 ## Phase 1 — Complete Operational Core
 
@@ -342,24 +344,21 @@ Each supplier standard or API needs a partner, version, direction, support model
 
 ## Open Product Decisions
 
+Decided by the owner on 2026-09-17 (reasoning in [pre-Wave-3 step 4](../plans/phase-1/pre-wave-3/04-wave-3-4-and-phase-2-planning.md#round-1-asked-and-answered-2026-09-17)): `Verfügbar` is on hand minus reservations, with planned demand shown as a separate value; only `buero` and `admin` reserve, and parking or cancelling a job releases its reservations with a visible event; the operational valuation basis is a moving average per item and location, labelled operational and never an accounting ledger; negative stock stays blocked; a vehicle is a location, with an optional asset instance for inspection and custody in `P1-32`, and a fleet module stays a decision gate. Still open:
+
 - Which inventory outcomes matter first in user testing: reliable counts, job availability, reduced buying trips, procurement speed, missed-billing prevention, or tool custody?
-- Should `Verfügbar` exclude only committed reservations, all approved plans, or both with separate values?
-- When may a job reserve stock, who can override a reservation, and when is it released?
 - Should preferred source locations be strict allocations or suggestions?
-- Is negative stock always blocked, or allowed for selected roles/locations with a visible exception queue?
 - Which location hierarchy and vehicle-stock model matches real SHK businesses without excessive setup?
 - Which unit and pack conversions are required, and who approves ambiguous supplier data?
-- Which price basis should operational valuation and post-calculation use?
 - Which article replacements or substitutes require customer or project-manager approval?
 - What are the first procurement approval thresholds and roles?
 - How should direct-to-job delivery, customer-owned material, consignment, and supplier returns behave?
-- Which DATANORM versions and rebate structures are required by the first target wholesalers?
-- Which IDS, UGL, Open Masterdata, and SHK Connect workflows and partners have enough customer demand to justify implementation?
+- Which DATANORM versions and rebate structures are required by the first target wholesalers? (The 2026-09-17 research: wholesalers still ship version 4, the format is not open, the real price is list price minus the `.RAB` rebate group; `P1-25` imports version 4 files with rebate groups as first-class data.)
+- Which IDS, UGL, Open Masterdata, and SHK Connect workflows and partners have enough customer demand to justify implementation? (Decided order 2026-09-17: IDS Connect 2.5 first, UGL 5.0 where a beta wholesaler uses it, Open Masterdata after IDS for single-article refresh, Open Connect only as the endpoint directory; the beta customer's wholesalers are still unknown, see the [expert-review agenda](../plans/phase-1/pre-wave-3/04-wave-3-4-and-phase-2-planning.md#expert-review-agenda-for-wave-4-answer-to-q4).)
 - Which scanner hardware and mobile barcode formats must be supported?
 - What must work offline for a technician, warehouse employee, or vehicle count?
 - Which count cadence, blind-count policy, and correction approval are practical for small businesses?
 - When do tools require individual tracking, checkout, inspection, calibration, or maintenance?
-- Are vehicles assets, locations, or both in the first mature inventory release?
 - Which material event creates a billable suggestion, and who reviews warranty, goodwill, rework, and waste?
 - What migration service, reconciliation acceptance criteria, support entitlement, and data-exit promise are included in each product package?
 
@@ -369,4 +368,4 @@ Each supplier standard or API needs a partner, version, direction, support model
 - [Phase 1 roadmap](../plans/phase-1/roadmap.md) — slice order, current status, and links to per-slice acceptance records.
 - [User-flow catalog](../product/user-flow-catalog.md) — this feature's accepted user-visible flows by stable ID.
 - Connected feature specs: the **Connected Workflow Contracts** table above names every cross-feature contract; load only the specs the current slice names.
-- [Inventory V1 implementation plan (closed)](../plans/inventory-v1-implementation-plan.md) — the historical V1 planning record.
+- [Inventory V1 implementation plan (closed)](../plans/phase-1/consolidation-2026-08/inventory-v1-implementation-plan.md) — the historical V1 planning record.

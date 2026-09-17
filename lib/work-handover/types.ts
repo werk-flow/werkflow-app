@@ -1,10 +1,8 @@
 import type { Database, Json } from '@/lib/supabase/database.types';
 import type { WorkExecutionState, WorkTargetType } from '@/lib/work-lifecycle/types';
-
-export type WorkHandoverPackage = Database['public']['Tables']['work_handover_packages']['Row'];
 export type WorkHandoverDraftItem = Database['public']['Tables']['work_handover_draft_items']['Row'];
-export type WorkHandoverRelease = Database['public']['Tables']['work_handover_releases']['Row'];
-export type WorkHandoverEvent = Database['public']['Tables']['work_handover_events']['Row'];
+type WorkHandoverRelease = Database['public']['Tables']['work_handover_releases']['Row'];
+type WorkHandoverEvent = Database['public']['Tables']['work_handover_events']['Row'];
 export type WorkHandoverCommercialReadiness =
   Database['public']['Enums']['work_handover_commercial_readiness_state'];
 export type WorkHandoverPackageState =

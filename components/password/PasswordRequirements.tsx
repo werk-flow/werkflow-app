@@ -40,7 +40,7 @@ export function PasswordRequirements({
               className={cn(
                 'flex h-5 w-5 items-center justify-center rounded-full border text-[11px] font-semibold transition-colors',
                 met
-                  ? 'border-emerald-200 bg-emerald-100 text-emerald-700'
+                  ? 'border-success/40 bg-success-soft text-success-soft-foreground'
                   : 'border-destructive/30 bg-destructive/10 text-destructive'
               )}
             >
@@ -53,7 +53,7 @@ export function PasswordRequirements({
             <span
               className={cn(
                 'leading-tight transition-colors',
-                met ? 'text-emerald-700' : 'text-muted-foreground'
+                met ? 'text-success-text' : 'text-muted-foreground'
               )}
             >
               {item.label}

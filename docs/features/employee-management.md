@@ -1,6 +1,6 @@
 # Employee Management
 
-Status: living — last reviewed 2026-09-05
+Status: living — last reviewed 2026-09-08
 
 Employee management covers the complete operational relationship between an organization and the people who work in it: membership, access, personnel information, employment conditions, availability, qualifications, assignments, leave, personnel documents, and controlled handoffs to time tracking and payroll.
 
@@ -41,9 +41,9 @@ As of 2026-09-02, every person in an organization has one personnel record that 
 - Onboarding. Organization templates have immutable published versions; an instantiated plan holds editable typed requirements that reference existing documents, qualifications, conditions, schedules, teams, or acknowledgements. Only an explicit `blocks_access` requirement delays activation, and missing configuration is never shown as complete ([P1-24](../plans/phase-1/slices/p1-24-controlled-people-lifecycle.md)).
 - Protected personnel documents. The classes `personnel_standard`, `admin_restricted`, and `health_evidence` sit outside the ordinary library and never follow a responsibility, job assignment, or ordinary document permission. Admin sees every class, Büro manages standard files, and the person sees only explicitly released versions or uploads their own requested health evidence. An acknowledgement proves that one exact version was seen and makes no signature claim ([P1-24](../plans/phase-1/slices/p1-24-controlled-people-lifecycle.md)).
 
-The September 5 hardening gives the personnel lifecycle section an authoritative read after confirmed changes, including protected-document uploads, so its own updates do not depend solely on a route refresh or Realtime delivery. Background read progress stays visible without blocking unrelated operations; a failed read exposes stale data and a retry. Own-personnel confirmations and health-evidence uploads show explicit success feedback. The evidence dialog supports native form submission and preserves entered values after a rejected upload for an explicit retry. The [qualified verification record](../plans/uiux-and-test-reliability-2026-09.md) records component, focused business, and cloud proof with their certification limits.
+The September 5 hardening gives the personnel lifecycle section an authoritative read after confirmed changes, including protected-document uploads, so its own updates do not depend solely on a route refresh or Realtime delivery. Background read progress stays visible without blocking unrelated operations; a failed read exposes stale data and a retry. Own-personnel confirmations and health-evidence uploads show explicit success feedback. The evidence dialog supports native form submission and preserves entered values after a rejected upload for an explicit retry. The [qualified verification record](../plans/phase-1/hardening-2026-09/03-uiux-and-test-reliability.md) records component, focused business, and cloud proof with their certification limits.
 
-### Important current limitations
+### Important Current Limitations
 
 - Capacity conflicts, minimum staffing, shift rotations, and date-specific schedule overrides belong to planning ([P1-11](../plans/phase-1/slices/p1-11-planning-occurrences.md)); employee management shows only absence signals.
 - Vacation and sickness are the only absence types. Training, special leave, compensatory time, and hour-based absence are later scope. Time-account adjustments, expiry, and payout are manual four-eyes events without automatic caps, expiry, payout, or money calculation. Time-account balances carry forward; vacation carryover remains unimplemented.
@@ -51,7 +51,7 @@ The September 5 hardening gives the personnel lifecycle section an authoritative
 - A sole admin's own vacation request has no eligible approver until named `leave_approval` holders are selected.
 - Employees cannot propose corrections to their own master data or conditions. Their self-service is vacation, sickness, acknowledgements, released documents, and requested evidence.
 - Ownership transfer and emergency owner recovery do not exist yet.
-- Member removal is still the legacy destructive flow: it closes an open session, deletes that member's legacy time entries in the organization, and removes the membership, while canonical sessions and the personnel record survive as `Ausgeschieden`. It is not an archive or offboarding workflow; `P1-33` replaces it.
+- Member removal is allowed only before any time has been recorded. The [September security hardening](../plans/phase-1/hardening-2026-09/05-step-1-security-infrastructure.md) makes the database refuse removal when legacy entries or canonical sessions exist, preserving membership and time history. The office ends employment and controls access through the personnel record. Complete offboarding and retained historical identity remain `P1-33`.
 - No compensation, payroll profile, payslip, provider integration, electronic signature, legal retention, or complete organization export exists. `P1-23` supplies only a generic payroll-ready ZIP with employee and code mapping.
 
 ## Phase 1 — Complete Operational Core

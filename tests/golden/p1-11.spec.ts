@@ -14,6 +14,8 @@ import {
   setPlannedCalendarOccurrenceStatus,
   showPlanningMonth,
 } from './support/steps';
+import { expectLiveWithin, expectReadyWithin } from './support/live';
+import { createMeasurementPage } from './support/scenario-measurement';
 import { formatBerlinLocalDateTime } from '../../lib/planning/date-time';
 
 test.describe.configure({ mode: 'serial' });
@@ -27,6 +29,7 @@ const TODAY_ISO = new Intl.DateTimeFormat('sv-SE', {
 
 function shiftIsoDate(dateIso: string, days: number): string {
   const [year, month, day] = dateIso.split('-').map(Number);
+  if (year === undefined || month === undefined || day === undefined) throw new Error(`Invalid ISO date: ${dateIso}`);
   return new Date(Date.UTC(year, month - 1, day) + days * 86_400_000)
     .toISOString()
     .slice(0, 10);
@@ -34,6 +37,7 @@ function shiftIsoDate(dateIso: string, days: number): string {
 
 function nextMonthPlanningDate(): string {
   const [year, month] = TODAY_ISO.split('-').map(Number);
+  if (year === undefined || month === undefined) throw new Error(`Invalid ISO date: ${TODAY_ISO}`);
   return new Date(Date.UTC(year, month, 5)).toISOString().slice(0, 10);
 }
 
@@ -194,25 +198,29 @@ test.describe('P1-11 recurring and multi-visit planning @P1-11', () => {
     });
     expect(night.occurrences).toHaveLength(1);
     expect(night.jobId).toBeNull();
+    const [nightOccurrence] = night.occurrences;
+    if (!nightOccurrence?.startAt || !nightOccurrence.endAt) throw new Error('P1-11: expected a timed night occurrence');
     expect(
-      new Date(night.occurrences[0].endAt!).getTime() -
-        new Date(night.occurrences[0].startAt!).getTime()
+      new Date(nightOccurrence.endAt).getTime() -
+        new Date(nightOccurrence.startAt).getTime()
     ).toBe(4 * 60 * 60 * 1000);
-    const localStart = formatBerlinLocalDateTime(night.occurrences[0].startAt!);
+    const localStart = formatBerlinLocalDateTime(nightOccurrence.startAt);
     expect(localStart.slice(11, 16)).toBe('22:00');
 
     const multiDay = await getPlanningState(world.orgId, {
       internalTitle: multiDayTitle,
     });
-    expect(multiDay.occurrences[0].endDateExclusive).toBe(
-      shiftIsoDate(multiDay.occurrences[0].startDate!, 3)
+    const [multiDayOccurrence] = multiDay.occurrences;
+    if (!multiDayOccurrence?.startDate) throw new Error('P1-11: expected a dated multi-day occurrence');
+    expect(multiDayOccurrence.endDateExclusive).toBe(
+      shiftIsoDate(multiDayOccurrence.startDate, 3)
     );
     expect(await getOrganizationTimeEntryCount(world.orgId)).toBe(
       actualTimeCountBefore
     );
   });
 
-  test('team expansion, overlap warnings, qualification snapshots, RLS, and Realtime stay occurrence-scoped', async ({
+  test('team expansion, overlap warnings, qualification snapshots, RLS, and Realtime stay occurrence-scoped @FRESHNESS', async ({
     adminPage,
     bueroPage,
     employeePage,
@@ -244,18 +252,29 @@ test.describe('P1-11 recurring and multi-visit planning @P1-11', () => {
       recurrence: { frequency: 'daily', count: 2 },
       overrideReason: 'Das Einsatzteam hat den Termin betrieblich abgestimmt.',
     });
-    await expect(plannedCalendarEvent(bueroPage, jobTitle)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(plannedCalendarEvent(bueroPage, jobTitle, 1)).toBeVisible();
 
-    await createPlannedCalendarEntry(adminPage, {
-      kind: 'job_visit',
-      jobSearch: jobNumber,
-      date: shiftIsoDate(PLANNING_DATE, 6),
-      time: '09:00',
-      teamNames: [teamName],
-      overrideReason: 'Der doppelte Einsatz ist bewusst als Paralleltermin geplant.',
-    });
+    // The parallel visit is guaranteed to warn (overlap with the series), so
+    // the measured submission boundary sits before the override click. The
+    // Büro month grid must show the third occurrence inside the freshness
+    // deadline without any navigation (Step 2 retrofit of the former 20 s wait).
+    await expectLiveWithin(
+      plannedCalendarEvent(bueroPage, jobTitle, 2),
+      {
+        label: 'P1-11 overlapping occurrence reaches the already-open office month',
+        actingPage: adminPage,
+        mutation: (beforeSubmit) =>
+          createPlannedCalendarEntry(adminPage, {
+            kind: 'job_visit',
+            jobSearch: jobNumber,
+            date: shiftIsoDate(PLANNING_DATE, 6),
+            time: '09:00',
+            teamNames: [teamName],
+            overrideReason: 'Der doppelte Einsatz ist bewusst als Paralleltermin geplant.',
+            beforeSubmit,
+          }),
+      },
+    );
     const state = await getPlanningState(world.orgId, { jobNumber });
     expect(state.occurrenceCount).toBe(3);
     expect(state.assignmentCount).toBe(6);
@@ -265,10 +284,13 @@ test.describe('P1-11 recurring and multi-visit planning @P1-11', () => {
       'Der doppelte Einsatz ist bewusst als Paralleltermin geplant.'
     );
 
-    await showPlanningMonth(employeePage, PLANNING_DATE);
-    await expect(plannedCalendarEvent(employeePage, jobTitle)).toBeVisible({
-      timeout: 20_000,
-    });
+    const employeeOpening = await createMeasurementPage(employeePage);
+    try {
+      await expectReadyWithin(plannedCalendarEvent(employeeOpening.page, jobTitle), {
+        label: 'P1-11 employee calendar opening to assigned occurrence', targetMs: 5_000,
+        boundary: 'navigation-to-usable-content', trigger: () => showPlanningMonth(employeeOpening.page, PLANNING_DATE),
+      });
+    } finally { await employeeOpening.context.close(); }
     const [managerView, employeeView, outsiderView] = await Promise.all([
       getVisiblePlanningStateAs(world.users.admin, world.orgId),
       getVisiblePlanningStateAs(world.users.employee, world.orgId),
@@ -294,13 +316,16 @@ test.describe('P1-11 recurring and multi-visit planning @P1-11', () => {
       title: jobTitle,
       plannedDateDigits: toDatePickerDigits(legacyDate),
     });
-    await showPlanningMonth(adminPage, legacyDate);
-    await expect(plannedCalendarEvent(adminPage, jobTitle)).toBeVisible({
-      timeout: 20_000,
-    });
+    const adminOpening = await createMeasurementPage(adminPage);
+    try {
+      await expectReadyWithin(plannedCalendarEvent(adminOpening.page, jobTitle), {
+        label: 'P1-11 administrator calendar opening to legacy occurrence', targetMs: 5_000,
+        boundary: 'navigation-to-usable-content', trigger: () => showPlanningMonth(adminOpening.page, legacyDate),
+      });
+    } finally { await adminOpening.context.close(); }
     const before = await getPlanningState(world.orgId, { jobNumber });
     expect(before.occurrenceCount).toBe(1);
-    expect(before.occurrences[0].legacySourceJobId).toBe(before.jobId);
+    expect(before.occurrences[0]?.legacySourceJobId).toBe(before.jobId);
 
     await editPlannedCalendarOccurrence(adminPage, {
       title: jobTitle,
@@ -309,8 +334,8 @@ test.describe('P1-11 recurring and multi-visit planning @P1-11', () => {
       date: shiftIsoDate(legacyDate, 1),
     });
     const after = await getPlanningState(world.orgId, { jobNumber });
-    expect(after.occurrences[0].legacySourceJobId).toBe(after.jobId);
-    expect(after.occurrences[0].startDate).toBe(shiftIsoDate(legacyDate, 1));
+    expect(after.occurrences[0]?.legacySourceJobId).toBe(after.jobId);
+    expect(after.occurrences[0]?.startDate).toBe(shiftIsoDate(legacyDate, 1));
     expect(after.eventTypes).toContain('edited');
     expect(after.actualTimeCount).toBe(before.actualTimeCount);
   });

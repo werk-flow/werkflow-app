@@ -12,7 +12,7 @@ import {
 // exited stays neutral, active stays quiet green like the working status dot.
 const EMPLOYMENT_STATE_CLASSES: Record<EmploymentState, string> = {
   aktiv:
-    'bg-green-500/10 text-green-700 dark:text-green-400',
+    'bg-success-soft text-success-soft-foreground',
   geplant:
     'bg-brand-purple/15 text-brand-purple-dark dark:text-brand-purple-light',
   ausgeschieden: 'bg-muted text-muted-foreground',
@@ -21,7 +21,7 @@ const EMPLOYMENT_STATE_CLASSES: Record<EmploymentState, string> = {
 const ACCESS_STATE_CLASSES: Record<AccessState, string> = {
   mit_zugang: 'bg-accent text-accent-foreground',
   eingeladen:
-    'bg-yellow-500/10 text-yellow-700 dark:text-yellow-400',
+    'bg-warning-soft text-warning-soft-foreground',
   ohne_zugang: 'bg-muted text-muted-foreground',
 };
 

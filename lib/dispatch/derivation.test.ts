@@ -134,9 +134,9 @@ describe('travel-gap facts', () => {
       }),
     ]);
     expect(notes).toHaveLength(1);
-    expect(notes[0].kind).toBe('no_gap_different_sites');
-    expect(notes[0].previousTitle).toBe('Besuch A');
-    expect(notes[0].nextTitle).toBe('Besuch B');
+    expect(notes[0]?.kind).toBe('no_gap_different_sites');
+    expect(notes[0]?.previousTitle).toBe('Besuch A');
+    expect(notes[0]?.nextTitle).toBe('Besuch B');
   });
 
   test('unknown sites never pass silently: positive gaps stay "nicht bewertet"', () => {
@@ -151,8 +151,8 @@ describe('travel-gap facts', () => {
       }),
     ]);
     expect(notes).toHaveLength(1);
-    expect(notes[0].kind).toBe('gap_unassessed');
-    expect(notes[0].gapMinutes).toBe(60);
+    expect(notes[0]?.kind).toBe('gap_unassessed');
+    expect(notes[0]?.gapMinutes).toBe(60);
   });
 
   test('overlapping different-site visits count as negative gap warnings', () => {
@@ -165,8 +165,8 @@ describe('travel-gap facts', () => {
         endMinutes: 11 * 60,
       }),
     ]);
-    expect(notes[0].kind).toBe('no_gap_different_sites');
-    expect(notes[0].gapMinutes).toBe(-60);
+    expect(notes[0]?.kind).toBe('no_gap_different_sites');
+    expect(notes[0]?.gapMinutes).toBe(-60);
   });
 
   test('days and employees are assessed independently', () => {

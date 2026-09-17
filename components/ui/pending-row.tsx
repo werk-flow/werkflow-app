@@ -20,7 +20,7 @@ export function PendingRow({
 }: {
   columns: readonly SkeletonColumn[];
   cells?: Partial<Record<string, React.ReactNode>>;
-  interactive?: TableRowInteractive;
+  interactive?: TableRowInteractive | undefined;
   label?: string;
 }) {
   return (

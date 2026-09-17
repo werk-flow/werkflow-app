@@ -1,6 +1,6 @@
 # Document Storage And Access
 
-Status: living — last reviewed 2026-09-05
+Status: living — last reviewed 2026-09-17
 
 This is the implementation reference for WerkFlow's document system: where bytes and metadata live, how the signed upload and download flow works, how authorization splits between server actions and RLS, which operations exist and what they change, the audit vocabulary, the Realtime and caching contract, and the code map. What users can do, the role split in product terms, planned scope, and open decisions live in the feature spec [document-management.md](../features/document-management.md). For exact schema details, prefer live Supabase inspection and `lib/supabase/database.types.ts` over this file.
 
@@ -47,7 +47,7 @@ Postgres holds organization, folder structure, links, categories, trash state, v
 - **Version path pattern:** `{organizationId}/{documentId}/versions/{versionNumber}-{sanitizedFileName}`
 - **Environment variables:** `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, optional `R2_JURISDICTION` with default `eu`, and the local-only `R2_ENDPOINT` override.
 - **Bucket CORS** must allow `GET`, `PUT`, `HEAD` with the `content-type` header from the app origins (see `scripts/setup-r2-cors.ts`; applying it needs a bucket-admin token or the dashboard, the runtime object token deliberately cannot change bucket settings).
-- Orphaned uploads (PUT succeeded, finalize never ran) are invisible to users and are reconciled through the storage-cleanup report, which lists R2 objects against metadata.
+- Orphaned uploads (PUT succeeded, finalize never ran) are invisible to users; there is no automated reconciliation yet (see "Storage cleanup" below).
 
 ### Immutable storage paths
 
@@ -57,7 +57,7 @@ When a document is uploaded, its storage path is tied to `documentId` and does n
 
 **Upsides:** Fast rename/move; simpler audit; safer concurrent edits.
 
-**Downsides:** Display names can diverge from stored filenames; orphaned paths possible if metadata gets out of sync (mitigated by the cleanup report).
+**Downsides:** Display names can diverge from stored filenames; orphaned paths possible if metadata gets out of sync (no automated reconciliation yet).
 
 ### Signed URL access
 
@@ -76,7 +76,7 @@ File bytes moved from Supabase Storage to R2 with direct uploads in [P1-00a](../
 - **Client side:** uploads go directly from the browser to R2 via `lib/documents/upload-client.ts` (ticket → XHR PUT with real progress → finalize); file bytes never pass through Server Actions, so no body-size workaround exists or is needed.
 - **Size limit:** 50 MB (`DOCUMENT_MAX_FILE_SIZE_BYTES`), enforced at ticket creation and re-verified against the actual object size at finalize.
 - **Contextual uploads from the field work pack** retain completed files across the metadata step, synchronize renames, and expire abandoned retained uploads after 60 seconds ([P1-16](../plans/phase-1/slices/p1-16-field-work-pack.md)).
-- **Protected personnel upload:** `createPersonnelDocumentUploadTicket` and `finalizePersonnelDocumentUpload` reuse the same signed PUT, HEAD verification, bucket and path pattern ([P1-24](../plans/phase-1/slices/p1-24-controlled-people-lifecycle.md)). A short-lived signed cleanup capability binds actor, organization, personnel owner, document, filename, class and operation so a failed finalize can remove only its own orphan. The storage-cleanup report remains the recovery path for an interrupted browser that never returns.
+- **Protected personnel upload:** `createPersonnelDocumentUploadTicket` and `finalizePersonnelDocumentUpload` reuse the same signed PUT, HEAD verification, bucket and path pattern ([P1-24](../plans/phase-1/slices/p1-24-controlled-people-lifecycle.md)). A short-lived signed cleanup capability binds actor, organization, personnel owner, document, filename, class and operation so a failed finalize can remove only its own orphan. An interrupted browser that never returns leaves an orphan that only a future maintenance surface or manual review can remove.
 - **Handover package rendering:** the server renders the deterministic customer-safe HTML file and uploads those bytes directly to the organization-scoped EU R2 path through the storage adapter; a guarded database RPC then registers document metadata, release facts and the lifecycle transition ([P1-17](../plans/phase-1/slices/p1-17-office-handover.md)). Source document bytes are referenced by exact identity, never copied. A failed post-upload registration deletes the object only after proving no committed document or release references it.
 
 ## Data Model
@@ -319,13 +319,7 @@ Previous versions: download via signed URL. Rollback UI not implemented (optiona
 
 ### Storage cleanup
 
-Server-side maintenance helpers `getDocumentStorageCleanupReport` and `deleteOrphanedStorageObjects` compare:
-
-- Orphaned storage objects (bytes without metadata reference).
-- Missing storage objects (metadata without bytes).
-- Deleted document paths still in storage (Papierkorb candidates).
-
-Orphan deletion only deletes paths validated as orphaned by the report. These helpers are not exposed in the normal `/dokumente` user interface; add a dedicated admin/maintenance surface before using them as a product feature.
+There is no storage reconciliation feature in the app. The two former Server Actions that reported and deleted orphaned objects had no caller and no UI, so they were public endpoints without a product surface; the Step 3 cleanup on 2026-09-13 removed them. Orphaned uploads (a PUT that succeeded whose finalize never ran) stay invisible to users and are bounded by the short-lived upload ticket; protected personnel uploads carry their own signed cleanup capability. When a reconciliation surface becomes a product need, build it as an admin maintenance page with a reviewed authorization boundary, following the orphan-review rules in the [recovery runbook](recovery-and-incidents.md#restore-procedure-database): list candidates, never purge by prefix, and preserve objects for review.
 
 ## Audit History
 

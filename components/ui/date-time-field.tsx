@@ -27,7 +27,7 @@ export function DateTimeField({
   idPrefix: string;
   dateAriaLabel?: string;
   invalid?: boolean;
-  describedById?: string;
+  describedById?: string | undefined;
 }) {
   const datePart = value.length >= 10 ? value.slice(0, 10) : '';
   const timePart = value.length >= 16 ? value.slice(11, 16) : '';

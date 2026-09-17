@@ -1,0 +1,37 @@
+import { expect, test } from '@playwright/test';
+import { assertWorkspaceTestLock } from '@/lib/testing/workspace-test-lock';
+
+test('actual month renderer avoids redundant mount navigation and unrelated parent redraws while applying a new date and events', async ({ page }) => {
+  assertWorkspaceTestLock();
+  const bundle = process.env.WERKFLOW_UI_CONTRACT_BUNDLE;
+  if (!bundle) throw new Error('Run through bun tests/ui-contracts/run.ts.');
+  await page.route('http://localhost/ui-contracts', route => route.fulfill({ contentType: 'text/html', body: '<html lang="de"><body><div id="root"></div></body></html>' }));
+  await page.goto('http://localhost/ui-contracts');
+  await page.evaluate(() => { window.uiContractFixture = 'month-view'; });
+  await page.addScriptTag({ path: bundle });
+  const region = page.getByRole('region', { name: 'Monatskalender', exact: true });
+  await expect(page.getByLabel('Gerenderter Tag')).toHaveText('2026-06-15');
+  await expect(region.getByText('Monatsauftrag', { exact: true })).toBeVisible();
+  const mounted = await page.evaluate(() => ({ ...window.monthViewContract }));
+  expect(mounted.gotoDate).toBe(0);
+  expect(mounted.changeView).toBe(0);
+  await page.getByRole('button', { name: 'Äußeren Zustand ändern' }).click();
+  await expect(page.getByLabel('Äußerer Zustand')).toHaveText('1');
+  expect(await page.evaluate(() => window.monthViewContract.resetOptions)).toBe(mounted.resetOptions);
+  await page.getByRole('button', { name: 'Nächsten Monat anzeigen' }).click();
+  await expect(page.getByLabel('Gerenderter Tag')).toHaveText('2026-07-15');
+  expect(await page.evaluate(() => window.monthViewContract.eventSources)).toBe(mounted.eventSources);
+  expect(await page.evaluate(() => window.monthViewContract.presentationChanges)).toBe(mounted.presentationChanges);
+  await page.getByRole('button', { name: 'Neue Aufträge übernehmen' }).click();
+  await expect(region.getByText('Aktualisierter Monatsauftrag', { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => window.monthViewContract.eventSources)).toBe(mounted.eventSources + 1);
+  await page.getByRole('button', { name: 'Betriebsruhe übernehmen' }).click();
+  await expect(region.getByText('Betriebsruhe Test', { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => window.monthViewContract.eventSources)).toBe(mounted.eventSources + 2);
+  expect(await page.evaluate(() => window.monthViewContract.gotoDate)).toBe(1);
+  expect(await page.evaluate(() => window.monthViewContract.changeView)).toBe(0);
+  await page.getByRole('button', { name: 'Nächstes Jahr anzeigen' }).click();
+  await expect(page.getByLabel('Gerenderter Tag')).toHaveText('2027-01-01');
+  await expect(region.getByText('Neujahr', { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => window.monthViewContract.eventSources)).toBe(mounted.eventSources + 3);
+});

@@ -1,26 +1,10 @@
 import type { Database } from "@/lib/supabase/database.types";
 
-export const MAINTENANCE_PLAN_STATUSES = [
-  "draft",
-  "active",
-  "suspended",
-  "terminated",
-] as const satisfies readonly Database["public"]["Enums"]["maintenance_plan_status"][];
-
 export const MAINTENANCE_COVERAGE_STATUSES = [
   "active",
   "suspended",
   "terminated",
 ] as const satisfies readonly Database["public"]["Enums"]["maintenance_coverage_status"][];
-
-export const MAINTENANCE_DUE_STATUSES = [
-  "open",
-  "visit_created",
-  "completed",
-  "skipped",
-  "cancelled",
-  "superseded",
-] as const satisfies readonly Database["public"]["Enums"]["maintenance_due_status"][];
 
 export const MAINTENANCE_SCOPE_OUTCOMES = [
   "complete",

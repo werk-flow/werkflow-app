@@ -4,6 +4,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, posix, resolve } from "node:path";
 import ts from "typescript";
 import { z } from "zod";
+import { proofEnvironmentDigest } from "./proof-environment";
+import { contentDigest } from "./source-content";
 
 const digestSchema = z.string().regex(/^[a-f0-9]{64}$/);
 export const inputSnapshotSchema = z.object({
@@ -22,15 +24,24 @@ export function hashValue(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
-/** Runtime Markdown/MDX remains an input; guidance and isolated research are exempt. */
+/** Files no test executes: agent and review tooling, and the ignore files that only shape this listing. */
+const AGENT_TOOLING_INPUTS: readonly string[] = [".mcp.json", ".coderabbit.yaml"];
+
+/** Runtime Markdown/MDX remains an input; guidance, tooling and isolated research are exempt. */
 export function isDocumentationInput(file: string): boolean {
-  return file.startsWith("docs/") && /\.(md|mdx)$/.test(file) ||
+  return /\.(md|mdx)$/.test(file) && (file.startsWith("docs/") || file.startsWith("tests/")) ||
     /^(AGENTS|CLAUDE|README)\.md$/i.test(file) || file.startsWith(".claude/") || file.startsWith(".agents/") ||
-    file.startsWith("temporary-transcripts/");
+    file.startsWith("temporary-transcripts/") ||
+    AGENT_TOOLING_INPUTS.includes(file) || /(^|\/)\.gitignore$/.test(file);
 }
 
-/** Includes additions and deletions through snapshot comparison, without recording secret values. */
-export function captureInputSnapshot(repositoryRoot: string, environmentDigest: string): InputSnapshot {
+/**
+ * Includes additions and deletions through snapshot comparison, without
+ * recording secret values. The environment identity is the proof identity,
+ * never the build receipt's raw digest (see proof-environment.ts); code files
+ * are identified by their comment-free token stream (see source-content.ts).
+ */
+export function captureInputSnapshot(repositoryRoot: string, environment: Readonly<Record<string, string | undefined>> = process.env): InputSnapshot {
   const listed = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], {
     cwd: repositoryRoot, encoding: "utf8", maxBuffer: 32 * 1024 * 1024,
   });
@@ -39,9 +50,9 @@ export function captureInputSnapshot(repositoryRoot: string, environmentDigest: 
     if (!file || !existsSync(resolve(repositoryRoot, file))) continue;
     // Historical prose cannot invalidate behavior proof. Current coverage is checked separately.
     if (isDocumentationInput(file)) continue;
-    files[file] = createHash("sha256").update(readFileSync(resolve(repositoryRoot, file))).digest("hex");
+    files[file] = contentDigest(file, readFileSync(resolve(repositoryRoot, file)));
   }
-  return inputSnapshotSchema.parse({ version: 1, files, environment: environmentDigest });
+  return inputSnapshotSchema.parse({ version: 1, files, environment: proofEnvironmentDigest(repositoryRoot, environment) });
 }
 
 export function changedInputs(previous: InputSnapshot | undefined, current: InputSnapshot): string[] {
@@ -79,7 +90,8 @@ export function sourceImportGraph(repositoryRoot: string, files: readonly string
     (parsedConfig.success && (parsedConfig.data.extends !== undefined || parsedConfig.data.compilerOptions?.baseUrl !== undefined)));
   const aliases = parsedConfig.success ? Object.keys(parsedConfig.data.compilerOptions?.paths ?? {}) : [];
   const rootAlias = parsedConfig.success ? parsedConfig.data.compilerOptions?.paths?.["@/*"] : undefined;
-  const supportedRootAlias = !config || Boolean(rootAlias?.length === 1 && ["./*", "*"].includes(rootAlias[0]));
+  const rootAliasTarget = rootAlias?.length === 1 ? rootAlias[0] : undefined;
+  const supportedRootAlias = !config || (rootAliasTarget !== undefined && ["./*", "*"].includes(rootAliasTarget));
   function matchesAlias(name: string): boolean {
     return aliases.some((alias) => {
       const wildcard = alias.indexOf("*");
@@ -135,6 +147,25 @@ export function sourceImportGraph(repositoryRoot: string, files: readonly string
   return graph;
 }
 
+/**
+ * Harness code that only a test can reach by importing it. A change there
+ * qualifies the groups whose specs (or their support modules) import it, not
+ * every group; before 2026-09-14 these directories were unowned and therefore
+ * global, so a one-function helper fix reran all forty release groups.
+ */
+const IMPORT_QUALIFIED_PREFIXES: readonly string[] = [
+  "tests/golden/support/",
+  "tests/audit/support/",
+  "tests/canary/support/",
+  "lib/testing/",
+  // The verifier, runner and repository scripts are harness entry points; their
+  // correctness is proven by unit:all and the static gates, not by rerunning
+  // every browser group they orchestrate.
+  "scripts/",
+];
+/** Loaded by a Playwright config path rather than an import; stays a shared input of every group. */
+const FRAMEWORK_LOADED_HELPERS: readonly string[] = ["tests/golden/support/run-reporter.ts"];
+
 export function groupInputFiles(input: {
   group: EvidenceGroup;
   groups: readonly EvidenceGroup[];
@@ -142,9 +173,9 @@ export function groupInputFiles(input: {
   graph: ReadonlyMap<string, readonly string[]>;
 }): string[] {
   const selected = new Set<string>();
-  const declared = input.groups.flatMap((group) => [...group.sourcePrefixes, ...group.files]);
+  const declared = [...input.groups.flatMap((group) => [...group.sourcePrefixes, ...group.files]), ...IMPORT_QUALIFIED_PREFIXES];
   for (const file of input.files) {
-    const owned = declared.some((prefix) => isWithin(file, prefix));
+    const owned = declared.some((prefix) => isWithin(file, prefix)) && !FRAMEWORK_LOADED_HELPERS.includes(file);
     // A new or unowned input is global until somebody declares and reviews its ownership.
     if (!owned || input.group.files.includes(file) || input.group.sourcePrefixes.some((prefix) => isWithin(file, prefix))) selected.add(file);
   }
@@ -181,17 +212,38 @@ export const groupResultSchema = z.object({
   logPath: z.string(),
   reason: z.string().nullable(),
 });
-export type GroupResult = z.infer<typeof groupResultSchema>;
+/** The report snapshot a result was recorded under, attached when history is read. */
+export type GroupResult = z.infer<typeof groupResultSchema> & { snapshot?: InputSnapshot };
 
-export function reusableGroupResult(input: { groupId: string; fingerprint: string; results: readonly GroupResult[] }): GroupResult | undefined {
+/** True when every listed input has the same content and the environment digest is unchanged. */
+export function inputsUnchangedBetween(then: InputSnapshot, now: InputSnapshot, inputs: readonly string[]): boolean {
+  return then.environment === now.environment
+    && inputs.every((file) => then.files[file] !== undefined && then.files[file] === now.files[file]);
+}
+
+type ResultMatch = { groupId: string; fingerprint: string; inputs?: readonly string[]; snapshot?: InputSnapshot };
+
+/**
+ * A result proves the current inputs when its fingerprint matches, or when the
+ * snapshot it was recorded under holds the same content for every current
+ * input. The second form keeps a proof valid across a qualification-rule
+ * change that narrows a group's inputs (2026-09-14).
+ */
+function resultMatches(result: GroupResult, input: ResultMatch): boolean {
+  if (result.groupId !== input.groupId) return false;
+  if (result.fingerprint === input.fingerprint) return true;
+  return Boolean(input.inputs && input.snapshot && result.snapshot && inputsUnchangedBetween(result.snapshot, input.snapshot, input.inputs));
+}
+
+export function reusableGroupResult(input: ResultMatch & { results: readonly GroupResult[] }): GroupResult | undefined {
   // A later failure invalidates an older pass for the same inputs. Never cherry-pick a lucky pass.
-  const latest = input.results.filter((result) => result.groupId === input.groupId && result.fingerprint === input.fingerprint)
+  const latest = input.results.filter((result) => resultMatches(result, input))
     .sort((left, right) => left.startedAt.localeCompare(right.startedAt)).at(-1);
   return latest?.status === "passed" ? latest : undefined;
 }
 
-export function groupAttemptProblem(input: { groupId: string; fingerprint: string; results: readonly GroupResult[]; recoveredRunKeys?: readonly string[] }): string | undefined {
-  const unique = new Map(input.results.filter((result) => result.groupId === input.groupId && result.fingerprint === input.fingerprint && result.status !== "blocked").map((result) => [`${result.groupId}:${result.startedAt}`, result]));
+export function groupAttemptProblem(input: ResultMatch & { results: readonly GroupResult[]; recoveredRunKeys?: readonly string[] }): string | undefined {
+  const unique = new Map(input.results.filter((result) => resultMatches(result, input) && result.status !== "blocked").map((result) => [`${result.groupId}:${result.startedAt}`, result]));
   const attempts = [...unique.values()].sort((left, right) => left.startedAt.localeCompare(right.startedAt));
   const latest = attempts.at(-1);
   if (latest?.status === "failed") {

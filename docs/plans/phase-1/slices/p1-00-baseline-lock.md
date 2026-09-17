@@ -22,7 +22,7 @@ Findings and resolutions in the [baseline verification report below](#baseline-v
 
 ## Links
 
-- Gate runs: [golden-gate-log.md](../../golden-gate-log.md)
+- Gate runs: [golden-gate-log.md](../audits/golden-gate-log.md)
 - Progress log: [../log.md](../log.md)
 
 ## Baseline verification report (merged 2026-09-03 from the former separate report file)
@@ -46,6 +46,6 @@ Date: 2026-08-04. This report records the discrepancy findings and resolutions r
 
 ### Open items at the time (all resolved 2026-08-04)
 
-1. ~~Automated regression coverage does not exist.~~ **Resolved 2026-08-04:** the Playwright golden-gate harness exists ([testing.md](../../../technical/testing.md)) and `GG-00` automated v1 passes 8/8 against a disposable multi-role organization, including a 6 MB direct-to-R2 upload and cross-organization isolation. Run log: [golden-gate-log.md](../../golden-gate-log.md).
+1. ~~Automated regression coverage does not exist.~~ **Resolved 2026-08-04:** the Playwright golden-gate harness exists ([testing.md](../../../technical/testing.md)) and `GG-00` automated v1 passes 8/8 against a disposable multi-role organization, including a 6 MB direct-to-R2 upload and cross-organization isolation. Run log: [golden-gate-log.md](../audits/golden-gate-log.md).
 2. ~~**`GG-00` coverage gaps.**~~ **Resolved 2026-08-04:** automated v3 (13/13 passing on a fresh production build) adds the two remaining flows — invite/onboarding (real invite dialog, real email via Resend test address, real link/login redemption, role-appropriate surfaces) and employee inventory take/return on an assigned job with stock-ledger consistency assertions. The gate now covers the roadmap's full `GG-00` scenario. The v3 cycle found and fixed another real defect: `ClockStateProvider` let a late-streamed server snapshot overwrite a newer client mutation, visually reverting a successful clock-in. Earlier v2 findings: missing Realtime refresh on `/kunden`, and a pre-hydration login fallback that put credentials into the URL.
 3. ~~**Frankfurt region verification after next deploy**~~ **Resolved 2026-08-04:** the product owner confirmed the latest Vercel deployment's Functions show `fra1`, and upload/download works on the deployed app (first production deploy on the R2 storage path).

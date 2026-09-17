@@ -10,7 +10,7 @@ export type ProposedEmployeeMinutes = {
   minutes: number;
 };
 
-export const CAPACITY_CONFLICT_MESSAGES = {
+const CAPACITY_CONFLICT_MESSAGES = {
   no_schedule: 'Für diesen Tag ist keine Arbeitszeit hinterlegt.',
   holiday_or_closure: 'Der Termin liegt auf einem arbeitsfreien Tag.',
   approved_absence: 'Für diesen Zeitraum liegt eine genehmigte Abwesenheit vor.',

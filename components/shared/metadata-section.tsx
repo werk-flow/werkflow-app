@@ -41,9 +41,9 @@ export interface MetadataField {
     type: 'text' | 'textarea' | 'select' | 'date' | 'time' | 'duration';
     currentValue: string;
     onSave: (newValue: string) => Promise<void>;
-    options?: { value: string; label: string }[];
-    placeholder?: string;
-    nullable?: boolean;
+    options?: { value: string; label: string }[] | undefined;
+    placeholder?: string | undefined;
+    nullable?: boolean | undefined;
     confirmBeforeSave?: {
       shouldConfirm: (newValue: string, currentValue: string) => boolean;
       title: string;
@@ -51,7 +51,7 @@ export interface MetadataField {
       confirmLabel?: string;
       loadingLabel?: string;
     };
-  };
+  } | undefined;
 }
 
 interface MetadataSectionProps {

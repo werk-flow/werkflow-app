@@ -1,9 +1,9 @@
 import 'server-only'
 
 import { cacheTag } from 'next/cache'
+import type { PostgrestSingleResponse } from '@supabase/supabase-js'
 
 import { CACHE_TAGS } from '@/lib/data/cached'
-import { authenticateAndAuthorize } from '@/lib/jobs/auth'
 import { createSupabaseAdminClient } from '@/lib/supabase/admin'
 import type { Json } from '@/lib/supabase/database.types'
 
@@ -256,7 +256,7 @@ export async function applyWorkTemplateWithAdmin(
   organizationId: string,
   actorId: string,
   input: ApplyWorkTemplateInput
-) {
+): Promise<PostgrestSingleResponse<Json>> {
   const assessment = input.qualificationAssessment
   return admin.rpc('apply_work_template', {
     p_organization_id: organizationId,
@@ -322,7 +322,10 @@ export async function loadWorkTemplateRequirementRows(input: {
   organizationId: string
   versionId: string
   jobId?: string
-}) {
+}): Promise<
+  | { success: true; rows: Array<{ id: string; capability_id: string; require_confirmation: boolean }>; templateRequirementCount: number }
+  | { success: false; error: string }
+> {
   const [templateResult, jobResult] = await Promise.all([
     input.admin
       .from('work_template_capability_requirements')
@@ -353,12 +356,6 @@ export async function loadWorkTemplateRequirementRows(input: {
       : row)
   }
   return { success: true as const, rows: [...merged.values()], templateRequirementCount: templateResult.data?.length ?? 0 }
-}
-
-export async function getManagerWorkTemplateContext() {
-  const auth = await authenticateAndAuthorize()
-  if (!auth.success || !auth.context.isManagerOrAbove) return null
-  return auth.context
 }
 
 export function toJson(value: unknown): Json {

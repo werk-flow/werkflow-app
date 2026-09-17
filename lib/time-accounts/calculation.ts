@@ -59,15 +59,16 @@ function ruleMatches(
   return true;
 }
 
-export function resolveCreditPercentage(
+function resolveCreditPercentage(
   policy: TimeAccountPolicy,
   context: TimeActivityContext,
 ): TimeCreditPercentage {
   const matches = policy.creditRules.filter((rule) =>
     ruleMatches(rule, context),
   );
-  if (matches.length !== 1) throw new Error("credit_rule_not_resolved");
-  return matches[0].percentage;
+  const [match] = matches;
+  if (!match || matches.length !== 1) throw new Error("credit_rule_not_resolved");
+  return match.percentage;
 }
 
 function getBerlinDayBounds(localDate: string): { start: Date; end: Date } {

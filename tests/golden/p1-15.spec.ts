@@ -19,6 +19,7 @@ function futureDate(days: number): string {
     day: '2-digit',
   }).format(new Date());
   const [year, month, day] = today.split('-').map(Number);
+  if (year === undefined || month === undefined || day === undefined) throw new Error(`Invalid ISO date: ${today}`);
   return new Date(Date.UTC(year, month - 1, day) + days * 86_400_000).toISOString().slice(0, 10);
 }
 
@@ -98,7 +99,7 @@ test.describe('P1-15 structured site evidence @P1-15', () => {
       'review_requested',
       'internal_approved',
     ]);
-    expect(state.actions[1].responsibility_snapshot).toMatchObject({
+    expect(state.actions[1]?.responsibility_snapshot).toMatchObject({
       responsibility: 'work_artifact_approval',
     });
     await closeWorkArtifactDialog(adminDialog);
@@ -126,8 +127,8 @@ test.describe('P1-15 structured site evidence @P1-15', () => {
       jobNumber,
     });
     expect(measurementState.measurements).toHaveLength(1);
-    expect(Number(measurementState.measurements[0].quantity)).toBe(7.25);
-    expect(measurementState.measurements[0].unit).toBe('meter');
+    expect(Number(measurementState.measurements[0]?.quantity)).toBe(7.25);
+    expect(measurementState.measurements[0]?.unit).toBe('meter');
     const lifecycle = await getWorkLifecycleState(world.orgId, { jobNumber });
     expect(lifecycle.snapshot.gates.measurementArtifacts).toBe(1);
     expect(lifecycle.snapshot.gates.notAssessable).not.toContain('measurements');

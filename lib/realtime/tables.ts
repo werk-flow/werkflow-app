@@ -1,5 +1,6 @@
 // The one home of the Realtime table list. The provider subscribes to
-// exactly these tables (all org-filtered except profiles), the parity check
+// these business tables (all org-filtered except profiles) plus the deletion
+// transport below. The parity check
 // (scripts/check-realtime-parity.ts) diffs them against the database's
 // supabase_realtime publication and replica-identity state, and the
 // RealtimeTable type derives from this array so list and type cannot drift.
@@ -102,6 +103,11 @@ export const REALTIME_TABLES = [
 
 export type RealtimeTable = (typeof REALTIME_TABLES)[number];
 
+// Transport-only INSERTs become business-table DELETE invalidations. It is not
+// a domain table and must never be exposed as a consumer subscription target.
+export const REALTIME_DELETION_TABLE = 'realtime_deletions';
+export const REALTIME_PUBLISHED_TABLES = [...REALTIME_TABLES, REALTIME_DELETION_TABLE] as const;
+
 // profiles is the one published table without an organization_id column
 // (profile data is referenced across organization views); every other
 // subscription carries the server-side organization filter.
@@ -109,11 +115,12 @@ export const UNFILTERED_REALTIME_TABLES: readonly RealtimeTable[] = [
   "profiles",
 ];
 
-// Published tables whose DEFAULT replica identity is already minimal and
-// filterable: organization_settings and organization_qualification_settings
+// Published tables whose DEFAULT replica identity is already minimal:
+// organization_settings and organization_qualification_settings
 // have organization_id as their primary key; profiles has no organization
 // column at all. Every other published table uses the committed
-// a unique (id, organization_id) index (see the replica-identity migrations).
+// unique (id, organization_id) index. Raw DELETE delivery is disabled; these
+// identities retain the minimal logical-decoding contract for other changes.
 export const DEFAULT_IDENTITY_REALTIME_TABLES: readonly RealtimeTable[] = [
   "profiles",
   "organization_settings",

@@ -9,7 +9,7 @@ import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { createOrganization } from '@/lib/org/actions';
 
-const ERROR_MESSAGES: Record<string, string> = {
+const ERROR_MESSAGES = {
   name_required: 'Bitte gib einen Namen ein.',
   name_too_short: 'Der Name muss mindestens 2 Zeichen lang sein.',
   name_too_long: 'Der Name darf maximal 100 Zeichen lang sein.',
@@ -19,7 +19,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   organization_creation_failed: 'Organisation konnte nicht erstellt werden.',
   member_creation_failed: 'Mitgliedschaft konnte nicht erstellt werden.',
   unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.'
-};
+} satisfies Record<string, string>;
+const ERROR_MESSAGE_BY_CODE: Record<string, string> = ERROR_MESSAGES;
 
 export function CreateOrganizationForm() {
   const [name, setName] = useState('');
@@ -39,7 +40,7 @@ export function CreateOrganizationForm() {
       window.location.href = `/dashboard?created=${result.organizationId}`;
     } else {
       setError(
-        ERROR_MESSAGES[result.error ?? 'unexpected_error'] ??
+        ERROR_MESSAGE_BY_CODE[result.error ?? 'unexpected_error'] ??
           ERROR_MESSAGES.unexpected_error
       );
       setIsLoading(false);

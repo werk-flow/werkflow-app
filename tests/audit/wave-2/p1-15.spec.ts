@@ -39,7 +39,7 @@ function escapeRegExp(value: string): string {
 }
 
 const PLANNED_DATE = ownedBerlinDateAtOffset('p1-15', 80);
-const DATES = Array.from({ length: 3 }, (_, index) => berlinDateAtOffset(80 + index));
+const DATES = [berlinDateAtOffset(80), berlinDateAtOffset(81), berlinDateAtOffset(82)] as const;
 
 const KIND_LABELS = {
   site_diary: 'Bautagebuch',
@@ -277,7 +277,7 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
       description: 'Kupferrohr',
       unit: 'meter',
     });
-    expect(Number(jobState.measurements[0].quantity)).toBe(12.5);
+    expect(Number(jobState.measurements[0]?.quantity)).toBe(12.5);
     expect(jobState.defects[0]).toMatchObject({
       severity: 'high',
       state: 'open',
@@ -365,14 +365,16 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     const revisions = state.revisions.filter((row) => row.artifact_id === report?.id);
     expect(revisions).toHaveLength(2);
     expect(revisions.map((row) => row.title)).toEqual([title, `${title} v2`]);
-    expect(revisions[1]).toMatchObject({
-      corrects_revision_id: revisions[0].id,
+    const [firstRevision, secondRevision] = revisions;
+    if (!firstRevision || !secondRevision) throw new Error('P1-15: expected two report revisions');
+    expect(secondRevision).toMatchObject({
+      corrects_revision_id: firstRevision.id,
       correction_reason: 'Leistungsumfang wurde vor Ort präzisiert.',
     });
     expect(report).toMatchObject({
       version: 2,
       status: 'draft',
-      current_revision_id: revisions[1].id,
+      current_revision_id: secondRevision.id,
     });
   });
 
@@ -729,7 +731,9 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
         .getByText(/^Nachweis erfüllt:/)
     ).toBeVisible({ timeout: 20_000 });
     const state = await getWorkArtifactState(world.orgId, { jobNumber });
-    const currentRevisionId = state.artifacts[0].current_revision_id;
+    const [exportedArtifact] = state.artifacts;
+    if (!exportedArtifact) throw new Error('P1-15: expected the exported artifact');
+    const currentRevisionId = exportedArtifact.current_revision_id;
     expect(state.actions.filter((row) => row.action_type === 'exported')).toHaveLength(1);
     expect(
       state.actions.filter((row) =>

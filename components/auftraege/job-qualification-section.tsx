@@ -15,10 +15,8 @@ import { SectionError } from '@/components/ui/section-error';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
-import {
-  getJobQualificationDetail,
-  setJobCapabilityRequirements,
-} from '@/lib/qualifications/actions';
+import { setJobCapabilityRequirements } from '@/lib/qualifications/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
 import {
   getCoverageStatusLabel,
   type JobQualificationDetail,
@@ -47,8 +45,8 @@ export function JobQualificationSection({
       'employee_capabilities',
       'organization_capabilities',
     ],
-    read: async (): Promise<LiveViewResult<JobQualificationDetail>> => {
-      const result = await getJobQualificationDetail(jobId);
+    read: async ({ signal }): Promise<LiveViewResult<JobQualificationDetail>> => {
+      const result = await readInBackground('job-qualification-detail', { jobId }, signal);
       return result.success ? { ok: true, data: result.data } : { ok: false };
     },
     resetKey: jobId,

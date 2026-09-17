@@ -6,6 +6,7 @@ import 'server-only';
 // caller-supplied user ID a public parameter (SI-014).
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 import type { OrgMemberInfo } from './actions';
 
 /**
@@ -49,16 +50,17 @@ export async function getProfileNamesVisibleTo(
   const requested = [...new Set(userIds)].filter(Boolean);
   if (requested.length === 0) return {};
 
-  const admin = createSupabaseAdminClient();
-  const { data: callerMemberships, error: membershipError } = await admin
+  // The caller-scoped RLS policy evaluates effective P1-24 access now. Do not
+  // authorize this fresh read from cached memberships after an out-of-band revoke.
+  const callerClient = await createSupabaseServerClient();
+  const { data: callerMemberships, error: membershipError } = await callerClient
     .from('organization_members')
     .select('organization_id')
     .eq('user_id', callerUserId);
-  if (membershipError || !callerMemberships || callerMemberships.length === 0) {
-    return {};
-  }
+  if (membershipError || !callerMemberships?.length) return {};
 
-  const organizationIds = callerMemberships.map((row) => row.organization_id);
+  const admin = createSupabaseAdminClient();
+  const organizationIds = callerMemberships.map((membership) => membership.organization_id);
   const [coMembersResult, personnelResult] = await Promise.all([
     admin
       .from('organization_members')

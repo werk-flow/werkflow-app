@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { memoizeRequestRead } from '@/lib/data/read-request-cache';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { getBusinessTodayIso } from '@/lib/personnel/types';
 import {
@@ -69,7 +70,7 @@ export type ResponsibilitySettingsData = {
   effective: Record<OrganizationResponsibility, EffectiveResponsibility>;
 };
 
-export async function loadResponsibilityRuntimeState(
+export const loadResponsibilityRuntimeState = memoizeRequestRead(async function loadResponsibilityRuntimeState(
   organizationId: string
 ): Promise<ResponsibilityRuntimeState | null> {
   const admin = createSupabaseAdminClient();
@@ -209,7 +210,7 @@ export async function loadResponsibilityRuntimeState(
       revokedFrom: delegation.revoked_from,
     })),
   };
-}
+}, { outsideRequest: 'fresh' });
 
 export async function getResponsibilitySettingsData(): Promise<
   | { success: true; data: ResponsibilitySettingsData }

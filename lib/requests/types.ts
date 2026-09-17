@@ -106,13 +106,6 @@ export const REQUEST_CLOSE_REASON_LABELS: Record<RequestCloseReason, string> = {
   sonstiges: 'Sonstiges',
 };
 
-export const REQUEST_STATUS_ORDER: RequestStatus[] = [
-  'offen',
-  'in_klaerung',
-  'umgewandelt',
-  'geschlossen',
-];
-
 export const REQUEST_CATEGORY_ORDER: RequestCategory[] = [
   'notfall',
   'stoerung_reparatur',
@@ -168,10 +161,6 @@ export function requestUrgencyToJobPriority(
 
 export type ClientRequestResult =
   | { success: true; request: ClientRequest }
-  | { success: false; error: string };
-
-export type ClientRequestListResult =
-  | { success: true; requests: ClientRequest[] }
   | { success: false; error: string };
 
 export type ConvertRequestResult =

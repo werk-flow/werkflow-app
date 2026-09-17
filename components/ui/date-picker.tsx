@@ -156,16 +156,18 @@ export function DatePicker({
 
   const advanceSegment = () => {
     const idx = activeSegment ? SEGMENT_ORDER.indexOf(activeSegment) : -1;
-    if (idx < SEGMENT_ORDER.length - 1) {
-      setActiveSegment(SEGMENT_ORDER[idx + 1]);
+    const nextSegment = SEGMENT_ORDER[idx + 1];
+    if (nextSegment !== undefined) {
+      setActiveSegment(nextSegment);
     }
     clearBuffer();
   };
 
   const retreatSegment = () => {
     const idx = activeSegment ? SEGMENT_ORDER.indexOf(activeSegment) : -1;
-    if (idx > 0) {
-      setActiveSegment(SEGMENT_ORDER[idx - 1]);
+    const previousSegment = idx > 0 ? SEGMENT_ORDER[idx - 1] : undefined;
+    if (previousSegment !== undefined) {
+      setActiveSegment(previousSegment);
     }
     clearBuffer();
   };

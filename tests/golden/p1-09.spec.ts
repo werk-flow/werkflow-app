@@ -40,6 +40,7 @@ const TODAY_ISO = new Intl.DateTimeFormat('sv-SE', {
 
 function shiftIsoDate(dateIso: string, days: number): string {
   const [year, month, day] = dateIso.split('-').map(Number);
+  if (year === undefined || month === undefined || day === undefined) throw new Error(`Invalid ISO date: ${dateIso}`);
   const shifted = new Date(Date.UTC(year, month - 1, day) + days * 86_400_000);
   return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, '0')}-${String(shifted.getUTCDate()).padStart(2, '0')}`;
 }
@@ -164,7 +165,8 @@ test.describe('P1-09 Teams und Qualifikationen @P1-09', () => {
     const state = await getJobQualificationState(world.orgId, jobNumber);
     expect(state.requirementCount).toBe(1);
     expect(state.assessments.length).toBeGreaterThan(0);
-    const latest = state.assessments[state.assessments.length - 1];
+    const latest = state.assessments.at(-1);
+    if (!latest) throw new Error('P1-09: expected at least one qualification assessment');
     expect(latest.overrideReason).toBe('Erfahrener Kollege begleitet den Einsatz');
     expect(latest.teamSourceId).not.toBeNull();
     expect(latest.fingerprint).toMatch(/^p1-09:/);
@@ -218,7 +220,9 @@ test.describe('P1-09 Teams und Qualifikationen @P1-09', () => {
     const certification = certificationName(world.runId);
     const before = await getCapabilityHistoryState(world.orgId, employeeRecord.id, certification);
     expect(before.rows).toHaveLength(1);
-    const expiredRecordId = before.rows[0].id;
+    const [expiredRow] = before.rows;
+    if (!expiredRow) throw new Error('P1-09: expected the expired certification row');
+    const expiredRecordId = expiredRow.id;
 
     await openAufgaben(adminPage);
     const notice = attentionNotificationRow(adminPage, expiredRecordId);
@@ -234,8 +238,10 @@ test.describe('P1-09 Teams und Qualifikationen @P1-09', () => {
     });
     const after = await getCapabilityHistoryState(world.orgId, employeeRecord.id, certification);
     expect(after.rows).toHaveLength(2);
-    expect(after.rows[0].supersededAt).not.toBeNull();
-    expect(after.rows[1].supersedesId).toBe(after.rows[0].id);
+    const [supersededRow, renewedRow] = after.rows;
+    if (!supersededRow || !renewedRow) throw new Error('P1-09: expected two certification rows');
+    expect(supersededRow.supersededAt).not.toBeNull();
+    expect(renewedRow.supersedesId).toBe(supersededRow.id);
     expect(after.employeeEventTypes).toEqual(['qualification_added', 'qualification_renewed']);
 
     await openAufgaben(adminPage);

@@ -74,7 +74,7 @@ The final user-flow catalog and Wave 2 ledger spell out every stable ID and its 
 
 ## Reserved acceptance dates
 
-P1-24's Berlin run-day offsets are recorded in the [fixture-date ownership registry](../../wave-2-audit.md#fixture-date-ownership); the code registry is `tests/golden/support/date-ownership.ts`.
+P1-24's Berlin run-day offsets are recorded in the [fixture-date ownership registry](../audits/wave-2-audit.md#fixture-date-ownership); the code registry is `tests/golden/support/date-ownership.ts`.
 
 ## Acceptance record
 
@@ -172,7 +172,7 @@ No enforcement-backlog item is needed. Every credible repeatable class landed at
 
 ## Links
 
-- Gate runs: [golden-gate-log.md](../../golden-gate-log.md)
+- Gate runs: [golden-gate-log.md](../audits/golden-gate-log.md)
 - Progress log: [../log.md](../log.md)
 
 ## Implementation plan (merged 2026-09-03 from the former separate plan file)

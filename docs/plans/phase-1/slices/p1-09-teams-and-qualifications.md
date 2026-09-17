@@ -26,5 +26,5 @@ Implemented on 2026-08-08 across live schema, server actions, resolver, RLS/Real
 
 ## Links
 
-- Gate runs: [golden-gate-log.md](../../golden-gate-log.md)
+- Gate runs: [golden-gate-log.md](../audits/golden-gate-log.md)
 - Progress log: [../log.md](../log.md)

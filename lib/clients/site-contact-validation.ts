@@ -2,7 +2,7 @@ import type { createSupabaseAdminClient } from '@/lib/supabase/admin';
 
 type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 
-export type SiteContactValidationError =
+type SiteContactValidationError =
   | 'site_requires_client'
   | 'site_not_found'
   | 'site_client_mismatch'

@@ -3,12 +3,13 @@ import { browserGroupReuseProblem, unresolvedBrowserGroupIds, type BrowserGroupR
 import { selectRequiredGroups } from "./group-selection";
 import type { GroupResult } from "./group-evidence";
 
-const run: BrowserGroupRunEvidence = {
-  runKey: "qualified-run", groupId: "audit:p1-22", groupFingerprint: "a".repeat(64), target: "local", lane: "group", status: "passed",
+const unqualifiedRun: BrowserGroupRunEvidence = {
+  runKey: "qualified-run", groupId: "audit:p1-22", target: "local", lane: "group", status: "passed",
   startedAt: "2026-09-06T10:00:00.000Z", completedAt: "2026-09-06T10:01:00.000Z",
   cleanedAt: "2026-09-06T10:00:59.000Z", retainedAt: null, buildId: "build-one",
   total: 3, passed: 3, failed: 0, skipped: 0, failures: [],
 };
+const run: BrowserGroupRunEvidence = { ...unqualifiedRun, groupFingerprint: "a".repeat(64) };
 const result: GroupResult = {
   groupId: "audit:p1-22", fingerprint: "a".repeat(64), status: "passed",
   startedAt: run.startedAt, completedAt: run.completedAt!, durationMs: 60_000,
@@ -34,9 +35,9 @@ test("a direct failed group stays required with no changed files or verifier fai
 test("a missing, ambiguous, or changed referenced run cannot be reused", () => {
   expect(problem([])).toContain("missing or ambiguous");
   expect(problem([run, run])).toContain("missing or ambiguous");
-  for (const change of [
-    { groupId: "audit:another" }, { groupFingerprint: "b".repeat(64) }, { groupFingerprint: undefined }, { target: "cloud" as const }, { buildId: "different-build" },
-  ]) expect(problem([{ ...run, ...change }])).toContain("identity");
+  for (const candidate of [
+    { ...run, groupId: "audit:another" }, { ...run, groupFingerprint: "b".repeat(64) }, unqualifiedRun, { ...run, target: "cloud" as const }, { ...run, buildId: "different-build" },
+  ]) expect(problem([candidate])).toContain("identity");
 });
 
 test("incomplete, failed, skipped, and retained references invalidate the report pass", () => {

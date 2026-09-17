@@ -54,7 +54,7 @@ import {
 } from '@/lib/requests/types';
 import type { Client } from '@/lib/jobs/types';
 
-const ERROR_MESSAGES: Record<string, string> = {
+const ERROR_MESSAGES = {
   not_authenticated: 'Du bist nicht angemeldet.',
   no_active_org: 'Keine Organisation ausgewählt.',
   not_authorized: 'Du bist nicht berechtigt, Anfragen zu verwalten.',
@@ -64,9 +64,10 @@ const ERROR_MESSAGES: Record<string, string> = {
   client_not_found: 'Der Kunde wurde nicht gefunden.',
   create_failed: 'Fehler beim Speichern der Anfrage.',
   unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.',
-};
+} satisfies Record<string, string>;
+const ERROR_MESSAGE_BY_CODE: Record<string, string> = ERROR_MESSAGES;
 
-export type RequestAssigneeOption = {
+type RequestAssigneeOption = {
   userId: string;
   name: string;
 };
@@ -179,25 +180,25 @@ export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogP
     try {
       const input: CreateClientRequestInput = {
         summary: summary.trim(),
-        details: details.trim() || undefined,
-        requestNumber: requestNumber.trim() || undefined,
-        clientId: clientId || undefined,
-        siteId: siteId || undefined,
-        contactId: contactId || undefined,
-        callerName: callerName.trim() || undefined,
-        callerPhone: callerPhone.trim() || undefined,
-        callerEmail: callerEmail.trim() || undefined,
-        callerAddress: callerAddress.trim() || undefined,
+        ...(details.trim() ? { details: details.trim() } : {}),
+        ...(requestNumber.trim() ? { requestNumber: requestNumber.trim() } : {}),
+        ...(clientId ? { clientId } : {}),
+        ...(siteId ? { siteId } : {}),
+        ...(contactId ? { contactId } : {}),
+        ...(callerName.trim() ? { callerName: callerName.trim() } : {}),
+        ...(callerPhone.trim() ? { callerPhone: callerPhone.trim() } : {}),
+        ...(callerEmail.trim() ? { callerEmail: callerEmail.trim() } : {}),
+        ...(callerAddress.trim() ? { callerAddress: callerAddress.trim() } : {}),
         category,
         urgency,
         source,
-        receivedAt: receivedAtDate?.toISOString(),
-        assignedTo: assignedTo || undefined,
+        ...(receivedAtDate ? { receivedAt: receivedAtDate.toISOString() } : {}),
+        ...(assignedTo ? { assignedTo } : {}),
       };
 
       const result = await createClientRequest(input);
       if (!result.success) {
-        setError(ERROR_MESSAGES[result.error] || 'Unbekannter Fehler');
+        setError(ERROR_MESSAGE_BY_CODE[result.error] || 'Unbekannter Fehler');
         return;
       }
 

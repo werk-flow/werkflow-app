@@ -11,16 +11,16 @@ import {
 const STATUS_CLASSES: Record<RequestStatus, string> = {
   offen: 'bg-accent text-accent-foreground',
   in_klaerung:
-    'bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300',
+    'bg-warning-soft text-warning-soft-foreground',
   umgewandelt:
-    'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300',
+    'bg-success-soft text-success-soft-foreground',
   geschlossen: 'bg-muted text-muted-foreground',
 };
 
 const URGENCY_CLASSES: Record<RequestUrgency, string> = {
   niedrig: 'bg-muted text-muted-foreground',
   normal: 'bg-accent text-accent-foreground',
-  hoch: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300',
+  hoch: 'bg-warning-soft text-warning-soft-foreground',
   notfall: 'bg-destructive/10 text-destructive dark:bg-destructive/20',
 };
 

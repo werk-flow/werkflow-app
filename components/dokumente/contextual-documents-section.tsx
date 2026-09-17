@@ -1,5 +1,7 @@
 "use client";
 
+import { formatGermanDate as formatDate } from '@/lib/utils';
+import { formatFileSize } from '@/lib/documents/format';
 import {
   useEffect,
   useRef,
@@ -96,31 +98,17 @@ type ContextualDocumentsSectionProps = {
   keepUploadedDocumentsVisible?: boolean;
 };
 
-function formatFileSize(sizeBytes: number): string {
-  if (sizeBytes < 1024) return `${sizeBytes} B`;
-  if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
-  return `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function formatDate(date: string): string {
-  return new Intl.DateTimeFormat("de-DE", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(new Date(date));
-}
-
 function getContextLink(
   document: OrganizationDocument,
   context: {
-    jobId?: string;
-    projectId?: string;
-    clientId?: string;
-    employeeId?: string;
-    requestId?: string;
-    equipmentId?: string;
-    serviceCaseId?: string;
-    maintenanceCoverageId?: string;
+    jobId?: string | undefined;
+    projectId?: string | undefined;
+    clientId?: string | undefined;
+    employeeId?: string | undefined;
+    requestId?: string | undefined;
+    equipmentId?: string | undefined;
+    serviceCaseId?: string | undefined;
+    maintenanceCoverageId?: string | undefined;
   },
 ) {
   return document.links.find((link) => {
@@ -149,14 +137,14 @@ function getDeleteDescription(document: OrganizationDocument): string {
 }
 
 function getUnlinkLabel(context: {
-  jobId?: string;
-  projectId?: string;
-  clientId?: string;
-  employeeId?: string;
-  requestId?: string;
-  equipmentId?: string;
-  serviceCaseId?: string;
-  maintenanceCoverageId?: string;
+  jobId?: string | undefined;
+  projectId?: string | undefined;
+  clientId?: string | undefined;
+  employeeId?: string | undefined;
+  requestId?: string | undefined;
+  equipmentId?: string | undefined;
+  serviceCaseId?: string | undefined;
+  maintenanceCoverageId?: string | undefined;
 }): string {
   if (context.jobId) return "Verknüpfung zu diesem Auftrag entfernen";
   if (context.projectId) return "Verknüpfung zu diesem Projekt entfernen";
@@ -177,14 +165,14 @@ type DocumentRowProps = {
   isBusy: boolean;
   canManage: boolean;
   context: {
-    jobId?: string;
-    projectId?: string;
-    clientId?: string;
-    employeeId?: string;
-    requestId?: string;
-    equipmentId?: string;
-    serviceCaseId?: string;
-    maintenanceCoverageId?: string;
+    jobId?: string | undefined;
+    projectId?: string | undefined;
+    clientId?: string | undefined;
+    employeeId?: string | undefined;
+    requestId?: string | undefined;
+    equipmentId?: string | undefined;
+    serviceCaseId?: string | undefined;
+    maintenanceCoverageId?: string | undefined;
   };
   indented?: boolean;
   onOpen: (document: OrganizationDocument) => void;

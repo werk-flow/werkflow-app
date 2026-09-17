@@ -40,6 +40,7 @@ const TODAY_ISO = new Intl.DateTimeFormat('sv-SE', {
 
 function shiftIsoDate(dateIso: string, days: number): string {
   const [year, month, day] = dateIso.split('-').map(Number);
+  if (year === undefined || month === undefined || day === undefined) throw new Error(`Invalid ISO date: ${dateIso}`);
   return new Date(Date.UTC(year, month - 1, day) + days * 86_400_000).toISOString().slice(0, 10);
 }
 
@@ -114,11 +115,11 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
     });
     const state = await getDispatchState(world.orgId, parkJobNumber(world.runId));
     expect(state.dispatches).toHaveLength(1);
-    expect(state.dispatches[0].status).toBe('active');
-    expect(state.dispatches[0].targetKind).toBe('job');
-    expect(state.dispatches[0].revisionChangeKinds).toEqual(['issued']);
-    expect(state.dispatches[0].currentRecipientRecordIds).toHaveLength(1);
-    expect(state.dispatches[0].eventTypes).toContain('issued');
+    expect(state.dispatches[0]?.status).toBe('active');
+    expect(state.dispatches[0]?.targetKind).toBe('job');
+    expect(state.dispatches[0]?.revisionChangeKinds).toEqual(['issued']);
+    expect(state.dispatches[0]?.currentRecipientRecordIds).toHaveLength(1);
+    expect(state.dispatches[0]?.eventTypes).toContain('issued');
 
     // The recipient sees the pending confirmation on the shared surface.
     await employeePage.goto('/aufgaben');
@@ -143,11 +144,11 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
 
     const state = await getDispatchState(world.orgId, parkJobNumber(world.runId));
     expect(state.dispatches).toHaveLength(1);
-    expect(state.dispatches[0].status).toBe('active');
-    expect(state.dispatches[0].targetKind).toBe('occurrence');
-    expect(state.dispatches[0].revisionChangeKinds).toEqual(['issued', 'target_scheduled']);
-    expect(state.dispatches[0].currentRevisionNumber).toBe(2);
-    expect(state.dispatches[0].eventTypes).toContain('target_scheduled');
+    expect(state.dispatches[0]?.status).toBe('active');
+    expect(state.dispatches[0]?.targetKind).toBe('occurrence');
+    expect(state.dispatches[0]?.revisionChangeKinds).toEqual(['issued', 'target_scheduled']);
+    expect(state.dispatches[0]?.currentRevisionNumber).toBe(2);
+    expect(state.dispatches[0]?.eventTypes).toContain('target_scheduled');
 
     // Planning and parking are independent P1-14 facts. Scheduling updates the
     // dispatch target without silently resolving the parking blocker.
@@ -182,9 +183,9 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
 
     let state = await getDispatchState(world.orgId, mainJobNumber(world.runId));
     expect(state.dispatches).toHaveLength(1);
-    expect(state.dispatches[0].currentRevisionNumber).toBe(1);
+    expect(state.dispatches[0]?.currentRevisionNumber).toBe(1);
     expect(
-      state.dispatches[0].acknowledgements.filter(
+      state.dispatches[0]?.acknowledgements.filter(
         (ack) => ack.revisionNumber === 1 && ack.state === 'acknowledged'
       )
     ).toHaveLength(1);
@@ -199,16 +200,16 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
       overrideReason: OVERRIDE_REASON,
     });
     state = await getDispatchState(world.orgId, mainJobNumber(world.runId));
-    expect(state.dispatches[0].currentRevisionNumber).toBe(2);
-    expect(state.dispatches[0].revisionChangeKinds).toEqual(['issued', 'schedule_changed']);
+    expect(state.dispatches[0]?.currentRevisionNumber).toBe(2);
+    expect(state.dispatches[0]?.revisionChangeKinds).toEqual(['issued', 'schedule_changed']);
     // The old acknowledgement stays verbatim on revision 1; revision 2 has none.
     expect(
-      state.dispatches[0].acknowledgements.filter(
+      state.dispatches[0]?.acknowledgements.filter(
         (ack) => ack.revisionNumber === 1 && ack.state === 'acknowledged'
       )
     ).toHaveLength(1);
     expect(
-      state.dispatches[0].acknowledgements.filter((ack) => ack.revisionNumber === 2)
+      state.dispatches[0]?.acknowledgements.filter((ack) => ack.revisionNumber === 2)
     ).toHaveLength(0);
     await expectDispatchStateOnJobPage(employeePage, mainJobNumber(world.runId), 'ausstehend');
   });
@@ -237,7 +238,9 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
     await acknowledgeDispatchOnJobPage(employeePage, mainJobNumber(world.runId));
 
     const state = await getDispatchState(world.orgId, mainJobNumber(world.runId));
-    const acks = state.dispatches[0].acknowledgements;
+    const [mainDispatch] = state.dispatches;
+    if (!mainDispatch) throw new Error('P1-12: expected the main dispatch');
+    const acks = mainDispatch.acknowledgements;
     expect(
       acks.filter(
         (ack) =>
@@ -256,7 +259,7 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
       'challenge_resolved',
       'acknowledged',
     ]) {
-      expect(state.dispatches[0].eventTypes).toContain(expected);
+      expect(state.dispatches[0]?.eventTypes).toContain(expected);
     }
   });
 
@@ -319,8 +322,8 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
     // required action, and no message was sent by the move.
     let commitments = await getCommitmentState(world.orgId, mainJobNumber(world.runId));
     expect(commitments).toHaveLength(1);
-    expect(commitments[0].status).toBe('active');
-    expect(commitments[0].committedDate).toBe(MAIN_MOVED_DATE);
+    expect(commitments[0]?.status).toBe('active');
+    expect(commitments[0]?.committedDate).toBe(MAIN_MOVED_DATE);
     await expect(mainRow.locator('[data-commitment-mismatch="true"]')).toBeVisible({
       timeout: 20_000,
     });
@@ -329,18 +332,18 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
     await recordCommitmentForOccurrence(adminPage, mainTitle);
     commitments = await getCommitmentState(world.orgId, mainJobNumber(world.runId));
     expect(commitments).toHaveLength(2);
-    expect(commitments[0].status).toBe('superseded');
-    expect(commitments[1].status).toBe('active');
-    expect(commitments[1].committedDate).toBe(MAIN_BATCH_DATE);
-    expect(commitments[1].supersedesId).not.toBeNull();
+    expect(commitments[0]?.status).toBe('superseded');
+    expect(commitments[1]?.status).toBe('active');
+    expect(commitments[1]?.committedDate).toBe(MAIN_BATCH_DATE);
+    expect(commitments[1]?.supersedesId).not.toBeNull();
     await expect(mainRow.locator('[data-commitment-mismatch="false"]')).toBeVisible({
       timeout: 20_000,
     });
 
     // The batch move superseded the acknowledged dispatch revision again.
     const state = await getDispatchState(world.orgId, mainJobNumber(world.runId));
-    expect(state.dispatches[0].currentRevisionNumber).toBe(3);
-    expect(state.dispatches[0].revisionChangeKinds).toEqual([
+    expect(state.dispatches[0]?.currentRevisionNumber).toBe(3);
+    expect(state.dispatches[0]?.revisionChangeKinds).toEqual([
       'issued',
       'schedule_changed',
       'schedule_changed',
@@ -386,6 +389,7 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
     await openDispatchPanel(adminPage);
     await expectLiveWithin(bueroRow.locator('[data-recipient-state]'), {
       label: 'p1-12 dispatch state cross-session',
+      actingPage: adminPage,
       mutation: (beforeSubmit) =>
         issueDispatchForOccurrence(adminPage, liveTitle, beforeSubmit),
     });

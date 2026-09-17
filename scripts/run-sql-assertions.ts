@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { withWorkspaceTestLock } from '../lib/testing/workspace-test-lock';
+import { executeSqlAssertionFiles } from '../lib/testing/sql-assertion-files';
 
 // Every file argument runs, in order, each in its own psql session. The group
 // registry may therefore declare several files for one SQL group; a file that
@@ -48,8 +49,6 @@ export async function runSqlAssertionFile(assertionFile: string): Promise<void> 
 await withWorkspaceTestLock(
   { operation: `SQL assertions ${assertionFiles.map((file) => basename(file)).join(', ')}` },
   async () => {
-    for (const assertionFile of assertionFiles) {
-      await runSqlAssertionFile(assertionFile);
-    }
+    await executeSqlAssertionFiles(assertionFiles, runSqlAssertionFile);
   }
 );

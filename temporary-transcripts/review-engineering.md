@@ -284,7 +284,7 @@ Source: [Website publishing checks](engineering-practice-video-subs/2026-08-05-w
 | Aspect | Topic | Status | Consideration |
 | --- | --- | --- | --- |
 | 01 | deployment-security | Candidate | Verify intended custom domain and preview exposure; a provider subdomain is not inherently insecure. |
-| 02 | performance | Deferred | Inspect initial HTML and usable rendering in the speed pass; an empty view-source claim needs actual framework context. |
+| 02 | performance | Deferred | Reconsidered 2026-09-12. The final local build retains partially static authenticated shells. Local renderer checks do not prove deployed shell confidentiality or streamed-script policy. Verify those at the coordinated Step 3 deployment; [the rendering reference](../docs/technical/realtime-and-caching.md) preserves the security boundary. |
 | 03 | interaction-feedback | Candidate | Useful unknown-route/404 handling. |
 | 04 | ui-quality | Deferred | Browser title must identify WerkFlow rather than scaffold names; revisit metadata with public-site work. |
 | 05 | ui-quality | Deferred | Distinct page titles improve navigation; public SEO requirements differ from authenticated app routes. |
@@ -302,7 +302,7 @@ Source: [Website publishing checks](engineering-practice-video-subs/2026-08-05-w
 | 17 | accessibility | Candidate | Appropriate alt text for informative images, with decorative-image exceptions. |
 | 18 | deployment-security | Candidate | Review public source maps and actual exposed information. |
 | 19 | observability | Candidate | Investigate console errors while preventing sensitive diagnostic disclosure. |
-| 20 | performance | Deferred | Measure large client bundles during speed work. |
+| 20 | performance | Deferred | Reconsidered 2026-09-12. Selected navigation records include requests and transfer/RSC bytes, and optional selectors load bounded options. [Calendar component checks](../tests/ui-contracts/month-view.spec.ts) cover redundant renderer work. This is not a complete CPU/chunk profile. Revisit route chunks or CPU when a measured usable-content gap identifies cost; deployed asset delivery belongs to Step 3. |
 
 ## PRACTICE-005
 

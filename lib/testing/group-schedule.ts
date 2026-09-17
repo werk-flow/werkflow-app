@@ -7,12 +7,10 @@ export async function runGroupSchedule<T>(input: {
 }): Promise<void> {
   let batch: T[] = [];
   const flush = async (): Promise<void> => {
-    let index = 0;
+    // One shared iterator: each worker takes the next entry whenever it is free.
+    const queue = batch.values();
     const workers = Array.from({ length: Math.min(input.jobs, batch.length) }, async () => {
-      while (index < batch.length) {
-        const entry = batch[index++];
-        await input.run(entry);
-      }
+      for (const entry of queue) await input.run(entry);
     });
     const outcomes = await Promise.allSettled(workers);
     batch = [];

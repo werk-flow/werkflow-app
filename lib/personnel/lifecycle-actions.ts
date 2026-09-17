@@ -135,7 +135,7 @@ function isValidUploadCleanupToken(
   }
 }
 
-export type PersonnelLifecycleRequirement = {
+type PersonnelLifecycleRequirement = {
   id: string;
   planId: string;
   requirementType: PersonnelRequirementType;
@@ -150,7 +150,7 @@ export type PersonnelLifecycleRequirement = {
   version: number;
 };
 
-export type ProtectedPersonnelDocument = {
+type ProtectedPersonnelDocument = {
   id: string;
   documentId: string;
   displayName: string;

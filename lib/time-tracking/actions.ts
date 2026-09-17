@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { readCompleteRows, readInBatches, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import {
   getAuthenticatedUser,
@@ -15,8 +16,8 @@ import {
   type TimeEntryType,
   type JobTimeParticipant,
   type OrgRole,
-  type ClockResult,
   type LiveClockState,
+  type TimeActivitySelection,
   type AddManualEntryParams,
   type AddManualEntryResult,
   type ReviewEntryResult,
@@ -24,9 +25,7 @@ import {
   type DeleteEntryResult,
   type GetTimeEntriesParams,
   type GetTimeEntriesResult,
-  type GetPendingEntriesResult,
   type GetPendingSessionsResult,
-  type GetCurrentlyClockedInResult,
   type PendingSession,
   type ChangeRequest,
   type ChangeRequestWithDetails,
@@ -35,7 +34,8 @@ import {
   type GetChangeRequestsResult,
   toTimeEntry,
   toTimeEntries,
-  toChangeRequest
+  toChangeRequest,
+  type ClockJobInfo,
 } from './types';
 import {
   buildClockTimelineSegments,
@@ -50,9 +50,9 @@ import {
   canApproveEntries,
   canViewEntries,
   canAddEntriesFor,
-  needsChangeRequest
 } from './helpers';
 import { canViewChangeRequest } from './change-request-visibility';
+import { readPendingChangeRequestData } from './change-request-reader';
 import {
   getLocalDayEnd,
   getLocalDayKey,
@@ -65,19 +65,16 @@ import {
   validateTimestampUpdate,
   validateDayEntrySequence
 } from './validation';
-import { getEffectiveTimeEntries } from './effective-entries';
 import { computeBreakdownForSettings } from './settings';
 import { getJobDisplayTitle } from '@/lib/jobs/types';
 import {
   authorizeResponsibilityForTarget,
   getEffectiveResponsibilityHolderForActor,
 } from '@/lib/responsibilities/server';
-import { hasApprovedFullDayVacationOn } from '@/lib/vacation/server';
-import { hasActiveSicknessOn } from '@/lib/sickness/server';
-import { getBusinessTodayIso } from '@/lib/personnel/types';
 import { getCanonicalClockState } from './segment-actions';
 import { hashTimeTransitionRequest } from './transition-hash';
 import {
+  createActivitySelection,
   projectTimeSegmentsToLegacyTransitions,
   splitSegmentAtLocalDayBoundaries,
   toTimeSegmentFact,
@@ -87,38 +84,10 @@ import {
   getProvisionalTimeCorrectionProjection,
 } from '@/lib/time-corrections/actions';
 import { applyApprovedTimeCorrections } from '@/lib/time-corrections/projection';
-
-function isWorkingEntryType(entryType: string): boolean {
-  return entryType === 'clock_in' || entryType === 'break_end';
-}
+import { collectActiveJobIds } from './active-jobs';
 
 function isAttendanceOpenEntryType(entryType: string): boolean {
   return entryType !== 'clock_out';
-}
-
-function getJobIdBeforeCurrentBreak(entries: TimeEntry[]): string | null {
-  const effectiveEntries = getEffectiveTimeEntries(entries);
-  let activeJobId: string | null = null;
-  let jobIdBeforeCurrentBreak: string | null = null;
-
-  for (const entry of effectiveEntries) {
-    switch (entry.entryType) {
-      case 'clock_in':
-      case 'break_end':
-        activeJobId = entry.jobId ?? null;
-        break;
-      case 'break_start':
-        jobIdBeforeCurrentBreak = activeJobId;
-        activeJobId = null;
-        break;
-      case 'clock_out':
-        activeJobId = null;
-        jobIdBeforeCurrentBreak = null;
-        break;
-    }
-  }
-
-  return jobIdBeforeCurrentBreak;
 }
 
 /**
@@ -196,10 +165,11 @@ async function getUserTodayEntries(
 }
 
 /**
- * Verify user is a member of the org using cached memberships.
- * Falls back to a direct DB query if cache is empty.
+ * Resolve the caller's current operational role in the organization from the
+ * per-request membership read (never a cross-request cache); null when the
+ * caller is not a current operational member.
  */
-async function verifyMembershipFromCache(
+async function verifyCurrentMembership(
   userId: string,
   orgId: string
 ): Promise<OrgRole | null> {
@@ -212,7 +182,7 @@ async function getClockJobInfo(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   jobId: string,
   options?: { includeRelations?: boolean; touchStatus?: boolean }
-): Promise<import('./types').ClockJobInfo | null> {
+): Promise<ClockJobInfo | null> {
   const includeRelations = options?.includeRelations ?? true;
 
   const { data: job } = await admin
@@ -360,330 +330,6 @@ async function getOpenSessionOrgsForUserToday(
 // ============================================
 // Real-Time Clock In/Out Actions
 // ============================================
-
-/**
- * Clock in for the current user (real-time)
- */
-export async function clockIn(
-  organizationId?: string,
-  jobId?: string | null
-): Promise<ClockResult> {
-  try {
-    const user = await getAuthenticatedUser();
-    if (!user) {
-      return { success: false, error: 'not_authenticated' };
-    }
-
-    const orgId = organizationId || (await getCurrentOrgId(user.id));
-    if (!orgId) {
-      return { success: false, error: 'no_active_org' };
-    }
-
-    const admin = createSupabaseAdminClient();
-
-    // Run membership check, cross-org guard, today's entries, and the
-    // vacation/sickness contradiction checks in parallel
-    const [userRole, openOrgs, todayRows, onVacationToday, sickToday] =
-      await Promise.all([
-        verifyMembershipFromCache(user.id, orgId),
-        getOpenSessionOrgsForUserToday(admin, user.id),
-        getUserTodayEntries(admin, user.id, orgId),
-        hasApprovedFullDayVacationOn(orgId, user.id, getBusinessTodayIso()),
-        hasActiveSicknessOn(orgId, user.id, getBusinessTodayIso())
-      ]);
-
-    if (!userRole) {
-      return { success: false, error: 'not_a_member' };
-    }
-
-    const openOther = openOrgs.find((o) => o.organizationId !== orgId);
-    if (openOther) {
-      return {
-        success: false,
-        error: 'working_in_other_org',
-        otherOrgId: openOther.organizationId,
-        otherOrgName: openOther.organizationName
-      };
-    }
-
-    const timeEntries = toTimeEntries(todayRows);
-    const currentState = deriveCurrentClockState(timeEntries);
-    if (currentState.isClockedIn) {
-      return { success: false, error: 'already_clocked_in' };
-    }
-
-    // P1-06: an approved full-day vacation day and an active clock are
-    // contradictory states. Resolved at action time against the Berlin
-    // business date; the correction path is cancelling the vacation.
-    if (onVacationToday) {
-      return { success: false, error: 'on_approved_vacation' };
-    }
-
-    const resolvedJobId = jobId || null;
-
-    const { data: newEntry, error: insertError } = await admin
-      .from('time_entries')
-      .insert({
-        user_id: user.id,
-        organization_id: orgId,
-        entry_type: 'clock_in',
-        timestamp: new Date().toISOString(),
-        is_manual: false,
-        status: 'approved',
-        job_id: resolvedJobId
-      })
-      .select()
-      .single();
-
-    if (insertError || !newEntry) {
-      console.error('Error inserting clock_in:', insertError);
-      return { success: false, error: 'insert_failed' };
-    }
-
-    let jobInfo: import('./types').ClockJobInfo | null = null;
-
-    if (resolvedJobId) {
-      jobInfo = await getClockJobInfo(admin, resolvedJobId, {
-        includeRelations: false,
-        touchStatus: true
-      });
-    }
-
-    return {
-      success: true,
-      entry: toTimeEntry(newEntry),
-      jobInfo,
-      // P1-08: warn, never block — the visible notice is the correction
-      // nudge; the office sees the contradiction on the management surface.
-      ...(sickToday ? { notice: 'sickness_reported_today' as const } : {})
-    };
-  } catch (error) {
-    console.error('Unexpected error in clockIn:', error);
-    return { success: false, error: 'unexpected_error' };
-  }
-}
-
-/**
- * Clock out for the current user (real-time)
- */
-export async function clockOut(organizationId?: string): Promise<ClockResult> {
-  try {
-    const user = await getAuthenticatedUser();
-    if (!user) {
-      return { success: false, error: 'not_authenticated' };
-    }
-
-    const orgId = organizationId || (await getCurrentOrgId(user.id));
-    if (!orgId) {
-      return { success: false, error: 'no_active_org' };
-    }
-
-    const admin = createSupabaseAdminClient();
-
-    // Run membership check and today's entries in parallel
-    const [userRole, todayRows] = await Promise.all([
-      verifyMembershipFromCache(user.id, orgId),
-      getUserTodayEntries(admin, user.id, orgId)
-    ]);
-
-    if (!userRole) {
-      return { success: false, error: 'not_a_member' };
-    }
-
-    const timeEntries = toTimeEntries(todayRows);
-    const currentState = deriveCurrentClockState(timeEntries);
-    if (!currentState.isClockedIn) {
-      return { success: false, error: 'not_clocked_in' };
-    }
-
-    const { data: newEntry, error: insertError } = await admin
-      .from('time_entries')
-      .insert({
-        user_id: user.id,
-        organization_id: orgId,
-        entry_type: 'clock_out',
-        timestamp: new Date().toISOString(),
-        is_manual: false,
-        status: 'approved'
-      })
-      .select()
-      .single();
-
-    if (insertError || !newEntry) {
-      console.error('Error inserting clock_out:', insertError);
-      return { success: false, error: 'insert_failed' };
-    }
-
-    return { success: true, entry: toTimeEntry(newEntry) };
-  } catch (error) {
-    console.error('Unexpected error in clockOut:', error);
-    return { success: false, error: 'unexpected_error' };
-  }
-}
-
-export async function startBreak(
-  organizationId?: string
-): Promise<ClockResult> {
-  try {
-    const user = await getAuthenticatedUser();
-    if (!user) {
-      return { success: false, error: 'not_authenticated' };
-    }
-
-    const orgId = organizationId || (await getCurrentOrgId(user.id));
-    if (!orgId) {
-      return { success: false, error: 'no_active_org' };
-    }
-
-    const admin = createSupabaseAdminClient();
-    const [userRole, todayRows, organizationSettings] = await Promise.all([
-      verifyMembershipFromCache(user.id, orgId),
-      getUserTodayEntries(admin, user.id, orgId),
-      getCachedOrganizationSettings(orgId)
-    ]);
-
-    if (!userRole) {
-      return { success: false, error: 'not_a_member' };
-    }
-
-    if (organizationSettings.breakMode === 'automatic') {
-      return { success: false, error: 'break_mode_automatic' };
-    }
-
-    const timeEntries = toTimeEntries(todayRows);
-    const currentState = deriveCurrentClockState(timeEntries);
-
-    if (currentState.status !== 'working') {
-      return { success: false, error: 'not_working' };
-    }
-
-    const { data: newEntry, error: insertError } = await admin
-      .from('time_entries')
-      .insert({
-        user_id: user.id,
-        organization_id: orgId,
-        entry_type: 'break_start',
-        timestamp: new Date().toISOString(),
-        is_manual: false,
-        status: 'approved',
-        job_id: null
-      })
-      .select()
-      .single();
-
-    if (insertError || !newEntry) {
-      console.error('Error inserting break_start:', insertError);
-      return { success: false, error: 'insert_failed' };
-    }
-
-    return { success: true, entry: toTimeEntry(newEntry) };
-  } catch (error) {
-    console.error('Unexpected error in startBreak:', error);
-    return { success: false, error: 'unexpected_error' };
-  }
-}
-
-export async function endBreak(
-  organizationId: string,
-  jobId: string | null
-): Promise<ClockResult> {
-  try {
-    const user = await getAuthenticatedUser();
-    if (!user) {
-      return { success: false, error: 'not_authenticated' };
-    }
-
-    const admin = createSupabaseAdminClient();
-    const [userRole, todayRows, organizationSettings] = await Promise.all([
-      verifyMembershipFromCache(user.id, organizationId),
-      getUserTodayEntries(admin, user.id, organizationId),
-      getCachedOrganizationSettings(organizationId)
-    ]);
-
-    if (!userRole) {
-      return { success: false, error: 'not_a_member' };
-    }
-
-    if (organizationSettings.breakMode === 'automatic') {
-      return { success: false, error: 'break_mode_automatic' };
-    }
-
-    const timeEntries = toTimeEntries(todayRows);
-    const currentState = deriveCurrentClockState(timeEntries);
-
-    if (currentState.status !== 'on_break') {
-      return { success: false, error: 'not_on_break' };
-    }
-
-    const jobIdBeforeBreak = getJobIdBeforeCurrentBreak(timeEntries);
-    const shouldStartSeparateWorkBlock =
-      (jobIdBeforeBreak ?? null) !== (jobId ?? null);
-    const breakEndTimestamp = new Date();
-    const breakEndIso = breakEndTimestamp.toISOString();
-
-    const { data: breakEndEntry, error: insertError } = await admin
-      .from('time_entries')
-      .insert({
-        user_id: user.id,
-        organization_id: organizationId,
-        entry_type: 'break_end',
-        timestamp: breakEndIso,
-        is_manual: false,
-        status: 'approved',
-        job_id: jobId
-      })
-      .select()
-      .single();
-
-    if (insertError || !breakEndEntry) {
-      console.error('Error inserting break_end:', insertError);
-      return { success: false, error: 'insert_failed' };
-    }
-
-    let returnedEntry = breakEndEntry;
-
-    if (shouldStartSeparateWorkBlock) {
-      const resumeClockInIso = new Date(
-        breakEndTimestamp.getTime() + 1
-      ).toISOString();
-
-      const { data: resumeClockInEntry, error: resumeClockInError } = await admin
-        .from('time_entries')
-        .insert({
-          user_id: user.id,
-          organization_id: organizationId,
-          entry_type: 'clock_in',
-          timestamp: resumeClockInIso,
-          is_manual: false,
-          status: 'approved',
-          job_id: jobId
-        })
-        .select()
-        .single();
-
-      if (resumeClockInError || !resumeClockInEntry) {
-        console.error('Error inserting continuation clock_in after break_end:', resumeClockInError);
-        await admin.from('time_entries').delete().eq('id', breakEndEntry.id);
-        return { success: false, error: 'insert_failed' };
-      }
-
-      returnedEntry = resumeClockInEntry;
-    }
-
-    let jobInfo: import('./types').ClockJobInfo | null = null;
-    if (jobId) {
-      jobInfo = await getClockJobInfo(admin, jobId, {
-        includeRelations: false,
-        touchStatus: true
-      });
-    }
-
-    return { success: true, entry: toTimeEntry(returnedEntry), jobInfo };
-  } catch (error) {
-    console.error('Unexpected error in endBreak:', error);
-    return { success: false, error: 'unexpected_error' };
-  }
-}
 
 function getTransitionOutcome(value: unknown): string | null {
   if (!value || typeof value !== 'object' || !('outcome' in value)) return null;
@@ -863,12 +509,11 @@ export async function addManualEntry(
 
     const { organizationId, targetUserId, entries } = params;
 
-    if (entries.length === 0) {
-      return { success: false, error: 'validation_failed' };
-    }
+    const [firstEntry] = entries;
+    if (!firstEntry) return { success: false, error: 'validation_failed' };
 
     const [callerRole, organizationSettings] = await Promise.all([
-      verifyMembershipFromCache(user.id, organizationId),
+      verifyCurrentMembership(user.id, organizationId),
       getCachedOrganizationSettings(organizationId)
     ]);
     if (!callerRole) {
@@ -904,7 +549,7 @@ export async function addManualEntry(
       return { success: false, error: 'not_authorized' };
     }
 
-    const targetDay = new Date(entries[0]?.timestamp);
+    const targetDay = new Date(firstEntry.timestamp);
     const existingEntries = await getUserEntriesForDay(
       admin,
       targetUserId,
@@ -1045,7 +690,7 @@ export async function reviewEntry(
       return { success: false, error: 'entry_not_pending' };
     }
 
-    const callerRole = await verifyMembershipFromCache(
+    const callerRole = await verifyCurrentMembership(
       user.id,
       entry.organization_id
     );
@@ -1156,7 +801,7 @@ export async function updateEntry(
       return { success: false, error: 'entry_not_found' };
     }
 
-    const callerRole = await verifyMembershipFromCache(
+    const callerRole = await verifyCurrentMembership(
       user.id,
       entry.organization_id
     );
@@ -1249,72 +894,6 @@ export async function updateEntry(
     }
 
     // Check if this needs to be a change request (manager editing own entry)
-    if (needsChangeRequest(callerRole, targetRole, isOwnEntry)) {
-      // Check if there's already a pending request for this entry
-      const { data: existingRequest } = await admin
-        .from('entry_change_requests')
-        .select('id')
-        .eq('entry_id', entryId)
-        .eq('status', 'pending')
-        .single();
-
-      if (existingRequest) {
-        return { success: false, error: 'pending_request_exists' };
-      }
-
-      // Store original timestamp and apply edit immediately (immediate effect model)
-      const originalTimestamp = entry.timestamp;
-
-      // Create a change request with original timestamp stored for potential revert
-      const { data: request, error: requestError } = await admin
-        .from('entry_change_requests')
-        .insert({
-          entry_id: entryId,
-          organization_id: entry.organization_id,
-          requested_by: user.id,
-          change_type: 'edit',
-          proposed_timestamp: fields.timestamp || null,
-          original_timestamp: originalTimestamp // Store original for revert on rejection
-        })
-        .select()
-        .single();
-
-      if (requestError || !request) {
-        console.error('Error creating change request:', requestError);
-        return { success: false, error: 'request_failed' };
-      }
-
-      // Apply the edit immediately (immediate effect)
-      if (fields.timestamp || fields.entryType !== undefined || fields.jobId !== undefined) {
-        const immediateUpdateData: Record<string, unknown> = {};
-        if (fields.timestamp) {
-          immediateUpdateData.timestamp = fields.timestamp;
-        }
-        if (fields.entryType !== undefined) {
-          immediateUpdateData.entry_type = fields.entryType;
-        }
-        if (fields.jobId !== undefined) {
-          immediateUpdateData.job_id = fields.jobId;
-        }
-
-        const { error: updateError } = await admin
-          .from('time_entries')
-          .update(immediateUpdateData)
-          .eq('id', entryId);
-
-        if (updateError) {
-          console.error('Error applying immediate edit:', updateError);
-          // Rollback: delete the change request since we couldn't apply the edit
-          await admin
-            .from('entry_change_requests')
-            .delete()
-            .eq('id', request.id);
-          return { success: false, error: 'update_failed' };
-        }
-      }
-
-      return { success: true, request: toChangeRequest(request) };
-    }
 
     // Direct update (admin or manager editing managed role's entry)
     const updateData: Record<string, unknown> = {};
@@ -1376,7 +955,7 @@ export async function deleteEntry(
       return { success: false, error: 'entry_not_found' };
     }
 
-    const callerRole = await verifyMembershipFromCache(
+    const callerRole = await verifyCurrentMembership(
       user.id,
       entry.organization_id
     );
@@ -1405,91 +984,6 @@ export async function deleteEntry(
     }
 
     // Check if this needs to be a change request (manager deleting own entry)
-    if (needsChangeRequest(callerRole, targetRole, isOwnEntry)) {
-      // Check if there's already a pending request for this entry
-      const { data: existingRequest } = await admin
-        .from('entry_change_requests')
-        .select('id')
-        .eq('entry_id', entryId)
-        .eq('status', 'pending')
-        .single();
-
-      if (existingRequest) {
-        return { success: false, error: 'pending_request_exists' };
-      }
-
-      // Also check if there's a pending request for the paired entry
-      if (pairedEntryId) {
-        const { data: existingPairedRequest } = await admin
-          .from('entry_change_requests')
-          .select('id')
-          .eq('entry_id', pairedEntryId)
-          .eq('status', 'pending')
-          .single();
-
-        if (existingPairedRequest) {
-          return { success: false, error: 'pending_request_exists' };
-        }
-      }
-
-      // Create a delete request
-      const { data: request, error: requestError } = await admin
-        .from('entry_change_requests')
-        .insert({
-          entry_id: entryId,
-          paired_entry_id: pairedEntryId || null,
-          organization_id: entry.organization_id,
-          requested_by: user.id,
-          change_type: 'delete'
-        })
-        .select()
-        .single();
-
-      if (requestError || !request) {
-        console.error('Error creating change request:', requestError);
-        return { success: false, error: 'request_failed' };
-      }
-
-      // Mark main entry as pending_delete immediately (immediate effect)
-      const { error: markMainError } = await admin
-        .from('time_entries')
-        .update({ status: 'pending_delete' })
-        .eq('id', entryId);
-
-      if (markMainError) {
-        console.error('Error marking entry as pending_delete:', markMainError);
-        // Rollback: delete the change request
-        await admin.from('entry_change_requests').delete().eq('id', request.id);
-        return { success: false, error: 'update_failed' };
-      }
-
-      // Mark paired entry as pending_delete if provided
-      if (pairedEntryId) {
-        const { error: markPairedError } = await admin
-          .from('time_entries')
-          .update({ status: 'pending_delete' })
-          .eq('id', pairedEntryId);
-
-        if (markPairedError) {
-          console.error(
-            'Error marking paired entry as pending_delete:',
-            markPairedError
-          );
-          // Rollback: restore main entry and delete the request
-          await admin
-            .from('time_entries')
-            .update({ status: 'approved' })
-            .eq('id', entryId);
-          await admin
-            .from('entry_change_requests')
-            .delete()
-            .eq('id', request.id);
-          return { success: false, error: 'update_failed' };
-        }
-      }
-
-      return { success: true, request: toChangeRequest(request) };
-    }
 
     // Direct delete (admin or manager deleting managed role's entry)
     // Delete paired entry first if provided
@@ -1551,7 +1045,7 @@ export async function deleteEntriesBatch(
       return { success: false, error: 'not_authorized' };
     }
 
-    const callerRole = await verifyMembershipFromCache(user.id, organizationId);
+    const callerRole = await verifyCurrentMembership(user.id, organizationId);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
@@ -1582,9 +1076,6 @@ export async function deleteEntriesBatch(
         return { success: false, error: 'not_authorized' };
       }
 
-      if (needsChangeRequest(callerRole, targetRole, isOwnEntry)) {
-        return { success: false, error: 'request_failed' };
-      }
     }
 
     const { error: deleteError } = await admin
@@ -1612,7 +1103,7 @@ async function getCanonicalTimeEntries(params: {
   organizationId: string;
   from: string;
   to: string;
-  userId?: string;
+  userId?: string | undefined;
   jobId?: string;
   referenceTime?: string;
 }): Promise<
@@ -1626,7 +1117,9 @@ async function getCanonicalTimeEntries(params: {
     .eq('organization_id', params.organizationId)
     .not('user_id', 'is', null);
   if (params.userId) employeeQuery = employeeQuery.eq('user_id', params.userId);
-  const { data: employees, error: employeeError } = await employeeQuery;
+  const { data: employees, error: employeeError } = await readCompleteRows(
+    (from, to) => employeeQuery.order('id').range(from, to), LIST_ROW_CAP,
+  );
   if (employeeError) {
     console.error('Error fetching employees for canonical time entries:', employeeError);
     return { success: false };
@@ -1635,26 +1128,38 @@ async function getCanonicalTimeEntries(params: {
   const userByEmployee = new Map(
     employees.map((employee) => [employee.id, employee.user_id as string])
   );
-  let segmentQuery = admin
+  const { data: rows, error } = await readInBatches([...userByEmployee.keys()], (employeeIds) => {
+    let segmentQuery = admin
     .from('time_segments')
     .select(
       'id, session_id, organization_id, employee_record_id, kind, allocation_kind, job_id, internal_type, travel_route, travel_role, standby_context, started_at, ended_at, created_at, updated_at'
     )
     .eq('organization_id', params.organizationId)
-    .in('employee_record_id', [...userByEmployee.keys()])
+    .in('employee_record_id', [...employeeIds])
     .lte('started_at', params.to)
     .or(`ended_at.is.null,ended_at.gte.${params.from}`)
-    .order('started_at', { ascending: true });
-  if (params.jobId) segmentQuery = segmentQuery.eq('job_id', params.jobId);
-  const { data: rows, error } = await segmentQuery;
+    .order('started_at', { ascending: true }).order('id');
+    if (params.jobId) segmentQuery = segmentQuery.eq('job_id', params.jobId);
+    return readCompleteRows((from, to) => segmentQuery.range(from, to), LIST_ROW_CAP);
+  });
   if (error) {
     console.error('Error fetching canonical time segments:', error);
+    return { success: false };
+  }
+  if (rows.length > LIST_ROW_CAP) {
+    console.error('Canonical time segment window exceeds the row cap', {
+      organizationId: params.organizationId,
+      rows: rows.length,
+      cap: LIST_ROW_CAP,
+    });
     return { success: false };
   }
 
   const rangeStart = new Date(params.from);
   const rangeEnd = new Date(params.to);
-  const canonicalRows = (rows ?? []).map((row) => ({
+  const canonicalRows = rows.sort((left, right) =>
+    left.started_at.localeCompare(right.started_at) || left.id.localeCompare(right.id)
+  ).map((row) => ({
     row,
     segment: toTimeSegmentFact(row as never),
   }));
@@ -1770,7 +1275,7 @@ export async function getTimeEntries(
     const normalizedFrom = new Date(fromTimestamp).toISOString();
     const normalizedTo = new Date(toTimestamp).toISOString();
 
-    const callerRole = await verifyMembershipFromCache(user.id, organizationId);
+    const callerRole = await verifyCurrentMembership(user.id, organizationId);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
@@ -1791,35 +1296,45 @@ export async function getTimeEntries(
       .gte('timestamp', normalizedFrom)
       .lte('timestamp', normalizedTo)
       .order('timestamp', { ascending: true })
-      .order('created_at', { ascending: true });
+      .order('created_at', { ascending: true }).order('id');
 
-    if (userId) {
-      query = query.eq('user_id', userId);
-    }
+    const effectiveUserId = callerRole === 'employee' ? user.id : userId;
+    if (effectiveUserId) query = query.eq('user_id', effectiveUserId);
 
     if (status) {
       query = query.eq('status', status);
     }
 
-    const { data, error } = await query;
-
-    if (error) {
-      console.error('Error fetching time entries:', error);
+    // Every read below depends only on the authorized scope and date window.
+    // Start legacy rows alongside projections, not one database roundtrip earlier.
+    const [legacyResult, canonicalResult, applications, provisionalProjection] = await Promise.all([
+      readCompleteRows((from, to) => query.range(from, to), LIST_ROW_CAP),
+      status && status !== 'approved'
+        ? Promise.resolve({ success: true as const, entries: [] })
+        : getCanonicalTimeEntries({
+            organizationId, from: normalizedFrom, to: normalizedTo,
+            userId: userId ?? (callerRole === 'employee' ? user.id : undefined),
+          }),
+      status && status !== 'approved'
+        ? Promise.resolve([])
+        : getApprovedTimeCorrectionApplications({
+            organizationId,
+            userId: userId ?? (callerRole === 'employee' ? user.id : undefined),
+          }),
+      status
+        ? Promise.resolve({ entries: [], sources: [] })
+        : getProvisionalTimeCorrectionProjection({
+            organizationId, from: normalizedFrom, to: normalizedTo,
+            userId: userId ?? (callerRole === 'employee' ? user.id : undefined),
+          }),
+    ]);
+    if (legacyResult.error) {
+      console.error('Error fetching time entries:', legacyResult.error);
       return { success: false, error: 'fetch_failed' };
     }
-
-    const visibleEntries = (data || []).filter((entry) =>
+    const visibleEntries = (legacyResult.data ?? []).filter((entry) =>
       canViewEntries(callerRole, entry.user_id, user.id)
     );
-
-    const canonicalResult = status && status !== 'approved'
-      ? { success: true as const, entries: [] }
-      : await getCanonicalTimeEntries({
-          organizationId,
-          from: normalizedFrom,
-          to: normalizedTo,
-          userId: userId ?? (callerRole === 'employee' ? user.id : undefined),
-        });
     if (!canonicalResult.success) {
       return { success: false, error: 'fetch_failed' };
     }
@@ -1827,12 +1342,6 @@ export async function getTimeEntries(
     const visibleCanonicalEntries = canonicalEntries.filter((entry) =>
       canViewEntries(callerRole, entry.userId, user.id)
     );
-    const applications = status && status !== 'approved'
-      ? []
-      : await getApprovedTimeCorrectionApplications({
-          organizationId,
-          userId: userId ?? (callerRole === 'employee' ? user.id : undefined),
-        });
     const projectedEntries = applyApprovedTimeCorrections(
       [...toTimeEntries(visibleEntries), ...visibleCanonicalEntries],
       applications,
@@ -1843,14 +1352,6 @@ export async function getTimeEntries(
         && (!userId || entry.userId === userId)
         && (!status || entry.status === status);
     });
-    const provisionalProjection = status
-      ? { entries: [], sources: [] }
-      : await getProvisionalTimeCorrectionProjection({
-          organizationId,
-          from: normalizedFrom,
-          to: normalizedTo,
-          userId: userId ?? (callerRole === 'employee' ? user.id : undefined),
-        });
     const pendingByLegacyId = new Map(
       provisionalProjection.sources
         .filter((source) => source.sourceKind === 'legacy_entry')
@@ -1894,87 +1395,6 @@ export async function getTimeEntries(
 }
 
 /**
- * Get pending entries that the caller can review
- */
-export async function getPendingEntries(
-  organizationId?: string
-): Promise<GetPendingEntriesResult> {
-  try {
-    const user = await getAuthenticatedUser();
-    if (!user) {
-      return { success: false, error: 'not_authenticated' };
-    }
-
-    const orgId = organizationId || (await getCurrentOrgId(user.id));
-    if (!orgId) {
-      return { success: false, error: 'no_active_org' };
-    }
-
-    const callerRole = await verifyMembershipFromCache(user.id, orgId);
-    if (!callerRole) {
-      return { success: false, error: 'not_a_member' };
-    }
-
-    const responsibilityHolder =
-      await getEffectiveResponsibilityHolderForActor({
-        organizationId: orgId,
-        responsibility: 'time_approval',
-        actorUserId: user.id,
-      });
-    if (!responsibilityHolder) {
-      return { success: true, entries: [] };
-    }
-
-    const admin = createSupabaseAdminClient();
-
-    // Get all pending entries in the org
-    const { data: pendingEntries, error: entriesError } = await admin
-      .from('time_entries')
-      .select('*')
-      .eq('organization_id', orgId)
-      .eq('status', 'pending')
-      .order('created_at', { ascending: false });
-
-    if (entriesError) {
-      console.error('Error fetching pending entries:', entriesError);
-      return { success: false, error: 'fetch_failed' };
-    }
-
-    // Batch-fetch roles, then apply the same effective responsibility and
-    // inherited target scope used by the review action.
-    const uniqueUserIds = [
-      ...new Set((pendingEntries || []).map((e) => e.user_id))
-    ];
-    const { data: memberRows } = await admin
-      .from('organization_members')
-      .select('user_id, role')
-      .eq('organization_id', orgId)
-      .in('user_id', uniqueUserIds);
-
-    const roleMap = new Map<string, OrgRole>();
-    for (const m of memberRows || []) {
-      roleMap.set(m.user_id, m.role as OrgRole);
-    }
-
-    const filteredEntries = (pendingEntries || []).filter((entry) => {
-      const targetRole = roleMap.get(entry.user_id);
-      return Boolean(
-        targetRole &&
-          canApproveEntries(callerRole, targetRole, {
-            holder: responsibilityHolder,
-            targetUserId: entry.user_id,
-          })
-      );
-    });
-
-    return { success: true, entries: toTimeEntries(filteredEntries) };
-  } catch (error) {
-    console.error('Unexpected error in getPendingEntries:', error);
-    return { success: false, error: 'unexpected_error' };
-  }
-}
-
-/**
  * Canonical pending approval badge count.
  * Uses the same grouped-session semantics as the approvals list so paired
  * clock-in/clock-out requests count as exactly one everywhere.
@@ -2000,7 +1420,7 @@ export async function getPendingSessions(
       return { success: false, error: 'no_active_org' };
     }
 
-    const callerRole = await verifyMembershipFromCache(user.id, orgId);
+    const callerRole = await verifyCurrentMembership(user.id, orgId);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
@@ -2226,171 +1646,6 @@ export async function reviewSession(
   }
 }
 
-/**
- * Get list of users currently clocked in
- */
-export async function getCurrentlyClockedIn(
-  organizationId?: string
-): Promise<GetCurrentlyClockedInResult> {
-  try {
-    const user = await getAuthenticatedUser();
-    if (!user) {
-      return { success: false, error: 'not_authenticated' };
-    }
-
-    const orgId = organizationId || (await getCurrentOrgId(user.id));
-    if (!orgId) {
-      return { success: false, error: 'no_active_org' };
-    }
-
-    const callerRole = await verifyMembershipFromCache(user.id, orgId);
-    if (!callerRole) {
-      return { success: false, error: 'not_a_member' };
-    }
-
-    if (callerRole !== 'admin' && callerRole !== 'buero') {
-      return { success: false, error: 'not_authorized' };
-    }
-
-    const admin = createSupabaseAdminClient();
-
-    // Two-step lookup on purpose: organization_members has no direct foreign
-    // key to profiles (both only reference auth.users), so a PostgREST embed
-    // `profiles(...)` fails with a missing-relationship error.
-    const { data: members, error: membersError } = await admin
-      .from('organization_members')
-      .select('user_id, role')
-      .eq('organization_id', orgId);
-
-    if (membersError) {
-      console.error('Error fetching members:', membersError);
-      return { success: false, error: 'fetch_failed' };
-    }
-
-    // Admin and Büro can see all members
-    const visibleMembers = members || [];
-
-    const { data: memberProfiles, error: profilesError } = await admin
-      .from('profiles')
-      .select('id, first_name, last_name')
-      .in('id', visibleMembers.map((m) => m.user_id));
-
-    if (profilesError) {
-      console.error('Error fetching member profiles:', profilesError);
-      return { success: false, error: 'fetch_failed' };
-    }
-
-    const profileByUserId = new Map(
-      (memberProfiles ?? []).map((profile) => [profile.id, profile])
-    );
-
-    // Batch-fetch today's entries for all visible members at once
-    // instead of one query per member (N+1 elimination).
-    const memberUserIds = visibleMembers.map((m) => m.user_id);
-    const { start } = getTodayBounds();
-
-    const { data: allTodayEntries, error: todayError } = await admin
-      .from('time_entries')
-      .select('*')
-      .eq('organization_id', orgId)
-      .in('user_id', memberUserIds)
-      .gte('timestamp', start.toISOString())
-      .lte('timestamp', new Date().toISOString())
-      .neq('status', 'rejected')
-      .neq('status', 'pending_delete')
-      .order('timestamp', { ascending: false });
-
-    if (todayError) {
-      console.error('Error fetching today entries:', todayError);
-      return { success: false, error: 'fetch_failed' };
-    }
-
-    // Group entries by user
-    const entriesByUser = new Map<string, TimeEntryRow[]>();
-    for (const entry of allTodayEntries || []) {
-      const uid = entry.user_id as string;
-      if (!entriesByUser.has(uid)) entriesByUser.set(uid, []);
-      entriesByUser.get(uid)!.push(entry);
-    }
-
-    const clockedInUsers: Array<{
-      userId: string;
-      clockInTime: string;
-      firstName: string | null;
-      lastName: string | null;
-    }> = [];
-
-    for (const member of visibleMembers) {
-      const memberEntries = entriesByUser.get(member.user_id) || [];
-      const timeEntries = toTimeEntries(memberEntries);
-
-      const currentState = deriveCurrentClockState(timeEntries);
-
-      if (currentState.isClockedIn && currentState.clockInTime) {
-        const profile = profileByUserId.get(member.user_id) ?? null;
-
-        clockedInUsers.push({
-          userId: member.user_id,
-          clockInTime: currentState.clockInTime,
-          firstName: profile?.first_name || null,
-          lastName: profile?.last_name || null
-        });
-      }
-    }
-
-    return { success: true, users: clockedInUsers };
-  } catch (error) {
-    console.error('Unexpected error in getCurrentlyClockedIn:', error);
-    return { success: false, error: 'unexpected_error' };
-  }
-}
-
-/**
- * Get the current clock status for the authenticated user
- */
-export async function getClockStatus(organizationId?: string): Promise<
-  | {
-      success: true;
-      isClockedIn: boolean;
-      lastEntry: TimeEntry | null;
-    }
-  | { success: false; error: string }
-> {
-  try {
-    const user = await getAuthenticatedUser();
-    if (!user) {
-      return { success: false, error: 'not_authenticated' };
-    }
-
-    const orgId = organizationId || (await getCurrentOrgId(user.id));
-    if (!orgId) {
-      return { success: false, error: 'no_active_org' };
-    }
-
-    const admin = createSupabaseAdminClient();
-
-    // Run membership check and today's entries in parallel
-    const [userRole, todayRows] = await Promise.all([
-      verifyMembershipFromCache(user.id, orgId),
-      getUserTodayEntries(admin, user.id, orgId)
-    ]);
-
-    if (!userRole) {
-      return { success: false, error: 'not_a_member' };
-    }
-
-    const timeEntries = toTimeEntries(todayRows);
-    const currentState = deriveCurrentClockState(timeEntries);
-    const isClockedIn = currentState.isClockedIn;
-    const lastEntry = currentState.lastEntry;
-
-    return { success: true, isClockedIn, lastEntry };
-  } catch (error) {
-    console.error('Unexpected error in getClockStatus:', error);
-    return { success: false, error: 'unexpected_error' };
-  }
-}
-
 // ============================================
 // Change Request Actions
 // ============================================
@@ -2412,7 +1667,7 @@ export async function getPendingChangeRequests(
       return { success: false, error: 'no_active_org' };
     }
 
-    const callerRole = await verifyMembershipFromCache(user.id, orgId);
+    const callerRole = await verifyCurrentMembership(user.id, orgId);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
@@ -2542,7 +1797,7 @@ export async function reviewChangeRequest(
       return { success: false, error: 'request_not_found' };
     }
 
-    const callerRole = await verifyMembershipFromCache(
+    const callerRole = await verifyCurrentMembership(
       user.id,
       request.organization_id
     );
@@ -2712,7 +1967,7 @@ export async function reassignEntries(
     if (!ciEntry || !coEntry) return { success: false, error: 'entries_not_found' };
 
     const orgId = ciEntry.organization_id;
-    const callerRole = await verifyMembershipFromCache(user.id, orgId);
+    const callerRole = await verifyCurrentMembership(user.id, orgId);
     if (!callerRole) return { success: false, error: 'not_a_member' };
 
     const { data: srcMember } = await admin
@@ -2801,7 +2056,8 @@ export async function reassignEntryBatch(
   try {
     const user = await getAuthenticatedUser();
     if (!user) return { success: false, error: 'not_authenticated' };
-    if (updates.length === 0) return { success: true };
+    const [firstUpdate] = updates;
+    if (!firstUpdate) return { success: true };
 
     const admin = createSupabaseAdminClient();
     const entryIds = updates.map((update) => update.entryId);
@@ -2822,7 +2078,7 @@ export async function reassignEntryBatch(
       return { success: false, error: 'mixed_organizations' };
     }
 
-    const callerRole = await verifyMembershipFromCache(user.id, orgId);
+    const callerRole = await verifyCurrentMembership(user.id, orgId);
     if (!callerRole) return { success: false, error: 'not_a_member' };
 
     const sourceUserIds = [...new Set(fetchedEntries.map((entry) => entry.user_id))];
@@ -2860,14 +2116,14 @@ export async function reassignEntryBatch(
         new Date(update.newTimestamp).getTime() < new Date(min).getTime()
           ? update.newTimestamp
           : min,
-      updates[0].newTimestamp
+      firstUpdate.newTimestamp
     );
     const maxTimestamp = updates.reduce(
       (max, update) =>
         new Date(update.newTimestamp).getTime() > new Date(max).getTime()
           ? update.newTimestamp
           : max,
-      updates[0].newTimestamp
+      firstUpdate.newTimestamp
     );
 
     const { data: targetEntries } = await admin
@@ -3063,31 +2319,15 @@ export async function getChangeRequestsForEntries(
 
     const admin = createSupabaseAdminClient();
 
-    const { data: requests, error } = await admin
-      .from('entry_change_requests')
-      .select('*')
-      .in('entry_id', persistedEntryIds)
-      .in('organization_id', [...roleByOrganization.keys()])
-      .eq('status', 'pending');
-
+    const { requests, entryOwnerById, error } = await readPendingChangeRequestData(
+      admin, persistedEntryIds, [...roleByOrganization.keys()],
+    );
     if (error) {
       console.error('Error fetching change requests for entries:', error);
       return { success: false, error: 'fetch_failed' };
     }
 
-    const { data: entries, error: entryError } = await admin
-      .from('time_entries')
-      .select('id, user_id')
-      .in('id', (requests || []).map((request) => request.entry_id));
-    if (entryError) {
-      console.error('Error fetching entries for change requests:', entryError);
-      return { success: false, error: 'fetch_failed' };
-    }
-    const entryOwnerById = new Map(
-      (entries || []).map((entry) => [entry.id, entry.user_id])
-    );
-
-    const visible = (requests || []).filter((request) =>
+    const visible = requests.filter((request) =>
       canViewChangeRequest(
         {
           organizationId: request.organization_id,
@@ -3104,97 +2344,6 @@ export async function getChangeRequestsForEntries(
     };
   } catch (error) {
     console.error('Unexpected error in getChangeRequestsForEntries:', error);
-    return { success: false, error: 'unexpected_error' };
-  }
-}
-
-// ============================================
-// Job-Linked Time Tracking
-// ============================================
-
-/**
- * Switch the active job for the current session.
- * Atomically clocks out of the current session and clocks back in with the new job.
- */
-export async function switchJob(
-  organizationId: string,
-  newJobId: string | null
-): Promise<ClockResult> {
-  try {
-    const user = await getAuthenticatedUser();
-    if (!user) {
-      return { success: false, error: 'not_authenticated' };
-    }
-
-    const admin = createSupabaseAdminClient();
-
-    const [userRole, todayRows] = await Promise.all([
-      verifyMembershipFromCache(user.id, organizationId),
-      getUserTodayEntries(admin, user.id, organizationId)
-    ]);
-
-    if (!userRole) {
-      return { success: false, error: 'not_a_member' };
-    }
-
-    const timeEntries = toTimeEntries(todayRows);
-    const currentState = deriveCurrentClockState(timeEntries);
-    if (currentState.status !== 'working') {
-      return { success: false, error: 'not_working' };
-    }
-
-    const now = new Date();
-    const clockOutIso = now.toISOString();
-    const clockInIso = new Date(now.getTime() + 1).toISOString();
-
-    const { error: clockOutError } = await admin.from('time_entries').insert({
-      user_id: user.id,
-      organization_id: organizationId,
-      entry_type: 'clock_out',
-      timestamp: clockOutIso,
-      is_manual: false,
-      status: 'approved'
-    });
-
-    if (clockOutError) {
-      console.error(
-        'Error inserting clock_out during switchJob:',
-        clockOutError
-      );
-      return { success: false, error: 'insert_failed' };
-    }
-
-    const { data: newEntry, error: clockInError } = await admin
-      .from('time_entries')
-      .insert({
-        user_id: user.id,
-        organization_id: organizationId,
-        entry_type: 'clock_in',
-        timestamp: clockInIso,
-        is_manual: false,
-        status: 'approved',
-        job_id: newJobId
-      })
-      .select()
-      .single();
-
-    if (clockInError || !newEntry) {
-      console.error('Error inserting clock_in during switchJob:', clockInError);
-      return { success: false, error: 'insert_failed' };
-    }
-
-    let jobInfo: import('./types').ClockJobInfo | null = null;
-
-    if (newJobId) {
-      jobInfo = await getClockJobInfo(admin, newJobId, {
-        includeRelations: false,
-        touchStatus: true
-      });
-    }
-
-    return { success: true, entry: toTimeEntry(newEntry), jobInfo };
-  } catch (error) {
-    console.error('Unexpected error in switchJob:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
@@ -3222,7 +2371,7 @@ export async function getTimeEntriesForJob(
       return { success: false, error: 'fetch_failed' };
     }
 
-    const callerRole = await verifyMembershipFromCache(user.id, job.organization_id);
+    const callerRole = await verifyCurrentMembership(user.id, job.organization_id);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
@@ -3434,7 +2583,7 @@ export async function getTimeEntriesForProjectJobs(
     .maybeSingle();
   if (projectError || !project) return { success: false, error: 'fetch_failed' };
 
-  const callerRole = await verifyMembershipFromCache(
+  const callerRole = await verifyCurrentMembership(
     user.id,
     project.organization_id
   );
@@ -3491,66 +2640,6 @@ export async function getTimeEntriesForProjectJobs(
 }
 
 /**
- * Get the job_id from the user's currently open clock-in entry (if any).
- */
-export async function getActiveJobId(
-  organizationId: string
-): Promise<
-  | { success: true; jobId: string | null; isClockedIn: boolean }
-  | { success: false; error: string }
-> {
-  try {
-    const result = await getCurrentClockState(organizationId);
-    if (!result.success) return result;
-    if (!result.state.isClockedIn) {
-      return { success: true, jobId: null, isClockedIn: false };
-    }
-
-    return {
-      success: true,
-      jobId: result.state.activeJobId,
-      isClockedIn: true
-    };
-  } catch (error) {
-    console.error('Unexpected error in getActiveJobId:', error);
-    return { success: false, error: 'unexpected_error' };
-  }
-}
-
-/**
- * Combined clock status + active job in a single call.
- * Fetches today's entries only ONCE (instead of twice for getClockStatus + getActiveJobId).
- * Used by ClockFAB.
- */
-export async function getClockStatusWithActiveJob(
-  organizationId: string
-): Promise<
-  | {
-      success: true;
-      isClockedIn: boolean;
-      lastEntry: TimeEntry | null;
-      activeJobId: string | null;
-    }
-  | { success: false; error: string }
-> {
-  try {
-    const result = await getCurrentClockState(organizationId);
-    if (!result.success) return result;
-    const currentState = result.state;
-
-    return {
-      success: true,
-      isClockedIn: currentState.isClockedIn,
-      lastEntry: null,
-      activeJobId: currentState.activeJobId
-    };
-  } catch (error) {
-    console.error('Unexpected error in getClockStatusWithActiveJob:', error);
-    return { success: false, error: 'unexpected_error' };
-  }
-}
-
-/**
  * Get the caller's current clock state together with active job info.
  * Used by the shared client clock state and Zeiterfassung overview prefetch.
  */
@@ -3571,7 +2660,7 @@ export async function getCurrentClockState(
 
     const admin = createSupabaseAdminClient();
     const [userRole, todayRows, organizationSettings] = await Promise.all([
-      verifyMembershipFromCache(user.id, organizationId),
+      verifyCurrentMembership(user.id, organizationId),
       getUserTodayEntries(admin, user.id, organizationId),
       getCachedOrganizationSettings(organizationId)
     ]);
@@ -3599,6 +2688,16 @@ export async function getCurrentClockState(
     const activeJobInfo = currentState.activeJobId
       ? await getClockJobInfo(admin, currentState.activeJobId)
       : null;
+    // Legacy events know only work and breaks, so the resumable activity is
+    // work on the job the break interrupted (or unallocated work).
+    const resumeActivity: TimeActivitySelection | null = currentState.isClockedIn
+      ? createActivitySelection('work', currentState.resumeJobId)
+      : null;
+    const resumeJobInfo = !currentState.resumeJobId
+      ? null
+      : currentState.resumeJobId === currentState.activeJobId
+        ? activeJobInfo
+        : await getClockJobInfo(admin, currentState.resumeJobId);
 
     return {
       success: true,
@@ -3641,6 +2740,8 @@ export async function getCurrentClockState(
                   jobId: null,
                 }
           : null,
+        resumeActivity,
+        resumeJobInfo,
         recoveryReason: null,
         legacyOpen: currentState.isClockedIn,
         standbyMinutes: 0,
@@ -3657,354 +2758,13 @@ export async function getCurrentClockState(
 }
 
 /**
- * Get minimal info for a single job by ID.
- * Used by ClockFAB to display the active job pill without loading all org jobs.
- */
-export async function getJobInfoById(jobId: string): Promise<
-  | {
-      success: true;
-      job: {
-        id: string;
-        title: string;
-        jobNumber: string | null;
-        status: string;
-        projectName: string | null;
-        clientName: string | null;
-      } | null;
-    }
-  | { success: false; error: string }
-> {
-  try {
-    const user = await getAuthenticatedUser();
-    if (!user) {
-      return { success: false, error: 'not_authenticated' };
-    }
-
-    const admin = createSupabaseAdminClient();
-    const job = await getClockJobInfo(admin, jobId);
-    if (!job) {
-      return { success: true, job: null };
-    }
-
-    return {
-      success: true,
-      job
-    };
-  } catch (error) {
-    console.error('Unexpected error in getJobInfoById:', error);
-    return { success: false, error: 'unexpected_error' };
-  }
-}
-
-/**
- * Get jobs assigned to a specific user in an organization.
- * Used by clock-in job picker and Zeiterfassung dashboard.
- */
-export async function getAssignedJobs(
-  organizationId: string,
-  userId?: string
-): Promise<
-  | {
-      success: true;
-      jobs: Array<{
-        id: string;
-        title: string;
-        jobNumber: string | null;
-        status: string;
-        projectName: string | null;
-      }>;
-    }
-  | { success: false; error: string }
-> {
-  try {
-    const user = await getAuthenticatedUser();
-    if (!user) {
-      return { success: false, error: 'not_authenticated' };
-    }
-
-    // Membership in the requested organization and manager role for a foreign
-    // user are required; a UUID alone grants nothing (SI-017).
-    const callerRole = await verifyMembershipFromCache(user.id, organizationId);
-    if (!callerRole) {
-      return { success: false, error: 'not_a_member' };
-    }
-    const targetUserId = userId || user.id;
-    if (!canViewEntries(callerRole, targetUserId, user.id)) {
-      return { success: false, error: 'not_authorized' };
-    }
-    const admin = createSupabaseAdminClient();
-
-    const { data: assignments, error: assignError } = await admin
-      .from('job_assignments')
-      .select('job_id')
-      .eq('organization_id', organizationId)
-      .eq('user_id', targetUserId);
-
-    if (assignError) {
-      console.error('Error fetching job assignments:', assignError);
-      return { success: false, error: 'fetch_failed' };
-    }
-
-    if (!assignments || assignments.length === 0) {
-      return { success: true, jobs: [] };
-    }
-
-    const jobIds = assignments.map((a) => a.job_id);
-
-    const { data: jobs, error: jobsError } = await admin
-      .from('jobs')
-      .select('id, title, description, job_number, status, project_id')
-      .eq('organization_id', organizationId)
-      .in('id', jobIds)
-      .neq('status', 'fertig')
-      .order('planned_date', { ascending: true, nullsFirst: false });
-
-    if (jobsError) {
-      console.error('Error fetching assigned jobs:', jobsError);
-      return { success: false, error: 'fetch_failed' };
-    }
-
-    const projectIds = (jobs || [])
-      .map((j) => j.project_id)
-      .filter((id): id is string => id !== null);
-
-    let projectMap: Record<string, string> = {};
-    if (projectIds.length > 0) {
-      const { data: projects } = await admin
-        .from('projects')
-        .select('id, name')
-        .in('id', projectIds);
-
-      if (projects) {
-        projectMap = Object.fromEntries(projects.map((p) => [p.id, p.name]));
-      }
-    }
-
-    return {
-      success: true,
-      jobs: (jobs || []).map((j) => ({
-        id: j.id,
-        title: getJobDisplayTitle({
-          title: j.title,
-          description: j.description
-        }),
-        jobNumber: j.job_number,
-        status: j.status,
-        projectName: j.project_id ? (projectMap[j.project_id] ?? null) : null
-      }))
-    };
-  } catch (error) {
-    console.error('Unexpected error in getAssignedJobs:', error);
-    return { success: false, error: 'unexpected_error' };
-  }
-}
-
-/**
- * Get ALL org jobs (for admin/manager use in manual entry dialog).
- */
-export async function getAllOrgJobs(organizationId: string): Promise<
-  | {
-      success: true;
-      jobs: Array<{
-        id: string;
-        title: string;
-        jobNumber: string | null;
-        status: string;
-        projectName: string | null;
-      }>;
-    }
-  | { success: false; error: string }
-> {
-  try {
-    const user = await getAuthenticatedUser();
-    if (!user) {
-      return { success: false, error: 'not_authenticated' };
-    }
-
-    const admin = createSupabaseAdminClient();
-
-    const { data: jobs, error: jobsError } = await admin
-      .from('jobs')
-      .select('id, title, description, job_number, status, project_id')
-      .eq('organization_id', organizationId)
-      .neq('status', 'fertig')
-      .order('planned_date', { ascending: true, nullsFirst: false });
-
-    if (jobsError) {
-      console.error('Error fetching all org jobs:', jobsError);
-      return { success: false, error: 'fetch_failed' };
-    }
-
-    const projectIds = (jobs || [])
-      .map((j) => j.project_id)
-      .filter((id): id is string => id !== null);
-
-    let projectMap: Record<string, string> = {};
-    if (projectIds.length > 0) {
-      const { data: projects } = await admin
-        .from('projects')
-        .select('id, name')
-        .in('id', projectIds);
-
-      if (projects) {
-        projectMap = Object.fromEntries(projects.map((p) => [p.id, p.name]));
-      }
-    }
-
-    return {
-      success: true,
-      jobs: (jobs || []).map((j) => ({
-        id: j.id,
-        title: getJobDisplayTitle({
-          title: j.title,
-          description: j.description
-        }),
-        jobNumber: j.job_number,
-        status: j.status,
-        projectName: j.project_id ? (projectMap[j.project_id] ?? null) : null
-      }))
-    };
-  } catch (error) {
-    console.error('Unexpected error in getAllOrgJobs:', error);
-    return { success: false, error: 'unexpected_error' };
-  }
-}
-
-type PickerJob = {
-  id: string;
-  title: string;
-  jobNumber: string | null;
-  status: string;
-  projectName: string | null;
-  clientName: string | null;
-};
-
-/**
- * Get jobs for the clock-in / job-switch picker.
- * Admin/manager: all non-archived org jobs.
- * Employee: only assigned, non-archived jobs.
- */
-export async function getJobsForPicker(
-  organizationId: string
-): Promise<
-  { success: true; jobs: PickerJob[] } | { success: false; error: string }
-> {
-  try {
-    const user = await getAuthenticatedUser();
-    if (!user) {
-      return { success: false, error: 'not_authenticated' };
-    }
-
-    const role = await verifyMembershipFromCache(user.id, organizationId);
-    if (!role) {
-      return { success: false, error: 'not_a_member' };
-    }
-
-    const admin = createSupabaseAdminClient();
-    const isManagerOrAbove = role === 'admin' || role === 'buero';
-
-    let jobIds: string[] | null = null;
-
-    if (!isManagerOrAbove) {
-      const { data: assignments, error: assignError } = await admin
-        .from('job_assignments')
-        .select('job_id')
-        .eq('user_id', user.id);
-
-      if (assignError) {
-        console.error('Error fetching job assignments:', assignError);
-        return { success: false, error: 'fetch_failed' };
-      }
-
-      if (!assignments || assignments.length === 0) {
-        return { success: true, jobs: [] };
-      }
-
-      jobIds = assignments.map((a) => a.job_id);
-    }
-
-    let query = admin
-      .from('jobs')
-      .select('id, title, description, job_number, status, project_id, client_id')
-      .eq('organization_id', organizationId)
-      .neq('status', 'fertig')
-      .order('title', { ascending: true });
-
-    if (jobIds) {
-      query = query.in('id', jobIds);
-    }
-
-    const { data: jobs, error: jobsError } = await query;
-
-    if (jobsError) {
-      console.error('Error fetching picker jobs:', jobsError);
-      return { success: false, error: 'fetch_failed' };
-    }
-
-    const projectIds = (jobs || [])
-      .map((j) => j.project_id)
-      .filter((id): id is string => id !== null);
-    const clientIds = (jobs || [])
-      .map((j) => j.client_id)
-      .filter((id): id is string => id !== null);
-
-    let projectMap: Record<string, string> = {};
-    let clientMap: Record<string, string> = {};
-
-    const [projectsData, clientsData] = await Promise.all([
-      projectIds.length > 0
-        ? admin
-            .from('projects')
-            .select('id, name')
-            .in('id', [...new Set(projectIds)])
-        : null,
-      clientIds.length > 0
-        ? admin
-            .from('clients')
-            .select('id, name')
-            .in('id', [...new Set(clientIds)])
-        : null
-    ]);
-
-    if (projectsData?.data) {
-      projectMap = Object.fromEntries(
-        projectsData.data.map((p) => [p.id, p.name])
-      );
-    }
-    if (clientsData?.data) {
-      clientMap = Object.fromEntries(
-        clientsData.data.map((c) => [c.id, c.name])
-      );
-    }
-
-    return {
-      success: true,
-      jobs: (jobs || []).map((j) => ({
-        id: j.id,
-        title: getJobDisplayTitle({
-          title: j.title,
-          description: j.description
-        }),
-        jobNumber: j.job_number,
-        status: j.status,
-        projectName: j.project_id ? (projectMap[j.project_id] ?? null) : null,
-        clientName: j.client_id ? (clientMap[j.client_id] ?? null) : null
-      }))
-    };
-  } catch (error) {
-    console.error('Unexpected error in getJobsForPicker:', error);
-    return { success: false, error: 'unexpected_error' };
-  }
-}
-
-/**
  * Get the set of job IDs that currently have at least one worker clocked in.
  * Used for the "active work" pulsation indicator across all tables.
  */
 export async function getActiveJobIdsForOrg(
   organizationId: string
 ): Promise<
-  { success: true; activeJobIds: string[] } | { success: false; error: string }
+  { success: true; activeJobIds: string[]; activeProjectIds: string[] } | { success: false; error: string }
 > {
   try {
     const user = await getAuthenticatedUser();
@@ -4012,7 +2772,7 @@ export async function getActiveJobIdsForOrg(
       return { success: false, error: 'not_authenticated' };
     }
 
-    const callerRole = await verifyMembershipFromCache(user.id, organizationId);
+    const callerRole = await verifyCurrentMembership(user.id, organizationId);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
@@ -4021,7 +2781,7 @@ export async function getActiveJobIdsForOrg(
     const { start } = getTodayBounds();
 
     const [legacyResult, canonicalResult] = await Promise.all([
-      admin
+      readCompleteRows((from, to) => admin
         .from('time_entries')
         .select('user_id, entry_type, timestamp, job_id')
         .eq('organization_id', organizationId)
@@ -4029,15 +2789,15 @@ export async function getActiveJobIdsForOrg(
         .lte('timestamp', new Date().toISOString())
         .neq('status', 'rejected')
         .neq('status', 'pending_delete')
-        .order('timestamp', { ascending: false }),
-      admin
+        .order('timestamp', { ascending: false }).order('id').range(from, to), LIST_ROW_CAP),
+      readCompleteRows((from, to) => admin
         .from('time_segments')
         .select('job_id, time_sessions!inner(status, ended_at)')
         .eq('organization_id', organizationId)
         .is('ended_at', null)
         .is('time_sessions.ended_at', null)
         .in('kind', ['work', 'callout'])
-        .not('job_id', 'is', null),
+        .not('job_id', 'is', null).order('id').range(from, to), LIST_ROW_CAP),
     ]);
 
     if (legacyResult.error || canonicalResult.error) {
@@ -4048,23 +2808,10 @@ export async function getActiveJobIdsForOrg(
       return { success: false, error: 'fetch_failed' };
     }
 
-    const activeJobIds = new Set<string>();
-    const seenUsers = new Set<string>();
-
-    for (const row of legacyResult.data || []) {
-      const uid = row.user_id as string;
-      if (seenUsers.has(uid)) continue;
-      seenUsers.add(uid);
-
-      if (isWorkingEntryType(row.entry_type) && row.job_id) {
-        activeJobIds.add(row.job_id as string);
-      }
-    }
-    for (const row of canonicalResult.data || []) {
-      if (row.job_id) activeJobIds.add(row.job_id);
-    }
-
-    return { success: true, activeJobIds: [...activeJobIds] };
+    const activeJobIds = collectActiveJobIds(legacyResult.data, canonicalResult.data);
+    const jobs = await readInBatches(activeJobIds, (ids) => admin.from('jobs').select('id,project_id').eq('organization_id', organizationId).in('id', [...ids]));
+    if (jobs.error) return { success: false, error: 'fetch_failed' };
+    return { success: true, activeJobIds, activeProjectIds: [...new Set(jobs.data.flatMap((job) => job.project_id ? [job.project_id] : []))] };
   } catch (error) {
     console.error('Unexpected error in getActiveJobIdsForOrg:', error);
     return { success: false, error: 'unexpected_error' };

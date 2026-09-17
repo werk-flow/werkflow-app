@@ -1,5 +1,6 @@
 'use client'
 
+import { formatBerlinDateTime } from '@/lib/utils';
 import { useMemo, useState, type ReactElement } from 'react'
 import { usePendingTask, useServerAction } from '@/hooks/use-server-action';
 import { Archive, ArrowDown, ArrowUp, History, Loader2, Plus, RotateCcw, Save, Send, Trash2 } from 'lucide-react'
@@ -49,14 +50,15 @@ type Props = {
   capabilities: CapabilityDefinition[]
 }
 
-const ERROR_MESSAGES: Record<string, string> = {
+const ERROR_MESSAGES = {
   validation_failed: 'Bitte prüfe die markierten Angaben.',
   work_template_item_required: 'Füge mindestens eine Aufgabe oder einen Checklistenpunkt hinzu.',
   work_template_dependency_cycle: 'Abhängigkeiten dürfen keinen Kreis bilden.',
   work_template_reference_unavailable: 'Mindestens ein Material, Lager oder eine Qualifikation ist nicht mehr aktiv.',
   not_authorized: 'Du darfst Arbeitsvorlagen nicht verwalten.',
   operation_failed: 'Die Änderung konnte nicht gespeichert werden.',
-}
+} satisfies Record<string, string>
+const ERROR_MESSAGE_BY_CODE: Record<string, string> = ERROR_MESSAGES
 
 type CreateTemplateInput = { name: string; description: string; targetType: WorkTemplateTargetType }
 type CreateInventoryItemInput = { name: string; unit: string }
@@ -78,8 +80,12 @@ function byUpdatedAtDesc(a: WorkTemplateSummary, b: WorkTemplateSummary): number
 function move<T>(items: T[], index: number, direction: -1 | 1): T[] {
   const target = index + direction
   if (target < 0 || target >= items.length) return items
+  const current = items[index]
+  const swapped = items[target]
+  if (current === undefined || swapped === undefined) return items
   const next = [...items]
-  ;[next[index], next[target]] = [next[target], next[index]]
+  next[index] = swapped
+  next[target] = current
   return next
 }
 
@@ -275,7 +281,7 @@ function TemplateEditorDialog({ detail, onOpenChange, inventoryItems, inventoryL
     if (!detail || !activeDraft) return
     void runSave(async () => {
       const result = await saveWorkTemplateDraft({ templateId: detail.id, draft: { ...activeDraft, items: activeDraft.items.map((item, index) => ({ ...item, sortOrder: index })), materials: activeDraft.materials.map((item, index) => ({ ...item, sortOrder: index })), capabilities: activeDraft.capabilities.map((item, index) => ({ ...item, sortOrder: index })) } }).catch(() => null)
-      if (!result?.success) { setError(result ? ERROR_MESSAGES[result.error] ?? 'Der Entwurf konnte nicht gespeichert werden.' : 'Der Entwurf konnte nicht gespeichert werden.'); return }
+      if (!result?.success) { setError(result ? ERROR_MESSAGE_BY_CODE[result.error] ?? 'Der Entwurf konnte nicht gespeichert werden.' : 'Der Entwurf konnte nicht gespeichert werden.'); return }
       await onChanged('Entwurf gespeichert.')
     })
   }
@@ -284,10 +290,10 @@ function TemplateEditorDialog({ detail, onOpenChange, inventoryItems, inventoryL
     void runPublish(async () => {
       if (draft) {
         const saveResult = await saveWorkTemplateDraft({ templateId: detail.id, draft: { ...draft, items: draft.items.map((item, index) => ({ ...item, sortOrder: index })), materials: draft.materials.map((item, index) => ({ ...item, sortOrder: index })), capabilities: draft.capabilities.map((item, index) => ({ ...item, sortOrder: index })) } }).catch(() => null)
-        if (!saveResult?.success) { setError(saveResult ? ERROR_MESSAGES[saveResult.error] ?? 'Der Entwurf konnte nicht gespeichert werden.' : 'Der Entwurf konnte nicht gespeichert werden.'); return }
+        if (!saveResult?.success) { setError(saveResult ? ERROR_MESSAGE_BY_CODE[saveResult.error] ?? 'Der Entwurf konnte nicht gespeichert werden.' : 'Der Entwurf konnte nicht gespeichert werden.'); return }
       }
       const result = await publishWorkTemplate(detail.id).catch(() => null)
-      if (!result?.success) { setError(result ? ERROR_MESSAGES[result.error] ?? 'Die Version konnte nicht veröffentlicht werden.' : 'Die Version konnte nicht veröffentlicht werden.'); return }
+      if (!result?.success) { setError(result ? ERROR_MESSAGE_BY_CODE[result.error] ?? 'Die Version konnte nicht veröffentlicht werden.' : 'Die Version konnte nicht veröffentlicht werden.'); return }
       close(false); await onChanged(`Version ${detail.versionNumber} wurde veröffentlicht.`)
     })
   }
@@ -304,9 +310,9 @@ function TemplateEditorDialog({ detail, onOpenChange, inventoryItems, inventoryL
   return <Dialog open onOpenChange={close}><DialogContent className="sm:max-w-4xl"><form onSubmit={(event) => { event.preventDefault(); save() }} className="contents"><DialogHeader><DialogTitle>{editable ? `Entwurf · Version ${detail.versionNumber}` : `${detail.name} · Version ${detail.versionNumber}`}</DialogTitle><DialogDescription>{editable ? 'Nach dem Veröffentlichen bleibt diese Version unveränderlich.' : 'Diese veröffentlichte Version ist unveränderlich. Für Änderungen legst du eine neue Version an.'}</DialogDescription></DialogHeader><DialogBody className="space-y-6 py-1">
     <section className="space-y-4"><h3 className="font-semibold">Grunddaten</h3><Field label="Name" htmlFor="template-name" required><Input value={activeDraft.name} disabled={!editable} onChange={(event) => update({ ...activeDraft, name: event.target.value })} /></Field><Field label="Beschreibung" htmlFor="template-description"><Textarea value={activeDraft.description ?? ''} disabled={!editable} onChange={(event) => update({ ...activeDraft, description: event.target.value || null })} /></Field></section>
     <ItemsEditor draft={activeDraft} editable={editable} onChange={update} />
-    <MaterialsEditor draft={activeDraft} editable={editable} onChange={update} inventoryItems={inventoryItemOptions} inventoryLocations={inventoryLocations} onCreateItem={createInventoryItem} isItemPending={optionBusy.isBusy} />
+    <MaterialsEditor draft={activeDraft} editable={editable} onChange={update} onPatch={patchDraft} inventoryItems={inventoryItemOptions} inventoryLocations={inventoryLocations} onCreateItem={createInventoryItem} isItemPending={optionBusy.isBusy} />
     <CapabilitiesEditor draft={activeDraft} editable={editable} onChange={update} capabilities={capabilityItemOptions} onCreateCapability={createCapabilityOption} isCapabilityPending={optionBusy.isBusy} />
-    <section className="space-y-3"><div className="flex items-center gap-2"><History className="size-4" /><h3 className="font-semibold">Verlauf</h3></div>{detail.history.map((event) => <div key={event.id} className="flex justify-between gap-3 border-b pb-2 text-sm"><span>{event.eventType} {event.versionNumber ? `· Version ${event.versionNumber}` : ''}{event.targetLabel && <span className="block">{event.targetLabel}</span>}<span className="block text-muted-foreground">{event.actorName}</span></span><time className="text-muted-foreground">{new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(event.createdAt))}</time></div>)}</section>
+    <section className="space-y-3"><div className="flex items-center gap-2"><History className="size-4" /><h3 className="font-semibold">Verlauf</h3></div>{detail.history.map((event) => <div key={event.id} className="flex justify-between gap-3 border-b pb-2 text-sm"><span>{event.eventType} {event.versionNumber ? `· Version ${event.versionNumber}` : ''}{event.targetLabel && <span className="block">{event.targetLabel}</span>}<span className="block text-muted-foreground">{event.actorName}</span></span><time className="text-muted-foreground">{formatBerlinDateTime(event.createdAt)}</time></div>)}</section>
     <ErrorText>{error}</ErrorText>
   </DialogBody><DialogFooter><Button type="button" variant="outline" onClick={() => close(false)}>Schließen</Button>{editable ? <><Button type="submit" variant="outline" disabled={isPending || optionBusy.anyBusy}>{isSaving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}Speichern</Button><Button type="button" onClick={publish} disabled={isPending || optionBusy.anyBusy}>{isPublishing ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}Veröffentlichen</Button></> : <Button type="button" onClick={createNextDraft} disabled={isPending}>{isCreatingNextDraft ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}Neue Version</Button>}</DialogFooter></form></DialogContent></Dialog>
 }
@@ -336,9 +342,9 @@ function ItemsEditor({ draft, editable, onChange }: { draft: WorkTemplateDraft; 
   </section>
 }
 
-function MaterialsEditor({ draft, editable, onChange, inventoryItems, inventoryLocations, onCreateItem, isItemPending }: { draft: WorkTemplateDraft; editable: boolean; onChange: (draft: WorkTemplateDraft) => void; inventoryItems: InventoryPickerOption[]; inventoryLocations: InventoryLocation[]; onCreateItem: (lineId: string, input: CreateInventoryItemInput) => void; isItemPending: (itemId: string) => boolean }) {
+function MaterialsEditor({ draft, editable, onChange, onPatch, inventoryItems, inventoryLocations, onCreateItem, isItemPending }: { draft: WorkTemplateDraft; editable: boolean; onChange: (draft: WorkTemplateDraft) => void; onPatch: (patch: (current: WorkTemplateDraft) => WorkTemplateDraft) => void; inventoryItems: InventoryPickerOption[]; inventoryLocations: InventoryLocation[]; onCreateItem: (lineId: string, input: CreateInventoryItemInput) => void; isItemPending: (itemId: string) => boolean }) {
   function add() { onChange({ ...draft, materials: [...draft.materials, { id: newId(), itemId: '', preferredLocationId: null, plannedQuantity: 1, isBillable: true, notes: null, sortOrder: draft.materials.length }] }) }
-  return <section className="space-y-3"><div className="flex items-center justify-between"><div><h3 className="font-semibold">Geplantes Material</h3><p className="text-sm text-muted-foreground">Mengen werden geplant, nicht reserviert oder ausgebucht.</p></div>{editable && <Button type="button" size="sm" variant="outline" onClick={add}><Plus className="size-4" />Material</Button>}</div>{draft.materials.map((line) => { const pending = isItemPending(line.itemId); return <Card key={line.id} className={cn('gap-3 py-4', pending && 'opacity-70')} aria-busy={pending || undefined}><CardContent className="grid gap-3 sm:grid-cols-2"><Field label={<span className="inline-flex items-center gap-2">Artikel<InlinePending active={pending} label="Artikel wird erstellt" /></span>} htmlFor={`material-item-${line.id}`}><SelectWithCreate id={`material-item-${line.id}`} items={inventoryItems} getOption={(item) => ({ value: item.id, label: item.name, description: item.internalSku ?? undefined })} value={line.itemId} onValueChange={(value) => onChange({ ...draft, materials: draft.materials.map((item) => item.id === line.id ? { ...item, itemId: value, isBillable: inventoryItems.find((option) => option.id === value)?.isBillable ?? item.isBillable } : item) })} createLabel="Neuen Artikel erstellen" disabled={!editable} renderCreateDialog={({ open, onOpenChange }) => <CreateMaterialDialog open={open} onOpenChange={onOpenChange} onSubmit={(input) => onCreateItem(line.id, input)} />} /></Field><Field label="Bevorzugtes Lager" htmlFor={`material-location-${line.id}`}><LocationSelectWithCreate id={`material-location-${line.id}`} locations={inventoryLocations} value={line.preferredLocationId ?? ''} onValueChange={(value) => onChange({ ...draft, materials: draft.materials.map((item) => item.id === line.id ? { ...item, preferredLocationId: value || null } : item) })} allowNone disabled={!editable} /></Field><Field label="Geplante Menge" htmlFor={`quantity-${line.id}`}><QuantityStepper id={`quantity-${line.id}`} value={String(line.plannedQuantity).replace('.', ',')} min={0.001} step={1} disabled={!editable} onChange={(value) => onChange({ ...draft, materials: draft.materials.map((item) => item.id === line.id ? { ...item, plannedQuantity: parseDecimalInput(value) } : item) })} unitLabel={inventoryItems.find((item) => item.id === line.itemId)?.unit} /></Field><div className="flex items-end justify-between gap-3"><label className="flex h-11 items-center gap-2"><Checkbox checked={line.isBillable} disabled={!editable} onCheckedChange={(checked) => onChange({ ...draft, materials: draft.materials.map((item) => item.id === line.id ? { ...item, isBillable: checked === true } : item) })} />Abrechenbar</label>{editable && <Button type="button" size="icon" variant="ghost" onClick={() => onChange({ ...draft, materials: draft.materials.filter((item) => item.id !== line.id) })} aria-label="Material löschen"><Trash2 className="size-4" /></Button>}</div><Field label="Notiz" htmlFor={`material-notes-${line.id}`} className="sm:col-span-2"><Textarea value={line.notes ?? ''} disabled={!editable} onChange={(event) => onChange({ ...draft, materials: draft.materials.map((item) => item.id === line.id ? { ...item, notes: event.target.value || null } : item) })} /></Field></CardContent></Card> })}</section>
+  return <section className="space-y-3"><div className="flex items-center justify-between"><div><h3 className="font-semibold">Geplantes Material</h3><p className="text-sm text-muted-foreground">Mengen werden geplant, nicht reserviert oder ausgebucht.</p></div>{editable && <Button type="button" size="sm" variant="outline" onClick={add}><Plus className="size-4" />Material</Button>}</div>{draft.materials.map((line) => { const pending = isItemPending(line.itemId); return <Card key={line.id} className={cn('gap-3 py-4', pending && 'opacity-70')} aria-busy={pending || undefined}><CardContent className="grid gap-3 sm:grid-cols-2"><Field label={<span className="inline-flex items-center gap-2">Artikel<InlinePending active={pending} label="Artikel wird erstellt" /></span>} htmlFor={`material-item-${line.id}`}><SelectWithCreate id={`material-item-${line.id}`} items={inventoryItems} getOption={(item) => ({ value: item.id, label: item.name, description: item.internalSku ?? undefined })} value={line.itemId} onValueChange={(value) => onChange({ ...draft, materials: draft.materials.map((item) => item.id === line.id ? { ...item, itemId: value, isBillable: inventoryItems.find((option) => option.id === value)?.isBillable ?? item.isBillable } : item) })} createLabel="Neuen Artikel erstellen" disabled={!editable} renderCreateDialog={({ open, onOpenChange }) => <CreateMaterialDialog open={open} onOpenChange={onOpenChange} onSubmit={(input) => onCreateItem(line.id, input)} />} /></Field><Field label="Bevorzugtes Lager" htmlFor={`material-location-${line.id}`}><LocationSelectWithCreate id={`material-location-${line.id}`} locations={inventoryLocations} value={line.preferredLocationId ?? ''} onValueChange={(value) => onPatch((current) => ({ ...current, materials: current.materials.map((item) => item.id === line.id ? { ...item, preferredLocationId: value || null } : item) }))} allowNone disabled={!editable} /></Field><Field label="Geplante Menge" htmlFor={`quantity-${line.id}`}><QuantityStepper id={`quantity-${line.id}`} value={String(line.plannedQuantity).replace('.', ',')} min={0.001} step={1} disabled={!editable} onChange={(value) => onChange({ ...draft, materials: draft.materials.map((item) => item.id === line.id ? { ...item, plannedQuantity: parseDecimalInput(value) } : item) })} unitLabel={inventoryItems.find((item) => item.id === line.itemId)?.unit} /></Field><div className="flex items-end justify-between gap-3"><label className="flex h-11 items-center gap-2"><Checkbox checked={line.isBillable} disabled={!editable} onCheckedChange={(checked) => onChange({ ...draft, materials: draft.materials.map((item) => item.id === line.id ? { ...item, isBillable: checked === true } : item) })} />Abrechenbar</label>{editable && <Button type="button" size="icon" variant="ghost" onClick={() => onChange({ ...draft, materials: draft.materials.filter((item) => item.id !== line.id) })} aria-label="Material löschen"><Trash2 className="size-4" /></Button>}</div><Field label="Notiz" htmlFor={`material-notes-${line.id}`} className="sm:col-span-2"><Textarea value={line.notes ?? ''} disabled={!editable} onChange={(event) => onChange({ ...draft, materials: draft.materials.map((item) => item.id === line.id ? { ...item, notes: event.target.value || null } : item) })} /></Field></CardContent></Card> })}</section>
 }
 
 // Closes on submit; the editor selects the optimistic article on the line and reports the outcome.

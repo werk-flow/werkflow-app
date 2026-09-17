@@ -1,20 +1,17 @@
-import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
 import {
-  PLAYWRIGHT_LANES,
   PLAYWRIGHT_TARGETS,
+  RUNNABLE_LANES,
   type PlaywrightLane,
   type PlaywrightTarget,
 } from "../lib/testing/run-policy";
 import { getR2Endpoint } from "../lib/storage/r2";
 import { assertDevMigrationHistoryParity } from "../lib/testing/dev-migration-history";
-import { getSpawnFailureDetail } from "../lib/testing/spawn-result";
+import { getWindowsListener } from "../lib/testing/windows-listener";
 import { assertBuildIdentity, calculateBuildInputs, readBuildReceipt } from "../lib/testing/build-identity";
 import { loadEnvLocal, requireEnv } from "../tests/golden/support/env";
-import { listRunManifests, runDirectory } from "../tests/golden/support/run-state";
-import { assertNoRetainedManifests } from "../lib/testing/archive-state";
 import { checkRealtimeParity } from "./check-realtime-parity";
 
 const DEV_PROJECT_REF = "mbkkzuqjbdvzelqvuzcn";
@@ -25,12 +22,6 @@ const LOCAL_API_PORT = "54321";
 // forwarding or the WSL VM's private NAT address (see environments.md).
 const PRIVATE_HOST_PATTERN =
   /^(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})$/;
-
-type ListenerDetails = {
-  processId: number;
-  commandLine: string | null;
-  creationDate: string;
-};
 
 function assertRouting(target: PlaywrightTarget): void {
   loadEnvLocal();
@@ -80,7 +71,7 @@ function assertRouting(target: PlaywrightTarget): void {
 }
 
 const LOCAL_REMEDY =
-  "Start or repair the local stack: `wsl supabase start` in the repo, then `bun run env:local` (the WSL address changes when WSL restarts; certification additionally needs a rebuild so the baked NEXT_PUBLIC_* values match).";
+  "Start or repair the local stack: `wsl supabase start` in the repo, then `bun run env:local` (the WSL address changes when WSL restarts; browser runs additionally need a rebuild so the baked NEXT_PUBLIC_* values match).";
 
 async function probeBounded(input: {
   label: string;
@@ -174,47 +165,6 @@ async function assertLocalEdgeRuntimeReachable(): Promise<void> {
   });
 }
 
-function getWindowsListener(): ListenerDetails | null {
-  const script = [
-    "$listener = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1",
-    "if (-not $listener) { Write-Output 'NO_LISTENER'; exit 0 }",
-    '$process = Get-CimInstance Win32_Process -Filter "ProcessId = $($listener.OwningProcess)"',
-    "$started = (Get-Process -Id $listener.OwningProcess).StartTime.ToUniversalTime().ToString('o')",
-    "[pscustomobject]@{ processId = $listener.OwningProcess; commandLine = $process.CommandLine; creationDate = $started } | ConvertTo-Json -Compress",
-  ].join("; ");
-  const result = spawnSync(
-    "powershell.exe",
-    ["-NoProfile", "-Command", script],
-    {
-      encoding: "utf8",
-      timeout: 20_000,
-      killSignal: "SIGKILL",
-    },
-  );
-  if (result.error) {
-    throw new Error(`Could not inspect port 3000: ${result.error.message}`);
-  }
-  if (result.status !== 0) {
-    throw new Error(
-      `Could not inspect port 3000: ${getSpawnFailureDetail(result, `PowerShell exited ${result.status}`)}`,
-    );
-  }
-  const output = result.stdout.trim();
-  // An empty port is an expected pre-run state, not an inspection failure —
-  // the vague "Could not inspect" wording cost the P1-17 cycle a confused
-  // diagnosis moment (incident log, 2026-08-28).
-  if (!output || output === "NO_LISTENER") {
-    return null;
-  }
-  try {
-    return JSON.parse(output) as ListenerDetails;
-  } catch {
-    throw new Error(
-      `Port-3000 inspection returned invalid JSON: ${output.slice(0, 200)}`,
-    );
-  }
-}
-
 async function assertRecordedAppServer(
   repositoryRoot: string,
 ): Promise<void> {
@@ -233,7 +183,7 @@ async function assertRecordedAppServer(
       `Application server ownership verification is not implemented for ${process.platform}.`,
     );
   }
-  const listener = getWindowsListener();
+  const listener = getWindowsListener(3000);
   if (!listener) {
     throw new Error(
       "Application browser tests require a recorded, workspace-owned production server on port 3000. Nothing is listening. Start `bun run test:server local` or `bun run test:server cloud` for the selected target.",
@@ -314,11 +264,6 @@ export async function runPlaywrightPreflight(input: {
 }): Promise<void> {
   const repositoryRoot = input.repositoryRoot ?? resolve(import.meta.dir, "..");
   assertRouting(input.target);
-  if (input.lane === "certification") {
-    assertNoRetainedManifests(listRunManifests(), (runKey) =>
-      existsSync(resolve(runDirectory(runKey), 'state/world.json'))
-    );
-  }
   // All lanes share the same server requirement, including retained diagnostics.
   await assertRecordedAppServer(repositoryRoot);
   await runBackendPreflight({ target: input.target, repositoryRoot });
@@ -345,9 +290,9 @@ export async function runBackendPreflight(input: {
 if (import.meta.main) {
   try {
     const laneArgument = process.argv[2] ?? "iteration";
-    if (laneArgument !== "backend" && !PLAYWRIGHT_LANES.includes(laneArgument as PlaywrightLane)) {
+    if (laneArgument !== "backend" && !(RUNNABLE_LANES as readonly string[]).includes(laneArgument)) {
       throw new Error(
-        `Unknown lane: ${laneArgument}. Expected one of ${PLAYWRIGHT_LANES.join(", ")}.`,
+        `Unknown lane: ${laneArgument}. Expected backend or one of ${RUNNABLE_LANES.join(", ")}.`,
       );
     }
     const targetArgument = process.argv[3] ?? "local";

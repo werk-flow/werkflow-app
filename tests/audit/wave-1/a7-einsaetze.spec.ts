@@ -258,12 +258,13 @@ async function getEmployeeRecordIdByLastName(orgId: string, lastName: string): P
     .select('id')
     .eq('organization_id', orgId)
     .eq('last_name', lastName);
-  if (error || (data?.length ?? 0) !== 1) {
+  const record = data?.length === 1 ? data[0] : undefined;
+  if (error || !record) {
     throw new Error(
       `A7 employee record lookup for "${lastName}" failed: ${error?.message ?? `${data?.length ?? 0} rows`}`
     );
   }
-  return data![0].id as string;
+  return record.id;
 }
 
 // The batch RPC preserves each occurrence's history as a per-occurrence
@@ -549,10 +550,10 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
 
     const state = await getDispatchState(world.orgId, `A7-MAIN-${world.runId}`);
     expect(state.dispatches).toHaveLength(1);
-    expect(state.dispatches[0].status).toBe('active');
+    expect(state.dispatches[0]?.status).toBe('active');
     const notes = await getDispatchRevisionNotes(world.orgId, `A7-MAIN-${world.runId}`);
     expect(notes).toHaveLength(1);
-    expect(notes[0].note).toBe(MAIN_NOTE);
+    expect(notes[0]?.note).toBe(MAIN_NOTE);
   });
 
   test('A7-T2: Belegbare Fahrzeit warnt; die Mein-Einsatz-Karte trägt Termin, Ort und Hinweis; Bestätigen läuft über /aufgaben [P1-12-F02/P1-12-F03/P1-12-F07]',
@@ -639,7 +640,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
 
     const state = await getDispatchState(world.orgId, `A7-MAIN-${world.runId}`);
     expect(
-      state.dispatches[0].acknowledgements.filter(
+      state.dispatches[0]?.acknowledgements.filter(
         (ack) => ack.revisionNumber === 1 && ack.state === 'acknowledged'
       )
     ).toHaveLength(1);
@@ -701,19 +702,21 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
 
     const state = await getDispatchState(world.orgId, `A7-MAIN-${world.runId}`);
     expect(state.dispatches).toHaveLength(1);
-    expect(state.dispatches[0].revisionChangeKinds).toEqual(['issued', 'reassigned']);
-    expect(state.dispatches[0].currentRevisionNumber).toBe(2);
-    expect(state.dispatches[0].currentRecipientRecordIds).toHaveLength(3);
+    const [mainDispatch] = state.dispatches;
+    if (!mainDispatch) throw new Error('A7: expected the main dispatch');
+    expect(mainDispatch.revisionChangeKinds).toEqual(['issued', 'reassigned']);
+    expect(mainDispatch.currentRevisionNumber).toBe(2);
+    expect(mainDispatch.currentRecipientRecordIds).toHaveLength(3);
     // The unchanged recipient's confirmation lives on traceably.
-    const revisionTwoAcks = state.dispatches[0].acknowledgements.filter(
+    const revisionTwoAcks = mainDispatch.acknowledgements.filter(
       (ack) => ack.revisionNumber === 2
     );
     expect(revisionTwoAcks).toHaveLength(1);
-    expect(revisionTwoAcks[0].state).toBe('carried_forward');
+    expect(revisionTwoAcks[0]?.state).toBe('carried_forward');
     // A record without login is NEVER auto-confirmed — zero acknowledgement
     // rows exist for it on any revision.
     expect(
-      state.dispatches[0].acknowledgements.filter((ack) => ack.employeeRecordId === noLoginRecordId)
+      mainDispatch.acknowledgements.filter((ack) => ack.employeeRecordId === noLoginRecordId)
     ).toHaveLength(0);
 
     // The panel shows the full visible state vocabulary.
@@ -807,12 +810,12 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     });
 
     let state = await getDispatchState(world.orgId, `A7-MAIN-${world.runId}`);
-    expect(state.dispatches[0].revisionChangeKinds).toEqual([
+    expect(state.dispatches[0]?.revisionChangeKinds).toEqual([
       'issued',
       'reassigned',
       'schedule_changed',
     ]);
-    const resolvedChallenge = state.dispatches[0].acknowledgements.find(
+    const resolvedChallenge = state.dispatches[0]?.acknowledgements.find(
       (ack) => ack.revisionNumber === 2 && ack.state === 'challenged'
     );
     expect(resolvedChallenge?.challengeResolution).toBe('superseded');
@@ -852,13 +855,13 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       .poll(
         async () => {
           state = await getDispatchState(world.orgId, `A7-MAIN-${world.runId}`);
-          return state.dispatches[0].revisionChangeKinds;
+          return state.dispatches[0]?.revisionChangeKinds;
         },
         { timeout: 20_000 }
       )
       .toEqual(['issued', 'reassigned', 'schedule_changed', 'instruction_changed']);
     expect(
-      state.dispatches[0].acknowledgements.filter((ack) => ack.revisionNumber === 4)
+      state.dispatches[0]?.acknowledgements.filter((ack) => ack.revisionNumber === 4)
     ).toHaveLength(0);
     const invalidatedCard = jobDispatchSection(bueroPage).locator(
       '[data-dispatch-state="ausstehend"]'
@@ -941,8 +944,8 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
 
     let state = await getDispatchState(world.orgId, `A7-PARK-${world.runId}`);
     expect(state.dispatches).toHaveLength(1);
-    expect(state.dispatches[0].status).toBe('cancelled');
-    expect(state.dispatches[0].eventTypes).toContain('cancelled');
+    expect(state.dispatches[0]?.status).toBe('cancelled');
+    expect(state.dispatches[0]?.eventTypes).toContain('cancelled');
     await employeePage.goto(`/auftraege/A7-PARK-${world.runId}`);
     await expect(jobDispatchSection(employeePage)).toHaveCount(0);
 
@@ -967,8 +970,8 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
 
     state = await getDispatchState(world.orgId, `A7-PARK-${world.runId}`);
     expect(state.dispatches).toHaveLength(2);
-    expect(state.dispatches[0].status).toBe('cancelled');
-    expect(state.dispatches[1].status).toBe('active');
+    expect(state.dispatches[0]?.status).toBe('cancelled');
+    expect(state.dispatches[1]?.status).toBe('active');
     const notes = await getDispatchRevisionNotes(world.orgId, `A7-PARK-${world.runId}`);
     expect(notes.map((entry) => entry.note)).toContain(MAIN_NOTE);
     expect(notes.map((entry) => entry.note)).toContain(RESEND_NOTE);
@@ -1078,8 +1081,8 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     // Parking cancelled the acknowledged dispatch automatically and visibly.
     const state = await getDispatchState(world.orgId, schedNumber);
     expect(state.dispatches).toHaveLength(1);
-    expect(state.dispatches[0].status).toBe('cancelled');
-    expect(state.dispatches[0].eventTypes).toContain('cancelled');
+    expect(state.dispatches[0]?.status).toBe('cancelled');
+    expect(state.dispatches[0]?.eventTypes).toContain('cancelled');
     const causes = await getDispatchCancellationCauses(world.orgId, schedNumber);
     expect(causes).toContain('job_parked');
     await employeePage.goto(`/auftraege/${schedNumber}`);
@@ -1158,11 +1161,11 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     await expect(row).toContainText(`Zusage: ${formatGermanDate(COMMIT_DATE)}, 06:00–08:00 Uhr`);
     let commitments = await getCommitmentFacts(world.orgId, commitNumber);
     expect(commitments).toHaveLength(1);
-    expect(commitments[0].status).toBe('active');
-    expect(commitments[0].source).toBe('vor_ort');
-    expect(commitments[0].committedDate).toBe(COMMIT_DATE);
-    expect(commitments[0].windowStartTime?.slice(0, 5)).toBe('06:00');
-    expect(commitments[0].windowEndTime?.slice(0, 5)).toBe('08:00');
+    expect(commitments[0]?.status).toBe('active');
+    expect(commitments[0]?.source).toBe('vor_ort');
+    expect(commitments[0]?.committedDate).toBe(COMMIT_DATE);
+    expect(commitments[0]?.windowStartTime?.slice(0, 5)).toBe('06:00');
+    expect(commitments[0]?.windowEndTime?.slice(0, 5)).toBe('08:00');
     // The worker sees the internal promise on their card.
     await employeePage.goto(`/auftraege/${commitNumber}`);
     await expect(jobDispatchSection(employeePage)).toContainText('Dem Kunden zugesagt');
@@ -1185,7 +1188,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     await expect(movedRow).toContainText('weicht vom Plan ab');
     commitments = await getCommitmentFacts(world.orgId, commitNumber);
     expect(commitments).toHaveLength(1);
-    expect(commitments[0].committedDate).toBe(COMMIT_DATE);
+    expect(commitments[0]?.committedDate).toBe(COMMIT_DATE);
 
     // Explicit resolution: withdraw WITH reason; no customer notification.
     await movedRow.getByRole('button', { name: 'Zusage zurückziehen …' }).click();
@@ -1199,8 +1202,8 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
 
     commitments = await getCommitmentFacts(world.orgId, commitNumber);
     expect(commitments).toHaveLength(1);
-    expect(commitments[0].status).toBe('withdrawn');
-    expect(commitments[0].withdrawalReason).toBe('A7 Kundin hat den Termin telefonisch abgesagt.');
+    expect(commitments[0]?.status).toBe('withdrawn');
+    expect(commitments[0]?.withdrawalReason).toBe('A7 Kundin hat den Termin telefonisch abgesagt.');
     await expect(
       movedRow.getByRole('button', { name: 'Zusage erfassen', exact: true })
     ).toBeVisible({ timeout: 20_000 });
@@ -1270,7 +1273,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     ).toBeVisible({ timeout: 20_000 });
     const alldayOccurrences = await getJobOccurrences(world.orgId, `A7-GT-${world.runId}`);
     expect(alldayOccurrences).toHaveLength(1);
-    expect(alldayOccurrences[0].startDate).toBe(ALLDAY_DATE);
+    expect(alldayOccurrences[0]?.startDate).toBe(ALLDAY_DATE);
   });
 
   test('A7-T9: Batch mit neuer Uhrzeit — Vorschau je Termin alt und neu, Konflikte nur mit Grund, Serientermine werden Einzel-Ausnahmen [P1-12-F15/P1-12-F16/P1-12-F17]',
@@ -1315,7 +1318,9 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     expect(before).toHaveLength(2);
     expect(before.every((occurrence) => occurrence.seriesId !== null)).toBe(true);
     expect(before.every((occurrence) => !occurrence.isException)).toBe(true);
-    const seriesId = before[0].seriesId;
+    const [firstSeriesOccurrence] = before;
+    if (!firstSeriesOccurrence) throw new Error('A7: expected a first series occurrence');
+    const seriesId = firstSeriesOccurrence.seriesId;
 
     await openDispatchPanel(adminPage);
     const panel = dispatchPanel(adminPage);
@@ -1352,15 +1357,16 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       { oldDate: SERIES_SECOND_SOURCE_DATE, newDate: SERIES_SHIFTED_SECOND },
     ];
     const renderedPreviewItems = await previewItems.all();
-    for (let index = 0; index < renderedPreviewItems.length; index += 1) {
-      const item = renderedPreviewItems[index];
+    for (const [index, item] of renderedPreviewItems.entries()) {
+      const expectedRow = expectedRows[index];
+      if (!expectedRow) throw new Error(`A7: no expected preview row at index ${index}`);
       await expect(item).toContainText(seriesTitle);
       await expect(item).toContainText(
-        `${shortGermanDayMonth(expectedRows[index].oldDate)}, 06:00 Uhr`
+        `${shortGermanDayMonth(expectedRow.oldDate)}, 06:00 Uhr`
       );
       await expect(item).toContainText('→');
       await expect(item).toContainText(
-        `${shortGermanDayMonth(expectedRows[index].newDate)}, 08:00 Uhr`
+        `${shortGermanDayMonth(expectedRow.newDate)}, 08:00 Uhr`
       );
     }
     // Capacity conflicts (no schedules in this world) are announced with the

@@ -3,7 +3,21 @@ import {
   buildPayrollExportPackage,
   distributeCreditedMinutes,
 } from "./export";
-import type { PayrollExportInput } from "./types";
+import type { PayrollExportInput, PayrollExportValueRow } from "./types";
+
+const valueRow: PayrollExportValueRow = {
+  rowId: "value-1",
+  employeeRecordId: "employee-1",
+  externalEmployeeReference: "MA-001",
+  localDate: "2026-10-05",
+  valueKind: "credited_activity",
+  outputCode: "1000",
+  sourceSeconds: 3600,
+  minutes: 60,
+  roundingDeltaSeconds: 0,
+  policyVersionId: "policy-version-1",
+  calculationVersion: 1,
+};
 
 const input: PayrollExportInput = {
   manifest: {
@@ -20,21 +34,7 @@ const input: PayrollExportInput = {
     generatedAt: "2026-11-01T08:00:00.000Z",
     scope: "organization_period",
   },
-  valueRows: [
-    {
-      rowId: "value-1",
-      employeeRecordId: "employee-1",
-      externalEmployeeReference: "MA-001",
-      localDate: "2026-10-05",
-      valueKind: "credited_activity",
-      outputCode: "1000",
-      sourceSeconds: 3600,
-      minutes: 60,
-      roundingDeltaSeconds: 0,
-      policyVersionId: "policy-version-1",
-      calculationVersion: 1,
-    },
-  ],
+  valueRows: [valueRow],
   allocationRows: [
     {
       rowId: "allocation-1",
@@ -65,7 +65,7 @@ const input: PayrollExportInput = {
 describe("P1-23 payroll export package", () => {
   test("is byte-stable and self-identifying", () => {
     const secondValueRow = {
-      ...input.valueRows[0],
+      ...valueRow,
       rowId: "value-0",
       minutes: 30,
     };
@@ -88,7 +88,7 @@ describe("P1-23 payroll export package", () => {
       "manifest.json",
       "zuordnungen.csv",
     ]);
-    expect(first.files["lohnwerte.csv"].slice(0, 3)).toEqual(
+    expect(first.files["lohnwerte.csv"]?.slice(0, 3)).toEqual(
       new Uint8Array([0xef, 0xbb, 0xbf]),
     );
   });
@@ -96,7 +96,7 @@ describe("P1-23 payroll export package", () => {
   test("escapes semicolons and quotes without changing control totals", () => {
     const result = buildPayrollExportPackage({
       ...input,
-      valueRows: [{ ...input.valueRows[0], outputCode: 'Code;"Sonder"' }],
+      valueRows: [{ ...valueRow, outputCode: 'Code;"Sonder"' }],
     });
     const csv = new TextDecoder().decode(result.files["lohnwerte.csv"]);
     expect(csv).toContain('"Code;""Sonder"""');
@@ -108,7 +108,7 @@ describe("P1-23 payroll export package", () => {
   test("neutralizes spreadsheet formula prefixes", () => {
     const result = buildPayrollExportPackage({
       ...input,
-      valueRows: [{ ...input.valueRows[0], outputCode: "=1+1" }],
+      valueRows: [{ ...valueRow, outputCode: "=1+1" }],
     });
     const csv = new TextDecoder().decode(result.files["lohnwerte.csv"]);
     expect(csv).toContain("'=1+1");
@@ -119,7 +119,7 @@ describe("P1-23 payroll export package", () => {
       ...input,
       manifest: { ...input.manifest, schemaVersion: 1 },
       valueRows: [
-        { ...input.valueRows[0], sourceSeconds: 3570, roundingDeltaSeconds: -30 },
+        { ...valueRow, sourceSeconds: 3570, roundingDeltaSeconds: -30 },
       ],
     });
     const reversedManifest = Object.fromEntries(
@@ -129,7 +129,7 @@ describe("P1-23 payroll export package", () => {
       ...input,
       manifest: reversedManifest,
       valueRows: [
-        { ...input.valueRows[0], sourceSeconds: 3570, roundingDeltaSeconds: -30 },
+        { ...valueRow, sourceSeconds: 3570, roundingDeltaSeconds: -30 },
       ],
     });
     expect(new TextDecoder().decode(first.files["lohnwerte.csv"])).toContain(

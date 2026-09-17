@@ -1,5 +1,10 @@
 "use server";
 
+import { uuidSchema } from '@/lib/validation/uuid';
+import { entityIdPageSchema } from '@/lib/jobs/list-page';
+import { LIST_PAGE_SIZE, parseListPage } from '@/lib/ui/list-pagination';
+import { readAllRows, readCompleteRows, readInBatches, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
+import { newestDocumentsFirst } from '@/lib/documents/ordering';
 import { UUID_PATTERN } from '@/lib/validation/uuid';
 import { randomUUID } from "crypto";
 import { revalidatePath, updateTag } from "next/cache";
@@ -13,7 +18,6 @@ import {
   createSignedUploadUrl,
   deleteStorageObjects,
   headStorageObject,
-  listStorageObjectPaths as listR2ObjectPaths,
 } from "@/lib/storage/r2";
 import {
   DOCUMENT_CATEGORIES,
@@ -56,7 +60,6 @@ import {
   type OrganizationDocument,
   type ProjectDocumentsOverviewResult,
   type SignedDocumentUrlResult,
-  type StorageCleanupReportResult,
   type UpdateDocumentLinksInput,
   type UpdateDocumentLinksResult,
   type VersionResult,
@@ -194,6 +197,8 @@ type RecordDocumentAuditEventInput = {
 };
 
 type DocumentLibraryInput = {
+  page?: number;
+  folderPage?: number;
   folderId?: string | null;
   view?: DocumentLibraryView;
   searchQuery?: string | null;
@@ -387,7 +392,6 @@ function buildVersionStoragePath({
     fileName,
   });
 }
-
 
 // Types the in-app viewer actually previews. Everything else is delivered as a
 // download so uploader-controlled active content (HTML, SVG) can never render
@@ -680,7 +684,7 @@ async function getAvailableDisplayName({
 }: {
   admin: SupabaseAdmin;
   orgId: string;
-  folderId?: string | null;
+  folderId?: string | null | undefined;
   preferredName: string;
 }): Promise<string> {
   const trimmed = trimName(preferredName) || "Dokument";
@@ -724,7 +728,7 @@ async function getAvailableFolderName({
 }: {
   admin: SupabaseAdmin;
   orgId: string;
-  parentFolderId?: string | null;
+  parentFolderId?: string | null | undefined;
   preferredName: string;
 }): Promise<string> {
   const trimmed = trimName(preferredName) || "Ordner";
@@ -768,15 +772,15 @@ async function hydrateDocuments(
 
   const documentIds = rows.map((row) => row.id);
   const uploaderIds = Array.from(new Set(rows.map((row) => row.uploaded_by)));
+  // Every related read stays inside the documents' organizations; the admin client bypasses RLS.
+  const organizationIds = [...new Set(rows.map((row) => row.organization_id))];
 
   const [linksResult, profilesResult] = await Promise.all([
-    admin.from("document_links").select("*").in("document_id", documentIds),
-    admin
-      .from("profiles")
-      .select("id, first_name, last_name, email, avatar_path")
-      .in("id", uploaderIds),
+    readInBatches(documentIds, (ids) => readCompleteRows((from, to) => admin.from("document_links").select("*").in("document_id", [...ids]).in("organization_id", organizationIds).order("id").range(from, to), LIST_ROW_CAP)),
+    readInBatches(uploaderIds, (ids) => admin.from("profiles").select("id, first_name, last_name, email, avatar_path").in("id", [...ids])),
   ]);
 
+  if (linksResult.error || profilesResult.error) throw new Error("Dokumentverknüpfungen konnten nicht vollständig geladen werden.");
   const linkRows = (linksResult.data ?? []) as DocumentLinkRow[];
   const jobIds = Array.from(
     new Set(
@@ -846,49 +850,32 @@ async function hydrateDocuments(
     maintenanceCoveragesResult,
   ] = await Promise.all([
     jobIds.length > 0
-      ? admin.from("jobs").select("id, title, job_number").in("id", jobIds)
-      : Promise.resolve({ data: [] }),
+      ? readInBatches(jobIds, (ids) => admin.from("jobs").select("id, title, job_number").in("organization_id", organizationIds).in("id", [...ids]))
+      : Promise.resolve({ data: [], error: null }),
     projectIds.length > 0
-      ? admin
-          .from("projects")
-          .select("id, name, project_number")
-          .in("id", projectIds)
-      : Promise.resolve({ data: [] }),
+      ? readInBatches(projectIds, (ids) => admin.from("projects").select("id, name, project_number").in("organization_id", organizationIds).in("id", [...ids]))
+      : Promise.resolve({ data: [], error: null }),
     clientIds.length > 0
-      ? admin.from("clients").select("id, name").in("id", clientIds)
-      : Promise.resolve({ data: [] }),
+      ? readInBatches(clientIds, (ids) => admin.from("clients").select("id, name").in("organization_id", organizationIds).in("id", [...ids]))
+      : Promise.resolve({ data: [], error: null }),
     employeeIds.length > 0
-      ? admin
-          .from("profiles")
-          .select("id, first_name, last_name, email")
-          .in("id", employeeIds)
-      : Promise.resolve({ data: [] }),
+      ? readInBatches(employeeIds, (ids) => admin.from("profiles").select("id, first_name, last_name, email").in("id", [...ids]))
+      : Promise.resolve({ data: [], error: null }),
     requestIds.length > 0
-      ? admin
-          .from("client_requests")
-          .select("id, request_number, summary")
-          .in("id", requestIds)
-      : Promise.resolve({ data: [] }),
+      ? readInBatches(requestIds, (ids) => admin.from("client_requests").select("id, request_number, summary").in("organization_id", organizationIds).in("id", [...ids]))
+      : Promise.resolve({ data: [], error: null }),
     equipmentIds.length > 0
-      ? admin
-          .from("installed_equipment")
-          .select("id, equipment_number, name")
-          .in("id", equipmentIds)
-      : Promise.resolve({ data: [] }),
+      ? readInBatches(equipmentIds, (ids) => admin.from("installed_equipment").select("id, equipment_number, name").in("organization_id", organizationIds).in("id", [...ids]))
+      : Promise.resolve({ data: [], error: null }),
     serviceCaseIds.length > 0
-      ? admin
-          .from("service_cases")
-          .select("id, case_number, summary")
-          .in("id", serviceCaseIds)
-      : Promise.resolve({ data: [] }),
+      ? readInBatches(serviceCaseIds, (ids) => admin.from("service_cases").select("id, case_number, summary").in("organization_id", organizationIds).in("id", [...ids]))
+      : Promise.resolve({ data: [], error: null }),
     maintenanceCoverageIds.length > 0
-      ? admin
-          .from("maintenance_coverages")
-          .select("id, coverage_number")
-          .in("id", maintenanceCoverageIds)
-      : Promise.resolve({ data: [] }),
+      ? readInBatches(maintenanceCoverageIds, (ids) => admin.from("maintenance_coverages").select("id, coverage_number").in("organization_id", organizationIds).in("id", [...ids]))
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
+  if ([jobsResult, projectsResult, clientsResult, employeesResult, requestsResult, equipmentResult, serviceCasesResult, maintenanceCoveragesResult].some((result) => result.error)) throw new Error("Dokumentverknüpfungen konnten nicht geladen werden.");
   const jobsById = new Map(
     (
       (jobsResult.data ?? []) as Array<{
@@ -1034,12 +1021,11 @@ async function hydrateFolders(
   if (rows.length === 0) return [];
 
   const creatorIds = Array.from(new Set(rows.map((row) => row.created_by)));
-  const { data: profiles } = creatorIds.length
-    ? await admin
+  const { data: profiles, error } = await readInBatches(creatorIds, (ids) => admin
         .from("profiles")
         .select("id, first_name, last_name, email, avatar_path")
-        .in("id", creatorIds)
-    : { data: [] };
+        .in("id", [...ids]));
+  if (error) throw new Error("Ordnerinformationen konnten nicht vollständig geladen werden.");
 
   const profilesById = new Map(
     ((profiles ?? []) as ProfileRow[]).map((profile) => [profile.id, profile]),
@@ -1053,39 +1039,20 @@ async function hydrateFolders(
   );
 }
 
-async function getFolderBreadcrumbs({
-  admin,
-  orgId,
-  folderId,
-}: {
-  admin: SupabaseAdmin;
-  orgId: string;
-  folderId?: string | null;
-}): Promise<DocumentFolder[]> {
-  if (!folderId) return [];
-
-  const { data } = await admin
-    .from("document_folders")
-    .select("*")
-    .eq("organization_id", orgId)
-    .is("deleted_at", null);
-
-  const folderById = new Map(
-    ((data ?? []) as DocumentFolderRow[]).map((folder) => [folder.id, folder]),
-  );
+async function getFolderBreadcrumbs({ admin, orgId, folderId }: { admin: SupabaseAdmin; orgId: string; folderId?: string | null }): Promise<DocumentFolder[]> {
   const breadcrumbs: DocumentFolder[] = [];
-  let current = folderById.get(folderId);
-
-  while (current) {
-    breadcrumbs.unshift(toDocumentFolder(current));
-    current = current.parent_folder_id
-      ? folderById.get(current.parent_folder_id)
-      : undefined;
+  const visited = new Set<string>();
+  let currentId = folderId ?? null;
+  while (currentId) {
+    if (visited.has(currentId) || visited.size >= 100) throw new Error('Der Ordnerpfad konnte nicht geladen werden.');
+    visited.add(currentId);
+    const result = await admin.from('document_folders').select('*').eq('organization_id', orgId).eq('id', currentId).is('deleted_at', null).maybeSingle();
+    if (result.error || !result.data) throw new Error('Der Ordnerpfad konnte nicht geladen werden.');
+    breadcrumbs.unshift(toDocumentFolder(result.data));
+    currentId = result.data.parent_folder_id;
   }
-
   return breadcrumbs;
 }
-
 async function getAuthorizedDocument(
   context: AuthorizedDocumentContext,
   documentId: string,
@@ -1344,236 +1311,46 @@ function applyDocumentSearch<
   );
 }
 
-function applyDocumentSort<
-  T extends {
-    order: (
-      column: string,
-      options?: { ascending?: boolean; nullsFirst?: boolean },
-    ) => T;
-  },
->(query: T, sort: DocumentLibrarySort): T {
-  if (sort === "name") {
-    return query.order("display_name", { ascending: true });
-  }
-
-  if (sort === "size_bytes") {
-    return query.order("size_bytes", { ascending: false });
-  }
-
-  if (sort === "type") {
-    return query.order("mime_type", { ascending: true, nullsFirst: false });
-  }
-
-  if (sort === "category") {
-    return query.order("category", { ascending: true });
-  }
-
-  if (sort === "updated_at") {
-    return query.order("updated_at", { ascending: false });
-  }
-
-  return query.order("created_at", { ascending: false });
-}
-
-function getCategoryForView(
-  view: DocumentLibraryView,
-): DocumentCategory | null {
-  if (view === "photos") return "photo";
-  if (view === "contracts") return "contract";
-  if (view === "invoices") return "invoice";
-  if (view === "offers") return "offer";
-  if (view === "reports") return "report";
-  if (view === "other") return "other";
-  return null;
-}
-
-export async function getDocumentLibrary(
-  input: DocumentLibraryInput = {},
-): Promise<DocumentLibraryResult> {
+export async function getDocumentLibrary(input: DocumentLibraryInput = {}): Promise<DocumentLibraryResult> {
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
-
   const { context } = auth;
   const manager = requireManager(context);
   if (!manager.success) return manager;
-
   const folderId = input.folderId ?? null;
-  const view = input.view ?? "folders";
-  const sort = input.sort ?? "name";
-  const categoryFilter = input.category ?? "all";
-  const linkFilter = input.linkFilter ?? "all";
-  if (view !== "trash") {
-    const folderCheck = await ensureFolder(
-      context.admin,
-      context.orgId,
-      folderId,
-    );
+  if (folderId && !uuidSchema.safeParse(folderId).success) return { success: false, error: 'invalid_folder' };
+  const view = input.view ?? 'folders';
+  const sort = input.sort ?? 'name';
+  const page = parseListPage(input.page);
+  const folderPage = parseListPage(input.folderPage);
+  if (view !== 'trash') {
+    const folderCheck = await ensureFolder(context.admin, context.orgId, folderId);
     if (!folderCheck.success) return folderCheck;
   }
-  const isFolderView = view === "folders" || Boolean(folderId);
-
-  let foldersQuery = context.admin
-    .from("document_folders")
-    .select("*")
-    .eq("organization_id", context.orgId)
-    .is("deleted_at", null)
-    .order("name", { ascending: true });
-
-  if (isFolderView) {
-    foldersQuery = folderId
-      ? foldersQuery.eq("parent_folder_id", folderId)
-      : foldersQuery.is("parent_folder_id", null);
-  }
-
-  let documentsQuery = context.admin
-    .from("ordinary_documents")
-    .select("*")
-    .eq("organization_id", context.orgId);
-
-  documentsQuery =
-    view === "trash"
-      ? documentsQuery.not("deleted_at", "is", null)
-      : documentsQuery.is("deleted_at", null);
-
-  documentsQuery = applyDocumentSearch(documentsQuery, input.searchQuery);
-
-  const categoryForView =
-    categoryFilter !== "all" ? categoryFilter : getCategoryForView(view);
-  if (categoryForView) {
-    documentsQuery = documentsQuery.eq("category", categoryForView);
-  }
-
-  if (isFolderView && view !== "trash") {
-    documentsQuery = folderId
-      ? documentsQuery.eq("folder_id", folderId)
-      : documentsQuery.is("folder_id", null);
-  }
-
-  if (view === "unorganized") {
-    documentsQuery = documentsQuery.is("folder_id", null);
-  }
-
-  if (
-    view === "work" ||
-    view === "jobs" ||
-    view === "projects" ||
-    view === "clients" ||
-    view === "employees" ||
-    view === "unorganized" ||
-    linkFilter !== "all"
-  ) {
-    const { data: links, error: linksError } = await context.admin
-      .from("document_links")
-      .select("document_id, job_id, project_id, client_id, employee_id")
-      .eq("organization_id", context.orgId);
-
-    if (linksError) {
-      console.error(
-        "Failed to load document links for library view:",
-        linksError,
-      );
-      return { success: false, error: "documents_failed" };
-    }
-
-    const linkRows = (links ?? []) as Pick<
-      DocumentLinkRow,
-      "document_id" | "job_id" | "project_id" | "client_id" | "employee_id"
-    >[];
-    const linkedIds = new Set<string>();
-    const filterDocumentIds = new Set<string>();
-
-    for (const link of linkRows) {
-      if (
-        view === "work" &&
-        (link.job_id || link.project_id || link.client_id || link.employee_id)
-      ) {
-        linkedIds.add(link.document_id);
-      }
-      if (view === "jobs" && link.job_id) linkedIds.add(link.document_id);
-      if (view === "projects" && link.project_id)
-        linkedIds.add(link.document_id);
-      if (view === "clients" && link.client_id) linkedIds.add(link.document_id);
-      if (view === "employees" && link.employee_id)
-        linkedIds.add(link.document_id);
-      if (view === "unorganized") linkedIds.add(link.document_id);
-      if (linkFilter === "jobs" && link.job_id)
-        filterDocumentIds.add(link.document_id);
-      if (linkFilter === "projects" && link.project_id)
-        filterDocumentIds.add(link.document_id);
-      if (linkFilter === "clients" && link.client_id)
-        filterDocumentIds.add(link.document_id);
-      if (linkFilter === "employees" && link.employee_id)
-        filterDocumentIds.add(link.document_id);
-      if (linkFilter === "unlinked") filterDocumentIds.add(link.document_id);
-    }
-
-    if (view === "unorganized" || linkFilter === "unlinked") {
-      const allLinkedIds = Array.from(
-        view === "unorganized" ? linkedIds : filterDocumentIds,
-      );
-      if (allLinkedIds.length > 0) {
-        documentsQuery = documentsQuery.not(
-          "id",
-          "in",
-          `(${allLinkedIds.join(",")})`,
-        );
-      }
-    } else {
-      const viewDocumentIds = Array.from(
-        linkFilter !== "all" ? filterDocumentIds : linkedIds,
-      );
-      if (viewDocumentIds.length === 0) {
-        return {
-          success: true,
-          breadcrumbs: [],
-          folders: [],
-          documents: [],
-        };
-      }
-      documentsQuery = documentsQuery.in("id", viewDocumentIds);
-    }
-  }
-
-  documentsQuery = applyDocumentSort(documentsQuery, sort).limit(200);
-
-  const [foldersResult, documentsResult] = await Promise.all([
-    isFolderView && view !== "trash"
-      ? foldersQuery
-      : Promise.resolve({ data: [], error: null }),
-    documentsQuery,
+  const isFolderView = view === 'folders' || Boolean(folderId);
+  let foldersQuery = context.admin.from('document_folders').select('*', { count: 'exact' }).eq('organization_id', context.orgId).is('deleted_at', null).order('name').order('id');
+  foldersQuery = folderId ? foldersQuery.eq('parent_folder_id', folderId) : foldersQuery.is('parent_folder_id', null);
+  const [selection, foldersResult] = await Promise.all([
+    context.admin.rpc('list_document_page', { p_organization_id: context.orgId, p_filters: { folderId, view, sort, searchQuery: (input.searchQuery ?? '').trim().slice(0, 250), category: input.category ?? 'all', linkFilter: input.linkFilter ?? 'all', page, pageSize: LIST_PAGE_SIZE } }),
+    isFolderView && view !== 'trash' ? foldersQuery.range((folderPage - 1) * LIST_PAGE_SIZE, folderPage * LIST_PAGE_SIZE - 1) : Promise.resolve({ data: [], error: null, count: 0 }),
   ]);
-
-  if (foldersResult.error) {
-    console.error("Failed to load document folders:", foldersResult.error);
-    return { success: false, error: "folders_failed" };
+  const selected = entityIdPageSchema.safeParse(selection.data);
+  if (selection.error || !selected.success || foldersResult.error) return { success: false, error: 'documents_failed' };
+  const documentsResult = selected.data.ids.length ? await context.admin.from('ordinary_documents').select('*').eq('organization_id', context.orgId).in('id', selected.data.ids) : { data: [], error: null };
+  if (documentsResult.error) return { success: false, error: 'documents_failed' };
+  const rows = selected.data.ids.flatMap((id) => { const row = documentsResult.data.find((row) => row.id === id); return row ? [row] : []; });
+  try {
+    const [breadcrumbs, folders, documents] = await Promise.all([
+      view === 'trash' ? [] : getFolderBreadcrumbs({ admin: context.admin, orgId: context.orgId, folderId }),
+      hydrateFolders(context.admin, foldersResult.data),
+      hydrateDocuments(context.admin, rows),
+    ]);
+    return { success: true, page, total: selected.data.total, folderPage, folderTotal: foldersResult.count ?? 0, breadcrumbs, folders, documents };
+  } catch (error) {
+    console.error('Error hydrating the document library:', error);
+    return { success: false, error: 'documents_failed' };
   }
-
-  if (documentsResult.error) {
-    console.error("Failed to load documents:", documentsResult.error);
-    return { success: false, error: "documents_failed" };
-  }
-
-  return {
-    success: true,
-    breadcrumbs:
-      view === "trash"
-        ? []
-        : await getFolderBreadcrumbs({
-            admin: context.admin,
-            orgId: context.orgId,
-            folderId,
-          }),
-    folders: await hydrateFolders(
-      context.admin,
-      (foldersResult.data ?? []) as DocumentFolderRow[],
-    ),
-    documents: await hydrateDocuments(
-      context.admin,
-      (documentsResult.data ?? []) as DocumentRow[],
-    ),
-  };
 }
-
 export async function getDocumentFolderOptions(): Promise<
   | { success: true; folders: DocumentFolder[] }
   | { success: false; error: string }
@@ -1584,14 +1361,10 @@ export async function getDocumentFolderOptions(): Promise<
   const manager = requireManager(auth.context);
   if (!manager.success) return manager;
 
-  const { data, error } = await auth.context.admin
-    .from("document_folders")
-    .select("*")
-    .eq("organization_id", auth.context.orgId)
-    .is("deleted_at", null)
-    .order("name", { ascending: true });
-
-  if (error) {
+  const { data, error, overflow } = await readAllRows((from, to) => auth.context.admin
+    .from('document_folders').select('*').eq('organization_id', auth.context.orgId).is('deleted_at', null)
+    .order('name').order('id').range(from, to), { cap: LIST_ROW_CAP });
+  if (error || overflow) {
     console.error("Failed to load document folder options:", error);
     return { success: false, error: "folders_failed" };
   }
@@ -1662,35 +1435,19 @@ export async function getAttachableDocuments(
       return { success: false, error: "invalid_target" };
   }
   if (!access.success) return access;
-  const { data: existingLinks, error: linksError } = await auth.context.admin
-    .from("document_links")
-    .select("document_id")
-    .eq("organization_id", auth.context.orgId)
-    .eq(linkColumn, input.targetId);
-
-  if (linksError) {
-    console.error("Failed to load existing document links:", linksError);
-    return { success: false, error: "documents_failed" };
-  }
-
-  const existingDocumentIds = (
-    (existingLinks ?? []) as Pick<DocumentLinkRow, "document_id">[]
-  ).map((link) => link.document_id);
-
   let query = auth.context.admin
     .from("ordinary_documents")
-    .select("*")
+    .select("*, existing:document_links()")
     .eq("organization_id", auth.context.orgId)
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    .eq("existing.organization_id", auth.context.orgId)
+    .eq(`existing.${linkColumn}`, input.targetId)
+    .is("existing", null);
 
   query = applyDocumentSearch(query, input.searchQuery);
 
   if (input.category && input.category !== "all") {
     query = query.eq("category", input.category);
-  }
-
-  if (existingDocumentIds.length > 0) {
-    query = query.not("id", "in", `(${existingDocumentIds.join(",")})`);
   }
 
   const { data, error } = await query
@@ -1720,11 +1477,9 @@ export async function getJobDocuments(
   const access = await ensureJobAccess(auth.context, jobId);
   if (!access.success) return access;
 
-  const { data: links, error: linksError } = await auth.context.admin
-    .from("document_links")
-    .select("document_id")
+  const { data: links, error: linksError } = await readCompleteRows((from, to) => auth.context.admin.from("document_links").select("document_id")
     .eq("organization_id", auth.context.orgId)
-    .eq("job_id", jobId);
+    .eq("job_id", jobId).order("id").range(from, to), LIST_ROW_CAP);
 
   if (linksError) {
     console.error("Failed to load job document links:", linksError);
@@ -1739,13 +1494,11 @@ export async function getJobDocuments(
     return { success: true, documents: [] };
   }
 
-  const { data: documents, error: documentsError } = await auth.context.admin
-    .from("documents")
-    .select("*")
-    .in("id", documentIds)
+  const { data: documents, error: documentsError } = await readInBatches(documentIds, (ids) => auth.context.admin.from("ordinary_documents").select("*")
+    .in("id", [...ids])
     .eq("organization_id", auth.context.orgId)
     .is("deleted_at", null)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false }).order("id"));
 
   if (documentsError) {
     console.error("Failed to load job documents:", documentsError);
@@ -1756,7 +1509,7 @@ export async function getJobDocuments(
     success: true,
     documents: await hydrateDocuments(
       auth.context.admin,
-      (documents ?? []) as DocumentRow[],
+      newestDocumentsFirst(documents ?? []),
     ),
   };
 }
@@ -1771,11 +1524,9 @@ export async function getRequestDocuments(
   const access = await ensureRequestManagerAccess(auth.context, requestId);
   if (!access.success) return access;
 
-  const { data: links, error: linksError } = await auth.context.admin
-    .from("document_links")
-    .select("document_id")
+  const { data: links, error: linksError } = await readCompleteRows((from, to) => auth.context.admin.from("document_links").select("document_id")
     .eq("organization_id", auth.context.orgId)
-    .eq("request_id", requestId);
+    .eq("request_id", requestId).order("id").range(from, to), LIST_ROW_CAP);
 
   if (linksError) {
     console.error("Failed to load request document links:", linksError);
@@ -1790,13 +1541,11 @@ export async function getRequestDocuments(
     return { success: true, documents: [] };
   }
 
-  const { data: documents, error: documentsError } = await auth.context.admin
-    .from("documents")
-    .select("*")
-    .in("id", documentIds)
+  const { data: documents, error: documentsError } = await readInBatches(documentIds, (ids) => auth.context.admin.from("ordinary_documents").select("*")
+    .in("id", [...ids])
     .eq("organization_id", auth.context.orgId)
     .is("deleted_at", null)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false }).order("id"));
 
   if (documentsError) {
     console.error("Failed to load request documents:", documentsError);
@@ -1807,12 +1556,12 @@ export async function getRequestDocuments(
     success: true,
     documents: await hydrateDocuments(
       auth.context.admin,
-      (documents ?? []) as DocumentRow[],
+      newestDocumentsFirst(documents ?? []),
     ),
   };
 }
 
-export async function getProjectDocuments(
+async function getProjectDocuments(
   projectId: string,
 ): Promise<DocumentListResult> {
   const auth = await getAuthorizedDocumentContext();
@@ -1821,11 +1570,9 @@ export async function getProjectDocuments(
   const access = await ensureProjectManagerAccess(auth.context, projectId);
   if (!access.success) return access;
 
-  const { data: links, error: linksError } = await auth.context.admin
-    .from("document_links")
-    .select("document_id")
+  const { data: links, error: linksError } = await readCompleteRows((from, to) => auth.context.admin.from("document_links").select("document_id")
     .eq("organization_id", auth.context.orgId)
-    .eq("project_id", projectId);
+    .eq("project_id", projectId).order("id").range(from, to), LIST_ROW_CAP);
 
   if (linksError) {
     console.error("Failed to load project document links:", linksError);
@@ -1840,13 +1587,11 @@ export async function getProjectDocuments(
     return { success: true, documents: [] };
   }
 
-  const { data: documents, error: documentsError } = await auth.context.admin
-    .from("documents")
-    .select("*")
-    .in("id", documentIds)
+  const { data: documents, error: documentsError } = await readInBatches(documentIds, (ids) => auth.context.admin.from("ordinary_documents").select("*")
+    .in("id", [...ids])
     .eq("organization_id", auth.context.orgId)
     .is("deleted_at", null)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false }).order("id"));
 
   if (documentsError) {
     console.error("Failed to load project documents:", documentsError);
@@ -1857,7 +1602,7 @@ export async function getProjectDocuments(
     success: true,
     documents: await hydrateDocuments(
       auth.context.admin,
-      (documents ?? []) as DocumentRow[],
+      newestDocumentsFirst(documents ?? []),
     ),
   };
 }
@@ -1920,12 +1665,12 @@ export async function getDocumentLinkCatalog(): Promise<
     getOrgProjects(),
     getOrgClients(),
     getOrgMembersForUser(auth.context.orgId, auth.context.userId),
-    auth.context.admin
+    readCompleteRows((from, to) => auth.context.admin
       .from("installed_equipment")
       .select("id, equipment_number, name")
       .eq("organization_id", auth.context.orgId)
       .is("voided_at", null)
-      .order("equipment_number"),
+      .order("equipment_number").order("id").range(from, to), LIST_ROW_CAP),
   ]);
 
   if (!jobsResult.success) {
@@ -1951,10 +1696,8 @@ export async function getDocumentLinkCatalog(): Promise<
     clients: clientsResult.clients,
     employees: membersResult.map((member) => ({
       userId: member.user_id,
-      firstName: member.first_name,
-      lastName: member.last_name,
+      name: [member.first_name, member.last_name].filter(Boolean).join(" "),
       email: member.email,
-      role: member.role,
     })),
     equipment: (equipmentResult.data ?? []).map((item) => ({
       id: item.id,
@@ -1973,11 +1716,9 @@ export async function getClientDocuments(
   const access = await ensureClientManagerAccess(auth.context, clientId);
   if (!access.success) return access;
 
-  const { data: links, error: linksError } = await auth.context.admin
-    .from("document_links")
-    .select("document_id")
+  const { data: links, error: linksError } = await readCompleteRows((from, to) => auth.context.admin.from("document_links").select("document_id")
     .eq("organization_id", auth.context.orgId)
-    .eq("client_id", clientId);
+    .eq("client_id", clientId).order("id").range(from, to), LIST_ROW_CAP);
 
   if (linksError) {
     console.error("Failed to load client document links:", linksError);
@@ -1992,13 +1733,11 @@ export async function getClientDocuments(
     return { success: true, documents: [] };
   }
 
-  const { data: documents, error: documentsError } = await auth.context.admin
-    .from("documents")
-    .select("*")
-    .in("id", documentIds)
+  const { data: documents, error: documentsError } = await readInBatches(documentIds, (ids) => auth.context.admin.from("ordinary_documents").select("*")
+    .in("id", [...ids])
     .eq("organization_id", auth.context.orgId)
     .is("deleted_at", null)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false }).order("id"));
 
   if (documentsError) {
     console.error("Failed to load client documents:", documentsError);
@@ -2009,7 +1748,7 @@ export async function getClientDocuments(
     success: true,
     documents: await hydrateDocuments(
       auth.context.admin,
-      (documents ?? []) as DocumentRow[],
+      newestDocumentsFirst(documents ?? []),
     ),
   };
 }
@@ -2023,28 +1762,24 @@ export async function getEquipmentDocuments(
   const access = await ensureEquipmentManagerAccess(auth.context, equipmentId);
   if (!access.success) return access;
 
-  const { data: links, error: linksError } = await auth.context.admin
-    .from("document_links")
-    .select("document_id")
+  const { data: links, error: linksError } = await readCompleteRows((from, to) => auth.context.admin.from("document_links").select("document_id")
     .eq("organization_id", auth.context.orgId)
-    .eq("equipment_id", equipmentId);
+    .eq("equipment_id", equipmentId).order("id").range(from, to), LIST_ROW_CAP);
 
   if (linksError) return { success: false, error: "documents_failed" };
   const documentIds = (links ?? []).map((link) => link.document_id);
   if (documentIds.length === 0) return { success: true, documents: [] };
 
-  const { data: documents, error } = await auth.context.admin
-    .from("documents")
-    .select("*")
+  const { data: documents, error } = await readInBatches(documentIds, (ids) => auth.context.admin.from("ordinary_documents").select("*")
     .eq("organization_id", auth.context.orgId)
-    .in("id", documentIds)
+    .in("id", [...ids])
     .is("deleted_at", null)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false }).order("id"));
   if (error) return { success: false, error: "documents_failed" };
 
   return {
     success: true,
-    documents: await hydrateDocuments(auth.context.admin, documents ?? []),
+    documents: await hydrateDocuments(auth.context.admin, newestDocumentsFirst(documents ?? [])),
   };
 }
 
@@ -2058,25 +1793,21 @@ export async function getServiceCaseDocuments(
     serviceCaseId,
   );
   if (!access.success) return access;
-  const { data: links, error: linksError } = await auth.context.admin
-    .from("document_links")
-    .select("document_id")
+  const { data: links, error: linksError } = await readCompleteRows((from, to) => auth.context.admin.from("document_links").select("document_id")
     .eq("organization_id", auth.context.orgId)
-    .eq("service_case_id", serviceCaseId);
+    .eq("service_case_id", serviceCaseId).order("id").range(from, to), LIST_ROW_CAP);
   if (linksError) return { success: false, error: "documents_failed" };
   const documentIds = (links ?? []).map((link) => link.document_id);
   if (documentIds.length === 0) return { success: true, documents: [] };
-  const { data: documents, error } = await auth.context.admin
-    .from("documents")
-    .select("*")
+  const { data: documents, error } = await readInBatches(documentIds, (ids) => auth.context.admin.from("ordinary_documents").select("*")
     .eq("organization_id", auth.context.orgId)
-    .in("id", documentIds)
+    .in("id", [...ids])
     .is("deleted_at", null)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false }).order("id"));
   if (error) return { success: false, error: "documents_failed" };
   return {
     success: true,
-    documents: await hydrateDocuments(auth.context.admin, documents ?? []),
+    documents: await hydrateDocuments(auth.context.admin, newestDocumentsFirst(documents ?? [])),
   };
 }
 
@@ -2090,25 +1821,21 @@ export async function getMaintenanceCoverageDocuments(
     maintenanceCoverageId,
   );
   if (!access.success) return access;
-  const { data: links, error: linksError } = await auth.context.admin
-    .from("document_links")
-    .select("document_id")
+  const { data: links, error: linksError } = await readCompleteRows((from, to) => auth.context.admin.from("document_links").select("document_id")
     .eq("organization_id", auth.context.orgId)
-    .eq("maintenance_coverage_id", maintenanceCoverageId);
+    .eq("maintenance_coverage_id", maintenanceCoverageId).order("id").range(from, to), LIST_ROW_CAP);
   if (linksError) return { success: false, error: "documents_failed" };
   const documentIds = (links ?? []).map((link) => link.document_id);
   if (documentIds.length === 0) return { success: true, documents: [] };
-  const { data: documents, error } = await auth.context.admin
-    .from("documents")
-    .select("*")
+  const { data: documents, error } = await readInBatches(documentIds, (ids) => auth.context.admin.from("ordinary_documents").select("*")
     .eq("organization_id", auth.context.orgId)
-    .in("id", documentIds)
+    .in("id", [...ids])
     .is("deleted_at", null)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false }).order("id"));
   if (error) return { success: false, error: "documents_failed" };
   return {
     success: true,
-    documents: await hydrateDocuments(auth.context.admin, documents ?? []),
+    documents: await hydrateDocuments(auth.context.admin, newestDocumentsFirst(documents ?? [])),
   };
 }
 
@@ -2121,11 +1848,9 @@ export async function getEmployeeDocuments(
   const access = await ensureEmployeeManagerAccess(auth.context, employeeId);
   if (!access.success) return access;
 
-  const { data: links, error: linksError } = await auth.context.admin
-    .from("document_links")
-    .select("document_id")
+  const { data: links, error: linksError } = await readCompleteRows((from, to) => auth.context.admin.from("document_links").select("document_id")
     .eq("organization_id", auth.context.orgId)
-    .eq("employee_id", employeeId);
+    .eq("employee_id", employeeId).order("id").range(from, to), LIST_ROW_CAP);
 
   if (linksError) {
     console.error("Failed to load employee document links:", linksError);
@@ -2140,13 +1865,11 @@ export async function getEmployeeDocuments(
     return { success: true, documents: [] };
   }
 
-  const { data: documents, error: documentsError } = await auth.context.admin
-    .from("documents")
-    .select("*")
-    .in("id", documentIds)
+  const { data: documents, error: documentsError } = await readInBatches(documentIds, (ids) => auth.context.admin.from("ordinary_documents").select("*")
+    .in("id", [...ids])
     .eq("organization_id", auth.context.orgId)
     .is("deleted_at", null)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false }).order("id"));
 
   if (documentsError) {
     console.error("Failed to load employee documents:", documentsError);
@@ -2157,7 +1880,7 @@ export async function getEmployeeDocuments(
     success: true,
     documents: await hydrateDocuments(
       auth.context.admin,
-      (documents ?? []) as DocumentRow[],
+      newestDocumentsFirst(documents ?? []),
     ),
   };
 }
@@ -3056,9 +2779,8 @@ export async function finalizeDocumentUpload(
   }
 
   revalidateDocuments(auth.context.orgId);
-  const [document] = await hydrateDocuments(auth.context.admin, [
-    documentRow as DocumentRow,
-  ]);
+  const [document] = await hydrateDocuments(auth.context.admin, [documentRow as DocumentRow]);
+  if (!document) return { success: false, error: "documents_failed" };
 
   return { success: true, document };
 }
@@ -3105,9 +2827,8 @@ export async function renameDocument(
   });
 
   revalidateDocuments(auth.context.orgId);
-  const [document] = await hydrateDocuments(auth.context.admin, [
-    data as DocumentRow,
-  ]);
+  const [document] = await hydrateDocuments(auth.context.admin, [data as DocumentRow]);
+  if (!document) return { success: false, error: "documents_failed" };
   return { success: true, document };
 }
 
@@ -3152,9 +2873,8 @@ export async function updateDocumentCategory(
   });
 
   revalidateDocuments(auth.context.orgId);
-  const [document] = await hydrateDocuments(auth.context.admin, [
-    data as DocumentRow,
-  ]);
+  const [document] = await hydrateDocuments(auth.context.admin, [data as DocumentRow]);
+  if (!document) return { success: false, error: "documents_failed" };
   return { success: true, document };
 }
 
@@ -3226,9 +2946,8 @@ export async function moveDocument(
   });
 
   revalidateDocuments(auth.context.orgId);
-  const [document] = await hydrateDocuments(auth.context.admin, [
-    data as DocumentRow,
-  ]);
+  const [document] = await hydrateDocuments(auth.context.admin, [data as DocumentRow]);
+  if (!document) return { success: false, error: "documents_failed" };
   return { success: true, document };
 }
 
@@ -3325,9 +3044,8 @@ export async function copyDocument(
   });
 
   revalidateDocuments(auth.context.orgId);
-  const [document] = await hydrateDocuments(auth.context.admin, [
-    data as DocumentRow,
-  ]);
+  const [document] = await hydrateDocuments(auth.context.admin, [data as DocumentRow]);
+  if (!document) return { success: false, error: "documents_failed" };
   return { success: true, document };
 }
 
@@ -3372,7 +3090,7 @@ export async function deleteDocument(
   return { success: true };
 }
 
-export async function linkDocumentToJob(
+async function linkDocumentToJob(
   input: LinkDocumentToJobInput,
 ): Promise<DocumentMutationResult> {
   const auth = await getAuthorizedDocumentContext();
@@ -3412,7 +3130,7 @@ export async function linkDocumentToJob(
   return { success: true };
 }
 
-export async function linkDocumentToProject(
+async function linkDocumentToProject(
   input: LinkDocumentToProjectInput,
 ): Promise<DocumentMutationResult> {
   const auth = await getAuthorizedDocumentContext();
@@ -3452,7 +3170,7 @@ export async function linkDocumentToProject(
   return { success: true };
 }
 
-export async function linkDocumentToClient(
+async function linkDocumentToClient(
   input: LinkDocumentToClientInput,
 ): Promise<DocumentMutationResult> {
   const auth = await getAuthorizedDocumentContext();
@@ -3492,7 +3210,7 @@ export async function linkDocumentToClient(
   return { success: true };
 }
 
-export async function linkDocumentToEmployee(
+async function linkDocumentToEmployee(
   input: LinkDocumentToEmployeeInput,
 ): Promise<DocumentMutationResult> {
   const auth = await getAuthorizedDocumentContext();
@@ -3532,7 +3250,7 @@ export async function linkDocumentToEmployee(
   return { success: true };
 }
 
-export async function linkDocumentToEquipment(
+async function linkDocumentToEquipment(
   input: LinkDocumentToEquipmentInput,
 ): Promise<DocumentMutationResult> {
   const auth = await getAuthorizedDocumentContext();
@@ -3567,7 +3285,7 @@ export async function linkDocumentToEquipment(
   return { success: true };
 }
 
-export async function linkDocumentToServiceCase(
+async function linkDocumentToServiceCase(
   input: LinkDocumentToServiceCaseInput,
 ): Promise<DocumentMutationResult> {
   const auth = await getAuthorizedDocumentContext();
@@ -3600,7 +3318,7 @@ export async function linkDocumentToServiceCase(
   return { success: true };
 }
 
-export async function linkDocumentToMaintenanceCoverage(
+async function linkDocumentToMaintenanceCoverage(
   input: LinkDocumentToMaintenanceCoverageInput,
 ): Promise<DocumentMutationResult> {
   const auth = await getAuthorizedDocumentContext();
@@ -4112,34 +3830,6 @@ export async function getDocumentDetails(
   };
 }
 
-export async function getDeletedDocuments(): Promise<DocumentListResult> {
-  const auth = await getAuthorizedDocumentContext();
-  if (!auth.success) return auth;
-
-  const manager = requireManager(auth.context);
-  if (!manager.success) return manager;
-
-  const query = auth.context.admin
-    .from("ordinary_documents")
-    .select("*")
-    .eq("organization_id", auth.context.orgId)
-    .not("deleted_at", "is", null);
-  const { data, error } = await query.order("deleted_at", { ascending: false });
-
-  if (error) {
-    console.error("Failed to load deleted documents:", error);
-    return { success: false, error: "documents_failed" };
-  }
-
-  return {
-    success: true,
-    documents: await hydrateDocuments(
-      auth.context.admin,
-      (data ?? []) as DocumentRow[],
-    ),
-  };
-}
-
 export async function restoreDocument(
   documentId: string,
 ): Promise<DocumentMutationResult> {
@@ -4505,103 +4195,4 @@ export async function finalizeDocumentVersionUpload(
 
   revalidateDocuments(auth.context.orgId);
   return { success: true, version };
-}
-
-export async function getDocumentStorageCleanupReport(): Promise<StorageCleanupReportResult> {
-  const auth = await getAuthorizedDocumentContext();
-  if (!auth.success) return auth;
-
-  const manager = requireManager(auth.context);
-  if (!manager.success) return manager;
-
-  try {
-    const [storagePaths, documentsResult, versionsResult] = await Promise.all([
-      listR2ObjectPaths(`${auth.context.orgId}/`),
-      auth.context.admin
-        .from("documents")
-        .select("storage_path, deleted_at")
-        .eq("organization_id", auth.context.orgId),
-      auth.context.admin
-        .from("document_versions")
-        .select("storage_path")
-        .eq("organization_id", auth.context.orgId),
-    ]);
-
-    if (documentsResult.error || versionsResult.error) {
-      console.error("Failed to load cleanup metadata:", {
-        documentsError: documentsResult.error,
-        versionsError: versionsResult.error,
-      });
-      return { success: false, error: "cleanup_report_failed" };
-    }
-
-    const documentRows = (documentsResult.data ?? []) as Pick<
-      DocumentRow,
-      "storage_path" | "deleted_at"
-    >[];
-    const versionRows = (versionsResult.data ?? []) as Pick<
-      DocumentVersionRow,
-      "storage_path"
-    >[];
-    const referencedPaths = new Set([
-      ...documentRows.map((document) => document.storage_path),
-      ...versionRows.map((version) => version.storage_path),
-    ]);
-    const existingPaths = new Set(storagePaths);
-
-    return {
-      success: true,
-      report: {
-        orphanedStoragePaths: storagePaths.filter(
-          (path) => !referencedPaths.has(path),
-        ),
-        missingStoragePaths: Array.from(referencedPaths).filter(
-          (path) => !existingPaths.has(path),
-        ),
-        deletedDocumentStoragePaths: documentRows
-          .filter((document) => document.deleted_at)
-          .map((document) => document.storage_path),
-      },
-    };
-  } catch (error) {
-    console.error("Failed to build storage cleanup report:", error);
-    return { success: false, error: "cleanup_report_failed" };
-  }
-}
-
-export async function deleteOrphanedStorageObjects(
-  storagePaths: string[],
-): Promise<DocumentMutationResult> {
-  const auth = await getAuthorizedDocumentContext();
-  if (!auth.success) return auth;
-
-  const manager = requireManager(auth.context);
-  if (!manager.success) return manager;
-
-  const report = await getDocumentStorageCleanupReport();
-  if (!report.success) return report;
-
-  const allowedPaths = new Set(report.report.orphanedStoragePaths);
-  const safePaths = storagePaths.filter(
-    (path) =>
-      path.startsWith(`${auth.context.orgId}/`) && allowedPaths.has(path),
-  );
-
-  if (safePaths.length === 0) {
-    return { success: false, error: "no_orphans_selected" };
-  }
-
-  try {
-    await deleteStorageObjects(safePaths);
-  } catch (error) {
-    console.error("Failed to delete orphaned storage objects:", error);
-    return { success: false, error: "storage_delete_failed" };
-  }
-
-  await recordDocumentAuditEvent(auth.context, {
-    eventType: "storage_cleanup",
-    eventPayload: { deletedStoragePaths: safePaths },
-  });
-
-  return { success: true };
 }

@@ -9,7 +9,7 @@ export type TimeCorrectionKind =
   Database['public']['Enums']['time_correction_kind'];
 export type TimeCorrectionStatus =
   Database['public']['Enums']['time_correction_status'];
-export type TimeCorrectionSourceKind =
+type TimeCorrectionSourceKind =
   Database['public']['Enums']['time_correction_source_kind'];
 
 export const TIME_CORRECTION_KIND_LABELS = {
@@ -64,7 +64,7 @@ export type TimeCorrectionApplicationProjection = {
   sources: TimeCorrectionSource[];
 };
 
-export type TimeCorrectionRevision = {
+type TimeCorrectionRevision = {
   revision: number;
   reason: string;
   beforeSnapshot: TimeCorrectionSnapshot;
@@ -99,26 +99,10 @@ export type TimeCorrectionResult =
       success: true;
       requestId: string;
       status: TimeCorrectionStatus;
-      applicationId?: string | null;
+      applicationId?: string | null | undefined;
       replayed: boolean;
     }
   | { success: false; error: string };
-
-export const TIME_CORRECTION_ERROR_CODES = [
-  'invalid_input',
-  'invalid_shape',
-  'invalid_time_order',
-  'source_required',
-  'source_not_found',
-  'not_authenticated',
-  'not_a_member',
-  'not_responsible',
-  'self_approval_not_allowed',
-  'stale_source',
-  'stale_revision',
-  // Reserved for P1-23. P1-22 does not invent a close state.
-  'period_closed',
-] as const;
 
 export type TimeCorrectionListResult =
   | { success: true; requests: TimeCorrectionRequest[] }

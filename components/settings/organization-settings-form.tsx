@@ -28,7 +28,7 @@ import {
 } from '@/lib/org/schemas';
 import { getRoleLabel } from '@/lib/roles';
 
-const ERROR_MESSAGES: Record<string, string> = {
+const ERROR_MESSAGES = {
   not_authenticated: 'Du bist nicht angemeldet.',
   org_not_found: 'Die Organisation konnte nicht gefunden werden.',
   not_authorized: 'Nur Admins können diese Organisationsdaten bearbeiten.',
@@ -42,7 +42,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   code_taken: 'Dieser Organisationscode ist bereits vergeben.',
   no_changes: 'Es wurden keine Änderungen vorgenommen.',
   update_failed: 'Die Organisation konnte nicht gespeichert werden.',
-};
+} satisfies Record<string, string>;
+const ERROR_MESSAGE_BY_CODE: Record<string, string> = ERROR_MESSAGES;
 
 type OrganizationSettingsFormProps = {
   initialOrganization: {
@@ -120,7 +121,7 @@ export function OrganizationSettingsForm({
         }
 
         showBanner({
-          message: ERROR_MESSAGES[result.error] ?? ERROR_MESSAGES.update_failed,
+          message: ERROR_MESSAGE_BY_CODE[result.error] ?? ERROR_MESSAGES.update_failed,
           variant: 'error',
         });
         return;

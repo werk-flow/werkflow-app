@@ -8,7 +8,7 @@ import {
 
 export async function submitMissedTime(
   page: Page,
-  input: { date: string; reason: string; personName?: string },
+  input: { date: string; reason: string; personName?: string; beforeSubmit?: () => Promise<void> },
 ): Promise<void> {
   await page.goto("/zeiterfassung?tab=history");
   const dialog = page.getByRole("dialog").filter({
@@ -51,9 +51,11 @@ export async function submitMissedTime(
         dialog.getByRole("button", { name: "Speichern", exact: true }),
       ).toHaveAttribute("form", formId!);
     },
-    submit: () =>
-      dialog
+    submit: async () => {
+      await input.beforeSubmit?.();
+      await dialog
         .getByRole("button", { name: "Speichern" })
-        .press("Enter", { timeout: 5_000 }),
+        .press("Enter", { timeout: 5_000 });
+    },
   });
 }

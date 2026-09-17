@@ -183,10 +183,6 @@ export function calculateTimeActivityTotals(
   return totals;
 }
 
-export function isProductiveActivity(kind: TimeSegmentKind): boolean {
-  return kind !== 'break' && kind !== 'standby';
-}
-
 export function createActivitySelection(
   kind: TimeActivitySelection['kind'],
   jobId: string | null = null

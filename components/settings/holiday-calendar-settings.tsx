@@ -33,14 +33,15 @@ import {
 import type { ClosureDay } from '@/lib/personnel/targets'
 import { toLocalDateString } from '@/lib/utils'
 
-const REGION_ERROR_MESSAGES: Record<string, string> = {
+const REGION_ERROR_MESSAGES = {
   not_authorized: 'Nur der Admin kann den Feiertagskalender ändern.',
   invalid_region: 'Bitte wähle ein gültiges Bundesland aus.',
   org_not_found: 'Die aktive Organisation konnte nicht gefunden werden.',
   update_failed: 'Der Feiertagskalender konnte nicht gespeichert werden.',
-}
+} satisfies Record<string, string>
+const REGION_ERROR_MESSAGE_BY_CODE: Record<string, string> = REGION_ERROR_MESSAGES
 
-const CLOSURE_ERROR_MESSAGES: Record<string, string> = {
+const CLOSURE_ERROR_MESSAGES = {
   not_authorized: 'Du bist nicht berechtigt, Betriebsruhe-Tage zu ändern.',
   invalid_date: 'Bitte gib ein gültiges Datum an.',
   date_in_past:
@@ -49,7 +50,8 @@ const CLOSURE_ERROR_MESSAGES: Record<string, string> = {
   closure_day_not_found: 'Der Betriebsruhe-Tag wurde nicht gefunden.',
   create_failed: 'Der Betriebsruhe-Tag konnte nicht gespeichert werden.',
   delete_failed: 'Der Betriebsruhe-Tag konnte nicht entfernt werden.',
-}
+} satisfies Record<string, string>
+const CLOSURE_ERROR_MESSAGE_BY_CODE: Record<string, string> = CLOSURE_ERROR_MESSAGES
 
 const NO_REGION_VALUE = 'none'
 
@@ -106,7 +108,7 @@ export function HolidayCalendarSettings({
       if (!result.success) {
         showBanner({
           message:
-            REGION_ERROR_MESSAGES[result.error] ??
+            REGION_ERROR_MESSAGE_BY_CODE[result.error] ??
             REGION_ERROR_MESSAGES.update_failed,
           variant: 'error',
         })
@@ -142,7 +144,7 @@ export function HolidayCalendarSettings({
       if (!result.success) {
         showBanner({
           message:
-            CLOSURE_ERROR_MESSAGES[result.error] ??
+            CLOSURE_ERROR_MESSAGE_BY_CODE[result.error] ??
             CLOSURE_ERROR_MESSAGES.create_failed,
           variant: 'error',
         })
@@ -170,7 +172,7 @@ export function HolidayCalendarSettings({
       if (!result.success) {
         showBanner({
           message:
-            CLOSURE_ERROR_MESSAGES[result.error] ??
+            CLOSURE_ERROR_MESSAGE_BY_CODE[result.error] ??
             CLOSURE_ERROR_MESSAGES.delete_failed,
           variant: 'error',
         })

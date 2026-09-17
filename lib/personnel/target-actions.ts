@@ -62,6 +62,9 @@ export async function getWeeklyTargets(input: {
     }
 
     const weekDates = getBusinessWeekDates();
+    const [weekStart] = weekDates;
+    const weekEnd = weekDates.at(-1);
+    if (!weekStart || !weekEnd) return { success: false, error: 'load_failed' };
 
     if (!record) {
       // No personnel record (should not happen for members): resolve with the
@@ -88,17 +91,8 @@ export async function getWeeklyTargets(input: {
           .select('*')
           .eq('employee_record_id', record.id),
         calendarPromise,
-        loadApprovedVacationSpansByRecord(
-          orgId,
-          weekDates[0],
-          weekDates[weekDates.length - 1]
-        ),
-        loadActiveSicknessSpansByRecord(
-          orgId,
-          weekDates[0],
-          weekDates[weekDates.length - 1],
-          record.id
-        ),
+        loadApprovedVacationSpansByRecord(orgId, weekStart, weekEnd),
+        loadActiveSicknessSpansByRecord(orgId, weekStart, weekEnd, record.id),
       ]);
 
     if (schedulesResult.error || conditionsResult.error) {
@@ -128,11 +122,6 @@ export async function getWeeklyTargets(input: {
     return { success: false, error: 'unexpected_error' };
   }
 }
-
-export type MemberTodayTarget = {
-  userId: string;
-  target: DailyTarget;
-};
 
 export type MemberTodayTargetsResult =
   | { success: true; targetsByUserId: Record<string, DailyTarget> }
@@ -214,6 +203,7 @@ export async function getTodayTargetsForMembers(): Promise<MemberTodayTargetsRes
           ...(sicknessSpans.get(record.id) ?? []),
         ],
       });
+      if (!target) continue;
       targetsByUserId[record.user_id] = target;
     }
 

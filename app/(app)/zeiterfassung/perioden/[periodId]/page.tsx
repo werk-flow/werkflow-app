@@ -28,7 +28,7 @@ function FindingIcon({ severity }: { severity: string }) {
     );
   if (severity === "approval_required")
     return (
-      <AlertTriangle aria-hidden="true" className="size-4 text-yellow-600" />
+      <AlertTriangle aria-hidden="true" className="size-4 text-warning-text" />
     );
   return <Info aria-hidden="true" className="size-4 text-muted-foreground" />;
 }

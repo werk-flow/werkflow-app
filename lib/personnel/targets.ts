@@ -29,7 +29,7 @@ import {
  */
 export const DEFAULT_DAILY_TARGET_MINUTES = 480;
 
-export type DailyTargetSource =
+type DailyTargetSource =
   // A real work-schedule version effective on the date.
   | 'schedule'
   // No schedule, but the effective employment condition has weekly hours:
@@ -54,7 +54,7 @@ export type ApprovedAbsenceSpan = {
   dayPortion: 'full' | 'half_day';
 };
 
-export type DailyTargetAbsence = {
+type DailyTargetAbsence = {
   type: ApprovedAbsenceSpan['type'];
   portion: ApprovedAbsenceSpan['dayPortion'];
 };
@@ -105,7 +105,7 @@ export function parseHolidayRegionHistory(
 
 export type ClosureDay = {
   /** Row id, present when loaded from the database (needed for removal). */
-  id?: string;
+  id?: string | undefined;
   closureDate: string;
   label: string | null;
 };
@@ -146,8 +146,7 @@ export function resolveHolidayRegionOnDate(
       new Date(a.effectiveFrom).getTime() - new Date(b.effectiveFrom).getTime()
   );
 
-  for (let i = history.length - 1; i >= 0; i--) {
-    const entry = history[i];
+  for (const entry of history.reverse()) {
     if (toBusinessIsoDate(new Date(entry.effectiveFrom)) <= dateIso) {
       return entry.region.length > 0 ? entry.region : null;
     }

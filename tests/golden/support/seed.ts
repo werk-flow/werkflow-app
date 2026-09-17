@@ -6,6 +6,7 @@ import type { TestUser, TestWorld } from './world';
 import { registerTestUserEmail } from './world';
 import { planTestWorld, seedOwnedWorld } from '../../../lib/testing/seed-world-plan';
 import { ownedTestEmails } from '../../../lib/testing/test-email-ownership';
+import { deleteOwnedMailpitMessages, localMailpitUrl } from '../../../lib/testing/local-mailpit';
 import {
   deleteStorageObjects,
   listStorageObjectPaths,
@@ -244,6 +245,25 @@ export async function destroyTestWorld(world: TestWorld): Promise<void> {
   const failures: string[] = [];
 
   const additionalEmails = ownedTestEmails(world);
+  const mailbox = localMailpitUrl(requireEnv('NEXT_PUBLIC_SUPABASE_URL'));
+  if (mailbox) {
+    const emails = [
+      ...Object.values(world.users).map((user) => user.email), world.invitee.email,
+      world.removableEmployee.email, world.personnelInvitee.email, world.outsider.admin.email,
+      ...additionalEmails,
+    ];
+    const suffix = `-${world.runId}@werkflow-golden.test`;
+    const ownedRecipients = emails.filter((email) => email.endsWith(suffix) ||
+      email === `delivered+gg-${world.runId}@resend.dev` || email === `delivered+gg-p103-${world.runId}@resend.dev`);
+    if (ownedRecipients.length !== emails.length) {
+      failures.push('A Mailpit cleanup recipient does not belong to this test world');
+    }
+    try {
+      await deleteOwnedMailpitMessages(mailbox, ownedRecipients);
+    } catch (error) {
+      failures.push(`owned local mailbox cleanup: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
   let additionalUserIds: string[] = [];
   if (additionalEmails.length) {
     const { data: profiles, error } = await admin.from('profiles').select('id').in('email', additionalEmails);

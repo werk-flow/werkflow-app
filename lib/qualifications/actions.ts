@@ -9,7 +9,6 @@ import {
   CAPABILITY_KINDS,
   CONFIRMATION_STATUSES,
   EVIDENCE_STATES,
-  type AssignmentEvaluation,
   type CapabilityDefinition,
   type CapabilityKind,
   type ConfirmationStatus,
@@ -527,28 +526,6 @@ export async function getOwnQualificationProfile(): Promise<
   }
 }
 
-export async function evaluateJobAssignment(input: {
-  jobId?: string | null;
-  selectedUserIds: string[];
-  assessedForDate?: string | null;
-}): Promise<
-  | { success: true; evaluation: AssignmentEvaluation }
-  | { success: false; error: string }
-> {
-  const auth = await authenticateAndAuthorize();
-  if (!auth.success) return auth;
-  if (!auth.context.isManagerOrAbove) {
-    return { success: false, error: 'not_authorized' };
-  }
-  return loadAssignmentEvaluation({
-    admin: createSupabaseAdminClient(),
-    orgId: auth.context.orgId,
-    jobId: input.jobId,
-    selectedUserIds: input.selectedUserIds,
-    assessedForDate: input.assessedForDate,
-  });
-}
-
 export async function createTeam(input: {
   name: string;
   description?: string | null;
@@ -853,76 +830,6 @@ export async function createCapability(input: {
   });
   updateTag(CACHE_TAGS.qualifications(auth.context.orgId));
   return { success: true, capabilityId: data.id };
-}
-
-export async function updateCapabilityDefinition(input: {
-  capabilityId: string;
-  name: string;
-  description?: string | null;
-  expiryWarningDays?: number;
-}): Promise<{ success: boolean; error?: string }> {
-  const auth = await authenticateAndAuthorize();
-  if (!auth.success) return auth;
-  if (!auth.context.isManagerOrAbove) {
-    return { success: false, error: 'not_authorized' };
-  }
-  const admin = createSupabaseAdminClient();
-  const { data: current } = await admin
-    .from('organization_capabilities')
-    .select('kind, name, description, default_expiry_warning_days')
-    .eq('id', input.capabilityId)
-    .eq('organization_id', auth.context.orgId)
-    .is('retired_at', null)
-    .maybeSingle();
-  if (!current) return { success: false, error: 'definition_not_found' };
-  const warningDays =
-    current.kind === 'certification'
-      ? input.expiryWarningDays ?? current.default_expiry_warning_days
-      : 0;
-  const name = input.name.trim();
-  if (
-    !name ||
-    !Number.isInteger(warningDays) ||
-    warningDays < 0 ||
-    warningDays > 365
-  ) {
-    return { success: false, error: 'invalid_input' };
-  }
-  const description = normalizeOptionalText(input.description);
-  const { error } = await admin
-    .from('organization_capabilities')
-    .update({
-      name,
-      description,
-      default_expiry_warning_days: warningDays,
-      updated_by: auth.context.userId,
-    })
-    .eq('id', input.capabilityId)
-    .eq('organization_id', auth.context.orgId);
-  if (error) {
-    return {
-      success: false,
-      error: error.code === '23505' ? 'duplicate_name' : 'update_failed',
-    };
-  }
-  await recordQualificationEvent({
-    orgId: auth.context.orgId,
-    capabilityId: input.capabilityId,
-    eventType: 'definition_updated',
-    payload: {
-      changes: {
-        name: { from: current.name, to: name },
-        description: { from: current.description, to: description },
-        warning_days: {
-          from: current.default_expiry_warning_days,
-          to: warningDays,
-        },
-      },
-    },
-    actorId: auth.context.userId,
-  });
-  updateTag(CACHE_TAGS.qualifications(auth.context.orgId));
-  return { success: true };
 }
 
 export async function retireCapabilityDefinition(

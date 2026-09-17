@@ -1,8 +1,5 @@
 'use server';
 
-import { updateTag } from 'next/cache';
-
-import { CACHE_TAGS } from '@/lib/data/cached';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { formatProfileName } from '@/lib/members/profile-name';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -1274,7 +1271,6 @@ export async function createCustomerFollowUp(
   if (data.status !== 'open') {
     return { success: false, error: 'create_failed' };
   }
-  updateTag(CACHE_TAGS.clients(auth.context.orgId));
   const [ownersResult, sourceResult] = await Promise.all([
     loadFollowUpOwners(auth.context),
     loadSingleFollowUpSource(
@@ -1328,7 +1324,6 @@ export async function updateCustomerFollowUp(
     console.error('Failed to update customer follow-up:', error);
     return { success: false, error: 'update_failed' };
   }
-  updateTag(CACHE_TAGS.clients(auth.context.orgId));
   return { success: true };
 }
 
@@ -1359,7 +1354,6 @@ export async function transitionCustomerFollowUp(
     console.error('Failed to transition customer follow-up:', error);
     return { success: false, error: 'transition_failed' };
   }
-  updateTag(CACHE_TAGS.clients(auth.context.orgId));
   return { success: true };
 }
 
@@ -1393,7 +1387,6 @@ export async function saveCustomerCommunicationSettings(
     console.error('Failed to save communication settings:', error);
     return { success: false, error: 'save_failed' };
   }
-  updateTag(CACHE_TAGS.clients(auth.context.orgId));
   return { success: true };
 }
 
@@ -1424,7 +1417,6 @@ export async function saveCustomerCommunicationPreference(
     console.error('Failed to save communication preference:', error);
     return { success: false, error: 'save_failed' };
   }
-  updateTag(CACHE_TAGS.clients(auth.context.orgId));
   return { success: true };
 }
 
@@ -1512,6 +1504,5 @@ export async function recordCustomerCommunicationException(
     console.error('Failed to record communication exception:', error);
     return { success: false, error: 'save_failed' };
   }
-  updateTag(CACHE_TAGS.clients(auth.context.orgId));
   return { success: true };
 }

@@ -5,7 +5,7 @@ import {
   WORK_ARTIFACT_UNIT_LABELS, type WorkArtifactDetail,
 } from './types';
 
-export const WORK_ARTIFACT_EXPORT_RENDERER_VERSION = 'p1-21-html-v4';
+const WORK_ARTIFACT_EXPORT_RENDERER_VERSION = 'p1-21-html-v4';
 
 const DEFECT_SEVERITY_LABELS = { low: 'Niedrig', medium: 'Mittel', high: 'Hoch', critical: 'Kritisch' } as const;
 const DEFECT_STATE_LABELS = { open: 'Offen', in_progress: 'In Bearbeitung', resolved: 'Behoben' } as const;

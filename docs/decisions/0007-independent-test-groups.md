@@ -10,7 +10,7 @@
 
 Requiring complete accumulated browser batteries after every slice made unrelated failures repeatedly block feature delivery. Shared working files and implicit fixture dependencies also prevented independent execution. A global candidate change invalidated useful evidence without determining whether its tested behavior could change.
 
-The preceding hardening review fixed concrete defects but did not resolve those structural costs. Its [qualified closure](../plans/uiux-and-test-reliability-2026-09.md) remains historical evidence, not a new acceptance standard.
+The preceding hardening review fixed concrete defects but did not resolve those structural costs. Its [qualified closure](../plans/phase-1/hardening-2026-09/03-uiux-and-test-reliability.md) remains historical evidence, not a new acceptance standard.
 
 ## Decision
 
@@ -34,13 +34,15 @@ The default change plan and the complete release plan define their scopes. Expli
 
 Application build identity remains independently verified. A test-input change need not force a new app build. An application or backend-environment change must not use a stale build. Digests identify inputs without storing secrets; they do not replace migration-replay evidence or provider checks.
 
+Amendment 2026-09-14 (pre-Wave-3 step 1): the environment identity of a proof is the backend identity, with the local stack's private address replaced by a token, so a WSL restart is not an environment change; the build receipt keeps the raw digest. Code inputs are compared by their comment-free token stream. Tooling no test executes is not an input, and each suite's configuration is owned by the kind that loads it. A release plan after a failed release report requires a later passing result for every failed group on the current inputs, and a third consecutive release attempt requires a written diagnosis in the incident log. Mechanisms and evidence: [testing.md](../technical/testing.md).
+
 ## Failure and responsiveness rules
 
 A failed group retains its evidence and owned world. Unrelated groups continue where the environment is valid. A dependent stage does not run after its prerequisite fails. Setup and teardown must never sweep unrelated groups' records.
 
 An unchanged failed group cannot be retried as acceptance until its cause is addressed. One environment-recovery retry is allowed after classification, a later matching retained diagnostic pass on the same candidate and target, and owned-world cleanup. Two same-input failures remain blocked. A preflight failure with no run or world is blocked verification and can be retried after environment repair without fabricating business evidence. Investigate the smallest relevant failure, classify it from evidence, add prevention, and rerun the affected group. Unexplained repetition stays blocked. Do not manufacture progress through complete-battery reruns, timeout increases, or repeated budget extensions. Preserve cumulative campaign cost and historical failures.
 
-Correctness, responsiveness, and environment validity are separate conclusions. The cross-session two-second target is an enforced acceptance deadline. Eventual visibility inside a longer emergency wait is not sufficient. Readiness checks start when the user opens the relevant UI, before loading completes. A demonstrated invalid environment prevents acceptance rather than converting a slow result to green.
+Correctness, responsiveness, and environment validity are separate conclusions. The cross-session two-second target is an enforced acceptance deadline. Eventual visibility inside a longer emergency wait is not sufficient. Amendment 2026-09-14: a single sample over the target but inside the approved combined tolerance (25% or 250 ms) is recorded, not failed; beyond it the group fails. Harness helpers qualify groups through real imports, and a recorded pass stays valid while every current input of the group is unchanged in content (see [testing.md](../technical/testing.md)). Readiness checks start when the user opens the relevant UI, before loading completes. A demonstrated invalid environment prevents acceptance rather than converting a slow result to green.
 
 Retained diagnostics and cleanup validate exact backend and world ownership. Resolve retained worlds before release closure. A missing archive is unresolved ownership, not successful cleanup.
 
@@ -56,7 +58,7 @@ The [enforcement ladder](0005-enforcement-ladder.md) remains the governing princ
 
 No new Linux machine or test infrastructure is part of this decision. The verification command retains the shared workspace lock. Execution defaults to one group at a time. Opt-in `--jobs 2` permits at most two eligible independent browser groups within that owned command; integrated journeys, timing-sensitive groups, SQL, and setup gates remain exclusive. Independent files and worlds are prerequisites for concurrency, not evidence of a measured speedup. The implementation plan must record host validation, resource limits, and coverage equivalence before claiming the concurrent mode verified.
 
-The [implementation plan](../plans/testing-system-restructure-2026-09.md) owns rollout status, measurements, and outstanding verification. Acceptance of this policy is not a claim that migration or end-to-end verification is complete. No fixed speedup, zero-flake guarantee, security certification, or production release is implied.
+The [implementation plan](../plans/phase-1/hardening-2026-09/04-testing-system-restructure.md) owns rollout status, measurements, and outstanding verification. Acceptance of this policy is not a claim that migration or end-to-end verification is complete. No fixed speedup, zero-flake guarantee, security certification, or production release is implied.
 
 ## Alternatives considered
 

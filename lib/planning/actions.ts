@@ -24,11 +24,16 @@ import {
   expandPlanningTeamsForDates,
   loadPlanningCalendarEntries,
   loadPlanningOptions,
+  type PlanningEmployeeOption,
+  type PlanningJobOption,
+  type PlanningTeamOption,
 } from './server';
 import type {
   MaterializedOccurrence,
   PlanningActionResult,
   PlanningAssignmentDraft,
+  PlanningCalendarEntry,
+  PlanningConflict,
   PlanningSeriesDraft,
 } from './types';
 
@@ -45,7 +50,15 @@ function logPlanningRpcFailure(
   console.error(operation, { code: error?.code ?? 'unknown' });
 }
 
-export async function getPlanningOptions() {
+export async function getPlanningOptions(): Promise<
+  | {
+      success: true;
+      employees: PlanningEmployeeOption[];
+      jobs: PlanningJobOption[];
+      teams: PlanningTeamOption[];
+    }
+  | { success: false; error: string }
+> {
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
   if (!auth.context.isManagerOrAbove) {
@@ -57,7 +70,13 @@ export async function getPlanningOptions() {
     : { success: false as const, error: 'load_failed' };
 }
 
-export async function getPlanningEntries(from: string, to: string) {
+export async function getPlanningEntries(
+  from: string,
+  to: string
+): Promise<
+  | { success: true; entries: PlanningCalendarEntry[] }
+  | { success: false; error: string }
+> {
   try {
     if (
       addLocalDays(from, 0) !== from ||
@@ -190,31 +209,6 @@ async function preparePlanningEntry(
     occurrences,
     assignments,
     ...assessment,
-  };
-}
-
-export async function previewPlanningEntry(rawInput: unknown) {
-  const parsed = createPlanningEntrySchema.safeParse(rawInput);
-  if (!parsed.success) {
-    return { success: false as const, error: 'invalid_input' };
-  }
-  const auth = await authenticateAndAuthorize();
-  if (!auth.success) return auth;
-  if (!auth.context.isManagerOrAbove) {
-    return { success: false as const, error: 'not_authorized' };
-  }
-  const prepared = await preparePlanningEntry(parsed.data, auth.context.orgId);
-  if (!prepared.success) return prepared;
-  return {
-    success: true as const,
-    occurrenceCount: prepared.occurrences.length,
-    assignments: prepared.assignments,
-    conflicts: prepared.conflicts,
-    assessmentFingerprint: prepared.assessmentFingerprint,
-    capacitySnapshot: prepared.capacitySnapshot,
-    capacityFingerprint: prepared.capacityFingerprint,
-    qualificationSnapshot: prepared.qualificationSnapshot,
-    qualificationFingerprint: prepared.qualificationFingerprint,
   };
 }
 
@@ -489,7 +483,15 @@ export type UpdatePlanningCalendarInput = {
 export async function updatePlanningCalendarEntry(
   occurrenceId: string,
   rawInput: UpdatePlanningCalendarInput
-) {
+): Promise<
+  | { success: true; version: number }
+  | {
+      success: false;
+      error: string;
+      conflicts?: PlanningConflict[];
+      fingerprint?: string;
+    }
+> {
   const parsed = updatePlanningCalendarSchema.safeParse(rawInput);
   if (!parsed.success) return { success: false as const, error: 'invalid_input' };
   const input = parsed.data;
@@ -673,7 +675,7 @@ export async function reschedulePlanningSeries(
   occurrenceId: string,
   scope: 'future' | 'series',
   rawInput: UpdatePlanningCalendarInput
-) {
+): Promise<PlanningActionResult> {
   const parsed = updatePlanningCalendarSchema.safeParse(rawInput);
   if (
     !parsed.success ||
@@ -961,7 +963,7 @@ export async function setPlanningOccurrenceStatus(
   occurrenceId: string,
   status: 'skipped' | 'cancelled',
   reason: string
-) {
+): Promise<{ success: true; version: number } | { success: false; error: string }> {
   const parsed = planningOccurrenceStatusSchema.safeParse({
     occurrenceId,
     status,

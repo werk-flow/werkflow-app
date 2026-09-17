@@ -9,7 +9,7 @@ describe("one document per slice", () => {
       paths: [
         "plans/phase-1/slices/p1-00-baseline.md",
         "plans/phase-1/slices/p1-00a-storage.md",
-        "plans/wave-2-audit.md",
+        "plans/phase-1/audits/wave-2-audit.md",
       ],
       sliceIds,
     })).toEqual([]);

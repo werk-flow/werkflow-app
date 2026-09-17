@@ -1,6 +1,6 @@
 # Customers And CRM
 
-Status: living — last reviewed 2026-09-05
+Status: living — last reviewed 2026-09-13
 
 Customer relationship management in WerkFlow means maintaining the operational customer context an SHK business needs to receive requests, plan visits, perform work, communicate reliably, and understand the history of a relationship.
 
@@ -22,6 +22,8 @@ The goal is less duplicate entry, fewer duplicate customers, fewer missed follow
 
 ## Current Product Baseline
 
+The `/kunden` table uses server-selected pages of 50 customers and shows the total matching count. Search covers the complete organization, including customer identity, active contacts, and active site names/addresses, before paging. Search and page live in the URL; Realtime refreshes the current selection. A page of customers is never a complete entity-selection catalog. [The performance reference](../technical/realtime-and-caching.md#server-paginated-lists) owns the implementation and verification rules.
+
 As of 2026-09-02, Admin and Büro maintain one organization-scoped customer record with contacts, work sites, request intake, a relationship chronology, owned follow-ups, and communication guidance. Field workers never open the customer area; they see only the customer facts an assigned job exposes. The area is a master-data and work-context foundation, not yet a complete operational CRM.
 
 - **Customer master data.** Admin and Büro create, edit, search, and delete customers under `/kunden`. A customer is `privat` or `gewerblich` and has one email address, one phone number, one free-form main address, notes, and an optional manual `Kundennummer` that is unique in the organization ([P1-01](../plans/phase-1/slices/p1-01-customer-contacts-and-sites.md)). Search matches name, number, email, phone, address, active contact names, and active site addresses. The list shows count, type, and contact data, refreshes live, and offers a manual refresh. Deleting a customer removes the association from existing jobs and projects; the work itself stays.
@@ -37,7 +39,7 @@ As of 2026-09-02, Admin and Büro maintain one organization-scoped customer reco
 - **Access boundary.** Customer, contact, site, follow-up, and preference records are manager-only. Field workers receive only the contact and site facts exposed through an assigned job. An assignment grants no access to the customer relationship record and no access to equipment beyond what is linked to that exact job ([P1-10](../plans/phase-1/slices/p1-10-customer-relationship-timeline.md), [P1-18](../plans/phase-1/slices/p1-18-installed-equipment.md)).
 - **Work and documents in customer context.** The customer detail embeds the customer's standalone jobs and projects with the normal work-list capabilities, and managers can create work in the locked customer context. Job and project creation can select an existing customer or create one inline. A project has one customer, its jobs inherit that customer, and changing the project customer synchronizes its jobs. Customer documents are managed through the contextual `Dokumente & Bilder` section and the central library. The detail also holds a clearly marked financial-summary placeholder; structured invoices, payments, contracts, and balances do not exist.
 
-### Important current limitations
+### Important Current Limitations
 
 - Dedicated billing recipients, address purposes beyond main address plus sites, households, and contacts shared across customers are not modeled. Those wait for the commercial slices and an explicit shared-contact decision.
 - Customer numbers are manual. Controlled number ranges remain a Wave 4 commercial decision.

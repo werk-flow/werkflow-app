@@ -9,7 +9,7 @@ import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { joinOrganization } from '@/lib/org/actions';
 
-const ERROR_MESSAGES: Record<string, string> = {
+const ERROR_MESSAGES = {
   code_required: 'Bitte gib einen Organisationscode ein.',
   invalid_code: 'Ungültiger Organisationscode.',
   admin_mismatch:
@@ -18,7 +18,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   not_authenticated: 'Du musst angemeldet sein.',
   join_failed: 'Beitritt fehlgeschlagen. Bitte versuche es erneut.',
   unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.'
-};
+} satisfies Record<string, string>;
+const ERROR_MESSAGE_BY_CODE: Record<string, string> = ERROR_MESSAGES;
 
 export function JoinOrganizationForm() {
   const [code, setCode] = useState('');
@@ -38,7 +39,7 @@ export function JoinOrganizationForm() {
       window.location.href = `/dashboard?joined=${result.organizationId}`;
     } else {
       setError(
-        ERROR_MESSAGES[result.error ?? 'unexpected_error'] ??
+        ERROR_MESSAGE_BY_CODE[result.error ?? 'unexpected_error'] ??
           ERROR_MESSAGES.unexpected_error
       );
       setIsLoading(false);

@@ -2,7 +2,7 @@
 
 Status: closed (2026-09-01) — accepted P1-23 acceptance record; canonical home for the slice's evidence
 
-Navigation amendment, 2026-09-05: the [accepted UI/UX hardening pass](../../uiux-hardening-2026-09.md) moved time-account rules and payroll mapping from `/einstellungen/zeiterfassung` to `/zeiterfassung/einstellungen`. The plan below preserves the route used at P1-23 acceptance. Current navigation belongs to the [time-tracking baseline](../../../features/time-tracking.md).
+Navigation amendment, 2026-09-05: the [accepted UI/UX hardening pass](../hardening-2026-09/02-uiux-hardening.md) moved time-account rules and payroll mapping from `/einstellungen/zeiterfassung` to `/zeiterfassung/einstellungen`. The plan below preserves the route used at P1-23 acceptance. Current navigation belongs to the [time-tracking baseline](../../../features/time-tracking.md).
 
 ## Bounded outcome
 
@@ -21,7 +21,7 @@ Time accounts, overtime and supplement classifications, operational compliance w
 - The exact P1-22 acceptance checkpoint is verified on clean local `main` at `3ce91b013eea390266acdeb87ebcf09274de4848`, matching `origin/partner-preview`.
 - The roadmap prerequisites are accepted and `P1-23` is the only executable slice.
 - Unit, Golden, Wave 2 audit and DEV canary baselines match the accepted P1-22 evidence. No retained test world is open.
-- The prompt names an obsolete P1-04 filename. The indexed canonical record is `p1-04-work-schedules-and-holidays.md`; there is no process conflict.
+- The prompt names an obsolete P1-04 filename. The indexed canonical record is [p1-04-work-schedules-and-holidays.md](p1-04-work-schedules-and-holidays.md); there is no process conflict.
 - Code, generated types and live DEV/PROD database state were inspected before implementation.
 - The owner confirmed the complete report and authorized implementation, DEV-first/PROD-second rollout, CodeRabbit passes and the closing enforcement-ladder audit on 2026-09-01.
 
@@ -62,7 +62,7 @@ Closed on 2026-09-01. The owner confirmed all report items and the complete reco
 
 ## Reserved acceptance dates
 
-P1-23's Berlin run-day offsets are recorded in the [fixture-date ownership registry](../../wave-2-audit.md#fixture-date-ownership); the code registry is `tests/golden/support/date-ownership.ts`.
+P1-23's Berlin run-day offsets are recorded in the [fixture-date ownership registry](../audits/wave-2-audit.md#fixture-date-ownership); the code registry is `tests/golden/support/date-ownership.ts`.
 
 ## Acceptance record
 
@@ -83,7 +83,7 @@ The campaign audit promoted only repeatable lessons: closed-period and wrapper-o
 
 ## Links
 
-- Gate runs: [golden-gate-log.md](../../golden-gate-log.md)
+- Gate runs: [golden-gate-log.md](../audits/golden-gate-log.md)
 - Progress log: [../log.md](../log.md)
 
 ## Implementation plan (merged 2026-09-03 from the former separate plan file)

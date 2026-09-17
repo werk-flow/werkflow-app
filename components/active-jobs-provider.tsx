@@ -6,14 +6,17 @@ import { ActiveJobsContext, useActiveJobsProvider } from '@/hooks/use-active-job
 export function ActiveJobsProvider({
   children,
   initialActiveJobIds,
+  initialActiveProjectIds,
   initialOrganizationId,
 }: {
   children: ReactNode;
   initialActiveJobIds?: string[];
+  initialActiveProjectIds?: string[];
   initialOrganizationId?: string | null;
 }) {
   const value = useActiveJobsProvider({
     initialActiveJobIds,
+    initialActiveProjectIds,
     initialOrganizationId,
   });
 

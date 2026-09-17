@@ -1,5 +1,7 @@
-﻿"use client";
+"use client";
 
+import { formatGermanDate as formatDate } from '@/lib/utils';
+import { formatFileSize } from '@/lib/documents/format';
 import {
   useEffect,
   useMemo,
@@ -11,6 +13,8 @@ import {
   type ReactNode,
 } from "react";
 import Link from "next/link";
+import { ListPagination } from '@/components/shared/list-pagination';
+import { useListNavigation } from '@/hooks/use-list-navigation';
 import { useRouter } from "next/navigation";
 import {
   File,
@@ -136,6 +140,7 @@ import {
 import type { Job, ProjectWithDetails, Client } from "@/lib/jobs/types";
 
 type DocumentLibraryContentProps = {
+  page: number; total: number; folderPage: number; folderTotal: number;
   view: DocumentLibraryView;
   searchQuery: string;
   category: DocumentLibraryCategoryFilter;
@@ -209,20 +214,6 @@ type BulkStep = () => Promise<{ success: boolean }>;
 
 function getDocumentId(document: OrganizationDocument): string {
   return document.id;
-}
-
-function formatFileSize(sizeBytes: number): string {
-  if (sizeBytes < 1024) return `${sizeBytes} B`;
-  if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
-  return `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function formatDate(date: string): string {
-  return new Intl.DateTimeFormat("de-DE", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(new Date(date));
 }
 
 function getUploaderName(document: OrganizationDocument): string {
@@ -783,7 +774,7 @@ function MoveDestinationDialog({
                             isDisabled && "opacity-45",
                           )}
                         >
-                          <Folder className="size-4 shrink-0 text-orange-500" />
+                          <Folder className="size-4 shrink-0 text-primary" />
                           <button
                             type="button"
                             className="truncate text-left hover:underline"
@@ -917,6 +908,7 @@ function MoveDestinationDialog({
 }
 
 export function DocumentLibraryContent({
+  page, total, folderPage, folderTotal,
   view,
   searchQuery: initialSearchQuery,
   category,
@@ -935,6 +927,7 @@ export function DocumentLibraryContent({
   initialDocumentUnavailable,
 }: DocumentLibraryContentProps) {
   const router = useRouter();
+  const paginationNavigation = useListNavigation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const versionInputRef = useRef<HTMLInputElement>(null);
@@ -1017,12 +1010,7 @@ export function DocumentLibraryContent({
     visibleView === "folders" ? currentFolderId : null;
   const allowUploadFolderCreation = canUseUploadActions;
   const showNavigationSkeleton = pendingNavigation !== null;
-  const linkDialogCatalogIsPrefetched =
-    view === "work" &&
-    (jobs.length > 0 ||
-      projects.length > 0 ||
-      clients.length > 0 ||
-      employees.length > 0);
+  const linkDialogCatalogIsPrefetched = false;
 
   useRealtimeRouterRefresh({
     tables: ["documents", "document_folders", "document_links"],
@@ -1032,7 +1020,7 @@ export function DocumentLibraryContent({
     // Route props are the authoritative state after folder or filter navigation.
     setSearchQuery(initialSearchQuery);
     setPendingNavigation(null);
-  }, [category, currentFolderId, initialSearchQuery, linkFilter, view]);
+  }, [category, currentFolderId, initialSearchQuery, linkFilter, view, page, folderPage]);
 
   useEffect(() => {
     const viewingInitialDocument =
@@ -1080,8 +1068,8 @@ export function DocumentLibraryContent({
       ...foldersToCheck.map((folder) => folder.parentFolderId ?? "root"),
     ];
 
-    if (sourceFolderIds.length === 0) return currentFolderId;
     const firstSourceFolderId = sourceFolderIds[0];
+    if (firstSourceFolderId === undefined) return currentFolderId;
     const allSameSource = sourceFolderIds.every(
       (sourceFolderId) => sourceFolderId === firstSourceFolderId,
     );
@@ -2726,6 +2714,10 @@ export function DocumentLibraryContent({
         </nav>
       )}
 
+      {!showNavigationSkeleton && (
+        <ListPagination label="Dokumente" page={page} total={total} busy={paginationNavigation.busy} onPageChange={(nextPage) => { clearSelection(); paginationNavigation.navigate({ page: nextPage }); }} />
+      )}
+
       {showNavigationSkeleton ? (
         <DokumenteTabContentSkeleton
           view={
@@ -2908,6 +2900,7 @@ export function DocumentLibraryContent({
             )}
           </div>
 
+          {folderTotal > 50 && <ListPagination label="Ordner" page={folderPage} total={folderTotal} busy={paginationNavigation.busy} onPageChange={(nextPage) => { clearSelection(); paginationNavigation.navigate({ folderPage: nextPage }); }} />}
           <DocumentLibraryTable
             folders={folders}
             documents={documents}
@@ -3170,9 +3163,9 @@ export function DocumentLibraryContent({
           moveCopyDialog &&
           moveCopyDialog.documents.length + moveCopyDialog.folders.length > 1
             ? "Wähle den Zielordner für die ausgewählten Einträge."
-            : moveCopyDialog?.documents.length === 1
+            : moveCopyDialog?.documents[0] && moveCopyDialog.documents.length === 1
               ? `Wähle den Zielordner für „${moveCopyDialog.documents[0].displayName}“.`
-              : moveCopyDialog?.folders.length === 1
+              : moveCopyDialog?.folders[0] && moveCopyDialog.folders.length === 1
                 ? `Wähle den Zielordner für „${moveCopyDialog.folders[0].name}“.`
                 : "Wähle den Zielordner."
         }

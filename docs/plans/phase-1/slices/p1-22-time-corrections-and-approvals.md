@@ -68,6 +68,8 @@ Committed migrations, in order:
 
 ## Initial acceptance plan
 
+Historical plan as written before implementation on 2026-09-01. Its full-battery rerun step reflects the acceptance policy of that date; [decision 0007](../../../decisions/0007-independent-test-groups.md) governs current verification.
+
 - Add precise unit and SQL proofs for correction payloads, immutable history, stale versions, authorization, organization isolation, idempotency and atomic application.
 - Add staged `tests/golden/p1-22.spec.ts` coverage at persisted boundaries and exhaustive `tests/audit/wave-2/p1-22.spec.ts` clause evidence.
 - Claim the reserved `+115 … +119` Berlin-date window and remain compatible with all retained Golden and audit state through P1-21.
@@ -105,7 +107,7 @@ All retained worlds were classified, diagnosed where required and cleaned. The f
 
 ## Links
 
-- Gate runs: [golden-gate-log.md](../../golden-gate-log.md)
+- Gate runs: [golden-gate-log.md](../audits/golden-gate-log.md)
 - Progress log: [../log.md](../log.md)
 
 ## Implementation plan (merged 2026-09-03 from the former separate plan file)

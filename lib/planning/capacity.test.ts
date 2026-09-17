@@ -25,7 +25,7 @@ describe('planning capacity resolution', () => {
       'overlap',
       'over_capacity',
     ]);
-    expect(result.employeeDays[0].remainingMinutes).toBe(180);
+    expect(result.employeeDays[0]?.remainingMinutes).toBe(180);
   });
 
   test('keeps missing configuration distinct from an explicit zero target', () => {
@@ -48,7 +48,7 @@ describe('planning capacity resolution', () => {
         },
       ]
     );
-    expect(missing.conflicts[0].kind).toBe('no_schedule');
+    expect(missing.conflicts[0]?.kind).toBe('no_schedule');
     expect(closed.conflicts.map((conflict) => conflict.kind)).toEqual([
       'holiday_or_closure',
       'over_capacity',
@@ -76,7 +76,7 @@ describe('planning capacity resolution', () => {
     );
 
     expect(result.employeeDays).toHaveLength(1);
-    expect(result.employeeDays[0].proposedMinutes).toBe(540);
+    expect(result.employeeDays[0]?.proposedMinutes).toBe(540);
     expect(result.conflicts.map((conflict) => conflict.kind)).toEqual([
       'over_capacity',
     ]);

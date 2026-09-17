@@ -33,16 +33,12 @@ import type { MemberStatus } from '@/hooks/use-member-status';
 import type { PersonnelListEntry } from '@/lib/personnel/actions';
 import { getAccessState, getEmploymentState } from '@/lib/personnel/types';
 import type { DailyTarget } from '@/lib/personnel/targets';
-
-// Roles that managers can view status for (same as MANAGED_ROLES in time-tracking/types.ts)
-const BUERO_VIEWABLE_ROLES: OrgRole[] = [
-  'employee'
-];
+import { MANAGED_ROLES } from '@/lib/time-tracking/types';
 
 /**
  * Check if the current user can view a member's working status
  * - Admins can view everyone
- * - Managers can only view: themselves + managed roles (employee, accountant, secretary)
+ * - Büro can only view: themselves + the managed roles in MANAGED_ROLES
  */
 function canViewMemberStatus(
   currentUserRole: OrgRole,
@@ -58,7 +54,7 @@ function canViewMemberStatus(
 
   // Managers can only view managed roles
   if (currentUserRole === 'buero') {
-    return BUERO_VIEWABLE_ROLES.includes(memberRole);
+    return MANAGED_ROLES.includes(memberRole);
   }
 
   // Default: can't view
@@ -96,9 +92,9 @@ interface MembersTableProps {
   /** Rows with a change in flight (role change until refreshed props land). */
   busyMemberIds?: ReadonlySet<string>;
   /** Resolved daily targets per member (P1-04) */
-  targetsByUserId?: Record<string, DailyTarget>;
-  personnelByUserId?: Record<string, PersonnelListEntry>;
-  removalBlockedByUserId?: Record<string, string>;
+  targetsByUserId?: Record<string, DailyTarget> | undefined;
+  personnelByUserId?: Record<string, PersonnelListEntry> | undefined;
+  removalBlockedByUserId?: Record<string, string> | undefined;
 }
 
 // The status cells' skeletons double as their loading state in the live table.
@@ -113,7 +109,7 @@ const PROGRESS_SKELETON = (
 // One column definition for the loaded table and its skeleton (design canon):
 // header count, widths and hover cannot drift apart. The actions column is
 // appended only for managers, see `memberColumns`.
-export const MEMBER_COLUMNS: readonly SkeletonColumn[] = [
+const MEMBER_COLUMNS: readonly SkeletonColumn[] = [
   {
     id: 'name',
     header: 'Name',
@@ -154,7 +150,7 @@ const MEMBER_ACTIONS_COLUMN: SkeletonColumn = {
   skeleton: <Skeleton className="size-8 rounded" />,
 };
 
-export function memberColumns(showActions: boolean): readonly SkeletonColumn[] {
+function memberColumns(showActions: boolean): readonly SkeletonColumn[] {
   return showActions ? [...MEMBER_COLUMNS, MEMBER_ACTIONS_COLUMN] : MEMBER_COLUMNS;
 }
 
@@ -231,12 +227,12 @@ function MemberCard({
   currentUserId: string;
   currentUserRole: OrgRole;
   onRoleChange: RoleChangeHandler;
-  status?: MemberStatus;
+  status?: MemberStatus | undefined;
   isStatusLoading: boolean;
   isBusy: boolean;
-  target?: DailyTarget;
-  personnel?: PersonnelListEntry;
-  removalBlockedMessage?: string;
+  target?: DailyTarget | undefined;
+  personnel?: PersonnelListEntry | undefined;
+  removalBlockedMessage?: string | undefined;
 }) {
   const router = useRouter();
 

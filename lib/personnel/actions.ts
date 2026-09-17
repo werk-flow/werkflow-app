@@ -825,8 +825,9 @@ function scheduleAuditPayload(input: {
 
 function toDayMinuteColumns(dayMinutes: number[]): Record<string, number> {
   const columns: Record<string, number> = {};
-  WORK_SCHEDULE_DAY_COLUMNS.forEach((column, index) => {
-    columns[column] = dayMinutes[index];
+  dayMinutes.forEach((minutes, index) => {
+    const column = WORK_SCHEDULE_DAY_COLUMNS[index];
+    if (column) columns[column] = minutes;
   });
   return columns;
 }

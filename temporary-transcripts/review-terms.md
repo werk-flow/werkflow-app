@@ -39,7 +39,7 @@ Source: [Race conditions](vibecoder-terms-video-subs/2026-06-27-EP-04-race-condi
 | --- | --- | --- | --- |
 | 01 | business-integrity | Candidate | The two withdrawals illustrate lost updates; inspect stock, time, approval, and lifecycle operations for equivalent concurrent invariants. |
 | 02 | database-security | Verify | Transactions alone do not guarantee that invariant under every isolation level. Inspect locking, conditional updates, constraints, and conflict handling. |
-| 03 | performance | Deferred | Lock only the required data for the required duration; global locking is not the default fix. Revisit contention during speed analysis. |
+| 03 | performance | Deferred | Reconsidered 2026-09-12. Preserve existing transaction integrity. No global application lock was introduced for this pass. Investigate narrower locks if measured concurrent business transactions show contention; local navigation timings do not establish contention under load. |
 
 ## TERM-005
 
@@ -57,8 +57,8 @@ Source: [N+1 queries](vibecoder-terms-video-subs/2026-06-29-EP-06-n-plus-one-que
 
 | Aspect | Topic | Status | Consideration |
 | --- | --- | --- | --- |
-| 01 | performance | Deferred | Inspect list-plus-per-item queries during the speed pass. The repeated-shopping-trip analogy identifies round-trip overhead. |
-| 02 | data-minimization | Deferred | A batched/joined replacement must preserve authorization, required fields, and bounded result size rather than simply fetch everything. |
+| 01 | performance | Already covered | Verified 2026-09-12. Scope: [calendar read tests](../lib/calendar/entry-read.test.ts) and the [read-boundary reference](../docs/technical/realtime-and-caching.md#server-paginated-lists) cover embedded reads, server-selected identities and bounded related queries. This is prevention for these owners, not a repository-wide N+1 detector. |
+| 02 | data-minimization | Already covered | Verified 2026-09-12. Scope: [operational list SQL assertions](../supabase/tests/operational_list_pages.sql) exercise tenant/employee scope and global filters beyond 1,000 rows; [bounded related reads](../lib/supabase/query-batches.ts) reject overflow. The selected pagination browser group passes both cases for later pages, filtering and mutations. This does not make a join alone proof of authorization or completeness. |
 
 ## TERM-007
 
@@ -99,7 +99,7 @@ Source: [Server and client components](vibecoder-terms-video-subs/2026-07-01-EP-
 | Aspect | Topic | Status | Consideration |
 | --- | --- | --- | --- |
 | 01 | secrets | Candidate | Inspect what crosses the server/client boundary, including imports and serialized props. |
-| 02 | performance | Deferred | Review client-boundary size and actual interactivity during performance analysis. |
+| 02 | performance | Deferred | Reconsidered 2026-09-12. Optional calendar selectors load bounded data when needed; [real month-view checks](../tests/ui-contracts/month-view.spec.ts) exercise renderer stability. Revisit additional client boundaries/chunks when a measured request-to-usable gap or larger workload identifies browser work. No complete CPU profile is claimed. |
 | 03 | architecture | Verify | Server-component defaults and use-client semantics are framework-specific, not true of every React/TypeScript app. Buttons/forms do not all require custom client JavaScript. |
 
 ## TERM-011
@@ -109,7 +109,7 @@ Source: [Hydration](vibecoder-terms-video-subs/2026-07-01-EP-11-hydration.txt)
 | Aspect | Topic | Status | Consideration |
 | --- | --- | --- | --- |
 | 01 | interaction-feedback | Candidate | Distinguish visible server-rendered controls from usable hydrated controls in tests and application feedback. |
-| 02 | performance | Deferred | Inspect nondeterministic time, dimensions, and random IDs for hydration mismatch during speed work. |
+| 02 | performance | Already covered | Verified 2026-09-12. Scope: [browser-observation contracts](../tests/ui-contracts/browser-observation.spec.ts), [calendar contracts](../tests/ui-contracts/calendar.spec.ts) and date-range tests distinguish server snapshots, hydrated controls and committed usable rendering. This is not a repository-wide hydration mismatch audit or a requirement to replace all server content with placeholders. |
 | 03 | architecture | Verify | Placeholder-plus-useEffect is one solution, not a universal prescription. Prefer stable server inputs, framework IDs, and existing conventions where applicable. |
 
 ## TERM-012
@@ -118,10 +118,10 @@ Source: [Caching and invalidation](vibecoder-terms-video-subs/2026-07-02-EP-12-c
 
 | Aspect | Topic | Status | Consideration |
 | --- | --- | --- | --- |
-| 01 | caching | Deferred | Evaluate reuse and invalidation with measured cost/freshness in the speed pass. |
-| 02 | caching | Candidate | Distinguish immutable public assets from private images/files before setting cache policy. |
+| 01 | caching | Already covered | Verified 2026-09-12. Scope: the [cache-reader inventory](../docs/technical/realtime-and-caching.md#cross-request-reader-inventory) and [calendar contracts](../tests/ui-contracts/calendar.spec.ts) cover retained data, current authorization, scope changes and failure recovery. This does not permit stale privileged data or replace the separate DEV revocation check. |
+| 02 | caching | Already covered | Verified 2026-09-12. Scope: [security policy](../docs/technical/security.md) separates private file/operational responses from public static assets. Deployed header/cache behaviour still requires Step 3 verification; this row does not certify CDN configuration. |
 | 03 | authorization | Candidate | Feature-flag/configuration TTLs cannot silently preserve revoked permissions or cross-tenant configuration. |
-| 04 | caching | Deferred | Stale-while-revalidate for operational reads must preserve authorized scope, mutation confirmation, and visible stale/error handling. It is not suitable for every data class. |
+| 04 | caching | Deferred | Reconsidered 2026-09-12. The existing calendar owner retains authorized data with explicit stale/error and recovery states; this is not a general SWR cache. Extend reuse only when a measured need exists and current authorization, mutation confirmation and invalidation remain provable. |
 
 ## TERM-013
 
@@ -129,7 +129,7 @@ Source: [Indexes](vibecoder-terms-video-subs/2026-07-03-EP-13-database-indexing.
 
 | Aspect | Topic | Status | Consideration |
 | --- | --- | --- | --- |
-| 01 | performance | Deferred | Use query plans and representative data to evaluate index benefit against write/storage cost. |
+| 01 | performance | Deferred | Reconsidered 2026-09-12. No new index or representative EXPLAIN evidence is claimed. Revisit safe query plans when measured database time or the larger profile warrants an index change, and compare read benefit with write/storage cost. |
 | 02 | evidence-quality | Verify | Indexes need not be single-column or simple presorted shortcuts; choose actual Postgres index design rather than literalizing the book analogy. |
 
 ## TERM-014
@@ -158,7 +158,7 @@ Source: [Connection pooling](vibecoder-terms-video-subs/2026-07-11-EP-16-connect
 
 | Aspect | Topic | Status | Consideration |
 | --- | --- | --- | --- |
-| 01 | capacity | Candidate | Identify actual connection reuse, concurrency, and provider limits. |
+| 01 | capacity | Deferred | Reconsidered 2026-09-12. The app uses Supabase HTTP/PostgREST, so raw PostgreSQL pooler tuning is not an app URL change. Measured HTTP pressure is now bounded by the [request scheduler](../docs/technical/realtime-and-caching.md#backend-request-capacity). Revisit provider pool capacity when provider metrics identify connection pressure or a direct database client is introduced. |
 | 02 | database-security | Verify | Transaction pooling must fit the client, session-state needs, and prepared-statement support. Do not point every Supabase HTTP request at a raw Postgres pooler. |
 
 ## TERM-017
@@ -168,7 +168,7 @@ Source: [Promises](vibecoder-terms-video-subs/2026-07-12-EP-17-promises.txt)
 | Aspect | Topic | Status | Consideration |
 | --- | --- | --- | --- |
 | 01 | resilience | Candidate | Inspect rejected and unawaited asynchronous work where it can lose errors or mutate after a response. |
-| 02 | performance | Deferred | Sequence dependent work and run independent I/O concurrently when safe during speed analysis. |
+| 02 | performance | Already covered | Verified 2026-09-12. Scope: [request reuse tests](../lib/data/read-request-cache.test.ts), [permission lifetime/cancellation tests](../lib/data/read-request-lifetime.test.ts) and [calendar HTTP tests](../lib/calendar/window-http.test.ts) exercise current request ownership; [clock/active-job GET transport](../docs/technical/realtime-and-caching.md) removes those reads from the browser Server Action queue. The [scheduler contracts](../lib/supabase/request-scheduler.test.ts) also enforce bounded pressure, caller context, cancellation and background progress. Dependent writes remain ordered; per-process bounds do not establish whole-provider capacity. |
 | 03 | evidence-quality | Verify | Not every filesystem/API function returns a promise, and await does not always require an enclosing async function in module contexts. Hydration is not simply filling the frontend with data. |
 
 ## TERM-018
@@ -177,7 +177,7 @@ Source: [Event loop and blocking](vibecoder-terms-video-subs/2026-07-13-EP-18-ev
 
 | Aspect | Topic | Status | Consideration |
 | --- | --- | --- | --- |
-| 01 | performance | Deferred | Profile main-thread CPU work rather than infer blocking from function length. |
+| 01 | performance | Deferred | Reconsidered 2026-09-12. Renderer stability has focused component checks, but no whole-app CPU profile is claimed. Profile the browser main thread when response-to-usable timing or a larger workload identifies unexplained rendering cost; function length alone is not evidence. |
 | 02 | performance | Verify | Marking CPU work async does not move it to another thread. Distinguish asynchronous I/O from worker execution. |
 | 03 | capacity | Deferred | Use worker processing for a measured heavy task that fits the settled infrastructure rule. |
 | 04 | interaction-feedback | Deferred | Chunked processing/progress can improve responsiveness but must preserve cancellation, atomicity, and accurate partial-state display. |
@@ -207,8 +207,8 @@ Source: [CDN and edge](vibecoder-terms-video-subs/2026-07-16-EP-21-cdn-and-edge.
 
 | Aspect | Topic | Status | Consideration |
 | --- | --- | --- | --- |
-| 01 | caching | Deferred | Inspect static font/image/script delivery on the actual deployment during the speed pass. |
-| 02 | observability | Deferred | Check response headers and cache hit/miss behavior after warm-up; a first miss is not inherently a defect. |
+| 01 | caching | Deferred | Reconsidered 2026-09-12. Verify deployed compression, font/image delivery and asset-specific cache headers at Step 3. Local transfer measurements do not prove CDN behaviour. Private HTML/RSC and file URLs must retain their access boundaries; no new CDN is proposed. |
+| 02 | observability | Deferred | Reconsidered 2026-09-12. At Step 3, inspect deployment response headers after controlled warm-up for the relevant public asset class. A local load is not CDN-hit evidence, and one first miss is not a defect. Keep protected HTML/RSC and private file URLs outside public-asset assumptions. |
 | 03 | source-completeness | Verify | The displayed asset/header values are absent from the transcript; retrieve provider documentation or original visuals if exact values matter. |
 | 04 | evidence-quality | Verify | Automatic CDN coverage and nearest-city serving vary by provider, asset, cache policy, and region. |
 
@@ -278,9 +278,9 @@ Source: [Optimistic rendering](vibecoder-terms-video-subs/2026-08-05-EP-26-optim
 
 | Aspect | Topic | Status | Consideration |
 | --- | --- | --- | --- |
-| 01 | interaction-feedback | Deferred | Evaluate optimistic UI for predictable reversible effects during the speed pass. |
+| 01 | interaction-feedback | Already covered | Verified 2026-09-12. Scope: [actual day-view contracts](../tests/ui-contracts/day-view.spec.ts) cover delayed/rejected save and Undo; [calendar contracts](../tests/ui-contracts/calendar.spec.ts) cover retention, failure and reconciliation. Existing list mutation owners remain. The source's claimed 99% success rate never authorizes false success for an unconfirmed action. |
 | 02 | business-integrity | Candidate | Deletion still needs permission, error handling, reconciliation, and recovery; a guessed 99% success rate cannot authorize false success feedback. |
-| 03 | observability | Deferred | Measure perceived acknowledgement and authoritative completion separately rather than treating optimism as a server-speed improvement. |
+| 03 | observability | Already covered | Verified 2026-09-12. Scope: [testing rules](../docs/technical/testing.md) separate pending-feedback contracts from selected authoritative completion/readiness measurements. This does not put a stopwatch in every test or equate optimistic feedback with faster server processing. |
 
 ## TERM-029
 

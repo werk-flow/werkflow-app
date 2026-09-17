@@ -1,5 +1,6 @@
 "use client";
 
+import { normalizeSearchText } from '@/lib/ui/search';
 import { useEffect, useMemo, useState, type ReactElement } from "react";
 import { CalendarClock, ClipboardList, FileCheck2, MapPin, Pencil, Plus } from "lucide-react";
 
@@ -50,7 +51,7 @@ function formatDate(value: string | null): string {
 
 // One column definition for the due list header and its skeleton (design canon).
 const TWO_LINE_CELL = <span className="block space-y-1.5"><Skeleton className="h-4 w-40 max-w-full" /><Skeleton className="h-3 w-24 max-w-full" /></span>;
-export const MAINTENANCE_DUE_COLUMNS: readonly SkeletonColumn[] = [
+const MAINTENANCE_DUE_COLUMNS: readonly SkeletonColumn[] = [
   { id: "due", header: "Fälligkeit", className: "w-32", skeleton: TWO_LINE_CELL },
   { id: "plan", header: "Plan & Anlage", skeleton: TWO_LINE_CELL },
   { id: "client", header: "Kunde & Auftrag", skeleton: TWO_LINE_CELL },
@@ -136,7 +137,7 @@ export function MaintenanceContent({ initial }: { initial: MaintenanceWorkspace 
   // arrives before the settle read drops the placeholder by id.
   const pendingPlans = pendingCreates.filter((draft): draft is MaintenancePlanPendingDraft => draft.kind === "plan" && !workspace.plans.some((plan) => plan.id === draft.id));
   const pendingCoverages = pendingCreates.filter((draft): draft is MaintenanceCoveragePendingDraft => draft.kind === "coverage" && !workspace.coverages.some((coverage) => coverage.id === draft.id));
-  const needle = search.trim().toLocaleLowerCase("de-DE");
+  const needle = normalizeSearchText(search);
   const plans = useMemo(
     () => workspace.plans.filter((plan) =>
       !needle || [plan.planNumber, plan.clientName, plan.siteName, plan.templateName, ...plan.equipment.map((item) => `${item.equipmentNumber} ${item.name}`)]

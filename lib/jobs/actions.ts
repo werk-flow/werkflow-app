@@ -3,6 +3,7 @@
 import { UUID_PATTERN } from '@/lib/validation/uuid';
 import { updateTag, revalidatePath } from 'next/cache';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { authenticateAndAuthorize } from './auth';
 import { CACHE_TAGS } from '@/lib/data/cached';
 import {
@@ -13,14 +14,10 @@ import {
   type JobAssignmentWithProfile,
   type ProjectWithDetails,
   type CalendarJob,
-  type CalendarEntryDialogMember,
-  type CalendarEntryDialogJobOption,
   type CreateJobResult,
   type UpdateJobResult,
   type DeleteJobResult,
-  type AssignEmployeeResult,
   type UpdateJobAssignmentsResult,
-  type UnassignEmployeeResult,
   normalizeJobPlannedTime,
   getJobDisplayTitle,
   toJob,
@@ -95,15 +92,15 @@ type AssignmentContext = {
 
 async function assessAssignmentSelection(input: {
   context: AssignmentContext;
-  jobId?: string | null;
+  jobId?: string | null | undefined;
   selectedUserIds: string[];
-  assessedForDate?: string | null;
-  approval?: AssignmentApproval | null;
+  assessedForDate?: string | null | undefined;
+  approval?: AssignmentApproval | null | undefined;
   requirementRows?: Array<{
     id: string;
     capability_id: string;
     require_confirmation: boolean;
-  }>;
+  }> | undefined;
 }): Promise<
   | { success: true; evaluation: AssignmentEvaluation }
   | {
@@ -157,8 +154,8 @@ async function replaceJobAssignmentsAfterAssessment(input: {
   jobId: string;
   selectedUserIds: string[];
   evaluation: AssignmentEvaluation;
-  approval?: AssignmentApproval | null;
-  teamSourceId?: string | null;
+  approval?: AssignmentApproval | null | undefined;
+  teamSourceId?: string | null | undefined;
   recordAssessment?: boolean;
 }): Promise<
   | { success: true; assignments: ReturnType<typeof toJobAssignment>[] }
@@ -234,16 +231,6 @@ export type AuftraegeDialogOptionsResult =
     }
   | { success: false; error: string };
 
-export type CalendarEntryDialogOptionsResult =
-  | {
-      success: true;
-      clients: ReturnType<typeof toClient>[];
-      members: CalendarEntryDialogMember[];
-      projects: ProjectWithDetails[];
-      manualEntryJobs: CalendarEntryDialogJobOption[];
-    }
-  | { success: false; error: string };
-
 export async function getAuftraegeDialogOptions(): Promise<AuftraegeDialogOptionsResult> {
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return { success: false, error: auth.error };
@@ -254,26 +241,23 @@ export async function getAuftraegeDialogOptions(): Promise<AuftraegeDialogOption
   const admin = createSupabaseAdminClient();
   const [clientsResult, membersResult, projectsResult, jobsResult] =
     await Promise.all([
-      admin
-        .from('clients')
+      readCompleteRows((from, to) => admin.from('clients')
         .select('*')
         .eq('organization_id', auth.context.orgId)
-        .order('name', { ascending: true }),
+        .order('name', { ascending: true }).order('id').range(from, to), LIST_ROW_CAP),
       admin.rpc('get_org_members_for_user', {
         p_org_id: auth.context.orgId,
         p_user_id: auth.context.userId
       }),
-      admin
-        .from('projects')
+      readCompleteRows((from, to) => admin.from('projects')
         .select('*')
         .eq('organization_id', auth.context.orgId)
-        .order('created_at', { ascending: false }),
-      admin
-        .from('jobs')
+        .order('created_at', { ascending: false }).order('id').range(from, to), LIST_ROW_CAP),
+      readCompleteRows((from, to) => admin.from('jobs')
         .select('*')
         .eq('organization_id', auth.context.orgId)
         .order('planned_date', { ascending: true, nullsFirst: false })
-        .order('created_at', { ascending: false }),
+        .order('created_at', { ascending: false }).order('id').range(from, to), LIST_ROW_CAP),
     ]);
 
   if (clientsResult.error) return { success: false, error: 'clients_failed' };
@@ -338,134 +322,6 @@ export async function getAuftraegeDialogOptions(): Promise<AuftraegeDialogOption
       };
     }),
     jobs: (jobsResult.data ?? []).map(toJob),
-  };
-}
-
-export async function getCalendarEntryDialogOptions(): Promise<CalendarEntryDialogOptionsResult> {
-  const auth = await authenticateAndAuthorize();
-  if (!auth.success) return { success: false, error: auth.error };
-  if (!auth.context.isManagerOrAbove) {
-    return { success: false, error: 'not_authorized' };
-  }
-
-  const admin = createSupabaseAdminClient();
-  const [clientsResult, membersResult, projectsResult, jobsResult] =
-    await Promise.all([
-      admin
-        .from('clients')
-        .select('*')
-        .eq('organization_id', auth.context.orgId)
-        .order('name', { ascending: true }),
-      admin.rpc('get_org_members_for_user', {
-        p_org_id: auth.context.orgId,
-        p_user_id: auth.context.userId,
-      }),
-      admin
-        .from('projects')
-        .select('*')
-        .eq('organization_id', auth.context.orgId)
-        .order('created_at', { ascending: false }),
-      admin
-        .from('jobs')
-        .select('id, title, description, job_number, status, project_id, planned_date, created_at')
-        .eq('organization_id', auth.context.orgId)
-        .order('planned_date', { ascending: true, nullsFirst: false })
-        .order('created_at', { ascending: false }),
-    ]);
-
-  if (clientsResult.error) return { success: false, error: 'clients_failed' };
-  if (membersResult.error) return { success: false, error: 'members_failed' };
-  if (projectsResult.error) return { success: false, error: 'projects_failed' };
-  if (jobsResult.error) return { success: false, error: 'jobs_failed' };
-
-  const clients = (clientsResult.data ?? []).map(toClient);
-  const clientLookup = new Map(clients.map((client) => [client.id, client]));
-  const projectRows = projectsResult.data ?? [];
-  const projectJobCounts = new Map<
-    string,
-    { total: number; completed: number; inProgress: number; parked: number }
-  >();
-
-  for (const job of jobsResult.data ?? []) {
-    if (!job.project_id) continue;
-    const counts = projectJobCounts.get(job.project_id) ?? {
-      total: 0,
-      completed: 0,
-      inProgress: 0,
-      parked: 0,
-    };
-    counts.total++;
-    if (job.status === 'fertig') counts.completed++;
-    if (job.status === 'in_bearbeitung') counts.inProgress++;
-    if (job.status === 'geparkt') counts.parked++;
-    projectJobCounts.set(job.project_id, counts);
-  }
-
-  const projectLookup = new Map(
-    projectRows.map((row) => [row.id, toProject(row)])
-  );
-
-  const rawMembers = (membersResult.data ?? []) as Array<{
-    user_id: string;
-    first_name: string | null;
-    last_name: string | null;
-    email: string;
-    role: string;
-  }>;
-  const members = rawMembers
-    .filter((member) =>
-      auth.context.role === 'buero'
-        ? member.role === 'employee' || member.user_id === auth.context.userId
-        : true
-    )
-    .map((member) => ({
-      userId: member.user_id,
-      firstName: member.first_name ?? '',
-      lastName: member.last_name ?? '',
-      email: member.email,
-      role: member.role,
-    }));
-
-  const projects = projectRows.map((row) => {
-    const project = toProject(row);
-    const counts = projectJobCounts.get(project.id) ?? {
-      total: 0,
-      completed: 0,
-      inProgress: 0,
-      parked: 0,
-    };
-
-    return {
-      ...project,
-      client: project.clientId ? clientLookup.get(project.clientId) ?? null : null,
-      jobCount: counts.total,
-      completedJobCount: counts.completed,
-      inProgressJobCount: counts.inProgress,
-      parkedJobCount: counts.parked,
-    };
-  });
-
-  const manualEntryJobs = (jobsResult.data ?? [])
-    .filter((job) => job.status !== 'fertig')
-    .map((job) => ({
-      id: job.id,
-      title: getJobDisplayTitle({
-        title: job.title,
-        description: job.description,
-      }),
-      jobNumber: job.job_number,
-      status: job.status,
-      projectName: job.project_id
-        ? projectLookup.get(job.project_id)?.name ?? null
-        : null,
-    }));
-
-  return {
-    success: true,
-    clients,
-    members,
-    projects,
-    manualEntryJobs,
   };
 }
 
@@ -1070,144 +926,6 @@ export async function deleteJob(jobId: string): Promise<DeleteJobResult> {
   }
 }
 
-export async function assignEmployee(
-  jobId: string,
-  targetUserId: string,
-  approval?: AssignmentApproval | null
-): Promise<AssignEmployeeResult> {
-  try {
-    const auth = await authenticateAndAuthorize();
-    if (!auth.success) return auth;
-    const { userId, orgId, isManagerOrAbove } = auth.context;
-
-    if (!isManagerOrAbove) {
-      return { success: false, error: 'not_authorized' };
-    }
-
-    const admin = createSupabaseAdminClient();
-
-    const { data: job, error: jobError } = await admin
-      .from('jobs')
-      .select('id, planned_date')
-      .eq('id', jobId)
-      .eq('organization_id', orgId)
-      .single();
-
-    if (jobError || !job) {
-      return { success: false, error: 'job_not_found' };
-    }
-
-    const { data: existingRows, error: existingError } = await admin
-      .from('job_assignments')
-      .select('user_id')
-      .eq('job_id', jobId);
-    if (existingError) return { success: false, error: 'load_failed' };
-    if ((existingRows ?? []).some((row) => row.user_id === targetUserId)) {
-      return { success: false, error: 'already_assigned' };
-    }
-    const selectedUserIds = [
-      ...(existingRows ?? []).map((row) => row.user_id),
-      targetUserId,
-    ];
-    const context = { admin, orgId, actorId: userId };
-    const assessment = await assessAssignmentSelection({
-      context,
-      jobId,
-      selectedUserIds,
-      assessedForDate: job.planned_date,
-      approval,
-    });
-    if (!assessment.success) return assessment;
-    const result = await replaceJobAssignmentsAfterAssessment({
-      context,
-      jobId,
-      selectedUserIds,
-      evaluation: assessment.evaluation,
-      approval,
-    });
-    if (!result.success) return result;
-    const assignment = result.assignments.find(
-      (row) => row.userId === targetUserId
-    );
-    if (!assignment) return { success: false, error: 'assign_failed' };
-
-    updateTag(CACHE_TAGS.jobs(orgId));
-    updateTag(CACHE_TAGS.qualifications(orgId));
-    revalidatePath('/auftraege', 'layout');
-    revalidatePath('/mitarbeiter', 'layout');
-
-    return { success: true, assignment };
-  } catch (error) {
-    console.error('Unexpected error in assignEmployee:', error);
-    return { success: false, error: 'unexpected_error' };
-  }
-}
-
-export async function unassignEmployee(
-  jobId: string,
-  targetUserId: string,
-  approval?: AssignmentApproval | null
-): Promise<UnassignEmployeeResult> {
-  try {
-    const auth = await authenticateAndAuthorize();
-    if (!auth.success) return auth;
-    const { orgId, userId, isManagerOrAbove } = auth.context;
-
-    if (!isManagerOrAbove) {
-      return { success: false, error: 'not_authorized' };
-    }
-
-    const admin = createSupabaseAdminClient();
-
-    const { data: job, error: jobError } = await admin
-      .from('jobs')
-      .select('id, planned_date')
-      .eq('id', jobId)
-      .eq('organization_id', orgId)
-      .single();
-
-    if (jobError || !job) {
-      return { success: false, error: 'job_not_found' };
-    }
-
-    const { data: existingRows, error: existingError } = await admin
-      .from('job_assignments')
-      .select('user_id')
-      .eq('job_id', jobId);
-    if (existingError) return { success: false, error: 'load_failed' };
-    const selectedUserIds = (existingRows ?? [])
-      .map((row) => row.user_id)
-      .filter((id) => id !== targetUserId);
-    const context = { admin, orgId, actorId: userId };
-    const assessment = await assessAssignmentSelection({
-      context,
-      jobId,
-      selectedUserIds,
-      assessedForDate: job.planned_date,
-      approval,
-    });
-    if (!assessment.success) return assessment;
-    const result = await replaceJobAssignmentsAfterAssessment({
-      context,
-      jobId,
-      selectedUserIds,
-      evaluation: assessment.evaluation,
-      approval,
-    });
-    if (!result.success) return result;
-
-    updateTag(CACHE_TAGS.jobs(orgId));
-    updateTag(CACHE_TAGS.qualifications(orgId));
-    revalidatePath('/auftraege', 'layout');
-    revalidatePath('/mitarbeiter', 'layout');
-
-    return { success: true };
-  } catch (error) {
-    console.error('Unexpected error in unassignEmployee:', error);
-    return { success: false, error: 'unexpected_error' };
-  }
-}
-
 export async function updateJobAssignments(
   jobId: string,
   selectedUserIds: string[],
@@ -1278,12 +996,10 @@ export async function getOrgJobs(): Promise<
     const admin = createSupabaseAdminClient();
 
     if (isManagerOrAbove) {
-      const { data, error } = await admin
-        .from('jobs')
-        .select('*')
+      const { data, error } = await readCompleteRows((from, to) => admin.from('jobs').select('*')
         .eq('organization_id', orgId)
         .order('planned_date', { ascending: true, nullsFirst: false })
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false }).order('id').range(from, to), LIST_ROW_CAP);
 
       if (error) {
         console.error('Error fetching jobs:', error);
@@ -1293,10 +1009,7 @@ export async function getOrgJobs(): Promise<
       return { success: true, jobs: (data ?? []).map(toJob) };
     }
 
-    const { data: assignments, error: assignError } = await admin
-      .from('job_assignments')
-      .select('job_id')
-      .eq('user_id', userId);
+    const { data: assignments, error: assignError } = await readCompleteRows((from, to) => admin.from('job_assignments').select('job_id').eq('organization_id', orgId).eq('user_id', userId).order('id').range(from, to), LIST_ROW_CAP);
 
     if (assignError) {
       console.error('Error fetching assignments:', assignError);
@@ -1309,13 +1022,11 @@ export async function getOrgJobs(): Promise<
       return { success: true, jobs: [] };
     }
 
-    const { data, error } = await admin
-      .from('jobs')
-      .select('*')
+    const { data, error } = await readInBatches(assignedJobIds, (ids) => admin.from('jobs').select('*')
       .eq('organization_id', orgId)
-      .in('id', assignedJobIds)
+      .in('id', [...ids])
       .order('planned_date', { ascending: true, nullsFirst: false })
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false }).order('id'));
 
     if (error) {
       console.error('Error fetching assigned jobs:', error);
@@ -1587,174 +1298,46 @@ export type ClientJobsResult = {
  * Includes jobs directly linked to the client AND jobs belonging to
  * projects linked to the client. Requires admin/manager access.
  */
-export async function getJobsForClient(
-  clientId: string
-): Promise<
-  ({ success: true } & ClientJobsResult) | { success: false; error: string }
-> {
-  try {
-    const auth = await authenticateAndAuthorize();
-    if (!auth.success) return auth;
-    const { orgId, isManagerOrAbove } = auth.context;
-
-    if (!isManagerOrAbove) {
-      return { success: false, error: 'not_authorized' };
-    }
-
-    const admin = createSupabaseAdminClient();
-
-    const [directJobsResult, clientProjectsResult] = await Promise.all([
-      admin
-        .from('jobs')
-        .select('*')
-        .eq('organization_id', orgId)
-        .eq('client_id', clientId)
-        .order('planned_date', { ascending: true, nullsFirst: false })
-        .order('created_at', { ascending: false }),
-      admin
-        .from('projects')
-        .select('*')
-        .eq('organization_id', orgId)
-        .eq('client_id', clientId),
-    ]);
-
-    if (directJobsResult.error) {
-      console.error('Error fetching client jobs:', directJobsResult.error);
-      return { success: false, error: 'fetch_failed' };
-    }
-    if (clientProjectsResult.error) {
-      console.error('Error fetching client projects:', clientProjectsResult.error);
-      return { success: false, error: 'fetch_failed' };
-    }
-
-    const projectRows = clientProjectsResult.data ?? [];
-    const projectIds = projectRows.map((p) => p.id);
-
-    let projectChildJobs: typeof directJobsResult.data = [];
-    if (projectIds.length > 0) {
-      const { data } = await admin
-        .from('jobs')
-        .select('*')
-        .eq('organization_id', orgId)
-        .in('project_id', projectIds);
-      projectChildJobs = data ?? [];
-    }
-
-    const jobMap = new Map<string, (typeof directJobsResult.data)[number]>();
-    for (const j of directJobsResult.data ?? []) jobMap.set(j.id, j);
-    for (const j of projectChildJobs) jobMap.set(j.id, j);
-
-    const jobs = [...jobMap.values()].map(toJob);
-
-    const allProjectIds = [
-      ...new Set([
-        ...projectIds,
-        ...jobs.filter((j) => j.projectId).map((j) => j.projectId!),
-      ]),
-    ];
-
-    const projects: ProjectWithDetails[] = [];
-    if (allProjectIds.length > 0) {
-      const knownProjectMap = new Map(projectRows.map((p) => [p.id, p]));
-
-      const missingIds = allProjectIds.filter((id) => !knownProjectMap.has(id));
-      if (missingIds.length > 0) {
-        const { data: extraRows } = await admin
-          .from('projects')
-          .select('*')
-          .eq('organization_id', orgId)
-          .in('id', missingIds);
-        for (const r of extraRows ?? []) knownProjectMap.set(r.id, r);
-      }
-
-      const { data: allProjectJobs } = await admin
-        .from('jobs')
-        .select('id, project_id, status')
-        .eq('organization_id', orgId)
-        .in('project_id', allProjectIds);
-
-      const jobsByProject = new Map<string, { total: number; completed: number; inProgress: number; parked: number }>();
-      for (const j of allProjectJobs ?? []) {
-        const entry = jobsByProject.get(j.project_id!) ?? { total: 0, completed: 0, inProgress: 0, parked: 0 };
-        entry.total++;
-        if (j.status === 'fertig') entry.completed++;
-        if (j.status === 'in_bearbeitung') entry.inProgress++;
-        if (j.status === 'geparkt') entry.parked++;
-        jobsByProject.set(j.project_id!, entry);
-      }
-
-      const projClientIds = [
-        ...new Set(
-          [...knownProjectMap.values()]
-            .filter((p) => p.client_id)
-            .map((p) => p.client_id!)
-        ),
-      ];
-      const projectClients: Record<string, ReturnType<typeof toClient>> = {};
-      if (projClientIds.length > 0) {
-        const { data: clientRows } = await admin
-          .from('clients')
-          .select('*')
-          .in('id', projClientIds);
-        for (const c of clientRows ?? []) {
-          projectClients[c.id] = toClient(c);
-        }
-      }
-
-      for (const id of allProjectIds) {
-        const row = knownProjectMap.get(id);
-        if (!row) continue;
-        const counts = jobsByProject.get(row.id) ?? { total: 0, completed: 0, inProgress: 0, parked: 0 };
-        projects.push({
-          ...toProject(row),
-          client: row.client_id ? (projectClients[row.client_id] ?? null) : null,
-          jobCount: counts.total,
-          completedJobCount: counts.completed,
-          inProgressJobCount: counts.inProgress,
-          parkedJobCount: counts.parked,
-        });
-      }
-    }
-
-    const allClientIds = [
-      ...new Set(jobs.filter((j) => j.clientId).map((j) => j.clientId!)),
-    ];
-    const clientMap: Record<string, string> = {};
-    if (allClientIds.length > 0) {
-      const { data: clientRows } = await admin
-        .from('clients')
-        .select('id, name')
-        .in('id', allClientIds);
-      for (const c of clientRows ?? []) {
-        clientMap[c.id] = c.name;
-      }
-    }
-    for (const p of projects) {
-      if (p.clientId && p.client) {
-        clientMap[p.clientId] = p.client.name;
-      }
-    }
-
-    const allJobIds = jobs.map((j) => j.id);
-    const jobAssignmentMap: Record<string, string[]> = {};
-    if (allJobIds.length > 0) {
-      const { data: allAssignments } = await admin
-        .from('job_assignments')
-        .select('job_id, user_id')
-        .in('job_id', allJobIds);
-      for (const a of allAssignments ?? []) {
-        if (!jobAssignmentMap[a.job_id]) jobAssignmentMap[a.job_id] = [];
-        jobAssignmentMap[a.job_id].push(a.user_id);
-      }
-    }
-
-    return { success: true, jobs, projects, clientMap, jobAssignmentMap };
-  } catch (error) {
-    console.error('Unexpected error in getJobsForClient:', error);
-    return { success: false, error: 'unexpected_error' };
-  }
+export async function getJobsForClient(clientId: string): Promise<({ success: true } & ClientJobsResult) | { success: false; error: string }> {
+  const auth = await authenticateAndAuthorize();
+  if (!auth.success) return auth;
+  const { orgId, isManagerOrAbove } = auth.context;
+  if (!isManagerOrAbove) return { success: false, error: 'not_authorized' };
+  if (!UUID_PATTERN.test(clientId)) return { success: false, error: 'invalid_client' };
+  const admin = createSupabaseAdminClient();
+  const [directJobs, clientProjects] = await Promise.all([
+    readCompleteRows((from, to) => admin.from('jobs').select('*').eq('organization_id', orgId).eq('client_id', clientId).order('id').range(from, to), LIST_ROW_CAP),
+    readCompleteRows((from, to) => admin.from('projects').select('*').eq('organization_id', orgId).eq('client_id', clientId).order('id').range(from, to), LIST_ROW_CAP),
+  ]);
+  if (directJobs.error || clientProjects.error) return { success: false, error: 'fetch_failed' };
+  const projectIds = [...new Set([...clientProjects.data.map((project) => project.id), ...directJobs.data.flatMap((job) => job.project_id ? [job.project_id] : [])])];
+  const [allProjects, projectJobs] = await Promise.all([
+    readInBatches(projectIds, (ids) => admin.from('projects').select('*').eq('organization_id', orgId).in('id', [...ids])),
+    readInBatches(projectIds, (ids) => readCompleteRows((from, to) => admin.from('jobs').select('*').eq('organization_id', orgId).in('project_id', [...ids]).order('id').range(from, to), LIST_ROW_CAP)),
+  ]);
+  if (allProjects.error || projectJobs.error || projectJobs.data.length > LIST_ROW_CAP) return { success: false, error: 'fetch_failed' };
+  const directProjectIds = new Set(clientProjects.data.map((project) => project.id));
+  const jobRows = new Map(directJobs.data.map((job) => [job.id, job]));
+  for (const job of projectJobs.data) if (job.project_id && directProjectIds.has(job.project_id)) jobRows.set(job.id, job);
+  const jobs = [...jobRows.values()].map(toJob);
+  if (jobs.length > LIST_ROW_CAP) return { success: false, error: 'fetch_failed' };
+  const clientIds = [...new Set([...allProjects.data, ...jobRows.values()].flatMap((row) => row.client_id ? [row.client_id] : []))];
+  const [clients, assignments] = await Promise.all([
+    readInBatches(clientIds, (ids) => admin.from('clients').select('*').eq('organization_id', orgId).in('id', [...ids])),
+    readInBatches(jobs.map((job) => job.id), (ids) => readCompleteRows((from, to) => admin.from('job_assignments').select('job_id,user_id').eq('organization_id', orgId).in('job_id', [...ids]).order('id').range(from, to), LIST_ROW_CAP)),
+  ]);
+  if (clients.error || assignments.error || assignments.data.length > LIST_ROW_CAP * 4) return { success: false, error: 'fetch_failed' };
+  const clientLookup = new Map(clients.data.map((client) => [client.id, toClient(client)]));
+  const projects: ProjectWithDetails[] = allProjects.data.map((project) => {
+    const children = projectJobs.data.filter((job) => job.project_id === project.id);
+    return { ...toProject(project), client: project.client_id ? clientLookup.get(project.client_id) ?? null : null,
+      jobCount: children.length, completedJobCount: children.filter((job) => job.status === 'fertig').length,
+      inProgressJobCount: children.filter((job) => job.status === 'in_bearbeitung').length, parkedJobCount: children.filter((job) => job.status === 'geparkt').length };
+  });
+  const jobAssignmentMap: Record<string, string[]> = {};
+  for (const assignment of assignments.data) (jobAssignmentMap[assignment.job_id] ??= []).push(assignment.user_id);
+  return { success: true, jobs, projects, clientMap: Object.fromEntries(clients.data.map((client) => [client.id, client.name])), jobAssignmentMap };
 }
-
 // ============================================
 // Member-scoped queries
 // ============================================
@@ -1909,8 +1492,7 @@ export async function getJobsForMember(
 
     const jobAssignmentMap: Record<string, string[]> = {};
     for (const a of allAssignments ?? []) {
-      if (!jobAssignmentMap[a.job_id]) jobAssignmentMap[a.job_id] = [];
-      jobAssignmentMap[a.job_id].push(a.user_id);
+      (jobAssignmentMap[a.job_id] ??= []).push(a.user_id);
     }
 
     return {
@@ -1922,126 +1504,6 @@ export async function getJobsForMember(
     };
   } catch (error) {
     console.error('Unexpected error in getJobsForMember:', error);
-    return { success: false, error: 'unexpected_error' };
-  }
-}
-
-// ============================================
-// Calendar Integration
-// ============================================
-
-/**
- * Fetch jobs for the calendar view. Returns CalendarJob[] with assignment data.
- * Admin/manager see all org jobs; others see only assigned jobs.
- */
-export async function getJobsForCalendar(
-  from?: string,
-  to?: string
-): Promise<
-  { success: true; jobs: CalendarJob[] } | { success: false; error: string }
-> {
-  try {
-    const auth = await authenticateAndAuthorize();
-    if (!auth.success) return auth;
-    const { orgId, userId, isManagerOrAbove } = auth.context;
-
-    const admin = createSupabaseAdminClient();
-
-    let query = admin
-      .from('jobs')
-      .select('id, title, description, job_number, status, priority, planned_date, planned_time, estimated_duration_minutes, planned_working_minutes, location, client_id, project_id, execution_version')
-      .eq('organization_id', orgId)
-      .neq('status', 'geparkt')
-      .not('planned_date', 'is', null);
-
-    if (from) query = query.gte('planned_date', from);
-    if (to) query = query.lte('planned_date', to);
-
-    if (!isManagerOrAbove) {
-      const { data: assignments } = await admin
-        .from('job_assignments')
-        .select('job_id')
-        .eq('user_id', userId);
-
-      const assignedJobIds = (assignments || []).map((a) => a.job_id);
-      if (assignedJobIds.length === 0) {
-        return { success: true, jobs: [] };
-      }
-      query = query.in('id', assignedJobIds);
-    }
-
-    const { data: jobs, error: jobsError } = await query;
-
-    if (jobsError) {
-      console.error('Error fetching calendar jobs:', jobsError);
-      return { success: false, error: 'fetch_failed' };
-    }
-
-    if (!jobs || jobs.length === 0) {
-      return { success: true, jobs: [] };
-    }
-
-    const jobIds = jobs.map((j) => j.id);
-    const clientIds = jobs.map((j) => j.client_id).filter((id): id is string => id !== null);
-    const projectIds = jobs.map((j) => j.project_id).filter((id): id is string => id !== null);
-
-    const [assignmentsResult, clientsResult, projectsResult] = await Promise.all([
-      admin.from('job_assignments').select('job_id, user_id').in('job_id', jobIds),
-      clientIds.length > 0
-        ? admin.from('clients').select('id, name, address').in('id', clientIds)
-        : Promise.resolve({
-            data: [] as { id: string; name: string; address: string | null }[],
-            error: null
-          }),
-      projectIds.length > 0
-        ? admin.from('projects').select('id, name, project_number').in('id', projectIds)
-        : Promise.resolve({ data: [] as { id: string; name: string; project_number: string | null }[], error: null }),
-    ]);
-
-    const assignmentMap: Record<string, string[]> = {};
-    for (const a of assignmentsResult.data || []) {
-      if (!assignmentMap[a.job_id]) assignmentMap[a.job_id] = [];
-      assignmentMap[a.job_id].push(a.user_id);
-    }
-
-    const clientMap: Record<string, { name: string; address: string | null }> = {};
-    for (const c of clientsResult.data || []) {
-      clientMap[c.id] = {
-        name: c.name,
-        address: c.address
-      };
-    }
-
-    const projectMap: Record<string, { name: string; number: string | null }> = {};
-    for (const p of projectsResult.data || []) {
-      projectMap[p.id] = { name: p.name, number: p.project_number };
-    }
-
-    const calendarJobs: CalendarJob[] = jobs.map((j) => ({
-      id: j.id,
-      jobNumber: j.job_number,
-      title: getJobDisplayTitle({
-        title: j.title,
-        description: j.description
-      }),
-      status: j.status as JobStatus,
-      executionVersion: j.execution_version ?? 0,
-      priority: j.priority as JobPriority,
-      plannedDate: j.planned_date,
-      plannedTime: normalizeJobPlannedTime(j.planned_time),
-      estimatedDurationMinutes: j.estimated_duration_minutes,
-      plannedWorkingMinutes: j.planned_working_minutes,
-      location: j.location,
-      clientName: j.client_id ? (clientMap[j.client_id]?.name ?? null) : null,
-      clientAddress: j.client_id ? (clientMap[j.client_id]?.address ?? null) : null,
-      projectName: j.project_id ? (projectMap[j.project_id]?.name ?? null) : null,
-      projectNumber: j.project_id ? (projectMap[j.project_id]?.number ?? null) : null,
-      assignedUserIds: assignmentMap[j.id] || [],
-    }));
-
-    return { success: true, jobs: calendarJobs };
-  } catch (error) {
-    console.error('Unexpected error in getJobsForCalendar:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
@@ -2110,8 +1572,7 @@ export async function getParkedJobs(): Promise<
 
     const assignmentMap: Record<string, string[]> = {};
     for (const a of assignmentsResult.data || []) {
-      if (!assignmentMap[a.job_id]) assignmentMap[a.job_id] = [];
-      assignmentMap[a.job_id].push(a.user_id);
+      (assignmentMap[a.job_id] ??= []).push(a.user_id);
     }
 
     const clientMap: Record<string, { name: string; address: string | null }> = {};

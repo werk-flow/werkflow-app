@@ -53,6 +53,9 @@ const TimeInput = React.forwardRef<HTMLDivElement, TimeInputProps>(
         return { hours: 0, minutes: 0 };
       }
       const [h, m] = val.split(':').map(Number);
+      if (h === undefined || m === undefined) {
+        return { hours: 0, minutes: 0 };
+      }
       return { hours: h, minutes: m };
     };
 

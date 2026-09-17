@@ -32,7 +32,7 @@ export function QuickStats({
       </div>
 
       <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2">
-        <Clock className="h-4 w-4 text-green-500" />
+        <Clock className="h-4 w-4 text-success-text" />
         <span className="text-sm">
           <span className="font-medium">{activeWorkingCount}</span>
           <span className="text-muted-foreground ml-1">
@@ -44,14 +44,14 @@ export function QuickStats({
       {pendingCount > 0 && (
         <Link
           href="/zeiterfassung?tab=approvals"
-          className="flex items-center gap-2 rounded-lg border border-yellow-500/50 bg-yellow-50 dark:bg-yellow-950/20 px-3 py-2 transition-colors hover:bg-yellow-100 dark:hover:bg-yellow-950/40"
+          className="flex items-center gap-2 rounded-lg border border-warning/50 bg-warning-soft px-3 py-2 transition-colors hover:bg-warning/20"
         >
-          <AlertCircle className="h-4 w-4 text-yellow-600" />
+          <AlertCircle className="h-4 w-4 text-warning-soft-foreground" />
           <span className="text-sm">
-            <span className="font-medium text-yellow-700 dark:text-yellow-400">
+            <span className="font-medium text-warning-soft-foreground">
               {pendingCount}
             </span>
-            <span className="text-yellow-600 dark:text-yellow-500 ml-1">
+            <span className="text-warning-soft-foreground ml-1">
               {pendingCount === 1
                 ? 'ausstehender Antrag'
                 : 'ausstehende Anträge'}

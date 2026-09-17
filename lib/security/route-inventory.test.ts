@@ -10,13 +10,29 @@ import { resolve } from 'node:path';
 const repositoryRoot = resolve(import.meta.dir, '../..');
 
 const reviewedHandlers: Record<string, { authorization: string; mustImport: readonly string[] }> = {
+  'app/api/customer-page/route.ts': {
+    authorization: 'verified cookie identity, current manager role and active organization equality before the bounded shared customer reader; validated query and private no-store responses',
+    mustImport: ['authenticateAndAuthorize', 'withReadRequest', 'customerPageInputSchema', 'readCustomerPage'],
+  },
+  'app/api/time-tracking-state/route.ts': {
+    authorization: 'verified cookie identity and matching active organization before delegating to existing self-clock and membership-checked active-job readers; validated kind/UUID, private no-store responses',
+    mustImport: ['authenticateAndAuthorize', 'getCurrentClockState', 'getActiveJobIdsForOrg', 'withReadRequest'],
+  },
+  'app/api/calendar-window/route.ts': {
+    authorization: 'delegates to getCalendarWindow: verified cookie identity, active organization equality, bounded paired ranges, and constituent role permissions; every response is private and no-store',
+    mustImport: ['getCalendarWindow'],
+  },
+  'app/api/attention-counts/route.ts': {
+    authorization: 'delegates to getAttentionCounts, which authenticates the cookie session, resolves the active organization, and checks membership',
+    mustImport: ['getAttentionCounts'],
+  },
   'app/api/redeem-invite/route.ts': {
     authorization: 'getUser() on the caller session; the RPC binds the invite to that user',
     mustImport: ['createSupabaseServerClient'],
   },
-  'app/api/time-entries/route.ts': {
-    authorization: 'delegates to getTimeEntries, which authenticates, checks membership and role visibility',
-    mustImport: ['getTimeEntries'],
+  'app/api/background-read/route.ts': {
+    authorization: 'closed reader registry with per-kind validated input; verified cookie identity and, for inputs that name an organization, active-organization equality before delegating to readers that keep their own membership and subject checks; private no-store responses at background priority',
+    mustImport: ['authenticateAndAuthorize', 'withReadRequest', 'BACKGROUND_READS', 'isBackgroundReadKind'],
   },
   'app/auth/callback/route.ts': {
     authorization: 'GET: provider code/token exchange with same-origin return path; POST: same-origin JSON guard before setSession',

@@ -1,5 +1,6 @@
 "use client";
 
+import { normalizeSearchText } from '@/lib/ui/search';
 import { useEffect, useMemo, useState } from "react";
 import {
   BriefcaseBusiness,
@@ -46,11 +47,11 @@ type DocumentLinkDialogProps = {
   document: OrganizationDocument | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  jobs?: Job[];
-  projects?: ProjectWithDetails[];
-  clients?: Client[];
-  employees?: DocumentEmployee[];
-  equipment?: DocumentEquipment[];
+  jobs?: Job[] | undefined;
+  projects?: ProjectWithDetails[] | undefined;
+  clients?: Client[] | undefined;
+  employees?: DocumentEmployee[] | undefined;
+  equipment?: DocumentEquipment[] | undefined;
   onComplete: (variant: "success" | "error", message: string) => void;
 };
 
@@ -69,10 +70,7 @@ function getClientLabel(client: Client): string {
 }
 
 function getEmployeeLabel(employee: DocumentEmployee): string {
-  const name = [employee.firstName, employee.lastName]
-    .filter(Boolean)
-    .join(" ");
-  return name || employee.email || "Mitarbeiter";
+  return employee.name || employee.email || "Mitarbeiter";
 }
 
 function getEquipmentLabel(equipment: DocumentEquipment): string {
@@ -326,7 +324,7 @@ export function DocumentLinkDialog({
 
   const isLoadingCatalog = needsCatalogFetch && isCatalogPending;
 
-  const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase("de-DE");
+  const normalizedSearchQuery = normalizeSearchText(searchQuery);
 
   const filteredJobs = useMemo(
     () =>

@@ -46,7 +46,13 @@ function dateDigits(dateIso: string): string {
   return dateIso.split('-').reverse().join('');
 }
 
-const DATES = Array.from({ length: 5 }, (_, index) => ownedBerlinDateAtOffset('p1-16', 85 + index));
+const DATES = [
+  ownedBerlinDateAtOffset('p1-16', 85),
+  ownedBerlinDateAtOffset('p1-16', 86),
+  ownedBerlinDateAtOffset('p1-16', 87),
+  ownedBerlinDateAtOffset('p1-16', 88),
+  ownedBerlinDateAtOffset('p1-16', 89),
+] as const;
 const FIELD_VIEWPORT = { width: 390, height: 844 } as const;
 
 test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2', () => {
@@ -61,9 +67,12 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     // projection, office continuity, server authorization, side-effect-free
     // opening, first-viewport order, practical contact actions, and privacy.
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
-    const customerName = `P116 Audit Kunde ${world.runId}`;
-    const contactName = `P116 Audit Kontakt ${world.runId}`;
-    const siteName = `P116 Audit Heizzentrale ${world.runId}`;
+    // Short suffix: the world already isolates the organization, and a 32-character
+    // hex token wraps the phone header to three lines, which no real job title does.
+    const fixtureTag = world.runId.slice(0, 8);
+    const customerName = `P116 Audit Kunde ${fixtureTag}`;
+    const contactName = `P116 Audit Kontakt ${fixtureTag}`;
+    const siteName = `P116 Audit Heizzentrale ${fixtureTag}`;
     const projectNumber = `PRJ-${world.runId}-P116`;
     const projectTitle = `P116 Audit Projekt ${world.runId}`;
     const childJobNumber = `${projectNumber}-1`;
@@ -98,7 +107,7 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     });
     await createJob(adminPage, {
       jobNumber: childJobNumber,
-      title: `P116 Kindauftrag ${world.runId}`,
+      title: `P116 Kindauftrag ${fixtureTag}`,
       description: 'Störung prüfen und Ergebnis dokumentieren.',
       projectNumber,
       clientName: customerName,
@@ -303,7 +312,7 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     await acknowledgeDispatchOnJobPage(employeePage, acknowledgeNumber);
     const acknowledged = await getDispatchState(world.orgId, acknowledgeNumber);
     expect(
-      acknowledged.dispatches[0].acknowledgements.filter((entry) => entry.state === 'acknowledged')
+      acknowledged.dispatches[0]?.acknowledgements.filter((entry) => entry.state === 'acknowledged')
     ).toHaveLength(1);
     const lifecycleAfter = await getWorkLifecycleState(world.orgId, {
       jobNumber: acknowledgeNumber,
@@ -315,7 +324,7 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     await challengeDispatchOnJobPage(employeePage, challengeNumber, challengeReason);
     const challenged = await getDispatchState(world.orgId, challengeNumber);
     expect(
-      challenged.dispatches[0].acknowledgements.filter((entry) => entry.state === 'challenged')
+      challenged.dispatches[0]?.acknowledgements.filter((entry) => entry.state === 'challenged')
     ).toHaveLength(1);
     await employeePage.reload();
     await expect(visibleText(employeePage, challengeReason)).toBeVisible();

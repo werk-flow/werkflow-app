@@ -19,7 +19,7 @@ Source: [Login endpoint checklist](security-video-subs/2026-06-17-five-ways-a-vi
 | Aspect | Topic | Status | Consideration |
 | --- | --- | --- | --- |
 | 01 | session-security | Candidate | Inspect actual token storage and script access rather than assuming a login screen establishes safe sessions. |
-| 02 | authorization | Already covered | Verify admin privileges on the server for every privileged operation. Verified 2026-09-06: every exported Server Action must reach a caller-identity helper ([lib/security/server-action-authorization.test.ts](../lib/security/server-action-authorization.test.ts)); route handlers are inventoried with their mechanism ([lib/security/route-inventory.test.ts](../lib/security/route-inventory.test.ts)). Scope: web app route handlers and Server Actions at commit 4ab0319 plus the hardening pass; not the future mobile client. |
+| 02 | authorization | Candidate | Rechecked 2026-09-07: the action and route convention checks detect missing identity mechanisms. They cannot prove admin, object, tenant, lifecycle, or authorization-order requirements. Direct boundary tests and SQL denial evidence cover the repaired cases in [the Step 1 record](../docs/plans/security-infrastructure-hardening-2026-09.md); verify the exact operation when adopting or extending this advice. The future mobile client has no coverage claim. |
 | 03 | authentication | Candidate | Evaluate email verification and MFA separately against the SHK account lifecycle and provider capabilities. Neither universally prevents impersonation alone. |
 | 04 | abuse-controls | Candidate | Inspect login and reset throttling, including direct provider access and bypass of disabled UI controls. |
 | 05 | authentication | Candidate | Check password policy and breached-password controls at the authoritative boundary. |
@@ -98,7 +98,7 @@ Source: [Committed secrets](security-video-subs/2026-08-01-secrets-committed-to-
 
 | Aspect | Topic | Status | Consideration |
 | --- | --- | --- | --- |
-| 01 | secrets | Already covered | Inspect tracked files, generated client assets, history, and ignored environment files for actual credentials without reproducing secrets in reports. Verified 2026-09-06: pattern scan of tracked files and of every .env path in history found nothing; recorded in [docs/plans/security-infrastructure-hardening-2026-09.md](../docs/plans/security-infrastructure-hardening-2026-09.md). Scope: repository content and history on 2026-09-06; build output and provider logs were not scanned. |
+| 01 | secrets | Already covered | Rechecked 2026-09-07. Scope: exact private-credential and reviewed credential-pattern scans found no matches in 198 reachable commits, 5,002 blobs, current tracked/unignored files, and production login HTML plus 17 referenced JavaScript assets. Ignored credential values were compared only in memory. [The Step 1 record](../docs/plans/security-infrastructure-hardening-2026-09.md) owns evidence and limits. This does not certify unknown historical credentials, provider logs, protected preview, or all authenticated/lazy chunks; recheck changed delivered output. |
 | 02 | secrets | Candidate | If exposure is verified, revoke and rotate the affected credential and document the boundary. Deleting a file does not revoke a key. |
 | 03 | supply-chain | Candidate | Evaluate commit and CI secret detection with known bypasses and false positives. A pre-commit hook alone is not permanent prevention. |
 | 04 | evidence-quality | Not applicable | The author's 70% audit rate and one-hour exposure framing are not WerkFlow evidence or a safe exposure window. |
@@ -311,7 +311,7 @@ Source: [Checklist 3](security-video-subs/2026-08-22-security-checklist-3-depend
 
 | Aspect | Topic | Status | Consideration |
 | --- | --- | --- | --- |
-| 01 | dependency-security | Already covered | Known vulnerable dependencies. Verified 2026-09-06: Next upgraded to 16.3.4, transitive packages updated; remaining bun audit entries are nested development tooling ([docs/plans/security-infrastructure-hardening-2026-09.md](../docs/plans/security-infrastructure-hardening-2026-09.md), SI-018). Scope: the audit on 2026-09-06; recheck on every dependency change. |
+| 01 | dependency-security | Already covered | Rechecked 2026-09-07. Scope: dependency changes now have a bounded advisory gate with exact reviewed exceptions. The prior runtime `ws` dependency was not development-only, and its advisory was not server-only. Compatible patch overrides remove that affected version and several tooling findings. [The Step 1 record](../docs/plans/security-infrastructure-hardening-2026-09.md) owns the final audit evidence. Recheck package versions, advisory changes, and runtime reachability whenever dependencies change. |
 | 02 | supply-chain | Candidate | Malicious packages and install hooks. |
 | 03 | ai-security | Deferred | Product prompt injection before adding AI; developer tooling remains in current scope. |
 | 04 | agent-security | Candidate | Agent permissions and exposed tools. |
@@ -496,7 +496,7 @@ Source: [Deployment interrogation](security-video-subs/2026-09-03-a-deployment-s
 | 04 | browser-security | Verify | Serving only browser-originated requests does not prove an API is private. Check authentication independently of CORS. |
 | 05 | abuse-controls | Candidate | Actual server/provider throttles. |
 | 06 | error-disclosure | Candidate | Helpful safe error states, not just custom error screens. |
-| 07 | performance | Deferred | Query indexes and write overhead in the speed pass; use actual query plans before adding indexes. |
+| 07 | performance | Deferred | Reconsidered 2026-09-12. Server pagination changes filtered/counting query shapes but adds no indexes. Local SQL verifies access and completeness; it does not establish index efficiency at every scale. Revisit representative safe SELECT plans when query timing or a larger workload exposes cost, before proposing indexes and their write/storage overhead. |
 | 08 | observability | Candidate | Useful logs and actionable critical alerts. |
 | 09 | recovery | Candidate | Verify application rollback and database compatibility. Blue-green is an example, not a required Vercel migration. |
 

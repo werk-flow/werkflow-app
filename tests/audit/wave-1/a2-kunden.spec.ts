@@ -82,11 +82,13 @@ async function openProject(page: Page, projectNumber: string): Promise<void> {
 }
 
 async function expectSelectOptions(page: Page, trigger: Locator, labels: string[]): Promise<void> {
+  const [firstLabel] = labels;
+  if (!firstLabel) throw new Error('expectSelectOptions needs at least one label');
   await trigger.click();
   for (const label of labels) {
     await expect(page.getByRole('option', { name: label, exact: true })).toBeVisible();
   }
-  await page.getByRole('option', { name: labels[0], exact: true }).click();
+  await page.getByRole('option', { name: firstLabel, exact: true }).click();
 }
 
 async function createTimelineFollowUp(
@@ -311,10 +313,10 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
     const before = await getProjectJobRelationState(world.orgId, projectNumber, jobNumbers);
     expect(before.jobs).toHaveLength(2);
     expect(before.jobs.every((job) => job.projectId === before.projectId)).toBe(true);
-    expect(before.jobs[0].siteId).toBe(before.siteId);
-    expect(before.jobs[0].contactId).toBe(before.contactId);
-    expect(before.jobs[1].siteId).not.toBe(before.siteId);
-    expect(before.jobs[1].contactId).not.toBe(before.contactId);
+    expect(before.jobs[0]?.siteId).toBe(before.siteId);
+    expect(before.jobs[0]?.contactId).toBe(before.contactId);
+    expect(before.jobs[1]?.siteId).not.toBe(before.siteId);
+    expect(before.jobs[1]?.contactId).not.toBe(before.contactId);
 
     await adminPage.goto(`/auftraege/${projectNumber}-2`);
     await adminPage.getByRole('button', { name: 'Aktionen öffnen' }).click();
@@ -327,8 +329,8 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
     await jobDialog.getByRole('button', { name: 'Speichern', exact: true }).click();
     await expect(jobDialog).toHaveCount(0, { timeout: 20_000 });
     const edited = await getProjectJobRelationState(world.orgId, projectNumber, jobNumbers);
-    expect(edited.jobs[1].siteId).toBe(edited.siteId);
-    expect(edited.jobs[1].contactId).toBe(edited.contactId);
+    expect(edited.jobs[1]?.siteId).toBe(edited.siteId);
+    expect(edited.jobs[1]?.contactId).toBe(edited.contactId);
 
     await openProject(adminPage, projectNumber);
     await adminPage.getByRole('button', { name: 'Aktionen öffnen' }).click();
@@ -1004,7 +1006,7 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
       ['Auftrag angelegt', jobTitle],
       ['Projekt angelegt', projectTitle],
       ['Dokument verknüpft', 'upload-fixture'],
-    ]) {
+    ] as const) {
       const row = newestCustomerTimelineRow(adminPage, label, reference);
       await expect(row).toContainText(actor);
       await expect(row.getByRole('link', { name: 'Quelle öffnen' })).toHaveCount(1);
@@ -1270,7 +1272,7 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
       [`A2 Unbekannte Anruferin ${world.runId}`, `A2-ANF-${world.runId}-09`],
       [activeNumber, activeNumber],
       [fullName(world.users.buero), activeNumber],
-    ]) {
+    ] as const) {
       await search.fill(query);
       await expect(visibleText(bueroPage, expected)).toBeVisible();
     }

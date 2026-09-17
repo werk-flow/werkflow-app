@@ -65,7 +65,7 @@ export function SettingsShell({ children }: SettingsShellProps) {
                       : `Gilt für ${activeOrg?.name ?? 'die aktive Organisation'}`}
                   </p>
                   {isReadOnlyForCurrentSection ? (
-                    <p className="text-amber-600 dark:text-amber-400">
+                    <p className="text-warning-text">
                       Du kannst diesen Bereich einsehen, aber nur Admins können ihn später bearbeiten.
                     </p>
                   ) : null}

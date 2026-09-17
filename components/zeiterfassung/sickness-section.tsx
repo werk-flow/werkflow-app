@@ -30,10 +30,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   cancelSicknessReport,
   endSicknessReport,
-  getOwnSicknessReports,
   reportOwnSickness,
   type OwnSicknessOverview,
 } from '@/lib/sickness/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
 import {
   formatSicknessRange,
   SICKNESS_ERROR_MESSAGES,
@@ -64,8 +64,8 @@ export function SicknessSection() {
 
   const view = useLiveView<OwnSicknessOverview>({
     tables: ['sickness_reports'],
-    read: async (): Promise<LiveViewResult<OwnSicknessOverview>> => {
-      const result = await getOwnSicknessReports();
+    read: async ({ signal }): Promise<LiveViewResult<OwnSicknessOverview>> => {
+      const result = await readInBackground('own-sickness-reports', {}, signal);
       return result.success
         ? { ok: true, data: result.overview }
         : { ok: false };
@@ -258,7 +258,7 @@ function SicknessReportDialog({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [overlapHint, setOverlapHint] = useState(false);
-  const [dateErrors, setDateErrors] = useState<{ start?: string; end?: string }>({});
+  const [dateErrors, setDateErrors] = useState<{ start?: string | undefined; end?: string | undefined }>({});
 
   const isSingleDay = endKnown && startDate === endDate;
 

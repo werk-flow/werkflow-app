@@ -3,6 +3,7 @@
 - **Status:** accepted (2026-08-04)
 - **Date:** 2026-08-04
 - **Update 2026-08-18:** the shared dev/test/prod Supabase project follow-up is resolved — development and testing moved to a dedicated dev project; see [0003](0003-dev-prod-environment-split.md).
+- **Update 2026-09-17:** the first Railway worker arrives in Wave 4, not at `P1-44`/`P1-47`: offers and invoices need PDF/A-3 rendering (Chromium alone produces tagged PDF, not PDF/A) and `P1-40` needs the KoSIT and Mustang validators, which are Java. A Gotenberg container (Chromium, PDF/A-3b, Factur-X embedding) runs on Railway from `P1-36` on, the validators beside it in `P1-40`; e-invoice generation stays TypeScript. File bytes keep the direct-to-R2 path. Also clarified: "provider APIs" for Phase 2 AI include hyperscaler-hosted models with EU processing (Claude through the Bedrock `eu.` inference profile in Frankfurt, OpenAI's EU endpoint, Mistral's EU platform); Anthropic's first-party API offers no EU inference, so customer data goes through an EU endpoint under an AVV with that provider. See [pre-Wave-3 step 4](../plans/phase-1/pre-wave-3/04-wave-3-4-and-phase-2-planning.md#research-digest-2026-09-17).
 - **Owner:** Product owner (Tamay), evaluated with agent research across database, auth, storage, and deployment
 - **Affects:** Every feature area; see the relevance map below
 
@@ -22,7 +23,7 @@
 
 ## Context
 
-Before Phase 1 feature build-out, we evaluated replacing Supabase with Convex, Vercel with Railway, and Supabase Auth with WorkOS/Clerk/Better Auth/Convex Auth. Inputs: the extended Phase 1/Phase 2 scope in [product-capability-map.md](../product/product-capability-map.md) and the Phase 1 roadmap (then the single file `phase-1-build-roadmap.md`, split into [phase-1/roadmap.md](../plans/phase-1/roadmap.md) on 2026-08-24), live Supabase state (~30 tables, ~56 RLS policies, 17 Realtime tables, 100+ coupled source files), two video transcripts on Convex and deployment options, and independent verification of current provider pricing.
+Before Phase 1 feature build-out, we evaluated replacing Supabase with Convex, Vercel with Railway, and Supabase Auth with WorkOS/Clerk/Better Auth/Convex Auth. Inputs: the extended Phase 1/Phase 2 scope in [product-capability-map.md](../product/product-capability-map.md) and the Phase 1 roadmap (then the single file [roadmap.md](../plans/phase-1/roadmap.md), split into [phase-1/roadmap.md](../plans/phase-1/roadmap.md) on 2026-08-24), live Supabase state (~30 tables, ~56 RLS policies, 17 Realtime tables, 100+ coupled source files), two video transcripts on Convex and deployment options, and independent verification of current provider pricing.
 
 ## Rationale
 

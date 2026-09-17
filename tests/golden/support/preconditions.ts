@@ -23,7 +23,7 @@ function preconditionError(input: SerialPrecondition): Error {
   return new Error(
     `Serial precondition missing for ${input.test}: ${input.needs}. ` +
       `Earlier tests in this serial file create that state — run the chain in one world: ` +
-      `bun run test:${input.suite}:focused --grep "${input.grep}". ` +
+      `bun run test:${input.suite}:focused --grep "${input.grep}" (focused diagnostic lane; acceptance evidence comes from bun run test:verify --group <owning group>). ` +
       `(A partial grep of a serial file would otherwise fail after minutes on a misleading locator timeout.)`
   );
 }

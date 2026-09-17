@@ -35,7 +35,7 @@ export function FieldWorkPackExecutionSection({
 }: {
   jobId: string;
   jobTitle: string;
-  initialDispatchCards?: EmployeeDispatchCard[];
+  initialDispatchCards?: EmployeeDispatchCard[] | undefined;
   initialDispatchError: string | null;
   lifecycleSnapshot: WorkLifecycleSnapshot | null;
   readOnly: boolean;

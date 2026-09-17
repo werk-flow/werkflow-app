@@ -41,4 +41,4 @@ Sources are versioned in `supabase/functions/` and deployed with `bunx supabase 
 - Ground database-related claims in actual Supabase inspection when needed.
 - Confirm live auth, RLS, table, function, or storage state before relying on it.
 - After Supabase-sensitive changes, verify the relevant behavior with MCP queries or the most direct available check, on dev first.
-- Run the guards that cover the change: `bun run migrations:check` (dev history matches the committed files), `bun run types:check`, `bun run realtime:check` (publication and replica-identity parity), and the slice's SQL assertions (`bun run test:sql:p12N`, for example `test:sql:p124`).
+- Run the guards that cover the change: `bun run migrations:check` (dev history matches the committed files), `bun run types:check`, `bun run realtime:check` (publication and replica-identity parity), and the SQL groups that own the change (`bun run test:verify --group sql:p1-24`, `sql:security`, `sql:list-pagination`); the registry in `lib/testing/test-groups.ts` is the only list of a group's SQL files.

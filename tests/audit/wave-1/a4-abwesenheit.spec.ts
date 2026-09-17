@@ -43,8 +43,17 @@ import {
 
 test.describe.configure({ mode: 'serial' });
 
-function shiftIsoDate(dateIso: string, days: number): string {
+/** Year, month and day of a `YYYY-MM-DD` string; a missing or non-numeric part is an error, never NaN arithmetic. */
+function parseIsoDateParts(dateIso: string): [number, number, number] {
   const [year, month, day] = dateIso.split('-').map(Number);
+  if (year === undefined || month === undefined || day === undefined || ![year, month, day].every(Number.isInteger)) {
+    throw new Error(`Invalid ISO date: ${dateIso}`);
+  }
+  return [year, month, day];
+}
+
+function shiftIsoDate(dateIso: string, days: number): string {
+  const [year, month, day] = parseIsoDateParts(dateIso);
   const shifted = new Date(Date.UTC(year, month - 1, day) + days * 86_400_000);
   return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, '0')}-${String(shifted.getUTCDate()).padStart(2, '0')}`;
 }
@@ -60,7 +69,7 @@ function formatGermanDate(dateIso: string): string {
 }
 
 function weekdayIndex(dateIso: string): number {
-  const [year, month, day] = dateIso.split('-').map(Number);
+  const [year, month, day] = parseIsoDateParts(dateIso);
   const dayOfWeek = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
   return dayOfWeek === 0 ? 6 : dayOfWeek - 1;
 }
@@ -114,8 +123,8 @@ async function cancelOwnSicknessReport(page: Page, rangeText: string): Promise<v
 async function openMonthCalendar(page: Page, dateIso = berlinDateAtOffset(0)): Promise<void> {
   await page.goto('/kalender');
   await page.getByRole('tab', { name: 'Monat', exact: true }).click();
-  const [targetYear, targetMonth] = dateIso.split('-').map(Number);
-  const [currentYear, currentMonth] = berlinDateAtOffset(0).split('-').map(Number);
+  const [targetYear, targetMonth] = parseIsoDateParts(dateIso);
+  const [currentYear, currentMonth] = parseIsoDateParts(berlinDateAtOffset(0));
   const monthDelta = (targetYear - currentYear) * 12 + targetMonth - currentMonth;
   const stepTitle = monthDelta < 0 ? 'Zurück' : 'Weiter';
   for (let step = 0; step < Math.abs(monthDelta); step += 1) {
@@ -539,6 +548,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
       [baseTarget] = resolveDailyTargets([requestDate], context);
       expect(doesDateConsumeVacation(requestDate, context)).toBe(true);
     }
+    if (!baseTarget) throw new Error('A4: no daily target resolved for the request date');
     const dateDigits = toDatePickerDigits(requestDate);
     const rangeText = formatGermanDate(requestDate);
     expect(baseTarget.targetMinutes).toBeGreaterThan(0);
@@ -630,6 +640,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     const previewScheduleNote = `A4 Vorschau-Wochenplan ${world.runId}`;
     let [baseTarget] = resolveDailyTargets([requestDate], context);
     const halfDayScheduleNote = `A4 Halbtag-Wochenplan ${world.runId}`;
+    if (!baseTarget) throw new Error('A4: no daily target resolved for the request date');
     if (baseTarget.targetMinutes <= 0) {
       await openMemberDetailFromList(adminPage, employeeName);
       await addWorkScheduleViaDialog(adminPage, {
@@ -640,6 +651,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
       context = await getTargetContextForRecord(world.orgId, employeeRecord.id);
       [baseTarget] = resolveDailyTargets([requestDate], context);
     }
+    if (!baseTarget) throw new Error('A4: no daily target resolved after the schedule change');
     const dateDigits = toDatePickerDigits(requestDate);
     const rangeText = formatGermanDate(requestDate);
     expect(baseTarget.targetMinutes).toBeGreaterThan(0);

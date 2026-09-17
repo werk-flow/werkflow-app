@@ -65,7 +65,7 @@ export function usePlanningWarningConfirmation(): {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="size-4 text-yellow-600 dark:text-yellow-400" />
+              <AlertTriangle className="size-4 text-warning-text" />
               Planungshinweise prüfen
             </DialogTitle>
             <DialogDescription>

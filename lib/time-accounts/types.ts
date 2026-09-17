@@ -5,15 +5,15 @@ import type {
   TimeTravelRoute,
 } from "@/lib/time-tracking/types";
 
-export const TIME_CREDIT_PERCENTAGES = [0, 50, 100] as const;
+const TIME_CREDIT_PERCENTAGES = [0, 50, 100] as const;
 export type TimeCreditPercentage = (typeof TIME_CREDIT_PERCENTAGES)[number];
-export type TimeAbsenceTreatment = "paid" | "unpaid" | "informational";
+type TimeAbsenceTreatment = "paid" | "unpaid" | "informational";
 export type TimeSupplementKind = "night" | "sunday" | "public_holiday";
-export type TimeFindingSeverity =
+type TimeFindingSeverity =
   | "informational"
   | "approval_required"
   | "close_blocked";
-export type TimeWarningKind =
+type TimeWarningKind =
   | "break_duration"
   | "daily_duration"
   | "rest_duration"
@@ -38,7 +38,7 @@ export type TimeCreditRule =
       percentage: TimeCreditPercentage;
     };
 
-export type TimeSupplementRule = {
+type TimeSupplementRule = {
   supplementKind: TimeSupplementKind;
   eligibleActivityKinds: readonly TimeSegmentKind[];
   enabled: boolean;
@@ -63,9 +63,9 @@ export type TimeAccountPolicy = {
 
 export type TimeActivityContext = {
   activityKind: TimeSegmentKind;
-  travelRoute?: TimeTravelRoute;
-  travelRole?: TimeTravelRole;
-  standbyContext?: TimeStandbyContext;
+  travelRoute?: TimeTravelRoute | undefined;
+  travelRole?: TimeTravelRole | undefined;
+  standbyContext?: TimeStandbyContext | undefined;
 };
 
 export type TimeActivityInterval = TimeActivityContext & {
@@ -73,9 +73,9 @@ export type TimeActivityInterval = TimeActivityContext & {
   startedAt: string;
   endedAt: string;
   allocationKind?: string;
-  jobId?: string;
+  jobId?: string | undefined;
   jobNumber?: string;
-  projectId?: string;
+  projectId?: string | undefined;
   projectNumber?: string;
 };
 
@@ -107,7 +107,7 @@ export type SupplementBucket = {
   sourceIds: readonly string[];
 };
 
-export type AccountEventInput = {
+type AccountEventInput = {
   id: string;
   kind: "opening_balance" | "manual_adjustment" | "expiry" | "payout";
   effectiveDate: string;
@@ -202,7 +202,7 @@ export type PayrollExportCorrectionRow = {
   sourceFingerprint: string;
 };
 
-export type PayrollExportManifest = {
+type PayrollExportManifest = {
   schemaVersion: 1;
   exportId: string;
   exportVersion: number;

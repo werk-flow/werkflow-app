@@ -3,8 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { uuidSchema } from '@/lib/validation/uuid';
+import { timeActivitySelectionSchema as selectionSchema } from './activity-selection-schema';
 
-import { getAuthenticatedUser, getCachedOrganizationSettings } from '@/lib/data/cached';
+import { getAuthenticatedUser, getCachedMemberships, getCachedOrganizationSettings } from '@/lib/data/cached';
 import { getBusinessTodayIso } from '@/lib/personnel/types';
 import { getJobDisplayTitle } from '@/lib/jobs/types';
 import { hasActiveSicknessOn } from '@/lib/sickness/server';
@@ -16,56 +17,17 @@ import {
   toTimeActivitySelection,
   toTimeSegmentFact,
 } from './segments';
+import { readResumeActivity } from './resume-activity';
 import { computeBreakdownForSettings } from './settings';
 import { hashTimeTransitionRequest } from './transition-hash';
 import { TIME_TRANSITION_ERROR_CODES } from './types';
 import type {
+  ClockJobInfo,
   LiveClockState,
   TimeActivitySelection,
   TimeTransitionError,
   TimeTransitionResult,
 } from './types';
-
-const travelRouteSchema = z.enum([
-  'company_to_site',
-  'home_to_site',
-  'site_to_site',
-  'site_to_company',
-  'other',
-  'unspecified',
-]);
-const travelRoleSchema = z.enum(['driver', 'passenger', 'unspecified']);
-const selectionSchema: z.ZodType<TimeActivitySelection> = z.union([
-  z.strictObject({ kind: z.literal('work'), allocationKind: z.literal('job'), jobId: uuidSchema }),
-  z.strictObject({ kind: z.literal('work'), allocationKind: z.literal('unallocated'), jobId: z.null() }),
-  z.strictObject({ kind: z.literal('callout'), allocationKind: z.literal('job'), jobId: uuidSchema }),
-  z.strictObject({ kind: z.literal('callout'), allocationKind: z.literal('unallocated'), jobId: z.null() }),
-  z.strictObject({
-    kind: z.literal('travel'),
-    allocationKind: z.literal('job'),
-    jobId: uuidSchema,
-    travelRoute: travelRouteSchema,
-    travelRole: travelRoleSchema,
-  }),
-  z.strictObject({
-    kind: z.literal('travel'),
-    allocationKind: z.literal('unallocated'),
-    jobId: z.null(),
-    travelRoute: travelRouteSchema,
-    travelRole: travelRoleSchema,
-  }),
-  z.strictObject({ kind: z.literal('break'), allocationKind: z.literal('none') }),
-  z.strictObject({
-    kind: z.literal('standby'),
-    allocationKind: z.literal('none'),
-    standbyContext: z.enum(['on_site', 'remote', 'unspecified']),
-  }),
-  z.strictObject({
-    kind: z.literal('internal_activity'),
-    allocationKind: z.literal('internal_activity'),
-    internalType: z.enum(['internal_work', 'meeting', 'training', 'other']),
-  }),
-]);
 
 const transitionSchema = z.object({
   organizationId: uuidSchema,
@@ -182,6 +144,30 @@ export async function transitionTimeActivity(
   };
 }
 
+async function readClockJobInfo(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  organizationId: string,
+  jobId: string
+): Promise<ClockJobInfo | null> {
+  const { data: job } = await admin
+    .from('jobs')
+    .select('id, title, description, job_number, status, projects(name), clients(name)')
+    .eq('organization_id', organizationId)
+    .eq('id', jobId)
+    .maybeSingle();
+  if (!job) return null;
+  const project = Array.isArray(job.projects) ? job.projects[0] : job.projects;
+  const client = Array.isArray(job.clients) ? job.clients[0] : job.clients;
+  return {
+    id: job.id,
+    title: getJobDisplayTitle({ title: job.title, description: job.description }),
+    jobNumber: job.job_number,
+    status: job.status === 'nicht_bearbeitet' ? 'in_bearbeitung' : job.status,
+    projectName: project?.name ?? null,
+    clientName: client?.name ?? null,
+  };
+}
+
 export async function getCanonicalClockState(
   organizationId: string
 ): Promise<{ success: true; state: LiveClockState | null } | { success: false; error: string }> {
@@ -190,6 +176,8 @@ export async function getCanonicalClockState(
   }
   const user = await getAuthenticatedUser();
   if (!user) return { success: false, error: 'not_authenticated' };
+  const memberships = await getCachedMemberships(user.id);
+  if (!memberships.some((membership) => membership.orgId === organizationId)) return { success: false, error: 'not_a_member' };
   const admin = createSupabaseAdminClient();
   const [{ data: sessionData, error: sessionError }, settings] = await Promise.all([
     admin
@@ -231,30 +219,22 @@ export async function getCanonicalClockState(
     totals.breakMinutes,
     settings
   );
-  let activeJobInfo = null;
-  if (current?.jobId) {
-    const { data: job } = await admin
-      .from('jobs')
-      .select('id, title, description, job_number, status, projects(name), clients(name)')
-      .eq('organization_id', organizationId)
-      .eq('id', current.jobId)
-      .maybeSingle();
-    if (job) {
-      const project = Array.isArray(job.projects) ? job.projects[0] : job.projects;
-      const client = Array.isArray(job.clients) ? job.clients[0] : job.clients;
-      activeJobInfo = {
-        id: job.id,
-        title: getJobDisplayTitle({
-          title: job.title,
-          description: job.description,
-        }),
-        jobNumber: job.job_number,
-        status: job.status === 'nicht_bearbeitet' ? 'in_bearbeitung' : job.status,
-        projectName: project?.name ?? null,
-        clientName: client?.name ?? null,
-      };
-    }
+  // The activity a break interrupted is read across the whole session, so a
+  // break that crosses the Berlin midnight still resumes the right job.
+  let resumeActivity: TimeActivitySelection | null = current ? toTimeActivitySelection(current) : null;
+  if (current?.kind === 'break') {
+    const resume = await readResumeActivity(admin, session.id);
+    if (!resume.success) return { success: false, error: 'fetch_failed' };
+    resumeActivity = resume.activity;
   }
+  const activeJobInfo = current?.jobId
+    ? await readClockJobInfo(admin, organizationId, current.jobId)
+    : null;
+  const resumeJobInfo = !resumeActivity?.jobId
+    ? null
+    : resumeActivity.jobId === current?.jobId
+      ? activeJobInfo
+      : await readClockJobInfo(admin, organizationId, resumeActivity.jobId);
   const derivedRecovery =
     session.status === 'recovery_required'
       ? session.recovery_reason
@@ -294,6 +274,8 @@ export async function getCanonicalClockState(
       sessionVersion: session.version,
       currentSegmentId: current?.id ?? null,
       currentActivity: current ? toTimeActivitySelection(current) : null,
+      resumeActivity,
+      resumeJobInfo,
       recoveryReason: derivedRecovery,
       legacyOpen: false,
       standbyMinutes: totals.standbyMinutes,

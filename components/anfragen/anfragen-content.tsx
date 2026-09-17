@@ -1,5 +1,6 @@
 'use client';
 
+import { formatGermanDateTime as formatReceivedAt } from '@/lib/utils';
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -54,7 +55,7 @@ const FILTER_TABS: Array<{ value: StatusFilter; label: string }> = [
 // One column definition for the loaded table and its skeleton (design canon):
 // header count, widths and hover cannot drift apart.
 const BADGE_CELL = <Skeleton className="h-5 w-16 rounded-full" />;
-export const REQUEST_COLUMNS: readonly SkeletonColumn[] = [
+const REQUEST_COLUMNS: readonly SkeletonColumn[] = [
   {
     id: 'number',
     header: 'Nr.',
@@ -132,16 +133,6 @@ export function AnfragenTableSkeleton({ count }: { count: number }) {
       </div>
     </>
   );
-}
-
-function formatReceivedAt(receivedAt: string): string {
-  return new Intl.DateTimeFormat('de-DE', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(receivedAt));
 }
 
 function requestCallerLabel(entry: RequestListEntry): string {

@@ -27,9 +27,9 @@ interface CreateAuftragProjectDialogProps {
   members: OrgMemberOption[];
   projects?: ProjectWithDetails[];
   jobs: Job[];
-  defaultClientId?: string;
-  defaultEmployeeIds?: string[];
-  readOnlyClient?: boolean;
+  defaultClientId?: string | undefined;
+  defaultEmployeeIds?: string[] | undefined;
+  readOnlyClient?: boolean | undefined;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   onJobCreated?: (payload: {

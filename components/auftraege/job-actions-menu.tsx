@@ -42,17 +42,17 @@ interface JobActionsMenuProps {
   clients: Client[];
   members: OrgMemberOption[];
   projects: ProjectWithDetails[];
-  onJobUpdated?: (payload: {
+  onJobUpdated?: ((payload: {
     job: Job;
     selectedEmployeeIds?: string[];
-  }) => void | Promise<void>;
-  onJobDeleted?: (jobId: string) => void | Promise<void>;
+  }) => void | Promise<void>) | undefined;
+  onJobDeleted?: ((jobId: string) => void | Promise<void>) | undefined;
   /**
    * Optimistic list mode (feedback canon): the confirm closes at once and the
    * list owns the delete — row removal, server call, rollback, banners.
    * `onJobDeleted` is not called on that path.
    */
-  onDeleteRequested?: (jobId: string) => void;
+  onDeleteRequested?: ((jobId: string) => void) | undefined;
 }
 
 export function JobActionsMenu({

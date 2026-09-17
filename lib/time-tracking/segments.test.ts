@@ -13,10 +13,11 @@ import type { TimeSegmentFact } from './segments';
 function segment(
   kind: TimeSegmentFact['kind'],
   startedAt: string,
-  endedAt: string | null
+  endedAt: string | null,
+  jobId: string | null = null
 ): TimeSegmentFact {
   return {
-    ...createActivitySelection(kind),
+    ...createActivitySelection(kind, jobId),
     id: crypto.randomUUID(),
     sessionId: 'session',
     organizationId: 'organization',

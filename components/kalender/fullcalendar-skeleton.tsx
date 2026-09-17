@@ -77,9 +77,9 @@ function WeekGridSkeleton() {
         {/* Header with days */}
         <div className="grid grid-cols-[60px_repeat(7,_1fr)] bg-muted/30 border-b">
           <div className="p-2 border-r" />
-          {days.map((day, i) => (
+          {days.map((day) => (
             <div
-              key={i}
+              key={day}
               className="p-2 border-r last:border-r-0 flex flex-col items-center gap-1"
             >
               <Skeleton className="h-3 w-6" />
@@ -122,8 +122,8 @@ function MonthGridSkeleton() {
       <div className="rounded-lg border bg-card overflow-hidden shadow-xs">
         {/* Header with day names */}
         <div className="grid grid-cols-7 bg-muted/30 border-b">
-          {days.map((day, i) => (
-            <div key={i} className="p-3 border-r last:border-r-0 text-center">
+          {days.map((day) => (
+            <div key={day} className="p-3 border-r last:border-r-0 text-center">
               <Skeleton className="h-4 w-8 mx-auto" />
             </div>
           ))}
@@ -146,7 +146,7 @@ function MonthGridSkeleton() {
                 {/* Random entries */}
                 <div className="space-y-1">
                   {Array.from({
-                    length: MONTH_SKELETON_ENTRY_COUNTS[(weekIdx + dayIdx) % MONTH_SKELETON_ENTRY_COUNTS.length]
+                    length: MONTH_SKELETON_ENTRY_COUNTS[(weekIdx + dayIdx) % MONTH_SKELETON_ENTRY_COUNTS.length] ?? 0
                   }).map((_, entryIdx) => (
                     <Skeleton key={entryIdx} className="h-5 w-full rounded" />
                   ))}

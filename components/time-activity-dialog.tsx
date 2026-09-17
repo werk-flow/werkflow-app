@@ -29,6 +29,7 @@ import { Field } from '@/components/ui/field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useServerAction } from '@/hooks/use-server-action';
 import { cn } from '@/lib/utils';
+import { getTransitionErrorMessage, isSameActivitySelection } from '@/lib/time-tracking/clock-actions';
 import { TIME_ACTIVITY_LABELS } from '@/lib/time-tracking/types';
 import type {
   TimeActivitySelection,
@@ -88,9 +89,10 @@ function buildSelection(
 type TimeActivityDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Called after the dialog's own transition was accepted, before it closes. */
+  onSettled?: (() => void) | undefined;
   organizationId: string;
   preferredJobId?: string | null;
-  initialActivity?: TimeSegmentKind;
 };
 
 export function TimeActivityDialog(props: TimeActivityDialogProps) {
@@ -100,14 +102,14 @@ export function TimeActivityDialog(props: TimeActivityDialogProps) {
 function TimeActivityDialogForm({
   open,
   onOpenChange,
+  onSettled,
   organizationId,
   preferredJobId = null,
-  initialActivity,
 }: TimeActivityDialogProps) {
-  const { state, isPending, transitionActivity, recoverAndContinue, clockOut } = useClockState();
+  const { state, isReady, isPending, statusError, refresh, transitionActivity, recoverAndContinue, clockOut } = useClockState();
   const { showBanner } = useBanner();
   const current = state?.currentActivity;
-  const [kind, setKind] = useState<TimeSegmentKind>(initialActivity ?? current?.kind ?? 'work');
+  const [kind, setKind] = useState<TimeSegmentKind>(current?.kind ?? 'work');
   const [jobId, setJobId] = useState<string | null>(current?.jobId ?? preferredJobId);
   const [internalType, setInternalType] = useState<TimeInternalActivity>(current?.internalType ?? 'internal_work');
   const [travelRoute, setTravelRoute] = useState<TimeTravelRoute>(current?.travelRoute ?? 'unspecified');
@@ -126,13 +128,18 @@ function TimeActivityDialogForm({
     )
   );
   const canLinkJob = kind === 'work' || kind === 'travel' || kind === 'callout';
-  const selectedJobLabel =
-    jobId && state?.activeJobId === jobId && state.activeJobInfo
-      ? state.activeJobInfo.title
-      : jobId
-        ? 'Auftrag ausgewählt'
-        : 'Ohne Auftrag';
+  const knownJob = [state?.activeJobInfo, state?.resumeJobInfo].find((job) => job && job.id === jobId);
+  const selectedJobLabel = knownJob ? knownJob.title : jobId ? 'Auftrag ausgewählt' : 'Ohne Auftrag';
   const recovery = Boolean(state?.recoveryReason);
+  // Switching to exactly the running activity is not an action: the database
+  // would answer `no_change`, and a user who meant to change something would
+  // read the closed dialog as a switch that never happened.
+  const isUnchanged =
+    Boolean(state?.isClockedIn) && !recovery && !state?.legacyOpen &&
+    isSameActivitySelection(
+      buildSelection(kind, jobId, internalType, travelRoute, travelRole, standbyContext),
+      state?.currentActivity
+    );
 
   async function submit(): Promise<void> {
     setError(null);
@@ -140,28 +147,15 @@ function TimeActivityDialogForm({
     const result = recovery
       ? await recoverAndContinue(selection)
       : await transitionActivity(selection);
+    const fallback = 'Die Aktivität konnte nicht gespeichert werden. Bitte versuche es erneut.';
     if (!result.success) {
-      if (result.error === 'time_transition_working_other_org') {
+      if (result.error === 'time_transition_working_other_org' || result.error === 'on_approved_vacation') {
         onOpenChange(false);
-        showBanner({
-          variant: 'error',
-          message:
-            'Bereits in anderer Organisation eingestempelt: Bitte beende dort zuerst die laufende Zeiterfassung.',
-        });
+        onSettled?.();
+        showBanner({ variant: 'error', message: getTransitionErrorMessage(result.error, fallback) });
         return;
       }
-      if (result.error === 'on_approved_vacation') {
-        onOpenChange(false);
-        showBanner({
-          variant: 'error',
-          message:
-            'Heute ist Urlaub genehmigt: Einstempeln ist deshalb nicht möglich. Falls du doch arbeitest, kann eine verantwortliche Person den Urlaub stornieren.',
-        });
-        return;
-      }
-      setError(result.error === 'time_transition_stale_version'
-        ? 'Der Stand hat sich geändert. Bitte prüfe die aktuelle Erfassung und versuche es erneut.'
-        : 'Die Aktivität konnte nicht gespeichert werden. Bitte versuche es erneut.');
+      setError(getTransitionErrorMessage(result.error, fallback));
       return;
     }
     if (result.outcome === 'recovery_required') {
@@ -169,6 +163,7 @@ function TimeActivityDialogForm({
       return;
     }
     onOpenChange(false);
+    onSettled?.();
     if (result.notice === 'sickness_reported_today') {
       showBanner({
         variant: 'info',
@@ -191,6 +186,7 @@ function TimeActivityDialogForm({
       return;
     }
     onOpenChange(false);
+    onSettled?.();
   }
 
   return (
@@ -201,14 +197,16 @@ function TimeActivityDialogForm({
       }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{state?.isClockedIn ? 'Aktivität wechseln' : 'Zeiterfassung starten'}</DialogTitle>
+            <DialogTitle>{state?.isClockedIn ? 'Aktivität wechseln' : 'Aktivität wählen'}</DialogTitle>
             <DialogDescription>
-              Wähle, was du gerade machst. Der Wechsel beendet die laufende Aktivität und startet die neue in einem Schritt.
+              {state?.isClockedIn
+                ? 'Wähle, was du gerade machst. Der Wechsel beendet die laufende Aktivität und startet die neue in einem Schritt.'
+                : 'Wähle, womit du startest. Angaben zu Strecke, Rolle und Bereitschaft sind freiwillig.'}
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="space-y-5">
             {recovery && (
-              <div className="rounded-md border border-yellow-500/40 bg-yellow-500/10 p-3 text-sm text-yellow-900 dark:text-yellow-100">
+              <div className="rounded-md border border-warning/40 bg-warning-soft p-3 text-sm text-warning-soft-foreground">
                 <p className="font-medium">Ungewöhnlich lange Erfassung</p>
                 <p className="mt-1">Prüfe den Stand. Du kannst bewusst fortsetzen oder die Erfassung jetzt beenden.</p>
               </div>
@@ -221,8 +219,13 @@ function TimeActivityDialogForm({
                   <Button
                     key={option.kind}
                     type="button"
-                    variant={kind === option.kind ? 'secondary' : 'outline'}
-                    className={cn('h-auto min-h-16 flex-col gap-1.5', kind === option.kind && 'border-primary/40 ring-2 ring-primary')}
+                    variant="outline"
+                    // Selection is drawn inside the box (border + tint), never as an
+                    // outer ring: the scrolling body would clip it on the first row.
+                    className={cn(
+                      'h-auto min-h-16 flex-col gap-1.5 last:odd:col-span-2 sm:last:odd:col-span-1',
+                      kind === option.kind && 'border-primary bg-primary/10 hover:bg-primary/10'
+                    )}
                     aria-pressed={kind === option.kind}
                     onClick={() => setKind(option.kind)}
                   >
@@ -240,7 +243,7 @@ function TimeActivityDialogForm({
                     id="time-activity-job"
                     type="button"
                     variant="outline"
-                    className="min-h-11 flex-1 justify-start"
+                    className="min-h-11 min-w-0 flex-1 shrink justify-start"
                     aria-label={`Auftrag auswählen: ${selectedJobLabel}`}
                     onClick={() => setShowJobPicker(true)}
                   >
@@ -306,16 +309,18 @@ function TimeActivityDialogForm({
                 </Select>
               </Field>
             )}
+            {!isReady && <p role="status" className="text-sm text-muted-foreground">{statusError ? 'Der Zeitstatus konnte nicht sicher geladen werden.' : 'Zeitstatus wird geladen…'}</p>}
+            {statusError && <Button type="button" variant="outline" onClick={() => void refresh()}>Erneut laden</Button>}
             <ErrorText>{error}</ErrorText>
           </DialogBody>
           <DialogFooter>
             {state?.isClockedIn && (
-              <Button type="button" variant="outline" disabled={isPending} onClick={() => void endAction.run()}>
+              <Button type="button" variant="outline" disabled={!isReady || isPending} onClick={() => void endAction.run()}>
                 {endAction.isPending && <Loader2 className="size-4 animate-spin" />}
                 Erfassung beenden
               </Button>
             )}
-            <Button type="button" disabled={isPending} onClick={() => void submitAction.run()}>
+            <Button type="button" disabled={!isReady || isPending || isUnchanged} onClick={() => void submitAction.run()}>
               {submitAction.isPending && <Loader2 className="size-4 animate-spin" />}
               {recovery ? 'Prüfen und fortsetzen' : state?.isClockedIn ? 'Aktivität wechseln' : 'Starten'}
             </Button>

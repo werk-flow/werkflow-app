@@ -41,7 +41,7 @@ import type { TimeEntry, TimeSegmentKind } from '@/lib/time-tracking/types';
 
 type CorrectionDialogProps = {
   organizationId: string;
-  entry?: TimeEntry;
+  entry?: TimeEntry | undefined;
   onSubmitted?: () => void;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -127,7 +127,7 @@ export function TimeCorrectionDialog({
   const [activityKind, setActivityKind] = useState<TimeSegmentKind>(
     entry?.activityKind ?? 'work'
   );
-  const [fieldErrors, setFieldErrors] = useState<{ person?: string; reason?: string }>({});
+  const [fieldErrors, setFieldErrors] = useState<{ person?: string | undefined; reason?: string | undefined }>({});
   // Save failures stay inside the dialog at the point of action; the dialog
   // never closes on failure.
   const [submitError, setSubmitError] = useState<string | null>(null);

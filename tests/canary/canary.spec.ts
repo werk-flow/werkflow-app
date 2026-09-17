@@ -23,9 +23,10 @@ import { goldenTestEmail } from '../golden/support/seed';
 import { artifactsDirectory } from '../golden/support/world';
 import { expectLiveWithin } from '../golden/support/live';
 import { getDevMigrationHistoryProblems } from '../../lib/testing/dev-migration-history';
+import { waitForDatabaseSubscription } from './support/realtime-readiness';
 
 // Cloud canary suite (@CANARY) — decision D10 in
-// docs/plans/platform-hardening.md, ADR docs/decisions/0006-testing-architecture.md.
+// docs/plans/phase-1/consolidation-2026-08/platform-hardening.md, ADR docs/decisions/0006-testing-architecture.md.
 //
 // Application logic is certified against the local Supabase stack. This suite
 // exists for the behavior only the cloud can prove: real provider auth and
@@ -108,7 +109,18 @@ test.describe('Cloud-Canary @CANARY', () => {
     bueroPage,
     world,
   }) => {
-    await bueroPage.goto('/kunden');
+    // Both sessions settle before the measured write. Measure delivery on an
+    // established database subscription: a socket join alone can still miss
+    // the write and let a later catch-up masquerade as event delivery.
+    // Initial/reconnect gap recovery has its own contracts. Each page's
+    // readiness catch-up burst (attention counts, clock state, list read) must
+    // also finish: the 2026-09-12 handoff diagnostic showed those reads and a
+    // fresh sender navigation tripling backend query times inside the window.
+    for (const page of [bueroPage, adminPage]) {
+      await page.goto('/kunden');
+      await waitForDatabaseSubscription(page);
+      await page.waitForLoadState('networkidle');
+    }
     await expect(
       textInDom(bueroPage, `Canary Realtime ${world.runId}`),
     ).toHaveCount(0);
@@ -118,9 +130,11 @@ test.describe('Cloud-Canary @CANARY', () => {
       visibleText(bueroPage, `Canary Realtime ${world.runId}`),
       {
         label: 'canary C3 realtime cross-session',
+        actingPage: adminPage,
         mutation: (beforeSubmit) =>
           createCustomer(adminPage, `Canary Realtime ${world.runId}`, {
             beforeSubmit,
+            navigate: false,
           }),
       },
     );

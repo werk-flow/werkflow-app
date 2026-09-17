@@ -25,7 +25,7 @@ const loginSchema = z.object({
 type LoginValues = z.infer<typeof loginSchema>;
 
 interface LoginFormProps {
-  successMessage?: string;
+  successMessage?: string | undefined;
   inviteCode?: string;
 }
 

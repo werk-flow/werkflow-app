@@ -116,7 +116,7 @@ export async function deleteOrganization(
     }
 
     const remainingOrgs = remainingMemberships ?? [];
-    const nextOrgId = remainingOrgs.length > 0 ? remainingOrgs[0].organization_id : null;
+    const nextOrgId = remainingOrgs[0]?.organization_id ?? null;
 
     // Update the org cookie with proper options (matching other actions)
     if (nextOrgId) {

@@ -1,6 +1,7 @@
 'use server';
 
 import { updateTag } from 'next/cache';
+import { readCompleteRows, readInBatches, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { CACHE_TAGS } from '@/lib/data/cached';
@@ -410,23 +411,17 @@ export async function getOrgProjects(): Promise<
     let projectRows;
 
     if (isManagerOrAbove) {
-      const { data, error } = await admin
-        .from('projects')
-        .select('*')
-        .eq('organization_id', orgId)
-        .order('created_at', { ascending: false });
+      const { data, error } = await readCompleteRows((from, to) => admin.from('projects').select('*').eq('organization_id', orgId).order('created_at', { ascending: false }).order('id').range(from, to), LIST_ROW_CAP);
 
       if (error) {
         console.error('Error fetching projects:', error);
         return { success: false, error: 'fetch_failed' };
       }
 
-      projectRows = data ?? [];
+      // Each batch arrives ordered; the merged list is not.
+      projectRows = (data ?? []).sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id));
     } else {
-      const { data: assignments, error: assignError } = await admin
-        .from('job_assignments')
-        .select('job_id')
-        .eq('user_id', userId);
+      const { data: assignments, error: assignError } = await readCompleteRows((from, to) => admin.from('job_assignments').select('job_id').eq('organization_id', orgId).eq('user_id', userId).order('id').range(from, to), LIST_ROW_CAP);
 
       if (assignError) {
         console.error('Error fetching assignments:', assignError);
@@ -439,12 +434,7 @@ export async function getOrgProjects(): Promise<
         return { success: true, projects: [] };
       }
 
-      const { data: jobs, error: jobError } = await admin
-        .from('jobs')
-        .select('project_id')
-        .eq('organization_id', orgId)
-        .in('id', assignedJobIds)
-        .not('project_id', 'is', null);
+      const { data: jobs, error: jobError } = await readInBatches(assignedJobIds, (ids) => admin.from('jobs').select('project_id').eq('organization_id', orgId).in('id', [...ids]).not('project_id', 'is', null));
 
       if (jobError) {
         console.error('Error fetching job project IDs:', jobError);
@@ -463,11 +453,7 @@ export async function getOrgProjects(): Promise<
         return { success: true, projects: [] };
       }
 
-      const { data, error } = await admin
-        .from('projects')
-        .select('*')
-        .in('id', projectIds)
-        .order('created_at', { ascending: false });
+      const { data, error } = await readInBatches(projectIds, (ids) => admin.from('projects').select('*').eq('organization_id', orgId).in('id', [...ids]).order('created_at', { ascending: false }));
 
       if (error) {
         console.error('Error fetching assigned projects:', error);
@@ -482,10 +468,8 @@ export async function getOrgProjects(): Promise<
     }
 
     const projectIds = projectRows.map((p) => p.id);
-    const { data: allJobs } = await admin
-      .from('jobs')
-      .select('project_id, status')
-      .in('project_id', projectIds);
+    const { data: allJobs, error: jobsError } = await readInBatches(projectIds, (ids) => readCompleteRows((from, to) => admin.from('jobs').select('project_id, status').eq('organization_id', orgId).in('project_id', [...ids]).order('id').range(from, to), LIST_ROW_CAP));
+    if (jobsError || allJobs.length > LIST_ROW_CAP) return { success: false, error: 'fetch_failed' };
 
     const jobCountMap = new Map<
       string,
@@ -516,10 +500,8 @@ export async function getOrgProjects(): Promise<
 
     let clientMap = new Map<string, ReturnType<typeof toClient>>();
     if (clientIds.length > 0) {
-      const { data: clients } = await admin
-        .from('clients')
-        .select('*')
-        .in('id', clientIds);
+      const { data: clients, error: clientsError } = await readInBatches(clientIds, (ids) => admin.from('clients').select('*').eq('organization_id', orgId).in('id', [...ids]));
+      if (clientsError) return { success: false, error: 'fetch_failed' };
 
       clientMap = new Map((clients ?? []).map((c) => [c.id, toClient(c)]));
     }

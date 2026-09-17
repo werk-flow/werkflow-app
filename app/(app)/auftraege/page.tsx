@@ -1,24 +1,17 @@
+import { loadJobListPage } from '@/lib/jobs/list-server';
+import { parseJobListQuery, type ListSearchParams } from '@/lib/jobs/list-page';
 import { SectionError } from '@/components/ui/section-error';
 import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { Plus } from 'lucide-react';
 
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import {
   getCachedMemberships,
   getCachedOrganizationUserPreferences,
   getCachedUser,
 } from '@/lib/data/cached';
-import {
-  toJob,
-  toClient,
-  toProject,
-  type Client,
-  type Job,
-  type ProjectWithDetails,
-} from '@/lib/jobs/types';
 import { AuftraegeContent } from '@/components/auftraege/auftraege-content';
 import { AuftraegeContentSkeleton } from '@/components/loading-states/auftraege-content-skeleton';
 import { PageActionButton, PageActionProvider } from '@/components/shared/page-action';
@@ -27,226 +20,21 @@ import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { UrlFlashBanner } from '@/components/ui/banner';
 import { type OrgRole } from '@/lib/members/actions';
 import { getOrgMembersForUser } from '@/lib/members/queries';
-import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 
-async function AuftraegeData({
-  activeOrgId,
-  userId,
-  isAdminOrManager,
-  initialVisibleColumns,
-}: {
-  activeOrgId: string;
-  userId: string;
-  isAdminOrManager: boolean;
+async function AuftraegeData({ activeOrgId, userId, isAdminOrManager, initialVisibleColumns, searchParams }: {
+  activeOrgId: string; userId: string; isAdminOrManager: boolean;
   initialVisibleColumns: import('@/lib/jobs/auftraege-table-columns').AuftraegeColumnId[];
+  searchParams: Promise<ListSearchParams>;
 }) {
-  const admin = createSupabaseAdminClient();
-
-  let jobList: Job[] = [];
-  let clientList: Client[] = [];
-  let memberList: OrgMemberOption[] = [];
-  let projectList: ProjectWithDetails[] = [];
-  let jobAssignmentMap: Record<string, string[]> = {};
-
-  if (isAdminOrManager) {
-    const [jobsResult, projectsResult, clientsResult, membersResult] = await Promise.all([
-      admin
-        .from('jobs')
-        .select('*')
-        .eq('organization_id', activeOrgId)
-        .order('planned_date', { ascending: true, nullsFirst: false })
-        .order('created_at', { ascending: false }),
-      admin
-        .from('projects')
-        .select('*')
-        .eq('organization_id', activeOrgId)
-        .order('created_at', { ascending: false }),
-      admin
-        .from('clients')
-        .select('*')
-        .eq('organization_id', activeOrgId)
-        .order('name', { ascending: true }),
-      getOrgMembersForUser(activeOrgId, userId),
-    ]);
-
-    if (jobsResult.error) {
-      console.error('Error fetching jobs:', jobsResult.error);
-      return (
-        <SectionError>
-          Fehler beim Laden der Aufträge:{' '}
-          {jobsResult.error.message || 'Unbekannter Fehler'}
-        </SectionError>
-      );
-    }
-
-    jobList = (jobsResult.data ?? []).map(toJob);
-    clientList = (clientsResult.data ?? []).map(toClient);
-    memberList = membersResult.map((m) => ({
-      userId: m.user_id,
-      firstName: m.first_name,
-      lastName: m.last_name,
-      role: m.role,
-    }));
-
-    const jobIds = jobList.map((j) => j.id);
-    if (jobIds.length > 0) {
-      const { data: assignData } = await admin
-        .from('job_assignments')
-        .select('job_id, user_id')
-        .in('job_id', jobIds);
-      for (const a of assignData ?? []) {
-        if (!jobAssignmentMap[a.job_id]) jobAssignmentMap[a.job_id] = [];
-        jobAssignmentMap[a.job_id].push(a.user_id);
-      }
-    }
-
-    const clientLookup = new Map(clientList.map((c) => [c.id, c]));
-
-    const projectJobCounts = new Map<string, { total: number; completed: number; inProgress: number; parked: number }>();
-    for (const job of jobList) {
-      if (!job.projectId) continue;
-      const counts = projectJobCounts.get(job.projectId) ?? { total: 0, completed: 0, inProgress: 0, parked: 0 };
-      counts.total++;
-      if (job.status === 'fertig') counts.completed++;
-      if (job.status === 'in_bearbeitung') counts.inProgress++;
-      if (job.status === 'geparkt') counts.parked++;
-      projectJobCounts.set(job.projectId, counts);
-    }
-
-    projectList = (projectsResult.data ?? []).map((row) => {
-      const project = toProject(row);
-      const counts = projectJobCounts.get(project.id) ?? { total: 0, completed: 0, inProgress: 0, parked: 0 };
-      return {
-        ...project,
-        client: project.clientId ? clientLookup.get(project.clientId) ?? null : null,
-        jobCount: counts.total,
-        completedJobCount: counts.completed,
-        inProgressJobCount: counts.inProgress,
-        parkedJobCount: counts.parked,
-      };
-    });
-  } else {
-    const { data: assignments, error: assignError } = await admin
-      .from('job_assignments')
-      .select('job_id, user_id')
-      .eq('user_id', userId);
-
-    if (assignError) {
-      console.error('Error fetching assignments:', assignError);
-    }
-
-    const assignedJobIds = (assignments ?? []).map((a) => a.job_id);
-
-    for (const a of assignments ?? []) {
-      if (!jobAssignmentMap[a.job_id]) jobAssignmentMap[a.job_id] = [];
-      jobAssignmentMap[a.job_id].push(a.user_id);
-    }
-
-    if (assignedJobIds.length > 0) {
-      const [jobsResult2, allAssignResult, clientsResult] = await Promise.all([
-        admin
-          .from('jobs')
-          .select('*')
-          .eq('organization_id', activeOrgId)
-          .in('id', assignedJobIds)
-          .order('planned_date', { ascending: true, nullsFirst: false })
-          .order('created_at', { ascending: false }),
-        admin
-          .from('job_assignments')
-          .select('job_id, user_id')
-          .in('job_id', assignedJobIds),
-        admin
-          .from('clients')
-          .select('*')
-          .eq('organization_id', activeOrgId)
-          .order('name', { ascending: true }),
-      ]);
-
-      if (jobsResult2.error) {
-        console.error('Error fetching jobs:', jobsResult2.error);
-      } else {
-        jobList = (jobsResult2.data ?? []).map(toJob);
-      }
-
-      clientList = (clientsResult.data ?? []).map(toClient);
-
-      jobAssignmentMap = {};
-      for (const a of allAssignResult.data ?? []) {
-        if (!jobAssignmentMap[a.job_id]) jobAssignmentMap[a.job_id] = [];
-        jobAssignmentMap[a.job_id].push(a.user_id);
-      }
-    }
-
-    const assignedProjectIds = [
-      ...new Set(
-        jobList
-          .filter((j) => j.projectId)
-          .map((j) => j.projectId!)
-      ),
-    ];
-
-    if (assignedProjectIds.length > 0) {
-      const [projectsResult, projectJobsResult] = await Promise.all([
-        admin
-          .from('projects')
-          .select('*')
-          .in('id', assignedProjectIds)
-          .order('created_at', { ascending: false }),
-        admin
-          .from('jobs')
-          .select('id, project_id, status')
-          .in('project_id', assignedProjectIds)
-          .eq('organization_id', activeOrgId),
-      ]);
-
-      const projectJobCounts = new Map<string, { total: number; completed: number; inProgress: number; parked: number }>();
-      for (const job of projectJobsResult.data ?? []) {
-        if (!job.project_id) continue;
-        const counts = projectJobCounts.get(job.project_id) ?? { total: 0, completed: 0, inProgress: 0, parked: 0 };
-        counts.total++;
-        if (job.status === 'fertig') counts.completed++;
-        if (job.status === 'in_bearbeitung') counts.inProgress++;
-        if (job.status === 'geparkt') counts.parked++;
-        projectJobCounts.set(job.project_id, counts);
-      }
-
-      const clientLookup = new Map(clientList.map((c) => [c.id, c]));
-
-      projectList = (projectsResult.data ?? []).map((row) => {
-        const project = toProject(row);
-        const counts = projectJobCounts.get(project.id) ?? { total: 0, completed: 0, inProgress: 0, parked: 0 };
-        return {
-          ...project,
-          client: project.clientId ? clientLookup.get(project.clientId) ?? null : null,
-          jobCount: counts.total,
-          completedJobCount: counts.completed,
-          inProgressJobCount: counts.inProgress,
-          parkedJobCount: counts.parked,
-        };
-      });
-    }
-  }
-
-  const clientMap: Record<string, string> = {};
-  for (const c of clientList) {
-    clientMap[c.id] = c.name;
-  }
-
-  return (
-    <AuftraegeContent
-      jobs={jobList}
-      projects={projectList}
-      clientMap={clientMap}
-      clients={clientList}
-      members={memberList}
-      jobAssignmentMap={jobAssignmentMap}
-      isAdminOrManager={isAdminOrManager}
-      visibleColumns={initialVisibleColumns}
-    />
-  );
+  const params = await searchParams;
+  const queries = { active: parseJobListQuery(params, 'active', initialVisibleColumns), parked: parseJobListQuery(params, 'parked', initialVisibleColumns), archived: parseJobListQuery(params, 'archived', initialVisibleColumns) };
+  const result = await Promise.all([loadJobListPage(queries), getOrgMembersForUser(activeOrgId, userId)]).catch(() => null);
+  if (!result) return <SectionError>Aufträge konnten nicht geladen werden. Bitte aktualisiere die Seite.</SectionError>;
+  const [data, members] = result;
+  return <AuftraegeContent {...data} isAdminOrManager={isAdminOrManager} visibleColumns={initialVisibleColumns}
+    members={members.map((member) => ({ userId: member.user_id, firstName: member.first_name, lastName: member.last_name, role: member.role }))} />;
 }
-
-export default async function AuftraegePage() {
+export default async function AuftraegePage({ searchParams = Promise.resolve({}) }: { searchParams?: Promise<ListSearchParams> }) {
   const [{ data: { user } }, cookieStore] = await Promise.all([
     getCachedUser(),
     cookies()
@@ -319,7 +107,7 @@ export default async function AuftraegePage() {
               activeOrgId={activeOrgId}
               userId={user.id}
               isAdminOrManager={isAdminOrManager}
-              initialVisibleColumns={visibleColumns}
+              initialVisibleColumns={visibleColumns} searchParams={searchParams}
             />
           </Suspense>
         </PageBody>

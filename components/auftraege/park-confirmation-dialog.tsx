@@ -23,7 +23,7 @@ interface ParkConfirmationDialogProps {
   onOpenChange: (open: boolean) => void;
   variant: 'job' | 'project';
   title: string;
-  identifier?: string;
+  identifier?: string | undefined;
   mode?: 'manual-park' | 'auto-park-date-removal';
   onConfirm: () => Promise<void>;
 }

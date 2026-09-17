@@ -44,3 +44,13 @@ test('provider-only bootstrap cannot be selected as a business browser lane', ()
   expect(bootstrap).toContain("'test:preflight', 'backend', target");
   expect(bootstrap).not.toContain("'test:preflight', 'iteration'");
 });
+
+test('standalone local cleanup keeps WSL alive and cancels the owned child before lease release', () => {
+  const cleanup = sourceAt('scripts/manage-playwright-runs.ts').text;
+  for (const command of ['cleanup', 'cleanup-all', 'cleanup-local-relocated']) expect(cleanup).toContain(`'${command}'`);
+  expect(cleanup).toContain('localMailpitUrl');
+  expect(cleanup).toContain('withLocalStackLease(true, (signal) => runSessionCommand(');
+  expect(cleanup).toContain('{ signal, env:');
+  expect(cleanup).toContain('AbortSignal.timeout(180_000)');
+  expect(cleanup).toContain('withWorkspaceTestLock');
+});

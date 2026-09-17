@@ -1,3 +1,4 @@
+import type { InventoryPageQuery } from './list-page';
 export type InventoryItemType = 'material' | 'consumable' | 'tool' | 'asset';
 export type InventoryLocationType = 'storage' | 'room' | 'shelf' | 'vehicle' | 'other';
 export type InventoryMovementType =
@@ -212,7 +213,7 @@ export type InventoryItem = {
   updatedAt: string;
 };
 
-export type InventoryStockSlice = {
+type InventoryStockSlice = {
   locationId: string;
   locationName: string;
   quantityOnHand: number;
@@ -252,6 +253,7 @@ export type InventoryMovementListItem = {
 };
 
 export type InventoryOverview = {
+  page: { query: InventoryPageQuery; ids: string[]; total: number; locationIds: string[]; locationCounts: Record<string,number> };
   categories: InventoryCategory[];
   locations: InventoryLocation[];
   suppliers: InventorySupplier[];
@@ -259,6 +261,8 @@ export type InventoryOverview = {
   movements: InventoryMovementListItem[];
   summary: {
     totalItems: number;
+    stockedItems: number;
+    plannedItems: number;
     lowStockItems: number;
     outOfStockItems: number;
     plannedQuantity: number;
@@ -389,14 +393,6 @@ export function formatInventoryQuantity(quantity: number, unit: string): string 
     maximumFractionDigits: 2,
   });
   return `${formatter.format(quantity)} ${getInventoryUnitLabel(unit)}`;
-}
-
-export function formatInventoryPrice(cents: number | null): string {
-  if (cents === null) return '-';
-  return new Intl.NumberFormat('de-DE', {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(cents / 100);
 }
 
 export function getInventoryUnitLabel(unit: string): string {

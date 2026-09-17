@@ -1,6 +1,6 @@
 # Product Offer
 
-Status: living — last reviewed 2026-09-05; placeholder, do not invent details it lacks
+Status: living — last reviewed 2026-09-17; placeholder, do not invent details it lacks
 
 This document is still a placeholder for the complete WerkFlow offer.
 
@@ -16,6 +16,8 @@ The surrounding service should include substantial product enablement rather tha
 - help understanding how connected WerkFlow workflows should be used in the business.
 
 The exact format, duration, staffing, entitlement, price, service level, and package boundary are not yet defined. Do not turn this direction into a sales promise without a later offer decision.
+
+Fixed points the owner set on 2026-09-17: one monthly price for the whole software and the surrounding services, somewhere between 800 € and 1,500 €, with no upsells at the start; AI is bundled into that price rather than metered, with one fair-use line stated in the customer's own units (for example "bis zu 300 KI-Vorgänge im Monat", where one Vorgang is one Angebot, one Übergabe, one Lieferschein or ten Chat-Antworten), a visible counter in the app, top-ups only above the line in the same unit, and never tokens, credits or per-outcome charges; dictation is capped separately in minutes only if its cost grows. The reasoning (a worked month costs 2 to 4 % of the subscription at the expensive model; Cursor and HubSpot show what metering does to trust) is in [pre-Wave-3 step 4](../plans/phase-1/pre-wave-3/04-wave-3-4-and-phase-2-planning.md#phase-2-follow-up-research-after-the-owner-input-2026-09-17). The Plantafel is never packaged as an add-on (the most cited con of a competitor's pricing).
 
 ## Not Yet Defined
 

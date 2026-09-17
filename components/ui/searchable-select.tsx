@@ -10,31 +10,35 @@ import { useFieldContext } from "@/components/ui/field";
 export interface SearchableSelectOption {
   value: string;
   label: string;
-  description?: string;
+  description?: string | undefined;
 }
 
 interface SearchableSelectBaseProps {
   options: SearchableSelectOption[];
-  onSearchChange?: (search: string) => void;
-  searchPlaceholder?: string;
-  emptyMessage?: string;
-  disabled?: boolean;
+  onSearchChange?: ((search: string) => void) | undefined;
+  loading?: boolean | undefined;
+  loadError?: string | undefined;
+  onLoadMore?: (() => void) | undefined;
+  searchPlaceholder?: string | undefined;
+  emptyMessage?: string | undefined;
+  disabled?: boolean | undefined;
   /**
    * Accessible name for the trigger. Without it the trigger is announced by
    * its visible value/placeholder — set it when several identical selects
    * render on one page (e.g. one per card) or a Label cannot target the id.
    */
-  ariaLabel?: string;
-  action?: {
-    label: string;
-    icon?: React.ReactNode;
-    onClick: () => void;
-  };
+  ariaLabel?: string | undefined;
+  action?:
+    | {
+        label: string;
+        icon?: React.ReactNode;
+        onClick: () => void;
+      }
+    | undefined;
   /** Replaces the default label/description block of each option row. */
-  renderOption?: (
-    option: SearchableSelectOption,
-    isSelected: boolean,
-  ) => React.ReactNode;
+  renderOption?:
+    | ((option: SearchableSelectOption, isSelected: boolean) => React.ReactNode)
+    | undefined;
 }
 
 function filterOptions(
@@ -155,14 +159,14 @@ function handleSelectKeyDown(
  */
 
 interface SearchableSelectProps extends SearchableSelectBaseProps {
-  id?: string;
+  id?: string | undefined;
   value: string;
   onChange: (value: string) => void;
-  placeholder?: string;
-  allowNone?: boolean;
-  noneLabel?: string;
-  readOnly?: boolean;
-  readOnlyLabel?: string;
+  placeholder?: string | undefined;
+  allowNone?: boolean | undefined;
+  noneLabel?: string | undefined;
+  readOnly?: boolean | undefined;
+  readOnlyLabel?: string | undefined;
 }
 
 export function SearchableSelect({
@@ -180,6 +184,9 @@ export function SearchableSelect({
   action,
   renderOption,
   onSearchChange,
+  loading = false,
+  loadError,
+  onLoadMore,
   readOnly = false,
   readOnlyLabel,
 }: SearchableSelectProps) {
@@ -434,12 +441,16 @@ export function SearchableSelect({
               );
             })}
 
-            {filtered.length === 0 && (
+            {!loading && !loadError && filtered.length === 0 && (
               <div className="py-6 text-center text-sm text-muted-foreground">
                 {emptyMessage}
               </div>
             )}
           </div>
+          {/* Status rows and the load-more control sit beside the listbox, so its children stay options. */}
+          {loading && <p role="status" className="px-3 py-2 text-sm text-muted-foreground">Auswahl wird geladen…</p>}
+          {loadError && <p role="alert" className="px-3 py-2 text-sm text-destructive">{loadError}</p>}
+          {onLoadMore && <button type="button" disabled={loading} onClick={onLoadMore} className="w-full rounded-md px-3 py-2 text-sm text-primary-text hover:bg-accent">Weitere Ergebnisse laden</button>}
         </PopoverPrimitive.Content>
       </PopoverPrimitive.Portal>
     </PopoverPrimitive.Root>
@@ -448,16 +459,16 @@ export function SearchableSelect({
 
 interface SearchableMultiSelectProps extends SearchableSelectBaseProps {
   /** Trigger id, so a `Field` label can target it; defaults to the `Field` context id. */
-  id?: string;
+  id?: string | undefined;
   selectedIds: string[];
   onSelectionChange: (ids: string[]) => void;
-  placeholder?: string;
-  selectedLabel?: (count: number) => string;
+  placeholder?: string | undefined;
+  selectedLabel?: ((count: number) => string) | undefined;
   /** Adds a row that clears the whole selection. */
-  allowNone?: boolean;
-  noneLabel?: string;
-  readOnly?: boolean;
-  readOnlyLabel?: string;
+  allowNone?: boolean | undefined;
+  noneLabel?: string | undefined;
+  readOnly?: boolean | undefined;
+  readOnlyLabel?: string | undefined;
 }
 
 export function SearchableMultiSelect({
@@ -474,6 +485,9 @@ export function SearchableMultiSelect({
   action,
   renderOption,
   onSearchChange,
+  loading = false,
+  loadError,
+  onLoadMore,
   allowNone = false,
   noneLabel = "Auswahl leeren",
   readOnly = false,
@@ -722,12 +736,16 @@ export function SearchableMultiSelect({
               );
             })}
 
-            {filtered.length === 0 && (
+            {!loading && !loadError && filtered.length === 0 && (
               <div className="py-6 text-center text-sm text-muted-foreground">
                 {emptyMessage}
               </div>
             )}
           </div>
+          {/* Status rows and the load-more control sit beside the listbox, so its children stay options. */}
+          {loading && <p role="status" className="px-3 py-2 text-sm text-muted-foreground">Auswahl wird geladen…</p>}
+          {loadError && <p role="alert" className="px-3 py-2 text-sm text-destructive">{loadError}</p>}
+          {onLoadMore && <button type="button" disabled={loading} onClick={onLoadMore} className="w-full rounded-md px-3 py-2 text-sm text-primary-text hover:bg-accent">Weitere Ergebnisse laden</button>}
         </PopoverPrimitive.Content>
       </PopoverPrimitive.Portal>
     </PopoverPrimitive.Root>

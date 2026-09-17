@@ -49,7 +49,7 @@ export function PersonnelOnboardingTemplateSettings({ templates }: { templates: 
   const [required, setRequired] = useState(true);
   const [blocksAccess, setBlocksAccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<{ name?: string; itemTitle?: string }>({});
+  const [fieldErrors, setFieldErrors] = useState<{ name?: string | undefined; itemTitle?: string | undefined }>({});
   const { run, isPending } = useServerAction(publishPersonnelOnboardingTemplate);
 
   useRealtimeRouterRefresh({ tables: ["personnel_onboarding_templates"] });

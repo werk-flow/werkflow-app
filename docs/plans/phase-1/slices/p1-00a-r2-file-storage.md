@@ -22,5 +22,5 @@ Implemented 2026-08-04 (ahead of `P1-00` by product-owner instruction): `lib/sto
 
 ## Links
 
-- Gate runs: [golden-gate-log.md](../../golden-gate-log.md)
+- Gate runs: [golden-gate-log.md](../audits/golden-gate-log.md)
 - Progress log: [../log.md](../log.md)

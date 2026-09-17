@@ -1,0 +1,2 @@
+# Markdown is LF in the index and on checkout; tooling splits on \n
+*.md text eol=lf

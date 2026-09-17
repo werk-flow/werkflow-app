@@ -214,6 +214,7 @@ test.describe('P1-10 customer relationships @P1-10', () => {
     ]);
     await expectLiveWithin(visibleText(bueroPage, title), {
       label: "p1-10 follow-up cross-session",
+      actingPage: adminPage,
       mutation: (beforeSubmit) =>
         createFollowUpOnCustomerDetail(adminPage, {
       title,

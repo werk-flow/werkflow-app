@@ -1,5 +1,8 @@
 import 'server-only';
 
+import { z } from 'zod';
+import { parseIsoDateRange } from '@/lib/calendar/date-range';
+
 import { getCachedOrganizationCalendar } from '@/lib/data/cached';
 import { toWorkSchedule } from '@/lib/personnel/schedule';
 import {
@@ -7,7 +10,7 @@ import {
   toEmploymentCondition,
   type EmploymentType,
 } from '@/lib/personnel/types';
-import { resolveDailyTarget } from '@/lib/personnel/targets';
+import { DEFAULT_DAILY_TARGET_MINUTES, resolveDailyTarget } from '@/lib/personnel/targets';
 import {
   toCapabilityDefinition,
   toEmployeeCapability,
@@ -22,6 +25,7 @@ import type {
 import { loadActiveSicknessSpansByRecord } from '@/lib/sickness/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { loadApprovedVacationSpansByRecord } from '@/lib/vacation/server';
+import { readAllRows } from '@/lib/supabase/query-batches';
 import { evaluateCapacity, fingerprintSnapshot } from './capacity';
 import {
   addLocalDays,
@@ -398,28 +402,6 @@ export async function loadPlanningOptions(orgId: string): Promise<{
   };
 }
 
-export async function expandPlanningTeams(input: {
-  admin: AdminClient;
-  orgId: string;
-  teamIds: string[];
-  localDate: string;
-}): Promise<PlanningAssignmentDraft[] | null> {
-  if (input.teamIds.length === 0) return [];
-  const { data, error } = await input.admin
-    .from('team_memberships')
-    .select('team_id, employee_record_id, valid_from, valid_until')
-    .eq('organization_id', input.orgId)
-    .in('team_id', [...new Set(input.teamIds)])
-    .lte('valid_from', input.localDate)
-    .or(`valid_until.is.null,valid_until.gte.${input.localDate}`)
-    .limit(1001);
-  if (error || (data?.length ?? 0) > 1000) return null;
-  return (data ?? []).map((membership) => ({
-    employeeRecordId: membership.employee_record_id,
-    teamSourceId: membership.team_id,
-  }));
-}
-
 export async function expandPlanningTeamsForDates(input: {
   admin: AdminClient;
   orgId: string;
@@ -491,7 +473,7 @@ function enumerateOccurrenceAllocations(
         localDate: date,
         minutes:
           targetByEmployeeDate.get(`${employeeRecordId}:${date}`)
-            ?.targetMinutes ?? 480,
+            ?.targetMinutes ?? DEFAULT_DAILY_TARGET_MINUTES,
       });
     }
   }
@@ -575,6 +557,7 @@ export async function assessPlanningOccurrences(input: {
   }
 
   const windowStart = uniqueDates[0];
+  if (!windowStart) return null;
   const windowEnd = uniqueDates.at(-1) ?? windowStart;
   const windowStartInstant = resolveBerlinWallTime(`${windowStart}T00:00`);
   const windowEndInstant = resolveBerlinWallTime(
@@ -794,12 +777,12 @@ export async function assessPlanningOccurrences(input: {
           existingMinutes.set(
             key,
             (existingMinutes.get(key) ?? 0) +
-              (targetByEmployeeDate.get(key)?.targetMinutes ?? 480),
+              (targetByEmployeeDate.get(key)?.targetMinutes ?? DEFAULT_DAILY_TARGET_MINUTES),
           );
           overlaps.set(
             key,
             (overlaps.get(key) ?? 0) +
-              Math.max(1, targetByEmployeeDate.get(key)?.targetMinutes ?? 480),
+              Math.max(1, targetByEmployeeDate.get(key)?.targetMinutes ?? DEFAULT_DAILY_TARGET_MINUTES),
           );
         }
       }
@@ -817,13 +800,11 @@ export async function assessPlanningOccurrences(input: {
       activeProposals = activeProposals.filter(
         (proposed) => proposed.end > existing.start,
       );
-      while (
-        proposedCursor < proposedIntervals.length &&
-        proposedIntervals[proposedCursor].start < existing.end
-      ) {
-        const proposed = proposedIntervals[proposedCursor];
+      let proposed = proposedIntervals[proposedCursor];
+      while (proposed && proposed.start < existing.end) {
         if (proposed.end > existing.start) activeProposals.push(proposed);
         proposedCursor += 1;
+        proposed = proposedIntervals[proposedCursor];
       }
       for (const proposed of activeProposals) {
         const overlapStart = new Date(Math.max(existing.start, proposed.start));
@@ -1024,40 +1005,66 @@ export async function assessPlanningOccurrences(input: {
   };
 }
 
-async function loadCalendarAssignments(input: {
-  admin: AdminClient;
-  orgId: string;
-  occurrenceIds: string[];
-  employeeRecordId?: string;
-}): Promise<Array<{
-  occurrence_id: string;
-  employee_record_id: string;
-}> | null> {
-  const results = await Promise.all(
-    Array.from(
-      { length: Math.ceil(input.occurrenceIds.length / 100) },
-      (_, index) => {
-        let query = input.admin
-          .from('planning_occurrence_assignments')
-          .select('occurrence_id, employee_record_id')
-          .eq('organization_id', input.orgId)
-          .in(
-            'occurrence_id',
-            input.occurrenceIds.slice(index * 100, index * 100 + 100),
-          )
-          .limit(10_001);
-        if (input.employeeRecordId) {
-          query = query.eq('employee_record_id', input.employeeRecordId);
-        }
-        return query;
-      },
-    ),
-  );
-  if (results.some((result) => result.error)) return null;
-  const assignments = results.flatMap((result) => result.data ?? []);
-  return assignments.length > 10_000 ? null : assignments;
-}
+// Boundary schema for the embedded calendar read below. supabase-js cannot
+// infer aliased, foreign-key-hinted embeds reliably, so the rows are parsed
+// here instead of cast. Enum literals mirror the generated database types.
+const calendarOccurrenceRowSchema = z.object({
+  id: z.string(),
+  series_id: z.string().nullable(),
+  series_lineage_id: z.string().nullable(),
+  job_id: z.string().nullable(),
+  entry_kind: z.enum(['job_visit', 'internal']),
+  internal_type: z.enum(['internal_work', 'meeting', 'training', 'other']).nullable(),
+  time_kind: z.enum(['timed', 'all_day']),
+  status: z.enum(['scheduled', 'skipped', 'cancelled']),
+  is_exception: z.boolean(),
+  title: z.string().nullable(),
+  description: z.string().nullable(),
+  location: z.string().nullable(),
+  start_at: z.string().nullable(),
+  end_at: z.string().nullable(),
+  start_date: z.string().nullable(),
+  end_date_exclusive: z.string().nullable(),
+  version: z.number(),
+  assignments: z.array(
+    z.object({
+      employee_record_id: z.string(),
+      employee_records: z.object({ user_id: z.string().nullable() }).nullable(),
+    }),
+  ),
+  job: z
+    .object({
+      id: z.string(),
+      title: z.string(),
+      description: z.string().nullable(),
+      job_number: z.string().nullable(),
+      status: z.enum(['nicht_bearbeitet', 'in_bearbeitung', 'fertig', 'geparkt']),
+      priority: z.enum(['niedrig', 'mittel', 'hoch']),
+      location: z.string().nullable(),
+      execution_version: z.number(),
+      client: z.object({ id: z.string(), name: z.string(), address: z.string().nullable() }).nullable(),
+      project: z.object({ id: z.string(), name: z.string(), project_number: z.string().nullable() }).nullable(),
+    })
+    .nullable(),
+});
 
+const CALENDAR_OCCURRENCE_SELECT = [
+  'id, series_id, series_lineage_id, job_id, entry_kind, internal_type, time_kind, status, is_exception, title, description, location, start_at, end_at, start_date, end_date_exclusive, version',
+  'assignments:planning_occurrence_assignments(employee_record_id, employee_records(user_id))',
+  'job:jobs!planning_occurrences_job_id_fkey(id, title, description, job_number, status, priority, location, execution_version, client:clients(id, name, address), project:projects(id, name, project_number))',
+].join(', ');
+
+/** Assignments per window; the former batched loader kept the same bound. */
+const CALENDAR_ASSIGNMENT_CAP = 10_000;
+
+/**
+ * The calendar window in two paged requests at most (Step 2, PF-08, PF-23,
+ * PF-25): occurrences embed their assignments, job, client, and project
+ * through PostgREST relations instead of the former dependent stages with
+ * batched id lists. Employees read only occurrences they are assigned to
+ * (an inner-joined alias of the same relation carries the filter) but still
+ * see every assignee of those occurrences.
+ */
 export async function loadPlanningCalendarEntries(input: {
   orgId: string;
   userId: string;
@@ -1065,29 +1072,15 @@ export async function loadPlanningCalendarEntries(input: {
   from: string;
   to: string;
 }): Promise<PlanningCalendarEntry[] | null> {
+  // Both dates are interpolated into the PostgREST filter below: reject
+  // anything but a bounded ISO date range before building it.
+  if (!parseIsoDateRange({ from: input.from, to: input.to })) return null;
   const admin = createSupabaseAdminClient();
   const fromInstant = resolveBerlinWallTime(`${input.from}T00:00`);
   const toInstant = resolveBerlinWallTime(`${addLocalDays(input.to, 1)}T00:00`);
   if (!fromInstant || !toInstant) return null;
-  const query = admin
-    .from('planning_occurrences')
-    .select(
-      'id, series_id, series_lineage_id, job_id, entry_kind, internal_type, time_kind, status, is_exception, title, description, location, start_at, end_at, start_date, end_date_exclusive, version',
-    )
-    .eq('organization_id', input.orgId)
-    // Skipped/cancelled occurrences stay traceably visible in the calendar
-    // (P1-11-F03); overlap/capacity checks keep their own scheduled-only query.
-    .in('status', ['scheduled', 'skipped', 'cancelled'])
-    .or(
-      `and(start_at.lt.${toInstant.instant.toISOString()},end_at.gt.${fromInstant.instant.toISOString()}),and(start_date.lte.${input.to},end_date_exclusive.gt.${input.from})`,
-    )
-    .order('start_at', { ascending: true, nullsFirst: false })
-    .limit(2001);
-  const { data: windowOccurrences, error } = await query;
-  if (error || (windowOccurrences?.length ?? 0) > 2000) return null;
-  if (!windowOccurrences?.length) return [];
 
-  let occurrences = windowOccurrences;
+  let ownRecordId: string | null = null;
   if (!input.isManager) {
     const { data: record, error: recordError } = await admin
       .from('employee_records')
@@ -1097,125 +1090,55 @@ export async function loadPlanningCalendarEntries(input: {
       .maybeSingle();
     if (recordError) return null;
     if (!record) return [];
-    const occurrenceIds = windowOccurrences.map((occurrence) => occurrence.id);
-    const ownAssignments = await loadCalendarAssignments({
-      admin,
-      orgId: input.orgId,
-      occurrenceIds,
-      employeeRecordId: record.id,
-    });
-    if (!ownAssignments) return null;
-    const ownOccurrenceIds = new Set(
-      ownAssignments.map((assignment) => assignment.occurrence_id),
-    );
-    occurrences = windowOccurrences.filter((occurrence) =>
-      ownOccurrenceIds.has(occurrence.id),
-    );
-    if (!occurrences.length) return [];
+    ownRecordId = record.id;
   }
 
-  const occurrenceIds = occurrences.map((occurrence) => occurrence.id);
-  const jobIds = [
-    ...new Set(
-      occurrences.flatMap((occurrence) =>
-        occurrence.job_id ? [occurrence.job_id] : [],
-      ),
-    ),
-  ];
-  const [assignments, jobResult] = await Promise.all([
-    loadCalendarAssignments({
-      admin,
-      orgId: input.orgId,
-      occurrenceIds,
-    }),
-    jobIds.length
-      ? admin
-          .from('jobs')
-          .select(
-            'id, title, description, job_number, status, priority, location, client_id, project_id, execution_version',
-          )
-          .eq('organization_id', input.orgId)
-          .in('id', jobIds)
-      : { data: [], error: null },
-  ]);
-  if (!assignments || jobResult.error) {
-    console.error(
-      'Failed to load planning calendar job context:',
-      jobResult.error,
-    );
+  // A fresh builder per page: supabase-js builders are mutable, so one
+  // instance cannot serve several ranges.
+  const windowQuery = () => {
+    const select = ownRecordId
+      ? `${CALENDAR_OCCURRENCE_SELECT}, own:planning_occurrence_assignments!inner(employee_record_id)`
+      : CALENDAR_OCCURRENCE_SELECT;
+    let query = admin
+      .from('planning_occurrences')
+      .select(select)
+      .eq('organization_id', input.orgId)
+      // Skipped/cancelled occurrences stay traceably visible in the calendar
+      // (P1-11-F03); overlap/capacity checks keep their own scheduled-only query.
+      .in('status', ['scheduled', 'skipped', 'cancelled'])
+      .or(
+        `and(start_at.lt.${toInstant.instant.toISOString()},end_at.gt.${fromInstant.instant.toISOString()}),and(start_date.lte.${input.to},end_date_exclusive.gt.${input.from})`,
+      );
+    if (ownRecordId) query = query.eq('own.employee_record_id', ownRecordId);
+    return query
+      .order('start_at', { ascending: true, nullsFirst: false })
+      .order('id');
+  };
+  // Paged complete read up to the declared cap: a single request returns at
+  // most the project's `max_rows` (1,000) and would silently drop the rest of
+  // a dense month (PF-25). An overflow stays an explicit null.
+  const { data: rows, error, overflow } = await readAllRows<unknown, { message: string }>(
+    (from, to) => windowQuery().range(from, to),
+    { cap: 2000 },
+  );
+  if (error || overflow) {
+    if (error) console.error('Failed to load planning calendar window:', { message: error.message });
+    if (overflow) console.error('Planning calendar window exceeded its row cap:', { organizationId: input.orgId, from: input.from, to: input.to });
     return null;
   }
-  const employeeRecordIds = [
-    ...new Set(assignments.map((assignment) => assignment.employee_record_id)),
-  ];
-  const employeeResult = employeeRecordIds.length
-    ? await admin
-        .from('employee_records')
-        .select('id, user_id')
-        .eq('organization_id', input.orgId)
-        .in('id', employeeRecordIds)
-    : { data: [], error: null };
-  if (employeeResult.error) {
-    console.error(
-      'Failed to load planning calendar employee context:',
-      employeeResult.error,
-    );
+  const parsed = z.array(calendarOccurrenceRowSchema).safeParse(rows);
+  if (!parsed.success) {
+    console.error('Planning calendar window rows did not match the expected shape.');
     return null;
   }
-  const userIdByRecord = new Map(
-    (employeeResult.data ?? []).map((record) => [record.id, record.user_id]),
-  );
-  const assignmentsByOccurrence = new Map<string, string[]>();
-  for (const assignment of assignments) {
-    const list = assignmentsByOccurrence.get(assignment.occurrence_id) ?? [];
-    list.push(assignment.employee_record_id);
-    assignmentsByOccurrence.set(assignment.occurrence_id, list);
-  }
-  const jobs = new Map((jobResult.data ?? []).map((job) => [job.id, job]));
-  const clientIds = [
-    ...new Set(
-      (jobResult.data ?? []).flatMap((job) =>
-        job.client_id ? [job.client_id] : [],
-      ),
-    ),
-  ];
-  const projectIds = [
-    ...new Set(
-      (jobResult.data ?? []).flatMap((job) =>
-        job.project_id ? [job.project_id] : [],
-      ),
-    ),
-  ];
-  const [clientResult, projectResult] = await Promise.all([
-    clientIds.length
-      ? admin
-          .from('clients')
-          .select('id, name, address')
-          .eq('organization_id', input.orgId)
-          .in('id', clientIds)
-      : { data: [], error: null },
-    projectIds.length
-      ? admin
-          .from('projects')
-          .select('id, name, project_number')
-          .eq('organization_id', input.orgId)
-          .in('id', projectIds)
-      : { data: [], error: null },
-  ]);
-  if (clientResult.error || projectResult.error) return null;
-  const clients = new Map(
-    (clientResult.data ?? []).map((client) => [client.id, client]),
-  );
-  const projects = new Map(
-    (projectResult.data ?? []).map((project) => [project.id, project]),
-  );
+  const occurrences = parsed.data;
+  const assignmentCount = occurrences.reduce((total, row) => total + row.assignments.length, 0);
+  if (assignmentCount > CALENDAR_ASSIGNMENT_CAP) return null;
 
   return occurrences.flatMap((occurrence) => {
-    const job = occurrence.job_id ? jobs.get(occurrence.job_id) : null;
+    const job = occurrence.job;
     if (job?.status === 'geparkt') return [];
-    const client = job?.client_id ? clients.get(job.client_id) : null;
-    const project = job?.project_id ? projects.get(job.project_id) : null;
-    const records = assignmentsByOccurrence.get(occurrence.id) ?? [];
+    const records = occurrence.assignments.map((assignment) => assignment.employee_record_id);
     const startLocal = occurrence.start_at
       ? formatBerlinLocalDateTime(occurrence.start_at)
       : null;
@@ -1253,18 +1176,18 @@ export async function loadPlanningCalendarEntries(input: {
               )
             : null,
         assignedEmployeeRecordIds: records,
-        assignedUserIds: records.flatMap((recordId) => {
-          const userId = userIdByRecord.get(recordId);
+        assignedUserIds: occurrence.assignments.flatMap((assignment) => {
+          const userId = assignment.employee_records?.user_id;
           return userId ? [userId] : [];
         }),
         jobNumber: job?.job_number ?? null,
         jobStatus: job?.status ?? null,
         jobExecutionVersion: job?.execution_version ?? 0,
         priority: job?.priority ?? null,
-        clientName: client?.name ?? null,
-        clientAddress: client?.address ?? null,
-        projectName: project?.name ?? null,
-        projectNumber: project?.project_number ?? null,
+        clientName: job?.client?.name ?? null,
+        clientAddress: job?.client?.address ?? null,
+        projectName: job?.project?.name ?? null,
+        projectNumber: job?.project?.project_number ?? null,
       },
     ];
   });

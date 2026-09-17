@@ -3,6 +3,8 @@ import { createWriteStream } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
+import { Scanner } from "@tailwindcss/oxide";
 import { z } from "zod";
 import { calculateCandidateFingerprint } from "@/lib/testing/candidate-identity";
 import { withWorkspaceTestLock } from "@/lib/testing/workspace-test-lock";
@@ -47,6 +49,39 @@ await withWorkspaceTestLock(
           {
             name: "isolated-service-boundaries",
             setup(builder) {
+              builder.onResolve({ filter: /^@\/lib\/clients\/actions$/ }, () => ({ path: join(import.meta.dir, 'customer-service-boundaries.ts') }));
+              builder.onResolve({ filter: /^@\/(components\/organization\/organization-context|lib\/time-tracking\/segment-actions|components\/job-picker-modal)$/ }, (args) => {
+                if (args.importer.endsWith('clock-state-provider.tsx') || args.importer.endsWith('clock-fab.tsx') || args.importer.endsWith('clock-action-list.tsx') || args.importer.endsWith('time-activity-dialog.tsx')) {
+                  return { path: join(import.meta.dir, 'clock-service-boundaries.tsx') };
+                }
+              });
+              builder.onResolve({ filter: /^(next\/link|next\/navigation)$/ }, (args) => {
+                if (args.importer.endsWith('sidebar-link.tsx')) return { path: join(import.meta.dir, 'sidebar-service-boundaries.tsx') };
+              });
+              builder.onResolve({ filter: /^(next\/navigation|@\/lib\/org\/actions)$/ }, (args) => {
+                if (args.importer.endsWith('organization-context.tsx')) return { path: join(import.meta.dir, 'organization-service-boundaries.ts') };
+              });
+              builder.onResolve({ filter: /^next\/link$/ }, (args) => {
+                if (args.importer.endsWith('parkplatz-panel.tsx') || args.importer.endsWith('clients-table.tsx')) return { path: join(import.meta.dir, 'day-view-link-boundary.tsx') };
+              });
+              builder.onResolve({ filter: /(?:calendar-entry-dialog|job-event-popover|entry-details-dialog)$/ }, (args) => {
+                if (args.importer.includes('day-view') || args.importer.endsWith('fullcalendar-view.tsx')) return { path: join(import.meta.dir, 'day-view-service-boundaries.tsx') };
+              });
+              builder.onResolve({ filter: /^@\/lib\/(jobs|time-tracking)\/actions$/ }, (args) => {
+                if (args.importer.endsWith('day-view.tsx')) return { path: join(import.meta.dir, 'day-view-service-boundaries.tsx') };
+              });
+              builder.onResolve({ filter: /^next\/navigation$/ }, (args) => {
+                if (args.importer.endsWith('use-list-navigation.ts')) return { path: join(import.meta.dir, 'list-navigation-service-boundaries.ts') };
+              });
+              builder.onResolve({ filter: /^@\/lib\/jobs\/option-actions$/ }, () => ({ path: join(import.meta.dir, "option-service-boundaries.ts") }));
+              builder.onResolve({ filter: /^@\/lib\/calendar\/client$/ }, () => ({ path: join(import.meta.dir, "calendar-service-boundaries.tsx") }));
+              builder.onResolve({ filter: /^@\/lib\/data\/background-read-client$/ }, () => ({ path: join(import.meta.dir, "background-read-boundaries.ts") }));
+              builder.onResolve({ filter: /^@\/components\/realtime\/realtime-provider$/ }, () => ({ path: join(repository, "components/realtime/realtime-provider.tsx") }));
+              builder.onResolve({ filter: /^@\/(lib\/supabase\/client|components\/organization\/organization-context|components\/user\/user-profile-context|lib\/time-tracking\/actions)$/ }, (args) => {
+                if (args.importer.endsWith("realtime-provider.tsx") || args.importer.endsWith("use-calendar-range-data.ts") || args.importer.endsWith("use-job-entity-options.ts")) {
+                  return { path: join(import.meta.dir, "calendar-service-boundaries.tsx") };
+                }
+              });
               builder.onResolve(
                 {
                   filter:
@@ -103,6 +138,14 @@ await withWorkspaceTestLock(
       if (!bundleSource.trim())
         throw new Error("UI contract fixture bundle is empty.");
       bundleSha256 = createHash("sha256").update(bundleSource).digest("hex");
+      // The app's compiled stylesheet, for contracts that assert rendered
+      // geometry (clipping, touch targets). Specs opt in with addStyleTag.
+      const stylesheet = await compile(
+        await readFile(join(repository, "app/globals.css"), "utf8"),
+        { base: join(repository, "app"), onDependency() {} },
+      );
+      const cssPath = join(directory, "app.css");
+      await writeFile(cssPath, stylesheet.build(new Scanner({ sources: stylesheet.sources }).scan()));
       const child = Bun.spawn(
         [
           process.execPath,
@@ -118,6 +161,7 @@ await withWorkspaceTestLock(
           env: {
             ...process.env,
             WERKFLOW_UI_CONTRACT_BUNDLE: bundle.path,
+            WERKFLOW_UI_CONTRACT_CSS: cssPath,
             WERKFLOW_UI_CONTRACT_RUN_DIRECTORY: runDirectory,
           },
           stdout: "pipe",

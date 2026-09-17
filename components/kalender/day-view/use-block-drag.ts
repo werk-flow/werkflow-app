@@ -72,7 +72,7 @@ export function useBlockDrag({
     setCurrentWidth(width);
     currentLeftRef.current = left;
     currentWidthRef.current = width;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- layout props enter drag state only when left or width change; isHolding is drag-owned
   }, [left, width]);
 
   const handlePointerDown = useCallback(

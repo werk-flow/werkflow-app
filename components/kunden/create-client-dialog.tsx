@@ -113,10 +113,10 @@ export function CreateClientDialog({
     const input: CreateClientInput = {
       name: name.trim(),
       clientType,
-      email: email.trim() || undefined,
-      phone: phone.trim() || undefined,
-      address: address.trim() || undefined,
-      notes: notes.trim() || undefined
+      ...(email.trim() ? { email: email.trim() } : {}),
+      ...(phone.trim() ? { phone: phone.trim() } : {}),
+      ...(address.trim() ? { address: address.trim() } : {}),
+      ...(notes.trim() ? { notes: notes.trim() } : {})
     };
 
     if (onClientCreated) {
@@ -161,7 +161,10 @@ export function CreateClientDialog({
     }
     clientCreations.publish({ kind: 'commit', tempId, confirmed: result.client });
     showBanner({ variant: 'success', message: 'Kunde erfolgreich erstellt!' });
-    router.refresh();
+    // The action's tag update already re-renders this route in its response;
+    // a second router.refresh() rendered the same page again 10 ms later
+    // (Step 2 handoff diagnostic, 2026-09-12). The list's post-save read and
+    // the route snapshot effect reconcile the confirmed row.
   };
 
   const resetForm = () => {

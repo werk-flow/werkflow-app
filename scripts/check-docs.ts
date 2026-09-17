@@ -16,6 +16,8 @@
 //  9. Roadmap invariants: accepted counter, ready-set recomputation, slice-record linkage and dates.
 // 10. User-flow catalog: section order, unique sequential flow IDs, invariant counts.
 // 11. One document per slice: per-slice files exist only under plans/phase-1/slices/.
+// 12. Incident tiers — every dated incident-log section since decision 0005 names the
+//     enforcement tier its prevention landed on (or that no prevention claim follows).
 
 import { readdirSync, readFileSync, existsSync, statSync } from "node:fs";
 import { join, dirname, resolve, relative, sep } from "node:path";
@@ -63,9 +65,9 @@ const linkPattern = /\]\(([^)\s]+)\)/g;
 for (const file of docFiles) {
   const content = readFileSync(file, "utf8");
   for (const match of content.matchAll(linkPattern)) {
-    const target = match[1];
-    if (/^(https?:|mailto:|#)/.test(target)) continue;
-    const targetPath = resolve(dirname(file), target.split("#")[0]);
+    const [, target] = match;
+    if (target === undefined || /^(https?:|mailto:|#)/.test(target)) continue;
+    const targetPath = resolve(dirname(file), target.replace(/#.*$/, ""));
     if (!existsSync(targetPath)) {
       const relFile = relative(repoRoot, file).split(sep).join("/");
       problems.push(`link: ${relFile} → ${target} does not resolve`);
@@ -173,7 +175,6 @@ if (!existsSync(join(repoRoot, "scripts", "run-coderabbit-review.ts"))) {
 const livingStatusPattern = /^Status: living — last reviewed \d{4}-\d{2}-\d{2}(; .+)?$/;
 const closedStatusPattern = /^Status: closed \(\d{4}-\d{2}-\d{2}\) — .+$/;
 const decisionStatusPattern = /^- \*\*Status:\*\* accepted \(\d{4}-\d{2}-\d{2}\)( — .+)?$/;
-const pointerStubStatusPattern = /^Status: pointer stub — .+$/;
 
 function readDocStatus(file: string): { kind: "living" | "closed" | "accepted" | "pointer stub"; date: string | null } | null {
   const lines = readFileSync(file, "utf8").split("\n");
@@ -190,9 +191,7 @@ function readDocStatus(file: string): { kind: "living" | "closed" | "accepted" |
   const isDecision = relFile.startsWith("docs/decisions/");
   const pattern = isDecision
     ? decisionStatusPattern
-    : relFile === "docs/plans/phase-1-build-roadmap.md"
-      ? pointerStubStatusPattern
-      : statusLine.startsWith("Status: closed")
+    : statusLine.startsWith("Status: closed")
         ? closedStatusPattern
         : livingStatusPattern;
   if (!pattern.test(statusLine)) {
@@ -203,7 +202,6 @@ function readDocStatus(file: string): { kind: "living" | "closed" | "accepted" |
   }
   const date = statusLine.match(/\d{4}-\d{2}-\d{2}/)?.[0] ?? null;
   if (isDecision) return { kind: "accepted", date };
-  if (pattern === pointerStubStatusPattern) return { kind: "pointer stub", date };
   return { kind: statusLine.startsWith("Status: closed") ? "closed" : "living", date };
 }
 
@@ -218,10 +216,28 @@ for (const file of docFiles) {
 //    because their historical entries are immutable.
 const backtickDocPathExemptFiles = new Set([
   "plans/phase-1/log.md",
-  "plans/golden-gate-log.md",
+  "plans/phase-1/audits/golden-gate-log.md",
   "technical/test-incident-log.md",
 ]);
-const backtickDocPathPattern = /`((?:docs\/|\.\.\/)[A-Za-z0-9_./-]+\.md)`/g;
+// Any backticked Markdown path, not only docs/- or ../-prefixed ones (Step 3, 2026-09-13):
+// bare sibling paths such as `phase-1/protocol.md` escaped the earlier prefix-only pattern.
+// AGENTS.md, CLAUDE.md and skill/memory files are code-facing names, not doc links.
+const backtickDocPathPattern = /`((?:docs\/|\.\.\/)?[A-Za-z0-9_-][A-Za-z0-9_./-]*\.md)`/g;
+// A backticked name counts only when it names a real document under docs/; artifact names
+// such as `error-context.md` and code-facing files (AGENTS.md, SKILL.md) are not doc links.
+const docPathsByBasename = new Map<string, string[]>();
+for (const file of docFiles) {
+  const relPath = relative(docsRoot, file).split(sep).join("/");
+  const basename = relPath.split("/").pop()!;
+  docPathsByBasename.set(basename, [...(docPathsByBasename.get(basename) ?? []), relPath]);
+}
+function namesExistingDoc(fromRelPath: string, reference: string): boolean {
+  const cleaned = reference.replace(/^docs\//, "");
+  const fromDir = fromRelPath.includes("/") ? fromRelPath.slice(0, fromRelPath.lastIndexOf("/")) : "";
+  const candidates = [cleaned, join(fromDir, cleaned).split(sep).join("/")];
+  if (candidates.some((candidate) => existsSync(join(docsRoot, candidate)))) return true;
+  return !cleaned.includes("/") && docPathsByBasename.has(cleaned);
+}
 for (const file of docFiles) {
   const relPath = relative(docsRoot, file).split(sep).join("/");
   if (relPath === "README.md" || backtickDocPathExemptFiles.has(relPath)) continue;
@@ -230,7 +246,11 @@ for (const file of docFiles) {
   lines.forEach((line, index) => {
     if (line.trimStart().startsWith("```")) insideFence = !insideFence;
     if (insideFence || line.trimStart().startsWith(">")) return;
-    for (const match of line.matchAll(backtickDocPathPattern)) {
+    // Link text may legitimately carry a backticked file name: [`x.md`](x.md).
+    const withoutLinks = line.replace(/\[[^\]]*\]\([^)]*\)/g, "");
+    for (const match of withoutLinks.matchAll(backtickDocPathPattern)) {
+      const reference = match[1];
+      if (reference === undefined || !namesExistingDoc(relPath, reference)) continue;
       problems.push(
         `link-syntax: docs/${relPath}:${index + 1} references ${match[1]} in backticks; use a relative markdown link (docs/README.md maintenance rule 3)`,
       );
@@ -243,6 +263,7 @@ for (const file of docFiles) {
 const indexRowPattern = /^\| \[[^\]]+\]\(([^)]+)\)\s*\| (Closed|Living|Complete|Accepted) — /gm;
 for (const match of indexContent.matchAll(indexRowPattern)) {
   const [, target, prefix] = match;
+  if (target === undefined || prefix === undefined) continue;
   const status = docStatuses.get(target);
   if (prefix === "Complete" || prefix === "Accepted") {
     problems.push(`index: row for ${target} uses "${prefix} —"; index rows say "Closed —" or "Living —" only`);
@@ -263,7 +284,8 @@ const sliceRowPattern = /^\| `(P1-\d{2}a?)`\s*\| `([a-z_]+)`\s*\| .*?\| ([^|]*)\
 const sliceRows = new Map<string, { status: string; dependencies: string[]; exitEvidence: string }>();
 for (const match of roadmapContent.matchAll(sliceRowPattern)) {
   const [, id, status, dependencyCell, exitEvidence] = match;
-  const dependencies = [...dependencyCell.matchAll(/`(P1-\d{2}a?)`/g)].map((entry) => entry[1]);
+  if (id === undefined || status === undefined || dependencyCell === undefined || exitEvidence === undefined) continue;
+  const dependencies = [...dependencyCell.matchAll(/`(P1-\d{2}a?)`/g)].flatMap((entry) => entry[1] ?? []);
   sliceRows.set(id, { status, dependencies, exitEvidence });
 }
 const completeCount = [...sliceRows.values()].filter((row) => row.status === "complete").length;
@@ -287,20 +309,20 @@ for (const [id, row] of sliceRows) {
     problems.push(`roadmap: ${id} is ready but a direct prerequisite is not complete`);
   }
   if (row.status !== "complete") continue;
-  const recordMatch = row.exitEvidence.match(/\]\((slices\/[a-z0-9-]+\.md)\)/);
-  if (!recordMatch) {
+  const recordPath = row.exitEvidence.match(/\]\((slices\/[a-z0-9-]+\.md)\)/)?.[1];
+  if (!recordPath) {
     problems.push(`roadmap: complete row ${id} does not link its slice record under slices/`);
     continue;
   }
-  if (!recordMatch[1].startsWith(`slices/${id.toLowerCase()}-`)) {
-    problems.push(`roadmap: ${id} must link its own slice record; found ${recordMatch[1]}`);
+  if (!recordPath.startsWith(`slices/${id.toLowerCase()}-`)) {
+    problems.push(`roadmap: ${id} must link its own slice record; found ${recordPath}`);
   }
-  const recordStatus = docStatuses.get(`plans/phase-1/${recordMatch[1]}`);
+  const recordStatus = docStatuses.get(`plans/phase-1/${recordPath}`);
   const rowDate = row.exitEvidence.match(/Accepted `?complete`? (\d{4}-\d{2}-\d{2})/)?.[1];
   if (recordStatus?.kind !== "closed") {
-    problems.push(`roadmap: complete row ${id} links ${recordMatch[1]}, whose status line is not closed`);
+    problems.push(`roadmap: complete row ${id} links ${recordPath}, whose status line is not closed`);
   } else if (rowDate && recordStatus.date !== rowDate) {
-    problems.push(`roadmap: ${id} row says accepted ${rowDate} but ${recordMatch[1]} is closed (${recordStatus.date})`);
+    problems.push(`roadmap: ${id} row says accepted ${rowDate} but ${recordPath} is closed (${recordStatus.date})`);
   }
 }
 
@@ -320,12 +342,13 @@ const catalogSections = [...catalogContent.matchAll(/^### `(P1-\d{2}a?)`[^\n]*\n
 let previousSliceKey = "";
 const seenFlowIds = new Set<string>();
 for (const [, sliceId, body] of catalogSections) {
+  if (sliceId === undefined || body === undefined) continue;
   const sliceKey = sliceId.padEnd(6, " ");
   if (sliceKey < previousSliceKey) {
     problems.push(`catalog: section ${sliceId} is out of ID order in docs/product/user-flow-catalog.md`);
   }
   previousSliceKey = sliceKey;
-  const definedFlowIds = [...body.matchAll(new RegExp(`^- \`(${sliceId}-F\\d{2,3})\``, "gm"))].map((entry) => entry[1]);
+  const definedFlowIds = [...body.matchAll(new RegExp(`^- \`(${sliceId}-F\\d{2,3})\``, "gm"))].flatMap((entry) => entry[1] ?? []);
   definedFlowIds.forEach((flowId, index) => {
     if (seenFlowIds.has(flowId)) problems.push(`catalog: flow ID ${flowId} is defined twice`);
     seenFlowIds.add(flowId);
@@ -335,6 +358,43 @@ for (const [, sliceId, body] of catalogSections) {
   const invariant = body.match(/\*\*Acceptance invariant:\*\* `(\d+)\/(\d+) mapped/);
   if (invariant && Number(invariant[1]) !== definedFlowIds.length) {
     problems.push(`catalog: ${sliceId} invariant says ${invariant[1]} flows but the section defines ${definedFlowIds.length}`);
+  }
+}
+
+// 12. Incident tiers (decision 0005; mechanized in pre-Wave-3 step 1, 2026-09-14, after the Step 3
+//     campaign wrote entries whose prevention named no tier): every dated section of the incident
+//     log from the decision's adoption date names Tier 1 or Tier 2, names Tier 3 with a reason in the
+//     same sentence, or states that no prevention claim follows. Sections before that date are history.
+const incidentLogRelativePath = "technical/test-incident-log.md";
+const incidentTierRulePattern = /\bTier [12]\b|\bTier 3\b[^.\n]*(?::|\bbecause\b|\()|\bno (?:\w+ )*prevention claim\b/i;
+const incidentTierSince = "2026-08-27";
+for (const section of readFileSync(join(docsRoot, incidentLogRelativePath), "utf8").split(/^(?=#{2,3} )/m)) {
+  const heading = section.split("\n")[0] ?? "";
+  const date = heading.match(/\d{4}-\d{2}-\d{2}/)?.[0];
+  if (!heading.startsWith("#") || !date || date < incidentTierSince) continue;
+  if (incidentTierRulePattern.test(section)) continue;
+  problems.push(
+    `incident-tier: docs/${incidentLogRelativePath} "${heading.replace(/^#+ /, "")}" names no enforcement tier; end the entry with Tier 1 or Tier 2, "Tier 3: <why no mechanism reaches it>" or "no prevention claim" (decision 0005)`,
+  );
+}
+
+// 13. Deletion pass and independent review (protocol.md "Deletion Pass And Independent Review",
+//     pre-Wave-3 step 2, 2026-09-14): a slice record closed from 2026-09-15 on carries the section
+//     with the diff size before and after the pass (two `git diff --shortstat` lines) and the
+//     `bun run review` command with its finding dispositions, so a slice cannot close without both.
+const deletionPassSince = "2026-09-15";
+for (const [file, status] of docStatuses) {
+  if (!file.startsWith("plans/phase-1/slices/") || status?.kind !== "closed" || !status.date || status.date < deletionPassSince) continue;
+  const section = readFileSync(join(docsRoot, file), "utf8").match(/^## Deletion pass and review\n([\s\S]*?)(?=^## |$(?![\s\S]))/im)?.[1];
+  if (!section) {
+    problems.push(`deletion-pass: docs/${file} closes without a "## Deletion Pass And Review" section (protocol.md, Deletion Pass And Independent Review)`);
+    continue;
+  }
+  if ((section.match(/\d+ files? changed/g) ?? []).length < 2) {
+    problems.push(`deletion-pass: docs/${file} must record the git diff --shortstat line before and after the deletion pass`);
+  }
+  if (!/bun run review\b/.test(section)) {
+    problems.push(`deletion-pass: docs/${file} must record the bun run review command it ran and the disposition of every finding`);
   }
 }
 

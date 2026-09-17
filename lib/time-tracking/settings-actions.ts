@@ -111,7 +111,8 @@ async function reconcileOpenBreakSessionsForOrg(
   const entriesByUser = new Map<string, TimeEntry[]>()
 
   for (const row of timeEntryRows ?? []) {
-    const entry = toTimeEntries([row])[0]
+    const [entry] = toTimeEntries([row])
+    if (!entry) continue
     const existingEntries = entriesByUser.get(entry.userId) ?? []
     existingEntries.push(entry)
     entriesByUser.set(entry.userId, existingEntries)

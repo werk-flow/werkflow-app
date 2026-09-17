@@ -33,17 +33,17 @@ interface ProjectActionsMenuProps {
   detailHref: string;
   clients: Client[];
   jobs: Job[];
-  onProjectUpdated?: (payload: {
+  onProjectUpdated?: ((payload: {
     project: Project;
     selectedJobIds?: string[];
-  }) => void | Promise<void>;
-  onProjectDeleted?: (projectId: string) => void | Promise<void>;
+  }) => void | Promise<void>) | undefined;
+  onProjectDeleted?: ((projectId: string) => void | Promise<void>) | undefined;
   /**
    * Optimistic list mode (feedback canon): the confirm closes at once and the
    * list owns the delete — row removal, server call, rollback, banners.
    * `onProjectDeleted` is not called on that path.
    */
-  onDeleteRequested?: (projectId: string) => void;
+  onDeleteRequested?: ((projectId: string) => void) | undefined;
 }
 
 export function ProjectActionsMenu({

@@ -7,7 +7,6 @@ import {
   CardHeader,
   CardTitle
 } from '@/components/ui/card';
-import { reportAuthUsersStringColumnHealth } from '@/lib/supabase/auth-health';
 
 import { ForgotPasswordForm } from './forgot-password-form';
 
@@ -32,7 +31,6 @@ export default async function ForgotPasswordPage({
 }: {
   searchParams: Promise<{ email?: string; error?: string; source?: string }>;
 }) {
-  await reportAuthUsersStringColumnHealth('forgot-password-page');
   const params = await searchParams;
   const initialEmail = typeof params.email === 'string' ? params.email : '';
   const errorMessage = getErrorMessage(params.error);

@@ -188,7 +188,7 @@ The yaml holds durable, repo-wide review behavior only. Touch it only when the s
 
 ### Per-review context goes on the command line
 
-Pass it with `-c`: always `AGENTS.md` and `.coderabbit.yaml`, plus the primary feature spec(s) the slice touched, plus the matching technical doc when caching/Realtime/storage behavior changed. Smallest set that explains the diff.
+Pass it with `-c`: always `AGENTS.md` and `.coderabbit.yaml`, plus the primary feature specs the slice touched, plus the matching technical doc when caching/Realtime/storage behavior changed. Smallest set that explains the diff.
 
 ### Scope to the slice's diff
 

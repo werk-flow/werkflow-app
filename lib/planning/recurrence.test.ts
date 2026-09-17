@@ -76,9 +76,10 @@ describe('planning recurrence materialization', () => {
   });
 
   test('uses a stable logical identity', () => {
-    const occurrences = materializeSeries(draft(), '2027-01-01');
+    const [firstOccurrence] = materializeSeries(draft(), '2027-01-01');
+    if (!firstOccurrence) throw new Error('Expected at least one occurrence');
     expect(
-      occurrenceIdentity('org', 'lineage', occurrences[0].originalStartLocal)
+      occurrenceIdentity('org', 'lineage', firstOccurrence.originalStartLocal)
     ).toBe('org:lineage:2026-08-14T09:00');
   });
 

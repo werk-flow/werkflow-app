@@ -30,9 +30,13 @@ import { artifactsDirectory, type TestWorld } from "../../golden/support/world";
 
 test.describe.configure({ mode: "serial" });
 
-const DATES = Array.from({ length: 5 }, (_, index) =>
-  ownedBerlinDateAtOffset("p1-20", 105 + index),
-);
+const DATES = [
+  ownedBerlinDateAtOffset("p1-20", 105),
+  ownedBerlinDateAtOffset("p1-20", 106),
+  ownedBerlinDateAtOffset("p1-20", 107),
+  ownedBerlinDateAtOffset("p1-20", 108),
+  ownedBerlinDateAtOffset("p1-20", 109),
+] as const;
 const FIRST_DUE_LABEL = new Intl.DateTimeFormat("de-DE").format(
   new Date(`${DATES[0]}T12:00:00Z`),
 );
@@ -106,13 +110,18 @@ async function expectMaintenanceColumns(header: Locator, row: Locator, columns: 
       return { x: bounds.x, width: bounds.width };
     }));
     expect(headings).toHaveLength(4);
-    for (let index = 0; index < cells.length; index += 1) {
-      expect(Math.abs(cells[index].x - headings[index].x), `column ${index + 1} start`).toBeLessThanOrEqual(1);
-      expect(Math.abs(cells[index].width - headings[index].width), `column ${index + 1} width`).toBeLessThanOrEqual(1);
+    for (const [index, cell] of cells.entries()) {
+      const heading = headings[index];
+      if (!heading) throw new Error(`column ${index + 1} has no heading`);
+      expect(Math.abs(cell.x - heading.x), `column ${index + 1} start`).toBeLessThanOrEqual(1);
+      expect(Math.abs(cell.width - heading.width), `column ${index + 1} width`).toBeLessThanOrEqual(1);
     }
   } else {
     for (let index = 1; index < cells.length; index += 1) {
-      expect(cells[index].top).toBeGreaterThanOrEqual(cells[index - 1].bottom);
+      const cell = cells[index];
+      const previousCell = cells[index - 1];
+      if (!cell || !previousCell) throw new Error(`column ${index + 1} has no rendered cell pair`);
+      expect(cell.top).toBeGreaterThanOrEqual(previousCell.bottom);
     }
   }
   const containment = await row.evaluate((element) => {
@@ -488,7 +497,9 @@ test.describe("P1-20 exhaustive maintenance audit @AUDIT-W2-P1-20 @AUDIT-W2", ()
     const populatedDueRow = adminPage.getByRole("main").getByTestId("maintenance-due-row")
       .filter({ hasText: planNumber }).filter({ hasText: FIRST_DUE_LABEL });
     await expect(populatedDueRow).toBeVisible();
-    const duePanel = adminPage.getByRole("tabpanel").filter({ has: populatedDueRow });
+    const duePanel = adminPage.getByRole("main").getByRole("tabpanel").filter({
+      has: adminPage.getByTestId("maintenance-due-row").filter({ hasText: planNumber }).filter({ hasText: FIRST_DUE_LABEL }),
+    });
     const dueHeader = duePanel.getByTestId("maintenance-due-header");
     const planRows = duePanel.getByTestId("maintenance-due-row").filter({ hasText: planNumber });
     const openPlanDue = plan.dueWork.filter((due) => ['open', 'visit_created'].includes(due.status));
@@ -507,7 +518,9 @@ test.describe("P1-20 exhaustive maintenance audit @AUDIT-W2-P1-20 @AUDIT-W2", ()
 
     await adminPage.getByRole("tab", { name: /Abdeckungen/ }).click();
     await expect(coverageRow).toBeVisible();
-    const coveragePanel = adminPage.getByRole("tabpanel").filter({ has: coverageRow });
+    const coveragePanel = adminPage.getByRole("main").getByRole("tabpanel").filter({
+      has: adminPage.getByTestId("maintenance-coverage-row").filter({ hasText: fixture.coverageReference }),
+    });
     await captureResponsiveSection(adminPage, testInfo, coveragePanel, "p120-maintenance-coverage-populated", async (width) => {
       await verifyMaintenanceResponsiveRow(adminPage, coveragePanel.getByTestId("maintenance-coverage-header"), coverageRow, width);
       if (width === 375) return coverageRow;

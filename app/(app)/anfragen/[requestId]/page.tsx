@@ -1,10 +1,10 @@
 import { cookies } from 'next/headers';
+import { readOrganizationClients } from '@/lib/clients/server';
 import { notFound, redirect } from 'next/navigation';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
-import { toClient } from '@/lib/jobs/types';
 import { formatSiteAddress } from '@/lib/clients/types';
 import { toClientRequest, toClientRequestEvent } from '@/lib/requests/types';
 import { getRequestDocuments } from '@/lib/documents/actions';
@@ -76,7 +76,7 @@ export default async function AnfrageDetailPage({
     convertedJobResult,
     convertedProjectResult,
     eventsResult,
-    clientsResult,
+    clients,
     assignees,
     documentsResult,
     convertedServiceCaseResult,
@@ -134,11 +134,7 @@ export default async function AnfrageDetailPage({
       .eq('request_id', requestId)
       .eq('organization_id', activeOrgId)
       .order('created_at', { ascending: false }),
-    admin
-      .from('clients')
-      .select('*')
-      .eq('organization_id', activeOrgId)
-      .order('name', { ascending: true }),
+    readOrganizationClients(admin, activeOrgId),
     getManagerAssigneeOptions(admin, activeOrgId),
     getRequestDocuments(requestId),
     admin
@@ -227,7 +223,7 @@ export default async function AnfrageDetailPage({
           : null,
     documents: documentsResult.success ? documentsResult.documents : [],
     events: eventEntries,
-    clients: (clientsResult.data ?? []).map(toClient),
+    clients,
     assignees,
   };
 

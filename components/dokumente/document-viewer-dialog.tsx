@@ -1,5 +1,7 @@
 'use client';
 
+import { formatGermanDateTime as formatDate } from '@/lib/utils';
+import { formatFileSize } from '@/lib/documents/format';
 import { useEffect, useState } from 'react';
 import {
   Download,
@@ -44,22 +46,6 @@ function canPreviewPdf(document: OrganizationDocument): boolean {
     document.mimeType === 'application/pdf' ||
     document.displayName.toLowerCase().endsWith('.pdf')
   );
-}
-
-function formatFileSize(sizeBytes: number): string {
-  if (sizeBytes < 1024) return `${sizeBytes} B`;
-  if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
-  return `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function formatDate(date: string): string {
-  return new Intl.DateTimeFormat('de-DE', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(date));
 }
 
 function getPdfPreviewUrl(signedUrl: string): string {
@@ -152,12 +138,12 @@ export function DocumentViewerDialog({
     >
       <DialogContent
         className={cn(
-          'flex !h-[96vh] !max-h-[96vh] !w-[min(1680px,96vw)] !max-w-none flex-col gap-0 overflow-hidden border-border/70 bg-neutral-950 p-0 text-white shadow-2xl sm:!max-w-none',
+          'flex !h-[96vh] !max-h-[96vh] !w-[min(1680px,96vw)] !max-w-none flex-col gap-0 overflow-hidden border-border/70 bg-black p-0 text-white shadow-2xl sm:!max-w-none',
           isExpanded &&
             '!h-dvh !max-h-dvh !w-screen rounded-none border-0 sm:!max-w-none'
         )}
       >
-        <DialogHeader className="border-b border-white/10 bg-neutral-950/95 px-4 py-3">
+        <DialogHeader className="border-b border-white/10 bg-black/95 px-4 py-3">
           <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="min-w-0">
               <DialogTitle className="truncate text-white">
@@ -213,13 +199,13 @@ export function DocumentViewerDialog({
               </Button>
             </div>
           </div>
-          <ErrorText className="text-red-300 md:text-right">
+          <ErrorText className="text-viewer-error md:text-right">
             {downloadError}
           </ErrorText>
         </DialogHeader>
 
-        <div className="grid min-h-0 flex-1 bg-neutral-950 xl:grid-cols-[minmax(0,1fr)_300px]">
-          <div className="min-h-0 overflow-hidden bg-neutral-900">
+        <div className="grid min-h-0 flex-1 bg-black xl:grid-cols-[minmax(0,1fr)_300px]">
+          <div className="min-h-0 overflow-hidden bg-black/80">
             {!document ? null : error ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
               <FileText className="size-10 text-white/50" />
@@ -233,7 +219,7 @@ export function DocumentViewerDialog({
           ) : canPreviewImage(document) ? (
             <div className="flex h-full items-center justify-center overflow-auto p-6">
               {/* Signed private Storage URLs are short-lived, so next/image optimization is not useful here. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
+              {/* eslint-disable-next-line @next/next/no-img-element -- short-lived signed private URL; next/image optimization cannot cache it */}
               <img
                 src={signedUrl}
                 alt={document.displayName}
@@ -244,7 +230,7 @@ export function DocumentViewerDialog({
             <iframe
               src={getPdfPreviewUrl(signedUrl)}
               title={document.displayName}
-              className="h-full w-full bg-neutral-800"
+              className="h-full w-full bg-black/70"
             />
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
@@ -257,7 +243,7 @@ export function DocumentViewerDialog({
           </div>
 
           {document && (
-            <aside className="hidden border-l border-white/10 bg-neutral-950 p-4 text-sm text-white/80 xl:block">
+            <aside className="hidden border-l border-white/10 bg-black p-4 text-sm text-white/80 xl:block">
               <p className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-white/50">
                 <Info className="size-3.5" />
                 Dateiinformationen

@@ -51,9 +51,9 @@ type Options = Extract<
 >;
 
 interface PlanningEntryFormProps {
-  defaultDate?: Date;
-  defaultTime?: string;
-  defaultUserId?: string;
+  defaultDate?: Date | undefined;
+  defaultTime?: string | undefined;
+  defaultUserId?: string | undefined;
   onSuccess: () => void | Promise<void>;
 }
 
@@ -65,6 +65,7 @@ function getMondayWeekday(date: string): number {
 function isoToLocalDate(value: string): Date | undefined {
   if (!value) return undefined;
   const [year, month, day] = value.split('-').map(Number);
+  if (year === undefined || month === undefined || day === undefined) return undefined;
   return new Date(year, month - 1, day);
 }
 
@@ -168,9 +169,10 @@ export function PlanningEntryForm({
     if (entryKind === 'internal' && !title.trim()) missing.push(['title', 'Bitte gib einen Titel ein.', 'planning-title']);
     if (!date) missing.push(['date', 'Bitte wähle ein Datum.', 'planning-date']);
     if (conflicts.length > 0 && overrideReason.trim().length < 8) missing.push(['override', 'Bitte begründe die Abweichung mit mindestens 8 Zeichen.', 'planning-override']);
-    if (missing.length > 0) {
+    const [firstMissing] = missing;
+    if (firstMissing) {
       setFieldErrors(Object.fromEntries(missing.map(([key, message]) => [key, message])));
-      document.getElementById(missing[0][2])?.focus();
+      document.getElementById(firstMissing[2])?.focus();
       return;
     }
     const durationMinutes = parseHoursInputToMinutes(durationHours);
@@ -481,7 +483,7 @@ export function PlanningEntryForm({
         )}
 
         {conflicts.length > 0 && (
-          <div data-planning-warning className="space-y-3 rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-3" role="status">
+          <div data-planning-warning className="space-y-3 rounded-lg border border-warning/40 bg-warning-soft p-3" role="status">
             <div><p className="font-medium">Planungshinweise prüfen</p><p className="text-xs text-muted-foreground">Die Hinweise blockieren berechtigte Ausnahmen nicht. Eine bewusste Abweichung benötigt einen Grund.</p></div>
             <ul className="space-y-1.5 text-sm">{conflicts.map((conflict, index) => <li key={`${conflict.kind}-${conflict.employeeRecordId}-${conflict.localDate}-${index}`} className="flex gap-2"><span aria-hidden="true">•</span><span>{conflict.employeeName ? `${conflict.employeeName}: ` : ''}{conflict.message}{conflict.localDate ? ` (${conflict.localDate})` : ''}</span></li>)}</ul>
             <Field label="Begründung der Abweichung" htmlFor="planning-override" required description="Mindestens 8 Zeichen." error={fieldErrors.override}><Textarea value={overrideReason} onChange={(event) => setOverrideReason(event.target.value)} placeholder="Warum ist diese Planung trotzdem sinnvoll?" /></Field>

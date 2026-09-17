@@ -72,7 +72,8 @@ test.beforeEach(async ({ page }, testInfo) => {
       selection !== "default" &&
       selection !== "lifecycle" &&
       selection !== "personnel" &&
-      selection !== "own-personnel"
+      selection !== "own-personnel" &&
+      selection !== "live-view"
     )
       throw new Error(`Unknown UI contract fixture: ${selection}`);
     window.uiContractFixture = selection;
@@ -85,6 +86,85 @@ test.beforeEach(async ({ page }, testInfo) => {
 
 test.afterEach(async ({ page }) => {
   expect(pageErrors.get(page)).toEqual([]);
+});
+
+test('disabling a held live read aborts it and clears refreshing; reenabling reads fresh', {
+  annotation: { type: 'fixture', description: 'live-view' },
+}, async ({ page }) => {
+  const section = page.getByRole('region', { name: 'Leseaktivierung' });
+  await section.getByRole('button', { name: 'Lesen aktivieren', exact: true }).click();
+  await expect(section.getByLabel('Lesevorgänge', { exact: true })).toHaveText('1');
+  await expect(section.getByLabel('Lesezustand', { exact: true })).toHaveText('Lädt');
+  await expect(section.getByLabel('Lesesignal 1', { exact: true })).toHaveText('Aktiv');
+  await section.getByRole('button', { name: 'Lesen deaktivieren', exact: true }).click();
+  await expect(section.getByLabel('Lesesignal 1', { exact: true })).toHaveText('Abgebrochen');
+  await expect(section.getByLabel('Abgebrochene Lesevorgänge', { exact: true })).toHaveText('1');
+  await expect(section.getByLabel('Lesezustand', { exact: true })).toHaveText('Ruhend');
+  await section.getByRole('button', { name: 'Lesen aktivieren', exact: true }).click();
+  await expect(section.getByLabel('Lesevorgänge', { exact: true })).toHaveText('2');
+  await expect(section.getByLabel('Lesesignal 2', { exact: true })).toHaveText('Aktiv');
+  await expect(section.getByLabel('Lesezustand', { exact: true })).toHaveText('Lädt');
+  await section.getByRole('button', { name: 'Lesen 2 abschließen', exact: true }).click();
+  await expect(section.getByLabel('Leseergebnis', { exact: true })).toHaveText('2');
+  await expect(section.getByLabel('Lesezustand', { exact: true })).toHaveText('Ruhend');
+  await section.getByRole('button', { name: 'Lesen 1 abschließen', exact: true }).click();
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  await expect(section.getByLabel('Leseergebnis', { exact: true })).toHaveText('2');
+  await expect(section.getByLabel('Lesezustand', { exact: true })).toHaveText('Ruhend');
+});
+
+test('an older read that returns while the newer read is still pending is applied; the newer result still wins', {
+  annotation: { type: 'fixture', description: 'live-view' },
+}, async ({ page }) => {
+  const section = page.getByRole('region', { name: 'Leseaktivierung' });
+  await section.getByRole('button', { name: 'Lesen aktivieren', exact: true }).click();
+  await section.getByRole('button', { name: 'Erneut lesen', exact: true }).click();
+  await expect(section.getByLabel('Lesevorgänge', { exact: true })).toHaveText('2');
+  // The first read returns while the second is pending: its data is fresher than
+  // the state and must show; the surface stays refreshing for the second read.
+  await section.getByRole('button', { name: 'Lesen 1 abschließen', exact: true }).click();
+  await expect(section.getByLabel('Leseergebnis', { exact: true })).toHaveText('1');
+  await expect(section.getByLabel('Lesezustand', { exact: true })).toHaveText('Lädt');
+  await section.getByRole('button', { name: 'Lesen 2 abschließen', exact: true }).click();
+  await expect(section.getByLabel('Leseergebnis', { exact: true })).toHaveText('2');
+  await expect(section.getByLabel('Lesezustand', { exact: true })).toHaveText('Ruhend');
+  // Out of order the other way round: the older result never overwrites the newer one.
+  await section.getByRole('button', { name: 'Erneut lesen', exact: true }).click();
+  await section.getByRole('button', { name: 'Erneut lesen', exact: true }).click();
+  await expect(section.getByLabel('Lesevorgänge', { exact: true })).toHaveText('4');
+  await section.getByRole('button', { name: 'Lesen 4 abschließen', exact: true }).click();
+  await expect(section.getByLabel('Leseergebnis', { exact: true })).toHaveText('4');
+  await expect(section.getByLabel('Lesezustand', { exact: true })).toHaveText('Ruhend');
+  await section.getByRole('button', { name: 'Lesen 3 abschließen', exact: true }).click();
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  await expect(section.getByLabel('Leseergebnis', { exact: true })).toHaveText('4');
+});
+
+test('a failed newer read keeps the surface stale while an older success still lands its data', {
+  annotation: { type: 'fixture', description: 'live-view' },
+}, async ({ page }) => {
+  const section = page.getByRole('region', { name: 'Leseaktivierung' });
+  await section.getByRole('button', { name: 'Lesen aktivieren', exact: true }).click();
+  await section.getByRole('button', { name: 'Lesen 1 abschließen', exact: true }).click();
+  await expect(section.getByLabel('Leseergebnis', { exact: true })).toHaveText('1');
+  await section.getByRole('button', { name: 'Erneut lesen', exact: true }).click();
+  await section.getByRole('button', { name: 'Erneut lesen', exact: true }).click();
+  await expect(section.getByLabel('Lesevorgänge', { exact: true })).toHaveText('3');
+  // The newest read fails: last-known data stays, the surface is stale.
+  await section.getByRole('button', { name: 'Lesen 3 fehlschlagen', exact: true }).click();
+  await expect(section.getByLabel('Lesestatus', { exact: true })).toHaveText('Veraltet');
+  await expect(section.getByLabel('Leseergebnis', { exact: true })).toHaveText('1');
+  // The older read succeeds afterwards: its data is fresher than the state and
+  // lands; the status still reports the newest completed read.
+  await section.getByRole('button', { name: 'Lesen 2 abschließen', exact: true }).click();
+  await expect(section.getByLabel('Leseergebnis', { exact: true })).toHaveText('2');
+  await expect(section.getByLabel('Lesestatus', { exact: true })).toHaveText('Veraltet');
+  await expect(section.getByLabel('Lesezustand', { exact: true })).toHaveText('Ruhend');
+  // A newer success clears it.
+  await section.getByRole('button', { name: 'Erneut lesen', exact: true }).click();
+  await section.getByRole('button', { name: 'Lesen 4 abschließen', exact: true }).click();
+  await expect(section.getByLabel('Leseergebnis', { exact: true })).toHaveText('4');
+  await expect(section.getByLabel('Lesestatus', { exact: true })).toHaveText('Aktuell');
 });
 
 test(

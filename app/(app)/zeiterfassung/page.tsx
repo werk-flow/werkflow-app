@@ -55,6 +55,8 @@ function createDefaultClockState(
     sessionVersion: null,
     currentSegmentId: null,
     currentActivity: null,
+    resumeActivity: null,
+    resumeJobInfo: null,
     recoveryReason: null,
     legacyOpen: false,
     standbyMinutes: 0,
@@ -107,7 +109,7 @@ async function getInitialOverview(
         : [],
     todayIndex,
     weekLabel,
-    weekTargets,
+    ...(weekTargets !== undefined ? { weekTargets } : {}),
   };
 }
 

@@ -124,7 +124,7 @@ const ACCESS_CLASS_OPTIONS: Array<{
   },
 ];
 
-const ERROR_MESSAGES: Record<string, string> = {
+const ERROR_MESSAGES = {
   invalid_input: "Bitte prüfe die Eingaben.",
   stale_version: "Der Stand hat sich geändert. Die Ansicht wird aktualisiert.",
   not_authorized: "Du darfst diese Aktion nicht ausführen.",
@@ -151,11 +151,12 @@ const ERROR_MESSAGES: Record<string, string> = {
     "Diese Anforderung ist nicht mehr offen und kann nicht bestätigt werden.",
   file_missing: "Die Datei konnte nach dem Hochladen nicht bestätigt werden.",
   mutation_failed: "Die Änderung konnte nicht gespeichert werden.",
-};
+} satisfies Record<string, string>;
+const ERROR_MESSAGE_BY_CODE: Record<string, string> = ERROR_MESSAGES;
 
 function errorMessage(code: string): string {
   return (
-    ERROR_MESSAGES[code] ??
+    ERROR_MESSAGE_BY_CODE[code] ??
     "Die Aktion ist fehlgeschlagen. Bitte versuche es erneut."
   );
 }
@@ -285,6 +286,11 @@ export function PersonnelLifecycleSection({
     // The owned reader settles independently of route commits and mutation pending.
     void view.refresh();
   }
+  /** The stale_version text promises a refresh; the owned reader delivers it (Step 3 release run 6). */
+  function failureMessage(code: string): string {
+    if (code === "stale_version") void view.refresh();
+    return errorMessage(code);
+  }
   const currentPlan = data.plans[0] ?? null;
   const incompleteRequirements = useMemo(
     () =>
@@ -321,7 +327,7 @@ export function PersonnelLifecycleSection({
           operationId: crypto.randomUUID(),
         });
         if (!result.success) {
-          setError(errorMessage(result.error));
+          setError(failureMessage(result.error));
           return;
         }
         setAccessOpen(false);
@@ -363,7 +369,7 @@ export function PersonnelLifecycleSection({
           operationId: crypto.randomUUID(),
         });
         if (!result.success) {
-          setError(errorMessage(result.error));
+          setError(failureMessage(result.error));
           return;
         }
         setEmploymentOpen(false);
@@ -404,7 +410,7 @@ export function PersonnelLifecycleSection({
           operationId: crypto.randomUUID(),
         });
         if (!result.success) {
-          setError(errorMessage(result.error));
+          setError(failureMessage(result.error));
           return;
         }
         setPlanOpen(false);
@@ -430,7 +436,7 @@ export function PersonnelLifecycleSection({
           data.employeeRecordId,
         );
         if (!result.success) {
-          showBanner({ variant: "error", message: errorMessage(result.error) });
+          showBanner({ variant: "error", message: failureMessage(result.error) });
           return;
         }
         const url = URL.createObjectURL(
@@ -483,7 +489,7 @@ export function PersonnelLifecycleSection({
           operationId: crypto.randomUUID(),
         });
         if (!result.success) {
-          setError(errorMessage(result.error));
+          setError(failureMessage(result.error));
           return;
         }
         setRequirementOpen(false);
@@ -530,7 +536,7 @@ export function PersonnelLifecycleSection({
           operationId: crypto.randomUUID(),
         });
         if (!result.success) {
-          showBanner({ variant: "error", message: errorMessage(result.error) });
+          showBanner({ variant: "error", message: failureMessage(result.error) });
           return;
         }
         showBanner({
@@ -572,7 +578,7 @@ export function PersonnelLifecycleSection({
           operationId: crypto.randomUUID(),
         });
         if (!result.success) {
-          setError(errorMessage(result.error));
+          setError(failureMessage(result.error));
           return;
         }
         setUploadOpen(false);
@@ -617,7 +623,7 @@ export function PersonnelLifecycleSection({
                   ? "Freigabe wurde zurückgenommen."
                   : "Dokument wurde für die betroffene Person freigegeben.",
               }
-            : { variant: "error", message: errorMessage(result.error) },
+            : { variant: "error", message: failureMessage(result.error) },
         );
         if (result.success) reconcileMutation();
       })
@@ -640,7 +646,7 @@ export function PersonnelLifecycleSection({
       .run(document.id, async () => {
         const result = await getPersonnelDocumentSignedUrl(document.documentId);
         if (!result.success) {
-          showBanner({ variant: "error", message: errorMessage(result.error) });
+          showBanner({ variant: "error", message: failureMessage(result.error) });
           return;
         }
         window.location.assign(result.data.signedUrl);

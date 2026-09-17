@@ -58,7 +58,7 @@ export function UserProfileProvider({
     if (hydratedRef.current || initialProfile !== null) return
     hydratedRef.current = true
     refreshProfile()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one self-hydration on mount, guarded by hydratedRef
   }, [])
 
   // Fetch profile from Supabase (client-side)

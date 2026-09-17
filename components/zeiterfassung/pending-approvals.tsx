@@ -19,11 +19,10 @@ import { InlinePending } from '@/components/ui/inline-pending';
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  getPendingSessions,
   reviewSession,
-  getPendingChangeRequests,
   reviewChangeRequest
 } from '@/lib/time-tracking/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
 import type {
   PendingSession,
   ChangeRequestWithDetails,
@@ -123,7 +122,7 @@ function getApprovalErrorMessage(error: string): string {
 function RequestTypeBadge({ type }: { type: 'session' | 'edit' | 'delete' }) {
   if (type === 'session') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">
+      <span className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 text-[10px] font-medium text-warning-soft-foreground">
         <Plus className="h-3 w-3" />
         Neuer Eintrag
       </span>
@@ -132,7 +131,7 @@ function RequestTypeBadge({ type }: { type: 'session' | 'edit' | 'delete' }) {
 
   if (type === 'edit') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:text-blue-400">
+      <span className="inline-flex items-center gap-1 rounded-full bg-info-soft px-2 py-0.5 text-[10px] font-medium text-info-soft-foreground">
         <Pencil className="h-3 w-3" />
         Änderung
       </span>
@@ -140,7 +139,7 @@ function RequestTypeBadge({ type }: { type: 'session' | 'edit' | 'delete' }) {
   }
 
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-medium text-red-700 dark:text-red-400">
+    <span className="inline-flex items-center gap-1 rounded-full bg-destructive-soft px-2 py-0.5 text-[10px] font-medium text-destructive-soft-foreground">
       <Trash2 className="h-3 w-3" />
       Löschung
     </span>
@@ -169,7 +168,7 @@ export function PendingApprovals({
     changeRequests: ChangeRequestWithDetails[];
   }>({
     tables: ['time_entries', 'entry_change_requests'],
-    read: async (): Promise<
+    read: async ({ signal }): Promise<
       LiveViewResult<{
         sessions: PendingSession[];
         changeRequests: ChangeRequestWithDetails[];
@@ -177,7 +176,7 @@ export function PendingApprovals({
     > => {
       try {
         // Fetch pending sessions (for all admin/manager)
-        const sessionsResult = await getPendingSessions(organizationId);
+        const sessionsResult = await readInBackground('pending-sessions', { organizationId }, signal);
         if (!sessionsResult.success) {
           return {
             ok: false,
@@ -188,9 +187,7 @@ export function PendingApprovals({
         // Fetch change requests (admin only)
         let changeRequests: ChangeRequestWithDetails[] = [];
         if (isAdmin) {
-          const changeRequestsResult = await getPendingChangeRequests(
-            organizationId
-          );
+          const changeRequestsResult = await readInBackground('pending-change-requests', { organizationId }, signal);
           if (!changeRequestsResult.success) {
             return {
               ok: false,
@@ -343,18 +340,18 @@ export function PendingApprovals({
 
     // Info banner explaining the new behavior
     const infoBanner = (
-      <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-800 dark:text-amber-200 mb-3">
+      <div className="rounded-lg border border-warning/40 bg-warning-soft px-3 py-2 text-xs text-warning-soft-foreground mb-3">
         <p>
           <strong>Hinweis:</strong> Anträge sind bereits in den Kalendern und
           Arbeitszeiten der Mitarbeiter sichtbar (als &quot;ausstehend&quot;
           markiert).
         </p>
         <p className="mt-1">
-          <span className="text-green-700 dark:text-green-400">
+          <span className="text-success-text">
             ✓ Genehmigen
           </span>{' '}
           = Eintrag wird bestätigt und bleibt erhalten.
-          <span className="ml-3 text-red-700 dark:text-red-400">
+          <span className="ml-3 text-destructive">
             ✗ Ablehnen
           </span>{' '}
           = Eintrag wird entfernt und rückgängig gemacht.
@@ -558,7 +555,7 @@ function SessionRequestCard({
               onClick={onApprove}
               disabled={isProcessing}
               title="Genehmigen - Eintrag bleibt erhalten"
-              className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
+              className="h-8 w-8 text-success-text hover:bg-success-soft"
             >
               <Check className="h-4 w-4" />
             </Button>
@@ -657,7 +654,7 @@ function ChangeRequestCard({
                 </p>
                 {request.proposedTimestamp && (
                   <p>
-                    <span className="text-blue-600 dark:text-blue-400">
+                    <span className="text-info-text">
                       Neu:
                     </span>{' '}
                     {formatDateTime(request.proposedTimestamp)}
@@ -710,7 +707,7 @@ function ChangeRequestCard({
                 ? 'Genehmigen - Löschung wird bestätigt'
                 : 'Genehmigen'
             }
-            className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
+            className="h-8 w-8 text-success-text hover:bg-success-soft"
           >
             <Check className="h-4 w-4" />
           </Button>

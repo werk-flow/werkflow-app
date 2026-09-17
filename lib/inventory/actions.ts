@@ -2,6 +2,8 @@
 
 import { revalidatePath, updateTag } from 'next/cache';
 
+import { readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
+import { inventoryPageQuerySchema, inventoryPageResultSchema } from './list-page';
 import { CACHE_TAGS } from '@/lib/data/cached';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
@@ -531,94 +533,44 @@ async function resolveInventoryOrganizationReference(
   return { success: true, referenceId: resolvedReference.id };
 }
 
-export async function getInventoryOverview(): Promise<ActionResult<{ overview: InventoryOverview }>> {
+export async function getInventoryOverview(input: unknown = {}): Promise<ActionResult<{ overview: InventoryOverview }>> {
   const auth = await requireInventoryManager();
   if (!auth.success) return auth;
-
+  const parsedQuery = inventoryPageQuerySchema.safeParse(input);
+  if (!parsedQuery.success) return { success: false, error: 'inventory_failed' };
+  const query = parsedQuery.data;
   const admin = createSupabaseAdminClient();
   const { orgId } = auth.context;
   await ensureInventoryDefaults(admin, auth.context);
-
-  const [
-    categoriesResult,
-    locationsResult,
-    suppliersResult,
-    itemsResult,
-    barcodesResult,
-    stockLevelsResult,
-    materialLinesResult,
-    movementsResult,
-    assetInstancesResult,
-    jobsResult,
-    projectsResult,
-  ] = await Promise.all([
-    admin
-      .from('inventory_categories')
-      .select('*')
-      .eq('organization_id', orgId)
-      .order('sort_order', { ascending: true })
-      .order('name', { ascending: true }),
-    admin
-      .from('inventory_locations')
-      .select('*')
-      .eq('organization_id', orgId)
-      .order('sort_order', { ascending: true })
-      .order('name', { ascending: true }),
-    admin
-      .from('inventory_suppliers')
-      .select('*')
-      .eq('organization_id', orgId)
-      .order('name', { ascending: true }),
-    admin
-      .from('inventory_items')
-      .select('*')
-      .eq('organization_id', orgId)
-      .order('name', { ascending: true }),
-    admin
-      .from('inventory_item_barcodes')
-      .select('*')
-      .eq('organization_id', orgId)
-      .order('is_primary', { ascending: false }),
-    admin
-      .from('inventory_stock_levels')
-      .select('*')
-      .eq('organization_id', orgId),
-    admin
-      .from('job_material_lines')
-      .select('*')
-      .eq('organization_id', orgId)
-      .neq('status', 'cancelled'),
-    admin
-      .from('inventory_movements')
-      .select('*')
-      .eq('organization_id', orgId)
-      .order('created_at', { ascending: false })
-      .limit(40),
-    admin
-      .from('inventory_asset_instances')
-      .select('*')
-      .eq('organization_id', orgId),
-    admin
-      .from('jobs')
-      .select('id, job_number, title')
-      .eq('organization_id', orgId),
-    admin
-      .from('projects')
-      .select('id, project_number, name')
-      .eq('organization_id', orgId),
+  const [pageResult, movementsResult] = await Promise.all([
+    admin.rpc('list_inventory_page', { p_organization_id: orgId, p_query: query }),
+    admin.from('inventory_movements').select('*').eq('organization_id', orgId)
+      .order('created_at', { ascending: false }).order('id').limit(40),
   ]);
-
-  if (categoriesResult.error) return { success: false, error: 'categories_failed' };
-  if (locationsResult.error) return { success: false, error: 'locations_failed' };
-  if (suppliersResult.error) return { success: false, error: 'suppliers_failed' };
-  if (itemsResult.error) return { success: false, error: 'items_failed' };
-  if (barcodesResult.error) return { success: false, error: 'barcodes_failed' };
-  if (stockLevelsResult.error) return { success: false, error: 'stock_failed' };
-  if (materialLinesResult.error) return { success: false, error: 'materials_failed' };
-  if (movementsResult.error) return { success: false, error: 'movements_failed' };
-  if (assetInstancesResult.error) return { success: false, error: 'assets_failed' };
-  if (jobsResult.error) return { success: false, error: 'jobs_failed' };
-  if (projectsResult.error) return { success: false, error: 'projects_failed' };
+  if (pageResult.error || movementsResult.error) return { success: false, error: 'inventory_failed' };
+  const parsedPage = inventoryPageResultSchema.safeParse(pageResult.data);
+  if (!parsedPage.success) return { success: false, error: 'inventory_failed' };
+  const page = parsedPage.data;
+  const supportIds = [...new Set([...page.supportIds, ...(movementsResult.data ?? []).map(movement => movement.item_id)])];
+  const jobIds = [...new Set((movementsResult.data ?? []).flatMap(row => row.job_id ? [row.job_id] : []))];
+  const projectIds = [...new Set((movementsResult.data ?? []).flatMap(row => row.project_id ? [row.project_id] : []))];
+  const [categoriesResult, locationsResult, suppliersResult, itemsResult, barcodesResult,
+    stockLevelsResult, materialLinesResult, assetInstancesResult, jobsResult, projectsResult] = await Promise.all([
+    readCompleteRows((from,to) => admin.from('inventory_categories').select('*').eq('organization_id',orgId).order('sort_order').order('name').order('id').range(from,to),1000),
+    readCompleteRows((from,to) => admin.from('inventory_locations').select('*').eq('organization_id',orgId).order('sort_order').order('name').order('id').range(from,to),1000),
+    readCompleteRows((from,to) => admin.from('inventory_suppliers').select('*').eq('organization_id',orgId).order('name').order('id').range(from,to),1000),
+    readInBatches(supportIds, batch => admin.from('inventory_items').select('*').eq('organization_id',orgId).in('id',[...batch])),
+    readInBatches(supportIds, batch => readCompleteRows((from,to) => admin.from('inventory_item_barcodes').select('*').eq('organization_id',orgId).in('item_id',[...batch]).order('is_primary',{ascending:false}).order('id').range(from,to),10000)),
+    readInBatches(supportIds, batch => readCompleteRows((from,to) => admin.from('inventory_stock_levels').select('*').eq('organization_id',orgId).in('item_id',[...batch]).order('id').range(from,to),10000)),
+    readInBatches(supportIds, batch => readCompleteRows((from,to) => admin.from('job_material_lines').select('*').eq('organization_id',orgId).in('item_id',[...batch]).neq('status','cancelled').order('id').range(from,to),10000)),
+    readInBatches(supportIds, batch => readCompleteRows((from,to) => admin.from('inventory_asset_instances').select('*').eq('organization_id',orgId).in('item_id',[...batch]).order('id').range(from,to),10000)),
+    readInBatches(jobIds, batch => admin.from('jobs').select('id, job_number, title').eq('organization_id',orgId).in('id',[...batch])),
+    readInBatches(projectIds, batch => admin.from('projects').select('id, project_number, name').eq('organization_id',orgId).in('id',[...batch])),
+  ]);
+  if ([categoriesResult,locationsResult,suppliersResult,itemsResult,barcodesResult,stockLevelsResult,
+    materialLinesResult,assetInstancesResult,jobsResult,projectsResult].some(result => result.error)) {
+    return { success: false, error: 'inventory_failed' };
+  }
 
   const categories = asRows<InventoryCategoryRow>(categoriesResult.data).map(toInventoryCategory);
   const locations = asRows<InventoryLocationRow>(locationsResult.data).map(toInventoryLocation);
@@ -674,7 +626,10 @@ export async function getInventoryOverview(): Promise<ActionResult<{ overview: I
     assetCountByItem.set(asset.item_id, (assetCountByItem.get(asset.item_id) ?? 0) + 1);
   }
 
-  const overviewItems: InventoryOverviewItem[] = items.map((item) => {
+  // The page is the filtered, ordered id list; movement-only items feed the lookups above but are not page rows.
+  const overviewItems: InventoryOverviewItem[] = page.ids.flatMap((id) => {
+    const item = itemMap.get(id);
+    if (!item) return [];
     const itemStock = stockByItem.get(item.id) ?? [];
     const stockByLocation = itemStock.map((stock) => ({
       locationId: stock.location_id,
@@ -692,7 +647,7 @@ export async function getInventoryOverview(): Promise<ActionResult<{ overview: I
       itemBarcodes[0]?.barcode_value ??
       null;
 
-    return {
+    return [{
       ...item,
       categoryName: item.categoryId ? categoryMap.get(item.categoryId)?.name ?? null : null,
       supplierName: item.supplierId ? supplierMap.get(item.supplierId)?.name ?? null : null,
@@ -704,7 +659,7 @@ export async function getInventoryOverview(): Promise<ActionResult<{ overview: I
       stockStatus: getStockStatus(item, totalOnHand),
       stockByLocation,
       assetInstanceCount: assetCountByItem.get(item.id) ?? 0,
-    };
+    }];
   });
 
   const movementItems: InventoryMovementListItem[] = movements.map((movement) => ({
@@ -729,13 +684,7 @@ export async function getInventoryOverview(): Promise<ActionResult<{ overview: I
     createdAt: movement.created_at,
   }));
 
-  const summary = {
-    totalItems: overviewItems.length,
-    lowStockItems: overviewItems.filter((item) => item.stockStatus === 'low_stock').length,
-    outOfStockItems: overviewItems.filter((item) => item.stockStatus === 'out_of_stock').length,
-    plannedQuantity: overviewItems.reduce((sum, item) => sum + item.plannedQuantity, 0),
-    totalOnHand: overviewItems.reduce((sum, item) => sum + item.totalOnHand, 0),
-  };
+  const summary = page.summary;
 
   return {
     success: true,
@@ -746,6 +695,7 @@ export async function getInventoryOverview(): Promise<ActionResult<{ overview: I
       items: overviewItems,
       movements: movementItems,
       summary,
+      page: { query, ids: page.ids, total: page.total, locationIds: page.locationIds, locationCounts: page.locationCounts },
     },
   };
 }
@@ -754,7 +704,7 @@ async function loadInventoryPickerOptions(
   admin: SupabaseAdminClient,
   orgId: string,
   includeOfficeDetails: boolean,
-  options?: { searchTerm?: string; itemLimit?: number; exactItemId?: string }
+  options?: { searchTerm?: string; itemLimit?: number; exactItemId?: string | undefined }
 ): Promise<ActionResult<{ items: InventoryPickerOption[]; locations: InventoryLocation[] }>> {
   const searchTerm = options?.searchTerm?.trim().slice(0, 80) ?? '';
   const itemLimit = options?.itemLimit;
@@ -1185,8 +1135,9 @@ export async function createJobMaterialLine(
   updateTag(CACHE_TAGS.jobs(auth.context.orgId));
   revalidatePath('/auftraege', 'layout');
 
-  const lines = await hydrateJobMaterialLines(admin, auth.context.orgId, [data as JobMaterialLineRow]);
-  return { success: true, line: lines[0] };
+  const [line] = await hydrateJobMaterialLines(admin, auth.context.orgId, [data as JobMaterialLineRow]);
+  if (!line) return { success: false, error: 'lines_failed' };
+  return { success: true, line };
 }
 
 export async function createProjectMaterialLine(
@@ -1246,8 +1197,9 @@ export async function createProjectMaterialLine(
   updateTag(CACHE_TAGS.projects(auth.context.orgId));
   revalidatePath('/auftraege', 'layout');
 
-  const lines = await hydrateJobMaterialLines(admin, auth.context.orgId, [data as JobMaterialLineRow]);
-  return { success: true, line: lines[0] };
+  const [line] = await hydrateJobMaterialLines(admin, auth.context.orgId, [data as JobMaterialLineRow]);
+  if (!line) return { success: false, error: 'lines_failed' };
+  return { success: true, line };
 }
 
 export async function updateJobMaterialLine(
@@ -1332,8 +1284,9 @@ export async function updateJobMaterialLine(
   updateTag(CACHE_TAGS.jobs(auth.context.orgId));
   revalidatePath('/auftraege', 'layout');
 
-  const lines = await hydrateJobMaterialLines(admin, auth.context.orgId, [data as JobMaterialLineRow]);
-  return { success: true, line: lines[0] };
+  const [line] = await hydrateJobMaterialLines(admin, auth.context.orgId, [data as JobMaterialLineRow]);
+  if (!line) return { success: false, error: 'lines_failed' };
+  return { success: true, line };
 }
 
 export async function deleteJobMaterialLine(

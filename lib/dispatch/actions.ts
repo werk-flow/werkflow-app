@@ -9,17 +9,13 @@ import { z } from 'zod';
 import { uuidSchema } from '@/lib/validation/uuid';
 
 import { CACHE_TAGS } from '@/lib/data/cached';
-import { getJobMaterialLines } from '@/lib/inventory/actions';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { fingerprintSnapshot } from '@/lib/planning/capacity';
-import {
-  addLocalDays,
-  formatBerlinLocalDateTime,
-  resolveBerlinWallTime,
-} from '@/lib/planning/date-time';
+import { formatBerlinLocalDateTime } from '@/lib/planning/date-time';
 import { assessPlanningOccurrences } from '@/lib/planning/server';
 import type {
   MaterializedOccurrence,
+  PlanningActionResult,
   PlanningAssignmentDraft,
   PlanningConflict,
 } from '@/lib/planning/types';
@@ -27,23 +23,19 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { isCommitmentMismatch } from '@/lib/commitments/types';
 import { computeBatchShiftItems, type BatchShiftItem } from './batch';
 import {
-  deriveTravelNotes,
   latestAcknowledgementByRecipient,
   type AcknowledgementFact,
-  type TravelVisitFact,
 } from './derivation';
-import {
-  composeReadiness,
-  type MaterialReadinessFacts,
-  type ReadinessFacts,
-  type SiteReadinessFacts,
-} from './readiness';
 import {
   loadDispatchOverview,
   loadEmployeeDispatchCards,
-  loadEmployeeNameFacts,
 } from './server';
 import { composeReadinessForTarget } from './readiness-target';
+import type {
+  DispatchOverview,
+  EmployeeDispatchCard,
+  ReadinessResult,
+} from './types';
 
 type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 
@@ -66,7 +58,13 @@ function mapRpcError(
 // Reads
 // ============================================
 
-export async function getDispatchOverview(from: string, to: string) {
+export async function getDispatchOverview(
+  from: string,
+  to: string
+): Promise<
+  | { success: true; overview: DispatchOverview }
+  | { success: false; error: string }
+> {
   if (
     !/^\d{4}-\d{2}-\d{2}$/.test(from) ||
     !/^\d{4}-\d{2}-\d{2}$/.test(to) ||
@@ -92,7 +90,12 @@ export async function getDispatchOverview(from: string, to: string) {
     : { success: false as const, error: 'load_failed' };
 }
 
-export async function getJobDispatchCards(jobId: string) {
+export async function getJobDispatchCards(
+  jobId: string
+): Promise<
+  | { success: true; cards: EmployeeDispatchCard[] }
+  | { success: false; error: string }
+> {
   if (!uuidSchema.safeParse(jobId).success) {
     return { success: false as const, error: 'invalid_input' };
   }
@@ -115,7 +118,10 @@ export async function getJobDispatchCards(jobId: string) {
 export async function previewDispatchReadiness(input: {
   occurrenceId?: string;
   jobId?: string;
-}) {
+}): Promise<
+  | { success: true; readiness: ReadinessResult; fingerprint: string }
+  | { success: false; error: string }
+> {
   const occurrenceId = input.occurrenceId ?? null;
   const jobId = input.jobId ?? null;
   if (
@@ -168,7 +174,12 @@ const issueDispatchSchema = z
     }
   });
 
-export async function issueDispatch(rawInput: unknown) {
+export async function issueDispatch(
+  rawInput: unknown
+): Promise<
+  | { success: true; dispatchId: string }
+  | { success: false; error: string }
+> {
   const parsed = issueDispatchSchema.safeParse(rawInput);
   if (!parsed.success) return { success: false as const, error: 'invalid_input' };
   const auth = await authenticateAndAuthorize();
@@ -217,56 +228,10 @@ export async function issueDispatch(rawInput: unknown) {
   return { success: true as const, dispatchId: data as string };
 }
 
-export async function updateDispatchInstruction(input: {
-  dispatchId: string;
-  expectedRevisionNumber: number;
-  note: string | null;
-  recipientEmployeeRecordIds: string[] | null;
-}) {
-  const schema = z.object({
-    dispatchId: uuidSchema,
-    expectedRevisionNumber: z.number().int().positive(),
-    note: z.string().trim().max(2000).nullable(),
-    recipientEmployeeRecordIds: z.array(uuidSchema).max(100).nullable(),
-  });
-  const parsed = schema.safeParse(input);
-  if (!parsed.success) return { success: false as const, error: 'invalid_input' };
-  const auth = await authenticateAndAuthorize();
-  if (!auth.success) return auth;
-  if (!auth.context.isManagerOrAbove) {
-    return { success: false as const, error: 'not_authorized' };
-  }
-  const admin = createSupabaseAdminClient();
-  const { data, error } = await admin.rpc('update_planning_dispatch_instruction', {
-    p_organization_id: auth.context.orgId,
-    p_actor_id: auth.context.userId,
-    p_dispatch_id: parsed.data.dispatchId,
-    p_expected_revision_number: parsed.data.expectedRevisionNumber,
-    p_note: parsed.data.note ?? undefined,
-    p_recipient_employee_record_ids:
-      parsed.data.recipientEmployeeRecordIds ?? undefined,
-  });
-  if (error) {
-    return {
-      success: false as const,
-      error: mapRpcError('Failed to update dispatch instruction', error, [
-        'dispatch_not_found',
-        'dispatch_not_active',
-        'stale_dispatch_revision',
-        'dispatch_recipients_follow_assignments',
-        'dispatch_requires_recipients',
-        'dispatch_recipient_not_found',
-      ]),
-    };
-  }
-  revalidateDispatchMutation(auth.context.orgId);
-  return { success: true as const, revisionNumber: data as number };
-}
-
 export async function acknowledgeDispatch(
   dispatchId: string,
   expectedRevisionNumber: number
-) {
+): Promise<{ success: true } | { success: false; error: string }> {
   if (
     !uuidSchema.safeParse(dispatchId).success ||
     !Number.isInteger(expectedRevisionNumber) ||
@@ -303,7 +268,7 @@ export async function challengeDispatch(
   dispatchId: string,
   expectedRevisionNumber: number,
   reason: string
-) {
+): Promise<{ success: true } | { success: false; error: string }> {
   const trimmed = reason.trim();
   if (
     !uuidSchema.safeParse(dispatchId).success ||
@@ -345,7 +310,7 @@ export async function challengeDispatch(
 export async function resolveDispatchChallenge(
   acknowledgementId: string,
   resolutionReason: string
-) {
+): Promise<{ success: true } | { success: false; error: string }> {
   const trimmed = resolutionReason.trim();
   if (!uuidSchema.safeParse(acknowledgementId).success) {
     return { success: false as const, error: 'invalid_input' };
@@ -378,7 +343,10 @@ export async function resolveDispatchChallenge(
   return { success: true as const };
 }
 
-export async function cancelDispatch(dispatchId: string, reason: string) {
+export async function cancelDispatch(
+  dispatchId: string,
+  reason: string
+): Promise<{ success: true } | { success: false; error: string }> {
   const trimmed = reason.trim();
   if (!uuidSchema.safeParse(dispatchId).success) {
     return { success: false as const, error: 'invalid_input' };
@@ -746,7 +714,20 @@ async function prepareBatchReschedule(
   };
 }
 
-export async function previewBatchReschedule(rawInput: unknown) {
+export async function previewBatchReschedule(
+  rawInput: unknown
+): Promise<
+  | {
+      success: true;
+      itemCount: number;
+      items: BatchPreviewItem[];
+      conflicts: PlanningConflict[];
+      assessmentFingerprint: string;
+      commitmentMismatchTitles: string[];
+      invalidatedAcknowledgementCount: number;
+    }
+  | { success: false; error: string }
+> {
   const parsed = batchSelectionSchema.safeParse(rawInput);
   if (!parsed.success) return { success: false as const, error: 'invalid_input' };
   const auth = await authenticateAndAuthorize();
@@ -780,7 +761,9 @@ const batchCommitSchema = batchSelectionSchema.extend({
   assessmentFingerprint: z.string().length(64).nullable(),
 });
 
-export async function batchReschedule(rawInput: unknown) {
+export async function batchReschedule(
+  rawInput: unknown
+): Promise<PlanningActionResult> {
   const parsed = batchCommitSchema.safeParse(rawInput);
   if (!parsed.success) return { success: false as const, error: 'invalid_input' };
   const auth = await authenticateAndAuthorize();

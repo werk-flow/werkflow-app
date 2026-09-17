@@ -8,30 +8,16 @@ import { WORK_EXECUTION_LABELS } from '@/lib/work-lifecycle/types';
 // ============================================
 
 export type ClientRow = Database['public']['Tables']['clients']['Row'];
-export type ClientInsert = Database['public']['Tables']['clients']['Insert'];
-export type ClientUpdate = Database['public']['Tables']['clients']['Update'];
 
 export type ProjectRow = Database['public']['Tables']['projects']['Row'];
-export type ProjectInsert = Database['public']['Tables']['projects']['Insert'];
-export type ProjectUpdate = Database['public']['Tables']['projects']['Update'];
 
 export type JobRow = Database['public']['Tables']['jobs']['Row'];
-export type JobInsert = Database['public']['Tables']['jobs']['Insert'];
-export type JobUpdate = Database['public']['Tables']['jobs']['Update'];
 
 export type JobAssignmentRow =
   Database['public']['Tables']['job_assignments']['Row'];
-export type JobAssignmentInsert =
-  Database['public']['Tables']['job_assignments']['Insert'];
-export type JobAssignmentUpdate =
-  Database['public']['Tables']['job_assignments']['Update'];
 
 export type JobInstructionItemRow =
   Database['public']['Tables']['job_instruction_items']['Row'];
-export type JobInstructionItemInsert =
-  Database['public']['Tables']['job_instruction_items']['Insert'];
-export type JobInstructionItemUpdate =
-  Database['public']['Tables']['job_instruction_items']['Update'];
 
 // ============================================
 // Enum Types
@@ -41,7 +27,7 @@ export type ClientType = Database['public']['Enums']['client_type'];
 export type JobStatus = Database['public']['Enums']['job_status'];
 export type JobPriority = Database['public']['Enums']['job_priority'];
 export type ProjectStatus = Database['public']['Enums']['project_status'];
-export type WorkExecutionState = Database['public']['Enums']['work_execution_state'];
+type WorkExecutionState = Database['public']['Enums']['work_execution_state'];
 export type OrgRole = Database['public']['Enums']['org_role'];
 
 // ============================================
@@ -207,22 +193,22 @@ export type DerivedProjectStatus = {
 export type CalendarJob = {
   /** Unique calendar-row key; planning-backed rows use the occurrence ID. */
   id: string;
-  occurrenceId?: string;
-  jobId?: string | null;
-  seriesId?: string | null;
-  seriesLineageId?: string | null;
-  entryKind?: 'job_visit' | 'internal';
-  internalType?: 'internal_work' | 'meeting' | 'training' | 'other' | null;
-  timeKind?: 'timed' | 'all_day';
-  startAt?: string | null;
-  endAt?: string | null;
-  endDateExclusive?: string | null;
-  isException?: boolean;
-  version?: number;
-  executionVersion?: number;
+  occurrenceId?: string | undefined;
+  jobId?: string | null | undefined;
+  seriesId?: string | null | undefined;
+  seriesLineageId?: string | null | undefined;
+  entryKind?: 'job_visit' | 'internal' | undefined;
+  internalType?: 'internal_work' | 'meeting' | 'training' | 'other' | null | undefined;
+  timeKind?: 'timed' | 'all_day' | undefined;
+  startAt?: string | null | undefined;
+  endAt?: string | null | undefined;
+  endDateExclusive?: string | null | undefined;
+  isException?: boolean | undefined;
+  version?: number | undefined;
+  executionVersion?: number | undefined;
   /** Planning occurrence status; skipped/cancelled render muted + read-only. */
-  occurrenceStatus?: 'scheduled' | 'skipped' | 'cancelled';
-  assignedEmployeeRecordIds?: string[];
+  occurrenceStatus?: 'scheduled' | 'skipped' | 'cancelled' | undefined;
+  assignedEmployeeRecordIds?: string[] | undefined;
   jobNumber: string | null;
   title: string;
   status: JobStatus;
@@ -271,7 +257,7 @@ export type DeleteClientResult =
   | { success: true }
   | { success: false; error: string };
 
-export type QualificationWarningResult = {
+type QualificationWarningResult = {
   success: false;
   error: 'qualification_warning' | 'stale_evaluation';
   evaluation: AssignmentEvaluation;
@@ -303,18 +289,8 @@ export type DeleteProjectResult =
   | { success: true }
   | { success: false; error: string };
 
-export type AssignEmployeeResult =
-  | { success: true; assignment: JobAssignment }
-  | QualificationWarningResult
-  | { success: false; error: string };
-
 export type UpdateJobAssignmentsResult =
   | { success: true; assignments: JobAssignment[] }
-  | QualificationWarningResult
-  | { success: false; error: string };
-
-export type UnassignEmployeeResult =
-  | { success: true }
   | QualificationWarningResult
   | { success: false; error: string };
 
@@ -533,26 +509,6 @@ export const UNIFIED_STATUS_LABELS: Record<UnifiedStatus, string> = {
 
 export const MANAGER_ROLES: OrgRole[] = ['admin', 'buero'];
 
-export const JOB_STATUS_ORDER: JobStatus[] = [
-  'nicht_bearbeitet',
-  'in_bearbeitung',
-  'fertig',
-  'geparkt',
-];
-
-export const JOB_PRIORITY_ORDER: JobPriority[] = [
-  'niedrig',
-  'mittel',
-  'hoch',
-];
-
-export const PROJECT_STATUS_ORDER: ProjectStatus[] = [
-  'nicht_begonnen',
-  'in_bearbeitung',
-  'abgeschlossen',
-  'geparkt',
-];
-
 // ============================================
 // Utility Functions
 // ============================================
@@ -562,7 +518,7 @@ export const PROJECT_STATUS_ORDER: ProjectStatus[] = [
  * Returns `nicht_begonnen` if no jobs, `abgeschlossen` if all done,
  * `in_bearbeitung` if any are in progress or completed.
  */
-export function deriveProjectStatus(jobs: Pick<Job, 'status'>[]): ProjectStatus {
+function deriveProjectStatus(jobs: Pick<Job, 'status'>[]): ProjectStatus {
   if (jobs.length === 0) return 'nicht_begonnen';
 
   const allParked = jobs.every((j) => j.status === 'geparkt');
@@ -665,7 +621,7 @@ export function calculateTrafficLightFromCounts(
 /**
  * Map a Job's status to the abstract unified status used for filtering.
  */
-export function getJobUnifiedStatus(job: Pick<Job, 'status' | 'executionState'>): UnifiedStatus {
+function getJobUnifiedStatus(job: Pick<Job, 'status' | 'executionState'>): UnifiedStatus {
   if (job.status === 'geparkt') return 'parked';
   if (job.executionState) return job.executionState;
   switch (job.status) {
@@ -679,7 +635,7 @@ export function getJobUnifiedStatus(job: Pick<Job, 'status' | 'executionState'>)
 /**
  * Map a ProjectWithDetails' effective status to the abstract unified status.
  */
-export function getProjectUnifiedStatus(project: ProjectWithDetails): UnifiedStatus {
+function getProjectUnifiedStatus(project: ProjectWithDetails): UnifiedStatus {
   if (project.statusOverride === 'geparkt') return 'parked';
   if (project.executionStateOverride) return project.executionStateOverride;
   const effective = project.statusOverride ?? getEffectiveProjectStatusFromCounts(project);
@@ -782,18 +738,6 @@ function isArchivedEntry(entry: UnifiedListEntry): boolean {
 
 function isParkedEntry(entry: UnifiedListEntry): boolean {
   return getEntryUnifiedStatus(entry) === 'parked';
-}
-
-export function splitActiveAndArchived(
-  entries: UnifiedListEntry[]
-): { active: UnifiedListEntry[]; archived: UnifiedListEntry[] } {
-  const active: UnifiedListEntry[] = [];
-  const archived: UnifiedListEntry[] = [];
-  for (const entry of entries) {
-    if (isArchivedEntry(entry)) archived.push(entry);
-    else active.push(entry);
-  }
-  return { active, archived };
 }
 
 export function splitEntries(
@@ -954,16 +898,6 @@ export const EMPTY_FILTER_STATE: FilterState = {
   dateTo: '',
   entryType: 'alle',
 };
-
-export function isFilterActive(state: FilterState): boolean {
-  return (
-    state.clientIds.length > 0 ||
-    state.employeeIds.length > 0 ||
-    state.dateFrom !== '' ||
-    state.dateTo !== '' ||
-    state.entryType !== 'alle'
-  );
-}
 
 export function countActiveFilters(state: FilterState): number {
   let count = 0;

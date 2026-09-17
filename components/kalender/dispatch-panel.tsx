@@ -83,6 +83,7 @@ function berlinTodayIso(): string {
 
 function shiftIsoDate(dateIso: string, days: number): string {
   const [year, month, day] = dateIso.split('-').map(Number);
+  if (year === undefined || month === undefined || day === undefined) return dateIso;
   return new Date(Date.UTC(year, month - 1, day) + days * 86_400_000)
     .toISOString()
     .slice(0, 10);
@@ -164,6 +165,7 @@ function CommitmentDialog({
   const [committedDate, setCommittedDate] = useState<Date | undefined>(() => {
     const iso = berlinLocalDateOf(entry);
     const [year, month, day] = iso.split('-').map(Number);
+    if (year === undefined || month === undefined || day === undefined) return undefined;
     return new Date(year, month - 1, day);
   });
   const [windowStart, setWindowStart] = useState('');
@@ -596,7 +598,7 @@ export function DispatchPanel({
           <Send className="size-5 text-brand-purple" />
           <h2 className="text-base font-semibold">Einsätze</h2>
           {overview && overview.openChallengeCount > 0 && (
-            <span className="rounded-full bg-yellow-500/15 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:text-yellow-400">
+            <span className="rounded-full bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning-soft-foreground">
               {overview.openChallengeCount} Rückfrage
               {overview.openChallengeCount === 1 ? '' : 'n'}
             </span>
@@ -647,7 +649,7 @@ export function DispatchPanel({
               {openChallenges.map(({ entry, recipient, acknowledgementId }) => (
                 <div
                   key={`${entry.occurrenceId}:${recipient.employeeRecordId}`}
-                  className="rounded-md border border-yellow-500/40 bg-yellow-500/5 px-3 py-2"
+                  className="rounded-md border border-warning/40 bg-warning-soft px-3 py-2"
                 >
                   <p className="flex items-center gap-1.5 text-sm font-medium">
                     <span className="min-w-0 flex-1">
@@ -751,7 +753,7 @@ export function DispatchPanel({
                       <p
                         className={`mt-1 flex items-center gap-1 text-xs ${
                           entry.commitmentMismatch
-                            ? 'font-medium text-yellow-700 dark:text-yellow-400'
+                            ? 'font-medium text-warning-text'
                             : 'text-muted-foreground'
                         }`}
                         data-commitment-mismatch={
@@ -931,7 +933,7 @@ export function DispatchPanel({
                   key={index}
                   className={
                     note.kind === 'no_gap_different_sites'
-                      ? 'text-yellow-700 dark:text-yellow-400'
+                      ? 'text-warning-text'
                       : undefined
                   }
                 >
@@ -1036,7 +1038,7 @@ export function DispatchPanel({
             </ul>
             <ul className="space-y-1.5 text-sm">
               {batchPreview.conflictCount > 0 && (
-                <li className="text-yellow-700 dark:text-yellow-400">
+                <li className="text-warning-text">
                   {batchPreview.conflictCount} Planungshinweis
                   {batchPreview.conflictCount === 1 ? '' : 'e'} – Begründung
                   wird beim Speichern abgefragt.
@@ -1051,7 +1053,7 @@ export function DispatchPanel({
                 </li>
               )}
               {batchPreview.commitmentMismatchTitles.length > 0 && (
-                <li className="text-yellow-700 dark:text-yellow-400">
+                <li className="text-warning-text">
                   Kundenzusagen weichen danach ab:{' '}
                   {batchPreview.commitmentMismatchTitles.join(', ')} – bitte
                   neu zusagen oder zurückziehen. Es wird keine Nachricht

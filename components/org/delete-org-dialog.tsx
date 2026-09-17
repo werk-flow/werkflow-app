@@ -19,7 +19,6 @@ import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { deleteOrganization } from '@/lib/org/delete-action';
-import { cn } from '@/lib/utils';
 
 const ERROR_MESSAGES: Record<string, string> = {
   not_authenticated: 'Du bist nicht angemeldet.',
@@ -93,10 +92,7 @@ export function DeleteOrgDialog({
         <Button
           variant="destructive"
           size="sm"
-          className={cn(
-            'w-full bg-red-500 text-white hover:bg-red-400 dark:bg-red-500 dark:hover:bg-red-400',
-            disabled && 'cursor-not-allowed opacity-60 saturate-50 hover:bg-red-500'
-          )}
+          className="w-full"
           disabled={disabled}
         >
           <Trash2 className="size-4" />
@@ -155,7 +151,7 @@ export function DeleteOrgDialog({
               void handleDelete();
             }}
             disabled={isLoading || !isNameMatch}
-            className="bg-red-500 text-white hover:bg-red-400 dark:bg-red-500 dark:hover:bg-red-400"
+            variant="destructive"
           >
             {isLoading && <Loader2 className="size-4 animate-spin" />}
             {isLoading ? 'Wird gelöscht...' : 'Endgültig löschen'}

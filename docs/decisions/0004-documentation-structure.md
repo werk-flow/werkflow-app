@@ -12,7 +12,7 @@ By 2026-08-24 the repo carried roughly 36 docs and 149k words, all of it written
 
 A full audit of the docs, skills, and context surfaces ran the same day and found eight concrete problems, none of which a new retrieval layer would have fixed:
 
-1. **Factual staleness.** The roadmap header said "15 of 56" accepted above 16 listed rows; the Supabase skill (both mirrors) still claimed dev auto-pauses and that the connector cannot see dev, both contradicted by [environments.md](../technical/environments.md); the index tree was missing several files; `coderabbit.md` referenced the removed `.cursor/rules`.
+1. **Factual staleness.** The roadmap header said "15 of 56" accepted above 16 listed rows; the Supabase skill (both mirrors) still claimed dev auto-pauses and that the connector cannot see dev, both contradicted by [environments.md](../technical/environments.md); the index tree was missing several files; [coderabbit.md](../technical/coderabbit.md) referenced the removed `.cursor/rules`.
 2. **A god-file.** The 18.7k-word Phase 1 roadmap mixed three different change rates in one file: durable protocol, hot status, and immutable history. Partial reads produced the stale-counter class of bug.
 3. **No canonical home for acceptance evidence.** Each slice's facts were restated in five to seven places (roadmap row, progress log, gate log, wave audit ledger, slice plan, testing doc, feature baselines).
 4. **Link-everything tails.** "Related Docs" sections connected every feature to every feature, a near-complete graph whose edges carried no routing signal.
@@ -36,7 +36,7 @@ The six rules that follow from that:
 
 ## What was implemented
 
-- `docs/plans/phase-1/` replaced the roadmap god-file: [roadmap.md](../plans/phase-1/roadmap.md) as the hot entry, `protocol.md` for durable process, `gates.md`, `coverage.md`, an append-only `log.md`, and `slices/*.md` as the canonical per-slice acceptance records. The old path is a pointer stub and every inbound reference was rewritten.
+- `docs/plans/phase-1/` replaced the roadmap god-file: [roadmap.md](../plans/phase-1/roadmap.md) as the hot entry, [protocol.md](../plans/phase-1/protocol.md) for durable process, [gates.md](../plans/phase-1/gates.md), [coverage.md](../plans/phase-1/coverage.md), an append-only [log.md](../plans/phase-1/log.md), and `slices/*.md` as the canonical per-slice acceptance records. The old path is a pointer stub and every inbound reference was rewritten.
 - Every doc carries a `Status:` header. [docs/README.md](../README.md) became the exhaustive annotated index with a read-when hint per file, and `AGENTS.md` routes through it instead of leaving agents to glob the tree.
 - `bun run docs:check` (`scripts/check-docs.ts`) validates index coverage, relative-link resolution, status headers, and byte-sync between the `.claude/` and `.agents/` skill mirrors.
 - Acceptance writes were narrowed to a fixed touch set: roadmap, the slice record, the log, the golden-gate log, and the wave audit doc. Log entries link slice records instead of restating their evidence.

@@ -34,6 +34,6 @@ The three-part audit (code comments, docs, skills) that seeded this adoption pro
 
 ## Amendment 2026-09-05: current enforcement labels and follow-up ownership
 
-The consolidation named above completed in the [platform-hardening phase](../plans/platform-hardening.md). Remaining conversions stay in the living backlog for later work.
+The consolidation named above completed in the [platform-hardening phase](../plans/phase-1/consolidation-2026-08/platform-hardening.md). Remaining conversions stay in the living backlog for later work.
 
 Apply the tier definitions to the mechanism, even where historical run records used a different label. Runtime routing checks, certification preflight, and an exclusive-lock check are Tier 2 because they reject an attempted operation. A type or API that removes an invalid state is Tier 1. A rule awaiting an achievable check is temporarily Tier 3 with an open conversion, not a claim that enforcement is impossible.

@@ -74,10 +74,10 @@ test('nested aggregate diagnostics are bounded, cycle-safe and omit arbitrary er
     record: (record) => { records.push(record); },
   });
   await expect(fetch('not a URL containing private data', { method: 'private-method' })).rejects.toBe(failure);
-  expect(records[0].origin).toBeNull();
-  expect(records[0].method).toBe('OTHER');
-  expect(records[0].errors).toHaveLength(8);
-  expect(records[0].errors.slice(0, 3)).toEqual([
+  expect(records[0]?.origin).toBeNull();
+  expect(records[0]?.method).toBe('OTHER');
+  expect(records[0]?.errors).toHaveLength(8);
+  expect(records[0]?.errors.slice(0, 3)).toEqual([
     { depth: 0, name: 'AggregateError' },
     { depth: 1, name: 'UnknownError' },
     { depth: 1, name: 'Error', code: 'ECONNREFUSED', syscall: 'connect' },
@@ -105,7 +105,7 @@ test('cause depth and throwing metadata getters cannot replace the original reje
     record: (record) => { records.push(record); },
   });
   await expect(fetch('https://example.test')).rejects.toBe(failure);
-  expect(records[0].errors.map(({ depth }) => depth)).toEqual([0, 1, 2, 3, 4]);
+  expect(records[0]?.errors.map(({ depth }) => depth)).toEqual([0, 1, 2, 3, 4]);
 });
 
 test('the wrapper transparently delegates callable properties and the original call receiver', async () => {

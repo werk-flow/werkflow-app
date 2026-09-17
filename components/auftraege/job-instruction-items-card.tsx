@@ -61,7 +61,7 @@ type RenderedInstructionItem = JobInstructionItemWithDetails & {
   isOptimistic?: boolean;
 };
 
-const ERROR_MESSAGES: Record<string, string> = {
+const ERROR_MESSAGES = {
   content_required: 'Bitte gib einen Text für den Punkt ein.',
   not_authorized: 'Du hast keine Berechtigung für diese Aktion.',
   create_failed: 'Der Punkt konnte nicht erstellt werden.',
@@ -75,7 +75,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   item_not_found: 'Der Eintrag wurde nicht gefunden.',
   job_not_found: 'Der Auftrag wurde nicht gefunden.',
   unexpected_error: 'Es ist ein unerwarteter Fehler aufgetreten.',
-};
+} satisfies Record<string, string>;
+const ERROR_MESSAGE_BY_CODE: Record<string, string> = ERROR_MESSAGES;
 
 function generateDraftId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -140,7 +141,7 @@ export function JobInstructionItemsCard({
   useEffect(() => {
     if (projectId) void syncItemsFromServer();
     // The project detail route does not preload these rows.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- syncItemsFromServer reads the current project; it runs once per project or refresh signal
   }, [projectId, refreshSignal]);
 
   useEffect(() => {
@@ -191,7 +192,7 @@ export function JobInstructionItemsCard({
 
   function getErrorMessage(error: string | undefined): string {
     if (!error) return ERROR_MESSAGES.unexpected_error;
-    return ERROR_MESSAGES[error] ?? ERROR_MESSAGES.unexpected_error;
+    return ERROR_MESSAGE_BY_CODE[error] ?? ERROR_MESSAGES.unexpected_error;
   }
 
   function showErrorBanner(message: string) {
@@ -409,12 +410,14 @@ export function JobInstructionItemsCard({
     const nextIndex = currentIndex + direction;
     if (currentIndex < 0 || nextIndex < 0 || nextIndex >= items.length) return;
 
+    const currentItem = items[currentIndex];
+    const neighbourItem = items[nextIndex];
+    if (!currentItem || !neighbourItem) return;
+
     const previousItems = items;
     const nextItems = [...items];
-    [nextItems[currentIndex], nextItems[nextIndex]] = [
-      nextItems[nextIndex],
-      nextItems[currentIndex],
-    ];
+    nextItems[currentIndex] = neighbourItem;
+    nextItems[nextIndex] = currentItem;
 
     setItems(nextItems.map((item, index) => ({ ...item, sortOrder: index })));
     let errorMessage: string | null = null;
@@ -528,7 +531,7 @@ export function JobInstructionItemsCard({
                   data-testid="job-instruction-item"
                   className={cn(
                     'min-w-0 w-full rounded-md border px-3 py-3 transition-colors',
-                    item.isCompleted && 'border-orange-200 bg-orange-50/50 dark:border-orange-900/40 dark:bg-orange-950/10',
+                    item.isCompleted && 'border-primary/30 bg-primary/5',
                     item.isOptimistic && 'opacity-80'
                   )}
                 >
@@ -551,7 +554,7 @@ export function JobInstructionItemsCard({
                         'mt-0.5 flex size-11 shrink-0 items-center justify-center rounded-full border transition-colors sm:size-8',
                         readOnly && 'cursor-default opacity-70',
                         item.isCompleted
-                          ? 'border-orange-500 bg-orange-500 text-white'
+                          ? 'border-primary bg-primary text-primary-foreground'
                           : 'border-muted-foreground/40 bg-background text-transparent'
                       )}
                     >

@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { sourceImportGraph, UNKNOWN_IMPORT_DEPENDENCY, changedInputs, groupAttemptProblem, groupFingerprint, groupInputFiles, hashValue, isDocumentationInput, reusableGroupResult, type GroupResult, type InputSnapshot } from "./group-evidence";
+import { sourceImportGraph, UNKNOWN_IMPORT_DEPENDENCY, changedInputs, groupAttemptProblem, groupFingerprint, groupInputFiles, hashValue, inputsUnchangedBetween, isDocumentationInput, reusableGroupResult, type EvidenceGroup, type GroupResult, type InputSnapshot } from "./group-evidence";
 
-const groups = [
+const groups: [EvidenceGroup, EvidenceGroup] = [
   { id: "people", files: ["tests/people.ts"], sourcePrefixes: ["lib/people"] },
   { id: "inventory", files: ["tests/inventory.ts"], sourcePrefixes: ["lib/inventory"] },
 ];
@@ -21,6 +21,9 @@ test("runtime Markdown remains qualified while agent guidance uses current stati
   expect(isDocumentationInput("temporary-transcripts/security/video.txt")).toBe(true);
   expect(isDocumentationInput("temporary-transcripts/check-inventory.mjs")).toBe(true);
   expect(isDocumentationInput("temporary-transcripts-app/runtime.ts")).toBe(false);
+  // Tooling no test executes (2026-09-14: an .mcp.json edit invalidated every browser proof).
+  for (const file of [".mcp.json", ".coderabbit.yaml", ".gitignore", "supabase/.gitignore", "tests/audit/README.md", "tests/golden/support/notes.md"]) expect(isDocumentationInput(file)).toBe(true);
+  for (const file of ["eslint-rules/ui-rules.mjs", "bunfig.toml", "tests/audit/fixtures/readme.txt", "lib/.gitignore-loader.ts", "app/mcp.json"]) expect(isDocumentationInput(file)).toBe(false);
 });
 
 describe("independent group proof", () => {
@@ -178,4 +181,36 @@ test("a remapped root alias cannot preserve the former import graph", () => {
   }, (root, listed) => {
     expect(sourceImportGraph(root, listed).get("tests/people.ts")).toContain(UNKNOWN_IMPORT_DEPENDENCY);
   });
+});
+
+test("harness support modules qualify only the groups that import them; config-loaded helpers stay shared", () => {
+  const harnessFiles = [...files, "tests/golden/support/live.ts", "tests/audit/support/a1-steps.ts", "tests/golden/support/run-reporter.ts", "lib/testing/latency-evidence.ts"];
+  const graph = new Map([
+    ["tests/people.ts", ["tests/golden/support/live.ts"]],
+    ["tests/golden/support/live.ts", ["lib/testing/latency-evidence.ts"]],
+  ]);
+  const people = groupInputFiles({ group: groups[0], groups, files: harnessFiles, graph });
+  expect(people).toContain("tests/golden/support/live.ts");
+  expect(people).toContain("lib/testing/latency-evidence.ts");
+  expect(people).not.toContain("tests/audit/support/a1-steps.ts");
+  expect(people).toContain("tests/golden/support/run-reporter.ts");
+  const inventory = groupInputFiles({ group: groups[1], groups, files: harnessFiles, graph });
+  expect(inventory).not.toContain("tests/golden/support/live.ts");
+  expect(inventory).not.toContain("lib/testing/latency-evidence.ts");
+  expect(inventory).toContain("tests/golden/support/run-reporter.ts");
+});
+
+test("a pass recorded under a wider input set is reused when every current input is unchanged", () => {
+  const inputs = ["lib/people/save.ts", "lib/auth.ts"];
+  const recorded: GroupResult = { ...pass, fingerprint: hashValue("older-rule"), snapshot };
+  expect(inputsUnchangedBetween(snapshot, snapshot, inputs)).toBe(true);
+  expect(reusableGroupResult({ groupId: "people", fingerprint: hashValue("new-rule"), inputs, snapshot, results: [recorded] })).toBe(recorded);
+  const changed = { ...snapshot, files: { ...snapshot.files, "lib/auth.ts": hashValue("changed-auth") } };
+  expect(inputsUnchangedBetween(snapshot, changed, inputs)).toBe(false);
+  expect(reusableGroupResult({ groupId: "people", fingerprint: hashValue("new-rule"), inputs, snapshot: changed, results: [recorded] })).toBeUndefined();
+  const otherEnvironment = { ...snapshot, environment: hashValue("cloud") };
+  expect(reusableGroupResult({ groupId: "people", fingerprint: hashValue("new-rule"), inputs, snapshot: otherEnvironment, results: [recorded] })).toBeUndefined();
+  const laterFailure: GroupResult = { ...recorded, startedAt: "2026-09-06T11:00:00.000Z", status: "failed" };
+  expect(reusableGroupResult({ groupId: "people", fingerprint: hashValue("new-rule"), inputs, snapshot, results: [recorded, laterFailure] })).toBeUndefined();
+  expect(groupAttemptProblem({ groupId: "people", fingerprint: hashValue("new-rule"), inputs, snapshot, results: [recorded, laterFailure] })).toContain("unchanged inputs");
 });

@@ -747,35 +747,6 @@ export async function setMaintenancePlanArchived(input: {
   return { success: true };
 }
 
-export async function linkMaintenanceDueToJob(
-  input: unknown,
-): Promise<MaintenanceActionResult> {
-  const parsed = maintenanceVisitLinkSchema.safeParse(input);
-  if (!parsed.success) {
-    return { success: false, error: "invalid_input" };
-  }
-  const context = await requireMaintenanceManager();
-  if ("success" in context) return context;
-  const { error } = await context.admin.rpc("link_maintenance_due_visit", {
-    p_organization_id: context.organizationId,
-    p_maintenance_due_work_ids: parsed.data.dueWorkIds,
-    p_job_id: parsed.data.jobId,
-    p_planning_occurrence_id: parsed.data.planningOccurrenceId ?? null,
-    p_expected_versions: parsed.data.expectedVersions,
-    p_reason: parsed.data.reason,
-    p_actor_id: context.actorId,
-    p_idempotency_key: parsed.data.idempotencyKey,
-  });
-  if (error) {
-    return {
-      success: false,
-      error: mutationError(error, "maintenance_visit_link_failed"),
-    };
-  }
-  refreshMaintenancePaths();
-  return { success: true };
-}
-
 export async function createMaintenanceVisit(input: {
   dueWorkIds: string[];
   expectedVersions: number[];
@@ -876,8 +847,11 @@ export async function createMaintenanceVisit(input: {
   if (clientIds.size !== 1 || siteIds.size !== 1 || templateIds.size !== 1) {
     return { success: false, error: "maintenance_due_batch_incompatible" };
   }
-  const firstPlan = plans[0];
-  const firstRevision = revisions[0];
+  const [firstPlan] = plans;
+  const [firstRevision] = revisions;
+  if (!firstPlan || !firstRevision) {
+    return { success: false, error: "maintenance_visit_context_failed" };
+  }
   const durationByRevisionId = new Map(
     revisions.map((revision) => [
       revision.id,

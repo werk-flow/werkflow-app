@@ -117,7 +117,7 @@ enabled = true
 file_size_limit = "50MiB"
 
 # Local stand-in for the R2 buckets (decision D9 in
-# docs/plans/platform-hardening.md): the app reaches it through the bundled
+# docs/plans/phase-1/consolidation-2026-08/platform-hardening.md): the app reaches it through the bundled
 # S3-compatible endpoint via the R2_ENDPOINT override in .env.local.
 [storage.buckets.werkflow-documents-local]
 public = false
@@ -389,8 +389,9 @@ inspector_port = 8083
 # The Deno major version to use.
 deno_version = 2
 
-# [edge_runtime.secrets]
-# secret_key = "env(SECRET_VALUE)"
+# Local CLI only: actual Mailpit capture, never a production provider fallback.
+[edge_runtime.secrets]
+WERKFLOW_LOCAL_MAIL_CAPTURE = "mailpit"
 
 [analytics]
 enabled = true

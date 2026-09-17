@@ -107,6 +107,7 @@ export function deriveTravelNotes(visits: TravelVisitFact[]): TravelNote[] {
     for (let index = 1; index < list.length; index++) {
       const previous = list[index - 1];
       const next = list[index];
+      if (!previous || !next) continue;
       const sameKnownSite =
         previous.siteId !== null && previous.siteId === next.siteId;
       if (sameKnownSite) continue;

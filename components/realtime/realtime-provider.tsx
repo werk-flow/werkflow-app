@@ -16,11 +16,12 @@ import type {
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useOrganization } from "@/components/organization/organization-context";
 import {
-  coalesceRealtimeEvents,
-  REALTIME_DEBOUNCE_MS,
+  REALTIME_FOCUS_CATCH_UP_MIN_ABSENCE_MS,
+  normalizeRealtimeDeletion,
 } from "@/lib/realtime/events";
 import {
   REALTIME_TABLES,
+  REALTIME_DELETION_TABLE,
   UNFILTERED_REALTIME_TABLES,
   type RealtimeTable,
 } from "@/lib/realtime/tables";
@@ -50,13 +51,6 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     new Map(REALTIME_TABLES.map((t) => [t, new Set<RealtimeCallback>()])),
   );
 
-  const debounceTimersRef = useRef<Map<RealtimeTable, NodeJS.Timeout>>(
-    new Map(),
-  );
-  const pendingEventsRef = useRef<Map<RealtimeTable, RealtimeChangeEvent>>(
-    new Map(),
-  );
-
   const dispatchAll = useCallback(() => {
     for (const table of REALTIME_TABLES) {
       const listeners = listenersRef.current.get(table);
@@ -73,31 +67,25 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!activeOrgId) return;
+    const organizationId = activeOrgId;
 
     const supabase = createSupabaseBrowserClient();
     let cancelled = false;
 
     function dispatch(
-      table: RealtimeTable,
-      payload: RealtimePostgresChangesPayload<Record<string, unknown>>,
+      event: RealtimeChangeEvent,
+      commitTimestamp?: string,
     ) {
+      if (cancelled) return;
+      const table = event.table;
       const listeners = listenersRef.current.get(table);
       const count = listeners?.size ?? 0;
       if (count === 0) return;
-
-      const event: RealtimeChangeEvent = {
-        table,
-        eventType: payload.eventType as RealtimeChangeEvent["eventType"],
-        new: (payload.new as Record<string, unknown>) ?? null,
-        old: (payload.old as Record<string, unknown>) ?? null,
-      };
 
       if (isDev) {
         // Dev-mode propagation latency: database commit to client receipt.
         // The D4 latency contract's real numbers come from these lines plus
         // the expectLiveWithin measurements in the harness.
-        const commitTimestamp = (payload as { commit_timestamp?: string })
-          .commit_timestamp;
         const commitMs = commitTimestamp ? Date.parse(commitTimestamp) : NaN;
         console.info("[Realtime] event received", {
           channel: `org-${activeOrgId}`,
@@ -109,25 +97,10 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         });
       }
 
-      // Debounce: coalesce rapid-fire events on the same table into a single dispatch.
-      // This prevents the thundering herd when e.g. switchJob inserts 2 time_entries
-      // in quick succession, which would otherwise trigger 10+ parallel refetches twice.
-      const existing = debounceTimersRef.current.get(table);
-      if (existing) clearTimeout(existing);
-      pendingEventsRef.current.set(
-        table,
-        coalesceRealtimeEvents(pendingEventsRef.current.get(table), event),
-      );
-
-      debounceTimersRef.current.set(
-        table,
-        setTimeout(() => {
-          debounceTimersRef.current.delete(table);
-          const pendingEvent = pendingEventsRef.current.get(table);
-          pendingEventsRef.current.delete(table);
-          if (pendingEvent) listeners!.forEach((cb) => cb(pendingEvent));
-        }, REALTIME_DEBOUNCE_MS),
-      );
+      // Preserve every event identity. The two read/refresh hooks coalesce
+      // their complete table set once, with the shared 150 ms guard.
+      // A second provider timer delays delivery and can swallow a DELETE.
+      listeners!.forEach((callback) => callback(event));
     }
 
     async function setup() {
@@ -143,9 +116,23 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       // One binding per table, generated from the single source of truth:
       // a table cannot join Realtime without its organization filter
       // (profiles is the recorded exception). All bindings ride one channel
-      // join; DELETE payloads carry only id/organization_id (replica
-      // identity USING INDEX — see docs/technical/realtime-and-caching.md).
+      // join. Raw DELETE/TRUNCATE are disabled in the database publication;
+      // tenant-authorized INSERT invalidations below replace DELETE delivery.
       let channel = supabase.channel(`org-${activeOrgId}`);
+      channel = channel.on('system', {}, (payload: unknown) => {
+        if (cancelled || !payload || typeof payload !== 'object'
+          || !('extension' in payload) || payload.extension !== 'postgres_changes'
+          || !('status' in payload)) return;
+        if (payload.status === 'ok') {
+          document.documentElement.dataset.realtimePostgresState = 'ready';
+          // Channel join can precede database-listener readiness. Read after
+          // this signal on initial connection and reconnect to cover that gap.
+          dispatchAll();
+        } else if (payload.status === 'error') {
+          document.documentElement.dataset.realtimePostgresState = 'error';
+          console.warn('[Realtime] database subscription unavailable');
+        }
+      });
       for (const table of REALTIME_TABLES) {
         const filter = UNFILTERED_REALTIME_TABLES.includes(table)
           ? undefined
@@ -158,11 +145,24 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
             table,
             ...(filter ? { filter } : {}),
           },
-          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
-            dispatch(table, p),
+          (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
+            if (payload.eventType === 'DELETE') return;
+            dispatch({ table, eventType: payload.eventType, new: payload.new, old: payload.old }, payload.commit_timestamp);
+          },
         );
       }
+      channel = channel.on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: REALTIME_DELETION_TABLE,
+        filter: `organization_id=eq.${activeOrgId}`,
+      }, (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
+        const event = normalizeRealtimeDeletion(payload.new, organizationId);
+        if (event) dispatch(event, payload.commit_timestamp);
+      });
       channel.subscribe((status: string, err?: Error) => {
+        if (cancelled) return;
+        // Diagnostic marker for measured scenarios and support: the join state
+        // of this organization's channel, written after the client committed.
+        document.documentElement.dataset.realtimeState = status.toLowerCase();
         if (isDev) {
           console.info("[Realtime] channel status", {
             channel: `org-${activeOrgId}`,
@@ -173,18 +173,14 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           console.error("[Realtime] subscription error:", err);
         }
         if (status === "SUBSCRIBED") {
-          console.info(`[Realtime] subscribed to org-${activeOrgId}`);
-          // The first join has a gap between the server-rendered snapshot
-          // and the active database subscription; reconnects have the same
-          // gap while offline. Refetch active listeners after every join so
-          // a commit in either window cannot leave last-known data behind.
-          dispatchAll();
+          console.info('[Realtime] subscribed');
         }
         if (
           status === "TIMED_OUT" ||
           status === "CHANNEL_ERROR" ||
           status === "CLOSED"
         ) {
+          delete document.documentElement.dataset.realtimePostgresState;
           console.warn(`[Realtime] ${status} — will reconnect automatically`);
         }
       });
@@ -204,45 +200,43 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       },
     );
 
-    // Refresh all listeners when the tab becomes visible again.
     // Browsers (especially Edge) may throttle or drop WebSocket connections
-    // for background tabs; this ensures data is fresh when the user returns.
-    let catchUpTimer: ReturnType<typeof setTimeout> | null = null;
-    function scheduleCatchUp() {
-      if (catchUpTimer) clearTimeout(catchUpTimer);
-      catchUpTimer = setTimeout(() => {
-        catchUpTimer = null;
-        dispatchAll();
-      }, 50);
+    // for background tabs. After a long absence one catch-up re-reads every
+    // live view; a short glance elsewhere never does (decision D5), and a
+    // dropped socket recovers through the reconnect catch-up above instead.
+    // A provider mounted in a hidden tab is already away; focus is not read
+    // here because headless and embedded browsers report it unreliably.
+    let awaySince: number | null = document.visibilityState === "hidden" ? Date.now() : null;
+    function markAway() {
+      awaySince ??= Date.now();
+    }
+    function handleReturn() {
+      if (awaySince === null) return;
+      const absenceMs = Date.now() - awaySince;
+      awaySince = null;
+      if (absenceMs >= REALTIME_FOCUS_CATCH_UP_MIN_ABSENCE_MS) dispatchAll();
     }
     function handleVisibilityChange() {
-      if (document.visibilityState === "visible") {
-        scheduleCatchUp();
-      }
-    }
-    function handleWindowFocus() {
-      scheduleCatchUp();
+      if (document.visibilityState === "hidden") markAway();
+      else handleReturn();
     }
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("focus", handleWindowFocus);
-    const debounceTimers = debounceTimersRef.current;
-    const pendingEvents = pendingEventsRef.current;
+    window.addEventListener("blur", markAway);
+    window.addEventListener("focus", handleReturn);
 
     return () => {
       cancelled = true;
+      delete document.documentElement.dataset.realtimeState;
+      delete document.documentElement.dataset.realtimePostgresState;
       authListener.unsubscribe();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("focus", handleWindowFocus);
-      if (catchUpTimer) clearTimeout(catchUpTimer);
+      window.removeEventListener("blur", markAway);
+      window.removeEventListener("focus", handleReturn);
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
       }
-      for (const timer of debounceTimers.values()) {
-        clearTimeout(timer);
-      }
-      debounceTimers.clear();
-      pendingEvents.clear();
+
     };
   }, [activeOrgId, dispatchAll]);
 

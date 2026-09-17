@@ -19,7 +19,7 @@ interface WeeklyHoursChartProps {
   narrowBars?: boolean;
   weekLabel?: { dateRange: string; kw: string };
   /** Monday-first resolved daily targets (P1-04) for the shown week. */
-  weekTargets?: DailyTarget[];
+  weekTargets?: DailyTarget[] | undefined;
   className?: string;
 }
 
@@ -158,25 +158,25 @@ export function WeeklyHoursChart({
                     'flex flex-col-reverse overflow-hidden rounded-t-[3px]',
                     narrowBars ? 'w-full max-w-[66px]' : 'w-[85%]',
                     isToday &&
-                      'ring-1 ring-foreground/15 ring-offset-1 ring-offset-background'
+                      'ring-1 ring-foreground/15'
                   )}
                   style={{ height: workPx + breakPx + overtimePx }}
                 >
                   {workPx > 0 && (
                     <div
-                      className="w-full shrink-0 bg-green-500 transition-all duration-500"
+                      className="w-full shrink-0 bg-success transition-all duration-500"
                       style={{ height: workPx }}
                     />
                   )}
                   {breakPx > 0 && (
                     <div
-                      className="w-full shrink-0 bg-yellow-500 transition-all duration-500"
+                      className="w-full shrink-0 bg-warning transition-all duration-500"
                       style={{ height: breakPx }}
                     />
                   )}
                   {overtimePx > 0 && (
                     <div
-                      className="w-full shrink-0 bg-blue-500 transition-all duration-500"
+                      className="w-full shrink-0 bg-info transition-all duration-500"
                       style={{ height: overtimePx }}
                     />
                   )}
@@ -217,15 +217,15 @@ export function WeeklyHoursChart({
       {/* Legend */}
       <div className="mt-2 flex items-center justify-center gap-4 text-[10px] text-muted-foreground">
         <span className="flex items-center gap-1">
-          <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
+          <span className="inline-block h-2 w-2 rounded-full bg-success" />
           Arbeitszeit
         </span>
         <span className="flex items-center gap-1">
-          <span className="inline-block h-2 w-2 rounded-full bg-yellow-500" />
+          <span className="inline-block h-2 w-2 rounded-full bg-warning" />
           Pause
         </span>
         <span className="flex items-center gap-1">
-          <span className="inline-block h-2 w-2 rounded-full bg-blue-500" />
+          <span className="inline-block h-2 w-2 rounded-full bg-info" />
           Überstunden
         </span>
       </div>

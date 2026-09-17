@@ -50,6 +50,6 @@ export default defineConfig({
     locale: 'de-DE',
     timezoneId: 'Europe/Berlin',
     screenshot: 'only-on-failure',
-    trace: 'retain-on-failure',
+    trace: process.env.WERKFLOW_RETAIN_PERFORMANCE_TRACE === '1' ? 'on' : 'retain-on-failure',
   },
 });

@@ -3,15 +3,6 @@ import type { VacationDayPortion } from '@/lib/vacation/types';
 import type { RequestStatus, RequestUrgency } from '@/lib/requests/types';
 
 // ============================================
-// Database Row Aliases
-// ============================================
-
-export type AttentionReadStateRow =
-  Database['public']['Tables']['attention_read_states']['Row'];
-export type AttentionEventRow =
-  Database['public']['Tables']['attention_events']['Row'];
-
-// ============================================
 // Item identity (P1-07 pattern contract)
 // ============================================
 
@@ -22,7 +13,7 @@ export type AttentionEventRow =
 // slices (qualifications P1-09, follow-ups P1-10, corrections P1-22,
 // procurement P1-29) extend this union plus the database CHECK — they never
 // add parallel storage.
-export type AttentionSourceType =
+type AttentionSourceType =
   | 'time_session_approval'
   | 'time_change_request_approval'
   | 'time_correction_approval'
@@ -193,7 +184,7 @@ export type AttentionTask =
 // Informational notices, deduplicated per source record: a domain state
 // change (approve → cancel, sickness correction) changes the state version of
 // the SAME item instead of creating a second one.
-export type VacationDecisionNotification = {
+type VacationDecisionNotification = {
   sourceType: 'vacation_decision';
   sourceId: string;
   status: 'approved' | 'rejected' | 'cancelled';
@@ -211,7 +202,7 @@ export type VacationDecisionNotification = {
 // of reports the office recorded or cancelled for them. The payload is
 // deliberately minimal (privacy matrix): dates and portion only, NEVER the
 // absence type — that stays on the self/manager management surfaces.
-export type SicknessReportNotification = {
+type SicknessReportNotification = {
   sourceType: 'sickness_report';
   sourceId: string;
   /** null = the viewer's own report (person audience). */
@@ -227,7 +218,7 @@ export type SicknessReportNotification = {
   unread: boolean;
 };
 
-export type CertificationExpiryNotification = {
+type CertificationExpiryNotification = {
   sourceType: 'employee_certification_expiry';
   sourceId: string;
   employeeRecordId: string;

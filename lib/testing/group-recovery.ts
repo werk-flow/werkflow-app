@@ -6,8 +6,8 @@ type RecoveryRun = {
   cleanedAt: string | null;
   startedAt: string;
   completedAt: string | null;
-  target?: string;
-  candidateFingerprint?: string;
+  target?: string | undefined;
+  candidateFingerprint?: string | undefined;
 };
 
 /** One bounded retry follows actual retained diagnosis, not a free-text override. */

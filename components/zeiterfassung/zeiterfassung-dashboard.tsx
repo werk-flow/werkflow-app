@@ -1,29 +1,18 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import {
-  Briefcase,
-  Coffee,
-  Car,
-  Clock,
-  ChevronRight,
-} from 'lucide-react';
-import { useBanner } from '@/components/ui/banner';
+import { Car, Clock } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { ErrorText } from '@/components/ui/error-text';
-import { InlinePending } from '@/components/ui/inline-pending';
-import { ListRow } from '@/components/ui/list-row';
-import { useServerAction } from '@/hooks/use-server-action';
 import { cn } from '@/lib/utils';
 import { TimeProgressRing } from './time-progress-ring';
-import { JobPickerModal } from '@/components/job-picker-modal';
-import { TimeActivityDialog } from '@/components/time-activity-dialog';
+import { ClockActionList } from '@/components/clock-action-list';
 import {
   formatDuration,
   getNonNegativeElapsedMs,
 } from '@/lib/time-tracking/helpers';
 import { computeBreakdownForSettings } from '@/lib/time-tracking/settings';
-import { getTargetSourceHint } from '@/lib/personnel/targets';
+import { DEFAULT_DAILY_TARGET_MINUTES, getTargetSourceHint } from '@/lib/personnel/targets';
 import { useWeeklyTimeData } from '@/hooks/use-weekly-time-data';
 import { WeeklyHoursChart } from './weekly-hours-chart';
 import { useClockState } from '@/components/clock-state-provider';
@@ -31,17 +20,9 @@ import { VacationSection } from './vacation-section';
 import { SicknessSection } from './sickness-section';
 import type {
   ClockTimelineSegment,
-  TimeTransitionResult,
   ZeiterfassungOverview
 } from '@/lib/time-tracking/types';
 import { ZeiterfassungDashboardSkeleton } from '@/components/loading-states/zeiterfassung-dashboard-skeleton';
-
-const TRANSITION_ERROR_MESSAGES: Record<string, string> = {
-  time_transition_stale_version:
-    'Der Stand hat sich geändert. Bitte prüfe die aktuelle Erfassung und versuche es erneut.',
-  time_transition_working_other_org:
-    'Bereits in anderer Organisation eingestempelt: Bitte beende dort zuerst die laufende Zeiterfassung.',
-};
 
 interface ZeiterfassungDashboardProps {
   organizationId: string;
@@ -91,11 +72,7 @@ export function ZeiterfassungDashboard({
   const {
     state,
     isLoading,
-    isPending,
     statusError,
-    startBreak,
-    endBreak,
-    switchJob,
   } = useClockState();
   const effectiveState =
     state && state.organizationId === organizationId
@@ -121,28 +98,6 @@ export function ZeiterfassungDashboard({
 
   const [liveTime, setLiveTime] = useState('00:00:00');
   const [liveTotalMinutes, setLiveTotalMinutes] = useState(0);
-  const [showJobPicker, setShowJobPicker] = useState(false);
-  const [pickerMode, setPickerMode] = useState<'switch' | 'resume'>('switch');
-  const [activityDialogOpen, setActivityDialogOpen] = useState(false);
-  const { showBanner } = useBanner();
-  // Own pending flag for the break tile: the shared clock `isPending` also
-  // covers the job picker's transitions.
-  const breakAction = useServerAction(startBreak);
-
-  // The transition helpers resolve to a result instead of throwing; a
-  // discarded failure would leave the tile silent (no-silent-failures rule).
-  const reportTransition = (result: TimeTransitionResult, fallback: string) => {
-    if (!result.success) {
-      showBanner({
-        variant: 'error',
-        message: TRANSITION_ERROR_MESSAGES[result.error] ?? fallback,
-      });
-      return;
-    }
-    // An unusually long capture must be reviewed before it continues; the
-    // activity dialog carries that review flow.
-    if (result.outcome === 'recovery_required') setActivityDialogOpen(true);
-  };
 
   const liveTimelineSegments: ClockTimelineSegment[] = (() => {
     const segments = [...(effectiveState.timelineSegments ?? [])];
@@ -162,23 +117,6 @@ export function ZeiterfassungDashboard({
     });
     return segments;
   })();
-
-  const handlePickerConfirm = async (jobId: string | null) => {
-    if (!effectiveState.isClockedIn) {
-      setShowJobPicker(false);
-      return;
-    }
-
-    const result =
-      pickerMode === 'resume' ? await endBreak(jobId) : await switchJob(jobId);
-    setShowJobPicker(false);
-    reportTransition(
-      result,
-      pickerMode === 'resume'
-        ? 'Die Arbeit konnte nicht fortgesetzt werden. Bitte versuche es erneut.'
-        : 'Der Auftrag konnte nicht gewechselt werden. Bitte versuche es erneut.'
-    );
-  };
 
   useEffect(() => {
     const updateLiveValues = () => {
@@ -289,9 +227,9 @@ export function ZeiterfassungDashboard({
           className={cn(
             'mt-6 text-lg font-medium',
             effectiveState.status === 'working'
-              ? 'text-green-600 dark:text-green-400'
+              ? 'text-success-text'
               : effectiveState.status === 'on_break'
-                ? 'text-yellow-600 dark:text-yellow-300'
+                ? 'text-warning-text'
                 : 'text-muted-foreground'
           )}
         >
@@ -337,7 +275,7 @@ export function ZeiterfassungDashboard({
           </p>
         ) : (
           <p className="mt-1 text-sm text-muted-foreground">
-            Tagesziel: {formatDuration(todayTargetMinutes ?? 480)} Arbeitszeit
+            Tagesziel: {formatDuration(todayTargetMinutes ?? DEFAULT_DAILY_TARGET_MINUTES)} Arbeitszeit
             {workPercentage !== null ? ` (${workPercentage}% erreicht)` : ''}
           </p>
         )}
@@ -350,7 +288,7 @@ export function ZeiterfassungDashboard({
         {/* Time breakdown indicators */}
         <div className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs">
           <span className="flex items-center gap-1.5">
-            <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
+            <span className="inline-block h-2 w-2 rounded-full bg-success" />
             <span className="text-muted-foreground">Arbeitszeit</span>
             <span className="font-medium tabular-nums">
               {formatDuration(breakdown.workMinutes)}
@@ -382,7 +320,7 @@ export function ZeiterfassungDashboard({
             </span>
           )}
           <span className="flex items-center gap-1.5">
-            <span className="inline-block h-2 w-2 rounded-full bg-yellow-500" />
+            <span className="inline-block h-2 w-2 rounded-full bg-warning" />
             <span className="text-muted-foreground">Pause</span>
             <span className="font-medium tabular-nums">
               {breakdown.breakMinutes > 0
@@ -391,7 +329,7 @@ export function ZeiterfassungDashboard({
             </span>
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="inline-block h-2 w-2 rounded-full bg-blue-500" />
+            <span className="inline-block h-2 w-2 rounded-full bg-info" />
             <span className="text-muted-foreground">Überstunden heute</span>
             <span className="font-medium tabular-nums">
               {breakdown.overtimeMinutes > 0
@@ -402,75 +340,12 @@ export function ZeiterfassungDashboard({
         </div>
       </div>
 
-      {/* Quick Actions */}
+      {/* Next clock actions: the same list the clock button's sheet renders. */}
       <div className="space-y-3">
         <h3 className="text-sm font-medium text-muted-foreground px-1">
           Schnellzugriff
         </h3>
-
-        <MenuCard
-          icon={Briefcase}
-          title="Auftrag auswählen"
-          subtitle={
-            effectiveState.activeJobInfo?.title
-              ? effectiveState.activeJobInfo.title
-              : effectiveState.status === 'on_break'
-                ? 'Während der Pause nicht aktiv'
-                : effectiveState.isClockedIn
-                ? 'Kein Auftrag gewählt'
-                : 'Auftrag für nächste Schicht'
-          }
-          onClick={() => {
-            setPickerMode('switch');
-            setShowJobPicker(true);
-          }}
-          active={
-            !!effectiveState.activeJobId &&
-            effectiveState.isClockedIn &&
-            !effectiveState.isOnBreak
-          }
-          disabled={!effectiveState.isClockedIn || effectiveState.isOnBreak}
-          disabledHint={
-            !effectiveState.isClockedIn ? 'Stemple zuerst ein' : 'Während der Pause gesperrt'
-          }
-        />
-
-        {effectiveState.breakMode === 'manual' ? (
-          <MenuCard
-            icon={Coffee}
-            title={effectiveState.isOnBreak ? 'Arbeit fortsetzen' : 'Pause'}
-            subtitle={
-              effectiveState.isOnBreak
-                ? 'Auftrag für die Fortsetzung wählen'
-                : 'Pause jetzt starten'
-            }
-            active={effectiveState.isOnBreak}
-            disabled={!effectiveState.isClockedIn}
-            disabledHint="Stemple zuerst ein"
-            pending={breakAction.isPending}
-            onClick={() => {
-              if (!effectiveState.isClockedIn) return;
-              if (effectiveState.isOnBreak) {
-                setPickerMode('resume');
-                setShowJobPicker(true);
-              } else {
-                void breakAction.run().then((result) =>
-                  reportTransition(
-                    result,
-                    'Die Pause konnte nicht gestartet werden. Bitte versuche es erneut.'
-                  )
-                );
-              }
-            }}
-          />
-        ) : null}
-
-        <MenuCard
-          icon={Car}
-          title="Fahrzeit"
-          subtitle="Fahrt mit Strecke und Rolle erfassen"
-          onClick={() => setActivityDialogOpen(true)}
-        />
+        <ClockActionList organizationId={organizationId} />
       </div>
 
       {/* Vacation balance, requests, and entry point (P1-06) */}
@@ -493,9 +368,9 @@ export function ZeiterfassungDashboard({
                   className={cn(
                     'flex h-10 w-10 items-center justify-center rounded-full',
                     effectiveState.status === 'working'
-                      ? 'bg-green-500/10'
+                      ? 'bg-success-soft'
                       : effectiveState.status === 'on_break'
-                        ? 'bg-yellow-500/10'
+                        ? 'bg-warning-soft'
                         : 'bg-muted'
                   )}
                 >
@@ -503,9 +378,9 @@ export function ZeiterfassungDashboard({
                     className={cn(
                       'h-5 w-5',
                       effectiveState.status === 'working'
-                        ? 'text-green-600 dark:text-green-400'
+                        ? 'text-success-soft-foreground'
                         : effectiveState.status === 'on_break'
-                          ? 'text-yellow-600 dark:text-yellow-300'
+                          ? 'text-warning-soft-foreground'
                           : 'text-muted-foreground'
                     )}
                   />
@@ -528,9 +403,9 @@ export function ZeiterfassungDashboard({
                 className={cn(
                   'rounded-full px-3 py-1 text-xs font-medium',
                   effectiveState.status === 'working'
-                    ? 'bg-green-500/10 text-green-600 dark:text-green-400'
+                    ? 'bg-success-soft text-success-soft-foreground'
                     : effectiveState.status === 'on_break'
-                      ? 'bg-yellow-500/10 text-yellow-700 dark:text-yellow-300'
+                      ? 'bg-warning-soft text-warning-soft-foreground'
                       : 'bg-muted text-muted-foreground'
                 )}
               >
@@ -563,92 +438,8 @@ export function ZeiterfassungDashboard({
         </Card>
       </div>
 
-      <JobPickerModal
-        open={showJobPicker}
-        onClose={() => setShowJobPicker(false)}
-        onConfirm={handlePickerConfirm}
-        organizationId={organizationId}
-        mode={pickerMode}
-        currentJobId={effectiveState.activeJobId}
-        isPending={isPending}
-      />
-      <TimeActivityDialog
-        open={activityDialogOpen}
-        onOpenChange={setActivityDialogOpen}
-        organizationId={organizationId}
-        initialActivity="travel"
-      />
-
       <ErrorText className="text-center text-xs">{statusError}</ErrorText>
     </div>
   );
 }
 
-interface MenuCardProps {
-  icon: React.ElementType;
-  title: string;
-  subtitle: string;
-  disabled?: boolean;
-  disabledHint?: string;
-  active?: boolean;
-  /** The tile's own server call is in flight: spinner instead of the chevron. */
-  pending?: boolean;
-  onClick?: () => void;
-}
-
-function MenuCard({
-  icon: Icon,
-  title,
-  subtitle,
-  disabled,
-  disabledHint,
-  active,
-  pending = false,
-  onClick
-}: MenuCardProps) {
-  // A menu tile is a row that acts on click; a disabled tile keeps its hint
-  // reachable via `title`, so it stays a real disabled button without hover.
-  return (
-    <ListRow
-      asChild
-      interactive={!disabled}
-      className={cn(
-        'w-full p-4 text-left',
-        disabled && 'cursor-not-allowed opacity-60',
-        active && 'ring-1 ring-primary/30'
-      )}
-    >
-      <button type="button" disabled={disabled || pending} onClick={onClick}>
-        <div className="flex items-center gap-3">
-          <div
-            className={cn(
-              'flex h-10 w-10 items-center justify-center rounded-full',
-              active ? 'bg-primary/10' : 'bg-brand-purple/10'
-            )}
-          >
-            <Icon
-              className={cn(
-                'h-5 w-5',
-                active ? 'text-primary' : 'text-brand-purple'
-              )}
-            />
-          </div>
-          <div>
-            <p className="font-medium">{title}</p>
-            <p
-              className="max-w-[200px] truncate text-xs text-muted-foreground"
-              title={disabled && disabledHint ? disabledHint : subtitle}
-            >
-              {disabled && disabledHint ? disabledHint : subtitle}
-            </p>
-          </div>
-        </div>
-        {pending ? (
-          <InlinePending active className="size-5" />
-        ) : (
-          <ChevronRight className="h-5 w-5 text-muted-foreground" />
-        )}
-      </button>
-    </ListRow>
-  );
-}

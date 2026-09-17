@@ -2,10 +2,6 @@ import type { Database } from '@/lib/supabase/database.types';
 
 // Database types
 export type TimeEntryRow = Database['public']['Tables']['time_entries']['Row'];
-export type TimeEntryInsert =
-  Database['public']['Tables']['time_entries']['Insert'];
-export type TimeEntryUpdate =
-  Database['public']['Tables']['time_entries']['Update'];
 
 // Entry type and status
 export type TimeEntryType =
@@ -195,17 +191,17 @@ export type TimeEntry = {
   createdAt: string;
   updatedAt: string;
   /** Present for P1-21 compatibility projections from canonical segments. */
-  activityKind?: TimeSegmentKind;
-  canonicalSegmentId?: string;
+  activityKind?: TimeSegmentKind | undefined;
+  canonicalSegmentId?: string | undefined;
   /** Stable optimistic-lock source for a correction request. */
-  sourceKind?: 'legacy_entry' | 'canonical_segment' | 'correction_application';
-  sourceVersion?: string;
+  sourceKind?: 'legacy_entry' | 'canonical_segment' | 'correction_application' | undefined;
+  sourceVersion?: string | undefined;
   /** Present when this entry is projected from an approved correction. */
-  correctionApplicationId?: string;
-  correctionSourceFingerprint?: string;
-  pendingCorrectionRequestId?: string;
-  pendingCorrectionKind?: Database['public']['Enums']['time_correction_kind'];
-  isProvisionalCorrection?: boolean;
+  correctionApplicationId?: string | undefined;
+  correctionSourceFingerprint?: string | undefined;
+  pendingCorrectionRequestId?: string | undefined;
+  pendingCorrectionKind?: Database['public']['Enums']['time_correction_kind'] | undefined;
+  isProvisionalCorrection?: boolean | undefined;
 };
 
 /**
@@ -242,9 +238,9 @@ export type InteractiveCalendarSession = WorkSession & {
   calendarBlockId?: string;
   sourceEntries?: TimeEntry[];
   breaks?: WorkSessionBreak[];
-  breakMode?: OrgBreakMode;
-  autoBreakThresholdMinutes?: number;
-  autoBreakDurationMinutes?: number;
+  breakMode?: OrgBreakMode | undefined;
+  autoBreakThresholdMinutes?: number | undefined;
+  autoBreakDurationMinutes?: number | undefined;
   isCompositeBlock?: boolean;
   isOnBreakBlock?: boolean;
   employeeName?: string | null;
@@ -320,7 +316,7 @@ export type WeeklyTimeDataPoint = {
    * Resolved daily target (P1-04) for this day; absent when the caller did not
    * resolve targets, in which case the legacy 8h boundary applied.
    */
-  target?: import('@/lib/personnel/targets').DailyTarget;
+  target?: import('@/lib/personnel/targets').DailyTarget | undefined;
 };
 
 export type WeeklyTimeLabel = {
@@ -355,6 +351,15 @@ export type LiveClockState = {
   sessionVersion: number | null;
   currentSegmentId: string | null;
   currentActivity: TimeActivitySelection | null;
+  /**
+   * The last non-break activity of the open session, so a break can resume
+   * the job it interrupted without asking again. Equals `currentActivity`
+   * while not on a break; null when the session has no such segment yet or
+   * nothing is running.
+   */
+  resumeActivity: TimeActivitySelection | null;
+  /** Job context of `resumeActivity`; equals `activeJobInfo` while not on a break. */
+  resumeJobInfo: ClockJobInfo | null;
   recoveryReason: string | null;
   legacyOpen: boolean;
   standbyMinutes: number;
@@ -372,26 +377,6 @@ export type ZeiterfassungOverview = {
   /** Monday-first resolved daily targets for the current week (P1-04). */
   weekTargets?: import('@/lib/personnel/targets').DailyTarget[];
 };
-
-export type ClockResult =
-  | {
-      success: true;
-      entry: TimeEntry;
-      jobInfo?: ClockJobInfo | null;
-      /**
-       * P1-08: clocking in on a day covered by an active sickness report
-       * succeeds (a recovered person showing up early is reality, not an
-       * error) but carries this visible notice so the report gets corrected.
-       */
-      notice?: 'sickness_reported_today';
-    }
-  | {
-      success: false;
-      error: 'working_in_other_org';
-      otherOrgId: string;
-      otherOrgName: string;
-    }
-  | { success: false; error: string };
 
 export type AddManualEntryResult =
   | { success: true; entries: TimeEntry[] }
@@ -451,24 +436,8 @@ export type PendingSession = {
   jobTitle: string | null;
 };
 
-export type GetPendingEntriesResult =
-  | { success: true; entries: TimeEntry[] }
-  | { success: false; error: string };
-
 export type GetPendingSessionsResult =
   | { success: true; sessions: PendingSession[] }
-  | { success: false; error: string };
-
-export type GetCurrentlyClockedInResult =
-  | {
-      success: true;
-      users: Array<{
-        userId: string;
-        clockInTime: string;
-        firstName: string | null;
-        lastName: string | null;
-      }>;
-    }
   | { success: false; error: string };
 
 /**
@@ -483,11 +452,6 @@ export type ValidationResult = {
  * Roles that a manager can manage (roles below manager)
  */
 export const MANAGED_ROLES: OrgRole[] = ['employee'];
-
-/**
- * Roles that can approve entries for others
- */
-export const APPROVER_ROLES: OrgRole[] = ['admin', 'buero'];
 
 /**
  * Convert database row to application type
@@ -524,9 +488,9 @@ export function toTimeEntries(rows: TimeEntryRow[]): TimeEntry[] {
 
 export type ChangeRequestRow =
   Database['public']['Tables']['entry_change_requests']['Row'];
-export type ChangeRequestType =
+type ChangeRequestType =
   Database['public']['Enums']['entry_change_type'];
-export type ChangeRequestStatus =
+type ChangeRequestStatus =
   Database['public']['Enums']['change_request_status'];
 
 /**
@@ -594,48 +558,6 @@ export function toChangeRequest(row: ChangeRequestRow): ChangeRequest {
     updatedAt: row.updated_at
   };
 }
-
-// ============================================
-// Calendar Visualization Types
-// ============================================
-
-/**
- * Information about a pending edit for calendar visualization
- */
-export type PendingEditInfo = {
-  /** Type of edit: 'add_time' (extended) or 'remove_time' (shortened) */
-  editType: 'add_time' | 'remove_time';
-  /** The entry type that was edited (clock_in or clock_out) */
-  editedEntryType: TimeEntryType;
-  /** Original timestamp before the edit */
-  originalTimestamp: string;
-  /** New timestamp after the edit (current value) */
-  newTimestamp: string;
-  /** The change request ID */
-  changeRequestId: string;
-};
-
-/**
- * Information about a pending deletion for calendar visualization
- */
-export type PendingDeleteInfo = {
-  /** The change request ID */
-  changeRequestId: string;
-  /** Whether this is a paired deletion (both clock_in and clock_out) */
-  isPairedDelete: boolean;
-};
-
-/**
- * Extended WorkSession with pending change information for calendar visualization
- */
-export type WorkSessionWithPendingChanges = WorkSession & {
-  /** Pending edit info for clock_in entry */
-  clockInPendingEdit?: PendingEditInfo;
-  /** Pending edit info for clock_out entry */
-  clockOutPendingEdit?: PendingEditInfo;
-  /** Pending deletion info (applies to whole session) */
-  pendingDelete?: PendingDeleteInfo;
-};
 
 /**
  * Map of entry IDs to their pending change requests

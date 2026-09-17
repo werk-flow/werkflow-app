@@ -1,5 +1,7 @@
 'use client';
 
+import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
+import { SearchableMultiSelect } from '@/components/ui/searchable-select';
 import { useState, useEffect, useId, useRef } from 'react';
 import { Search, SlidersHorizontal, X, ChevronsUpDown } from 'lucide-react';
 
@@ -123,9 +125,9 @@ interface FilterBarProps {
   clients: Client[];
   members: OrgMemberOption[];
   /** When set, the employee filter shows a locked, read-only field with this label instead of a selectable popover. */
-  lockedEmployeeLabel?: string;
+  lockedEmployeeLabel?: string | undefined;
   /** When set, the client filter shows a locked, read-only field with this label instead of a selectable popover. */
-  lockedClientLabel?: string;
+  lockedClientLabel?: string | undefined;
 }
 
 export function FilterBar({
@@ -173,7 +175,7 @@ export function FilterBar({
     onFiltersChange({ ...filters, [key]: value });
   };
 
-  const clientOptions = clients.map((c) => ({ id: c.id, label: c.name }));
+  const customerSearch = useJobEntityOptions({ kind: 'clients', purpose: 'filter' }, filters.clientIds, clients.map((client) => ({ value: client.id, label: client.name })));
   const memberOptions = members.map((m) => ({ id: m.userId, label: `${m.firstName} ${m.lastName}` }));
 
   const filterFields = (
@@ -185,13 +187,10 @@ export function FilterBar({
           </div>
         </Field>
       ) : (
-        <MultiSelectPopover
-          label="Kunde"
-          placeholder="Alle Kunden"
-          selectedIds={filters.clientIds}
-          options={clientOptions}
-          onChange={(ids) => updateFilter('clientIds', ids)}
-        />
+        <Field label="Kunde">
+          <SearchableMultiSelect {...customerSearch} selectedIds={filters.clientIds}
+            onSelectionChange={(ids) => updateFilter('clientIds', ids)} placeholder="Alle Kunden" searchPlaceholder="Kunde suchen..." />
+        </Field>
       )}
 
       {lockedEmployeeLabel ? (

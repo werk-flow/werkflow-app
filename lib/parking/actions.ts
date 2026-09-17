@@ -33,8 +33,6 @@ const parkingContextSchema = z.object({
   nextReviewDate: z.string().date(),
 });
 
-export type SetParkingContextInput = z.infer<typeof parkingContextSchema>;
-
 export async function setJobParkingContext(
   rawInput: unknown
 ): Promise<{ success: true } | { success: false; error: string }> {

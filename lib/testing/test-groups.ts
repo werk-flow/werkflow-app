@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join, posix } from "node:path";
 import ts from "typescript";
+import { scenariosForFiles } from "./measured-scenarios";
 
 export interface TestGroup {
   readonly id: string;
@@ -10,40 +11,52 @@ export interface TestGroup {
   readonly prerequisites: readonly string[];
   readonly isolation: "group-world" | "integrated-world" | "process" | "database-transaction" | "cloud-world";
   readonly timing: GroupTimingRequirements;
+  /** Package script a static group runs; declared here so the registry is its only home. */
+  readonly script?: string;
 }
 
 export interface GroupTimingRequirements {
   readonly requireFreshness: boolean;
   readonly requireReadiness: boolean;
   readonly exclusive: boolean;
+  /** Registered measured-scenario ids the group must record (Step 2). */
+  readonly requiredScenarios?: readonly string[];
 }
 
 const untimed: GroupTimingRequirements = { requireFreshness: false, requireReadiness: false, exclusive: false };
 const freshnessFiles = new Set([
-  "tests/golden/gg-00.spec.ts", "tests/golden/p1-10.spec.ts", "tests/golden/p1-12.spec.ts",
+  "tests/golden/gg-00.spec.ts", "tests/golden/p1-10.spec.ts", "tests/golden/p1-11.spec.ts", "tests/golden/p1-12.spec.ts",
   "tests/golden/p1-18.spec.ts", "tests/golden/p1-19.spec.ts", "tests/golden/p1-24.spec.ts",
   "tests/canary/canary.spec.ts",
+  "tests/audit/performance/calendar-live.spec.ts",
+  "tests/audit/performance/planning-benchmark.spec.ts",
 ]);
 // Audit P1-22 measures opening readiness inside its imported submission helper.
 // This ownership declaration must survive a helper refactor or removal of a timing call.
 const readinessSources: Readonly<Record<string, string>> = {
   "tests/golden/p1-22.spec.ts": "tests/golden/p1-22.spec.ts",
+  "tests/golden/p1-11.spec.ts": "tests/golden/p1-11.spec.ts",
   "tests/audit/wave-2/p1-22.spec.ts": "tests/audit/support/time-corrections.ts",
+  "tests/audit/performance/calendar-live.spec.ts": "tests/audit/support/time-corrections.ts",
 };
 
 function declaredTiming(files: readonly string[]): GroupTimingRequirements {
   const requireFreshness = files.some((file) => freshnessFiles.has(file));
   const requireReadiness = files.some((file) => readinessSources[file] !== undefined);
-  return { requireFreshness, requireReadiness, exclusive: requireFreshness || requireReadiness };
+  const requiredScenarios = scenariosForFiles(files).map((scenario) => scenario.id);
+  return { requireFreshness, requireReadiness, requiredScenarios, exclusive: requireFreshness || requireReadiness || requiredScenarios.length > 0 };
 }
 
 // Prefixes describe ownership, not proof that a change cannot affect another area.
 // Selection follows actual imports and treats unmatched runtime files as global.
+// Every prefix must exist on disk (test-scope-prefixes.test.ts): a prefix that names
+// no directory owns nothing, and its code silently becomes global (the customer
+// library was listed as lib/customers/ while it lives in lib/clients/, 2026-09-14).
 export const TEST_SCOPE_PREFIXES: Readonly<Record<string, readonly string[]>> = {
-  customers: ["lib/customers/", "lib/customer-relationships/", "lib/requests/", "components/kunden/", "components/anfragen/", "app/(app)/kunden/", "app/(app)/anfragen/"],
-  work: ["lib/jobs/", "lib/projects/", "lib/work-lifecycle/", "lib/work-templates/", "lib/work-artifacts/", "lib/work-handover/", "components/auftraege/", "components/projekte/", "components/arbeitsvorlagen/", "app/(app)/auftraege/", "app/(app)/projekte/", "app/(app)/arbeitsvorlagen/"],
+  customers: ["lib/clients/", "lib/customer-relationships/", "lib/requests/", "components/kunden/", "components/anfragen/", "app/(app)/kunden/", "app/(app)/anfragen/"],
+  work: ["lib/jobs/", "lib/projects/", "lib/work-lifecycle/", "lib/work-templates/", "lib/work-artifacts/", "lib/work-handover/", "components/auftraege/", "components/arbeitsvorlagen/", "app/(app)/auftraege/", "app/(app)/arbeitsvorlagen/"],
   planning: ["lib/calendar/", "lib/planning/", "lib/dispatch/", "lib/commitments/", "components/kalender/", "app/(app)/kalender/"],
-  personnel: ["lib/personnel/", "lib/responsibilities/", "lib/qualifications/", "lib/sickness/", "lib/vacation/", "components/mitarbeiter/", "components/qualifikationen/", "app/(app)/mitarbeiter/", "app/(app)/qualifikationen/"],
+  personnel: ["lib/personnel/", "lib/responsibilities/", "lib/qualifications/", "lib/sickness/", "lib/vacation/", "components/mitarbeiter/", "app/(app)/mitarbeiter/", "app/(app)/qualifikationen/"],
   time: ["lib/time-tracking/", "lib/time-corrections/", "lib/time-accounts/", "components/zeiterfassung/", "app/(app)/zeiterfassung/"],
   documents: ["lib/documents/", "components/dokumente/", "app/(app)/dokumente/"],
   inventory: ["lib/inventory/", "components/inventar/", "app/(app)/inventar/"],
@@ -72,6 +85,13 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ["wave-2:p1-23", "wave-2/p1-23.spec.ts", ["time", "personnel", "documents"]],
   ["wave-2:p1-24", "wave-2/p1-24.spec.ts", ["personnel", "documents", "time", "work", "attention"]],
   ["layout", "layout/mobile-viewport.spec.ts", ["*"]],
+  ["security:account", "security/account.spec.ts", ["*"]],
+  ["list-pagination", "pagination/list-pagination.spec.ts", ["inventory", "documents", "work"]],
+  // Measured navigation and view switches against the typical data profile (Step 2).
+  ["performance:calendar", "performance/calendar.spec.ts", ["planning", "time", "customers", "work", "personnel"]],
+  ["performance:lists", "performance/lists.spec.ts", ["customers", "work", "personnel"]],
+  ["performance:calendar-live", "performance/calendar-live.spec.ts", ["planning", "time", "personnel"]],
+  ["performance:planning", "performance/planning-benchmark.spec.ts", ["planning", "work", "personnel"]],
 ];
 
 export function listTestFiles(repositoryRoot: string, directory: string, pattern: RegExp): string[] {
@@ -98,6 +118,7 @@ export function getTestGroups(repositoryRoot: string): TestGroup[] {
     { id: "ui:contracts", kind: "ui", files: listTestFiles(repositoryRoot, "tests/ui-contracts", /\.spec\.ts$/), scopes: ["*"], prerequisites: [], isolation: "process", timing: untimed },
     { id: "unit:all", kind: "unit", files: listTestFiles(repositoryRoot, "lib", /\.test\.(?:ts|tsx|mjs)$/), scopes: ["*"], prerequisites: [], isolation: "process", timing: untimed },
     { id: "canary:providers", kind: "canary", files: ["tests/canary/canary.spec.ts"], scopes: ["*"], prerequisites: [], isolation: "cloud-world", timing: declaredTiming(["tests/canary/canary.spec.ts"]) },
+    { id: "canary:security", kind: "canary", files: ["tests/canary/security-boundaries.spec.ts"], scopes: ["*"], prerequisites: [], isolation: "cloud-world", timing: { ...untimed, exclusive: true } },
   );
   const goldenFiles = listTestFiles(repositoryRoot, "tests/golden", /\.spec\.ts$/);
   for (const file of goldenFiles) {
@@ -120,9 +141,11 @@ export function getTestGroups(repositoryRoot: string): TestGroup[] {
   for (const [slice, name] of [["21", "time_segments"], ["22", "time_corrections"], ["23", "time_accounts"], ["24", "people_lifecycle"]]) {
     groups.push({ id: `sql:p1-${slice}`, kind: "sql", files: [`supabase/tests/p1_${slice}_${name}.sql`], scopes: slice === "24" ? ["personnel", "documents", "time", "work"] : ["time", "personnel", "work"], prerequisites: [], isolation: "database-transaction", timing: untimed });
   }
-  groups.push({ id: "sql:security", kind: "sql", files: ["supabase/tests/security_boundaries.sql"], scopes: ["*"], prerequisites: [], isolation: "database-transaction", timing: untimed });
-  for (const [id, file] of [["typecheck", "tsconfig.json"], ["lint", "eslint.config.mjs"], ["docs", "scripts/check-docs.ts"], ["coverage", "scripts/check-test-coverage.ts"]]) {
-    groups.push({ id: `static:${id}`, kind: "static", files: [file!], scopes: ["*"], prerequisites: [], isolation: "process", timing: untimed });
+  groups.push({ id: "sql:list-pagination", kind: "sql", files: ["supabase/tests/operational_list_pages.sql", "supabase/tests/inventory_pagination.sql"], scopes: ["customers", "work", "documents", "inventory"], prerequisites: [], isolation: "database-transaction", timing: untimed });
+  groups.push({ id: "sql:security", kind: "sql", files: ["supabase/tests/security_boundaries.sql", "supabase/tests/email_change_boundaries.sql", "supabase/tests/event_ledger_boundaries.sql", "supabase/tests/realtime_deletions.sql"], scopes: ["*"], prerequisites: [], isolation: "database-transaction", timing: untimed });
+  groups.push({ id: "static:dependencies", kind: "static", files: ["scripts/check-dependency-security.ts", "lib/security/dependency-exceptions.json", "bun.lock", "package.json"], scopes: ["*"], prerequisites: [], isolation: "process", timing: untimed, script: "security:dependencies" });
+  for (const [id, file, script] of [["typecheck", "tsconfig.json", "typecheck"], ["lint", "eslint.config.mjs", "lint"], ["docs", "scripts/check-docs.ts", "docs:check"], ["coverage", "scripts/check-test-coverage.ts", "test:coverage"], ["unused", "knip.jsonc", "unused:check"]] as const) {
+    groups.push({ id: `static:${id}`, kind: "static", files: [file], scopes: ["*"], prerequisites: [], isolation: "process", timing: untimed, script });
   }
   return groups;
 }
@@ -172,9 +195,9 @@ export function validateNamedTestPrerequisites(source: string, file: string): st
   }
   visit(parsed);
   for (const reference of references) {
-    const matches = titles.filter((test) => test.title === reference.title);
-    if (matches.length !== 1) problems.push(`${file}: unknown or ambiguous requires-test title: ${reference.title}`);
-    else if (matches[0].position >= reference.position) problems.push(`${file}: requires-test must name an earlier producer: ${reference.title}`);
+    const [match, ...others] = titles.filter((test) => test.title === reference.title);
+    if (!match || others.length) problems.push(`${file}: unknown or ambiguous requires-test title: ${reference.title}`);
+    else if (match.position >= reference.position) problems.push(`${file}: requires-test must name an earlier producer: ${reference.title}`);
   }
   return problems;
 }
@@ -208,11 +231,21 @@ export function getGroupTimingRequirements(group: TestGroup, groups: readonly Te
   const declared = declaredTiming(files);
   let requireFreshness = group.timing.requireFreshness || declared.requireFreshness;
   let requireReadiness = group.timing.requireReadiness || declared.requireReadiness;
+  const requiredScenarios = [...(group.timing.requiredScenarios ?? []), ...(declared.requiredScenarios ?? [])];
   for (const file of files) {
     const source = ts.createSourceFile(file, readFileSync(join(repositoryRoot, file), "utf8"), ts.ScriptTarget.Latest, true);
     const sourceTiming = readSourceTiming(source);
     requireFreshness ||= sourceTiming.requireFreshness;
     requireReadiness ||= sourceTiming.requireReadiness;
+    // A scenario call in source must be registered for this file, and a
+    // registration must still have its call: neither can drift silently.
+    const registered = new Set(scenariosForFiles([file]).map((scenario) => scenario.id));
+    for (const id of sourceTiming.scenarioIds) {
+      if (!registered.has(id)) throw new Error(`${file} measures unregistered scenario ${id}. Register it in lib/testing/measured-scenarios.ts before running.`);
+    }
+    for (const id of registered) {
+      if (!sourceTiming.scenarioIds.has(id)) throw new Error(`Registered scenario ${id} is no longer measured in ${file}. Reconcile the registry before running.`);
+    }
     const readinessSource = readinessSources[file];
     if (readinessSource && readinessSource !== file) {
       const imports = source.statements.filter(ts.isImportDeclaration).flatMap((declaration) => {
@@ -226,37 +259,42 @@ export function getGroupTimingRequirements(group: TestGroup, groups: readonly Te
       if (!readSourceTiming(helper).requireReadiness) throw new Error(`Required opening-readiness measurement is missing from ${readinessSource}.`);
     }
   }
-  return { requireFreshness, requireReadiness, exclusive: group.timing.exclusive || requireFreshness || requireReadiness };
+  return { requireFreshness, requireReadiness, requiredScenarios: [...new Set(requiredScenarios)], exclusive: group.timing.exclusive || requireFreshness || requireReadiness || requiredScenarios.length > 0 };
 }
 
-function readSourceTiming(source: ts.SourceFile): Pick<GroupTimingRequirements, "requireFreshness" | "requireReadiness"> {
+const SCENARIO_HELPERS = new Set(["expectUsableWithin", "expectScenarioLiveWithin"]);
+
+function readSourceTiming(source: ts.SourceFile): Pick<GroupTimingRequirements, "requireFreshness" | "requireReadiness"> & { scenarioIds: Set<string> } {
   const readinessNames = new Set<string>();
+  const scenarioNames = new Set<string>();
   for (const statement of source.statements) {
     if (!ts.isImportDeclaration(statement)) continue;
     const bindings = statement.importClause?.namedBindings;
     if (!bindings || !ts.isNamedImports(bindings)) continue;
     for (const element of bindings.elements) {
-      if ((element.propertyName ?? element.name).text === "expectReadyWithin") readinessNames.add(element.name.text);
+      const imported = (element.propertyName ?? element.name).text;
+      if (imported === "expectReadyWithin") readinessNames.add(element.name.text);
+      if (SCENARIO_HELPERS.has(imported)) scenarioNames.add(element.name.text);
     }
   }
   let requireFreshness = false;
   let requireReadiness = false;
+  const scenarioIds = new Set<string>();
   function visit(node: ts.Node): void {
     if (ts.isCallExpression(node)) {
       const title = node.arguments[0];
       if (title && ts.isStringLiteralLike(title) && /@FRESHNESS\b/.test(title.text)) requireFreshness = true;
       if (ts.isIdentifier(node.expression) && readinessNames.has(node.expression.text)) requireReadiness = true;
+      if (ts.isIdentifier(node.expression) && scenarioNames.has(node.expression.text)) {
+        // The scenario id must be a literal so the registry check stays static.
+        if (!title || !ts.isStringLiteralLike(title)) throw new Error(`${source.fileName}: a measured scenario id must be a string literal.`);
+        scenarioIds.add(title.text);
+      }
     }
     ts.forEachChild(node, visit);
   }
   visit(source);
-  return { requireFreshness, requireReadiness };
-}
-
-export function getTestGroup(id: string, repositoryRoot: string): TestGroup {
-  const group = getTestGroups(repositoryRoot).find((candidate) => candidate.id === id);
-  if (!group) throw new Error(`Unknown test group: ${id}`);
-  return group;
+  return { requireFreshness, requireReadiness, scenarioIds };
 }
 
 export function validateTestGroupInventory(groups: readonly TestGroup[], discoveredFiles: readonly string[]): string[] {

@@ -2,7 +2,7 @@
 
 Status: living — last reviewed 2026-09-05
 
-Gate definitions `GG-00` through `GG-16` and the run-record requirements. A gate definition changes only when a slice's acceptance extends it; runs are recorded in [`golden-gate-log.md`](../golden-gate-log.md). Process rules live in [protocol.md](protocol.md); the slice index in [roadmap.md](roadmap.md).
+Gate definitions `GG-00` through `GG-16` and the run-record requirements. A gate definition changes only when a slice's acceptance extends it; runs are recorded in [`golden-gate-log.md`](audits/golden-gate-log.md). Process rules live in [protocol.md](protocol.md); the slice index in [roadmap.md](roadmap.md).
 
 
 Golden scenarios test connected business outcomes. They do not replace focused unit, integration, RLS, migration, accessibility, or feature acceptance tests.

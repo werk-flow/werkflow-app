@@ -19,8 +19,9 @@ const MEMBER_ACTION_ERROR_MESSAGES: Record<string, string> = {
 function responsibilityRemovalMessage(
   responsibilities: OrganizationResponsibility[]
 ): string {
-  if (responsibilities.length === 1) {
-    return `Vor dem Entfernen muss die Verantwortung für ${RESPONSIBILITY_LABELS[responsibilities[0]]} neu zugewiesen oder auf den Standard zurückgestellt werden.`;
+  const [onlyResponsibility] = responsibilities;
+  if (responsibilities.length === 1 && onlyResponsibility !== undefined) {
+    return `Vor dem Entfernen muss die Verantwortung für ${RESPONSIBILITY_LABELS[onlyResponsibility]} neu zugewiesen oder auf den Standard zurückgestellt werden.`;
   }
   const labels = responsibilities
     .map((responsibility) => RESPONSIBILITY_LABELS[responsibility])

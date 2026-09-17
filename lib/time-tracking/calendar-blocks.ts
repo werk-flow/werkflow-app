@@ -214,7 +214,7 @@ function resolveDisplayBreakPolicy(
   )
 }
 
-export function getCalendarBlockDisplayBreaks(
+function getCalendarBlockDisplayBreaks(
   block: CalendarWorkBlock,
   referenceDate = new Date(),
   settings?: OrganizationTimeTrackingSettings | null
@@ -300,7 +300,7 @@ export function getCalendarBlockDisplaySegments(
   return segments
 }
 
-export function getCalendarBlockDisplayEnd(
+function getCalendarBlockDisplayEnd(
   block: CalendarWorkBlock,
   referenceDate = new Date()
 ): Date {
@@ -373,6 +373,7 @@ export function calculateCalendarWorkBlocks(
 
   for (let index = 0; index < effectiveEntries.length; index += 1) {
     const entry = effectiveEntries[index];
+    if (!entry) continue;
     if (
       current &&
       !isSameLocalDay(new Date(current.segmentStart.timestamp), new Date(entry.timestamp))

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Filter, Check, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Popover,
   PopoverContent,
@@ -185,54 +186,21 @@ export function CalendarViewTabs({
         </Tabs>
 
         {/* Event type filters - simple checkbox style */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+        <div role="group" aria-label="Angezeigte Einträge" className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
           <span className="text-muted-foreground">Anzeigen:</span>
           <label className="flex items-center gap-2 cursor-pointer select-none">
-            <div
-              className={cn(
-                'flex h-4 w-4 items-center justify-center rounded border transition-colors',
-                filters.showWorkingHours
-                  ? 'border-primary bg-primary text-primary-foreground'
-                  : 'border-muted-foreground/50 bg-background'
-              )}
-              onClick={handleToggleWorkingHours}
-            >
-              {filters.showWorkingHours && <Check className="h-3 w-3" />}
-            </div>
-            <span
-              className={cn(
-                'transition-colors',
-                filters.showWorkingHours
-                  ? 'text-foreground'
-                  : 'text-muted-foreground'
-              )}
-              onClick={handleToggleWorkingHours}
-            >
+            <Checkbox checked={filters.showWorkingHours} onCheckedChange={handleToggleWorkingHours} />
+            <span className={cn('transition-colors', filters.showWorkingHours ? 'text-foreground' : 'text-muted-foreground')}>
               Arbeitszeiten
             </span>
           </label>
-
           <label className="flex items-center gap-2 cursor-pointer select-none">
-            <div
-              className={cn(
-                'flex h-4 w-4 items-center justify-center rounded border transition-colors',
-                filters.showJobs
-                  ? 'border-brand-purple bg-brand-purple text-white'
-                  : 'border-muted-foreground/50 bg-background'
-              )}
-              onClick={handleToggleJobs}
-            >
-              {filters.showJobs && <Check className="h-3 w-3" />}
-            </div>
-            <span
-              className={cn(
-                'transition-colors',
-                filters.showJobs
-                  ? 'text-foreground'
-                  : 'text-muted-foreground'
-              )}
-              onClick={handleToggleJobs}
-            >
+            <Checkbox
+              checked={filters.showJobs}
+              onCheckedChange={handleToggleJobs}
+              className="data-[state=checked]:border-brand-purple data-[state=checked]:bg-brand-purple data-[state=checked]:text-white dark:data-[state=checked]:bg-brand-purple"
+            />
+            <span className={cn('transition-colors', filters.showJobs ? 'text-foreground' : 'text-muted-foreground')}>
               Aufträge
             </span>
           </label>

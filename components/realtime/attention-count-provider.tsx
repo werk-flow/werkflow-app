@@ -6,9 +6,9 @@
 // an item its viewer cannot act on.
 
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { z } from 'zod';
 
 import { useOrganization } from '@/components/organization/organization-context';
-import { getAttentionCounts } from '@/lib/attention/actions';
 import type { AttentionCounts } from '@/lib/attention/types';
 import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
@@ -26,14 +26,46 @@ type AttentionCountContextValue = AttentionCounts & {
 const AttentionCountContext =
   createContext<AttentionCountContextValue | null>(null);
 
+// Boundary parse of our own route handler's JSON (app/api/attention-counts).
+const attentionCountsResponseSchema = z.union([
+  z.object({
+    success: z.literal(true),
+    counts: z.object({
+      actionableCount: z.number().int().nonnegative(),
+      approvalsCount: z.number().int().nonnegative(),
+      unreadNotificationCount: z.number().int().nonnegative(),
+    }),
+  }),
+  z.object({ success: z.literal(false), error: z.string() }),
+]);
+
+/**
+ * Reads the counts through a route handler, not a Server Action: one
+ * client's Server Actions and router refreshes run one after another, and
+ * this derivation occupied that queue on every mount and channel join,
+ * delaying the reads behind it that carry user-visible content (Step 2,
+ * PF-29). Authorization lives in getAttentionCounts on the server.
+ */
+async function readAttentionCounts(signal: AbortSignal): Promise<LiveViewResult<AttentionCounts>> {
+  const response = await fetch('/api/attention-counts', {
+    cache: 'no-store',
+    credentials: 'same-origin',
+    signal,
+  });
+  if (!response.ok) return { ok: false };
+  const parsed = attentionCountsResponseSchema.safeParse(await response.json());
+  if (!parsed.success || !parsed.data.success) return { ok: false };
+  return { ok: true, data: parsed.data.counts };
+}
+
 export function AttentionCountProvider({
   children,
   initialCounts,
   initialOrganizationId,
 }: {
   children: ReactNode;
-  initialCounts?: AttentionCounts;
-  initialOrganizationId?: string | null;
+  initialCounts?: AttentionCounts | undefined;
+  initialOrganizationId?: string | null | undefined;
 }) {
   const { activeOrgId } = useOrganization();
 
@@ -59,15 +91,12 @@ export function AttentionCountProvider({
       'organization_responsibility_assignments',
       'organization_responsibility_delegations',
     ],
-    read: async (): Promise<LiveViewResult<AttentionCounts>> => {
+    read: async ({ signal }): Promise<LiveViewResult<AttentionCounts>> => {
       if (!activeOrgId) return { ok: true, data: ZERO_COUNTS };
-      const result = await getAttentionCounts();
       // Keep the last-known counts on transient failures (documented rule
       // since P1-04/P1-05): a badge briefly showing stale numbers is better
       // than one that silently claims "nothing to do".
-      return result.success
-        ? { ok: true, data: result.counts }
-        : { ok: false };
+      return readAttentionCounts(signal);
     },
     initialData:
       activeOrgId && activeOrgId === initialOrganizationId

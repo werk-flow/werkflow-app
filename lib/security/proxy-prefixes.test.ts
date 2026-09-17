@@ -36,8 +36,14 @@ test('the proxy matcher routes every protected prefix', () => {
   const source = readProxySource();
   const block = /matcher: \[([^\]]*)\]/.exec(source)?.[1];
   if (!block) throw new Error('matcher not found in proxy.ts');
-  const matched = new Set(quotedEntries(block).map((entry) => entry.replace(/\/:path\*$/, '')));
+  const entries = new Set(quotedEntries(block));
   for (const prefix of expectedPrefixes()) {
-    expect(matched.has(prefix), `${prefix} missing from the proxy matcher`).toBe(true);
+    // An area with nested pages needs the wildcard, or its subroutes never reach the
+    // proxy: Step 3 (2026-09-13) found /zeiterfassung listed bare with four subroutes.
+    const folder = authenticatedAreasOutsideGroup.includes(prefix) ? `app${prefix}` : `app/(app)${prefix}`;
+    // Route groups and private folders (`(group)`, `_lib`) are not subroutes.
+    const nested = readdirSync(resolve(repositoryRoot, folder), { withFileTypes: true }).some((entry) => entry.isDirectory() && !/^[_(]/.test(entry.name));
+    const expected = nested ? `${prefix}/:path*` : prefix;
+    expect(entries.has(expected) || entries.has(`${prefix}/:path*`), `${expected} missing from the proxy matcher`).toBe(true);
   }
 });

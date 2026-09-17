@@ -3,7 +3,7 @@
   "catalogHashes": {
     "BASE-ORG-F01": "850188498237aa3d714260fdf44d12fff6cbba9d8191b58be97b8054a86c989f",
     "BASE-ORG-F02": "644af4614a00015c94cd6816d03c370e92a61750951fe8cb1f8b930f066dce98",
-    "BASE-ORG-F03": "a3dfa2711ba91a03574a96bcafa176e666823c2702bc4a2a07f3ec08a7beeb55",
+    "BASE-ORG-F03": "5f592fe0b7395f8d524b1fa71905dfde654c6d80fdf18d4ab0caf852e663257a",
     "BASE-ORG-F04": "9d05401ac0f0307384d924e40d68a71c9a29fbfd8198aff5f8b0d8809fe596fc",
     "BASE-ORG-F05": "6d557881094a6d33a5c14f8f7e79215336dc4ddd75f8812422760aac1ab6ed0e",
     "BASE-ORG-F06": "dbd12199492c0fd89852586084702544b0fe411c64df802c1eba6f0b896905d3",
@@ -14,11 +14,11 @@
     "BASE-CUSTOMER-F04": "5f8f5f662e1fe0bb1ee685e7a6ca705476012d027a565f200b57b7eb1347527e",
     "BASE-WORK-F01": "75575baaa0c259b9d7be9ce6f2553008c45fffc60556f91056545489fda5c753",
     "BASE-WORK-F02": "cc58ded0b7a07135826f340e0e055dc70dd705139659a7455a099c9dfeb81ae3",
-    "BASE-WORK-F03": "c7ea6c3368963cb9f707975ca082a721d80d1b0c99a1336a3c1cf5b500a19fb3",
+    "BASE-WORK-F03": "0771054c651a7a5b0d1ce821ac576d84c3658aadb757cc0d4cb5e25714ebc2b6",
     "BASE-WORK-F04": "f52c565ff42fdcad0f39e08f28d643997d0b33f26799b99f1fecae3d451b047f",
     "BASE-WORK-F05": "16ce4a794d215ff1a346188f0373841b5d3614b35fa0f2d6080ce3192a42a676",
     "BASE-WORK-F06": "0401631522a6a0abced6c11857b408ab5b8ecc4f050013a67574b29cdfc8d8da",
-    "BASE-WORK-F07": "e81793a2d681a6f19e417f901f179bf2a570180267157401114feca2af7b321f",
+    "BASE-WORK-F07": "84a515124407944f09f7815c9c474d3fe2bb34103b335c482076c5ff83cab5e4",
     "BASE-WORK-F08": "23eb8c099da936e2822ce56e003bfa96de8bff384181aa7d604c82e437f50ad0",
     "BASE-CALENDAR-F01": "f54ecd5e080d9ed09e6567db946cb2b334ee30d5a73c33c95b02addba99ad482",
     "BASE-CALENDAR-F02": "f10f5523f84207cff889ffd1ac03b3381aae77277a9aafeea4b1519f250a67e3",
@@ -26,16 +26,16 @@
     "BASE-CALENDAR-F04": "288e679d16cb1da3b0fb9dcbcca52125daf74b43a3fc4215fd5cf6777c65ec19",
     "BASE-TIME-F01": "81808aaf749ac323f8b6bf382aa28b83e2db949f5138db7d5a774114d5ea414e",
     "BASE-TIME-F02": "4ed9ee97aee6b84086a5e6b95c7e7f29b645660b5e434aaad5da2d90069784b2",
-    "BASE-TIME-F03": "a0b499e434ec15a425fbc6156ac4a6736d413574ba88cdc122b056dae9de95c3",
+    "BASE-TIME-F03": "307aa6e3a8cd0a5cbc236f7675b1b0881ab5f0f879339069feab9c8894de5ad0",
     "BASE-TIME-F04": "51242b93396aa68021a34f47e54dd1a1df53a67cb360649c89c769736f19e557",
     "BASE-TIME-F05": "376a8beed2c55f32b96bf1c7370a8805ec2344066d707b069eedd70b1adb4161",
-    "BASE-TIME-F06": "e3883fde8e5df784cbb3a8ea5d252558bc76c92d2b3c917d3ca7d1869ca713d1",
+    "BASE-TIME-F06": "76e08bdcfe50d10fb7090bea12c4fdd73e148988388d2cddcd2da07462fd4ef0",
     "BASE-TIME-F07": "05a32e7f866571367fcd1ec4d55c9e9e46b346a3bcc9a5f35dda5b15015a7552",
     "BASE-DOCUMENT-F01": "e955d14a599a9278f18a2f97bf7c3363ffdb260f891fff7132d1025e123f8694",
     "BASE-DOCUMENT-F02": "48396af0873afed4e165fb1d8a479dd94a257834b368f2bf05f7be3be13d956f",
     "BASE-DOCUMENT-F03": "41cd1b1449eb21624a45ecfa2016595bc8b2688985c984bcd09571fb333df354",
-    "BASE-DOCUMENT-F04": "c0de6852e42664e84a869e733a45338f9d3b3c4d3011da9ffb4c7bb056c28ba9",
-    "BASE-INVENTORY-F01": "8aefed54161974aa9fa8b148ae0a50b6e1d67ad56ad2152cb4c4c97b819228ac",
+    "BASE-DOCUMENT-F04": "86bcd43282ee0e33ab4ac67037df754ec9e903bd6000bfdb30c75cd07b7637a7",
+    "BASE-INVENTORY-F01": "867b52b02905a6e1e0026d90f7dd6c263ef30800a4e61545221f90ec93ebfdba",
     "BASE-INVENTORY-F02": "713772e126a3318166f73c253f373eddbda264d6c4cb2a77a33b5a7d856b4b8b",
     "BASE-INVENTORY-F03": "460dd48c509d2661f8427635a87e59c2140d2a44644ad46e73ca29ed7ef4c1b9",
     "BASE-INVENTORY-F04": "1d501ed29b6edc29094b6aaa21040748f683f51f40e166015bc0ef6072c73925",
@@ -44,7 +44,7 @@
     "P1-00-F01": "fc627fa40330619fd6f9e00d1d71e6d2889281cbe69f48c735f1893be15c4698",
     "P1-00a-F01": "bd6392dbd04e7e878ee30168b065df82ceb78c92da0efe97871e709ca3efb0f3",
     "P1-00a-F02": "ba67cf55e1a96f245eb34a75c6ac18c06ddb8d6fb0434b42fd647d0545d0daab",
-    "P1-01-F01": "d819410121ad445991d7c74905c04478825ad6e4100351c4f879386c34a81d2d",
+    "P1-01-F01": "161b1511dd83e1218bf097da50842a58a1ec92ca5df30a5086f3d5ab085b480f",
     "P1-01-F02": "c6c2f3ccbf3c50b60c7a817cf0f5afbee62fbcca422ebffc5f42438c39fde695",
     "P1-01-F03": "2a90c7212d1f28cc25de6630bf1d791305c53d00ac7f9efde3c89c5e19b2733d",
     "P1-01-F04": "716ba0343ef22236be9b6b11e72fe1b9fe440b13273e5ed1b46a182d50470c90",
@@ -54,40 +54,40 @@
     "P1-02-F01": "e6ec6ba5a790b501b0dc435f96ba6b323134f89bcd25372850cfc006e6b00ad2",
     "P1-02-F02": "dc9652715541e579260188fab36ede25317ed521d27db9f652b1bce991db56b0",
     "P1-02-F03": "08d27cfd577f9344afd777f29a46ea9b44f6916b37d680d6ac4693402f76b194",
-    "P1-02-F04": "f94d337e2a555776f4b70921755c8b442325182c3b94b20b2fad2aec273cbc3a",
-    "P1-02-F05": "d3c6f87182c941c74f20fae8461fea489758c84060874464db2334083cafa8c4",
+    "P1-02-F04": "4b0d7f3146aeeb7b2b125408ac9e0fb2a55eaadcb25d8af5f6f328e339f55e88",
+    "P1-02-F05": "5bb04a3f00471c8e710fc8a4ec5a31a5e0ecc027cb44c25eb53420dc6e1404d4",
     "P1-02-F06": "db3f2a7af14b817682e30b9875ec24d18529a18893142f87411a83d2c4b085cf",
     "P1-03-F01": "b688c257be3081cda146864d25fd17c860408ec14d82aabe73f4a7c896715a5e",
-    "P1-03-F02": "2d798bec7e4baf5b6a2020cb8893cefbe974dd4395bcc237f9b00c3e0103eb45",
-    "P1-03-F03": "a118048d8d8fc18aef138b9456211a04d3b7d0f5cc700953f76189c778062f4d",
-    "P1-03-F04": "b999ac2196e34834580dc22f926647cbbedb3d25b018e376e556272ca3302d19",
-    "P1-03-F05": "06688cc5108ce0553d296c3a2888375fe77b9ea65a663bbfe8e28241482125af",
+    "P1-03-F02": "3a367d17c41cf1c1e24fa3b980298b4a0181a9e9aa4fbaa76c6b068ba9fec4f0",
+    "P1-03-F03": "cd9cd52873b8b4b89156308dc58ffaae229f9f469924837643d74388b6e45e7f",
+    "P1-03-F04": "3d261c29992aa60474d88283f7485580d399bdabb4c8bdcd4479f69a59ddf671",
+    "P1-03-F05": "b191ccb58db0ac82e66b2c8f49711b9350292ee1614313a0b39add8eabe20f81",
     "P1-03-F06": "0924f5058c98add347ed88c7deb5b43699967fa41ef84237d60b4330e70b9980",
     "P1-04-F01": "af64cd18784f3e36bc67e453a0064995b4a8deeabdddf053ff71fcbb10f6b5db",
     "P1-04-F02": "9be6b8a9cb03d19de8c9ced5dc2dbbb122be4a561639b325056384103a554b37",
     "P1-04-F03": "9cb20b58d7b563debb9f74e5b9991f44fc1e0cb32c0a1927ca8864932ff01728",
-    "P1-04-F04": "60c3b214edacac9d78832466629591f08ec5b47201e75786d673919147ae72c1",
+    "P1-04-F04": "0939ff6cbc97f0ed9dd9ba36fefa9ccd4bb802d000f18a6057bdf26c9a3bdc57",
     "P1-04-F05": "107d1ef2bffedf91bbc3bd87fb16c4cd4d38046ee064812d966f1fd3971c67b4",
     "P1-05-F01": "a66136b39406514ff575305cc9f7bd9e3e9862a77c88b868376aca03249706d8",
-    "P1-05-F02": "661e893f8244b457f9eef1a23d71cae92ab0efce40d5ee39094a77fc019b0264",
+    "P1-05-F02": "da83452a05b38fb4445d8a767e3d7750ee95ac7ee657bd25bd31d20417d9a7f9",
     "P1-05-F03": "1a162c7af18323e504cbbe93168ef0fd5d893a2b996cf896f89fc88cd0cab026",
-    "P1-05-F04": "1c96354dbb33e377776d1dd22be91158af0eaad93440a34c84977d6f24d65e12",
-    "P1-05-F05": "a51bfe5d6d647f4ddfceae44ee07b7243e141f16cad42db1852203724a6e1b14",
+    "P1-05-F04": "9c205fa3c45e22d05a139cdb4c6b44e18b77d62bf15af3eb88f1713b4a479506",
+    "P1-05-F05": "5f7f9a394a04a6c50ae92eaf594505b765d4afd11d64b59c47bf691f2034ac0f",
     "P1-06-F01": "c2a6468390ac1c8dd0a1a124307b15f2cd9b82d0c26be0921db1776d65b41e7b",
-    "P1-06-F02": "dbc5af728757b57862d34324d660f07fb9a85d4393c90c29f03cfa69269faebc",
+    "P1-06-F02": "791ff5d3657a8647867549f66699871fc748b8f518298eecd743dd0f1d52eb5d",
     "P1-06-F03": "5abd9a8b5f82b9c06e1ecdf90821f3e1166dd1b1c55262088f72e82ccd48e0eb",
     "P1-06-F04": "6e1752110ade04abb985ec9cea88f4608e55e6b683920a5a261f310f7e54a56f",
-    "P1-06-F05": "5e826a121268a53c2c8e3803d28af15fc69b5eca45a2959f93139d5c1773b2ba",
-    "P1-06-F06": "fb0e29403480989bdce9b1777856f2b21662d12aa7198560a609e2a1d436ff69",
+    "P1-06-F05": "4e77c56c3db9e5181f1b1dbedc860aab9a489e3dc9d6dd65087fc994f6d41067",
+    "P1-06-F06": "9b4f091b00d31b12607c7ceca77bd0ae9f6a31d62abf07484bc6a52c5845a6f7",
     "P1-07-F01": "686a6305dac4f2a9f6bbddfb27adcffadcd2bec62b36f2c544bc4385865290ae",
     "P1-07-F02": "e515a660c03b3c63ec0f799ef1487eabbaa83377ec3be7cf78997a376bfe4525",
     "P1-07-F03": "27da9d0961231749253dd1ad4b5397d2ccaa4efbc9fc6ade82f6a178e72dc2f2",
-    "P1-08-F01": "cefd862e57d1e4643ab0d1c0705f52d2945a1ea02904045dc05cc6aa1f3478c7",
-    "P1-08-F02": "10d4c7e78889499d427649e747cca6ddeb6d0cde8932b11a36c98cf24e68c4a4",
-    "P1-08-F03": "00e91a239f09efefd9d48db0d631d5cb747ef821b59d5ba67a57321375099d2a",
-    "P1-08-F04": "637920f1a3878bf05ed13cc9a962288bc1ac72f5e1d348391f3749609126ed0a",
-    "P1-08-F05": "45b56f471c812583b8764c8a4c34b5137bffbb12de3d724350bb2f981207c0fb",
-    "P1-08-F06": "9b83dda822d95bf0f60b5352d2dd6eb18d5302ef5863e2a015df8981cae4b8fc",
+    "P1-08-F01": "bca80ec966a20e57e6015ac9b393628e83ef0990fb485519cb6d91f4125c4859",
+    "P1-08-F02": "9b667ebba2258cdb3e899a296a73e8c247c608af40b9573e9682e1954110afb1",
+    "P1-08-F03": "c38b011ae6320695ad24ff6874fa8b1742fe7329ec489c9aaded79223b140deb",
+    "P1-08-F04": "fc18168ff34b3af869bba5bfe9eaad92680b0b668cc006b9815a5c732164f98e",
+    "P1-08-F05": "7009d065945e7defb2ac9cf81f217d4e1c0aa7bee37ff6e2ed91e0f39dff0765",
+    "P1-08-F06": "9f3bef4e941cfc832ef6dc527275bae725ae24f25503e9dc74a8414d0e22808d",
     "P1-08-F07": "63ecb2d7d4b8a19cdae5e45b86e2b6e1acb9f5ec01b931b149c2322561f8bf67",
     "P1-09-F01": "c3ab4745a9cdcbb17149fd2907ab2d5504b31e957603e446a88886be56bffbac",
     "P1-09-F02": "744182e0ee7d9a515603d40508b7ed2e098b8bf1fa59a13e7d7dabf204ec11f3",
@@ -96,23 +96,23 @@
     "P1-09-F05": "8739dbaefcb799de6632fd01c00a5737155636fc6ec6417070041a2c547a620e",
     "P1-09-F06": "68cb5de7ec78bf387639b2914c0ae315eaa51914bbe0a605e1f840d1fb5303a8",
     "P1-10-F01": "4516c898ca462a9fed8035d4d124473f66e4f0b106f65c4d9a222051979ed400",
-    "P1-10-F02": "e27c63b5df3ff557358740cc552ddaea46d19a944843f7c7e8b68bbc3e51b14d",
-    "P1-10-F03": "9e2f72245782befba3f1693021b5df249c8cc33c9568fe66e896e63e9f00bf29",
+    "P1-10-F02": "abc07bf0f852b93c02ec2e0a4a00dda89b1c39482871a60633cded3c408da085",
+    "P1-10-F03": "e07170a5c187e3bc2185c68dcf87b8f9a2f127b3db0229d233617e6c37113d5a",
     "P1-10-F04": "f5cbe62330c8a4ee905d44f2d5e63f154db5cce0b1b0dc378c8aee6b0c9ece1d",
     "P1-11-F01": "af39aa09898281ed54f395e1d2fb0d1a5906d2894d17e151c2510712325d28b6",
     "P1-11-F02": "b679f590245a46002118b9e65693220f1db8489ee5695e08e9a472fda6b0762f",
-    "P1-11-F03": "9a48f9babc8e57799037b9fd7b86e51d68709d3caba46791b90f35a9d0de1dc2",
+    "P1-11-F03": "3db8ba8b6ce87dc800d8e8a6bbac4b592a01c7a35035f4513f9e45aad08b5d12",
     "P1-11-F04": "f79cc1e6451afbdee74267fd169c6ccd2b580cb39c866d2390267546b1ebc99f",
     "P1-11-F05": "9104eb2c766a80bfed6c757c6f78fa4993eb3c9250896829ca8663574c686ceb",
-    "P1-12-F01": "de14f87af0bbe6e38b06021fee6ea0e753bb4c3f2062b7b575ec6db0426587c0",
-    "P1-12-F02": "ec9bd2efc4a6ec89ba1c32b9f3286cb9a71000cb9dba29ac6ddcb7da3d51a762",
-    "P1-12-F03": "98ba373147627f1c16527b48320a0c5769ec0b42619ee0f0be0c0b45922d38ab",
-    "P1-12-F04": "31f89053ee009262609ac745e3cb3646774836479799d4236792a8e4917c8de5",
+    "P1-12-F01": "c10fe9824419410a6fd95371ce8e9f45e0239c4400b7d99b262808f2edca6a24",
+    "P1-12-F02": "7d1cc7256ddd513586e8fe633b76e8ae108bcdc9862c40d299c0890c3e92f3e8",
+    "P1-12-F03": "6391230a65b0c4a06c4c7d62c67460a9c744a020e069d5cb6a3f02675a100409",
+    "P1-12-F04": "96e0b6264906901193da94f7ac7c809610b284f4a56a7c85e06fe1699550f77f",
     "P1-12-F05": "c69f9bc4eb0a3bb12935b6fce0deb1e996a86f60cf228fa86972e6502c82a2db",
     "P1-12-F06": "4b9ff96c78b2651c377c09f761a29c51d95537dad0100fac6fc81de5d5d83b22",
-    "P1-12-F07": "90cd1d21a6423ea780602b1e1e9d9f4d9d7f2bd80ff7752dd116802a291e272a",
+    "P1-12-F07": "a39a13852f22fbbdb3db18618f44cf403df2ef956815e4766b40667d199e623b",
     "P1-12-F08": "0c023ff2a88088b6108af68539fca2b90305b06414599233b474d6f7dfa63a97",
-    "P1-12-F09": "c566e581f85d703dab52d1ae43f454b00fc079579e239bac80963025cdb420ca",
+    "P1-12-F09": "3c1609017b04537f4e9e00278abb21f0a97a31b6b7c2de40f125af274cba8713",
     "P1-12-F10": "68194d417f28a3daeecd388315fd4bfd72288dab7d80d707a5a7aca99c480c32",
     "P1-12-F11": "d283dfff2387c54ef1782d9c953dc2edfad35f9858b6503a78f9db37f95e0e13",
     "P1-12-F12": "24ab1ae2d909deecaeba86f41094910b093199de0a31a5c44a29a73c2787aa5b",
@@ -741,7 +741,7 @@
     "P1-20-F103": "d884ed5013941b20afd86dca3c0c0c01959bf5ec51d2aa354d8d8bfb7047279d",
     "P1-20-F104": "b0b1fb45e2c93247f298321c5b3af987e11f503594b2db30bfd32a889d8b5b4e",
     "P1-20-F105": "1063cd51c62476b3afb343e6be4cf232b04fc31bb2837f9a752285927affd5f8",
-    "P1-21-F01": "a7299dc2484c60644f769cc6e8046cf2d29a7b2e8be071275c072ac81583113b",
+    "P1-21-F01": "4149324d499778d87cce1296694173718701405f1a75467518cbefdbb8429d96",
     "P1-21-F02": "35ec29824e04b9080fd3b0f61b06cbb238d6ab8f3784a4341df6dff3bc82891b",
     "P1-21-F03": "0d58b68a6da07f980684962e02154c5f9fbafe4b88ee96f6aa74bf961ad69608",
     "P1-21-F04": "dc04fac403ff2710aa302f29dd50181217efafeafd2d9328c17bf713e19cb0c6",
@@ -749,8 +749,8 @@
     "P1-21-F06": "b93fc69bd02699121ecb0bba16ad8fe547b0da5b84133b668b96d8abb64dba2d",
     "P1-21-F07": "1ce3341104878dca6b1e5a7ce801625377d24b2bf54b7093c73df3ef9fb14689",
     "P1-21-F08": "a87cc6ee25397f59c800bb67b638b5da8164a62e40f677c104cbf8408bb34a7a",
-    "P1-21-F09": "c7b812973478fb303b1e896078792fee51637b1969031a814567cecd51fbc5f0",
-    "P1-21-F10": "fbf6feaef334655befa283ab354d21055ca3243c76c32ca1a58d706267d7374f",
+    "P1-21-F09": "d837c2e3b9e9d5c7c55bbbc21e33ffafc4ef0ce68b2d45eb7232a86f9e38e7ea",
+    "P1-21-F10": "2cd36413d84824c28bff17e03a589fa8beb6e322bd79122e7d83a8f25cc3a8f6",
     "P1-21-F11": "45f15e0cc38b2b7d481b1d3802f7dc179952b4c1c7d49aa55513e329db800301",
     "P1-21-F12": "a4670264ed5403a7beccef19ebc53d1e271b269260227bf6165ecd654938d112",
     "P1-21-F13": "147e6df991562c211ef619dfec70e9c29c8dead6db0325786560f37571a78b3d",
@@ -759,7 +759,7 @@
     "P1-21-F16": "df3624aa5338daf93dc8d266827eff1eda3cba687aa62db2a6a92a0d23c97e80",
     "P1-21-F17": "b099dc94cd73437f1dbd44bb8222c0552bedeba8a50040adbab95abc9033d5c3",
     "P1-21-F18": "ade37aa40d15b9d9b4ce9bb99bae40f8ef1dc737a3ed4cf315678b1153d7a110",
-    "P1-21-F19": "eb7591008608412a68f8fecc806a33819d2f4b06300492f5f11bd3b60458dd55",
+    "P1-21-F19": "cd18fee3cebca8a72b5d0020a01ac8cc1eabf3542bbb2c583895c5d1fe02d4fb",
     "P1-21-F20": "30852dabfa86bedbd30c9343b855a669d997a727f6dfad89c3533f7f29ed0c9f",
     "P1-21-F21": "07d6824c246b3d0137825cb61a48e7f7cdeb0073d6b33a0b0bfd6fb2d078ff18",
     "P1-21-F22": "75158548670b7996dc934442ec563fd55da5ac25badc9c7ad4164712029ca391",
@@ -989,7 +989,7 @@
       "clauses": "Konto anlegen (Registrierung) und erste Organisation erstellen\nUI-Registrierung und Organisationserstellung; UI-erzeugte Organisation und Auth-Nutzer durch erweiterten World-Teardown entfernt.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-01"
       }
     },
@@ -1008,7 +1008,7 @@
       "clauses": "Organisation per Code beitreten\nBeitritt als Handwerker und zweite Mitgliedschaft verifiziert; Katalog um Admin-/Inhabergrenzen präzisiert.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-02"
       }
     },
@@ -1027,7 +1027,7 @@
       "clauses": "Aktive Organisation wechseln; Daten strikt getrennt\nUmschalten und beidseitige Datenisolation in `A1-02/A1-03`.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-03"
       }
     },
@@ -1036,7 +1036,8 @@
       "flowIds": [
         "BASE-ORG-F03",
         "BASE-ORG-F05",
-        "BASE-TIME-F03"
+        "BASE-TIME-F03",
+        "BASE-ORG-F07"
       ],
       "evidence": [
         {
@@ -1050,11 +1051,10 @@
           "description": "covered:@GG-00 („Einladung: Eingeladene Person tritt bei…\") + new:A1-04"
         }
       ],
-      "clauses": "Einladung per E-Mail (Büro), Einlösung, rollengerechte Oberflächen; Entfernung während laufender Zeit\nBeide Einladerollen, offene Einladung, Einlösung und Rollenoberflächen automatisiert; Entfernung einer gerade arbeitenden Person schreibt nun `auto_clocked_out=true` in das Mitgliedschaftsereignis und wird read-only belegt.",
+      "clauses": "Both inviter roles, invitation redemption and role surfaces are exercised. Removing a clocked-in member is denied with the personnel-record explanation; an unchanged database snapshot and a fresh member list prove preserved history, membership and live status. Signing out then clocks out normally.",
       "review": {
-        "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
-        "row": "A1-04"
+        "kind": "assertions-reviewed",
+        "rationale": "September 12 reconciliation with SI-006 and the current BASE-ORG-F07 contract. The former destructive-removal assertion contradicted the shipped security containment."
       }
     },
     {
@@ -1072,7 +1072,7 @@
       "clauses": "Mitgliederliste mit Live-Stempelstatus („arbeitet\")\nLive-Status „Arbeitet\" in `A1-05/A1-26/A1-27/A1-28`.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-05"
       }
     },
@@ -1091,7 +1091,7 @@
       "clauses": "Rollenänderungs-Schutz: eigene Rolle nicht änderbar, kein zweiter Admin, Büro verwaltet nur Handwerker\nSchutzregeln verifiziert; Katalog präzisiert, dass Büro zwar Büro einladen, bestehende Büro/Admin aber nicht verwalten kann.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-06"
       }
     },
@@ -1113,11 +1113,10 @@
           "description": "covered:@GG-00 (Abmelden); Auto-Ausstempeln new:A1-07"
         }
       ],
-      "clauses": "Abmelden (+ Auto-Ausstempeln beim Abmelden)\nAbmelden und Auto-Ausstempeln grün; Entfernung eines Mitglieds löscht dessen Zeithistorie. **Owner ruling 2026-08-15: deferred to `P1-33`** (offboarding owns retained historical identity); the defect is recorded in the `P1-33` index row in `phase-1/roadmap.md` so it cannot get lost.",
+      "clauses": "Sign-out automatically clocks out the current session. The earlier destructive membership-removal behavior was superseded by SI-006; A1-04 and security SQL now verify denial without loss of history.",
       "review": {
-        "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
-        "row": "A1-07"
+        "kind": "assertions-reviewed",
+        "rationale": "September 12 whole-clause review against the current sign-out and protected member-removal contracts."
       }
     },
     {
@@ -1141,7 +1140,7 @@
       "clauses": "Kunde anlegen; Liste live\n`@GG-00`-Body re-verifiziert; finale Golden-Suite.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-08"
       }
     },
@@ -1161,7 +1160,7 @@
       "clauses": "Kunde inline auf Detailseite bearbeiten\n`A1-09/A1-11`.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-09"
       }
     },
@@ -1181,7 +1180,7 @@
       "clauses": "Kunde löschen — Aufträge/Projekte bleiben, verlieren nur die Zuordnung\nRealtime-Selbst-Rennen beim Löschen behoben; Auftrag/Projekt bleiben ohne Kunde erhalten (`A1-10/A1-14`).",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-10"
       }
     },
@@ -1201,7 +1200,7 @@
       "clauses": "Kunde direkt im Auftrags-/Projektdialog neu anlegen\n`A1-09/A1-11`.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-11"
       }
     },
@@ -1226,7 +1225,7 @@
       "clauses": "Auftrag anlegen/zuweisen; Handwerker sieht nur Zugewiesenes\nBearbeitungsdialog gegen Realtime-Resets stabilisiert; Zuweisungsgrenze in `A1-12/A1-13`.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-12"
       }
     },
@@ -1246,7 +1245,7 @@
       "clauses": "Auftrag bearbeiten; Zuweisung entfernen; Auftrag löschen\nEdit/Delete-Selbst-Rennen behoben; `A1-12/A1-13`.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-13"
       }
     },
@@ -1266,7 +1265,7 @@
       "clauses": "Projekt anlegen; Auftrag im Projekt erbt Kunden; Projekt ohne Aufträge; Projekt löschen löst nur die Zuordnung\nAsynchroner Nummernvorschlag überschreibt keine Eingabe mehr; Projektlöschung in `A1-10/A1-14`.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-14"
       }
     },
@@ -1285,7 +1284,7 @@
       "clauses": "Datum entziehen lässt den Auftrag ungeplant offen; Parken und erneute Einplanung bleiben bewusste eigene Schritte\nP1-14 trennt Planung und Parkplatz. `A1-15/A1-16` belegen den ungeplanten Zustand ohne Parken sowie das atomare Parken mit Kontext.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-15"
       }
     },
@@ -1304,7 +1303,7 @@
       "clauses": "Projekt parken parkt unfertige Kinder; fertige bleiben fertig\nProjekt-Statusoverride nutzt jetzt die kaskadierende Park-Aktion; `A1-15/A1-16`.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-16"
       }
     },
@@ -1323,7 +1322,7 @@
       "clauses": "Checkliste: Manager pflegt/sortiert Punkte; Handwerker hakt ab / öffnet wieder; Attribution sichtbar\nFehlende UI-Sortierung ergänzt; `A1-17/A1-18` beweist persistente Reihenfolge, Toggle/Reopen und Attribution. CodeRabbit-Fix: synchroner Mutations-Mutex, `finally` und Server-Re-Sync.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-17"
       }
     },
@@ -1342,7 +1341,7 @@
       "clauses": "Fertigstellen setzt Abschlussdatum; Projektstatus/-fortschritt abgeleitet; manueller Override\nAbschlussdatum wird als Geschäftstag Europe/Berlin bestimmt; `A1-17/A1-18`.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-18"
       }
     },
@@ -1361,7 +1360,7 @@
       "clauses": "`/auftraege`: Suche, Status-/Typ-Filter, Parkplatz-/Archiv-Trennung\n`A1-19`.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-19"
       }
     },
@@ -1380,7 +1379,7 @@
       "clauses": "`/auftraege`: nutzerspezifische Spaltenauswahl, Sortierung, Live-Update und Bereichstrennung\nSpaltenpräferenz ist zwischen Benutzern getrennt; Sortierung, Projektausklappen, Realtime sowie Aktiv/Parkplatz/Archiv vollständig automatisiert.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-20"
       }
     },
@@ -1410,7 +1409,7 @@
       "clauses": "Tages-/Wochen-/Monatsansicht; geplante Arbeit vs. Zeitblöcke getrennt\nAlle drei Ansichten und Blocktrennung in `A1-21/A1-24`.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-21"
       }
     },
@@ -1434,7 +1433,7 @@
       "clauses": "Verschieben per Drag & Drop (inkl. Warnpfad)\nDrag und bestätigter Warnpfad in `A1-22`.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-22"
       }
     },
@@ -1453,7 +1452,7 @@
       "clauses": "Größe ziehen (Resize), neu zuweisen und Drag in den/aus dem Parkplatz\nEchte Playwright-Mausgesten beweisen Resize, Verschieben, Neuzuweisung und Parken/Entparken mit persistenter UI.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-23"
       }
     },
@@ -1472,7 +1471,7 @@
       "clauses": "Kalender-Filter (Mitarbeiter/Arbeitszeiten/Aufträge)\n`A1-21/A1-24`.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-24"
       }
     },
@@ -1491,7 +1490,7 @@
       "clauses": "Manueller Zeiteintrag aus dem Kalender heraus\nKalenderdialog legt den run-scoped Eintrag per UI an; Kalenderdarstellung, Verlauf und read-only Persistenz beweisen ihn.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-25"
       }
     },
@@ -1517,7 +1516,7 @@
       "clauses": "Ein-/Ausstempeln, Pausen, Tagessummen; auftragsbezogene Zeit\nPause, Auftragbezug, Zustände und Summen in `A1-05/A1-26/A1-27/A1-28`; Wochenbalken zeigen jeden Tag mit Anwesenheit, Arbeitszeit, Pause und Überstunden zugänglich an.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-26"
       }
     },
@@ -1536,7 +1535,7 @@
       "clauses": "Auftragswechsel während laufender Sitzung\n`A1-05/A1-26/A1-27/A1-28`.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-27"
       }
     },
@@ -1555,7 +1554,7 @@
       "clauses": "Kein gleichzeitiges Einstempeln in zwei Organisationen\nOrg-Sperre mit derselben Person in zwei Organisationen.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-28"
       }
     },
@@ -1574,7 +1573,7 @@
       "clauses": "Manuelle Einträge: Reihenfolge-/Überlappungs-Ablehnung\n`A1-29`.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-29"
       }
     },
@@ -1593,7 +1592,7 @@
       "clauses": "Bestehende Einträge korrigieren / löschen / umhängen (Manager)\nKorrigieren, Auftrag umhängen und löschen in `A1-30`.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-30"
       }
     },
@@ -1612,7 +1611,7 @@
       "clauses": "Verlauf-Filter (Zeitraum/Mitarbeiter/Status) mit Sitzungspaar und Auftrag\nRun-scoped genehmigte und ausstehende Fakten beweisen Zeitraum-, Mitarbeiter- und Statusfilter einschließlich Leerergebnis, Sitzungspaar und Auftrag.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-31"
       }
     },
@@ -1631,7 +1630,7 @@
       "clauses": "Pausenregel: Admin stellt automatische Pause ein, Büro liest nur; Historie schreibt Vergangenes nicht um\nProp-Refresh setzte ungespeicherte Auswahl zurück; primitive Reset-Abhängigkeiten stabilisieren das Formular.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-32"
       }
     },
@@ -1658,7 +1657,7 @@
       "clauses": "Einzel-, Mehrfach-, Ordner- und Drag-and-drop-Upload; echter Fortschritt; Handwerkergrenzen\nBatch-, `webkitdirectory`- und Drop-Upload persistieren; ein real gedrosselter 6-MiB-Direktupload zeigt Fortschritt und vollständige XHR-Bytes.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-33"
       }
     },
@@ -1678,7 +1677,7 @@
       "clauses": "Ordner anlegen, Datei verschieben/kopieren über den Ziel-Dialog\n`A1-34/A1-35`.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-34"
       }
     },
@@ -1698,7 +1697,7 @@
       "clauses": "Bestehendes Bibliotheksdokument mit Ziel (Auftrag/Kunde) verknüpfen; Verknüpfungsfilter\n`A1-34/A1-35`.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-35"
       }
     },
@@ -1717,7 +1716,7 @@
       "clauses": "Papierkorb: löschen, wiederherstellen, endgültig löschen; Audit-Historie\n`A1-36/A1-37`.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-36"
       }
     },
@@ -1736,7 +1735,7 @@
       "clauses": "Neue Version eines Geschäftsdokuments hochladen; Versionshistorie\nVersionsupload aktualisiert Version und Audit-Historie sofort im lokalen UI-Zustand; `A1-36/A1-37`.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-37"
       }
     },
@@ -1758,7 +1757,7 @@
       "clauses": "PDF-/Bildviewer; signierter Download; zugewiesener/unzugewiesener Handwerker; Realtime\nViewer rendern, echte signierte Fenster-/Download-URLs werden erfasst, Rollengrenzen gelten und ein zweiter Kontext erhält den Upload ohne Reload.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-38"
       }
     },
@@ -1782,7 +1781,7 @@
       "clauses": "Handwerker: geplantes Material entnehmen, ungeplant entnehmen, zurückgeben; Bestandskonsistenz; Zugriffsgrenzen\nGeplant/ungeplant/Retouren und Bestandsfakten in `A1-39/A1-42`; Rollen-Body in `@GG-00`.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-39"
       }
     },
@@ -1801,7 +1800,7 @@
       "clauses": "Artikel + Lagerort über die UI anlegen/bearbeiten (statt Seeder)\n`A1-40/A1-44`.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-40"
       }
     },
@@ -1820,7 +1819,7 @@
       "clauses": "Manuelle Zu-/Abgänge; Buchung unter null wird abgelehnt; Bewegungsliste mit Vorher/Nachher/Grund\nBewegungsliste um sichtbare Vorher- und Grund-Spalten ergänzt; `A1-41`.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-41"
       }
     },
@@ -1839,7 +1838,7 @@
       "clauses": "Manager plant Material am Auftrag (ohne Bestandsänderung); Projekt zeigt direktes/vererbtes Material + getrennte Summen\nProdukt zeigte abrechenbare Mengen bisher nicht; `A1-39/A1-42` beweist geplante, verbrauchte, retournierte und abrechenbare Mengen getrennt auf Auftrag und Projekt.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-42"
       }
     },
@@ -1858,7 +1857,7 @@
       "clauses": "CSV-Import mit Spaltenzuordnung (legt Kategorien/Lieferanten/Orte an; Anfangsmengen als Bewegungen)\nMapping-UI stabil automatisiert; Stammdaten und Anfangsbewegung per DB-Leseassertion.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-43"
       }
     },
@@ -1878,7 +1877,7 @@
       "clauses": "`/inventar`-Ansichten (Alle Artikel / Lager / Geplant / Bewegungen) mit Suche/Filtern\nVier Ansichten, Suche und Filter in `A1-40/A1-44` und `A1-41`.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A1-44"
       }
     },
@@ -1903,7 +1902,7 @@
       "clauses": "Ansprechpartner vollständig anlegen/primär/archivieren; Einsatzorte mit Zugang und Notizen pflegen\nName, Rollen-Vorschlag und Freitextrolle, Telefon, E-Mail, Notizen sowie vollständige Einsatzort-Adresse, Zugang und Notizen bleiben sichtbar; Primärwechsel und beide Archivlisten sind belegt.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A2-01"
       }
     },
@@ -1923,7 +1922,7 @@
       "clauses": "Archivierten Kontakt wiederherstellen; archivierte fehlen in Pickern\nKontakt und Einsatzort archiviert, aus Auftrags-Pickern ausgeschlossen und über die sichtbare Archivliste wiederhergestellt.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A2-02"
       }
     },
@@ -1942,7 +1941,7 @@
       "clauses": "Ein-Klick: Kundenadresse als ersten Einsatzort übernehmen\n„Adresse als Einsatzort übernehmen“ legt `Hauptstandort` mit der vollständigen Kundenadresse an.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A2-03"
       }
     },
@@ -1961,7 +1960,7 @@
       "clauses": "Kundennummer: manuelle Vergabe, Org-Eindeutigkeit wird abgelehnt\nEindeutigkeit dauerhaft per DB-Leseassertion; gemeinsamer Metadaten-Editor zeigt kuratierte deutsche Speicherfehler jetzt sichtbar statt nur in der Konsole.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A2-04"
       }
     },
@@ -1985,7 +1984,7 @@
       "clauses": "Ort-Snapshot: Adressänderung am Einsatzort ändert alte Aufträge nicht\n`@P1-01`-Body re-verifiziert; finale Golden-Suite 93/93.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A2-05"
       }
     },
@@ -2005,7 +2004,7 @@
       "clauses": "Projekt-Standardort/-kontakt befüllt neue Projektaufträge vor; bestehender Auftrag darf abweichen; Kundenwechsel löscht Referenzen (inkl. Kinder)\nProjektvorgaben werden UI- und serverseitig vererbt; ein bestehender Kinderauftrag wird auf einen anderen Ort/Kontakt geändert und dauerhaft gelesen. Kundenwechsel behält beide Kinder und leert alte Orts-/Kontaktverweise.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A2-06"
       }
     },
@@ -2029,7 +2028,7 @@
       "clauses": "Handwerker sieht Ort/Zugangshinweise/Kontakt mit Anruf-Link\n`@P1-01`-Body deckt Ort/Kontakt/Telefon; `A2-07` ergänzt Adresse, Zugangshinweis und `tel:`-Link in der Handwerkeransicht.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A2-07"
       }
     },
@@ -2053,7 +2052,7 @@
       "clauses": "Suche über Kontakte/Einsatzorte\n`@P1-01`-Body re-verifiziert; finale Golden-Suite 93/93.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A2-08"
       }
     },
@@ -2079,7 +2078,7 @@
       "clauses": "Anfrage im Anruf erfassen (inkl. Anhang); unbekannte Anruferin zuordnen/anlegen\n`@GG-01` deckt Erfassung/Anhang/Neuanlage; `A2-09` ordnet einem bestehenden Kunden zu. Name, Telefon, E-Mail und Adresse bleiben nach Zuordnung sichtbar und gespeichert; die vollständige Neuanlage-Vorbelegung ist im Golden-Body belegt.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A2-09"
       }
     },
@@ -2098,7 +2097,7 @@
       "clauses": "Vorgeschlagene Anfragenummer manuell überschreiben (Regressionsflow des P1-02-Defekts)\nNur die Nummernvorschlags-Server-Action wird verzögert; der vorher eingegebene run-scoped Wert überlebt die späte Antwort und wird gespeichert.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A2-10"
       }
     },
@@ -2118,7 +2117,7 @@
       "clauses": "Lifecycle: „In Klärung\" setzen; geschlossene Anfrage wieder öffnen\n`offen → in_klaerung → geschlossen → offen` jeweils nach Persistenz geprüft.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A2-11"
       }
     },
@@ -2143,7 +2142,7 @@
       "clauses": "Umwandlung genau einmal in **Auftrag**; Schließen mit Grund; Direktauftrag ohne Anfrage\nVollständige `@GG-01`-Bodies re-verifiziert; finale Golden-Suite 93/93.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A2-12"
       }
     },
@@ -2162,7 +2161,7 @@
       "clauses": "Umwandlung in **Projekt** (inkl. Rückverlinkung)\nEinmalige UI-Umwandlung, Anfrage→Projekt und Projekt→Quellanfrage sichtbar und per DB-Leseassertion belegt; zweite Umwandlung nicht angeboten.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A2-13"
       }
     },
@@ -2186,7 +2185,7 @@
       "clauses": "Zugriffsgrenzen `/anfragen` (Handwerker, Fremdorganisation)\nRollen- und Fremdorganisations-Bodies re-verifiziert; finale Golden-Suite 93/93.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A2-14"
       }
     },
@@ -2210,7 +2209,7 @@
       "clauses": "Kundendetail-Chronik: Reihenfolge, Filter, Deep-Links ohne Kopien\n`@P1-10` re-verifiziert; `A2-15/A2-17` ergänzt gültige absteigende `datetime`-Reihenfolge unter weiterem Follow-up-Verlauf.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A2-15"
       }
     },
@@ -2234,7 +2233,7 @@
       "clauses": "Follow-up anlegen/erledigen; überfällig als Aufgabe\n`@P1-10`-Body re-verifiziert; finale Golden-Suite 93/93.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A2-16"
       }
     },
@@ -2253,7 +2252,7 @@
       "clauses": "Follow-up ohne gültigen Verantwortlichen erscheint allen Managern zur Neuzuweisung\nTemporär eingeladener Owner per UI entfernt; Admin und Büro sehen „Neu zuweisen“, Büro übernimmt/erledigt. Danach keine Mitgliedschaft mehr; die verknüpfte Personalakte bleibt nachvollziehbar als `Ausgeschieden` mit Austrittsdatum erhalten.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A2-17"
       }
     },
@@ -2278,7 +2277,7 @@
       "clauses": "Kommunikationspräferenzen: Zweck×Kanal, Warnung, begründete Ausnahme\nZweck-/Kanaltrennung, Warnung und begründete Ausnahme im vollständigen `@P1-10`-Body re-verifiziert; finale Golden-Suite 93/93.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A2-18"
       }
     },
@@ -2297,7 +2296,7 @@
       "clauses": "Allgemeine Präferenzen (Kontaktzeiten, Sprache, Kontaktsperre) pflegen und sehen\nDie frühere manuelle Substitution ist vollständig automatisiert; es besteht keine manuelle Ausnahme.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A2-19"
       }
     },
@@ -2316,7 +2315,7 @@
       "clauses": "Alle optionalen Anfragefakten, Auswahlwerte, Eingangszeit und Attribution\nUI erfasst Details, Quelle, Kategorie, Dringlichkeit, Eingangszeit und Verantwortliche einschließlich aller angebotenen Werte; read-only Persistenz beweist Actor und Ereignisse. Der fehlende Eingangszeit-Editor wurde in Anlage und Bearbeitung ergänzt.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A2-R01"
       }
     },
@@ -2335,7 +2334,7 @@
       "clauses": "Anfrage-PDF im Browser ansehen und in den Papierkorb legen\nDirekter UI-Upload, gerenderter PDF-Viewer und UI-Papierkorb sind am identischen Dokument belegt.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A2-R02"
       }
     },
@@ -2355,7 +2354,7 @@
       "clauses": "Alle Abschlussgründe; Grund verpflichtend; umgewandelte Anfrage schreibgeschützt\nLeerer Grund wird abgelehnt, jeder angebotene Abschlussgrund persistiert, und eine umgewandelte Anfrage bietet keine Schreibaktionen mehr.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A2-R03"
       }
     },
@@ -2374,7 +2373,7 @@
       "clauses": "Vollständige, editierbare Auftragsumwandlung ohne Versand/Planung/Dispatch\nKunde, Ort, Kontakt, Beschreibung und Dringlichkeitspriorität sind vorbefüllt und editierbar; der Auftrag bleibt ungeplant offen, ohne Planungs-/Dispatch-Datensatz und ohne Versand, mit beidseitigem Quelllink.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A2-R04"
       }
     },
@@ -2394,7 +2393,7 @@
       "clauses": "Quellen-, Filter-, Schlüssel- und Attributionsmatrix für Chronik/Nachfassaktionen\nAnfrage-, Projekt-, Nachfassaktions- und Präferenzereignisse besitzen stabile Schlüssel, Actor und passende Filter; alle optionalen Follow-up-Quellen sowie Erledigen/Verwerfen bleiben nachvollziehbar.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A2-R05"
       }
     },
@@ -2414,7 +2413,7 @@
       "clauses": "Vollständige Kommunikationspräferenzen und nachvollziehbare E-Mail-Ausnahme\nBevorzugter Kontakt, Telefon, Zeiten, Sprache, Barrierefreiheit, Sperre, die gesamte Zweck×Kanal-Matrix und unbekannte Zustände sind automatisiert; E-Mail-Warnung, Pflichtgrund und Audit werden ohne tatsächlichen Versand oder Rechtsbewertung belegt.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A2-R06"
       }
     },
@@ -2433,7 +2432,7 @@
       "clauses": "Anfragenliste: Suche und alle Katalogfilter\nRun-scoped Identitäten beweisen Ergebnisänderungen für Suche sowie Status-, Kategorie-, Dringlichkeits- und Verantwortlichenfilter.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A2-R07"
       }
     },
@@ -2469,7 +2468,7 @@
       "clauses": "Personalien pflegen; Konditionen-Versionen (Aktuell/Früher/Geplant); Verlauf\n`A3-01/A3-03` pflegt alle Personalien und wählt sämtliche fünf Beschäftigungsarten; aktuelle/geplante Versionen, Notizen und Werte persistieren. Anlage, Stammdatenänderung und Kondition anlegen/ändern/löschen zeigen Zeitpunkt, Actor und Vorher/Nachher-Werte; read-only Event-Payloads stimmen mit dem sichtbaren Verlauf überein.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A3-01"
       }
     },
@@ -2505,7 +2504,7 @@
       "clauses": "Personalakte ohne Zugang; „Zugang einladen\" verknüpft; Entfernen ⇒ „Ausgeschieden\"; Status-Badges\nGolden beweist Einladung ohne Duplikat und den Erhalt der ausgeschiedenen Akte. `A3-R01` ergänzt die sechs Kombinationen aus Geplant/Aktiv/Ausgeschieden und Mit Zugang/Eingeladen/Ohne Zugang; bestehende Mitgliederzeilen erhielten die fehlenden sichtbaren Badges.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A3-02"
       }
     },
@@ -2524,7 +2523,7 @@
       "clauses": "Personalnummer: `MA-NNN`-Vorschlag überschreiben; Eindeutigkeit abgelehnt\nDie Nummernvorschlags-Server-Action wird gehalten; der manuelle run-scoped Wert überlebt nachweislich die späte Antwort. Ein zweiter UI-Anlageversuch mit derselben Nummer wird abgelehnt.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A3-03"
       }
     },
@@ -2554,7 +2553,7 @@
       "clauses": "Wochenplan-Versionen; Ziel aus Plan; Vertragsabweichungs-Hinweis; historische Tage stabil\nGolden beweist Versionen, Planabweichung und historische Stabilität; `A3-R02` berechnet Tages-/Wochenziel aus dem angelegten Plan und bestätigt die daraus abgeleiteten UI-Werte.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A3-04"
       }
     },
@@ -2586,7 +2585,7 @@
       "clauses": "Feiertagskalender; Betriebsruhe; Ziel 0; sichtbarer unkonfigurierter Fallback\nGolden beweist Region, Betriebsruhe und Nullziel. `A3-R02` automatisiert den sichtbar als unkonfiguriert bezeichneten 8-Stunden-Fallback; der Katalog wurde entsprechend der Eigentümerentscheidung korrigiert.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A3-05"
       }
     },
@@ -2615,7 +2614,7 @@
       "clauses": "Betriebsruhe pflegen (nur heute/zukünftig)\nAdmin und Büro legen Betriebsruhe per UI an und entfernen sie; read-only Persistenz wird geprüft, ein vergangener Tag verständlich abgelehnt.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A3-06"
       }
     },
@@ -2635,7 +2634,7 @@
       "clauses": "Feiertagsregionen und historischer Verlauf; Kalender-Hinweise\nUI und Resolver decken Berlin, Thüringen sowie beide Bayern-Varianten ab. Monatsansicht zeigt Feiertag und Betriebsruhe beschriftet als nicht interaktive Ganztages-Hinweise; Region und Ruhe werden abschließend per UI zurückgesetzt.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A3-07"
       }
     },
@@ -2655,7 +2654,7 @@
       "clauses": "Ziel, Ring, Überstunden und Mitarbeiterlisten-Fortschritt\n`A3-R02` ersetzt die historische manuelle Ausnahme: planabhängiges Ziel, Ring, Überstundengrenze, Wochen-Soll, Listenbalken, Betriebsruhe-Nullziel und der gekennzeichnete Fallback werden automatisiert. Progress-Werte und deutsche Zustandslabels sind jetzt programmatisch zugänglich.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A3-08"
       }
     },
@@ -2687,7 +2686,7 @@
       "clauses": "Verantwortlichkeiten: Vorschau, beide Modi/Arten, Büro-Grenze, Vertretung und Vier-Augen\nGolden beweist Vorschau, benannte Holder, Schutz und Fensterende; `A3-11` ergänzt beide Arten/Modi, Büros read-only Grenze, exakte Vertretungsreichweite, Büro-Selbstfreigabeverbot und Admin-Wiederherstellung.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A3-09"
       }
     },
@@ -2716,7 +2715,7 @@
       "clauses": "Vertretung vorzeitig beenden (Entzug wirkt sofort am Aktionspunkt)\nCoverage korrigiert: `@P1-05` beendet die Vertretung bereits vorzeitig über die UI und beweist die Ablehnung aus der veralteten Ansicht am Aktionspunkt.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A3-10"
       }
     },
@@ -2745,7 +2744,7 @@
       "clauses": "„Meine Verantwortlichkeiten und Vertretungen\" in den eigenen Einstellungen\nGolden deckt die betroffene Handwerkeransicht ab; `A3-11` beweist aktive Vertretungsdetails, die Eigenübersicht für betroffene Admin/Büro und die Manager-Zusammenfassung im Mitglied-Detail.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A3-11"
       }
     },
@@ -2764,7 +2763,7 @@
       "clauses": "Vollständige Beschäftigungs-/Zugangsstatusmatrix in Personalzeilen\nGeplant, Aktiv und Ausgeschieden werden jeweils mit Mit Zugang, Eingeladen oder Ohne Zugang in den Listenzeilen bewiesen.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A3-R01"
       }
     },
@@ -2784,7 +2783,7 @@
       "clauses": "Modellgetriebene Ziel-/Fortschrittsmatrix und unkonfigurierter Fallback\nDynamisch aus dem Resolver berechnete Ziele treiben Ring, Überstunden, Wochen-Soll und Listenwerte; ARIA-Wert/Zustandslabel, Betriebsruhe 0 und Fallback 8 Stunden sind vollständig automatisiert. Temporäre Zeit-, Ruhe- und Plandaten werden per UI entfernt.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A3-R02"
       }
     },
@@ -2814,7 +2813,7 @@
       "clauses": "Urlaub beantragen/zurückziehen; Wochenende zählt nicht; Überschneidung blockiert\nGolden belegt Antrag/Rücknahme/Überschneidung; `A4-R01` ergänzt die authoritative Vorschau-Matrix, `A4-R02` den neutralen Überschneidungshinweis und den angefragten Auftragszeitraum.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A4-01"
       }
     },
@@ -2846,7 +2845,7 @@
       "clauses": "Genehmigung: Saldo, Soll 0, Einstempel-Sperre; Stornierung stellt wieder her\nGolden belegt Genehmigung, Saldo/Soll, Sperre und begründete Wiederherstellung; `A4-R03` ergänzt das halbe Tagesziel und die vollständige Kalender-Sichtmatrix.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A4-02"
       }
     },
@@ -2877,7 +2876,7 @@
       "clauses": "Halber Tag = 0,5; ohne Anspruch sichtbare Ausnahme; Vier-Augen\nGolden belegt 0,5 Tage, fehlenden Anspruch und Vier-Augen; `A4-R01` belegt die halbtägige Vorschau, `A4-R02` die range-begrenzten Auftragsfakten.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A4-03"
       }
     },
@@ -2896,7 +2895,7 @@
       "clauses": "Anspruch aus der neuesten Kondition des Jahres (Mitte-Jahr-Änderung)\nZwei Konditionen per UI auf +35/+36 angelegt; read-only DB-Kontext und Handwerkeransicht belegen den Wechsel von 27 auf den neuesten Anspruch von 31 Tagen.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A4-04"
       }
     },
@@ -2925,7 +2924,7 @@
       "clauses": "Kalender: „Urlaub – Name\", „(angefragt)\" gestrichelt\n`A4-R03` belegt pending gestrichelt, approved sichtbar sowie Manager-alle/Beschäftigte-nur-eigene; Golden hält den neutralen Titel fest.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A4-05"
       }
     },
@@ -2953,7 +2952,7 @@
       "clauses": "Krankmeldung: Selbstmeldung (rückwirkend/offen), Büro-Erfassung, Korrekturen, Nachweisführung, Stornierung\nGolden deckt Selbst-/Büro-Erfassung, Korrektur und Nachweis; A4 belegt verpflichtenden Manager-Korrekturgrund, Eigenstornierung und halbtägige Sollwirkung bis zur Wiederherstellung.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A4-06"
       }
     },
@@ -2977,7 +2976,7 @@
       "clauses": "Einstempeln am Kranktag: Hinweis statt Blockade\nVollständiger `@P1-08`-Body re-verifiziert: neutraler Hinweis erscheint, Einstempeln bleibt möglich.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A4-07"
       }
     },
@@ -3001,7 +3000,7 @@
       "clauses": "Privacy-Matrix: neutraler Kalender, Kollegen sehen nichts\nVollständiger `@P1-08`-Body re-verifiziert: Managerkalender bleibt neutral, Kollegenansicht enthält weder Eintrag noch Diagnosekontext.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A4-08"
       }
     },
@@ -3026,7 +3025,7 @@
       "clauses": "Krankheit während genehmigten Urlaubs: neutraler Überschneidungs-Hinweis, kein automatischer Saldo-Effekt\nA4 wählt deterministisch einen urlaubsverbrauchenden Termin, belegt den neutralen Hinweis und hält genehmigten Snapshot sowie sichtbaren 1/31-Saldo vor und nach Meldung/Korrektur unverändert.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A4-09"
       }
     },
@@ -3051,7 +3050,7 @@
       "clauses": "Typen `Kind krank`/`Sonstige Abwesenheit` wählbar; nirgends ein Diagnosefeld\n`@P1-08` belegt `Kind krank`; A4 meldet `Sonstige Abwesenheit` und beweist browserseitig in Selbst- und Managerdialog Hinweistext sowie das Fehlen jeglicher Diagnose-Steuerung.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A4-10"
       }
     },
@@ -3077,7 +3076,7 @@
       "clauses": "`/aufgaben`: Aufgaben genau für Handlungsfähige, Deep-Links, Deduplizierung, Vertretung folgt Delegation\n`@GG-02`-Bodies belegen Zuständigkeitsanzeige, Deep-Links, Auflösung, Deduplizierung, Delegationsfenster und Storno-Wiedervorlage; `A5-T1` ergänzt das sichtbare Anfragealter („offen seit 1 Tag\" aus rückdatierter Eingangszeit) und beweist, dass `/aufgaben` keinerlei Entscheidungs-Steuerelemente anbietet.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A5-01"
       }
     },
@@ -3101,7 +3100,7 @@
       "clauses": "„Alle als gelesen markieren\" (Bulk)\nZwei entschiedene A5-Anträge erzeugen deterministisch ≥2 ungelesene Zeilen; der Bulk-Button erscheint, leert seitenweit alle `data-unread`-Zeilen, und Lesemarken/`marked_read`-Events beider Quellen sind read-only belegt. Der frühere `@GG-02`-Pfad war nur im vererbten Volllauf konditional erreichbar.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A5-02"
       }
     },
@@ -3120,7 +3119,7 @@
       "clauses": "Meine Anträge: eigene Anträge mit Status/Gründen\nDas Produkt zeigte in „Meine Anträge\" nur den Status; die katalogpflichtigen Gründe fehlten. Kleinster Fix: `OwnAttentionRequest.decisionReason` aus den autoritativen Feldern `decision_comment`/`cancellation_reason` (geteilter `resolveDecisionReason`-Helper) und „Grund: …\"-Zeile in der Kartenzeile. `A5-T1` belegt Offen/Genehmigt/Abgelehnt/Storniert einschließlich Ablehnungs- und Stornogrund.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A5-03"
       }
     },
@@ -3144,7 +3143,7 @@
       "clauses": "Badges zählen Zeit+Urlaub und nie Nicht-Handlungsfähiges\n`A5-T1` beweist das Zeiterfassungs-Badge erstmals direkt: Baseline+1 nach ausstehender Zeitfreigabe, +2 nach Urlaubsantrag, zurück auf Baseline nach beiden Entscheidungen und Freigabe; die nicht entscheidungsbefugte Person zeigt kein Badge. Das Aufgaben-Badge ist als Seitengleichung `Aufgaben + Ungelesen` in zwei Zustandsmischungen belegt; `@GG-02` hält die Einzelklassen.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A5-04"
       }
     },
@@ -3173,7 +3172,7 @@
       "clauses": "Teams anlegen, datumswirksame Mitglieder, Picker-Expansion ohne Rechte\n`A5-T2`: Büro legt Team und Katalogeintrag an; Mitgliedschaften aktiv/ohne Login/zukünftig (+44) sind datumswirksam (Zukunft ohne aktuelle Mitgliedszeile, per DB-Fenster belegt). Auftragsdialog-Expansion wählt genau das aktive Mitglied, weist die Person ohne Zugang sichtbar als übersprungen aus und schließt das Zukunftsmitglied aus; die Kalenderplanung expandiert beide aktiven Mitglieder inklusive Personal ohne Login (2 Zuweisungen). Katalog präzisiert: das Kalender-Überspringen ist seit `P1-11` durch planbares Personal ohne Login abgelöst. `@P1-09` hält Rechte-Freiheit, `@P1-11` die Datums-Expansion je Termin.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A5-05"
       }
     },
@@ -3192,7 +3191,7 @@
       "clauses": "Team auflösen: Historie bleibt\nUI-Auflösung mit Bestätigungsdialog; Team erscheint unter „Aufgelöste Teams\", `dissolved_at` gesetzt, alle drei Mitgliedschaftszeilen und das `dissolved`-Event bleiben bestehen, bestehende Auftrags- und Planungszuweisungen bleiben unverändert, und weder Auftrags- noch Kalender-Picker bieten das Team weiter an.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A5-06"
       }
     },
@@ -3223,7 +3222,7 @@
       "clauses": "Katalog Fähigkeiten/Zertifikate; Zuordnung mit Gültigkeit/Nachweis; Anforderungen am Auftrag; Override mit Grund\nGolden hält Katalogpflege, Gültigkeit/Nachweis, Erstellungsdialog-Prüfung zum Plandatum und Detail-Override mit Attribution. `A5-T3` ergänzt alle fünf Abdeckungszustände als Detailzeilen samt „Abgedeckt durch …\"/„Keine passende Person zugewiesen\", den Mehrfach-Lücken-Dialog mit Status und „stärkster Eintrag\" je Anforderung sowie die Ablehnung leerer Begründungen. `A5-T4` beweist den Bearbeitungsdialog als prüfende Zuweisungsfläche, den Kalender-Drag mit Warnung, „Änderung zurücknehmen\" mit stiller Wiederherstellung ohne jede Mutation (Datum/Events/Override-Zahl identisch) und die begründete Drag-Bestätigung mit persistiertem Datum.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A5-07"
       }
     },
@@ -3247,7 +3246,7 @@
       "clauses": "Azubi-Warnung admin-gesteuert, standardmäßig aus\n`A5-T3` beweist erstmals den unangehakten Standard („aus\") vor dem Einschalten und den Azubi-allein-Hinweis im Warnungsdialog; `A5-T4` beweist die Begleit-Negativprobe (Azubi + Person mit wirksamer Nicht-Azubi-Kondition ⇒ kein Dialog) und schaltet die Warnung per UI wieder aus. `@P1-09` hält die Büro-Sperre des Schalters.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A5-08"
       }
     },
@@ -3271,7 +3270,7 @@
       "clauses": "Ablaufhinweis als Aufgabe; Erneuerung entfernt ihn\n`@P1-09` hält Ablauf-Deduplizierung, Erneuerungshistorie und Entfernen des alten Hinweises. `A5-T3` ergänzt die Rechtzeitigkeit: ein noch gültiges Zertifikat innerhalb des Warnfensters erscheint als „läuft bald ab\" für Admin UND Büro auf `/aufgaben`, mit „Qualifikation ansehen\"-Deep-Link auf die Personalakte und Lesemarkierung.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A5-09"
       }
     },
@@ -3295,7 +3294,7 @@
       "clauses": "Mitarbeiter sieht eigene Qualifikationen nur lesend\nRLS-Selbstsicht bleibt Golden-belegt. `A5-T4` beweist die sichtbare Oberfläche: `/qualifikationen` zeigt eigene Einträge mit Gültigkeitszuständen (Gültig/Abgelaufen/Noch nicht gültig) über stabile Kartenmarker, fremde Einträge fehlen, und der gesamte Inhaltsbereich enthält keinerlei Verwaltungs-Steuerelement.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A5-10"
       }
     },
@@ -3320,7 +3319,7 @@
       "clauses": "Serie + zweiter Besuch desselben Auftrags; one/this-and-future/series/skip-Edits\n`@P1-11`-Bodies 1–2 halten Tagesserie, zweiten Besuch ohne Duplikat, alle drei Umfänge, Ausnahme-Identität und Auslassen mit Grund. `A6-T4` ergänzt die F03-Restklauseln: sichtbares Drei-Optionen-Angebot, Absagen mit Grund, Schutz von Vergangenem/Begonnenem und die sichtbare Nachvollziehbarkeit (D3).",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A6-01"
       }
     },
@@ -3344,7 +3343,7 @@
       "clauses": "Über Mitternacht / mehrtägig / interne Einträge ohne Fake-Auftrag\n`@P1-11`-Body 3 re-verifiziert: 22:00+4h über Mitternacht, dreitägiger Ganztages-Eintrag, `jobId` null, unveränderte Ist-Zeit; die UI-Labels „Interne Arbeit\"/„Schulung\" werden dort real ausgewählt.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A6-02"
       }
     },
@@ -3363,7 +3362,7 @@
       "clauses": "Ganztägige und mehrtägige Besuche; Büro als Planer\n`A6-T1`: ganztägiger zweitägiger Auftragsbesuch (`start_date`/`end_date_exclusive`, kein `start_at`) sichtbar im Kalender; Büro plant eine Besprechung durch die echte UI.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A6-03"
       }
     },
@@ -3382,7 +3381,7 @@
       "clauses": "Wochen-/Monatsserie: ungültige Termine (31.) fallen aus statt zu verrutschen\n`A6-T2`: Wochenserie über zwei explizit gewählte Wochentage entspricht exakt der Produkt-Materialisierung; Monatsserie am 31. erzeugt ausschließlich echte 31.-Termine — kurze Monate fallen aus, nichts verrutscht.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A6-04"
       }
     },
@@ -3401,7 +3400,7 @@
       "clauses": "18-Monats-Horizont; Serienhorizont um je 6 Monate verlängern (ohne Duplikate)\nProduktdefekt D2: `extendPlanningSeriesHorizon` hatte keinen UI-Aufrufer — der Katalog-Klick existierte nicht. Fix: „Serie um sechs Monate verlängern\" im Serienbereich des Bearbeitungsdialogs inkl. Warn-/Begründungspfad. `A6-T3`: 730 gewünschte Termine klemmen bei 18 Monaten (Soll-Menge aus dem Produkt-Materialisierer), zwei Klicks ergänzen exakt je sechs Monate, alle Identitäten bleiben einmalig.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A6-05"
       }
     },
@@ -3420,7 +3419,7 @@
       "clauses": "Kapazitätswarnung aus schwebendem (pending) Urlaubsantrag\n`A6-T5`: offener Antrag erzeugt die Warnzeile mit Person UND Datum; Speichern ist ohne Grund nachweislich gesperrt; die begründete Ausnahme persistiert `pending_absence` und den Grund read-only.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A6-06"
       }
     },
@@ -3444,7 +3443,7 @@
       "clauses": "Warnungen erklären jede Person und jedes Datum; Grund-Override; geänderte Fakten erzwingen neue Entscheidung\nProduktdefekt D1: keine Warnfläche nannte die betroffene Person, der Bearbeitungsdialog nicht einmal das Datum. Fix: serverseitig aufgelöster `employeeName` (Profil-Präzedenz) nach dem Fingerprint, gerendert in Erstell-, Bearbeitungs- und Drag-Dialog. `A6-T5` beweist Personen-/Datumszeilen über zwei Serientermine und den vollständigen Stale-Pfad (Faktenänderung → „Die Planungslage hat sich geändert\" → aktualisierte Hinweise → zweite bewusste Entscheidung speichert). `@P1-11`-Body 4 hält Overlap-Kinds und Override db-seitig, A5-T4 den Drag-Pfad.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A6-07"
       }
     },
@@ -3468,7 +3467,7 @@
       "clauses": "Personal ohne Login verplanbar (Manager-sichtbar)\nMapping-Korrektur: `@P1-11` plant kein Personal ohne Login; die db-Ebene stammt aus A5-T2. `A6-T7` legt eine eigene Akte ohne Login an, plant NUR sie, und beweist Manager-Sichtbarkeit: Kalender-Rendering plus Bearbeitungsdialog mit „1 Mitarbeiter\" und sichtbarem „Ohne App-Zugang\"; die Zuweisungsidentität ist read-only belegt.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A6-08"
       }
     },
@@ -3492,7 +3491,7 @@
       "clauses": "Legacy-Einzeldatum-Aufträge über die Brücke\n`@P1-11`-Body 5 re-verifiziert: Brücke rendert und editiert mit stabiler `legacy_source_job_id`-Identität ohne Ist-Zeit.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A6-09"
       }
     },
@@ -3516,7 +3515,7 @@
       "clauses": "Vier interne Eintragstypen wählbar mit korrekten Labels\nAutomatisiert statt manueller Ausnahme: `A6-T1` prüft das Vier-Optionen-Angebot mit exakten Labels, das Büro speichert die Standardart „Besprechung\" (`meeting`), Admin wählt „Sonstiges\" (`other`); `@P1-11`-Body 3 wählt „Interne Arbeit\" und „Schulung\".",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A6-10"
       }
     },
@@ -3535,7 +3534,7 @@
       "clauses": "Vergangenes/Begonnenes nie umgeschrieben; Absagen/Auslassen bleiben nachvollziehbar sichtbar\nProduktdefekt D3: Kalender und Dispatch-Panel filterten `status='scheduled'` — ausgelassene/abgesagte Termine verschwanden entgegen Katalog und Dialogtext. Fix: Kalender lädt und rendert sie gedämpft mit Status-Badge, nicht ziehbar, Popover ohne Bearbeiten. `A6-T4`: Serie ab gestern; Einzel-Edit des vergangenen Termins wird verständlich verweigert; Serien-Edit verschiebt nur Zukünftiges (Vergangenes byte-identisch); Absage und Auslassung bleiben mit Badge sichtbar und read-only persistiert.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A6-11"
       }
     },
@@ -3559,7 +3558,7 @@
       "clauses": "Kapazitätsquellen Wochenplan-Fallback, Feiertag, Betriebsruhe, genehmigter Urlaub, Krankheit\n`A6-T5` hält den Wochenplan-Fallback (`no_schedule`) als sichtbare Zeile; `A6-T6` provoziert Betriebsruhe-, Feiertags- (temporäre Berlin-Region, danach zurückgesetzt), Urlaubs- und Krankheits-Warnungen jeweils mit Person und Datum — ohne zu speichern — und räumt alle Fixtures per UI wieder ab. Overlap bleibt `@P1-11`-Body 4.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A6-12"
       }
     },
@@ -3583,7 +3582,7 @@
       "clauses": "Handwerker sehen genau ihre Termine; Planung erzeugt nie Ist-Zeit\n`@P1-11` hält RLS-Matrix und Ist-Zeit-Null; `A6-T7` ergänzt das exakte Positiv/Negativ-Paar in der Handwerker-Kalender-UI (eigener A6-Termin sichtbar, Nur-ohne-Login-Termin abwesend) und den unveränderten organisationsweiten Ist-Zeit-Zähler über alle A6-Planungen.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A6-13"
       }
     },
@@ -3610,7 +3609,7 @@
       "clauses": "Einsatz senden (geplant + ungeplant); Bereitschaftsbild ehrlich; Parkplatz-Kontext; Legacy-Label\n`@GG-03` hält Panel-Toggle, Empfänger-Marker, Realtime-Frische, fehlenden Mitarbeiter-Toggle und je einen Versand für Besuch und ungeplanten Auftrag. `A7-T1` belegt alle sechs beschrifteten Dimensionen (Kapazität/Qualifikation aus der Planungsprüfung, Einsatzort mit Zugangshinweis, Fahrzeit „nicht bewertet\", Material immer „– nicht reserviert.\", Werkzeuge „nicht bewertet\") plus Unbekannt-nie-grün und den optionalen Hinweistext; `A7-T2` die belegbare Fahrzeit-Warnung in Dialog und Panel; `A7-T3` das sichtbare Zustandsvokabular inkl. „Übernommen\"; `A7-T5/A7-T6` belegen bewusstes Parken mit Kontext. Der Altbestandspfad lässt sich nach P1-14 absichtlich nicht neu über die UI erzeugen; F09 wird durch den unveränderten sichtbaren Fallback und die migrationsseitige Null-Kontext-Erhaltung belegt, nicht fälschlich A7-T5 zugeschrieben.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A7-01"
       }
     },
@@ -3636,7 +3635,7 @@
       "clauses": "Bestätigen; wesentliche Änderung macht Bestätigung ungültig; Rückfrage → Büro löst → erneut bestätigen\nProduktdefekt D1: kein Trigger auf `jobs` rief die Dispatch-Synchronisation bei Ort-/Einsatzortänderung — Bestätigte behielten eine veraltete Adresse. Fix: additive Migration `sync_dispatch_on_job_location_change` (Fingerprint-idempotent). `@GG-03` hält Verschieben-/Batch-Invalidierung, Panel-Rückfrage und Beibehalten-mit-Begründung samt erneuter Bestätigung. `A7-T2` belegt die „Mein Einsatz\"-Karte (Termin, Ort, Hinweis) und das Bestätigen ÜBER die `/aufgaben`-Aufgabe; `A7-T4` die Rückfrage über `/aufgaben`, die Rückfrage als Manager-Aufgabe MIT Person/Titel/Grund, die Lösung durch Plananpassung (Rückfrage automatisch `superseded`, Karte „ausstehend\" mit neuem Datum) und die Ort-Änderung als `instruction_changed`-Revision mit neu sichtbarem Ort.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A7-02"
       }
     },
@@ -3655,7 +3654,7 @@
       "clauses": "Nur-Empfänger-Änderung: Bestätigungen Unveränderter leben nachvollziehbar weiter (carry-forward)\nReine Zuweisungsänderung erzeugt Revision `reassigned`; die bestätigte Person trägt auf der neuen Revision `carried_forward` (Panel: „Übernommen\"), neue Empfänger sind „Bestätigung ausstehend\".",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A7-03"
       }
     },
@@ -3674,7 +3673,7 @@
       "clauses": "Empfänger ohne Login zeigt „nicht möglich\" und wird nie auto-bestätigt\nEigene Akte ohne Login als Empfänger: Panel-Chip „Ohne Zugang – Bestätigung nicht möglich\"; read-only belegt NULL Acknowledgement-Zeilen für diese Akte über alle Revisionen.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A7-04"
       }
     },
@@ -3693,7 +3692,7 @@
       "clauses": "Einsatz manuell stornieren; Parken storniert aktive Einsätze sichtbar\n`A7-T5`: „Einsatz zurückziehen …\" mit Grund — Status `cancelled`, Historie bleibt, die Karte der Person verschwindet. `A7-T6`: Parken per Kalender-Drag storniert den bestätigten Einsatz automatisch (Event-Ursache `job_parked`), Karte weg, Panel-Zeile weg.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A7-05"
       }
     },
@@ -3718,7 +3717,7 @@
       "clauses": "Hinweistext nach dem Senden; Bestätigung erzeugt keine Ist-Zeit\nKein UI-, Action- oder SQL-Pfad ändert einen versendeten Hinweistext (die Sync-Funktion trägt `dispatch_note` unverändert weiter) — der Katalog wurde korrigiert: der Hinweis ist unveränderlich, eine geänderte Anweisung läuft über Zurückziehen und Neusenden. `A7-T5` belegt genau diesen Pfad (zwei Dispatches, alter Hinweis storniert, neuer Hinweis erneut ausstehend). Ist-Zeit-Null hält `@GG-03` body 6 organisationsweit; `A7-T2`/`A7-T9` halten den unveränderten Zähler zusätzlich über alle A7-Bestätigungen, und `A7-T2` belegt Null Kundenzusagen direkt nach einer Bestätigung.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A7-06"
       }
     },
@@ -3743,7 +3742,7 @@
       "clauses": "Kundenzusage erfassen; Verschieben ⇒ sichtbare Abweichung; neue Zusage löst ab\n`@GG-03` body 5 hält Erfassung, Mismatch-Lebenszyklus und die ablösende Zusage mit `supersedesId`. `A7-T7` ergänzt das optionale Ankunftsfenster (erfasst, im Panel und auf der Handwerker-Karte gerendert), die exakt vier Kanäle, den gewählten Kanal `vor_ort` read-only und den sichtbaren No-Send-Text „Es wird keine Nachricht versendet.\" plus den sichtbaren Text „weicht vom Plan ab\".",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A7-07"
       }
     },
@@ -3762,7 +3761,7 @@
       "clauses": "Kundenzusage mit Grund zurückziehen\n„Zusage zurückziehen …\" → Dialog „Kundenzusage zurückziehen\" (inkl. „nicht benachrichtigt\") — Status `withdrawn` mit read-only belegtem Grund; das Panel bietet danach wieder „Zusage erfassen\".",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A7-08"
       }
     },
@@ -3788,7 +3787,7 @@
       "clauses": "Batch: Auswahl, Vorschau, alles-oder-nichts, Serien-Ausnahmen\nProduktdefekt D2: die Vorschau zeigte nur Zählwerte, nicht die katalogpflichtigen alten/neuen Zeitpunkte je Termin. Fix: `previewBatchReschedule` liefert `items`, der Dialog rendert je Besuch „alt → neu\" (tastaturzugänglich). `@GG-03` body 5 hält Cross-Job-Auswahl, Zähler, Bestätigungs-/Zusagen-Zeilen und den atomaren Tages-Shift. `A7-T9` belegt Tage UND neue Uhrzeit, die indexgenaue alt→neu-Vorschau, die deterministische Konfliktzeile, die Grund-Pflicht (Button gesperrt unter 8 Zeichen), beide Termine als `is_exception` derselben Serie auf Minutengenauigkeit und die erhaltene Historie (je Termin `edited` mit `batchRequestId` plus ein atomarer `batch_rescheduled`-Marker mit der exakten Id-Menge).",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A7-09"
       }
     },
@@ -3808,7 +3807,7 @@
       "clauses": "Batch-Ablehnungsfälle: ganztägig braucht Tages-Verschiebung; Null-Verschiebung abgelehnt\nHeutiger Ganztagsbesuch: Checkbox deaktiviert (nur Zukunft). Null-Verschiebung ohne Uhrzeit: „Auswirkungen prüfen\" bleibt gesperrt. Ganztägig + reine Uhrzeit: exakte deutsche Ablehnung, und read-only ist belegt, dass NICHTS verschoben wurde.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A7-10"
       }
     },
@@ -3827,7 +3826,7 @@
       "clauses": "Überfällige Parkplatz-Wiedervorlage als Aufgabe\nWiedervorlage = HEUTE ist bereits überfällig (`next_review_date ≤ businessToday`); die verantwortliche Büro-Person sieht auf `/aufgaben` die Gruppe „Parkplatz-Wiedervorlagen\" mit Auftragstitel, Datum und „Zuständig: …\". Vollständig automatisiert; keine manuelle Ausnahme.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A7-11"
       }
     },
@@ -3853,7 +3852,7 @@
       "clauses": "Geparkten Auftrag vom Parkplatz dispatchen; späteres Einplanen = nachvollziehbarer Übergang\n`@GG-03` bodies 1–2 halten den Parkplatz-Versand mit ehrlichem Bereitschaftsbild und den `target_scheduled`-Übergang desselben Dispatches samt `unparked`-Kontextlöschung. `A7-T5` ergänzt die Katalogklausel „an die zugewiesenen Mitarbeiter\": der Dialog wählt die zugewiesene Person nachweislich vor.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-1-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-1-audit.md",
         "row": "A7-12"
       }
     },
@@ -3877,7 +3876,7 @@
       "clauses": "Real Admin/Büro/employee/outsider sessions prove zero seeded templates, manager creation and validation, description/target/status filters, employee redirect and outsider isolation. A Büro dialog stays open across an Admin mutation and receives the queued refresh only after close.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-13-F01`, `F02`, `F03`, `F09`, `F26`, `F27`"
       }
     },
@@ -3901,7 +3900,7 @@
       "clauses": "UI-only creation, editing, ordering and deletion cover task/checklist kind, required/optional state, grouping/notes, evidence category, material plus inline item/location creation, organization capability creation, multiple structural prerequisites, cycle rejection and successful immutable publish. Persisted version rows and every child collection are asserted.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-13-F04`, `F05`, `F06`, `F07`, `F08`, `F10`"
       }
     },
@@ -3927,7 +3926,7 @@
       "clauses": "Direct job creation selects a published version, uses the established qualification override, materializes attributed existing primitives, keeps stock/time/documents untouched, and preserves the pre-existing planning occurrence and assignment. Employee checklist completion is persisted with actor/time. Manager edits checklist metadata/evidence and material through existing sections; provenance survives. V2, archive/reactivation and actor/timestamp/target history never rewrite V1 work.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-13-F11`, `F12`, `F13`, `F14`, `F19`, `F20`, `F21`, `F22`"
       }
     },
@@ -3949,7 +3948,7 @@
       "clauses": "The preview shows exact counts; same-version retry is denied; another version requires explicit additive confirmation. A project application creates direct project instruction/material/capability rows, no child job, and no inherited row on a later child. Empty pickers exclude drafts, archives and foreign-organization versions.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-13-F17`, `F18`, `F23`, `F24`"
       }
     },
@@ -3969,7 +3968,7 @@
       "clauses": "Customer, employee, project-child and calendar creation dialogs expose the optional matching picker without changing their existing defaults. Job and project conversion materialize the selected version and persist the once-only request link; target state is read from the database.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-13-F15`, `F16`"
       }
     },
@@ -3989,7 +3988,7 @@
       "clauses": "A retired capability makes template-backed creation fail atomically: the request/job count and application count stay unchanged, the named correction appears, and retry remains possible. Direct employee action and cross-organization reads/writes stay denied.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-13-F25`, `F26`"
       }
     },
@@ -4019,7 +4018,7 @@
       "clauses": "UI-only work creation proves separate canonical/planned/readiness facets, next action, canonical list badge/filter and employee denial. Parallel Admin/Büro dialogs produce one accepted transition, a persisted version/event pair, preserved input, catch-up signal and concrete stale rejection; interruption persists its required reason.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-14-F01`…`F12`"
       }
     },
@@ -4050,7 +4049,7 @@
       "clauses": "An assigned employee creates a self-owned due-today safety blocker through the UI; persisted owner/reason/review/version and manager attention are asserted. Employee resolution, manager reopen, second resolution and event-compatible versions are followed by manager parking with bounded context. Database state proves one blocker model, resolved/open distinction and execution/parking separation.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-14-F13`…`F25`"
       }
     },
@@ -4079,7 +4078,7 @@
       "clauses": "Manager UI links two jobs, start is atomically denied, the inverse link is rejected as a cycle, predecessor execution completion satisfies the link, and reopening makes it unsatisfied again. The persisted row proves the chosen start effect and retained identity; the companion template/gate journey exercises the existing instruction prerequisite primitive.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-14-F26`…`F36`"
       }
     },
@@ -4109,7 +4108,7 @@
       "clauses": "A template-backed assigned/planned job renders the shared readiness dimensions, honest unknown/tool state and unreserved material wording. Required-instruction completion blocks execution completion until the employee persists it. Completion then succeeds, while handover needs the checked manager exception and reason; the final event asserts distinct state, current zero instruction gap, gate snapshot and 64-character fingerprint.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-14-F37`…`F48`"
       }
     },
@@ -4147,7 +4146,7 @@
       "clauses": "UI-only project/job creation proves automatic project derivation, a reasoned non-cascading override, reasoned clear and unchanged child. A scheduled job starts through actual clock-in and persists the atomic automatic event; clock-out restores test hygiene. Direct database assertions prove no template/application or inventory movement side effect, outsider UI denial and zero cross-organization lifecycle visibility. Golden compatibility stories additionally exercise legacy parking and the dedicated lifecycle journeys.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-14-F49`…`F63`"
       }
     },
@@ -4196,7 +4195,7 @@
       "clauses": "Real Admin/Büro/employee/outsider sessions prove the section placement, empty/list/detail states, exact job/project target access, all five typed forms, assignment-derived field access, customer visibility controls, complete-versus-draft validation, positive measurement rows, defect/change details and zero cross-organization visibility. Persisted revisions and typed detail rows are asserted without creating parallel jobs, tasks, time or stock facts.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-15-F01`…`F31`"
       }
     },
@@ -4223,7 +4222,7 @@
       "clauses": "Exact database assertions prove append-only versions/details, correction reasons, decision/evidence retention, optimistic version rejection with no partial write, same-request replay versus conflicting reuse, hard-delete protection and dialog-safe Realtime catch-up. The stale UI keeps its local input until the user reloads the current version.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-15-F32`…`F40`"
       }
     },
@@ -4250,7 +4249,7 @@
       "clauses": "Role default, selected responsibility and action-time delegation are exercised through the shared resolver. Self-approval is denied; a second authorized person approves, rejects and requests correction against exact revisions; withdrawal and void retain immutable history. Stable review/correction/defect attention identities surface only to current target-authorized viewers and clear or reappear from current facts without duplicates.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-15-F41`…`F49`"
       }
     },
@@ -4289,7 +4288,7 @@
       "clauses": "UI and persisted rows distinguish internal approval from acknowledgement, refusal and reservation; exact-version customer context and the legal-sufficiency disclaimer remain visible. Pointer signature upload uses the existing direct R2/document path. Same-target documents, time sources and instruction-evidence fulfilment are validated, and deterministic HTML export proves category/linkage, renderer/hash identity, structured content and retry behavior.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-15-F50`…`F70`"
       }
     },
@@ -4320,7 +4319,7 @@
       "clauses": "Current measurement, defect, approval, customer/signature and evidence facts feed the P1-14 snapshot/fingerprint and gates without a second blocker model; an approved artifact action can satisfy the declared approval prerequisite. Detail, attention, document and lifecycle surfaces refresh through existing ownership. Read-only database assertions prove zero changes to planning, dispatch, actual time, inventory, price, invoice, customer package or messages and preserve every later-slice boundary.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-15-F71`…`F78`"
       }
     },
@@ -4365,7 +4364,7 @@
       "clauses": "Real Admin/Büro/employee/outsider sessions create standalone and child work, then prove shared assigned access, minimal parent reference, no sibling/project-wide leakage, unchanged office composition, server denial for unassigned/foreign roles, side-effect-free opening, exact mobile order, requested outcome, site/access/contact/call/navigation actions, explicit missing facts, 44px targets and exclusion of internal notes, email, colleague, commercial and governance facts. Read-only before/after database state is equal.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-16-F01`…`F26`, `F83`"
       }
     },
@@ -4399,7 +4398,7 @@
       "clauses": "Two UI-created dispatch journeys prove one current CTA, fail-closed pending dispatch, acknowledgement and challenge through their owner, honest readiness dimensions and zero time/stock/status/message/customer-promise side effects. Employee lifecycle start, interrupt, resume and gated completion use the P1-14 transitions; terminal field state is read-only while completion remains distinct from handover/reopen. Persisted dispatch and lifecycle reads prove the committed revisions and events.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-16-F27`…`F42`"
       }
     },
@@ -4441,7 +4440,7 @@
       "clauses": "Ordered task metadata, dependency behavior, serialized completion/reopen, evidence requirements and exact fulfilment remain in P1-13/P1-15. UI-only artifact and direct-R2 document actions persist through independent reads; own internal drafts remain visible, coworker drafts/signers stay hidden, stale input survives and no copied task, file, field-artifact format or customer package appears. Upload failure/retention and terminal read-only controls are exercised through the shared components.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-16-F43`…`F61`"
       }
     },
@@ -4479,7 +4478,7 @@
       "clauses": "The employee sees only their own time, clocks in/out through the established surface and never gains P1-21 segmentation. Planned and unplanned material take plus return use a bounded picker and existing inventory RPCs; persisted movement count rises by two while on-hand quantity returns to baseline, and supplier/valuation/billability/catalog controls remain absent. Own blocker report/resolve and prerequisites use P1-14 without a second issue model.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-16-F62`…`F81`"
       }
     },
@@ -4510,7 +4509,7 @@
       "clauses": "Compact issues, progressive disclosure, parallel bounded loading, initial retry, keep-last-known inert stale state, duplicate/stale recovery, focus and assignment-revocation catch-up, root-based Realtime, dialog input preservation, keyboard/focus/screen-reader/touch behavior and explicit no-offline/no-provider/no-message/no-equipment/no-commercial/no-customer-package promises are asserted. Unit tests cover field projection/terminal privacy, signer redaction and fail-closed dispatch state. Every mutation remains with its domain owner.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-16-F82`…`F94`"
       }
     },
@@ -4567,7 +4566,7 @@
       "clauses": "Real Admin/Büro/employee/outsider sessions create project-child and standalone contexts, prove the three exact routes, compact field projection, side-effect-free empty state, stored customer/site/contact facts, lifecycle prerequisite, classified warning/exception/unassessed facts, action-time authorization, organization isolation, loading/retry/stale behavior, root-owned Realtime refetch and closed later-domain boundaries.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-17-F01`…`F22`, `F31`…`F39`, `F102`…`F109`"
       }
     },
@@ -4630,7 +4629,7 @@
       "clauses": "UI-only completion, direct R2 document upload and conscious source selection prove one versioned mutable root, exact document/version/path membership, immutable customer-safe release, deterministic renderer/hash identity, gate/readiness decision, responsibility snapshot, attention resolution and atomic `handed_over` transition. Hard gates reject invalid state/source/time/package facts; reasoned exceptions remain explicit. Read-only state proves no planning, dispatch, actual-time, stock or commercial mutation.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-17-F23`…`F30`, `F40`…`F71`"
       }
     },
@@ -4665,7 +4664,7 @@
       "clauses": "A project selects the concrete immutable releases of its own child jobs in stable order without copying their business sources or widening field authorization. Parallel office pages prove optimistic stale-write rejection and preserved server truth. Registration binds document, release/items/events, readiness and lifecycle in one guarded transaction; retries retain request identity and safe R2 cleanup boundaries. No delivery, public access, portal, billing, inventory consumption, offline queue or external provider is introduced.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-17-F72`…`F88`"
       }
     },
@@ -4696,7 +4695,7 @@
       "clauses": "Manager UI requires reasons for withdrawal and reopening, atomically returns the lifecycle through `execution_complete` to correction work, opens a successor draft and releases a second package linked to its predecessor. Exact database reads prove two retained package documents, immutable prior membership/readiness/review facts, actor/time/reason events and lifecycle history `handed_over → handover_withdrawn → reopened → handed_over`; stale/idempotent boundaries remain guarded.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-17-F89`…`F101`"
       }
     },
@@ -4732,7 +4731,7 @@
       "clauses": "Real manager sessions create one site-owned root and one bounded component, prove immutable `ANL-YYYY-NNN` identity, same-target constraints, exact/normalized identifiers, honest missing facts, bounded categories, list search and the compact customer projection. Direct persisted reads prove no inferred equipment and no inventory ownership or movement.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-18-F01`…`F14`, `F33`…`F36`"
       }
     },
@@ -4766,7 +4765,7 @@
       "clauses": "Exact job, project, artifact revision and handover-release references retain their owning identities and snapshots. Existing-document linking reuses private R2 metadata, blocks history-erasing unlink/permanent deletion, and does not widen employee document access. Versioned, idempotent guarded operations retain actor/effective/recorded times and reject conflicting retries without partial rows.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-18-F15`…`F23`, `F31`, `F32`"
       }
     },
@@ -4791,7 +4790,7 @@
       "clauses": "Manager UI and independent database reads exercise the fixed status vocabulary, reasoned terminal transitions, successor creation and correction history. The predecessor, its identifiers, origins, links, documents and events remain addressable; invalid reactivation, direct overwrite and stale mutations are rejected atomically.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-18-F24`…`F30`"
       }
     },
@@ -4819,7 +4818,7 @@
       "clauses": "Admin/Büro detail access, assigned employee projection, unassigned employee denial and outsider isolation prove the exact assigned-job boundary without site/project/root/sibling widening. Root-only Realtime refresh meets the latency contract; load/retry/stale states, dialog suspension, keyboard/focus labels, responsive list/detail composition and loading skeletons follow the shared UI primitives.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-18-F37`…`F46`"
       }
     },
@@ -4839,7 +4838,7 @@
       "clauses": "Before/after state proves registration, linking and replacement create no service request/dispatch, recurrence, contract, time segment, inventory movement, commercial row, message, public access or offline/external-provider state. The bounded typed category/component model introduces no EAV, compliance, manufacturer-rule or telemetry platform.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-18-F47`, `F48`"
       }
     },
@@ -4881,7 +4880,7 @@
       "clauses": "Real manager sessions create the existing customer, two sites, one installed asset and two jobs, then create a direct case and atomically qualify a request. Independent reads prove stable identities, preserved source text, exact customer/site/equipment ownership, no inferred equipment and owner-sensitive search.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-19-F01`…`F24`"
       }
     },
@@ -4928,7 +4927,7 @@
       "clauses": "UI and database reads prove bounded statuses, urgency, access and suspected charge context, exact-site job filtering, optimistic stale rejection, retained continuation relation, existing calendar visit, P1-12 dispatch and acknowledgement. The field-ready visit does not create a second job, occurrence, dispatch ledger or legal/commercial decision.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-19-F25`…`F48`"
       }
     },
@@ -4970,7 +4969,7 @@
       "clauses": "The assigned employee sees case number, issue, urgency, access and exact equipment through the existing work pack while internal triage and suspected charge context remain absent. A submitted P1-15 report revision, direct-R2 document and manager-owned P1-10 follow-up remain exact linked owner records; authoritative reads prove their identities and immutable service events.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-19-F49`…`F72`"
       }
     },
@@ -5007,7 +5006,7 @@
       "clauses": "Guarded RPCs enforce expected version, request identity, organization and target consistency while append-only events retain before/after context. Cross-manager Realtime refresh meets the bounded assertion; employee direct access redirects, outsider full-DOM and RLS reads reveal zero foreign facts, and shared components retain German labels, keyboard/focus semantics, loading and error behavior.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-19-F73`…`F91`"
       }
     },
@@ -5030,7 +5029,7 @@
       "clauses": "The audit creates no maintenance plan, contract coverage, recurrence, time segment, stock movement, consumption, supplier return, price, invoice, message, public link, offline queue, connector, telemetry, diagnosis or legal warranty classification. Planning, evidence, documents and follow-up remain with their existing owners.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-19-F92`…`F96`"
       }
     },
@@ -5075,7 +5074,7 @@
       "clauses": "Manager UI creates one customer/site/equipment/template/service context, one operational coverage and an active exact-equipment plan. Independent reads prove immutable revision/template ownership, understandable horizon rows before any job or occurrence exists, no inferred commercial/legal truth, and no hidden work creation.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-20-F01`…`F27`"
       }
     },
@@ -5125,7 +5124,7 @@
       "clauses": "A second overlapping plan is rejected until its reason is explicit. Optimistic stale protection, pause, terminate and archive retain attributable history. The Golden journey creates one normal job from exact due work, schedules its calendar occurrence and keeps the service identities separate; the audit proves link-only actions do not create a job.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-20-F28`…`F54`"
       }
     },
@@ -5171,7 +5170,7 @@
       "clauses": "The assigned employee sees only the exact visit plan/equipment/instructions and not coverage dates, internal notes or unrelated service history. Existing document, P1-10 follow-up and P1-19 case owners are linked exactly. Completion binds the exact P1-15 evidence revision and preserves the selected due-basis calculation and next due work without copying owner facts.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-20-F55`…`F82`"
       }
     },
@@ -5212,7 +5211,7 @@
       "clauses": "Guards enforce manager role, organization/site/equipment consistency, expected versions, stable request identities, terminal/archive rules and append-only history. Employee and outsider reads return zero foreign manager facts; only the three mutable roots publish Realtime. No time segment, stock movement, commercial record, outbound message, public/offline access, provider or inferred contract truth is created.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-20-F83`…`F105`"
       }
     },
@@ -5264,12 +5263,17 @@
           "file": "lib/time-tracking/segments.test.ts",
           "kind": "unit",
           "description": "`tests/golden/p1-21.spec.ts` and `tests/audit/wave-2/p1-21.spec.ts` — capture, kinds, allocation and atomic switching"
+        },
+        {
+          "file": "tests/ui-contracts/clock-readiness.spec.ts",
+          "kind": "browser",
+          "description": "Pre-Wave-3 step 3 (2026-09-15): the clock button opens the next-action sheet, the state-dependent hot keys resume the interrupted job in one tap and wait for readiness, the pill shows the running activity and time, and the styled contract proves 44 px targets and an unclipped selected tile (`P1-21-F01`, `F09`, `F10`); the picker groups today's planned jobs first (`P1-21-F19`, application proof through the repointed `clockInOnJob` helper)."
         }
       ],
       "clauses": "Real employee and manager-created job flows persist one stable attendance session, all six activity kinds, explicit job/unallocated allocation, travel qualifiers, standby context and one open segment at a time. Independent reads prove every switch closes/opens atomically and the field-work control uses the same session.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-21-F01`…`F24`"
       }
     },
@@ -5322,7 +5326,7 @@
       "clauses": "SQL assertions cover idempotent replay, conflicting reuse, stale version denial, organization locks, every segment shape, recovery, immutable events, legacy bridge and deploy-day zero backfill. Pure projection tests pin valid work/break state transitions and Berlin-day presentation while browser/database reads preserve stable identities and category facts.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-21-F25`…`F44`"
       }
     },
@@ -5365,7 +5369,7 @@
       "clauses": "Sign-out and member-removal paths close canonical state with attribution; employee, manager and outsider sessions prove self/organization visibility and zero foreign rows. Direct writes remain unavailable, action-time functions reauthorize, and canonical session/segment changes refresh readers without publishing immutable child ledgers or leaking stale organization state.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-21-F45`…`F54`"
       }
     },
@@ -5408,7 +5412,7 @@
       "clauses": "Job/project/calendar/field-pack/artifact/handover readers share the compatibility projection. Work/call-out start P1-14 while travel does not. Canonical rows stay read-only in P1-22-owned mutation surfaces. Semantic controls and exact database counts prove no automatic planning, dispatch, maintenance, document, stock, commercial, message, offline or provider effects.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-21-F55`…`F64`"
       }
     },
@@ -5457,7 +5461,7 @@
       "clauses": "Employee and manager sessions use the one dialog and persisted aggregate. The UI proves attributable before/proposed states; typed validation and SQL pin every operation shape, exact legacy/canonical/application sources, no immediate source mutation and visible refusal of invalid forms or targets.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-22-F01`…`F16`"
       }
     },
@@ -5503,7 +5507,7 @@
       "clauses": "A Büro holder corrects another employee atomically while the same Büro user's own correction remains submitted without an application. The employee request stays provisional until a different effective holder acts; history, approval/task projections, calendar and totals share the root invalidation and explicit German status vocabulary.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-22-F17`…`F29`"
       }
     },
@@ -5545,7 +5549,7 @@
       "clauses": "The audit preserves revision 1 through clarification and appends revision 2 on resubmission. SQL proves withdrawal retention/replay, required decision comments, stale-revision denial, one exact application, immutable events, duplicate-source denial and a newest-application-only historical chain.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-22-F30`…`F38`"
       }
     },
@@ -5590,7 +5594,7 @@
       "clauses": "Two individually visible requests are selected and approved together; stale SQL input leaves both untouched. Employee and outsider reads prove self visibility and complete tenant isolation. Remote checks prove service-role RPCs, RLS, indexed Realtime root and private immutable children; regression evidence proves no planning or downstream side effect and keeps actual close/account/export with P1-23.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-22-F39`…`F50`"
       }
     },
@@ -5656,7 +5660,7 @@
       "clauses": "Real manager actions confirm the organization default, a named employee exception, varied schedules, explicit account openings and a complete payroll mapping. A rejected adjustment remains in history while SQL and browser reads prove no ledger, balance or version mutation. Typed policy tests pin the fixed 0/50/100 vocabulary and absence/supplement separation.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-23-F01`…`F18`"
       }
     },
@@ -5722,7 +5726,7 @@
       "clauses": "Preparation freezes every overlapping personnel record, exact effective time/correction/schedule/absence/policy/account/calendar sources and daily credited buckets. Audit injects a missing historical clock, observes the blocking finding, repairs the exact source and proves a successor calculation clears it. SQL refuses incomplete populations and proves future activity does not stale an earlier month while an in-period closure-day change does.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-23-F19`…`F36`"
       }
     },
@@ -5779,7 +5783,7 @@
       "clauses": "A complete past month closes once, materializes every account result, is visible as an employee statement and remains invisible to an outsider. Reopen requires a reason, reverses account effects, retains close/export history and leaves the period ready for a corrected successor. Database guards deny history mutation, client RPC execution and closed-period correction application.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-23-F37`…`F45`"
       }
     },
@@ -5832,7 +5836,7 @@
       "clauses": "The confirmed mapping covers every employee and fixed code before one complete-workforce ZIP is reserved, generated, hashed, stored privately and finalized. Unit tests prove byte stability, CSV escaping and formula neutralization; manifest/control totals preserve exact versions. Realtime publishes only six mutable roots, and regression/canary evidence proves no payroll calculation or unrelated downstream state.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-23-F46`…`F50`"
       }
     },
@@ -5891,7 +5895,7 @@
       "clauses": "The browser journey starts from explicit missing configuration, creates one protected file through the existing direct R2 path, releases one exact version, records the employee receipt and keeps the file outside the ordinary library. Read-only role and tenant probes plus SQL prove stable `employee_records.id` ownership, standard/restricted/health separation, exact-version visibility, immutable history, protected link/move/delete guards and outsider denial.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-24-F01`…`F21`"
       }
     },
@@ -5943,7 +5947,7 @@
       "clauses": "Admin publishes one immutable template version and instantiates an editable employee plan with an acknowledgement blocker. Employee and manager sessions observe the same live requirement; the employee completes it once, while SQL proves stale/version refusal, operation replay, typed reference integrity and no copied qualification, schedule, team or condition records. Missing configuration never projects completion.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-24-F22`…`F35`"
       }
     },
@@ -6002,7 +6006,7 @@
       "clauses": "The journey activates, immediately suspends and reactivates one organization membership while the active session loses protected routes and the global Auth identity remains untouched. SQL covers scheduled transitions, cancelled/expired invites, blockers, last-Admin safety, employment reversal, responsibility/work inventory, last-holder refusal, explicit unresolved exceptions and historical person references. A1/A3/A5 regression proof preserves documents, membership behavior, time/person history, responsibilities, attention and qualifications.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-24-F36`…`F56`"
       }
     },
@@ -6050,7 +6054,7 @@
       "clauses": "Admin, Büro, affected employee, responsibility-only holder and outsider boundaries are enforced by both Server Actions and RLS. Seven mutable roots use indexed replica identity; immutable history stays unpublished. DEV-first/PROD-second rollout left every new business table empty and all legacy counts unchanged. A4 preserves sickness privacy; no Auth ban, second byte store, external resource, legal-retention claim or P1-25/P1-32/P1-33/P1-45 domain was introduced.",
       "review": {
         "kind": "imported-ledger",
-        "source": "docs/plans/wave-2-audit.md",
+        "source": "docs/plans/phase-1/audits/wave-2-audit.md",
         "row": "`P1-24-F57`…`F66`"
       }
     },
@@ -6117,12 +6121,17 @@
           "file": "supabase/tests/security_boundaries.sql",
           "kind": "sql",
           "description": "remove_member_with_time_capture raises time_member_removal_has_history and leaves membership and time history in place"
+        },
+        {
+          "file": "tests/audit/wave-1/a1-grundstock.spec.ts",
+          "kind": "browser",
+          "description": "A1-04 observes the German denial, unchanged time history, preserved membership and working status after reload, followed by normal sign-out."
         }
       ],
-      "clauses": "Entfernen eines Mitglieds mit erfasster Arbeitszeit wird an der Datenbankgrenze abgelehnt; Mitgliedschaft und Zeithistorie bleiben erhalten. Die deutsche Meldung der Aktion ist reviewed, nicht browsergetestet.",
+      "clauses": "Removal with recorded working time is denied at the SQL boundary and through the UI. Membership, recorded time and the running session survive. The SQL check separately permits removal before any recorded time.",
       "review": {
         "kind": "assertions-reviewed",
-        "rationale": "The SQL assertion calls the real RPC as service_role for a member with one time entry, checks the exception name, and verifies that the membership row and the time entry survive. The action maps the exception to the German message rendered by the member actions."
+        "rationale": "September 12: real RPC assertions cover both no-history success and recorded-history denial. A1-04 exercises the actual dialog and retained state. Runtime acceptance is recorded separately in the Step 2 plan."
       }
     }
   ]

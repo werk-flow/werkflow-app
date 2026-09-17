@@ -58,7 +58,7 @@ function collectStringLiterals(node) {
  * `items-center` for inline checkbox rows). A `Label` in a bare `div` renders
  * glued to its control — the 2026-09-03 regression in the P1-13/P1-15 forms.
  */
-export const labelInSpacedContainerRule = {
+const labelInSpacedContainerRule = {
   meta: {
     type: "problem",
     schema: [],
@@ -111,10 +111,45 @@ export const labelInSpacedContainerRule = {
   },
 };
 
-export const uiRules = {
-  rules: {
-    "label-in-spaced-container": labelInSpacedContainerRule,
+/**
+ * Lucide icons take the global 1.75 stroke from app/globals.css; a strokeWidth
+ * prop per icon drifts the weight (werkflow-design: Icons). SVG primitives
+ * such as the progress ring's own <circle> keep the attribute.
+ */
+const noLucideStrokeWidthRule = {
+  meta: {
+    type: "problem",
+    schema: [],
+    messages: {
+      strokeWidth:
+        "Lucide icons take the global 1.75 stroke from app/globals.css; drop the strokeWidth prop (werkflow-design skill: Icons). A deliberate exception uses a utility class such as [stroke-width:3].",
+    },
+  },
+  create(context) {
+    const lucideIcons = new Set();
+    const lucideNamespaces = new Set();
+    return {
+      ImportDeclaration(node) {
+        if (node.source.value !== "lucide-react") return;
+        for (const specifier of node.specifiers) {
+          (specifier.type === "ImportNamespaceSpecifier" ? lucideNamespaces : lucideIcons).add(specifier.local.name);
+        }
+      },
+      JSXAttribute(node) {
+        if (node.name.type !== "JSXIdentifier" || node.name.name !== "strokeWidth") return;
+        const name = node.parent.name;
+        const isLucide =
+          (name.type === "JSXIdentifier" && lucideIcons.has(name.name)) ||
+          (name.type === "JSXMemberExpression" && name.object.type === "JSXIdentifier" && lucideNamespaces.has(name.object.name));
+        if (isLucide) context.report({ node, messageId: "strokeWidth" });
+      },
+    };
   },
 };
 
-export default uiRules;
+export const uiRules = {
+  rules: {
+    "label-in-spaced-container": labelInSpacedContainerRule,
+    "no-lucide-stroke-width": noLucideStrokeWidthRule,
+  },
+};

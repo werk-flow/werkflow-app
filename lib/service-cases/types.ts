@@ -78,8 +78,6 @@ export const SERVICE_CASE_URGENCY_LABELS = {
 
 export type ServiceCaseRow =
   Database["public"]["Tables"]["service_cases"]["Row"];
-export type ServiceCaseEventRow =
-  Database["public"]["Tables"]["service_case_events"]["Row"];
 
 export type ServiceCaseEquipment = {
   id: string;
@@ -132,7 +130,7 @@ export type ServiceCaseRelation = {
   createdAt: string;
 };
 
-export type ServiceCaseEvidence = {
+type ServiceCaseEvidence = {
   id: string;
   revisionId: string;
   artifactId: string;
@@ -194,7 +192,7 @@ export type ServiceCaseJobOption = {
   siteId: string | null;
 };
 
-export type ServiceCaseWorkspace = {
+type ServiceCaseWorkspace = {
   cases: ServiceCaseListItem[];
   clients: ServiceCaseClientOption[];
 };

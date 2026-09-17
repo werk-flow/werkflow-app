@@ -18,9 +18,10 @@ function methodName(expression: ts.Expression): string | null {
 }
 
 function sectionId(call: ts.CallExpression): string | null {
+  const [testId] = call.arguments;
   if (methodName(call.expression) !== 'getByTestId' || call.arguments.length !== 1 ||
-      !ts.isStringLiteral(call.arguments[0])) return null;
-  return SECTION_OWNERS[call.arguments[0].text] ? call.arguments[0].text : null;
+      !testId || !ts.isStringLiteral(testId)) return null;
+  return SECTION_OWNERS[testId.text] ? testId.text : null;
 }
 
 function owningFunction(node: ts.Node): string | null {
@@ -62,7 +63,7 @@ function pageName(name: string): boolean {
 
 /** Local binding resolution avoids a full application typecheck in the unit suite. */
 function locatorScopeResolver(syntax: ts.SourceFile): (expression: ts.Expression) => LocatorScope {
-  type Binding = { name: string; scope: ts.Node; position: number; source?: ts.Expression; kind?: LocatorScope };
+  type Binding = { name: string; scope: ts.Node; position: number; source?: ts.Expression | undefined; kind?: LocatorScope | undefined };
   const bindings: Binding[] = [];
   const pageTypes = new Set(['Page']);
   for (const statement of syntax.statements) {
@@ -190,8 +191,9 @@ function isPageWidePrivacyAbsence(call: ts.CallExpression, resolveScope: (expres
   const matcher = assertion.parent;
   if (!ts.isPropertyAccessExpression(matcher) || matcher.name.text !== 'toHaveCount') return false;
   const result = matcher.parent;
-  return ts.isCallExpression(result) && result.expression === matcher &&
-    result.arguments.length >= 1 && ts.isNumericLiteral(result.arguments[0]) && result.arguments[0].text === '0';
+  if (!ts.isCallExpression(result) || result.expression !== matcher) return false;
+  const [count] = result.arguments;
+  return count !== undefined && ts.isNumericLiteral(count) && count.text === '0';
 }
 
 function unownedArtifactLocators(source: string, path = 'fixture.ts'): number[] {
@@ -213,6 +215,14 @@ function unownedArtifactLocators(source: string, path = 'fixture.ts'): number[] 
   return violations;
 }
 
+// A locator passed as `has:` or `hasNot:` is evaluated inside the outer locator, so the
+// outer element is its owner; a page root there would even be wrong (Step 3, 2026-09-13).
+function isFilterRelationArgument(node: ts.Node): boolean {
+  let current: ts.Node | undefined = node;
+  while (current && (ts.isCallExpression(current) || ts.isPropertyAccessExpression(current) || ts.isElementAccessExpression(current))) current = current.parent;
+  return !!current && ts.isPropertyAssignment(current) && ts.isIdentifier(current.name) && ['has', 'hasNot'].includes(current.name.text);
+}
+
 function unownedPageTestIds(source: string): number[] {
   const syntax = ts.createSourceFile('fixture.ts', source, ts.ScriptTarget.Latest, true);
   const resolveScope = locatorScopeResolver(syntax);
@@ -220,7 +230,8 @@ function unownedPageTestIds(source: string): number[] {
   function visit(node: ts.Node): void {
     if (ts.isCallExpression(node) && methodName(node.expression) === 'getByTestId' &&
         (ts.isPropertyAccessExpression(node.expression) || ts.isElementAccessExpression(node.expression)) &&
-        isUnownedScope(resolveScope(node.expression.expression)) && !isPageWidePrivacyAbsence(node, resolveScope)) {
+        isUnownedScope(resolveScope(node.expression.expression)) && !isPageWidePrivacyAbsence(node, resolveScope) &&
+        !isFilterRelationArgument(node)) {
       violations.push(syntax.getLineAndCharacterOfPosition(node.getStart(syntax)).line + 1);
     }
     ts.forEachChild(node, visit);
@@ -251,6 +262,7 @@ test('artifact locator guard preserves explicit whole-DOM privacy absence and sh
     {
       const pack = await openFieldWorkPack(employeePage, 'job-number');
       const readOnlyArtifacts = pack.getByTestId('work-artifacts-section');
+      page.getByRole('main').getByRole('tabpanel').filter({ has: page.getByTestId('maintenance-due-row').filter({ hasText: 'WPL' }) });
     }
   `)).toEqual([]);
 });
@@ -317,12 +329,15 @@ test('shared work section owners scope their sections to semantic main', () => {
   }
   visit(syntax);
   expect(selectors).toHaveLength(1);
-  const selector = selectors[0].expression;
+  const [selectorCall] = selectors;
+  if (!selectorCall) throw new Error('expected one section selector');
+  const selector = selectorCall.expression;
   if (!ts.isPropertyAccessExpression(selector) || !ts.isCallExpression(selector.expression)) throw new Error('Artifact owner must select semantic main before the section.');
   const scope = selector.expression;
   expect(methodName(scope.expression)).toBe('getByRole');
   expect(scope.arguments).toHaveLength(1);
-  expect(ts.isStringLiteral(scope.arguments[0]) && scope.arguments[0].text).toBe('main');
+  const [roleName] = scope.arguments;
+  expect(roleName !== undefined && ts.isStringLiteral(roleName) && roleName.text).toBe('main');
   }
 });
 

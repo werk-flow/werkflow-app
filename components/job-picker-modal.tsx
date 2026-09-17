@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { Fragment, useState, useEffect, useMemo, useRef } from 'react';
 import {
   Play,
   ArrowLeftRight,
@@ -22,7 +22,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { filterByQuery } from '@/lib/ui/search';
-import { getJobsForPicker } from '@/lib/time-tracking/actions';
+import { getJobsForPicker } from '@/lib/time-tracking/picker-actions';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 
 type PickerJob = {
@@ -32,6 +32,7 @@ type PickerJob = {
   status: string;
   projectName: string | null;
   clientName: string | null;
+  plannedToday: boolean;
 };
 
 const NO_JOBS: PickerJob[] = [];
@@ -91,15 +92,18 @@ export function JobPickerModal({
     }
   }, [open, mode, currentJobId]);
 
+  // Today's dispatched jobs first (P1-11 occurrences on the Berlin date), then
+  // the rest in the reader's alphabetical order.
   const filteredJobs = useMemo(
     () =>
       filterByQuery(jobs, searchQuery, (job) =>
         [job.title, job.jobNumber, job.projectName, job.clientName]
           .filter(Boolean)
           .join(' ')
-      ),
+      ).sort((left, right) => Number(right.plannedToday) - Number(left.plannedToday)),
     [jobs, searchQuery]
   );
+  const plannedTodayCount = filteredJobs.filter((job) => job.plannedToday).length;
 
   const title =
     mode === 'clock_in'
@@ -187,9 +191,14 @@ export function JobPickerModal({
                   <span className="text-muted-foreground">Ohne Auftrag</span>
                 </button>
 
-                {filteredJobs.map((job) => (
+                {filteredJobs.map((job, index) => (
+                  <Fragment key={job.id}>
+                  {plannedTodayCount > 0 && plannedTodayCount < filteredJobs.length && (index === 0 || index === plannedTodayCount) && (
+                    <p className="px-3 pb-1 pt-3 text-xs font-medium text-muted-foreground">
+                      {index === 0 ? 'Heute geplant' : 'Weitere Aufträge'}
+                    </p>
+                  )}
                   <button
-                    key={job.id}
                     type="button"
                     role="radio"
                     aria-checked={selectedJobId === job.id}
@@ -225,6 +234,7 @@ export function JobPickerModal({
                       </p>
                     </div>
                   </button>
+                  </Fragment>
                 ))}
 
                 {filteredJobs.length === 0 && !isLoading && (

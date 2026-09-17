@@ -254,6 +254,7 @@ async function expectRequestControlsOnPhone(page: Page): Promise<void> {
     .poll(() =>
       pair.evaluate((grid) => {
         const [dateControl, timeControl] = Array.from(grid.children);
+        if (!dateControl || !timeControl) throw new Error("expected a date and a time control");
         const dateBox = dateControl.getBoundingClientRect();
         const timeBox = timeControl.getBoundingClientRect();
         return timeBox.top - dateBox.bottom;

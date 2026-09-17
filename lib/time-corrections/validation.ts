@@ -3,7 +3,7 @@ import { uuidSchema } from '@/lib/validation/uuid';
 
 import type { TimeCorrectionKind } from './types';
 
-export const timeCorrectionSourceInputSchema = z.object({
+const timeCorrectionSourceInputSchema = z.object({
   kind: z.enum([
     'legacy_entry',
     'canonical_session',
@@ -13,7 +13,7 @@ export const timeCorrectionSourceInputSchema = z.object({
   id: uuidSchema,
 });
 
-export const timeCorrectionFactInputSchema = z.object({
+const timeCorrectionFactInputSchema = z.object({
   factId: z.string().min(1).max(100),
   employeeRecordId: uuidSchema,
   entryType: z.enum(['clock_in', 'clock_out', 'break_start', 'break_end']),
@@ -46,19 +46,6 @@ export const submitTimeCorrectionSchema = z.object({
 
 export type SubmitTimeCorrectionInput = z.infer<
   typeof submitTimeCorrectionSchema
->;
-
-export const reviseTimeCorrectionSchema = submitTimeCorrectionSchema.omit({
-  organizationId: true,
-  subjectEmployeeRecordId: true,
-  kind: true,
-}).extend({
-  requestId: uuidSchema,
-  expectedRevision: z.number().int().positive(),
-});
-
-export type ReviseTimeCorrectionInput = z.infer<
-  typeof reviseTimeCorrectionSchema
 >;
 
 export const reviewTimeCorrectionSchema = z.object({

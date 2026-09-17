@@ -1,5 +1,6 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
+export { visibleMatchingText } from '../../golden/support/steps';
 import { retryDialogTransaction, workLifecycleCard } from '../../golden/support/steps';
 
 export async function bookMaterialDialog(
@@ -146,16 +147,11 @@ export function upgradeChoiceLink(page: Page): Locator {
   return page.locator('a[href="/upgrade"]');
 }
 
-export function visibleMatchingText(page: Page, text: RegExp): Locator {
-  // Responsive views can render the same text twice; only one copy is visible.
-  return page.getByText(text).filter({ visible: true }).first();
-}
-
 export function clockInConfirmationButton(page: Page): Locator {
   return page
     .getByRole('dialog')
     .filter({ has: page.getByRole('heading', { name: 'Zeiterfassung starten' }) })
-    .getByRole('button', { name: 'Starten', exact: true });
+    .getByRole('button', { name: 'Arbeit starten', exact: true });
 }
 
 export function firstDailyTimeSummary(page: Page): Locator {
@@ -194,9 +190,9 @@ export function calendarDay(page: Page, date: string): Locator {
   return page.locator(`.fc-daygrid-day[data-date="${date}"]`);
 }
 
-export function calendarJobEvent(page: Page, title: string): Locator {
-  // FullCalendar job events expose no stable role.
-  return page.locator('.fc-event-job').filter({ hasText: title });
+export function calendarDayNumber(page: Page, date: string): Locator {
+  // A populated cell's center can target an event; the date number owns day navigation.
+  return calendarDay(page, date).locator('.fc-daygrid-day-number');
 }
 
 export function calendarDayJobEvent(page: Page, date: string, title: string): Locator {
@@ -240,7 +236,19 @@ export function documentFolderUploadInput(page: Page): Locator {
 export async function closeDocumentUploadProgressDialog(page: Page): Promise<void> {
   // The upload dialog exposes both its footer action and Radix icon close as
   // "Schließen". The footer action is first in the established DOM order.
-  await page.getByRole('dialog').getByRole('button', { name: 'Schließen' }).first().click();
+  // A fully successful upload closes the dialog by itself 650 ms after
+  // completion, so the click may lose its target mid-way (ninth release run,
+  // 2026-09-14); the helper closes what is still open and then requires the
+  // dialog to be gone.
+  const dialog = page.getByRole('dialog').filter({
+    has: page.getByRole('button', { name: 'Schließen' }),
+  });
+  await dialog
+    .getByRole('button', { name: 'Schließen' })
+    .first()
+    .click({ timeout: 2_000 })
+    .catch(() => undefined);
+  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 }
 
 export function inventoryLocationCard(page: Page, locationName: string): Locator {

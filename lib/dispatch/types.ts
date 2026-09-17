@@ -2,8 +2,8 @@ import type { Database, Json } from '@/lib/supabase/database.types';
 
 export const DISPATCH_OVERVIEW_MAX_OFFSET_DAYS = 14;
 
-export type DispatchStatus = Database['public']['Enums']['dispatch_status'];
-export type DispatchChangeKind =
+type DispatchStatus = Database['public']['Enums']['dispatch_status'];
+type DispatchChangeKind =
   Database['public']['Enums']['dispatch_change_kind'];
 export type DispatchAcknowledgementState =
   Database['public']['Enums']['dispatch_acknowledgement_state'];
@@ -110,9 +110,9 @@ export type TravelNote = {
   nextTitle: string;
 };
 
-export type ReadinessState = 'ok' | 'warning' | 'unknown';
+type ReadinessState = 'ok' | 'warning' | 'unknown';
 
-export type ReadinessDimensionKey =
+type ReadinessDimensionKey =
   | 'capacity'
   | 'qualification'
   | 'site'
@@ -158,7 +158,9 @@ export type EmployeeDispatchCard = {
   myOpenChallengeReason: string | null;
 };
 
-export const DISPATCH_ERROR_MESSAGES: Record<string, string> = {
+const DISPATCH_ERROR_MESSAGES: Record<string, string> & {
+  unexpected_error: string;
+} = {
   not_authenticated: 'Bitte erneut anmelden.',
   no_active_org: 'Keine aktive Organisation gefunden.',
   not_a_member: 'Kein Zugriff auf diese Organisation.',
@@ -216,10 +218,8 @@ export const DISPATCH_ERROR_MESSAGES: Record<string, string> = {
 export function dispatchErrorMessage(error: string): string {
   const known = DISPATCH_ERROR_MESSAGES[error];
   if (known) return known;
-  const batchPrefix = Object.keys(DISPATCH_ERROR_MESSAGES).find(
-    (key) => key.startsWith('batch_item_') && error.startsWith(key)
-  );
-  return batchPrefix
-    ? DISPATCH_ERROR_MESSAGES[batchPrefix]
-    : DISPATCH_ERROR_MESSAGES.unexpected_error;
+  const batchMessage = Object.entries(DISPATCH_ERROR_MESSAGES).find(
+    ([key]) => key.startsWith('batch_item_') && error.startsWith(key)
+  )?.[1];
+  return batchMessage ?? DISPATCH_ERROR_MESSAGES.unexpected_error;
 }

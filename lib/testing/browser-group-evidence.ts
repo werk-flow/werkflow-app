@@ -33,8 +33,8 @@ export function browserGroupReuseProblem(input: {
     return "Browser reuse requires a passed result with its original run and build identity.";
   }
   const references = input.runs.filter((run) => run.runKey === input.result.runKey);
-  if (references.length !== 1) return "The referenced browser run is missing or ambiguous in the run registry.";
-  const reference = references[0];
+  const [reference] = references;
+  if (references.length !== 1 || !reference) return "The referenced browser run is missing or ambiguous in the run registry.";
   if (reference.groupId !== input.result.groupId || reference.groupFingerprint !== input.result.fingerprint || reference.target !== input.target || reference.buildId !== input.result.buildId) {
     return "The referenced browser run has a different group inputs, target, or build identity.";
   }

@@ -1,5 +1,7 @@
 'use client';
 
+import { formatBerlinDateTime as formatDateTime } from '@/lib/utils';
+import { formatDuration } from '@/lib/time-tracking/helpers';
 import { Clock3, Loader2, LogIn, LogOut } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, type ReactElement } from 'react';
@@ -15,18 +17,8 @@ import { usePendingTask } from '@/hooks/use-server-action';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 
-function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat('de-DE', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: 'Europe/Berlin',
-  }).format(new Date(value));
-}
-
-function formatDuration(minutes: number | null): string {
-  if (minutes === null) return 'läuft';
-  const rounded = Math.max(0, Math.round(minutes));
-  return `${Math.floor(rounded / 60)} Std. ${rounded % 60} Min.`;
+function formatDurationOrRunning(minutes: number | null): string {
+  return minutes === null ? 'läuft' : formatDuration(Math.max(0, minutes));
 }
 
 export function FieldWorkPackTimeSection({
@@ -180,7 +172,7 @@ export function FieldWorkPackTimeSection({
                   <p className="text-xs text-muted-foreground">Änderung wartet auf Prüfung</p>
                 )}
               </div>
-              <span className="shrink-0 tabular-nums text-muted-foreground">{formatDuration(session.durationMinutes)}</span>
+              <span className="shrink-0 tabular-nums text-muted-foreground">{formatDurationOrRunning(session.durationMinutes)}</span>
             </div>
           ))}
         </div>

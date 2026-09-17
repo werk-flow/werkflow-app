@@ -32,8 +32,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { SkeletonList, SkeletonRows, type SkeletonColumn } from '@/components/ui/skeleton-table';
 import { cn } from '@/lib/utils';
 import { DatePicker } from '@/components/ui/date-picker';
-import { getTimeEntries } from '@/lib/time-tracking/actions';
-import { getProfilesByIds } from '@/lib/members/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
 import type { TimeEntry, TimeEntryStatus } from '@/lib/time-tracking/types';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useHydrated } from '@/hooks/use-hydrated';
@@ -95,19 +94,19 @@ const STATUS_LABELS: Record<
 > = {
   approved: {
     label: 'Genehmigt',
-    className: 'bg-green-500/20 text-green-700 dark:text-green-300'
+    className: 'bg-success-soft text-success-soft-foreground'
   },
   pending: {
     label: 'Ausstehend',
-    className: 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300'
+    className: 'bg-warning-soft text-warning-soft-foreground'
   },
   rejected: {
     label: 'Abgelehnt',
-    className: 'bg-red-500/20 text-red-700 dark:text-red-300'
+    className: 'bg-destructive-soft text-destructive-soft-foreground'
   },
   pending_delete: {
     label: 'Löschung ausstehend',
-    className: 'bg-orange-500/20 text-orange-700 dark:text-orange-300'
+    className: 'bg-warning-soft text-warning-soft-foreground'
   }
 };
 
@@ -174,7 +173,7 @@ export function EntryHistory({
 
   const view = useLiveView<EntryWithProfile[]>({
     tables: ['time_entries', 'time_sessions', 'time_segments', 'time_correction_requests'],
-    read: async (): Promise<LiveViewResult<EntryWithProfile[]>> => {
+    read: async ({ signal }): Promise<LiveViewResult<EntryWithProfile[]>> => {
       // Without a complete date range there is nothing to read; keep whatever
       // was shown last.
       if (!dateFrom || !dateTo) return { ok: false };
@@ -184,21 +183,22 @@ export function EntryHistory({
         const toDate = new Date(dateTo);
         toDate.setHours(23, 59, 59, 999);
 
-        const result = await getTimeEntries({
+        const result = await readInBackground('time-entries', {
           organizationId,
           from: fromDate.toISOString(),
           to: toDate.toISOString(),
-          status:
-            statusFilter !== 'all'
-              ? (statusFilter as TimeEntryStatus)
-              : undefined,
-          userId: memberFilter !== 'all' ? memberFilter : undefined
-        });
+          ...(statusFilter !== 'all'
+            ? { status: statusFilter as TimeEntryStatus }
+            : {}),
+          ...(memberFilter !== 'all' ? { userId: memberFilter } : {})
+        }, signal);
 
-        if (!result.success) return { ok: false, error: result.error };
+        if (!result.success) return { ok: false, error: 'Die Einträge konnten nicht geladen werden.' };
 
         const userIds = [...new Set(result.entries.map((e) => e.userId))];
-        const profileMap = await getProfilesByIds(userIds);
+        const profiles = await readInBackground('profiles-by-ids', { userIds }, signal);
+        if (!profiles.success) return { ok: false, error: 'Die Einträge konnten nicht geladen werden.' };
+        const profileMap = profiles.profiles;
 
         // Merge profile data with entries
         const entriesWithProfiles: EntryWithProfile[] = result.entries.map(

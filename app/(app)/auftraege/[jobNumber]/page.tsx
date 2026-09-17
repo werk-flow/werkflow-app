@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { readOrganizationClients } from '@/lib/clients/server';
 import { cookies } from 'next/headers';
 
 import { resolveActiveOrgId } from '@/lib/org/cookies';
@@ -7,7 +8,6 @@ import { getJobByNumber } from '@/lib/jobs/actions';
 import { getJobInstructionItems } from '@/lib/jobs/instruction-items-actions';
 import { getJobDocuments } from '@/lib/documents/actions';
 import { getInventoryPickerOptions, getJobMaterialLines } from '@/lib/inventory/actions';
-import { toClient } from '@/lib/jobs/types';
 import { type OrgRole } from '@/lib/members/actions';
 import { getOrgMembersForUser } from '@/lib/members/queries';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -76,7 +76,7 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
   const [
     result,
     membersResult,
-    clientsResult,
+    clients,
     instructionItemsResult,
     documentsResult,
     materialLinesResult,
@@ -88,11 +88,7 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
   ] = await Promise.all([
     jobResultPromise,
     getOrgMembersForUser(activeOrgId, user.id),
-    supabase
-      .from('clients')
-      .select('*')
-      .eq('organization_id', activeOrgId)
-      .order('name', { ascending: true }),
+    readOrganizationClients(supabase, activeOrgId),
     instructionItemsResultPromise,
     documentsResultPromise,
     materialLinesResultPromise,
@@ -119,17 +115,7 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
     role: member.role,
   }));
 
-  if (clientsResult.error) {
-    console.error(
-      `clients query failed for organization_id=${activeOrgId}`,
-      clientsResult.error
-    );
-    throw new Error(
-      `Failed to load clients: ${clientsResult.error.message ?? 'unknown error'}`
-    );
-  }
 
-  const clients = (clientsResult.data ?? []).map(toClient);
   const instructionItems =
     instructionItemsResult && instructionItemsResult.success
       ? instructionItemsResult.items

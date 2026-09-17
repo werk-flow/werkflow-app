@@ -92,9 +92,10 @@ export function resolveBerlinWallTime(
     )
     .sort((left, right) => left.getTime() - right.getTime());
 
-  if (candidates.length > 0) {
+  const [firstCandidate] = candidates;
+  if (firstCandidate) {
     return {
-      instant: candidates[0],
+      instant: firstCandidate,
       localDateTime,
       resolution: candidates.length > 1 ? 'first_ambiguous' : 'exact',
     };
@@ -200,11 +201,4 @@ export function splitTimedIntervalByBerlinDate(
     cursor = segmentEnd;
   }
   return allocations;
-}
-
-export function localDateTimeFromDateAndTime(
-  localDate: string,
-  localTime: string
-): string {
-  return `${localDate}T${localTime.slice(0, 5)}`;
 }

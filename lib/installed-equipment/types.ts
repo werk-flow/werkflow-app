@@ -213,14 +213,6 @@ export const EQUIPMENT_SUBTYPES_BY_CATEGORY: Record<
 
 export type EquipmentRow =
   Database["public"]["Tables"]["installed_equipment"]["Row"];
-export type EquipmentIdentifierRow =
-  Database["public"]["Tables"]["installed_equipment_identifiers"]["Row"];
-export type EquipmentEventRow =
-  Database["public"]["Tables"]["installed_equipment_events"]["Row"];
-export type EquipmentEventLinkRow =
-  Database["public"]["Tables"]["installed_equipment_event_links"]["Row"];
-export type EquipmentWorkLinkRow =
-  Database["public"]["Tables"]["installed_equipment_work_links"]["Row"];
 
 export type EquipmentIdentifierInput = {
   identifierType: EquipmentIdentifierType;
@@ -308,7 +300,7 @@ export type EquipmentWorkLinkInput = {
   idempotencyKey: string;
 };
 
-export type EquipmentSourceTargetType =
+type EquipmentSourceTargetType =
   "job" | "project" | "artifact_revision" | "handover_release" | "document";
 
 export type EquipmentSourceInput = {

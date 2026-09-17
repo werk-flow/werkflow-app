@@ -1,5 +1,6 @@
 'use client';
 
+import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
 import { SelectWithCreate } from '@/components/ui/select-with-create';
 import type { SearchableSelectOption } from '@/components/ui/searchable-select';
 import { CreateClientDialog } from '@/components/kunden/create-client-dialog';
@@ -10,7 +11,7 @@ import type { Client } from '@/lib/jobs/types';
  * projected client option (service, maintenance) can use it without
  * fabricating a full `Client`. A created `Client` satisfies it as well.
  */
-export type ClientSelectItem = Pick<Client, 'id' | 'name'> &
+type ClientSelectItem = Pick<Client, 'id' | 'name'> &
   Partial<Pick<Client, 'email'>>;
 
 interface ClientSelectWithCreateProps {
@@ -18,9 +19,9 @@ interface ClientSelectWithCreateProps {
   value: string;
   onValueChange: (value: string) => void;
   disabled?: boolean;
-  id?: string;
-  readOnly?: boolean;
-  readOnlyLabel?: string;
+  id?: string | undefined;
+  readOnly?: boolean | undefined;
+  readOnlyLabel?: string | undefined;
 }
 
 function clientOption(client: ClientSelectItem): SearchableSelectOption {
@@ -40,11 +41,13 @@ export function ClientSelectWithCreate({
   readOnly,
   readOnlyLabel,
 }: ClientSelectWithCreateProps) {
+  const search = useJobEntityOptions({ kind: 'clients' }, value ? [value] : [], clients.map(clientOption));
   return (
     <SelectWithCreate
       id={id}
-      items={clients}
-      getOption={clientOption}
+      items={search.options}
+      getOption={(option) => option}
+      onSearchChange={search.onSearchChange} loading={search.loading} loadError={search.loadError} onLoadMore={search.onLoadMore}
       value={value}
       onValueChange={onValueChange}
       placeholder="Kein Kunde"
@@ -60,7 +63,7 @@ export function ClientSelectWithCreate({
         <CreateClientDialog
           open={open}
           onOpenChange={onOpenChange}
-          onClientCreated={onCreated}
+          onClientCreated={(client) => onCreated(clientOption(client))}
         />
       )}
     />

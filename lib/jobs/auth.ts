@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
-import { resolveActiveOrgId } from '@/lib/org/cookies';
-import { getAuthenticatedUser, getCachedMemberships } from '@/lib/data/cached';
+import { resolveActiveMembership } from '@/lib/org/cookies';
+import { getAuthenticatedUser } from '@/lib/data/cached';
 import type { OrgRole } from './types';
 import { MANAGER_ROLES } from './types';
 
@@ -17,7 +17,7 @@ type AuthResult =
 
 /**
  * Shared auth + org + role resolution for all jobs/projects/clients actions.
- * Uses cached helpers to avoid redundant network roundtrips.
+ * Resolves the organization and role from one fresh membership snapshot.
  */
 export async function authenticateAndAuthorize(): Promise<AuthResult> {
   const [user, cookieStore] = await Promise.all([
@@ -29,17 +29,10 @@ export async function authenticateAndAuthorize(): Promise<AuthResult> {
     return { success: false, error: 'not_authenticated' };
   }
 
-  const orgId = await resolveActiveOrgId(cookieStore, user.id);
-
-  if (!orgId) {
-    return { success: false, error: 'no_active_org' };
-  }
-
-  const memberships = await getCachedMemberships(user.id);
-  const membership = memberships.find((m) => m.orgId === orgId);
+  const membership = await resolveActiveMembership(cookieStore, user.id);
 
   if (!membership) {
-    return { success: false, error: 'not_a_member' };
+    return { success: false, error: 'no_active_org' };
   }
 
   const role = membership.role as OrgRole;
@@ -48,7 +41,7 @@ export async function authenticateAndAuthorize(): Promise<AuthResult> {
     success: true,
     context: {
       userId: user.id,
-      orgId,
+      orgId: membership.orgId,
       role,
       isManagerOrAbove: MANAGER_ROLES.includes(role),
     },

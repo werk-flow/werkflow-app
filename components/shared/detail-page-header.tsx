@@ -3,7 +3,7 @@ import { PageHeader, type PageBreadcrumb } from '@/components/shared/page-header
 interface DetailPageHeaderProps {
   breadcrumbs: PageBreadcrumb[];
   title: React.ReactNode;
-  subtitle?: string;
+  subtitle?: string | undefined;
   badges?: React.ReactNode;
   actions?: React.ReactNode;
 }

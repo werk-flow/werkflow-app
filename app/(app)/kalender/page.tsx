@@ -9,16 +9,20 @@ import {
   getCachedOrganizationSettings,
   getCachedUser,
 } from '@/lib/data/cached';
-import { getTimeEntries } from '@/lib/time-tracking/actions';
+import { getChangeRequestsForEntries, getTimeEntries } from '@/lib/time-tracking/actions';
+import { completeCalendarEntryRead } from '@/lib/calendar/entry-read';
+import { calendarDateFromQuery } from '@/lib/calendar/date-range';
 import { getPlanningEntries } from '@/lib/planning/actions';
 import { toCalendarJob } from '@/lib/planning/view-model';
 import { CalendarContainer } from '@/components/kalender/calendar-container';
+import type { CalendarInitialData } from '@/components/kalender/use-calendar-range-data';
 import { KalenderPageSkeleton } from '@/components/loading-states/kalender-page-skeleton';
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
+import { getBerlinDayFetchRange } from '@/lib/calendar/business-range';
 import { type OrgRole } from '@/lib/members/actions';
 import { getOrgMembersForUser } from '@/lib/members/queries';
-import { toLocalDateString } from '@/lib/utils';
+import { getBusinessTodayIso, shiftIsoDateByDays } from '@/lib/personnel/types';
 
 type MemberRow = {
   user_id: string;
@@ -32,19 +36,22 @@ async function KalenderData({
   activeOrgId,
   userId,
   currentUserRole,
-  isAdminOrManager
+  isAdminOrManager,
+  searchParams,
 }: {
   activeOrgId: string;
   userId: string;
   currentUserRole: OrgRole;
   isAdminOrManager: boolean;
+  searchParams: Promise<{ date?: string | string[] }>;
 }) {
-  const now = new Date();
-  const dayStart = new Date(now);
-  dayStart.setDate(dayStart.getDate() - 1);
-  dayStart.setHours(0, 0, 0, 0);
-  const dayEnd = new Date(now);
-  dayEnd.setHours(23, 59, 59, 999);
+  // The prefetched window is the Berlin business day plus the previous day,
+  // computed from Berlin wall time rather than the server process timezone
+  // (PF-17). The client compares this range with the window it renders and
+  // reads again only when its own local day differs.
+  const businessDate = calendarDateFromQuery((await searchParams).date, getBusinessTodayIso());
+  const range = getBerlinDayFetchRange(businessDate);
+  const fromIso = shiftIsoDateByDays(businessDate, -1);
 
   async function fetchMembers(): Promise<MemberRow[]> {
     const data = await getOrgMembersForUser(activeOrgId, userId);
@@ -54,21 +61,28 @@ async function KalenderData({
     return data.filter((member) => member.user_id === userId);
   }
 
-  const fromIso = toLocalDateString(dayStart);
-  const toIso = toLocalDateString(dayEnd);
-
   const [entriesResult, members, jobsResult, organizationSettings, holidayCalendar] =
     await Promise.all([
-      getTimeEntries({
+      completeCalendarEntryRead(getTimeEntries({
         organizationId: activeOrgId,
-        from: dayStart.toISOString(),
-        to: dayEnd.toISOString()
-      }),
+        from: range.start.toISOString(),
+        to: range.end.toISOString()
+      }), getChangeRequestsForEntries),
       fetchMembers(),
-      getPlanningEntries(fromIso, toIso),
+      getPlanningEntries(fromIso, businessDate),
       getCachedOrganizationSettings(activeOrgId),
       getCachedOrganizationCalendar(activeOrgId),
     ]);
+
+  // Initial data carries the same official plus provisional projection and
+  // the same pending-correction badges as every later client read (PF-06).
+  const initialData: CalendarInitialData = {
+    range,
+    ...(entriesResult.success
+      ? { entries: entriesResult.entries, changeRequestMap: entriesResult.changeRequestMap }
+      : {}),
+    ...(jobsResult.success ? { jobs: jobsResult.entries.map(toCalendarJob) } : {}),
+  };
 
   return (
     <CalendarContainer
@@ -79,17 +93,15 @@ async function KalenderData({
       members={members}
       organizationSettings={organizationSettings}
       holidayCalendar={holidayCalendar}
-      initialEntries={entriesResult.success ? entriesResult.entries : undefined}
-      initialJobs={
-        jobsResult.success
-          ? jobsResult.entries.map(toCalendarJob)
-          : undefined
-      }
+      initialData={initialData}
+      initialDate={businessDate}
     />
   );
 }
 
-export default async function KalenderPage() {
+export default async function KalenderPage({ searchParams }: {
+  searchParams: Promise<{ date?: string | string[] }>;
+}) {
   const [{ data: { user } }, cookieStore] = await Promise.all([
     getCachedUser(),
     cookies()
@@ -132,6 +144,7 @@ export default async function KalenderPage() {
   return (
     <Suspense fallback={<KalenderPageSkeleton />}>
       <KalenderData
+        searchParams={searchParams}
         activeOrgId={activeOrgId}
         userId={user.id}
         currentUserRole={currentUserRole}

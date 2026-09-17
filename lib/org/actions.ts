@@ -20,9 +20,9 @@ import { buildBreakPolicyHistoryEntry } from '@/lib/time-tracking/settings';
  */
 export async function setActiveOrgCookie(orgId: string): Promise<void> {
   const user = await getAuthenticatedUser();
-  if (!user) return;
+  if (!user) throw new Error('not_authenticated');
   const memberships = await getCachedMemberships(user.id);
-  if (!memberships.some((membership) => membership.orgId === orgId)) return;
+  if (!memberships.some((membership) => membership.orgId === orgId)) throw new Error('not_a_member');
 
   const cookieStore = await cookies();
   cookieStore.set(CURRENT_ORG_COOKIE, orgId, {
@@ -31,16 +31,6 @@ export async function setActiveOrgCookie(orgId: string): Promise<void> {
     maxAge: CURRENT_ORG_MAX_AGE,
     path: '/'
   });
-}
-
-/**
- * Reads the active organization ID from the httpOnly cookie.
- * Used by client-side self-hydration since document.cookie cannot
- * access httpOnly cookies.
- */
-export async function getActiveOrgCookie(): Promise<string | null> {
-  const cookieStore = await cookies();
-  return cookieStore.get(CURRENT_ORG_COOKIE)?.value ?? null;
 }
 
 export type CreateOrganizationResult = {
@@ -248,9 +238,9 @@ export async function joinOrganization(
     }
 
     // If user has existing memberships, check admin_id compatibility
-    if (existingMemberships && existingMemberships.length > 0) {
+    const firstMembership = existingMemberships?.[0];
+    if (firstMembership) {
       // Get the admin_id from the first membership's organization
-      const firstMembership = existingMemberships[0];
       const existingOrg = firstMembership.organizations as unknown as {
         admin_id: string;
       };

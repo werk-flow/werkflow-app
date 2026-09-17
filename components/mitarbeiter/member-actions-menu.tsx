@@ -54,7 +54,7 @@ interface MemberActionsMenuProps {
   memberRole: OrgRole;
   currentUserId: string;
   currentUserRole: OrgRole;
-  removalBlockedMessage?: string;
+  removalBlockedMessage?: string | undefined;
   /** The list has a change for this row in flight (role change settling). */
   isBusy?: boolean;
   /**

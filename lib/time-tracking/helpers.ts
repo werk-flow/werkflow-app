@@ -7,6 +7,7 @@ import type {
   TimeEntryStatus,
   WorkSession,
 } from './types';
+import { DEFAULT_DAILY_TARGET_MINUTES } from '@/lib/personnel/targets';
 import { MANAGED_ROLES } from './types';
 import {
   getLocalDayEnd,
@@ -20,13 +21,13 @@ import {
 } from '@/lib/responsibilities/resolution';
 
 // ── Time model constants ──────────────────────────────────────────────
-export const TOTAL_RING_MINUTES = 510;        // 8.5h = one full rotation of main ring
-export const BREAK_THRESHOLD_MINUTES = 360;   // 6h total clocked → break applies
-export const BREAK_DURATION_MINUTES = 30;
-export const BREAK_START_MINUTES = 330;       // 5.5h mark on ring where yellow starts
-export const OVERTIME_THRESHOLD_MINUTES = 510; // legacy threshold for fixed-break fallback
-export const WORK_GOAL_MINUTES = 480;         // 8h = actual work goal
-export const OVERTIME_RING_MAX_MINUTES = 240; // 4h = full outer overtime ring
+const TOTAL_RING_MINUTES = 510;        // 8.5h = one full rotation of main ring
+const BREAK_THRESHOLD_MINUTES = 360;   // 6h total clocked → break applies
+const BREAK_DURATION_MINUTES = 30;
+const BREAK_START_MINUTES = 330;       // 5.5h mark on ring where yellow starts
+const OVERTIME_THRESHOLD_MINUTES = 510; // legacy threshold for fixed-break fallback
+export const WORK_GOAL_MINUTES = DEFAULT_DAILY_TARGET_MINUTES; // 8h legacy default, one source
+const OVERTIME_RING_MAX_MINUTES = 240; // 4h = full outer overtime ring
 
 export interface TimeBreakdown {
   workMinutes: number;
@@ -73,7 +74,7 @@ export function getNonNegativeElapsedMs(clockInTime: string | null): number {
   return Math.max(0, Date.now() - startMs);
 }
 
-export interface RingSegment {
+interface RingSegment {
   startFraction: number; // 0-1, position on ring
   endFraction: number;   // 0-1, position on ring
   type: 'work' | 'break';
@@ -282,16 +283,6 @@ export function computeRingSegmentsFromTimeline(
   return { segments, overtimeFraction };
 }
 
-/**
- * Role hierarchy for permission checks
- * Lower number = higher rank
- */
-export const ROLE_HIERARCHY: Record<OrgRole, number> = {
-  admin: 1,
-  buero: 2,
-  employee: 3
-};
-
 export type DerivedClockState = {
   status: ClockStatus;
   isClockedIn: boolean;
@@ -300,6 +291,8 @@ export type DerivedClockState = {
   statusStartedAt: string | null;
   breakStartTime: string | null;
   activeJobId: string | null;
+  /** The job the running break interrupted; equals `activeJobId` while working. */
+  resumeJobId: string | null;
   lastEntry: TimeEntry | null;
 };
 
@@ -317,6 +310,7 @@ export function deriveCurrentClockState(
   let statusStartedAt: string | null = null;
   let breakStartTime: string | null = null;
   let activeJobId: string | null = null;
+  let resumeJobId: string | null = null;
 
   for (const entry of todayEntries) {
     switch (entry.entryType) {
@@ -326,12 +320,14 @@ export function deriveCurrentClockState(
         statusStartedAt = entry.timestamp;
         breakStartTime = null;
         activeJobId = entry.jobId ?? null;
+        resumeJobId = activeJobId;
         break;
       case 'break_start':
         if (status === 'working') {
           status = 'on_break';
           statusStartedAt = entry.timestamp;
           breakStartTime = entry.timestamp;
+          resumeJobId = activeJobId;
           activeJobId = null;
         }
         break;
@@ -341,6 +337,7 @@ export function deriveCurrentClockState(
           statusStartedAt = entry.timestamp;
           breakStartTime = null;
           activeJobId = entry.jobId ?? null;
+          resumeJobId = activeJobId;
         }
         break;
       case 'clock_out':
@@ -349,12 +346,12 @@ export function deriveCurrentClockState(
         statusStartedAt = null;
         breakStartTime = null;
         activeJobId = null;
+        resumeJobId = null;
         break;
     }
   }
 
-  const lastEntry =
-    todayEntries.length > 0 ? todayEntries[todayEntries.length - 1] : null;
+  const lastEntry = todayEntries.at(-1) ?? null;
 
   return {
     status,
@@ -364,6 +361,7 @@ export function deriveCurrentClockState(
     statusStartedAt,
     breakStartTime,
     activeJobId,
+    resumeJobId,
     lastEntry,
   };
 }
@@ -385,18 +383,6 @@ export function hasOpenSession(
   referenceDate = new Date()
 ): boolean {
   return deriveCurrentClockState(entries, referenceDate).isClockedIn;
-}
-
-/**
- * Get the most recent entry for a user (approved OR pending entries)
- * Pending entries are included because they take immediate effect.
- * Entries marked for deletion (pending_delete) are excluded.
- */
-export function getLastEntry(entries: TimeEntry[]): TimeEntry | null {
-  const activeEntries = getEffectiveTimeEntries(entries)
-    .slice()
-    .reverse();
-  return activeEntries[0] || null;
 }
 
 /**
@@ -454,23 +440,6 @@ export function canManageEntries(
   }
 
   // Others cannot manage entries (not even their own for updates/deletes)
-  return false;
-}
-
-/**
- * Check if a change request is needed (requires admin approval).
- * TODO: make configurable via org settings. When enabled, return true
- * for `callerRole === 'buero' && isOwnEntry` so Büro edits/deletes
- * on their own entries require admin approval.
- */
-export function needsChangeRequest(
-  _callerRole: OrgRole,
-  _targetRole: OrgRole,
-  _isOwnEntry: boolean
-): boolean {
-  void _callerRole;
-  void _targetRole;
-  void _isOwnEntry;
   return false;
 }
 
@@ -566,13 +535,6 @@ export function calculateBreakMinutes(sessions: BreakSession[]): number {
   }, 0);
 }
 
-export function calculatePresenceMinutes(
-  workSessions: WorkSession[],
-  breakSessions: BreakSession[]
-): number {
-  return calculateTotalMinutes(workSessions) + calculateBreakMinutes(breakSessions);
-}
-
 /**
  * Format duration in minutes to human-readable string (German)
  * Rounds to nearest minute for display purposes
@@ -595,23 +557,6 @@ export function formatDuration(minutes: number): string {
 }
 
 /**
- * Get entries for a specific date range
- */
-export function filterEntriesByDateRange(
-  entries: TimeEntry[],
-  from: Date,
-  to: Date
-): TimeEntry[] {
-  const fromTime = from.getTime();
-  const toTime = to.getTime();
-
-  return entries.filter((entry) => {
-    const entryTime = new Date(entry.timestamp).getTime();
-    return entryTime >= fromTime && entryTime <= toTime;
-  });
-}
-
-/**
  * Group entries by date (YYYY-MM-DD)
  */
 export function groupEntriesByDate(
@@ -628,8 +573,8 @@ export function groupEntriesByDate(
   }
 
   // Sort entries within each date
-  for (const date of Object.keys(grouped)) {
-    grouped[date].sort(
+  for (const dateEntries of Object.values(grouped)) {
+    dateEntries.sort(
       (a, b) =>
         new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );

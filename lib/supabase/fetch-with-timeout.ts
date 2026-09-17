@@ -5,25 +5,32 @@
  * forever: the user stares at a disabled button ("Wird gelöscht...") and the
  * harness burns its full test budget. Evidenced 2026-08-21 across customer
  * deletion, assignment saves, and harness logins (see the M2 entry in
- * docs/plans/golden-gate-log.md). With this bound, a stalled request rejects
+ * docs/plans/phase-1/audits/golden-gate-log.md). With this bound, a stalled request rejects
  * and the callers' error handling surfaces a visible failure instead.
  *
  * 30 s is deliberately generous: the slowest legitimate calls (auth admin
  * pagination, edge-function invocations waiting on Resend) finish well under
  * it, while a genuinely dead socket no longer hangs anything.
  */
+import { getReadRequestPriority, getReadRequestSignal } from '@/lib/data/read-request-cache';
+import { createRequestScheduler } from './request-scheduler';
+
 const SUPABASE_FETCH_TIMEOUT_MS = 30_000;
+const scheduleRequest = createRequestScheduler();
 
 function boundedFetch(
   input: RequestInfo | URL,
   init?: RequestInit
 ): Promise<Response> {
   const timeoutSignal = AbortSignal.timeout(SUPABASE_FETCH_TIMEOUT_MS);
-  const signal = init?.signal
-    ? AbortSignal.any([init.signal, timeoutSignal])
-    : timeoutSignal;
+  const signals = [timeoutSignal];
+  if (init?.signal) signals.push(init.signal);
+  if (input instanceof Request) signals.push(input.signal);
+  const requestSignal = getReadRequestSignal();
+  if (requestSignal) signals.push(requestSignal);
+  const signal = AbortSignal.any(signals);
 
-  return fetch(input, { ...init, signal });
+  return scheduleRequest(getReadRequestPriority(), signal, () => fetch(input, { ...init, signal }));
 }
 
 // Cast: Node's `typeof fetch` additionally declares the `preconnect` static,

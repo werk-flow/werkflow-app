@@ -27,7 +27,7 @@ export const coverageMapSchema = z.object({
 export type CoverageMap = z.infer<typeof coverageMapSchema>;
 export interface CatalogFlow { id: string; bullet: string; hash: string }
 
-export function hashCatalogBullet(bullet: string): string {
+function hashCatalogBullet(bullet: string): string {
   return createHash("sha256").update(bullet.trim().replace(/\s+/g, " ")).digest("hex");
 }
 

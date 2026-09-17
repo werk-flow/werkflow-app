@@ -115,7 +115,7 @@ P1-19 still owns reactive service/warranty intake, triage and dispatch. P1-20 ow
 
 ## Links
 
-- Gate runs: [golden-gate-log.md](../../golden-gate-log.md)
+- Gate runs: [golden-gate-log.md](../audits/golden-gate-log.md)
 - Progress log: [../log.md](../log.md)
 
 ## Implementation plan (merged 2026-09-03 from the former separate plan file)

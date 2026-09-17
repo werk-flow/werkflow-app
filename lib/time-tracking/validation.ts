@@ -17,7 +17,7 @@ import { isBreakEndFollowedByClockIn } from './transition-pairs';
  * Check if two timestamps are in the same minute (minute-level overlap)
  * Used to block manual entries at the exact same minute as existing entries
  */
-export function checkMinuteOverlap(existingTs: Date, newTs: Date): boolean {
+function checkMinuteOverlap(existingTs: Date, newTs: Date): boolean {
   return (
     existingTs.getFullYear() === newTs.getFullYear() &&
     existingTs.getMonth() === newTs.getMonth() &&
@@ -33,7 +33,7 @@ export function checkMinuteOverlap(existingTs: Date, newTs: Date): boolean {
  * IMPORTANT: This includes PENDING entries because they take immediate effect
  * and should be treated as "real" for validation purposes.
  */
-export function validateSingleEntryNoOverlap(
+function validateSingleEntryNoOverlap(
   existingEntries: TimeEntry[],
   newTimestamp: Date,
   entryBeingUpdated?: TimeEntry
@@ -141,6 +141,7 @@ export function calculateWorkSessions(entries: TimeEntry[]): WorkSession[] {
 
   for (let index = 0; index < activeEntries.length; index += 1) {
     const entry = activeEntries[index];
+    if (!entry) continue;
     if (
       currentWorkStart &&
       !isSameLocalDay(new Date(currentWorkStart.timestamp), new Date(entry.timestamp))
@@ -646,7 +647,7 @@ function validateSingleManualEntry(
  * Check if a new time window (clock_in + clock_out pair) overlaps with any existing session
  * A pair must exist entirely outside existing work windows
  */
-export function checkWindowOverlap(
+function checkWindowOverlap(
   existingSessions: WorkSession[],
   newClockIn: Date,
   newClockOut: Date
@@ -701,7 +702,7 @@ export function checkWindowOverlap(
  * - clock_in must be before clock_out
  * - The pair must not overlap with any existing work session
  */
-export function validateManualPair(
+function validateManualPair(
   existingEntries: TimeEntry[],
   clockInTimestamp: Date,
   clockOutTimestamp: Date
@@ -787,7 +788,7 @@ export function validateManualPair(
   return { valid: true };
 }
 
-export function validateManualBreakPair(
+function validateManualBreakPair(
   existingEntries: TimeEntry[],
   breakStartTimestamp: Date,
   breakEndTimestamp: Date
@@ -848,7 +849,8 @@ export function validateManualEntries(
   newEntries: ManualEntryInput[],
   options?: { allowFutureTimestamps?: boolean }
 ): ValidationResult {
-  if (newEntries.length === 0) {
+  const [firstEntry] = newEntries;
+  if (!firstEntry) {
     return { valid: false, error: 'Mindestens ein Eintrag ist erforderlich.' };
   }
 
@@ -870,7 +872,7 @@ export function validateManualEntries(
     }
   }
 
-  const firstEntryDate = new Date(newEntries[0].timestamp);
+  const firstEntryDate = new Date(firstEntry.timestamp);
   const allOnSameDay = newEntries.every((entry) =>
     isSameLocalDay(new Date(entry.timestamp), firstEntryDate)
   );

@@ -17,7 +17,6 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { AUTH_FLASH_COOKIE, getAuthFlashMessage, isAuthFlashKey } from '@/lib/auth/flash';
 import { getCachedUser } from '@/lib/data/cached';
 import { getAuthenticatedRedirectPath } from '@/lib/auth/redirects';
-import { reportAuthUsersStringColumnHealth } from '@/lib/supabase/auth-health';
 
 import { LoginForm } from './login-form';
 
@@ -36,7 +35,6 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ message?: string; invite_code?: string }>;
 }) {
-  await reportAuthUsersStringColumnHealth('login-page');
 
   const { session } = await getSupabaseServerSession();
   const params = await searchParams;

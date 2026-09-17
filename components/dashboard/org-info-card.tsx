@@ -91,7 +91,7 @@ export function OrgInfoCard({ initialMemberCount }: OrgInfoCardProps) {
                 onClick={handleCopyCode}
               >
                 {copied ? (
-                  <Check className="size-4 text-green-600" />
+                  <Check className="size-4 text-success-text" />
                 ) : (
                   <Copy className="size-4" />
                 )}

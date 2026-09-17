@@ -17,7 +17,7 @@ const optionalDate = z
   .optional()
   .transform((value) => value || null);
 
-export const equipmentIdentifierSchema = z.object({
+const equipmentIdentifierSchema = z.object({
   identifierType: z.enum(EQUIPMENT_IDENTIFIER_TYPES),
   value: z.string().trim().min(1).max(200),
   issuer: optionalText(160),

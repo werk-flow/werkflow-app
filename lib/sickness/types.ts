@@ -7,8 +7,6 @@ import type { VacationDayPortion } from '@/lib/vacation/types';
 
 export type SicknessReportRow =
   Database['public']['Tables']['sickness_reports']['Row'];
-export type SicknessReportEventRow =
-  Database['public']['Tables']['sickness_report_events']['Row'];
 
 // Text columns with CHECK constraints; keep these unions in sync with the
 // database (migration add_sickness_reports).
@@ -17,7 +15,7 @@ export type SicknessReportEventRow =
 // lifecycle. 'reported' is effective immediately; 'cancelled' is the
 // recorded-in-error correction. Everything else (end date set, dates changed)
 // is a correction on the same row, traceable through sickness_report_events.
-export type SicknessReportStatus = 'reported' | 'cancelled';
+type SicknessReportStatus = 'reported' | 'cancelled';
 
 // Neutral operational absence-type vocabulary (owner decision, 2026-08-08).
 // These are labels for planning and paperwork, never legal categories, and no
@@ -30,11 +28,6 @@ export const SICKNESS_TYPE_LABELS: Record<SicknessAbsenceType, string> = {
   krankheit: 'Krankheit',
   kind_krank: 'Kind krank',
   sonstige: 'Sonstige Abwesenheit',
-};
-
-export const SICKNESS_STATUS_LABELS: Record<SicknessReportStatus, string> = {
-  reported: 'Gemeldet',
-  cancelled: 'Storniert',
 };
 
 export const SICKNESS_EVIDENCE_LABELS: Record<SicknessEvidenceStatus, string> =

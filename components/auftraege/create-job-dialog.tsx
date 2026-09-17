@@ -20,14 +20,14 @@ import type { Client, Job, ProjectWithDetails } from '@/lib/jobs/types';
 interface CreateJobDialogProps {
   clients: Client[];
   members: OrgMemberOption[];
-  projects?: ProjectWithDetails[];
-  defaultProjectId?: string;
-  defaultClientId?: string;
-  defaultEmployeeIds?: string[];
-  readOnlyClient?: boolean;
-  readOnlyProject?: boolean;
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
+  projects?: ProjectWithDetails[] | undefined;
+  defaultProjectId?: string | undefined;
+  defaultClientId?: string | undefined;
+  defaultEmployeeIds?: string[] | undefined;
+  readOnlyClient?: boolean | undefined;
+  readOnlyProject?: boolean | undefined;
+  open?: boolean | undefined;
+  onOpenChange?: ((open: boolean) => void) | undefined;
   onJobCreated?: (payload: {
     job: Job;
     assignedUserIds: string[];

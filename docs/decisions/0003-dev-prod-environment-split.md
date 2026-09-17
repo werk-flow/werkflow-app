@@ -4,6 +4,7 @@
 - **Date:** 2026-08-18
 - **Supersedes:** the shared-database follow-up flagged in [0001](0001-infrastructure-stack.md) and formerly tracked in [testing.md](../technical/testing.md) ("Shared-Database Caution") — resolved.
 - **Amended 2026-08-20:** the separate-orgs model below is historical. After a cost analysis (plans bill per org, compute per project: one Pro org with both projects ≈ $35/month vs $50 for two Pro orgs), the owner transferred the dev project into the "WerkFlow" org and deleted the "WerkFlow Dev" org. Transfer verified: refs, URLs, keys, and auth-config parity unchanged; the org-scoped claude.ai connector now sees both projects. The two-project split itself, the migration rule, and every workflow in this record are unchanged.
+- **Update 2026-09-17:** the DEV project moved into the shared "WerkFlow" organization on 2026-08-20 (refs and keys unchanged); [environments.md](../technical/environments.md) is current.
 
 ## Decision
 

@@ -4,14 +4,17 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   type ReactNode,
 } from 'react';
 
 import { useOrganization } from '@/components/organization/organization-context';
 import { useLiveView } from '@/hooks/use-live-view';
 import { useServerAction } from '@/hooks/use-server-action';
-import { getCurrentClockState } from '@/lib/time-tracking/actions';
+import { getCurrentClockState } from '@/lib/time-tracking/state-client';
+import { isClockStateEventRelevant } from '@/lib/time-tracking/clock-state-events';
 import { getNonNegativeElapsedMs } from '@/lib/time-tracking/helpers';
 import {
   transitionTimeActivity,
@@ -77,12 +80,16 @@ function applyTransitionEcho(
       statusStartedAt: null,
       breakStartTime: null,
       currentActivity: null,
+      resumeActivity: null,
+      resumeJobInfo: null,
       activeJobId: null,
       activeJobInfo: null,
     };
   }
   const isBreak = selection?.kind === 'break';
   const jobId = selection?.allocationKind === 'job' ? selection.jobId : null;
+  const knownJobs = [previous.activeJobInfo, previous.resumeJobInfo];
+  const activeJobInfo = knownJobs.find((job) => job !== null && job.id === jobId) ?? null;
   return {
     ...closed,
     status: isBreak ? 'on_break' : 'working',
@@ -92,14 +99,19 @@ function applyTransitionEcho(
     statusStartedAt: now,
     breakStartTime: isBreak ? now : null,
     currentActivity: selection,
+    // A break keeps what it interrupted; any other activity becomes the
+    // thing to resume after the next break.
+    resumeActivity: isBreak ? previous.resumeActivity : selection,
+    resumeJobInfo: isBreak ? previous.resumeJobInfo : activeJobInfo,
     activeJobId: jobId,
-    activeJobInfo: jobId !== null && previous.activeJobId === jobId ? previous.activeJobInfo : null,
+    activeJobInfo,
   };
 }
 
 type ClockStateContextValue = {
   state: LiveClockState | null;
   isLoading: boolean;
+  isReady: boolean;
   isPending: boolean;
   statusError: string | null;
   refresh: () => Promise<void>;
@@ -107,8 +119,6 @@ type ClockStateContextValue = {
   recoverAndContinue: (selection: TimeActivitySelection) => Promise<TimeTransitionResult>;
   clockIn: (jobId: string | null) => Promise<TimeTransitionResult>;
   clockOut: (acknowledgeRecovery?: boolean) => Promise<TimeTransitionResult>;
-  startBreak: () => Promise<TimeTransitionResult>;
-  endBreak: (jobId: string | null) => Promise<TimeTransitionResult>;
   switchJob: (jobId: string | null) => Promise<TimeTransitionResult>;
 };
 
@@ -122,11 +132,15 @@ export function ClockStateProvider({
   initialState?: LiveClockState | null;
 }) {
   const { activeOrgId } = useOrganization();
+  // The running session's job, for the `jobs` event filter below; a ref so
+  // the filter reads the latest value without re-registering.
+  const activeJobIdRef = useRef<string | null>(null);
   const view = useLiveView<LiveClockState | null>({
     tables: ['time_entries', 'time_sessions', 'time_segments', 'jobs'],
-    read: async () => {
+    eventFilter: (event) => isClockStateEventRelevant(event, activeJobIdRef.current),
+    read: async ({ signal }) => {
       if (!activeOrgId) return { ok: true, data: null };
-      const result = await getCurrentClockState(activeOrgId);
+      const result = await getCurrentClockState(activeOrgId, signal);
       return result.success
         ? { ok: true, data: result.state }
         : { ok: false, error: result.error };
@@ -141,6 +155,10 @@ export function ClockStateProvider({
   const { refresh, invalidate, setData } = view;
   const currentState =
     view.data?.organizationId === activeOrgId ? view.data : null;
+  const isReady = currentState !== null && !view.isLoading && !view.error;
+  useEffect(() => {
+    activeJobIdRef.current = currentState?.activeJobId ?? null;
+  }, [currentState?.activeJobId]);
   const sessionId = currentState?.sessionId ?? null;
   const sessionVersion = currentState?.sessionVersion ?? null;
   const legacyOpen = currentState?.legacyOpen ?? false;
@@ -154,6 +172,8 @@ export function ClockStateProvider({
       acknowledgeLong = false
     ): Promise<TimeTransitionResult> => {
       if (!activeOrgId) return { success: false, error: 'no_active_org' };
+      // Never infer a new session from an unknown or failed initial read.
+      if (!isReady) return { success: false, error: 'time_transition_failed' };
       let result: TimeTransitionResult;
       try {
         result = await run({
@@ -183,7 +203,7 @@ export function ClockStateProvider({
       }
       return result;
     },
-    [activeOrgId, invalidate, refresh, run, sessionId, sessionVersion, setData]
+    [activeOrgId, invalidate, isReady, refresh, run, sessionId, sessionVersion, setData]
   );
 
   const transitionActivity = useCallback(
@@ -213,14 +233,6 @@ export function ClockStateProvider({
         : 'end';
     return execute(action, null, acknowledgeRecovery && action === 'recover_end');
   }, [execute, legacyOpen, recoveryReason]);
-  const startBreak = useCallback(
-    () => transitionActivity(createActivitySelection('break')),
-    [transitionActivity]
-  );
-  const endBreak = useCallback(
-    (jobId: string | null) => transitionActivity(createActivitySelection('work', jobId)),
-    [transitionActivity]
-  );
   const switchJob = useCallback(
     (jobId: string | null) => transitionActivity(createActivitySelection('work', jobId)),
     [transitionActivity]
@@ -230,6 +242,7 @@ export function ClockStateProvider({
     () => ({
       state: currentState,
       isLoading: view.isLoading,
+      isReady,
       isPending,
       statusError: view.error ?? null,
       refresh,
@@ -237,22 +250,19 @@ export function ClockStateProvider({
       recoverAndContinue,
       clockIn,
       clockOut,
-      startBreak,
-      endBreak,
       switchJob,
     }),
     [
       clockIn,
       clockOut,
       currentState,
-      endBreak,
       isPending,
       recoverAndContinue,
-      startBreak,
       switchJob,
       transitionActivity,
       view.error,
       view.isLoading,
+      isReady,
       refresh,
     ]
   );

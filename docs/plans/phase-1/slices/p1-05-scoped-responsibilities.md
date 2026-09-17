@@ -26,5 +26,5 @@ Implemented and accepted 2026-08-06. Migrations `add_scoped_responsibilities`, `
 
 ## Links
 
-- Gate runs: [golden-gate-log.md](../../golden-gate-log.md)
+- Gate runs: [golden-gate-log.md](../audits/golden-gate-log.md)
 - Progress log: [../log.md](../log.md)

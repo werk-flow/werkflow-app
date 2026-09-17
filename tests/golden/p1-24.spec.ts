@@ -100,6 +100,7 @@ test.describe("P1-24 controlled people lifecycle @P1-24 @GG-07", () => {
     if (!stageState.releases.some((item) => item.personnel_document_id === expectedDocument?.id)) {
       await expectLiveWithin(visibleText(employeePage, protectedFileName), {
           label: "released protected personnel document",
+          actingPage: adminPage,
           mutation: async (beforeSubmit) => {
             await beforeSubmit();
             await lifecycle.getByRole("listitem").filter({ hasText: protectedFileName })
@@ -126,6 +127,7 @@ test.describe("P1-24 controlled people lifecycle @P1-24 @GG-07", () => {
           visibleText(lifecycle, "Keine offenen Anforderungen."),
           {
             label: "employee acknowledgement reflected in manager lifecycle",
+            actingPage: employeePage,
             mutation: async (beforeSubmit) => {
               await beforeSubmit();
               await employeePage.getByRole("button", { name: "Bestätigen", exact: true }).click();

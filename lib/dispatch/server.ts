@@ -6,6 +6,7 @@ import {
   isCommitmentMismatch,
   type CustomerCommitment,
 } from '@/lib/commitments/types';
+import { readInBatches } from '@/lib/supabase/query-batches';
 import {
   deriveRecipientState,
   deriveTravelNotes,
@@ -255,13 +256,13 @@ export async function loadDispatchOverview(input: {
       (occurrenceRows ?? []).flatMap((row) => (row.job_id ? [row.job_id] : []))
     ),
   ];
-  const jobsResult = jobIds.length
-    ? await admin
-        .from('jobs')
-        .select('id, title, description, job_number, status, location, client_id, site_id')
-        .eq('organization_id', input.orgId)
-        .in('id', jobIds)
-    : { data: [], error: null };
+  const jobsResult = await readInBatches(jobIds, (batch) =>
+    admin
+      .from('jobs')
+      .select('id, title, description, job_number, status, location, client_id, site_id')
+      .eq('organization_id', input.orgId)
+      .in('id', [...batch]),
+  );
   if (jobsResult.error) return null;
   const jobs = new Map((jobsResult.data ?? []).map((job) => [job.id, job]));
 

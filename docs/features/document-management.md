@@ -1,6 +1,6 @@
 # Document Management
 
-Status: living — last reviewed 2026-09-05
+Status: living — last reviewed 2026-09-13
 
 Document management gives SHK businesses a central digital place for job photos, contracts, invoices, offers, reports, and general business files. The goal is to reduce paper folders, scattered files, and disconnected customer/project documentation while staying practical for office staff and extremely simple for field workers.
 
@@ -24,6 +24,8 @@ Before adding more scope, ask WerkFlow's three product questions:
 
 ## Current Product Baseline
 
+The central library loads 50 documents per server-selected page, with independent pages for sibling folders. Search, sorting, category/link filters, and unlinked/trash selection cover all authorized ordinary documents before paging. The `Verknüpfungen` view has the same document pager and builds headings from the current page's linked targets; its counts describe that page. Folder navigation retains the complete bounded folder tree. Paging clears row selection, so batch operations act on the displayed page. Contextual attachments retain a complete bounded read and a global newest-first order after ID batches; equal creation times sort by document ID. Lazy link catalogs, including installed equipment, report a load failure if their declared bound is exceeded. [The performance reference](../technical/realtime-and-caching.md#server-paginated-lists) owns the implementation and verification rules.
+
 As of 2026-09-02, document management is substantially implemented. Admin and Büro organize ordinary organization files in the central library under `/dokumente`; operational records carry a contextual `Dokumente & Bilder` section. Field workers upload, view, and download ordinary files on assigned jobs. Protected personnel files use the separate access rules below. File bytes live in private Cloudflare R2 buckets in EU jurisdiction and all metadata in Postgres. The implementation reference lives in [Document storage and access](../technical/document-storage-and-access.md).
 
 - **Central library.** Admin and Büro browse a manual folder tree with breadcrumbs, the `Verknüpfungen` overview grouped by linked target, and `Alle Dateien`, with search, category and link filters, sortable columns, and a separate `Papierkorb`. They create, rename, move, copy, and delete folders, and upload single files, batches, or whole folders, including mixed drag and drop. The table supports multi-select, rectangle select, drag-to-folder, batch move, copy, and delete, and one shared row menu.
@@ -34,9 +36,8 @@ As of 2026-09-02, document management is substantially implemented. Admin and B�
 - **Evidence and handover artifacts.** A work-template item may declare an expected evidence category without creating a file ([P1-13](../plans/phase-1/slices/p1-13-work-templates.md)). A document can be related to one exact work-artifact revision as evidence, closure proof, signature mark, or export; ordinary uploads never become evidence automatically ([P1-15](../plans/phase-1/slices/p1-15-structured-site-evidence.md)). A handover release freezes exact document versions and registers one customer-safe HTML package as an ordinary document; the app does not deliver it and creates no public link ([P1-17](../plans/phase-1/slices/p1-17-office-handover.md)).
 - **Protected personnel documents.** A personnel file is a separate access class outside the ordinary library, owned by the personnel record rather than by an employee link, with standard, Admin-only, and health-evidence classes. The affected employee reaches only expressly released versions, and no job assignment or ordinary document permission widens that access ([P1-24](../plans/phase-1/slices/p1-24-controlled-people-lifecycle.md)).
 - **History guards.** Once an equipment-history event depends on a document link, ordinary unlink and permanent deletion are rejected ([P1-18](../plans/phase-1/slices/p1-18-installed-equipment.md)). Equipment, service-case, and coverage links grant an assigned employee no document access beyond the exact assigned job ([P1-19](../plans/phase-1/slices/p1-19-reactive-service.md), [P1-20](../plans/phase-1/slices/p1-20-maintenance-plans.md)).
-- **Storage maintenance.** Server-side helpers report orphaned and missing storage objects and delete validated orphans. They are not exposed in the `/dokumente` UI.
 
-### Important current limitations
+### Important Current Limitations
 
 - No automatic folder per job, project, customer, or employee. This is deliberate; see the design decisions in the technical doc.
 - No OCR, invoice parsing, or AI classification.

@@ -1,5 +1,6 @@
 'use client';
 
+import { INVITE_ROLE_OPTIONS } from '@/lib/roles';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { UserPlus } from 'lucide-react';
@@ -27,12 +28,6 @@ import { useBanner } from '@/components/ui/banner';
 import { createOptimisticChannel } from '@/hooks/use-optimistic-channel';
 import { sendOrgInvite, type InviteRole } from '@/lib/invites/actions';
 import type { Invite } from './invitations-table';
-
-// Role labels for the dropdown (using gender-inclusive German format)
-const ROLE_OPTIONS: { value: InviteRole; label: string }[] = [
-  { value: 'buero', label: 'Büro' },
-  { value: 'employee', label: 'Handwerker/in' }
-];
 
 const ERROR_MESSAGES: Record<string, string> = {
   not_authenticated: 'Du bist nicht angemeldet.',
@@ -194,7 +189,7 @@ export function InviteDialog() {
                   <SelectValue placeholder="Rolle auswählen" />
                 </SelectTrigger>
                 <SelectContent>
-                  {ROLE_OPTIONS.map((option) => (
+                  {INVITE_ROLE_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
                     </SelectItem>

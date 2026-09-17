@@ -31,7 +31,7 @@ As of 2026-09-02, Admin and Büro manage installed customer equipment under `/se
 - Field projection. The assigned employee sees only the equipment linked to the job, the compact issue and access context of a linked case, and the exact plan, equipment, and instruction context of a maintenance visit. Coverage dates, renewal risk, and internal notes are manager-only ([P1-16](../plans/phase-1/slices/p1-16-field-work-pack.md), [P1-18](../plans/phase-1/slices/p1-18-installed-equipment.md), [P1-19](../plans/phase-1/slices/p1-19-reactive-service.md), [P1-20](../plans/phase-1/slices/p1-20-maintenance-plans.md)).
 - Reused foundations. Service owns no parallel copy of customers, sites, and requests ([P1-01](../plans/phase-1/slices/p1-01-customer-contacts-and-sites.md), [P1-02](../plans/phase-1/slices/p1-02-client-requests.md)), planning occurrences and dispatch ([P1-11](../plans/phase-1/slices/p1-11-planning-occurrences.md), [P1-12](../plans/phase-1/slices/p1-12-dispatch.md)), work templates ([P1-13](../plans/phase-1/slices/p1-13-work-templates.md)), job-linked time segments ([P1-21](../plans/phase-1/slices/p1-21-time-segments.md)), site evidence ([P1-15](../plans/phase-1/slices/p1-15-structured-site-evidence.md)), the field work pack ([P1-16](../plans/phase-1/slices/p1-16-field-work-pack.md)), documents, or inventory. A later service slice must not create parallel customer, job, time, document, or inventory systems.
 
-### Important current limitations
+### Important Current Limitations
 
 - No plan is inferred from existing equipment, jobs, requests, documents, or warranty dates.
 - Service makes no legal or price decision, sends no message, mutates no stock, segments no time, and encodes no manufacturer rules.

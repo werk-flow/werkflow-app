@@ -32,9 +32,9 @@ export type DragJobPayload = {
 };
 
 const PRIORITY_COLORS: Record<string, string> = {
-  hoch: 'bg-red-500/15 text-red-700 dark:text-red-400',
-  mittel: 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-400',
-  niedrig: 'bg-green-500/15 text-green-700 dark:text-green-400',
+  hoch: 'bg-destructive-soft text-destructive-soft-foreground',
+  mittel: 'bg-warning-soft text-warning-soft-foreground',
+  niedrig: 'bg-success-soft text-success-soft-foreground',
 };
 
 const PRIORITY_LABELS: Record<string, string> = {
@@ -53,7 +53,7 @@ interface ParkplatzPanelProps {
   isExternalDragOver?: boolean;
   primaryHeaderHeight?: number;
   /** P1-12: current parking context per job id (managers only). */
-  parkingContexts?: Map<string, JobParkingContext>;
+  parkingContexts?: Map<string, JobParkingContext> | undefined;
   onEditContext?: (job: CalendarJob) => void;
   onDispatchJob?: (job: CalendarJob) => void;
 }

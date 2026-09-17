@@ -29,7 +29,13 @@ import { artifactsDirectory, type TestWorld } from '../../golden/support/world';
 
 test.describe.configure({ mode: 'serial' });
 
-const DATES = Array.from({ length: 5 }, (_, index) => ownedBerlinDateAtOffset('p1-17', 90 + index));
+const DATES = [
+  ownedBerlinDateAtOffset('p1-17', 90),
+  ownedBerlinDateAtOffset('p1-17', 91),
+  ownedBerlinDateAtOffset('p1-17', 92),
+  ownedBerlinDateAtOffset('p1-17', 93),
+  ownedBerlinDateAtOffset('p1-17', 94),
+] as const;
 
 function names(world: TestWorld) {
   const projectNumber = `PRJ-${world.runId}-P117-AUDIT`;
@@ -153,10 +159,10 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
       siteName: fixture.siteName,
       contactName: fixture.contactName,
     });
-    for (const [index, job] of [
-      { number: fixture.firstJobNumber, title: fixture.firstJobTitle },
-      { number: fixture.secondJobNumber, title: fixture.secondJobTitle },
-    ].entries()) {
+    for (const [visitDate, job] of [
+      [DATES[1], { number: fixture.firstJobNumber, title: fixture.firstJobTitle }],
+      [DATES[2], { number: fixture.secondJobNumber, title: fixture.secondJobTitle }],
+    ] as const) {
       await createJob(adminPage, {
         jobNumber: job.number,
         title: job.title,
@@ -169,7 +175,7 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
       await createPlannedCalendarEntry(adminPage, {
         kind: 'job_visit',
         jobSearch: job.number,
-        date: DATES[index + 1],
+        date: visitDate,
         time: '06:00',
         employeeNames: [fixture.employeeName],
         overrideReason: 'P1-17 Audit-Termin.',
@@ -271,7 +277,9 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
       expect(state.target).toMatchObject({ execution_state: 'handed_over' });
       expect(state.package).toMatchObject({ state: 'released' });
       expect(state.releases).toHaveLength(1);
-      const releaseId = state.releases[0].id;
+      const [release] = state.releases;
+      if (!release) throw new Error('P1-17: expected a released handover');
+      const releaseId = release.id;
       const releasedItems = state.releaseItems.filter((item) => item.release_id === releaseId);
       expect(
         releasedItems.map((item) => ({
@@ -292,7 +300,7 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
           (item) => item.source_kind === 'document_version' && item.document_version_number === 1
         )
       ).toBe(true);
-      expect(state.documents[0].storage_path).toContain('/work-handover-packages/');
+      expect(state.documents[0]?.storage_path).toContain('/work-handover-packages/');
     }
   });
 
@@ -375,7 +383,7 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
       getWorkHandoverState(world.orgId, { jobNumber: fixture.secondJobNumber }),
     ]);
     expect(state.releaseItems.map((item) => item.child_handover_release_id).sort()).toEqual(
-      childStates.map((child) => child.releases[0].id).sort()
+      childStates.map((child) => child.releases[0]?.id).sort()
     );
     expect(state.releases[0]).toMatchObject({
       commercial_readiness: 'ready_for_commercial_review',
@@ -442,7 +450,9 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
       projectNumber: fixture.projectNumber,
     });
     expect(state.releases).toHaveLength(2);
-    expect(state.releases[1].previous_release_id).toBe(state.releases[0].id);
+    const [firstRelease, secondRelease] = state.releases;
+    if (!firstRelease || !secondRelease) throw new Error('P1-17: expected two project releases');
+    expect(secondRelease.previous_release_id).toBe(firstRelease.id);
     expect(state.documents).toHaveLength(2);
     expect(state.events.map((event) => event.event_type)).toEqual(
       expect.arrayContaining([
