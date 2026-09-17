@@ -542,6 +542,20 @@ What the step wrote after the owner's two rounds, and where:
 
 Evidence on the final tree (2026-09-17): `bunx tsc --noEmit` clean; `bun run lint` 0 errors (36 pre-existing warnings); `bun run test:unit` 1,284 tests in 161 files passed; `bun run unused:check` clean; `bun run test:coverage` passes after the three rehashes; `bun run docs:check` passes on 87 docs; skill mirrors byte-identical. Browser groups were not run: this step changed documentation, one pure module with its test, one dead export and one lint cap, none of them observable in the browser; the release run of step 5 is the browser proof of the whole tree.
 
+## Durable homes
+
+Where every lasting fact of this record now lives (the record keeps the reasoning, the research sources and the history):
+
+- Wave 3 rules, order, seams and market bar: the roadmap's "Wave 3 planning (2026-09-17)"; the wholesaler-standard, scanning and legal research facts: the inventory spec's "Wholesaler Data And Transaction Standards" section; the resolved inventory decisions: the inventory spec's open decisions.
+- Wave 4 rules, engine, retention, accounting and banking: the roadmap's "Wave 4 planning (2026-09-17)" and the commercial spec's open decisions; the e-invoicing, library, accounting and banking research facts: the commercial spec's "Research facts for Wave 4"; the expert-review agenda E1 to E18: the commercial spec's "Expert-review agenda before `P1-39`"; the first Railway worker: decision 0001's 2026-09-17 amendment and the protocol's Wave 4 cost gate.
+- Phase 2: every decision, the pilot lane, the provider and channel starting points, the guardrails, the data dependencies, the fourteen considerations from the owner's input and the open decisions: the AI spec; the price band and the bundled-AI rule: the offer; the pilot lane: the roadmap header and the capability map.
+- The Plantafel: the `P1-24a` record and the calendar spec's baseline; the vehicle-row deferral: the calendar and inventory specs.
+- The Sykasoft migration path: the commercial spec's agenda items E17 and E18 (the `P1-47` slice reads them there).
+- The tier audit's open item (harness sign-in convention): the enforcement backlog; every other cleanup row is applied and needs no home.
+- The single-use-record rule itself: README maintenance rule 6, the protocol's "When A Slice Completes" and its template, and `docs:check` check 14.
+- The wave-end audit procedure and the per-aspect map of rules, gates and review judgments: [standards-audit.md](../../../technical/standards-audit.md).
+- Applied the same day to the older records: a read-only sweep of the hardening, consolidation, audit and slice records found 45 facts whose substance lived only there (accepted design rejections, harness conventions, the fixture run-day partition, security inspection gaps, calendar limits, split seams, the Phase 2 channel candidates); 43 were written into the design, Supabase and TypeScript skills, the realtime, testing, security and integrated-test-state docs, the calendar, time-tracking, inventory, commercial and AI specs, the backlog, the roadmap and the `P1-24a` record; one was already home and one (detached battery launches) was a harness quirk, not a repo fact.
+
 ## Acceptance for this step
 
 - The roadmap's Wave 3 and Wave 4 sections carry per-slice scope, dependencies, and the competitive reference each slice answers. (Done: the two planning subsections.)

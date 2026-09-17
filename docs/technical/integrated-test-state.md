@@ -1,6 +1,6 @@
 # Integrated test state
 
-Status: living — last reviewed 2026-09-06
+Status: living — last reviewed 2026-09-17
 
 This reference owns the fixture state and date constraints within connected Golden journeys. Use [testing.md](testing.md) for execution and acceptance policy.
 
@@ -11,6 +11,22 @@ Read this reference when changing the integrated Golden journey or its declared 
 - **Date expectations come from the app's own stored state and in-code rules**: `@P1-06` reads the person's schedules/conditions/holiday calendar through `getTargetContextForRecord` (`tests/golden/support/db.ts`) and computes consumed days and weekly Soll with the same `lib/vacation/balance` and `lib/personnel/targets` functions the product uses — hand-rolled date logic in specs drifts in holiday weeks.
 - **Expect Realtime-driven re-renders mid-step.** Re-locate a row after any mutation that re-renders it (a saved locator can hold a detached node), and never re-open or re-select a control whose desired value is already set — a router refresh can detach a Radix option between open and click.
 - **Fixtures under uniqueness constraints must use dates their spec owns.** Business facts such as `employment_conditions` and `work_schedules` versions, or closure days, collide deterministically when two specs pick the same date. Claim audit offsets through `ownedBerlinDateAtOffset()` in `tests/golden/support/date-ownership.ts`; it throws when a spec uses another spec's range. Use `dispatchOverviewBerlinDateAtOffset()` for a visit that must appear in the manager dispatch panel. It rejects offsets outside the product's shared 0 through 14 day window. Golden offsets remain documented below because their earlier specs predate that registry.
+
+  The audit run-day partition, as `AUDIT_DATE_WINDOWS` in that module encodes it (the registry throws at import on an overlap, so the table and the code cannot drift silently). The default time of day is 06:00 Europe/Berlin; P1-22, P1-23 and P1-24 use 07:00.
+
+  | Owner | Run-day offsets |
+  | --- | --- |
+  | A1 | +20 to +24, plus +65 (R1 reconciliation reserve) |
+  | A2 | +25 to +29, plus +66 |
+  | A3 | +30 to +34, plus +67 |
+  | A4 | +35 to +39, plus +68 and +69 |
+  | A5 | +40 to +44 |
+  | A6 | +45 to +54 |
+  | A7 | +55 to +64 |
+  | P1-13 to P1-24 | five days per slice from +70: P1-13 +70 to +74, P1-14 +75 to +79, P1-15 +80 to +84, P1-16 +85 to +89, P1-17 +90 to +94, P1-18 +95 to +99, P1-19 +100 to +104, P1-20 +105 to +109, P1-21 +110 to +114, P1-22 +115 to +119, P1-23 +120 to +124, P1-24 +125 to +129 |
+  | `audit:performance:calendar-live` | -7 (worked time) and +130 (a closure day) |
+
+  The Wave 2 audit record reserved "+130 onward" for Wave 3 before the calendar-live group claimed +130; the next free offset is therefore +131, and Wave 3 slices continue five days per slice from there (`P1-24a` +131 to +135, then `P1-25` +136 to +140, and so on), registered in `AUDIT_DATE_WINDOWS` when the slice starts.
 - **Stale-UI action proofs need a frozen page.** The app deliberately self-heals stale views (Realtime events plus a synthetic all-table refresh on `visibilitychange`), so a "click the stale card" test races the app's own freshness machinery and loses intermittently. `@P1-06` freezes the page first — `page.routeWebSocket` swallows the Realtime socket and an init script suppresses `visibilitychange` — which is also the honest simulation of the woken-up-laptop scenario the action-time enforcement exists for. This investigation surfaced a real defect: action-time authorization compared the app clock against database-stamped configuration timestamps, so a machine with a trailing clock briefly kept honoring a just-replaced configuration (fixed with a skew guard in `lib/responsibilities/server.ts`).
 
 - **State `@P1-08` leaves behind** (P1-09 now inherits it): the employee carries one CANCELLED sickness report (yesterday–run-day, `krankheit`, evidence received; events `reported`→`ended`→`evidence_updated`×2→`cancelled` — it no longer affects any target), Büro carries one ACTIVE half-day `kind_krank` report for run-day−1 with evidence required/`pending` recorded by the admin (it halves Büro's yesterday target), and sickness read markers/`attention_events` exist for Büro (two versions of the employee report) and the employee (the cancellation). The spec pins NO responsibility state (sickness authority is the manager role); its mode-dependent expectations (vacation-overlap hint, weekly Soll, notification rows) are all derived from the database at runtime.

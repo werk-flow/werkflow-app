@@ -25,4 +25,13 @@ Adapted for WerkFlow from cursor/plugins pstack (MIT). Repo notes: `lib/supabase
 | Real tests | Don't mock what you can run. Prefer the framework's real test primitives with leak/disposable checks, and verify UI in a running build. Mock only what you can't run locally. |
 | Structured telemetry | Prefer structured logger diagnostics with enough context to debug from an id, and never leak PII into logs. No stray `console.log` in shipped code. |
 
+## Strict optional and index rules
+
+`tsconfig.json` runs with `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess` (on since 2026-09-14; 1,205 errors were fixed under these rules with zero `!` on the added lines). They bind every new and changed file:
+
+- No non-null assertion, no cast, no `@ts-expect-error` or `@ts-ignore` to satisfy either flag.
+- An optional property that carries `undefined` on purpose is widened to `T | undefined` at its declaration. Every other site builds the object conditionally (`...(value !== undefined ? { key: value } : {})`, or a separate assignment) instead of passing `undefined` into an optional property.
+- An index or map read narrows with a guard that follows the module's own failure shape: return the module's error result, throw its named error, or skip the row, whichever that module already does for missing data.
+- In tests, a missing value fails the assertion (`expect(row).toBeDefined()` then use `row`), never `rows[0]!`.
+
 Examples: `references/patterns.md`.

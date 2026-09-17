@@ -398,6 +398,21 @@ for (const [file, status] of docStatuses) {
   }
 }
 
+// 14. Single-use plan records are history only (docs/README.md maintenance rule 6, owner rule of
+//     2026-09-17): a slice record, hardening, consolidation, audit or pre-wave record that closes from
+//     2026-09-17 on must carry a "## Durable homes" section naming the living doc that now states
+//     every fact a later agent needs, because nobody reopens a closed record unprompted. The living
+//     roadmap family (roadmap, protocol, gates, coverage, log) is exempt.
+const durableHomesSince = "2026-09-17";
+const livingRoadmapFamily = new Set(["plans/phase-1/roadmap.md", "plans/phase-1/protocol.md", "plans/phase-1/gates.md", "plans/phase-1/coverage.md", "plans/phase-1/log.md"]);
+for (const [file, status] of docStatuses) {
+  if (!file.startsWith("plans/") || livingRoadmapFamily.has(file) || status?.kind !== "closed" || !status.date || status.date < durableHomesSince) continue;
+  const section = readFileSync(join(docsRoot, file), "utf8").match(/^## Durable homes\r?\n([\s\S]*?)(?=^## |$(?![\s\S]))/im)?.[1];
+  if (!section || section.trim().length === 0) {
+    problems.push(`durable-homes: docs/${file} closes without a "## Durable homes" section naming where its lasting facts now live (docs/README.md maintenance rule 6)`);
+  }
+}
+
 if (problems.length > 0) {
   console.error(`docs:check failed with ${problems.length} problem(s):\n`);
   for (const problem of problems) console.error(`  - ${problem}`);

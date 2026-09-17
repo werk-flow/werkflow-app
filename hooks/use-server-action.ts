@@ -34,6 +34,8 @@ export function usePendingTask(): {
  * protection is the disabled state the flag drives, matching the
  * `useTransition` semantics this replaces. Errors propagate to the caller
  * after the pending count settles.
+ * Hook-level suppression of overlapping calls was tried and removed on
+ * 2026-08-28 after it silently dropped flows; do not reintroduce it here.
  */
 export type ServerActionPhase = 'idle' | 'pending' | 'settling';
 

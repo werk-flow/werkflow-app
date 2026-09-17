@@ -1,6 +1,6 @@
 # P1-24a — Plantafel
 
-Status: living — last reviewed 2026-09-15; slice plan written before implementation, the slice has not started
+Status: living — last reviewed 2026-09-17; slice plan written before implementation, the slice has not started
 
 ## Bounded Outcome
 
@@ -35,8 +35,9 @@ Primary: [calendar and resource planning](../../../features/calendar-and-resourc
 
 - Replace the week view's rendering with the board inside the same `CalendarView` value and tab position.
 - Horizon of 1, 2, 4 or 6 weeks; today marker; Monday start; shaded weekends, holidays, closure days and per-person non-working days.
-- Rows: active employees grouped by team, an "Ohne Zuweisung" row; row kind as a union with `person` as the only member.
-- Cards: timed visits, all-day and multi-day bars, series marks, skipped and cancelled states, dispatch state chip, readiness chips from the shared readiness function.
+- Rows: active employees grouped by team, an "Ohne Zuweisung" row; row kind as a union with `person` as the only member. Prepared, not built: `P1-33` ends a row at the offboarding date through the same P1-24 lifecycle read; `P1-46` may later offer „Kunden informieren" after a move as an explicit opt-in follow-up, never automatically; Phase 2 planning proposals render as ghost cards that a manager accepts or rejects on the same drop path.
+- Cards: timed visits, all-day and multi-day bars, series marks, skipped and cancelled states, dispatch state chip, readiness chips from the shared readiness function. The card renders the readiness picture the Einsätze panel already computes (capacity, qualification, site and access, travel, material "nicht reserviert", tools "nicht bewertet") and never computes readiness itself, so `P1-26` (material reserved, partial or missing), `P1-27` (consumed), `P1-32` (tools reserved or missing) and `P1-50` (a real travel estimate) change values, never the board.
+- Event colors: `components/kalender/fullcalendar-view.tsx` still passes `rgb(...)` event colors and an embedded style block (Step 3 CL-D3). This slice decides the calendar event colors against the design canon (purple for planning entities, semantic status colors) and converts the month renderer to tokens in the same change.
 - Absences in the row; per-cell capacity from one window-level capacity read beside the window GET.
 - Drops: reassign, move date, extend all-day bars by edge drag, park, unpark, multi-assign, with the existing qualification, capacity, supersession, commitment and series dialogs; optimistic under `beginMutation` with Undo and rollback.
 - Keyboard and form alternatives; `t`, `j`, `k`, `z` shortcuts with a `?` overlay.
@@ -52,6 +53,7 @@ Primary: [calendar and resource planning](../../../features/calendar-and-resourc
 - Customer messages after a move (`P1-46`), automatic proposals (Phase 2).
 - A free-form whiteboard canvas; project-level Gantt bars; a phone layout of the whole board (`P1-49` gives the phone its own row view).
 - Any new table, enum, Realtime subscription, message, reservation or order.
+- Hiding the month view's FullCalendar rendering cost: the library mounts hidden overflow events and exposes no safe visibility flag or virtualization switch (Step 2, 2026-09-09). Event completeness, overflow counts and interactions stay, and no measurement starts later or gets a raised budget to cover it.
 
 ## Product Decisions Required Before Coding
 

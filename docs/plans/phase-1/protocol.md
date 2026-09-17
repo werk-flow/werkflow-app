@@ -258,6 +258,8 @@ Status: living — last reviewed YYYY-MM-DD; in-progress slice plan
 
 ## Documentation Updates
 
+## Durable Homes
+
 ## Deletion Pass And Review
 
 ## Completion Evidence
@@ -305,7 +307,8 @@ Status changes touch the files that own them: the index row and checkpoint in [r
 
 ### When A Slice Completes
 
-- Close the slice record with the full acceptance evidence and completion date — the record is the canonical home; other docs link it instead of restating it.
+- Close the slice record with the full acceptance evidence and completion date — the record is the canonical home of the evidence and the reasoning; other docs link it for those.
+- Move every lasting fact out of the record before it closes (owner rule 2026-09-17, [README maintenance rule 6](../../README.md#maintenance-rules)): deferred items, open decisions, constraints, research findings and follow-ups go to the owning spec, the technical doc, the backlog or the roadmap, stated in full there, and the record's `## Durable homes` section lists the destinations. A closed record is never the only home of something a later slice needs; `docs:check` check 14 refuses to close one without the section.
 - Change the index-row status to `complete`, and bump the accepted counter in the status blockquote.
 - Append a short completion entry in [log.md](log.md) that links the slice record.
 - Move delivered behavior into the primary and connected feature baselines.

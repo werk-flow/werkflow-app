@@ -45,6 +45,9 @@ As of 2026-09-02, `/kalender` is the shared planning surface for Admin and Büro
 - Route and travel-time providers, tool and vehicle reservation, material reservation, external calendar sync, and outbound customer messages are not implemented; readiness signals say so instead of guessing.
 - On-call coverage, training absence, and other absence types are not planned yet.
 - There is no dedicated overdue-work view.
+- The browser's local timezone decides the calendar window (`getCalendarFetchRange`, Step 2 PF-01). A user outside Europe/Berlin sees a window of their own local days and re-reads on mount, because the server prefetch is computed in Berlin wall time and does not cover that window.
+- The dispatch overview keeps a 500-occurrence cap over its 14-day window (Step 2 PF-08). The typical performance profile already exceeds it (40 per day, 560 in 14 days), and the overview is not a measured scenario; above the cap the reader returns no overview (`lib/dispatch/server.ts`) rather than a truncated one.
+- FullCalendar mounts hidden overflow events in the month view and the installed library exposes no safe visibility flag or virtualization switch (Step 2, 2026-09-09). Event completeness, the "+n mehr" overflow counts and the existing interactions stay intact; that rendering cost is never hidden behind a later measurement start or a raised budget.
 
 Before changing current behavior, verify role rules, action validation, and live data structures in code and Supabase.
 
