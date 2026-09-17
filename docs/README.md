@@ -1,6 +1,6 @@
 # WerkFlow Docs
 
-Status: living — last reviewed 2026-09-17; update this index when adding, moving, or retiring a doc
+Status: living — last reviewed 2026-09-18; update this index when adding, moving, or retiring a doc
 
 This folder is the deeper reference library for WerkFlow: durable product and technical explanations that are too detailed for `AGENTS.md`, but important enough that future agents and developers should not rediscover them from scratch.
 
@@ -111,6 +111,7 @@ Short ADR-style records: why a durable choice was made. Immutable once accepted;
 | [0005-enforcement-ladder.md](decisions/0005-enforcement-ladder.md)                                                 | The enforcement ladder: every learned lesson climbs Tier 1 (unwritable) or Tier 2 (checked) before resting as prose.                     |
 | [0006-testing-architecture.md](decisions/0006-testing-architecture.md) | Historical local-backend/cloud-canary decision; execution and acceptance rules are superseded by decision 0007. |
 | [0007-independent-test-groups.md](decisions/0007-independent-test-groups.md) | Current coverage allocation, independent execution, selected change acceptance, input-qualified release results, and failure stopping rules. |
+| [0008-development-workflow.md](decisions/0008-development-workflow.md) | The development workflow: local `main`, local gates, preview on DEV for the partner, release by pushing `main` with PROD migrations in the window, hotfixes, pilot switches from the second customer, and everything rejected (branches, PRs, CI, branching, staging). |
 
 ## Skills
 

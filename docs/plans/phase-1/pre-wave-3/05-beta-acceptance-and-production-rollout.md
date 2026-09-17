@@ -1,6 +1,6 @@
 # Pre-Wave-3 step 5: beta acceptance and the production rollout
 
-Status: living — last reviewed 2026-09-17; starting brief written at the close of Step 3, not a complete plan; runs only after steps 1 to 4 are closed and on the owner's explicit request
+Status: living — last reviewed 2026-09-18; starting brief written at the close of Step 3, not a complete plan; runs only after steps 1 to 4 are closed and on the owner's explicit request
 
 ## Read this first
 
@@ -38,7 +38,7 @@ PROD still serves documents from the retired Supabase bucket: 40 objects and 43 
 1. Steps 1 to 4 of this folder are closed with evidence.
 2. The [signed-download tightening](#signed-download-tightening-before-the-release-run) below is implemented and its unit tests pass; it is the last code change before the release run.
 3. The fresh local release verification and the cloud canary pass on the final tree (see "What beta acceptance means here"); the reports are recorded in this file. Its four performance groups also supply the samples for the [reference recalibration](#performance-reference-recalibration), which happens right after the passing report and before the push.
-4. Inventory item 1: commit in reviewable commits and push to `partner-preview`; the owner reviews the preview; the script policy runs in report-only mode there first (SEC-08) and its reports are read before the nonce decision.
+4. Before the push: the owner scopes every Supabase and R2 variable per Vercel environment, Preview to DEV and Production to PROD ([decision 0008](../../../decisions/0008-development-workflow.md), 2026-09-18), and the agent verifies on the preview deployment that its Supabase URL is the DEV project; the `EMAIL_OTP_HASH_SECRET` from the section below is set in the same pass. Then inventory item 1: push to `partner-preview` (steps 1 to 4 are already committed as `16fbc3a` and `f929a8d`); the owner reviews the preview on synthetic DEV data; the script policy runs in report-only mode there first (SEC-08) and its reports are read before the nonce decision.
 5. Inventory items 6 then 2 to 4: backup, the migrations in order with migration 3 inside the cutover window, the edge functions, the compatibility order.
 6. Production document storage: delete every document and object that is not Willert Haustechnik's, migrate the Willert documents with the script, re-verifying counts live first.
 7. Push `main` on the owner's explicit go; inventory items 5, 7 and 8 against the production domain.
