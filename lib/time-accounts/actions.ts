@@ -2686,7 +2686,7 @@ export async function downloadPayrollExport(formData: FormData): Promise<void> {
     .single();
   if (!document) throw new Error("document_not_found");
   const url = await createSignedDownloadUrl({
-    path: document.storage_path,
+    path: document.storage_path, organizationId: context.orgId,
     disposition: "attachment",
     downloadFileName: document.original_file_name,
   });

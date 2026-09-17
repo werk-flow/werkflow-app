@@ -30,3 +30,15 @@ export function getSupabaseSecretKey(): string {
 export function getSiteUrl(): string | undefined {
   return readOptionalEnv(['NEXT_PUBLIC_SITE_URL']);
 }
+
+/**
+ * Server secret behind the email-change OTP hashes: one value per backend,
+ * generated once (32 random bytes, hex) and set in the environment. Without it
+ * the email-change actions refuse to run rather than fall back to a plain hash.
+ */
+export function getEmailOtpHashSecret(): string {
+  return readRequiredEnv(
+    ['EMAIL_OTP_HASH_SECRET'],
+    'Missing EMAIL_OTP_HASH_SECRET environment variable.'
+  );
+}

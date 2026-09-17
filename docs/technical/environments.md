@@ -115,7 +115,7 @@ Parity checkpoints belong in the slice or cross-slice record and the gate log. `
 ## Per-machine onboarding checklist
 
 1. **PAT**: make the owner's Supabase Personal Access Token available as `SUPABASE_ACCESS_TOKEN` to the CLI and management scripts. Use the environment or the established local secret-loading setup and restart the agent session after changing its inherited environment. The current workstation also keeps the token in its gitignored backend backups so switching `.env.local` does not remove script access. Keep those copies consistent across every backup you use. Never commit or print the token.
-2. **Env file**: obtain `.env.local` (dev values) from the owner's password manager / another machine; place it in the repo root. Optionally also `.env.live-backup` if prod-local sessions are expected. Copy `.env.local` to `.env.dev-backup`.
+2. **Env file**: obtain `.env.local` (dev values) from the owner's password manager / another machine; place it in the repo root. Since 2026-09-18 it also carries `EMAIL_OTP_HASH_SECRET`, one value per backend, so each of the three backup files holds its own. Optionally also `.env.live-backup` if prod-local sessions are expected. Copy `.env.local` to `.env.dev-backup`.
 3. **Claude Code**: approve the project-scoped `.mcp.json` server on first start. Project permissions travel via git (`.claude/settings.json`); the autoMode environment note about the dev project lives in the user-level `~/.claude/settings.json`.
 4. **Codex**: add the same account-wide server to `~/.codex/config.toml`:
 

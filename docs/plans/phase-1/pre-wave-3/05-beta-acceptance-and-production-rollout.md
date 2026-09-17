@@ -36,7 +36,7 @@ PROD still serves documents from the retired Supabase bucket: 40 objects and 43 
 ### Order of execution
 
 1. Steps 1 to 4 of this folder are closed with evidence.
-2. The [signed-download tightening](#signed-download-tightening-before-the-release-run) below is implemented and its unit tests pass; it is the last code change before the release run.
+2. The [signed-download tightening](#signed-download-tightening-before-the-release-run) and the [OTP hashing](#email-change-otp-hashing-before-the-release-run) below were implemented on 2026-09-18 at the close of step 4 (their unit tests, the account-boundaries fixture, typecheck, lint and knip pass; [security.md](../../../technical/security.md) and the backlog are updated); the release run of this step is their browser and canary proof. No further code change precedes the release run.
 3. The fresh local release verification and the cloud canary pass on the final tree (see "What beta acceptance means here"); the reports are recorded in this file. Its four performance groups also supply the samples for the [reference recalibration](#performance-reference-recalibration), which happens right after the passing report and before the push.
 4. Before the push: the Vercel variables are scoped per environment since 2026-09-18 (done by the owner, the target state is in [environments.md](../../../technical/environments.md); `EMAIL_OTP_HASH_SECRET` is set on both sides and in the three local backup files). The agent verifies on the new preview deployment that its Supabase URL is the DEV project, that the dev R2 bucket's CORS allows the branch URL `https://werkflow-app-git-partner-preview-werkflows-projects.vercel.app` (the owner adds it in the Cloudflare dashboard and removes it from the prod bucket; otherwise the agent runs `scripts/setup-r2-cors.ts` after extending it with the origin), and that DEV's auth redirect list allows that origin with `/**` (Supabase dashboard, Authentication, URL Configuration; or the Management API with `SUPABASE_ACCESS_TOKEN`). Then inventory item 1: push to `partner-preview` (steps 1 to 4 are already committed as `16fbc3a` and `f929a8d`); the owner reviews the preview on synthetic DEV data; the script policy runs in report-only mode there first (SEC-08) and its reports are read before the nonce decision.
 5. Inventory items 6 then 2 to 4: backup, the migrations in order with migration 3 inside the cutover window, the edge functions, the compatibility order.
@@ -75,9 +75,13 @@ Decision D6 of the [testing-system review](01-testing-system-review.md#decisions
 
 ## Owner decisions this step needs at the time
 
-- The go for each irreversible action: the push to `partner-preview`, each PROD migration batch, the document deletion and migration, the push of `main`.
-- The nonce decision after the report-only cycle (SEC-08).
-- Whether the two trashed Willert images are migrated or discarded.
+Given in advance on 2026-09-18 so the step can run end to end without the owner present (the owner's standing authorization for this one release; the agent still records every action with its timestamp, verification and rollback point):
+
+- The go for every irreversible action is granted: the push to `partner-preview`, each PROD migration batch in the compatibility order, the edge-function deployments, the production document deletion and migration, and the push of `main`. Any number of `bun run review` passes is authorized. A failed gate, a failed PROD verification, or any unexplained state still stops the step; the agent then records the stop and waits, it never improvises a fix on production.
+- The maintenance window is the night of the run: the beta business does not work at night, so no announcement precedes it; the agent still pauses and drains writes as item 4 describes and verifies before reopening.
+- The two trashed Willert images are migrated with the live photo (three objects; the trash stays the user's to empty).
+- The script policy stays report-only for this release (SEC-08 option 3); the nonce decision is taken after the owner has read the reports, as a later change, not tonight.
+- The reference recalibration: the agent drafts and activates the references from the release run's samples; a scenario whose new median is slower than the transferred reference is recorded as a finding for the owner, not as a reason to stop.
 
 ## Heads-up from step 3 (2026-09-15): the clock flows and the calendar's reads changed
 

@@ -943,6 +943,7 @@ export async function createPersonnelDocumentUploadTicket(input: {
       operationId: request.operationId,
     });
     const uploadUrl = await createSignedUploadUrl({
+      organizationId,
       path: storagePath,
       contentType: request.mimeType || "application/octet-stream",
     });
@@ -1136,6 +1137,7 @@ export async function getPersonnelDocumentSignedUrl(
   if (!ownReleased && !managerAllowed) return { success: false, error: "not_authorized" };
   try {
     const signedUrl = await createSignedDownloadUrl({
+      organizationId: file.organization_id,
       path: file.storage_path,
       disposition: "attachment",
       downloadFileName: file.display_name,

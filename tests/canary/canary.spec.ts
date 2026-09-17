@@ -95,7 +95,7 @@ test.describe('Cloud-Canary @CANARY', () => {
       world.orgId,
       'upload-fixture',
     );
-    const downloadUrl = await createSignedDownloadUrl({ path: storagePath });
+    const downloadUrl = await createSignedDownloadUrl({ organizationId: world.orgId, path: storagePath });
     const response = await fetch(downloadUrl, {
       signal: AbortSignal.timeout(60_000),
     });

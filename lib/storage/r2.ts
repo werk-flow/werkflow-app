@@ -124,15 +124,46 @@ function buildContentDisposition(type: 'inline' | 'attachment', fileName?: strin
   return `${type}; filename="${fallback}"; filename*=UTF-8''${encoded}`;
 }
 
+/**
+ * Every storage key starts with the owning organization id (document, version
+ * and payroll-export paths all build it that way). The signers refuse any other
+ * key, so a wrong or forged path can never yield a URL for another
+ * organization's object even if a caller is mistaken (pre-Wave-3 step 5,
+ * CodeRabbit finding of 2026-09-17; Tier 1). Exported for its unit test.
+ */
+export function assertOrganizationStorageKey(organizationId: string, path: string): void {
+  const segments = path.split('/');
+  if (
+    !organizationId ||
+    organizationId.includes('/') ||
+    segments.length < 2 ||
+    segments[0] !== organizationId ||
+    segments.some((segment) => segment === '' || segment === '.' || segment === '..')
+  ) {
+    throw new Error('storage_key_outside_organization');
+  }
+}
+
+/** Keys read without an organization context still may not traverse or contain empty segments. */
+function assertStorageKeyShape(path: string): void {
+  const segments = path.split('/');
+  if (segments.length < 2 || segments.some((segment) => segment === '' || segment === '.' || segment === '..')) {
+    throw new Error('storage_key_malformed');
+  }
+}
+
 export async function createSignedUploadUrl({
+  organizationId,
   path,
   contentType,
   expiresInSeconds = SIGNED_UPLOAD_URL_EXPIRES_SECONDS,
 }: {
+  organizationId: string;
   path: string;
   contentType: string;
   expiresInSeconds?: number;
 }): Promise<string> {
+  assertOrganizationStorageKey(organizationId, path);
   const command = new PutObjectCommand({
     Bucket: getR2BucketName(),
     Key: path,
@@ -148,16 +179,19 @@ export async function createSignedUploadUrl({
 }
 
 export async function createSignedDownloadUrl({
+  organizationId,
   path,
   disposition = 'inline',
   downloadFileName,
   expiresInSeconds = SIGNED_DOWNLOAD_URL_EXPIRES_SECONDS,
 }: {
+  organizationId: string;
   path: string;
   disposition?: 'inline' | 'attachment';
   downloadFileName?: string | undefined;
   expiresInSeconds?: number;
 }): Promise<string> {
+  assertOrganizationStorageKey(organizationId, path);
   const command = new GetObjectCommand({
     Bucket: getR2BucketName(),
     Key: path,
@@ -168,6 +202,7 @@ export async function createSignedDownloadUrl({
 }
 
 export async function headStorageObject(path: string): Promise<StorageObjectHead> {
+  assertStorageKeyShape(path);
   try {
     const result = await getR2Client().send(
       new HeadObjectCommand({ Bucket: getR2BucketName(), Key: path })

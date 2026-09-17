@@ -75,7 +75,10 @@ mock.module('@/lib/supabase/server', () => ({ createSupabaseServerClient: async 
 mock.module('@/lib/jobs/auth', () => ({ authenticateAndAuthorize: () => { throw new Error('Unexpected job read'); } }));
 mock.module('@/lib/responsibilities/server', () => ({ getResponsibilitiesStrandedByMemberRemoval: () => [] }));
 mock.module('@/lib/org/cookies', () => ({ resolveActiveOrgId: () => 'allowed' }));
-mock.module('@/lib/env/server', () => ({ getSupabaseSecretKey: () => 'fixture-only' }));
+mock.module('@/lib/env/server', () => ({
+  getSupabaseSecretKey: () => 'fixture-only',
+  getEmailOtpHashSecret: () => 'fixture-only-otp-secret',
+}));
 mock.module('@/lib/supabase/admin', () => ({
   createSupabaseAdminClient: () => ({
     from: (table: string) => { dataReads++; return new Query([...(tables[table] ?? [])]); },

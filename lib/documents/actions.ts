@@ -2573,7 +2573,7 @@ export async function createDocumentUploadTicket(
 
   try {
     const uploadUrl = await createSignedUploadUrl({
-      path: storagePath,
+      path: storagePath, organizationId: auth.context.orgId,
       contentType: input.mimeType || "application/octet-stream",
     });
 
@@ -3673,7 +3673,7 @@ export async function getDocumentSignedUrl(
 
   try {
     const signedUrl = await createSignedDownloadUrl({
-      path: existing.document.storage_path,
+      path: existing.document.storage_path, organizationId: auth.context.orgId,
       disposition: "attachment",
       downloadFileName: existing.document.display_name,
     });
@@ -3695,7 +3695,7 @@ export async function getDocumentViewSignedUrl(
 
   try {
     const signedUrl = await createSignedDownloadUrl({
-      path: existing.document.storage_path,
+      path: existing.document.storage_path, organizationId: auth.context.orgId,
       disposition: inlineSafeDisposition(existing.document.mime_type),
       downloadFileName:
         inlineSafeDisposition(existing.document.mime_type) === "attachment"
@@ -3749,7 +3749,7 @@ export async function getDocumentVersionSignedUrl(
       ? "attachment"
       : inlineSafeDisposition(versionRow.mime_type);
     const signedUrl = await createSignedDownloadUrl({
-      path: versionRow.storage_path,
+      path: versionRow.storage_path, organizationId: auth.context.orgId,
       disposition,
       downloadFileName:
         disposition === "attachment"
@@ -4031,7 +4031,7 @@ export async function createDocumentVersionUploadTicket(
 
   try {
     const uploadUrl = await createSignedUploadUrl({
-      path: storagePath,
+      path: storagePath, organizationId: auth.context.orgId,
       contentType: input.mimeType || "application/octet-stream",
     });
 

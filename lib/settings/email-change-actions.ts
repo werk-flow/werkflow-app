@@ -1,13 +1,14 @@
 'use server';
 
-import { createHash, randomInt } from 'crypto';
+import { randomInt } from 'crypto';
 import { z } from 'zod';
 import { updateTag } from 'next/cache';
 import type { User } from '@supabase/supabase-js';
 import { CACHE_TAGS, getAuthenticatedUser } from '@/lib/data/cached';
-import { getSupabaseSecretKey } from '@/lib/env/server';
+import { getEmailOtpHashSecret, getSupabaseSecretKey } from '@/lib/env/server';
 import { getInitialEmailChangeWizardState } from '@/lib/settings/email-change-state';
 import { isDefiniteEmailUpdateRejection } from '@/lib/settings/email-change-rules';
+import { hashEmailChangeOtp } from '@/lib/settings/otp-hash';
 import { transitionEmailChange } from '@/lib/settings/email-change-transition';
 import {
   CURRENT_EMAIL_OTP_EXPIRY_MINUTES, CURRENT_EMAIL_OTP_LENGTH,
@@ -18,8 +19,8 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 const otpCodeSchema = z.string().trim().regex(/^\d{6}$/);
 const newEmailSchema = z.string().trim().email().max(320);
 
-function hashOtpCode(code: string): string {
-  return createHash('sha256').update(code).digest('hex');
+function hashOtpCode(user: User, code: string): string {
+  return hashEmailChangeOtp({ secret: getEmailOtpHashSecret(), userId: user.id, code });
 }
 
 function generateOtpCode(): string {
@@ -55,7 +56,7 @@ export async function requestCurrentEmailChangeOtp(): Promise<EmailChangeActionR
   if (!user) return buildResult(false, 'not_authenticated');
   if (!user.email) return buildResult(false, 'no_active_email');
   const code = generateOtpCode();
-  const result = await transitionEmailChange(user, 'request_current', { codeHash: hashOtpCode(code) });
+  const result = await transitionEmailChange(user, 'request_current', { codeHash: hashOtpCode(user, code) });
   if ('error' in result) return buildResult(false, result.error);
   return sendEmailChangeOtpEmail({ userId: user.id, email: user.email.trim().toLowerCase(), code, kind: 'current' });
 }
@@ -65,7 +66,7 @@ export async function verifyCurrentEmailChangeOtp(code: string): Promise<EmailCh
   if (!user) return buildResult(false, 'not_authenticated');
   const parsed = otpCodeSchema.safeParse(code);
   if (!parsed.success) return buildResult(false, 'invalid_code');
-  const result = await transitionEmailChange(user, 'verify_current', { codeHash: hashOtpCode(parsed.data) });
+  const result = await transitionEmailChange(user, 'verify_current', { codeHash: hashOtpCode(user, parsed.data) });
   return 'error' in result ? buildResult(false, result.error) : buildResult(true);
 }
 
@@ -77,7 +78,7 @@ async function sendNewEmailCode(
   const email = parsed.data.toLowerCase();
   if (email === user.email?.trim().toLowerCase()) return buildResult(false, 'invalid_email');
   const code = generateOtpCode();
-  const result = await transitionEmailChange(user, operation, { codeHash: hashOtpCode(code), newEmail: email });
+  const result = await transitionEmailChange(user, operation, { codeHash: hashOtpCode(user, code), newEmail: email });
   if ('error' in result) return buildResult(false, result.error);
   return sendEmailChangeOtpEmail({ userId: user.id, email, code, kind: 'new' });
 }
@@ -99,7 +100,7 @@ export async function verifyNewEmailChangeOtp(code: string): Promise<EmailChange
   if (!user) return buildResult(false, 'not_authenticated');
   const parsed = otpCodeSchema.safeParse(code);
   if (!parsed.success) return buildResult(false, 'new_email_invalid_code');
-  const claim = await transitionEmailChange(user, 'verify_new', { codeHash: hashOtpCode(parsed.data) });
+  const claim = await transitionEmailChange(user, 'verify_new', { codeHash: hashOtpCode(user, parsed.data) });
   if ('error' in claim) return buildResult(false, claim.error);
   if (claim.status !== 'claimed' && claim.status !== 'completion_pending') {
     return buildResult(false, 'unexpected_error');
