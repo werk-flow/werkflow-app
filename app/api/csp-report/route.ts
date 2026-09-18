@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { CSP_REPORT_BODY_LIMIT, summarizeCspReport } from '@/lib/security/csp-report';
 
-// Receives the browser's reports for the report-only script policy declared in
+// Receives the browser's reports for the enforced script policy declared in
 // next.config.ts. Deliberately unauthenticated: browsers post reports without
 // application context, the handler reads nothing, writes nothing, and logs a
 // bounded, redacted summary (no script sample, no query strings) for the
-// owner's nonce decision (SEC-08). The route inventory names this posture.
+// nonce backlog row (SEC-08). The route inventory names this posture.
 const ACCEPTED_CONTENT_TYPES = ['application/csp-report', 'application/json'];
 
 export async function POST(request: NextRequest) {

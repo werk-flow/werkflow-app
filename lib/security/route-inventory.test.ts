@@ -31,7 +31,7 @@ const reviewedHandlers: Record<string, { authorization: string; mustImport: read
     mustImport: ['createSupabaseServerClient'],
   },
   'app/api/csp-report/route.ts': {
-    authorization: 'unauthenticated by design: receives browser CSP reports for the report-only script policy, reads and writes nothing, bounds the body, and logs a redacted summary without script samples or query strings',
+    authorization: 'unauthenticated by design: receives the browser reports of the enforced script policy, reads and writes nothing, bounds the body, and logs a redacted summary without script samples or query strings',
     mustImport: ['summarizeCspReport', 'CSP_REPORT_BODY_LIMIT'],
   },
   'app/api/background-read/route.ts': {

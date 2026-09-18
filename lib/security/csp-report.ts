@@ -1,19 +1,22 @@
 /**
- * Report-only script policy (SEC-08 option 3, owner decision of 2026-09-14):
- * browsers block nothing and report what the strict policy would block, so the
- * nonce-versus-'unsafe-inline' decision rests on real reports from real pages.
- * Only script, object, base and form directives are declared; a default-src
- * would report every Supabase and R2 request and drown the script findings.
- * Reports travel through the legacy `report-uri` channel only: with `report-to`
- * present Chromium batches through the Reporting API and delivered nothing in
- * the 2026-09-18 preview check, while `report-uri` posts at once.
+ * Enforced origin-only script policy (SEC-08, owner decision of 2026-09-18):
+ * scripts and plugins may come from this origin only, which blocks injected
+ * external scripts and objects. `'unsafe-inline'` stays because Next streams
+ * inline scripts on every page; the report-only phase (2026-09-18) showed
+ * nothing else. Injected inline scripts are therefore not blocked; the nonce
+ * policy that would close that gap is the open backlog row. Only script,
+ * object, base, form and frame directives are declared; a default-src would
+ * block every Supabase and R2 request. Violations still report through the
+ * legacy `report-uri` channel only: with `report-to` present Chromium batches
+ * through the Reporting API and delivered nothing in the preview check.
  */
 const CSP_REPORT_PATH = '/api/csp-report';
-export const CSP_REPORT_ONLY_POLICY = [
-  "script-src 'self'",
+export const CSP_POLICY = [
+  "script-src 'self' 'unsafe-inline'",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
+  "frame-ancestors 'none'",
   `report-uri ${CSP_REPORT_PATH}`,
 ].join('; ');
 

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { CSP_REPORT_ONLY_POLICY, summarizeCspReport } from './csp-report';
+import { CSP_POLICY, summarizeCspReport } from './csp-report';
 
 test('a report keeps directive, blocked origin, document path and source, and drops the sample', () => {
   const violation = summarizeCspReport({
@@ -12,7 +12,7 @@ test('a report keeps directive, blocked origin, document path and source, and dr
       'line-number': 12,
       'column-number': 7,
       'script-sample': 'self.__next_f.push([1,"Meier GmbH"])',
-      'original-policy': CSP_REPORT_ONLY_POLICY,
+      'original-policy': CSP_POLICY,
     },
   });
   expect(violation).toEqual({
@@ -36,9 +36,9 @@ test('inline and eval markers survive; malformed bodies summarize to nothing', (
   expect(summarizeCspReport({ 'csp-report': { 'effective-directive': 'script-src' } })).toBeNull();
 });
 
-test('the policy declares scripts, objects, base and form targets only and the legacy report channel', () => {
-  expect(CSP_REPORT_ONLY_POLICY).toBe("script-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; report-uri /api/csp-report");
-  expect(CSP_REPORT_ONLY_POLICY).not.toContain('default-src');
-  expect(CSP_REPORT_ONLY_POLICY).not.toContain('unsafe-inline');
-  expect(CSP_REPORT_ONLY_POLICY).not.toContain('report-to');
+test('the enforced policy declares scripts, objects, base, form and frame targets only and the legacy report channel', () => {
+  expect(CSP_POLICY).toBe("script-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; report-uri /api/csp-report");
+  expect(CSP_POLICY).not.toContain('default-src');
+  expect(CSP_POLICY).not.toContain('unsafe-eval');
+  expect(CSP_POLICY).not.toContain('report-to');
 });
