@@ -13,7 +13,6 @@ test('next.config.ts sends the browser hardening headers on every path', () => {
     '{ key: "X-Frame-Options", value: "DENY" }',
     `{ key: "Content-Security-Policy", value: "frame-ancestors 'none'" }`,
     '{ key: "Content-Security-Policy-Report-Only", value: CSP_REPORT_ONLY_POLICY }',
-    '{ key: "Reporting-Endpoints", value: CSP_REPORTING_ENDPOINTS_HEADER }',
     '{ key: "X-Content-Type-Options", value: "nosniff" }',
     '{ key: "Referrer-Policy", value: "strict-origin-when-cross-origin" }',
     '{ key: "Permissions-Policy", value:',

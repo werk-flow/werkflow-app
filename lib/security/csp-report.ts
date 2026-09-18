@@ -4,22 +4,21 @@
  * nonce-versus-'unsafe-inline' decision rests on real reports from real pages.
  * Only script, object, base and form directives are declared; a default-src
  * would report every Supabase and R2 request and drown the script findings.
+ * Reports travel through the legacy `report-uri` channel only: with `report-to`
+ * present Chromium batches through the Reporting API and delivered nothing in
+ * the 2026-09-18 preview check, while `report-uri` posts at once.
  */
 const CSP_REPORT_PATH = '/api/csp-report';
-export const CSP_REPORTING_ENDPOINTS_HEADER = `csp-reports="${CSP_REPORT_PATH}"`;
 export const CSP_REPORT_ONLY_POLICY = [
   "script-src 'self'",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
   `report-uri ${CSP_REPORT_PATH}`,
-  'report-to csp-reports',
 ].join('; ');
 
 /** Bodies above this are dropped unread; a report is a few hundred bytes. */
 export const CSP_REPORT_BODY_LIMIT = 16 * 1024;
-/** A report-to batch above this keeps its first entries only. */
-export const CSP_REPORT_MAX_VIOLATIONS = 20;
 
 export type CspViolation = {
   directive: string;
@@ -56,36 +55,23 @@ function location(value: unknown, keepPath: boolean): string | null {
 }
 
 /**
- * Reduces one legacy (`application/csp-report`) or one Reporting API
- * (`application/reports+json`) body to the fields the policy decision needs.
- * `script-sample` and the original policy never enter the log: the sample can
- * carry streamed page content, and the policy is ours already.
+ * Reduces one `application/csp-report` body to the fields the policy decision
+ * needs. `script-sample` and the original policy never enter the log: the
+ * sample can carry streamed page content, and the policy is ours already.
  */
-export function summarizeCspReports(body: unknown): CspViolation[] {
-  const entries: Record<string, unknown>[] = [];
-  const legacy = asRecord(asRecord(body)?.['csp-report']);
-  if (legacy) entries.push(legacy);
-  if (Array.isArray(body)) {
-    for (const item of body.slice(0, CSP_REPORT_MAX_VIOLATIONS)) {
-      const report = asRecord(item);
-      const violation = asRecord(report?.body);
-      if (report?.type === 'csp-violation' && violation) entries.push(violation);
-    }
-  }
-  const violations: CspViolation[] = [];
-  for (const entry of entries) {
-    const directive = text(entry['effective-directive'] ?? entry.effectiveDirective ?? entry['violated-directive'] ?? entry.violatedDirective);
-    const blocked = location(entry['blocked-uri'] ?? entry.blockedURL, false);
-    const document = location(entry['document-uri'] ?? entry.documentURL, true);
-    if (!directive || !blocked || !document) continue;
-    violations.push({
-      directive,
-      blocked,
-      document,
-      source: location(entry['source-file'] ?? entry.sourceFile, true),
-      line: integer(entry['line-number'] ?? entry.lineNumber),
-      column: integer(entry['column-number'] ?? entry.columnNumber),
-    });
-  }
-  return violations;
+export function summarizeCspReport(body: unknown): CspViolation | null {
+  const entry = asRecord(asRecord(body)?.['csp-report']);
+  if (!entry) return null;
+  const directive = text(entry['effective-directive'] ?? entry['violated-directive']);
+  const blocked = location(entry['blocked-uri'], false);
+  const document = location(entry['document-uri'], true);
+  if (!directive || !blocked || !document) return null;
+  return {
+    directive,
+    blocked,
+    document,
+    source: location(entry['source-file'], true),
+    line: integer(entry['line-number']),
+    column: integer(entry['column-number']),
+  };
 }
