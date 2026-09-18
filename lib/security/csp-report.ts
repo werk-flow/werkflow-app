@@ -2,9 +2,12 @@
  * Enforced origin-only script policy (SEC-08, owner decision of 2026-09-18):
  * scripts and plugins may come from this origin only, which blocks injected
  * external scripts and objects. `'unsafe-inline'` stays because Next streams
- * inline scripts on every page; the report-only phase (2026-09-18) showed
- * nothing else. Injected inline scripts are therefore not blocked; the nonce
- * policy that would close that gap is the open backlog row. Only script,
+ * inline scripts on every page. Injected inline scripts are therefore not
+ * blocked; the nonce policy that would close that gap is the open backlog row.
+ * `'unsafe-eval'` is deliberately absent: the report-only phase showed one
+ * eval user, Zod 4's `allowsEval` probe (`Function("")` inside try/catch),
+ * which now fails and sends Zod down its non-compiled parse path, so every
+ * page load reports exactly one `eval` violation from that probe. Only script,
  * object, base, form and frame directives are declared; a default-src would
  * block every Supabase and R2 request. Violations still report through the
  * legacy `report-uri` channel only: with `report-to` present Chromium batches
