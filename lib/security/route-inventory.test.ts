@@ -30,6 +30,10 @@ const reviewedHandlers: Record<string, { authorization: string; mustImport: read
     authorization: 'getUser() on the caller session; the RPC binds the invite to that user',
     mustImport: ['createSupabaseServerClient'],
   },
+  'app/api/csp-report/route.ts': {
+    authorization: 'unauthenticated by design: receives browser CSP reports for the report-only script policy, reads and writes nothing, bounds the body, and logs a redacted summary without script samples or query strings',
+    mustImport: ['summarizeCspReports', 'CSP_REPORT_BODY_LIMIT'],
+  },
   'app/api/background-read/route.ts': {
     authorization: 'closed reader registry with per-kind validated input; verified cookie identity and, for inputs that name an organization, active-organization equality before delegating to readers that keep their own membership and subject checks; private no-store responses at background priority',
     mustImport: ['authenticateAndAuthorize', 'withReadRequest', 'BACKGROUND_READS', 'isBackgroundReadKind'],
