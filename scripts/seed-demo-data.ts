@@ -947,20 +947,28 @@ async function seedTimeEntries(admin: Admin, organizationId: string, members: Me
   }
   const rows: Insert<'time_entries'>[] = [];
   const pastWorkdays = workdays.filter((date) => date <= TODAY);
+  const recentWorkdays = pastWorkdays.slice(-8);
+  let pendingSequence = 0;
   for (const member of members) {
     const schedule = scheduleFor(member);
     const minutesByWeekday = [schedule.sunday_minutes, schedule.monday_minutes, schedule.tuesday_minutes, schedule.wednesday_minutes, schedule.thursday_minutes, schedule.friday_minutes, schedule.saturday_minutes];
+    // One day per field worker still awaits approval, entered by hand that evening.
+    // The rows of one submission share a created_at, as the manual entry form writes them.
+    const pendingDay = member.field ? random.pick(recentWorkdays) : null;
     for (const date of pastWorkdays) {
       if (date < member.entryDate || absences.isAbsent(member, date)) continue;
       const target = minutesByWeekday[weekday(date)] ?? 0;
       if (target === 0) continue;
-      const status: Database['public']['Enums']['time_entry_status'] = date < '2026-09-01' ? 'approved' : 'pending';
+      const isPending = date === pendingDay;
+      const status: Database['public']['Enums']['time_entry_status'] = isPending ? 'pending' : 'approved';
+      pendingSequence += isPending ? 1 : 0;
+      const createdAt = isPending ? berlinInstant(date, minutesToClock(17 * 60 + 30 + pendingSequence)) : berlinInstant(date, '20:00');
       const start = (member.field ? 6 * 60 + 45 : 8 * 60) + random.int(0, 20);
       const worked = target + random.int(-15, 35);
       const hasBreak = worked > 300;
       const end = start + worked + (hasBreak ? 30 : 0);
       const dayJobs = jobsByMemberDay.get(`${member.employeeRecordId}:${date}`) ?? [];
-      const base = { organization_id: organizationId, user_id: member.userId, is_manual: true, status, capture_source: 'employee' as const };
+      const base = { organization_id: organizationId, user_id: member.userId, is_manual: true, status, capture_source: 'employee' as const, created_at: createdAt };
       rows.push({ ...base, entry_type: 'clock_in', timestamp: berlinInstant(date, minutesToClock(start)), job_id: dayJobs[0]?.id ?? null });
       if (hasBreak) {
         rows.push({ ...base, entry_type: 'break_start', timestamp: berlinInstant(date, minutesToClock(start + Math.floor(worked / 2))) });

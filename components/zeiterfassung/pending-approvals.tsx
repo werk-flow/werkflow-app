@@ -19,9 +19,20 @@ import { InlinePending } from '@/components/ui/inline-pending';
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  reviewSession,
+  reviewEntries,
   reviewChangeRequest
 } from '@/lib/time-tracking/actions';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger
+} from '@/components/ui/alert-dialog';
 import { readInBackground } from '@/lib/data/background-read-client';
 import type {
   PendingSession,
@@ -67,6 +78,7 @@ const APPROVAL_ERROR_MESSAGES: Record<string, string> = {
   not_authorized: 'Du darfst diesen Antrag nicht bearbeiten.',
   request_not_found: 'Der Antrag wurde nicht gefunden.',
   request_already_reviewed: 'Der Antrag wurde bereits bearbeitet.',
+  entry_not_pending: 'Ein Eintrag wurde bereits bearbeitet. Die Ansicht wurde aktualisiert.',
   unexpected_error: 'Die Freigabe konnte nicht gespeichert werden.',
 };
 
@@ -224,9 +236,7 @@ export function PendingApprovals({
     setActionError(null);
     return busy.run(session.id, async () => {
       try {
-        const pairedEntryId =
-          session.clockIn && session.clockOut ? session.clockOut.id : undefined;
-        const result = await reviewSession(session.id, decision, pairedEntryId);
+        const result = await reviewEntries(session.entryIds, decision);
         // Refresh while the card is still busy so the reviewed item is gone
         // (or the view corrected) before the next action is possible.
         await view.refresh();
@@ -235,6 +245,26 @@ export function PendingApprovals({
         }
       } catch (err) {
         console.error('Error reviewing session:', err);
+        setActionError('Ein Fehler ist aufgetreten.');
+      }
+    });
+  };
+
+  // One round trip for the whole backlog; the server re-checks every entry.
+  const approveAllSessions = () => {
+    setActionError(null);
+    return busy.run('all-sessions', async () => {
+      try {
+        const result = await reviewEntries(
+          sessions.flatMap((session) => session.entryIds),
+          'approved'
+        );
+        await view.refresh();
+        if (!result.success) {
+          setActionError(getApprovalErrorMessage(result.error));
+        }
+      } catch (err) {
+        console.error('Error approving all sessions:', err);
         setActionError('Ein Fehler ist aufgetreten.');
       }
     });
@@ -412,7 +442,39 @@ export function PendingApprovals({
             'Keine ausstehenden Anträge'
           )}
         </p>
-        <RefreshButton onRefresh={view.refresh} label="Anträge aktualisieren" />
+        <div className="flex items-center gap-2">
+          {sessions.length > 1 && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy.isBusy('all-sessions')}
+                >
+                  <Check className="h-4 w-4" />
+                  Alle genehmigen
+                  <InlinePending active={busy.isBusy('all-sessions')} />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Alle Zeiteinträge genehmigen?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {sessions.length} ausstehende Zeiteinträge werden genehmigt.
+                    Änderungsanträge bleiben unberührt.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => void approveAllSessions()}>
+                    Genehmigen
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+          <RefreshButton onRefresh={view.refresh} label="Anträge aktualisieren" />
+        </div>
       </div>
 
       {/* Inline error message for operation failures (when items exist) */}

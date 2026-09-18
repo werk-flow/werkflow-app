@@ -53,6 +53,8 @@ import {
 } from './helpers';
 import { canViewChangeRequest } from './change-request-visibility';
 import { readPendingChangeRequestData } from './change-request-reader';
+import { groupPendingEntries } from './pending-sessions';
+import { isUuid } from '@/lib/validation/uuid';
 import {
   getLocalDayEnd,
   getLocalDayKey,
@@ -659,11 +661,18 @@ export async function addManualEntry(
 // Review Actions
 // ============================================
 
+const REVIEW_BATCH_LIMIT = 1000;
+
 /**
- * Approve or reject a pending entry
+ * Approve or reject pending entries in one round trip: one session, one
+ * calendar day or the whole approval backlog. Every entry must be pending and
+ * belong to one organization the caller is a member of; the time_approval
+ * responsibility is resolved once per target person at action time, so a
+ * stale view never preserves authority. Nothing is written unless every entry
+ * passes. Rejected entries stay in history with status 'rejected'.
  */
-export async function reviewEntry(
-  entryId: string,
+export async function reviewEntries(
+  entryIds: string[],
   decision: 'approved' | 'rejected'
 ): Promise<ReviewEntryResult> {
   try {
@@ -671,101 +680,78 @@ export async function reviewEntry(
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
+    const ids = [...new Set(entryIds)];
+    if (ids.length === 0 || ids.length > REVIEW_BATCH_LIMIT || !ids.every(isUuid)) {
+      return { success: false, error: 'invalid_input' };
+    }
 
     const admin = createSupabaseAdminClient();
-
-    // Get the entry
-    const { data: entry, error: entryError } = await admin
+    const { data: entries, error: entriesError } = await admin
       .from('time_entries')
-      .select('*')
-      .eq('id', entryId)
-      .single();
-
-    if (entryError || !entry) {
+      .select('id, organization_id, user_id, status')
+      .in('id', ids);
+    if (entriesError || !entries || entries.length !== ids.length) {
       return { success: false, error: 'entry_not_found' };
     }
-
-    // Check if entry is pending
-    if (entry.status !== 'pending') {
+    if (entries.some((entry) => entry.status !== 'pending')) {
       return { success: false, error: 'entry_not_pending' };
     }
+    const organizationId = entries[0]?.organization_id;
+    if (!organizationId || entries.some((entry) => entry.organization_id !== organizationId)) {
+      return { success: false, error: 'invalid_input' };
+    }
 
-    const callerRole = await verifyCurrentMembership(
-      user.id,
-      entry.organization_id
-    );
+    const callerRole = await verifyCurrentMembership(user.id, organizationId);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
 
-    // Get target user's role
-    const { data: targetMember } = await admin
+    const targetUserIds = [...new Set(entries.map((entry) => entry.user_id))];
+    const { data: targetMembers } = await admin
       .from('organization_members')
-      .select('role')
-      .eq('user_id', entry.user_id)
-      .eq('organization_id', entry.organization_id)
-      .single();
-
-    if (!targetMember) {
-      return { success: false, error: 'target_not_found' };
-    }
-
-    const targetRole = targetMember.role as OrgRole;
-
+      .select('user_id, role')
+      .eq('organization_id', organizationId)
+      .in('user_id', targetUserIds);
+    const roleByUser = new Map(
+      (targetMembers ?? []).map((member) => [member.user_id, member.role as OrgRole])
+    );
     // Resolve current stored responsibility at action time. A stale UI can
     // never preserve authority after a delegation expires.
-    const approvalAuthorization = await authorizeResponsibilityForTarget({
-      organizationId: entry.organization_id,
-      responsibility: 'time_approval',
-      actorUserId: user.id,
-      targetUserId: entry.user_id,
-      targetRole,
-    });
-    if (!approvalAuthorization.success) {
-      return { success: false, error: approvalAuthorization.error };
+    const authorizations = await Promise.all(
+      targetUserIds.map(async (targetUserId) => {
+        const targetRole = roleByUser.get(targetUserId);
+        if (!targetRole) return { success: false as const, error: 'target_not_found' };
+        return authorizeResponsibilityForTarget({
+          organizationId,
+          responsibility: 'time_approval',
+          actorUserId: user.id,
+          targetUserId,
+          targetRole,
+        });
+      })
+    );
+    const refusal = authorizations.find((authorization) => !authorization.success);
+    if (refusal && !refusal.success) {
+      return { success: false, error: refusal.error };
     }
 
-    if (decision === 'approved') {
-      // Approval: Update the entry status to approved
-      const { data: updatedEntry, error: updateError } = await admin
-        .from('time_entries')
-        .update({
-          status: 'approved',
-          reviewed_by: user.id,
-          reviewed_at: new Date().toISOString()
-        })
-        .eq('id', entryId)
-        .select()
-        .single();
-
-      if (updateError || !updatedEntry) {
-        console.error('Error updating entry:', updateError);
-        return { success: false, error: 'update_failed' };
-      }
-
-      return { success: true, entry: toTimeEntry(updatedEntry) };
-    } else {
-      // Rejection: Update entry status to 'rejected' so it appears in history
-      const { data: updatedEntry, error: updateError } = await admin
-        .from('time_entries')
-        .update({
-          status: 'rejected',
-          reviewed_by: user.id,
-          reviewed_at: new Date().toISOString()
-        })
-        .eq('id', entryId)
-        .select()
-        .single();
-
-      if (updateError || !updatedEntry) {
-        console.error('Error rejecting entry:', updateError);
-        return { success: false, error: 'update_failed' };
-      }
-
-      return { success: true, entry: toTimeEntry(updatedEntry) };
+    const { data: updated, error: updateError } = await admin
+      .from('time_entries')
+      .update({
+        status: decision,
+        reviewed_by: user.id,
+        reviewed_at: new Date().toISOString()
+      })
+      .in('id', ids)
+      .eq('status', 'pending')
+      .select('id');
+    if (updateError || !updated) {
+      console.error('Error reviewing entries:', updateError);
+      return { success: false, error: 'update_failed' };
     }
+    return { success: true, reviewed: updated.length };
   } catch (error) {
-    console.error('Unexpected error in reviewEntry:', error);
+    console.error('Unexpected error in reviewEntries:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
@@ -1510,70 +1496,22 @@ export async function getPendingSessions(
       });
     }
 
-    // Group entries into sessions (pairs of clock_in/clock_out with same createdAt within 5 seconds)
-    const sessions: PendingSession[] = [];
-    const processedIds = new Set<string>();
-
-    for (const entry of filteredEntries) {
-      if (processedIds.has(entry.id)) continue;
-
-      const profile = profileMap.get(entry.user_id) || null;
-
-      // Find a matching pair (same user, created within 5 seconds, opposite entry type)
-      const matchingEntry = filteredEntries.find(
-        (e) =>
-          e.id !== entry.id &&
-          !processedIds.has(e.id) &&
-          e.user_id === entry.user_id &&
-          Math.abs(
-            new Date(e.created_at).getTime() -
-              new Date(entry.created_at).getTime()
-          ) < 5000 &&
-          e.entry_type !== entry.entry_type
-      );
-
-      if (matchingEntry) {
-        processedIds.add(entry.id);
-        processedIds.add(matchingEntry.id);
-
-        const clockIn =
-          entry.entry_type === 'clock_in'
-            ? toTimeEntry(entry)
-            : toTimeEntry(matchingEntry);
-        const clockOut =
-          entry.entry_type === 'clock_out'
-            ? toTimeEntry(entry)
-            : toTimeEntry(matchingEntry);
-
-        sessions.push({
-          id: clockIn.id,
-          userId: entry.user_id,
-          firstName: profile?.first_name || null,
-          lastName: profile?.last_name || null,
-          clockIn,
-          clockOut,
-          date: getLocalDayKey(new Date(clockIn.timestamp)),
-          createdAt: entry.created_at,
-          jobTitle: null
-        });
-      } else {
-        // Single entry (only clock_in or only clock_out)
-        processedIds.add(entry.id);
-        const timeEntry = toTimeEntry(entry);
-
-        sessions.push({
-          id: entry.id,
-          userId: entry.user_id,
-          firstName: profile?.first_name || null,
-          lastName: profile?.last_name || null,
-          clockIn: entry.entry_type === 'clock_in' ? timeEntry : null,
-          clockOut: entry.entry_type === 'clock_out' ? timeEntry : null,
-          date: getLocalDayKey(new Date(entry.timestamp)),
-          createdAt: entry.created_at,
-          jobTitle: null
-        });
-      }
-    }
+    // One session per manual submission; the grouping rule lives in pending-sessions.ts.
+    const sessions: PendingSession[] = groupPendingEntries(filteredEntries).map((group) => {
+      const profile = profileMap.get(group.userId) || null;
+      return {
+        id: group.id,
+        userId: group.userId,
+        firstName: profile?.first_name || null,
+        lastName: profile?.last_name || null,
+        clockIn: group.clockIn ? toTimeEntry(group.clockIn) : null,
+        clockOut: group.clockOut ? toTimeEntry(group.clockOut) : null,
+        entryIds: group.entries.map((entry) => entry.id),
+        date: group.date,
+        createdAt: group.createdAt,
+        jobTitle: null
+      };
+    });
 
     // Resolve job titles for sessions that have a linked job
     const jobIds = [
@@ -1609,39 +1547,9 @@ export async function getPendingSessions(
       }
     }
 
-    // Sort by createdAt descending
-    sessions.sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-
     return { success: true, sessions };
   } catch (error) {
     console.error('Unexpected error in getPendingSessions:', error);
-    return { success: false, error: 'unexpected_error' };
-  }
-}
-
-/**
- * Review (approve/reject) a pending session (handles pairs)
- */
-export async function reviewSession(
-  sessionId: string,
-  decision: 'approved' | 'rejected',
-  pairedEntryId?: string
-): Promise<ReviewEntryResult> {
-  try {
-    // Review the main entry
-    const result = await reviewEntry(sessionId, decision);
-
-    // If there's a paired entry, review it too
-    if (pairedEntryId && result.success) {
-      await reviewEntry(pairedEntryId, decision);
-    }
-
-    return result;
-  } catch (error) {
-    console.error('Unexpected error in reviewSession:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }

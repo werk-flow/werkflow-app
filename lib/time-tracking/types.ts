@@ -389,7 +389,7 @@ export type AddManualEntryResult =
   | { success: false; error: string };
 
 export type ReviewEntryResult =
-  | { success: true; entry: TimeEntry }
+  | { success: true; reviewed: number }
   | { success: false; error: string };
 
 export type UpdateEntryResult =
@@ -429,6 +429,8 @@ export type PendingSession = {
   lastName: string | null;
   clockIn: TimeEntry | null;
   clockOut: TimeEntry | null;
+  /** Every entry the session owns, breaks included; a review covers all of them. */
+  entryIds: string[];
   /** Entry date for display */
   date: string;
   createdAt: string;

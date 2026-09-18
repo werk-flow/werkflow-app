@@ -541,7 +541,7 @@ const eslintConfig = defineConfig([
   ...Object.entries({
     "lib/documents/actions.ts": 4198,
     "components/dokumente/document-library-content.tsx": 3478,
-    "lib/time-tracking/actions.ts": 2819,
+    "lib/time-tracking/actions.ts": 2727,
     "lib/time-accounts/actions.ts": 2694,
     "components/inventar/inventory-content.tsx": 2283,
   }).map(([file, max]) => ({

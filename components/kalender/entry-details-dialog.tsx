@@ -52,7 +52,7 @@ import {
   addManualEntry,
   deleteEntriesBatch,
   deleteEntry,
-  reviewEntry,
+  reviewEntries,
   updateEntry
 } from '@/lib/time-tracking/actions';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
@@ -1305,12 +1305,13 @@ export function EntryDetailsDialog({
     const isApproval = decision === 'approved';
     void runAction(isApproval ? 'approve' : 'reject', async () => {
       try {
-        for (const entry of pendingEntries) {
-          const result = await reviewEntry(entry.id, decision);
-          if (!result.success) {
-            setError(formatActionError(result.error));
-            return;
-          }
+        const result = await reviewEntries(
+          pendingEntries.map((entry) => entry.id),
+          decision
+        );
+        if (!result.success) {
+          setError(formatActionError(result.error));
+          return;
         }
 
         showBanner({
