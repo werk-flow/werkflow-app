@@ -228,6 +228,16 @@ What continued that night regardless: the four performance groups on the served 
 
 Owner decision, read at 05:15 (the owner read the stop record and asked why the harness still fails at this level and whether the repairs close the classes, not the instances): option 1. The recovery rule compares by served build id and target (`lib/testing/group-recovery.ts`, unit-tested; decision 0007 amended; testing.md follows), so the order of harness edits and diagnostics no longer matters, the diagnostic `2026-09-18T002230515Z-d8472d` counts, and A2 retries. Two more class closures landed with it: `lib/conventions/palette-classes-in-tests.test.ts` fails the unit group on any Tailwind palette class under `tests/`, and the retention scan tolerates the transient Windows rename codes beside `ENOENT`. The workstation's `.wslconfig` caps the VM at 12 GB with gradual reclaim. The owner's account of the night's failures: none in the product; two inside harness mechanisms added in the last four days or left without a rendered pass by an earlier owner decision; one from host memory pressure under two browser jobs. The release run resumes with one browser job.
 
+## Durable homes
+
+Where every lasting fact of this record now lives (the record keeps the run log, the diagnoses and the history):
+
+- The release itself, the reports and the production state: the roadmap checkpoint (production-release row, current work) and the progress log; the Step 3 record's rollout pointer; decision 0008's status line (first release under the flow).
+- The environment facts the release changed: [environments.md](../../../technical/environments.md) (the eight migrations and the bucket retirement on PROD, the preview on DEV, the WSL idle behaviour and memory cap), [security.md](../../../technical/security.md) (the deletion transport and the email-change repairs deployed), [Realtime and caching](../../../technical/realtime-and-caching.md) (the transport rollout evidence), [document storage](../../../technical/document-storage-and-access.md) (the retired bucket).
+- The harness rules that changed: decision 0007's 2026-09-18 amendment and testing.md (recovery compared by build id, `lib/testing/group-recovery.ts`); `lib/conventions/palette-classes-in-tests.test.ts` (no Tailwind palette class in test expectations); `fileSizeOrZero` in `lib/testing/run-retention.ts`; the launcher warning in `scripts/run-playwright.ts`; the gateway-probe candidate in the [enforcement backlog](../../../technical/enforcement-ladder-backlog.md); the incident-log entry of 2026-09-18 with its prevention tiers.
+- The performance references: `lib/testing/performance-baselines.json` (eleven entries from the candidate build) and the `required` comparison in `lib/testing/measured-scenarios.ts`; the transfer scripts are history.
+- What stays open: SEC-08 (report-only script policy) in security.md's browser row and the Step 3 owner decisions; the second-organization confidentiality session and the browser groups on the retirement migration in this record's closing account.
+
 ## Acceptance for this step
 
 - The final local release report and the cloud canary report are recorded here with build ids and results.
