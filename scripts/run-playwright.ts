@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { createWriteStream, existsSync, writeFileSync } from 'node:fs';
+import { createWriteStream, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseRunnerArguments } from '../lib/testing/runner-arguments';
 import { withWorkspaceTestLock } from '../lib/testing/workspace-test-lock';
@@ -172,6 +172,15 @@ async function main(signal: AbortSignal): Promise<number> {
   process.env.WERKFLOW_TEST_TARGET = target;
   process.env.WERKFLOW_TEST_LANE = lane;
   const retainedSource = reuseRunKey ? readRunManifest(reuseRunKey) : null;
+  if (lane === 'diagnostic' && retainedSource) {
+    // A replay on another build still explains a failure, but only a replay on
+    // the failed run's build can count as environment recovery (group-recovery.ts).
+    const buildIdPath = resolve(import.meta.dir, '../.next/BUILD_ID');
+    const servedBuildId = existsSync(buildIdPath) ? readFileSync(buildIdPath, 'utf8').trim() : null;
+    if (!retainedSource.buildId || retainedSource.buildId !== servedBuildId) {
+      console.warn(`[werkflow-test] ${reuseRunKey} was recorded on build ${retainedSource.buildId ?? 'unknown'}; the served build is ${servedBuildId ?? 'unknown'}. This diagnostic cannot count as environment recovery for that run.`);
+    }
+  }
   if (retainedSource) {
     const errors = validateDiagnosticProvenance(retainedSource.backendProvenance, currentBackendProvenance(suite));
     if (!retainedSource.retainedAt || retainedSource.cleanedAt) errors.push('Diagnostic source has no live retained world.');

@@ -36,6 +36,8 @@ Application build identity remains independently verified. A test-input change n
 
 Amendment 2026-09-14 (pre-Wave-3 step 1): the environment identity of a proof is the backend identity, with the local stack's private address replaced by a token, so a WSL restart is not an environment change; the build receipt keeps the raw digest. Code inputs are compared by their comment-free token stream. Tooling no test executes is not an input, and each suite's configuration is owned by the kind that loads it. A release plan after a failed release report requires a later passing result for every failed group on the current inputs, and a third consecutive release attempt requires a written diagnosis in the incident log. Mechanisms and evidence: [testing.md](../technical/testing.md).
 
+Amendment 2026-09-18 (pre-Wave-3 step 5): the environment-recovery retry compares the retained diagnostic with the failed run by the served build id and the target, no longer by the repository-wide candidate hash. The build id already proves the application unchanged (the preflight refuses a server whose receipt no longer matches), and the retry check proves the group's own inputs unchanged; the candidate hash also changed on a harness edit outside the group, which made a correct diagnostic stop counting after such an edit. Mechanism: `lib/testing/group-recovery.ts`.
+
 ## Failure and responsiveness rules
 
 A failed group retains its evidence and owned world. Unrelated groups continue where the environment is valid. A dependent stage does not run after its prerequisite fails. Setup and teardown must never sweep unrelated groups' records.
