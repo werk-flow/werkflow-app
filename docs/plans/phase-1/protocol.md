@@ -1,6 +1,6 @@
 # Phase 1 Execution Protocol
 
-Status: living — last reviewed 2026-09-17
+Status: living — last reviewed 2026-09-18
 
 This file holds the durable process rules for Phase 1. It changes only when the process itself changes, and any such change needs an explicit progress-log entry naming the decision. The hot status and slice index live in [roadmap.md](roadmap.md); gate definitions in [gates.md](gates.md); routing matrices in [coverage.md](coverage.md); history in [log.md](log.md); per-slice acceptance evidence in `slices/`.
 
@@ -111,6 +111,12 @@ Rule: a slice that would introduce an external account, API, or per-use cost not
 
 ## Mandatory Execution Protocol
 
+### Standing Authorizations And The Stop Rule
+
+Owner rule of 2026-09-18, after the beta release. The agent that takes a slice has the owner's go for the whole slice end to end: the research, the plan and report in the record, the implementation, every `bun run review` pass, the DEV migrations, the commit on local `main` and the publication to `partner-preview`. The pre-implementation report is written into the record and read by the owner there; it is not a gate the agent waits at.
+
+The agent stops and asks, with the `grilling` skill's numbered questions and a recommendation each, only for a decision the owner must weigh: a change of ownership, permissions, data migration or money, time or stock semantics; a durable user-facing behaviour that the docs and the code do not settle and that a customer would notice; a new dependency or an external resource (the cost gates above); a raise of a performance budget or a slower measured reference; a catalog clause that would lose its behaviour; or a fork where the evidence does not pick a direction. Everything else is the agent's judgment call, decided, recorded in the slice record with its reasoning, and carried on. A failed gate or verification the agent cannot explain is also a stop. Production is never touched by a slice; releases follow [decision 0008](../../decisions/0008-development-workflow.md).
+
 ### Before Starting A Slice
 
 1. Verify the slice is `ready`; do not work around an incomplete prerequisite by creating duplicate domain concepts.
@@ -118,8 +124,8 @@ Rule: a slice that would introduce an external account, API, or per-use cost not
 3. Read the required sources listed above.
 4. Inspect current code, generated types, migrations, RLS, Realtime/cache behavior, and live Supabase state where relevant.
 5. Restate the bounded outcome, non-goals, affected roles, direct dependencies, and acceptance criteria.
-   - **Propose the slice's complete user-flow list** (the per-slice audit model): draft the slice's catalog bullets as German flows with provisional `P1-XX-FNN` IDs and include them in the pre-implementation report, so the owner confirms product behavior and the flow inventory in one gate. Flows discovered during implementation are added; the catalog is finalized at acceptance.
-6. Identify unresolved decisions. Resolve them with the owner using the `grilling` skill's frontier method (numbered questions with recommended answers, in rounds). Move the slice to `decision_blocked` if a decision would materially change ownership, data migration, permissions, legal/commercial behavior, or downstream contracts.
+   - **Propose the slice's complete user-flow list** (the per-slice audit model): draft the slice's catalog bullets as German flows with provisional `P1-XX-FNN` IDs and include them in the pre-implementation report in the slice record, where the owner reads them. Flows discovered during implementation are added; the catalog is finalized at acceptance.
+6. Identify unresolved decisions. Decide the ones that are the agent's under the stop rule above and record them; put the ones that are the owner's to the owner with the `grilling` skill's frontier method (numbered questions with recommended answers, in rounds). Move the slice to `decision_blocked` if a decision would materially change ownership, data migration, permissions, legal/commercial behavior, or downstream contracts.
 7. The slice record under `slices/` is the slice's only document. It starts as the plan when the slice enters `in_progress` (bounded outcome, confirmed decisions, execution order, migration and rollout sequence) and closes as the acceptance record. A planning step may write the record earlier, while the slice is `ready`, when its status line says the slice has not started (as `P1-24a` was written in pre-Wave-3 step 3). Never create a separate implementation-plan file or any other per-slice file outside `slices/`; `docs:check` rejects them. Split by scope with suffixes such as `P1-15a` when a slice is too large, never by document.
 
 ### During Implementation
@@ -265,21 +271,32 @@ Status: living — last reviewed YYYY-MM-DD; in-progress slice plan
 ## Completion Evidence
 ```
 
-## Standard New-Task Prompt
+## Slice Handoff: The Meta Prompt
 
-Use this as a starting point; replace the placeholders with the actual slice row. Draft and revise any task prompt for another agent with the `writing-for-agents` and `unslop` skills loaded.
+Owner decision of 2026-09-18, replacing the standard new-task prompt of 2026-08-04 and the Wave 2 meta prompt. The cycle: the session that closes a slice writes the implementation prompt for the next one, the owner hands that prompt to a fresh session, and that session researches, plans, implements, reviews, tests and closes the slice, then writes the next prompt. The owner pastes the text below into the closing session. Both prompts are written with the `writing-for-agents` and `unslop` skills loaded. The implementation prompt is the only thing the next agent receives besides the repository, so everything durable it needs lives in the docs, and the prompt points at them.
 
-> Implement Phase 1 vertical slice `[P1-XX — name]`.
+> Your slice is closed. Write the implementation prompt for the next slice, for a fresh agent with zero context, as one copy-pasteable block.
 >
-> Read `AGENTS.md`, `docs/plans/phase-1/roadmap.md`, `docs/plans/phase-1/protocol.md`, the target slice's record under `docs/plans/phase-1/slices/` (if it exists yet), the relevant sections of `docs/product/product-capability-map.md`, the primary feature specification, and the connected specifications named by the slice index row. Inspect current code, generated Supabase types, migrations, RLS, Realtime/cache behavior, and live Supabase state before making implementation claims.
+> Before drafting, load `writing-for-agents` and `unslop`. Confirm your own closure against "Before Marking A Slice Complete" and "When A Slice Completes" in `docs/plans/phase-1/protocol.md`: the deletion pass and the independent review recorded, the durable homes named, the catalog and coverage map closed, the commit on local `main`, the publication to `partner-preview` verified with `git ls-remote`, `bun run docs:check` green. Finish anything missing first. Never draft on an unclosed slice.
 >
-> First verify that every direct prerequisite is complete with evidence. Review the current selected test plan and required connected Golden outcomes. If a product dependency is absent, explain it and do not create a parallel substitute.
+> Pick the target from the roadmap's checkpoint and its ready set, not from memory. If the choice is ambiguous, ask the owner before drafting.
 >
-> Bounded outcome: `[copy the outcome from the slice index row and refine only with confirmed decisions]`.
+> Verify every fact the prompt states in this session: the target's index row, its record if one exists, its prerequisites' records, the primary and connected specs, the code and the live DEV state it will touch, the cost gates and the smuggle list in the protocol. State nothing you did not look at today. Where the next agent can look a value up (a command, a count, a hash, a line number), point at the source instead of copying the value; a copied value goes stale and has to be re-verified anyway.
 >
-> Before coding, report the verified current behavior, affected ownership boundaries, proposed state transitions, permissions, migration/backward-compatibility behavior, failure recovery, acceptance criteria, non-goals, unresolved decisions, **and the slice's proposed user-flow list** (German catalog bullets with provisional `P1-XX-FNN` IDs). Ask for confirmation when a decision would materially change product behavior.
+> The prompt has these parts, in this order, and nothing else:
 >
-> After approval, implement the complete slice across data, authorization, backend, UI, audit, tests, and documentation. Preserve existing flows unless the accepted plan migrates them. Update the slice record, roadmap status, feature contracts, technical docs, and user-flow catalog. Map every flow clause to reviewed evidence in `lib/testing/coverage-map.json` and register its executable groups. Use `bun run test:plan` and `bun run test:verify` for the complete change scope. Record the report, selected groups, exact results, review findings, and remaining limitations. A deliberately narrowed group run alone does not qualify the slice.
+> 1. Target. The slice ID, the bounded outcome quoted from the index row, where the record is and what it already holds, and why this slice is next.
+> 2. Starting position. The checks the agent runs before touching anything (clean tree, local HEAD equal to `origin/partner-preview`, the checkpoint row, `bun run test:plan` free of unresolved failures, `bun run docs:check` green), written as checks, not as values to compare. The reading list, routed through `docs/README.md`, limited to what this slice needs. The parallel-work rule: every other ready slice and what it owns.
+> 3. Standing authorizations and the stop rule. Quote the protocol's "Standing Authorizations And The Stop Rule" in the slice's terms: what the agent may do without asking (everything, including reviews, DEV migrations if the slice has a schema, commits and the push to `partner-preview`), the kinds of decision that stop it, and any slice-specific stop you know of.
+> 4. Independent research first. The plan is a floor, not a ceiling: the agent verifies the record's baseline against the code at its HEAD, looks at the product in the browser itself, researches the domain and the market where the record's research is thin, and writes what the plan missed or got wrong into the record before it starts. A sound plan is confirmed as sound in one sentence with the evidence; nothing is added to prove the agent looked. Then the pre-implementation report goes into the record per "Before Starting A Slice" step 5, the owner questions, if any, are posted, and the agent proceeds.
+> 5. The five standards as the definition of done. Point at `docs/technical/standards-audit.md` and state, per standard, the two or three things that matter for this slice: which registered primitives, which measured scenarios and freshness rules, which control-map rows, which groups and contracts, which caps and helpers. Name first-frame feedback for every mutation explicitly, and that fewer lines reaching the same outcome win.
+> 6. Implementation and closure. Pointers only: `AGENTS.md`, the protocol's checklists and update protocol, `docs/technical/testing.md` for the plan and the acceptance scope, `docs/technical/coderabbit.md` for the review, the deletion pass and independent review, the durable-homes rule, the commit trailer, the publication command. A restatement drifts; do not restate.
+> 7. Traps. What the naive version and the overcorrected version of this slice get wrong, only where a real tension exists; otherwise one sentence saying there is none.
+> 8. Handoff. When the slice is closed and published, the agent runs this meta prompt for the next slice.
+>
+> Rules for the text: short imperative sentences, concrete paths, no unexplained shorthand, no process content copied from an older prompt, nothing the docs already say, nothing the next agent can look up. It must work for a less capable model. Under 200 lines; every line pays for itself or goes.
+>
+> Before the prompt, tell the owner in a few lines which slice you targeted and why, what you verified, and what you changed about the shape above and why.
 
 ## Roadmap Update Protocol
 
