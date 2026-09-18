@@ -163,7 +163,7 @@ Release campaign: `bun run test:plan --mode release` on the frozen tree requires
 
 ## Coordinated rollout
 
-The rollout inventory that this step prepared (application, the eight migrations in order, the two edge functions, compatibility order, verification, backups and rollback, monitoring, deployed final gate, and the production document storage rule) was moved on 2026-09-14 into the step that executes it: [pre-Wave-3 step 5, beta acceptance and production rollout](../pre-wave-3/05-beta-acceptance-and-production-rollout.md#the-coordinated-rollout). That brief is the single living checklist; this record keeps only this pointer so its history stays complete.
+The rollout inventory that this step prepared (application, the eight migrations in order, the two edge functions, compatibility order, verification, backups and rollback, monitoring, deployed final gate, and the production document storage rule) was moved on 2026-09-14 into the step that executes it: [pre-Wave-3 step 5, beta acceptance and production rollout](../pre-wave-3/05-beta-acceptance-and-production-rollout.md#the-coordinated-rollout). That brief is the single living checklist; this record keeps only this pointer so its history stays complete. Released on 2026-09-18: the run log in that brief holds the evidence (local release report `2026-09-18T053234843Z-896f8bd1`, canary `2026-09-18T060825442Z-9804bdde`, PROD cutover 06:21 to 06:33 UTC, `origin/main` at `0abbaf8`).
 
 ## Owner decisions required before or at release
 

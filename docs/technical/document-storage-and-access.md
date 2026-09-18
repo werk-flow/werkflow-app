@@ -68,7 +68,7 @@ Access uses short-lived signed URLs:
 
 ### Migration history
 
-File bytes moved from Supabase Storage to R2 with direct uploads in [P1-00a](../plans/phase-1/slices/p1-00a-r2-file-storage.md) on 2026-08-04. All pre-existing objects were copied to R2 under unchanged paths and verified; the old Supabase `organization-documents` bucket is retained untouched as a temporary fallback and can be emptied once the R2 path has proven itself in production. Retention-relevant categories will additionally get copies in an independent immutable archive; the product direction is in the spec's Governance section, the infrastructure decision in [decision 0001](../decisions/0001-infrastructure-stack.md).
+File bytes moved from Supabase Storage to R2 with direct uploads in [P1-00a](../plans/phase-1/slices/p1-00a-r2-file-storage.md) on 2026-08-04. All pre-existing objects were copied to R2 under unchanged paths and verified. The old Supabase `organization-documents` bucket was retired on 2026-09-18 in [pre-Wave-3 step 5](../plans/phase-1/pre-wave-3/05-beta-acceptance-and-production-rollout.md): its object policies were dropped by migration `20260918063500_retire_organization_documents_bucket.sql` and the empty bucket removed through the Storage API on every backend; `documents.storage_bucket` keeps the logical label only. Retention-relevant categories will additionally get copies in an independent immutable archive; the product direction is in the spec's Governance section, the infrastructure decision in [decision 0001](../decisions/0001-infrastructure-stack.md).
 
 ## Signed Upload And Download Flow
 

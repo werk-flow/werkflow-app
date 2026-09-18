@@ -1,6 +1,6 @@
 # 0008 — Development Workflow
 
-- **Status:** accepted (2026-09-18) — adopted in pre-Wave-3 step 5 with the beta rollout; the Vercel preview change is the one configuration step
+- **Status:** accepted (2026-09-18) — adopted in pre-Wave-3 step 5 with the beta rollout of 2026-09-18 (first release under this flow: preview on DEV from `partner-preview`, production from `origin/main` at `0abbaf8`); the Vercel preview change was the one configuration step
 - **Date:** 2026-09-18
 - **Owner:** Product owner (Tamay), decided with the agent after the workflow research of 2026-09-17 ([pre-Wave-3 step 4](../plans/phase-1/pre-wave-3/04-wave-3-4-and-phase-2-planning.md))
 - **Affects:** every publish and release; [environments.md](../technical/environments.md) carries the live configuration, `AGENTS.md` the always-on rules
