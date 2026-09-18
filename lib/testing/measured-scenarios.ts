@@ -38,14 +38,13 @@ export type MeasuredScenario = {
   description: string;
 };
 
-// Every scenario is `calibrating` since 2026-09-17: steps 02 and 03 of the
-// pre-Wave-3 work edited six measurement-digest inputs (the scenario module,
-// the browser observer, the performance steps, the typical profile and two
-// specs) after the last reviewed references were transferred, so no reference
-// matches the current digest and a required comparison would fail every
-// measured group. Step 5 recalibrates on the beta candidate and sets them back
-// to `required`; `performance-references.test.ts` refuses a required scenario
-// without a reference at the current digest, so this cannot happen silently again.
+// Every scenario is `required` again since 2026-09-18: pre-Wave-3 step 5
+// recalibrated all eleven references from three samples each on the beta
+// candidate build 64063ae0 (runs 2026-09-18T004206826Z-aa6651, 004348887Z-269644
+// and 004630732Z-469daa), retiring the Step 3 and pre-Wave-3 transfer chain
+// (decision D6). A later edit to a measurement-digest input needs a fresh
+// calibration from real samples, never a transfer; `performance-references.test.ts`
+// refuses a required scenario without a reference at the current digest.
 export const MEASURED_SCENARIOS: readonly MeasuredScenario[] = [
   {
     id: "planning.occurrence.cross-session",
@@ -55,7 +54,7 @@ export const MEASURED_SCENARIOS: readonly MeasuredScenario[] = [
     profile: "golden-world",
     file: "tests/audit/performance/planning-benchmark.spec.ts",
     samples: 3,
-    comparison: "calibrating",
+    comparison: "required",
     description: "A manager saves a planned visit; a second Büro session shows the occurrence in the month grid.",
   },
   {
@@ -66,7 +65,7 @@ export const MEASURED_SCENARIOS: readonly MeasuredScenario[] = [
     profile: "golden-world",
     file: "tests/audit/performance/planning-benchmark.spec.ts",
     samples: 3,
-    comparison: "calibrating",
+    comparison: "required",
     description: "An employee opens the fixed benchmark calendar date, switches to month, and sees an assigned event.",
   },
   {
@@ -77,7 +76,7 @@ export const MEASURED_SCENARIOS: readonly MeasuredScenario[] = [
     profile: "golden-world",
     file: "tests/audit/performance/planning-benchmark.spec.ts",
     samples: 3,
-    comparison: "calibrating",
+    comparison: "required",
     description: "An administrator opens the fixed benchmark date after creating a legacy-date job and sees its month event.",
   },
   {
@@ -88,7 +87,7 @@ export const MEASURED_SCENARIOS: readonly MeasuredScenario[] = [
     profile: "typical",
     file: "tests/audit/performance/calendar.spec.ts",
     samples: 3,
-    comparison: "calibrating",
+    comparison: "required",
     description: "First navigation to /kalender in a session until the day view reports ready.",
   },
   {
@@ -99,7 +98,7 @@ export const MEASURED_SCENARIOS: readonly MeasuredScenario[] = [
     profile: "typical",
     file: "tests/audit/performance/calendar.spec.ts",
     samples: 3,
-    comparison: "calibrating",
+    comparison: "required",
     description: "After the shell settled, switch from the covered day to the uncovered week; the week view reports ready.",
   },
   {
@@ -110,7 +109,7 @@ export const MEASURED_SCENARIOS: readonly MeasuredScenario[] = [
     profile: "typical",
     file: "tests/audit/performance/calendar.spec.ts",
     samples: 3,
-    comparison: "calibrating",
+    comparison: "required",
     description: "Switch back to the day inside the covered week; no read is required.",
   },
   {
@@ -123,7 +122,7 @@ export const MEASURED_SCENARIOS: readonly MeasuredScenario[] = [
     profile: "typical",
     file: "tests/audit/performance/calendar.spec.ts",
     samples: 3,
-    comparison: "calibrating",
+    comparison: "required",
     description: "Switch from the week to the month grid with 40 occurrences per day.",
   },
   {
@@ -134,7 +133,7 @@ export const MEASURED_SCENARIOS: readonly MeasuredScenario[] = [
     profile: "typical",
     file: "tests/audit/performance/calendar.spec.ts",
     samples: 3,
-    comparison: "calibrating",
+    comparison: "required",
     description: "Page to the next month in the month grid.",
   },
   {
@@ -145,7 +144,7 @@ export const MEASURED_SCENARIOS: readonly MeasuredScenario[] = [
     profile: "typical",
     file: "tests/audit/performance/calendar.spec.ts",
     samples: 3,
-    comparison: "calibrating",
+    comparison: "required",
     description: "Switch from the month grid to a week inside its covered window.",
   },
   {
@@ -156,7 +155,7 @@ export const MEASURED_SCENARIOS: readonly MeasuredScenario[] = [
     profile: "typical",
     file: "tests/audit/performance/lists.spec.ts",
     samples: 3,
-    comparison: "calibrating",
+    comparison: "required",
     description: "Navigate to /kunden with 1,000 customers until the list is usable.",
   },
   {
@@ -167,7 +166,7 @@ export const MEASURED_SCENARIOS: readonly MeasuredScenario[] = [
     profile: "typical",
     file: "tests/audit/performance/lists.spec.ts",
     samples: 3,
-    comparison: "calibrating",
+    comparison: "required",
     description: "Navigate to /auftraege with 2,500 jobs until the list is usable and assignments render.",
   },
 ];

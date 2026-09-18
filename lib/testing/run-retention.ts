@@ -61,13 +61,29 @@ export function prunableRunKeys(input: {
   }).map((run) => run.runKey);
 }
 
+/**
+ * A live run's `active/` directory holds atomic-write temp files for a few
+ * milliseconds. Under `--jobs 2` the next runner's size scan can list one and
+ * find it renamed away at stat time (release run of 2026-09-18, the
+ * list-pagination runner crashed on the layout run's manifest temp file).
+ * A vanished entry weighs nothing; every other error still propagates.
+ */
+export function fileSizeOrZero(path: string): number {
+  try {
+    return statSync(path).size;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return 0;
+    throw error;
+  }
+}
+
 function directorySize(path: string): number {
   if (!existsSync(path)) return 0;
   let total = 0;
   for (const entry of readdirSync(path, { withFileTypes: true })) {
     const child = join(path, entry.name);
     if (entry.isDirectory()) total += directorySize(child);
-    else if (entry.isFile()) total += statSync(child).size;
+    else if (entry.isFile()) total += fileSizeOrZero(child);
   }
   return total;
 }

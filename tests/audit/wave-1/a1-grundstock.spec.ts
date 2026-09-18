@@ -2080,7 +2080,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
 
     const pendingBlock = visibleCalendarTimeBlock(adminPage, /00:00.*00:05/);
     await expect(pendingBlock).toBeVisible({ timeout: 20_000 });
-    await expect(pendingBlock).toHaveClass(/bg-yellow-/);
+    await expect(pendingBlock).toHaveClass(/bg-warning/);
     await pendingBlock.getByRole("button").click();
     await expect(
       adminPage.getByRole("dialog").filter({

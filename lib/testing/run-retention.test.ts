@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { archiveSizeProblem, citedRunKeys, prunableArchiveBytes, prunableRunKeys, type RetentionRun } from "./run-retention";
+import { archiveSizeProblem, citedRunKeys, fileSizeOrZero, prunableArchiveBytes, prunableRunKeys, type RetentionRun } from "./run-retention";
 
 const now = Date.parse("2026-09-14T12:00:00.000Z");
 const old = "2026-09-12T10:00:00.000Z";
@@ -56,4 +56,12 @@ test("the size scan counts only the prunable directories and the guard names the
   expect(prunableArchiveBytes(join(root, "missing"))).toBe(0);
   expect(archiveSizeProblem(1200, 2000)).toBeUndefined();
   expect(archiveSizeProblem(3000, 2000)).toContain("bun run test:runs prune");
+});
+
+test("a file that vanishes between listing and stat weighs nothing", () => {
+  const root = mkdtempSync(join(tmpdir(), "werkflow-run-retention-"));
+  directories.push(root);
+  expect(fileSizeOrZero(join(root, "run-b/active/run-manifest.json.1.abc.tmp"))).toBe(0);
+  writeFileSync(join(root, "present"), Buffer.alloc(7));
+  expect(fileSizeOrZero(join(root, "present"))).toBe(7);
 });
