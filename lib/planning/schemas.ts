@@ -156,6 +156,8 @@ export const updatePlanningCalendarSchema = z
     plannedDate: z.string().date().optional(),
     plannedTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
     estimatedDurationMinutes: z.number().int().min(15).max(10_080).nullable().optional(),
+    /** All-day occurrences: the new length in days (P1-24a bar edge). */
+    durationDays: z.number().int().min(1).max(31).optional(),
     selectedUserIds: z.array(uuidSchema).max(100).optional(),
     selectedEmployeeRecordIds: z.array(uuidSchema).max(100).optional(),
     overrideReason: z.string().trim().min(8).max(1000).nullable().optional(),

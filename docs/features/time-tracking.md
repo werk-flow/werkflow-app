@@ -44,6 +44,8 @@ As of 2026-09-02, every role clocks in and out through the clock button on every
 
 ### Important Current Limitations
 
+- `updateEntry`, `reassignEntryBatch` and the calendar's block moves do not check the period close of the target date (`P1-24a` discovery F-1, 2026-09-18); the closed-period rule lives in the correction and approval flows. The calendar refuses moves into the future and over other blocks at the pointer; a move into a closed period is a server-side gap recorded in the enforcement-ladder backlog.
+
 - The two historical production legacy change requests keep their legacy interpretation; new corrections use the P1-22 aggregate and do not backfill them.
 - Time accounts provide manual adjustment, expiry, and payout events with four-eyes approval and reasoned close or reopen. There are no automatic caps, expiry, payout, forfeiture, or compensatory-time requests.
 - Standby, call-out, travel, and the other activities receive versioned 0, 50, or 100 percent credit; night, Sunday, and holiday values are classifications only. Arbitrary percentages, organization-defined categories, premiums, and wage values are out of scope.

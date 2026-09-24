@@ -49,9 +49,8 @@ export function vacationCalendarEvent(
   status: 'pending' | 'approved',
   personName: string
 ): Locator {
-  // FullCalendar exposes no semantic event role. The status class plus the
-  // person name identifies the event; first() handles its mirrored rendering.
-  return page.locator(`.fc-vacation-${status}`).filter({ hasText: personName }).first();
+  // Absence bars carry their tone as data; the person name scopes the bar.
+  return page.locator(`[data-calendar-bar="${status === 'pending' ? 'absence-pending' : 'absence'}"]`).filter({ hasText: personName }).first();
 }
 
 export function vacationRequestCard(page: Page, personName: string): Locator {
@@ -61,6 +60,5 @@ export function vacationRequestCard(page: Page, personName: string): Locator {
 }
 
 export function absenceCalendarEvent(page: Page, label: string): Locator {
-  // FullCalendar absence events have no semantic role or test id.
-  return page.locator('.fc-vacation-approved').filter({ hasText: label });
+  return page.locator('[data-calendar-bar="absence"]').filter({ hasText: label });
 }

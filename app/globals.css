@@ -78,6 +78,46 @@
   --status-work: var(--success-text);
   --status-break: var(--warning-text);
   --status-overtime: var(--info-text);
+
+  /* Calendar tokens (P1-24a). One design language for the board, the day
+     and the month: hairlines from the foreground, cell tints from the
+     neutral and purple families, cards from the purple planning family,
+     actual time from the success family, and one now indicator in the red
+     family (the one non-status use of that hue, decision Q3). Opaque hex
+     for every surface that carries text so the contrast contract can read
+     it; alpha only for lines and tints without text. */
+  --calendar-grid: color-mix(in oklab, var(--foreground) 8%, transparent);
+  --calendar-grid-strong: color-mix(in oklab, var(--foreground) 16%, transparent);
+  --calendar-gutter: #f6f5f8;
+  --calendar-cell-off: #f1f0f4;
+  --calendar-today: #f2f0f7;
+  --calendar-now: #dc2626;
+  --calendar-planning: #e9e7ef;
+  --calendar-planning-border: #c6bfd6;
+  --calendar-planning-foreground: #3e3659;
+  --calendar-planning-strong: #6f5f94;
+  --calendar-planning-strong-foreground: #ffffff;
+  --calendar-note: #f4f3f6;
+  --calendar-note-border: #a99ec2;
+  --calendar-note-foreground: #37304a;
+  --calendar-absence: #e2deea;
+  --calendar-absence-foreground: #3e3659;
+  --calendar-absence-pending-border: #a99ec2;
+  --calendar-holiday: #ecebf0;
+  --calendar-holiday-foreground: #5f5967;
+  --calendar-actual: var(--success-soft);
+  --calendar-actual-foreground: var(--success-soft-foreground);
+  --calendar-actual-border: color-mix(in oklab, var(--success) 55%, transparent);
+  --calendar-actual-pending: var(--warning-soft);
+  --calendar-actual-pending-foreground: var(--warning-soft-foreground);
+  --calendar-break: color-mix(in oklab, var(--foreground) 12%, transparent);
+  --calendar-break-foreground: var(--muted-foreground);
+  --calendar-capacity-full: var(--info-soft);
+  --calendar-capacity-full-foreground: var(--info-soft-foreground);
+  --calendar-capacity-over: var(--destructive-soft);
+  --calendar-capacity-over-foreground: var(--destructive-soft-foreground);
+  --calendar-drop-valid: color-mix(in oklab, var(--success) 14%, transparent);
+  --calendar-drop-refused: color-mix(in oklab, var(--destructive) 14%, transparent);
 }
 
 @theme inline {
@@ -138,6 +178,40 @@
   --color-brand-purple-light: var(--brand-purple-light);
   --color-brand-purple-dark: var(--brand-purple-dark);
   --color-brand-purple-deep: var(--brand-purple-deep);
+
+  /* Calendar token classes (bg-calendar-today, border-calendar-grid, ...). */
+  --color-calendar-grid: var(--calendar-grid);
+  --color-calendar-grid-strong: var(--calendar-grid-strong);
+  --color-calendar-gutter: var(--calendar-gutter);
+  --color-calendar-cell-off: var(--calendar-cell-off);
+  --color-calendar-today: var(--calendar-today);
+  --color-calendar-now: var(--calendar-now);
+  --color-calendar-planning: var(--calendar-planning);
+  --color-calendar-planning-border: var(--calendar-planning-border);
+  --color-calendar-planning-foreground: var(--calendar-planning-foreground);
+  --color-calendar-planning-strong: var(--calendar-planning-strong);
+  --color-calendar-planning-strong-foreground: var(--calendar-planning-strong-foreground);
+  --color-calendar-note: var(--calendar-note);
+  --color-calendar-note-border: var(--calendar-note-border);
+  --color-calendar-note-foreground: var(--calendar-note-foreground);
+  --color-calendar-absence: var(--calendar-absence);
+  --color-calendar-absence-foreground: var(--calendar-absence-foreground);
+  --color-calendar-absence-pending-border: var(--calendar-absence-pending-border);
+  --color-calendar-holiday: var(--calendar-holiday);
+  --color-calendar-holiday-foreground: var(--calendar-holiday-foreground);
+  --color-calendar-actual: var(--calendar-actual);
+  --color-calendar-actual-foreground: var(--calendar-actual-foreground);
+  --color-calendar-actual-border: var(--calendar-actual-border);
+  --color-calendar-actual-pending: var(--calendar-actual-pending);
+  --color-calendar-actual-pending-foreground: var(--calendar-actual-pending-foreground);
+  --color-calendar-break: var(--calendar-break);
+  --color-calendar-break-foreground: var(--calendar-break-foreground);
+  --color-calendar-capacity-full: var(--calendar-capacity-full);
+  --color-calendar-capacity-full-foreground: var(--calendar-capacity-full-foreground);
+  --color-calendar-capacity-over: var(--calendar-capacity-over);
+  --color-calendar-capacity-over-foreground: var(--calendar-capacity-over-foreground);
+  --color-calendar-drop-valid: var(--calendar-drop-valid);
+  --color-calendar-drop-refused: var(--calendar-drop-refused);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -185,6 +259,23 @@
     --info-soft-foreground: #93c5fd;
     --destructive-soft: #450a0a;
     --destructive-soft-foreground: #fca5a5;
+    --calendar-gutter: #131218;
+    --calendar-cell-off: #16151c;
+    --calendar-today: #171522;
+    --calendar-now: #f87171;
+    --calendar-planning: #2a2540;
+    --calendar-planning-border: #4a4166;
+    --calendar-planning-foreground: #ddd6ea;
+    --calendar-planning-strong: #948ab3;
+    --calendar-planning-strong-foreground: #1a1626;
+    --calendar-note: #1f1d27;
+    --calendar-note-border: #5d5480;
+    --calendar-note-foreground: #d9d6e2;
+    --calendar-absence: #2f2a43;
+    --calendar-absence-foreground: #ddd6ea;
+    --calendar-absence-pending-border: #6d6390;
+    --calendar-holiday: #1c1a24;
+    --calendar-holiday-foreground: #a7a1b3;
   }
 }
 
@@ -278,10 +369,10 @@ textarea::-moz-selection,
   animation: banner-fade-out 0.15s ease-in forwards;
 }
 
-/* Row highlight animation (for calendar day view navigation from week view) */
+/* Row highlight animation (calendar day view after a jump from the board) */
 @keyframes row-highlight {
   0% {
-    background-color: rgba(111, 95, 148, 0.25);
+    background-color: color-mix(in oklab, var(--brand-purple) 25%, transparent);
   }
   100% {
     background-color: transparent;
@@ -305,10 +396,10 @@ textarea::-moz-selection,
 /* Green glow pulsation for active work ring */
 @keyframes green-glow {
   0%, 100% {
-    filter: drop-shadow(0 0 12px rgba(34, 197, 94, 0.35));
+    filter: drop-shadow(0 0 12px color-mix(in oklab, var(--success) 35%, transparent));
   }
   50% {
-    filter: drop-shadow(0 0 22px rgba(34, 197, 94, 0.55));
+    filter: drop-shadow(0 0 22px color-mix(in oklab, var(--success) 55%, transparent));
   }
 }
 
@@ -318,10 +409,10 @@ textarea::-moz-selection,
 
 @keyframes yellow-glow {
   0%, 100% {
-    filter: drop-shadow(0 0 12px rgba(234, 179, 8, 0.35));
+    filter: drop-shadow(0 0 12px color-mix(in oklab, var(--warning) 35%, transparent));
   }
   50% {
-    filter: drop-shadow(0 0 22px rgba(234, 179, 8, 0.55));
+    filter: drop-shadow(0 0 22px color-mix(in oklab, var(--warning) 55%, transparent));
   }
 }
 
@@ -329,56 +420,21 @@ textarea::-moz-selection,
   animation: yellow-glow 2s ease-in-out infinite;
 }
 
-/* Force grabbing cursor globally during any drag operation */
+/* The calendar drag engine (P1-24a) sets this while a card is held: one
+   cursor everywhere, no text selection, and the ghost stays the only thing
+   that moves. */
 body.is-dragging,
-body.is-dragging *,
-body.is-dragging *::before,
-body.is-dragging *::after {
+body.is-dragging * {
   cursor: grabbing !important;
+  user-select: none;
 }
 
-/* Suppress FullCalendar mirror fly-back animation when parking a job */
-body.fc-parking .fc-event-mirror,
-body.fc-parking .fc-event-dragging {
-  display: none !important;
-  opacity: 0 !important;
-  transition: none !important;
-}
-
-/* Holiday/closure context entries (P1-04): calm purple-tinted planning
-   context, visually distinct from jobs and time blocks, not interactive. */
-.fc .fc-holiday-context {
-  background-color: color-mix(in oklab, var(--brand-purple) 12%, transparent);
-  border: none;
-  color: var(--muted-foreground);
-  cursor: default;
-  pointer-events: none;
-}
-
-/* Approved vacation entries (P1-06): calm purple planning state, stronger
-   than holiday context but still non-interactive. Pending requests appear
-   provisional (dashed, lighter) so requested and approved absence stay
-   visually distinct. */
-.fc .fc-vacation-approved {
-  background-color: color-mix(in oklab, var(--brand-purple) 22%, transparent);
-  border: none;
-  color: var(--foreground);
-  cursor: default;
-  pointer-events: none;
-}
-
-.fc .fc-daygrid-event.fc-vacation-approved {
-  border: none !important;
-}
-
-.fc .fc-vacation-pending {
-  background-color: color-mix(in oklab, var(--brand-purple) 8%, transparent);
-  /* !important: the daygrid base rule strips borders with !important; the
-     dashed outline is the pending/approved distinction and must survive it. */
-  border: 1px dashed color-mix(in oklab, var(--brand-purple) 45%, transparent) !important;
-  color: var(--muted-foreground);
-  cursor: default;
-  pointer-events: none;
+/* Hour grid painted by the container, not by one element per line: the
+   variables come from the day view (hour width and the sub-line interval). */
+.calendar-hour-grid {
+  background-image:
+    repeating-linear-gradient(to right, var(--calendar-grid-strong) 0 1px, transparent 1px var(--calendar-hour-width)),
+    repeating-linear-gradient(to right, var(--calendar-grid) 0 1px, transparent 1px var(--calendar-subline-width));
 }
 
 /* Hide native time picker indicators for all browsers */

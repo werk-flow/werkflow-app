@@ -288,6 +288,7 @@ const exceptions: Record<string, DialogException> = {
   'components/dokumente/document-viewer-dialog.tsx#DocumentViewerDialog|{document?.displayName ?? \'Dokument\'}': { kind: 'browser', reason: 'Document viewer owns its media viewport and download controls.' },
   'components/kalender/dispatch-issue-dialog.tsx#DispatchIssueDialog|Einsatz senden': { kind: 'command', reason: 'Dispatch and readiness overrides require explicit confirmation.' },
   'components/kalender/dispatch-panel.tsx#DispatchPanel|Verschiebung prüfen': { kind: 'command', reason: 'Confirms the reviewed batch move rather than editing a record.' },
+  'components/kalender/board/shortcuts-help.tsx#ShortcutsHelp|Tastenkürzel': { kind: 'widget', reason: 'An informational list of the calendar keyboard shortcuts; nothing is edited or submitted, Escape closes it.' },
   'components/kalender/entry-details-dialog.tsx#EntryDetailsDialog|Eintrag Details': { kind: 'multiple-actions', reason: 'Review and delete remain explicit commands; the ordinary editing form is enforced separately.' },
   'components/kalender/planning-warning-dialog.tsx#usePlanningWarningConfirmation|Planungshinweise prüfen': { kind: 'command', reason: 'Readiness warning overrides need deliberate acknowledgement.' },
   'components/kunden/use-communication-contact-guard.tsx#useCommunicationContactGuard|Kontaktvorgabe prüfen': { kind: 'command', reason: 'Contact-policy override requires an explicit reasoned confirmation.' },

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createGroupQualification, directGroupRetryProblem } from "./group-qualification";
 import { hashValue, type InputSnapshot } from "./group-evidence";
+import { BROWSER_INPUT_DRIFT_MESSAGE } from "./test-evidence";
 import type { TestGroup } from "./test-groups";
 
 const groups: [TestGroup, TestGroup] = [
@@ -144,6 +145,17 @@ test("one matching diagnosed environment recovery permits one further attempt", 
   expect(directGroupRetryProblem({ ...input, runs: [failed] })).toBeUndefined();
   const second = { ...failed, runKey: "second-failure", startedAt: "2026-09-06T11:00:00.000Z" };
   expect(directGroupRetryProblem({ ...input, runs: [second, failed], recoveredRunKeys: [failed.runKey, second.runKey] })).toContain("unchanged group inputs");
+});
+
+test("a recovered interruption without a failed test is no attempt on its inputs", () => {
+  const interrupted = { ...failed, status: "interrupted" as const, failed: 0 };
+  expect(directGroupRetryProblem({ groupId: failed.groupId, target: "local", fingerprint: failed.groupFingerprint, recoveredRunKeys: [], runs: [interrupted] })).toBeUndefined();
+  expect(directGroupRetryProblem({ groupId: failed.groupId, target: "local", fingerprint: failed.groupFingerprint, recoveredRunKeys: [], runs: [{ ...interrupted, failed: 1 }] })).toContain("unchanged group inputs");
+});
+
+test("a run voided by an input change is no attempt on its inputs", () => {
+  const voided = { ...failed, failures: [{ title: "Execution evidence", file: null, message: BROWSER_INPUT_DRIFT_MESSAGE }] };
+  expect(directGroupRetryProblem({ groupId: failed.groupId, target: "local", fingerprint: failed.groupFingerprint, recoveredRunKeys: [], runs: [voided] })).toBeUndefined();
 });
 
 test("a historical failure without group qualification cannot be escaped by a new fingerprint", () => {

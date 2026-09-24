@@ -70,7 +70,7 @@ describe("independent group registry", () => {
     const groups = getTestGroups(root);
     const performance = groups.find((entry) => entry.id === "audit:performance:calendar")!;
     expect(performance.timing.exclusive).toBe(true);
-    expect(performance.timing.requiredScenarios).toContain("calendar.week-to-day.covered");
+    expect(performance.timing.requiredScenarios).toContain("calendar.board-to-day.covered");
     const planning = getGroupTimingRequirements(groups.find((entry) => entry.id === "golden:p1-11")!, groups, root);
     expect(planning.requireFreshness).toBe(true);
     expect(planning.requireReadiness).toBe(true);

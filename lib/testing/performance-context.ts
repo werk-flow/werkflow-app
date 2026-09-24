@@ -51,7 +51,7 @@ export function performanceProtocol(scenario: MeasuredScenario): Pick<Performanc
   if (scenario.id === "planning.occurrence.cross-session") return { protocol: "independent-fixed-month-three-distinct-overlap-confirmations-browser-raf-v3", role: "buero" };
   if (scenario.id === "calendar.month.employee-open-to-event") return { protocol: "independent-fixed-month-fresh-employee-after-three-saves-browser-raf-v3", role: "employee" };
   if (scenario.id === "calendar.month.admin-open-to-legacy-event") return { protocol: "independent-fixed-month-fresh-admin-after-legacy-save-browser-raf-v3", role: "admin" };
-  return { protocol: scenario.file.endsWith("lists.spec.ts") ? "fixed-workload-fresh-context-customer-then-job-navigation-browser-raf-v3" : "fixed-date-fresh-context-day-week-day-week-month-next-week-browser-raf-v3", role: "admin" };
+  return { protocol: scenario.file.endsWith("lists.spec.ts") ? "fixed-workload-fresh-context-customer-then-job-navigation-browser-raf-v3" : "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4", role: "admin" };
 }
 
 export function workloadDigest(repositoryRoot: string, scenario: MeasuredScenario, evidenceDirectory?: string): string {

@@ -138,8 +138,9 @@ export async function expectUsableWithin(
   options: { page: Page; trigger: () => Promise<unknown>; usable: MeasuredTarget },
 ): Promise<number> {
   const scenario = getMeasuredScenario(scenarioId);
-  if (scenario.boundary !== "navigation-to-usable-content" && scenario.boundary !== "view-switch-to-usable-content") {
-    throw new Error(`Scenario ${scenarioId} is not a usable-content boundary.`);
+  const usableBoundaries = new Set(["navigation-to-usable-content", "view-switch-to-usable-content", "interaction-to-visible-change", "interaction-to-settled"]);
+  if (!usableBoundaries.has(scenario.boundary)) {
+    throw new Error(`Scenario ${scenarioId} is not a usable-content or interaction boundary.`);
   }
   const hardBudgetMs = LIVE_HARD_BUDGET_MS[currentBackend()];
   const mark = await markBrowserClock(options.page);

@@ -647,7 +647,6 @@ export async function addManualEntry(
       return { success: false, error: 'insert_failed' };
     }
 
-    revalidatePath('/kalender');
     revalidatePath('/zeiterfassung');
 
     return { success: true, entries: toTimeEntries(newEntries) };
@@ -1844,116 +1843,6 @@ export async function reviewChangeRequest(
   }
 }
 
-/**
- * Move a paired session (clock_in + clock_out) to a different user,
- * optionally updating timestamps. Used for cross-row drag-and-drop.
- */
-export async function reassignEntries(
-  clockInId: string,
-  clockOutId: string,
-  newUserId: string,
-  newClockInTimestamp: string,
-  newClockOutTimestamp: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const user = await getAuthenticatedUser();
-    if (!user) return { success: false, error: 'not_authenticated' };
-
-    const admin = createSupabaseAdminClient();
-
-    const { data: ciEntry } = await admin
-      .from('time_entries')
-      .select('*')
-      .eq('id', clockInId)
-      .single();
-    const { data: coEntry } = await admin
-      .from('time_entries')
-      .select('*')
-      .eq('id', clockOutId)
-      .single();
-
-    if (!ciEntry || !coEntry) return { success: false, error: 'entries_not_found' };
-
-    const orgId = ciEntry.organization_id;
-    const callerRole = await verifyCurrentMembership(user.id, orgId);
-    if (!callerRole) return { success: false, error: 'not_a_member' };
-
-    const { data: srcMember } = await admin
-      .from('organization_members')
-      .select('role')
-      .eq('user_id', ciEntry.user_id)
-      .eq('organization_id', orgId)
-      .single();
-    const { data: tgtMember } = await admin
-      .from('organization_members')
-      .select('role')
-      .eq('user_id', newUserId)
-      .eq('organization_id', orgId)
-      .single();
-
-    if (!srcMember || !tgtMember) return { success: false, error: 'member_not_found' };
-
-    const srcRole = srcMember.role as OrgRole;
-    const tgtRole = tgtMember.role as OrgRole;
-    const isOwnSource = ciEntry.user_id === user.id;
-    const isOwnTarget = newUserId === user.id;
-
-    if (!canManageEntries(callerRole, srcRole, isOwnSource)) {
-      return { success: false, error: 'not_authorized_source' };
-    }
-    if (!canManageEntries(callerRole, tgtRole, isOwnTarget)) {
-      return { success: false, error: 'not_authorized_target' };
-    }
-
-    const ciNew = new Date(newClockInTimestamp);
-    const coNew = new Date(newClockOutTimestamp);
-    if (ciNew >= coNew) return { success: false, error: 'invalid_time_range' };
-
-    const { data: targetExisting } = await admin
-      .from('time_entries')
-      .select('*')
-      .eq('user_id', newUserId)
-      .eq('organization_id', orgId)
-      .neq('status', 'rejected')
-      .neq('status', 'pending_delete')
-      .neq('id', clockInId)
-      .neq('id', clockOutId);
-
-    if (targetExisting && targetExisting.length > 0) {
-      const targetSessions = calculateWorkSessions(toTimeEntries(targetExisting));
-      for (const s of targetSessions) {
-        const sStart = s.clockIn ? new Date(s.clockIn.timestamp) : null;
-        const sEnd = s.clockOut ? new Date(s.clockOut.timestamp) : null;
-        if (sStart && sEnd && ciNew < sEnd && coNew > sStart) {
-          return { success: false, error: 'overlapping_session' };
-        }
-      }
-    }
-
-    const { error: e1 } = await admin
-      .from('time_entries')
-      .update({ user_id: newUserId, timestamp: newClockInTimestamp })
-      .eq('id', clockInId);
-    if (e1) return { success: false, error: 'update_failed' };
-
-    const { error: e2 } = await admin
-      .from('time_entries')
-      .update({ user_id: newUserId, timestamp: newClockOutTimestamp })
-      .eq('id', clockOutId);
-    if (e2) {
-      await admin.from('time_entries')
-        .update({ user_id: ciEntry.user_id, timestamp: ciEntry.timestamp })
-        .eq('id', clockInId);
-      return { success: false, error: 'update_failed' };
-    }
-
-    return { success: true };
-  } catch (error) {
-    console.error('Error in reassignEntries:', error);
-    return { success: false, error: 'unexpected_error' };
-  }
-}
-
 export async function reassignEntryBatch(
   updates: Array<{
     entryId: string;
@@ -2127,62 +2016,6 @@ export async function reassignEntryBatch(
     return { success: true };
   } catch (error) {
     console.error('Error in reassignEntryBatch:', error);
-    return { success: false, error: 'unexpected_error' };
-  }
-}
-
-/**
- * Cancel a pending change request created by the current user.
- * Reverts the entry to its original state and deletes the request.
- */
-export async function cancelOwnChangeRequest(
-  requestId: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const user = await getAuthenticatedUser();
-    if (!user) return { success: false, error: 'not_authenticated' };
-
-    const admin = createSupabaseAdminClient();
-
-    const { data: request, error: reqError } = await admin
-      .from('entry_change_requests')
-      .select('*')
-      .eq('id', requestId)
-      .single();
-
-    if (reqError || !request) return { success: false, error: 'request_not_found' };
-    if (request.requested_by !== user.id) return { success: false, error: 'not_authorized' };
-    if (request.status !== 'pending') return { success: false, error: 'request_not_pending' };
-
-    if (request.change_type === 'edit' && request.original_timestamp) {
-      await admin
-        .from('time_entries')
-        .update({ timestamp: request.original_timestamp })
-        .eq('id', request.entry_id);
-    }
-
-    if (request.change_type === 'delete') {
-      await admin
-        .from('time_entries')
-        .update({ status: 'approved' })
-        .eq('id', request.entry_id);
-
-      if (request.paired_entry_id) {
-        await admin
-          .from('time_entries')
-          .update({ status: 'approved' })
-          .eq('id', request.paired_entry_id);
-      }
-    }
-
-    await admin
-      .from('entry_change_requests')
-      .delete()
-      .eq('id', requestId);
-
-    return { success: true };
-  } catch (error) {
-    console.error('Error cancelling change request:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }

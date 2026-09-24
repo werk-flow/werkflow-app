@@ -5,6 +5,8 @@ import { z } from "zod";
 import { uuidSchema } from "@/lib/validation/uuid";
 
 import { CACHE_TAGS } from "@/lib/data/cached";
+import { updateJob } from "@/lib/jobs/actions";
+import type { UpdateJobResult } from "@/lib/jobs/types";
 import { authenticateAndAuthorize } from "@/lib/jobs/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
@@ -130,7 +132,6 @@ function revalidateWork(organizationId: string): void {
   updateTag(CACHE_TAGS.jobs(organizationId));
   updateTag(CACHE_TAGS.projects(organizationId));
   revalidatePath("/auftraege", "layout");
-  revalidatePath("/kalender", "layout");
   revalidatePath("/aufgaben", "layout");
   revalidatePath("/mitarbeiter", "layout");
 }
@@ -725,6 +726,69 @@ export async function unparkWorkTarget(input: {
   if (error) return { success: false as const, error: mapWorkError(error) };
   revalidateWork(auth.context.orgId);
   return { success: true as const, version: data };
+}
+
+const unparkScheduleInputSchema = z.object({
+  jobId: uuidSchema,
+  blockerVersion: versionSchema,
+  expectedExecutionVersion: versionSchema,
+  reason: reasonSchema,
+  schedule: z.object({
+    plannedDate: z.string().date(),
+    plannedTime: z.string().max(5),
+    estimatedDurationMinutes: z.number().int().positive().nullable().optional(),
+    selectedUserIds: z.array(uuidSchema).max(100),
+  }),
+  /** The parking context to restore when the schedule write fails after the unpark. */
+  restoreContext: z
+    .object({
+      reason: workBlockerReasonSchema,
+      details: detailsSchema.optional(),
+      responsibleEmployeeRecordId: uuidSchema,
+      nextReviewDate: z.string().date(),
+    })
+    .nullable(),
+});
+
+/**
+ * Unpark and schedule in one call (P1-24a, criterion 26): the unpark, the
+ * schedule write, and the re-park with the previous context when the write
+ * fails. A qualification warning returns after the unpark without a re-park,
+ * exactly as the former client flow left the job while the dialog was open;
+ * the caller retries the schedule write with the approval or restores the
+ * parking on decline. Rules stay with the owners: this composes them.
+ */
+export async function unparkJobIntoSchedule(
+  input: unknown,
+): Promise<UpdateJobResult | WorkActionFailure> {
+  const parsed = unparkScheduleInputSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: "invalid_input" };
+  const auth = await authenticateAndAuthorize();
+  if (!auth.success) return auth;
+  const { jobId, schedule, restoreContext } = parsed.data;
+  const unparked = await unparkWorkTarget({ targetType: "job", targetId: jobId, blockerVersion: parsed.data.blockerVersion, reason: parsed.data.reason });
+  if (!unparked.success) return unparked;
+  const written = await updateJob(jobId, {
+    plannedDate: schedule.plannedDate,
+    plannedTime: schedule.plannedTime,
+    ...(schedule.estimatedDurationMinutes !== undefined ? { estimatedDurationMinutes: schedule.estimatedDurationMinutes } : {}),
+    selectedUserIds: schedule.selectedUserIds,
+  });
+  if (written.success) return written;
+  const warning = written.error === "qualification_warning" || written.error === "stale_evaluation";
+  if (!warning && restoreContext) {
+    const restored = await parkWorkTarget({
+      targetType: "job",
+      targetId: jobId,
+      expectedExecutionVersion: parsed.data.expectedExecutionVersion,
+      reason: restoreContext.reason,
+      responsibleEmployeeRecordId: restoreContext.responsibleEmployeeRecordId,
+      nextReviewDate: restoreContext.nextReviewDate,
+      ...(restoreContext.details !== undefined ? { details: restoreContext.details } : {}),
+    });
+    if (!restored.success) return { success: false, error: "rollback_failed" };
+  }
+  return written;
 }
 
 type DependencyPredecessor =

@@ -10,6 +10,13 @@ import type {
   TravelNote,
 } from './types';
 
+/**
+ * The two readiness chips a calendar card carries until Wave 3 changes the
+ * values (P1-24a, criterion 13): the wording has one home here, beside the
+ * dimensions the Einsätze dialog renders in full.
+ */
+export const MATERIAL_UNRESERVED_LABEL = 'Material nicht reserviert';
+
 export type MaterialReadinessFacts =
   | { state: 'no_demand' }
   | {

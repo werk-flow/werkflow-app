@@ -43,7 +43,7 @@ test("repeated fixed-date workloads have stable identity while changed dates or 
     writeFileSync(join(root, "tests/audit/support/performance-profile.ts"), 'export const anchor = "2026-06-15";');
     const workload = { businessDate: "2026-06-15", counts: { occurrences: 1760, timeEntries: 132 }, window: { from: "2026-05-31", to: "2026-07-13" } };
     const archive = (value: unknown): void => { writeFileSync(join(evidence, "performance-workload.json"), JSON.stringify(value)); };
-    const scenario = getMeasuredScenario("calendar.day.cold-open");
+    const scenario = getMeasuredScenario("calendar.board.cold-open");
     archive(workload);
     const first = workloadDigest(root, scenario, evidence);
     archive({ ...workload });

@@ -251,7 +251,7 @@ test("an operation releases only its own lease, including transport failure and 
 
 test("calendar visibility filters support keyboard and label activation without double toggles", async ({ page }) => {
   const workingHours = page.getByRole("checkbox", { name: "Arbeitszeiten", exact: true });
-  const jobs = page.getByRole("checkbox", { name: "Aufträge", exact: true });
+  const jobs = page.getByRole("checkbox", { name: "Termine", exact: true });
   await expect(workingHours).not.toBeChecked();
   await expect(jobs).toBeChecked();
   await workingHours.focus();
@@ -263,7 +263,7 @@ test("calendar visibility filters support keyboard and label activation without 
   await jobs.focus();
   await page.keyboard.press("Space");
   await expect(jobs).not.toBeChecked();
-  await page.getByRole("group", { name: "Angezeigte Einträge" }).getByText("Aufträge", { exact: true }).click();
+  await page.getByRole("group", { name: "Angezeigte Einträge" }).getByText("Termine", { exact: true }).click();
   await expect(jobs).toBeChecked();
 });
 

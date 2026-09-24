@@ -4,7 +4,7 @@ import { createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync } f
 import { resolve } from "node:path";
 import { z } from "zod";
 import { readBuildReceipt } from "../lib/testing/build-identity";
-import { captureInputSnapshot, changedInputs, groupAttemptProblem, groupResultSchema, inputSnapshotSchema, isDocumentationInput, reusableGroupResult } from "../lib/testing/group-evidence";
+import { captureInputSnapshot, changedInputs, groupAttemptProblem, groupResultSchema, INPUT_DRIFT_REASON, inputSnapshotSchema, isDocumentationInput, reusableGroupResult } from "../lib/testing/group-evidence";
 import { getGroupTimingRequirements, getTestGroups, type TestGroup } from "../lib/testing/test-groups";
 import { createGroupQualification } from "../lib/testing/group-qualification";
 import { writeJsonAtomically } from "../lib/testing/file-lock";
@@ -186,7 +186,7 @@ async function main(): Promise<void> {
         const latencyProblems = latencyEvidence?.problems ?? [];
         const browserQualified = !browser || (run?.status === "passed" && Boolean(run.cleanedAt) && run.target === options.target && run.lane === "group" && run.groupFingerprint === entry.fingerprint && run.buildId === readBuildReceipt(repository).buildId && run.total === run.passed && run.failed === 0 && run.skipped === 0);
         const passed = exitCode === 0 && !drift.length && !latencyProblems.length && browserQualified && !controller.signal.aborted;
-        const failureDetails = [errorMessage, drift.length ? `Inputs changed during verification: ${drift.join(", ")}` : undefined, run?.failures[0]?.message, ...latencyProblems].filter((detail): detail is string => Boolean(detail));
+        const failureDetails = [errorMessage, drift.length ? `${INPUT_DRIFT_REASON}: ${drift.join(", ")}` : undefined, run?.failures[0]?.message, ...latencyProblems].filter((detail): detail is string => Boolean(detail));
         const reason = passed ? null : failureDetails.join("; ") || `Command exited ${exitCode}; inspect ${logPath}`;
         report.results.push({ groupId: entry.group.id, fingerprint: entry.fingerprint, status: passed ? "passed" : browser && !run ? "blocked" : "failed", startedAt, completedAt: new Date().toISOString(), durationMs: Date.now() - Date.parse(startedAt), runKey: run?.runKey ?? null, buildId: run?.buildId ?? null, logPath, reason });
         publish();

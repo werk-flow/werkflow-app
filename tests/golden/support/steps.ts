@@ -3975,10 +3975,10 @@ export function plannedCalendarEvent(
   title: string,
   index = 0,
 ): Locator {
-  return page.locator(".fc-event-job").filter({ hasText: title }).nth(index);
+  return page.locator("[data-calendar-card]").filter({ hasText: title }).nth(index);
 }
 
-/** A completed pointer gesture is evidence only after FullCalendar owns the drag. */
+/** A completed pointer gesture is evidence only after the calendar drag engine owns the drag. */
 export async function dragPlanningMonthEvent(
   page: Page,
   input: { title: string; sourceDate: string; targetDate: string },
@@ -3987,12 +3987,13 @@ export async function dragPlanningMonthEvent(
     throw new Error('A month drag requires two distinct explicit calendar dates.');
   }
   const main = page.getByRole('main');
-  const sourceDay = main.locator(`.fc-daygrid-day[data-date="${input.sourceDate}"]`);
-  const targetDay = main.locator(`.fc-daygrid-day[data-date="${input.targetDate}"]`);
-  const event = sourceDay.locator('.fc-event-job').filter({ hasText: input.title });
+  const sourceDay = main.locator(`[data-month-day="${input.sourceDate}"]`);
+  // The cell background sits under its day column; the column is the hit area.
+  const targetDay = main.locator(`[data-month-day="${input.targetDate}"]`);
+  const event = sourceDay.locator('[data-calendar-card]').filter({ hasText: input.title });
   await expect(event).toHaveCount(1);
   await expect(event).toBeVisible();
-  await expect(event).toHaveClass(/\bfc-event-draggable\b/);
+  await expect(event).toHaveClass(/\bcursor-grab\b/);
   await targetDay.scrollIntoViewIfNeeded();
   await event.scrollIntoViewIfNeeded();
 
@@ -4022,7 +4023,7 @@ export async function dragPlanningMonthEvent(
   const thresholdX = start.x + 12 < start.right - 2 ? start.x + 12 : start.x - 12;
   if (thresholdX <= start.left + 2) throw new Error('The source event is too narrow to engage a drag safely.');
   await visiblePoint(targetDay);
-  const canCancelOutside = await main.locator('.fc').evaluateAll((calendars) => calendars.every((calendar) => {
+  const canCancelOutside = await main.locator('[data-month-view]').evaluateAll((calendars) => calendars.every((calendar) => {
     const bounds = calendar.getBoundingClientRect();
     return 1 < bounds.left || 1 > bounds.right || 1 < bounds.top || 1 > bounds.bottom;
   }));
@@ -4035,10 +4036,10 @@ export async function dragPlanningMonthEvent(
     await page.mouse.down();
     held = true;
     await page.mouse.move(thresholdX, start.y, { steps: 3 });
-    await expect(body, 'FullCalendar must engage the drag before moving to another date').toHaveClass(/\bis-dragging\b/, { timeout: 5_000 });
+    await expect(body, 'The drag engine must engage the drag before moving to another date').toHaveClass(/\bis-dragging\b/, { timeout: 5_000 });
     const target = await visiblePoint(targetDay);
     await page.mouse.move(target.x, target.y, { steps: 10 });
-    await expect(body, 'FullCalendar must retain the drag until the destination release').toHaveClass(/\bis-dragging\b/, { timeout: 5_000 });
+    await expect(body, 'The drag engine must retain the drag until the destination release').toHaveClass(/\bis-dragging\b/, { timeout: 5_000 });
     // Exactly one destination release. Business warning and persisted-date
     // assertions remain with the scenario; an unknown outcome is never retried.
     held = false;
@@ -4058,15 +4059,15 @@ export async function showPlanningMonth(
   await page.goto("/kalender");
   await page.getByRole("tab", { name: "Monat", exact: true }).click();
   if (!targetDate) return;
-  const dayCells = page.locator(".fc-daygrid-day[data-date]");
+  const dayCells = page.locator("[data-month-cell]");
   const primaryMonthDayCells = page.locator(
-    ".fc-daygrid-day:not(.fc-day-other)[data-date]",
+    '[data-month-cell][data-in-month="true"]',
   );
   await expect(dayCells.first()).toBeVisible({ timeout: 15_000 });
   for (let attempt = 1; attempt <= 24; attempt += 1) {
     const primaryMonthDates = await primaryMonthDayCells.evaluateAll((cells) =>
       cells
-        .map((cell) => cell.getAttribute("data-date"))
+        .map((cell) => cell.getAttribute("data-month-cell"))
         .filter((date): date is string => Boolean(date)),
     );
     if (primaryMonthDates.includes(targetDate)) return;
@@ -4081,7 +4082,7 @@ export async function showPlanningMonth(
       .poll(
         () =>
           primaryMonthDayCells.evaluateAll((cells) =>
-            cells.map((cell) => cell.getAttribute("data-date")).join(","),
+            cells.map((cell) => cell.getAttribute("data-month-cell")).join(","),
           ),
         { timeout: 10_000 },
       )
@@ -4313,7 +4314,7 @@ export async function openParkplatzPanel(page: Page): Promise<void> {
 export function parkplatzCard(page: Page, title: string): Locator {
   // Filter instead of interpolating the title into a CSS selector.
   return page
-    .locator("[data-parkplatz-pill]")
+    .locator("[data-parkplatz-card]")
     .filter({ has: page.getByText(title, { exact: true }) });
 }
 

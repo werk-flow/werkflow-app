@@ -755,6 +755,7 @@ export async function setSicknessEvidence(input: {
  */
 export type SicknessCalendarEntry = {
   id: string;
+  employeeRecordId: string;
   personName: string;
   startDate: string;
   /** Clamped for open-ended reports; openEnded marks the honest difference. */
@@ -865,6 +866,7 @@ export async function getSicknessCalendarEntries(
       success: true,
       entries: rows.map((row) => ({
         id: row.id,
+        employeeRecordId: row.employee_record_id,
         personName: nameByRecordId.get(row.employee_record_id) ?? 'Unbekannt',
         startDate: row.start_date,
         endDate: row.end_date ?? windowEndIso,

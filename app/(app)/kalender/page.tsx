@@ -7,19 +7,24 @@ import {
   getCachedMemberships,
   getCachedOrganizationCalendar,
   getCachedOrganizationSettings,
+  getCachedOrganizationUserPreferences,
   getCachedUser,
 } from '@/lib/data/cached';
 import { getChangeRequestsForEntries, getTimeEntries } from '@/lib/time-tracking/actions';
 import { completeCalendarEntryRead } from '@/lib/calendar/entry-read';
 import { calendarDateFromQuery } from '@/lib/calendar/date-range';
 import { getPlanningEntries } from '@/lib/planning/actions';
+import { getCalendarBoardContext } from '@/lib/calendar/board-actions';
+import { getSicknessCalendarEntries } from '@/lib/sickness/actions';
+import { getVacationCalendarEntries } from '@/lib/vacation/actions';
 import { toCalendarJob } from '@/lib/planning/view-model';
 import { CalendarContainer } from '@/components/kalender/calendar-container';
 import type { CalendarInitialData } from '@/components/kalender/use-calendar-range-data';
 import { KalenderPageSkeleton } from '@/components/loading-states/kalender-page-skeleton';
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
-import { getBerlinDayFetchRange } from '@/lib/calendar/business-range';
+import { getBerlinDayFetchRange, getBerlinWeekFetchRange } from '@/lib/calendar/business-range';
+import { readCalendarPreferences } from '@/lib/calendar/preferences';
 import { type OrgRole } from '@/lib/members/actions';
 import { getOrgMembersForUser } from '@/lib/members/queries';
 import { getBusinessTodayIso, shiftIsoDateByDays } from '@/lib/personnel/types';
@@ -50,8 +55,16 @@ async function KalenderData({
   // (PF-17). The client compares this range with the window it renders and
   // reads again only when its own local day differs.
   const businessDate = calendarDateFromQuery((await searchParams).date, getBusinessTodayIso());
-  const range = getBerlinDayFetchRange(businessDate);
-  const fromIso = shiftIsoDateByDays(businessDate, -1);
+  // The landing view is the user's saved view, else the Plantafel for managers
+  // and the day for employees (P1-24a, D1); the prefetch covers its window.
+  const preferences = readCalendarPreferences((await getCachedOrganizationUserPreferences(activeOrgId, userId)).preferences);
+  const landingView = preferences.view ?? (isAdminOrManager ? 'week' : 'day');
+  const window = landingView === 'week'
+    ? getBerlinWeekFetchRange(businessDate, preferences.horizonWeeks)
+    : { ...getBerlinDayFetchRange(businessDate), fromIso: shiftIsoDateByDays(businessDate, -1), toIso: businessDate };
+  const range = { start: window.start, end: window.end };
+  const fromIso = window.fromIso;
+  const toIso = window.toIso;
 
   async function fetchMembers(): Promise<MemberRow[]> {
     const data = await getOrgMembersForUser(activeOrgId, userId);
@@ -61,7 +74,8 @@ async function KalenderData({
     return data.filter((member) => member.user_id === userId);
   }
 
-  const [entriesResult, members, jobsResult, organizationSettings, holidayCalendar] =
+  const dates = { from: fromIso, to: toIso };
+  const [entriesResult, members, jobsResult, organizationSettings, holidayCalendar, vacationResult, sicknessResult, boardResult] =
     await Promise.all([
       completeCalendarEntryRead(getTimeEntries({
         organizationId: activeOrgId,
@@ -69,9 +83,12 @@ async function KalenderData({
         to: range.end.toISOString()
       }), getChangeRequestsForEntries),
       fetchMembers(),
-      getPlanningEntries(fromIso, businessDate),
+      getPlanningEntries(fromIso, toIso),
       getCachedOrganizationSettings(activeOrgId),
       getCachedOrganizationCalendar(activeOrgId),
+      getVacationCalendarEntries(dates),
+      getSicknessCalendarEntries(dates),
+      getCalendarBoardContext({ organizationId: activeOrgId, fromDate: fromIso, toDate: toIso }),
     ]);
 
   // Initial data carries the same official plus provisional projection and
@@ -82,6 +99,11 @@ async function KalenderData({
       ? { entries: entriesResult.entries, changeRequestMap: entriesResult.changeRequestMap }
       : {}),
     ...(jobsResult.success ? { jobs: jobsResult.entries.map(toCalendarJob) } : {}),
+    ...(vacationResult.success ? { vacation: vacationResult.entries } : {}),
+    ...(sicknessResult.success ? { sickness: sicknessResult.entries } : {}),
+    ...(boardResult.success
+      ? { board: { rows: boardResult.rows, days: boardResult.days, dispatch: boardResult.dispatch, materialDemandJobIds: boardResult.materialDemandJobIds } }
+      : {}),
   };
 
   return (
@@ -93,8 +115,10 @@ async function KalenderData({
       members={members}
       organizationSettings={organizationSettings}
       holidayCalendar={holidayCalendar}
-      initialData={initialData}
+      initialData={landingView === 'month' ? undefined : initialData}
       initialDate={businessDate}
+      initialPreferences={preferences}
+      initialView={landingView}
     />
   );
 }

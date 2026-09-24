@@ -1,71 +1,49 @@
 'use client';
 
-import { useState, forwardRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { ParkingSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { clearCalendarDragState } from './drag-state';
-import { cn } from '@/lib/utils';
-
-const MIME_TYPE = 'application/x-werkflow-job';
+import { useCalendarDrag } from './drag-engine/drag-engine';
 
 interface ParkplatzButtonProps {
   count: number;
   isOpen: boolean;
   onToggle: () => void;
-  onParkJob: (jobId: string) => void;
-  isPointerOverParkplatz?: boolean | undefined;
 }
 
-export const ParkplatzButton = forwardRef<HTMLButtonElement, ParkplatzButtonProps>(
-  function ParkplatzButton({ count, isOpen, onToggle, onParkJob, isPointerOverParkplatz }, ref) {
-    const [isDragOver, setIsDragOver] = useState(false);
+/**
+ * The header's Parkplatz toggle is also a drop zone of the shared engine
+ * (P1-24a): dragging any card over it parks the job, whether or not the
+ * panel is open. The engine highlights the ghost; the button itself stays
+ * quiet so the header never flashes.
+ */
+export const ParkplatzButton = forwardRef<HTMLButtonElement, ParkplatzButtonProps>(function ParkplatzButton({ count, isOpen, onToggle }, ref) {
+  const { registerDropZone } = useCalendarDrag();
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  useImperativeHandle(ref, () => buttonRef.current as HTMLButtonElement);
+  useEffect(() => {
+    const element = buttonRef.current;
+    if (!element) return;
+    return registerDropZone({ zone: 'parkplatz', element });
+  }, [registerDropZone]);
 
-    const showHighlight = isDragOver || isPointerOverParkplatz;
-
-    return (
-      <Button
-        ref={ref}
-        variant={isOpen ? 'default' : 'outline'}
-        size="default"
-        className={cn(
-          'gap-2 relative transition-all',
-          showHighlight && 'ring-2 ring-brand-purple/60 bg-brand-purple/10 scale-105'
-        )}
-        onClick={onToggle}
-        onDragOver={(e) => {
-          if (e.dataTransfer.types.includes(MIME_TYPE)) {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            setIsDragOver(true);
-          }
-        }}
-        onDragEnter={(e) => {
-          if (e.dataTransfer.types.includes(MIME_TYPE)) {
-            e.preventDefault();
-            setIsDragOver(true);
-          }
-        }}
-        onDragLeave={() => setIsDragOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setIsDragOver(false);
-          clearCalendarDragState();
-          const raw = e.dataTransfer.getData(MIME_TYPE);
-          if (!raw) return;
-          try {
-            const { jobId } = JSON.parse(raw);
-            if (jobId) onParkJob(jobId);
-          } catch { /* ignore parse errors */ }
-        }}
-      >
-        <ParkingSquare className="size-4" />
-        <span>Parkplatz</span>
-        {count > 0 && (
-          <span className="absolute -top-1.5 -right-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-purple text-[10px] font-bold text-white px-1">
-            {count}
-          </span>
-        )}
-      </Button>
-    );
-  }
-);
+  return (
+    <Button
+      ref={buttonRef}
+      variant={isOpen ? 'default' : 'outline'}
+      size="default"
+      className="relative gap-2"
+      onClick={onToggle}
+      aria-pressed={isOpen}
+      data-parkplatz-zone=""
+    >
+      <ParkingSquare className="size-4" aria-hidden="true" />
+      <span>Parkplatz</span>
+      {count > 0 && (
+        <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-purple px-1 text-[10px] font-bold text-white">
+          {count}
+        </span>
+      )}
+    </Button>
+  );
+});

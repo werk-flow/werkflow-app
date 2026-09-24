@@ -4,7 +4,7 @@ import { getMeasuredScenario, MEASUREMENT_VERSION } from "./measured-scenarios";
 import { performanceContextFixture } from "./fixtures/performance";
 import type { PerformanceBaselines } from "./performance-baselines";
 
-const scenario = getMeasuredScenario("calendar.week-to-day.covered");
+const scenario = getMeasuredScenario("calendar.board-to-day.covered");
 const existing: PerformanceBaselines = { version: 1, measurementVersion: MEASUREMENT_VERSION, tolerance: { relative: 0.25, absoluteMs: 250 }, baselines: [] };
 const run: CalibrationRun = {
   runKey: "owned-run", buildId: "build-1", passed: true, cleaned: true, diagnostic: false, currentInputs: true,

@@ -313,7 +313,7 @@ function getCalendarBlockDisplayEnd(
   return new Date(Math.max(start, now));
 }
 
-export function getCalendarBlockDurationMinutes(
+function getCalendarBlockDurationMinutes(
   block: CalendarWorkBlock,
   referenceDate = new Date()
 ): number {

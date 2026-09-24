@@ -45,6 +45,7 @@ import {
   AlertDialogTrigger
 } from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
+import { calendarRefusalMessage } from '@/lib/calendar/messages';
 import { getJobDisplayTitle } from '@/lib/jobs/types';
 import { formatDuration } from '@/lib/time-tracking/helpers';
 import { getAutomaticBreakRange } from '@/lib/time-tracking/settings';
@@ -137,7 +138,7 @@ function formatActionError(error: string): string {
     return 'Diese Zeitänderung würde zu einer ungültigen oder überlappenden Arbeitszeit führen.';
   }
 
-  return error;
+  return calendarRefusalMessage(error) ?? 'Die Änderung konnte nicht gespeichert werden.';
 }
 
 function sortTimeEntries(entries: TimeEntry[]): TimeEntry[] {

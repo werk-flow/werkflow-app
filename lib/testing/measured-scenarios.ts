@@ -14,7 +14,11 @@ type ScenarioBoundary =
   | "before-submit-to-visible"
   | "opening-action-to-usable-control"
   | "navigation-to-usable-content"
-  | "view-switch-to-usable-content";
+  | "view-switch-to-usable-content"
+  /** A pointer release until the optimistic result is on screen (P1-24a). */
+  | "interaction-to-visible-change"
+  /** A pointer release until the server confirmed the change (P1-24a). */
+  | "interaction-to-settled";
 
 /** Which data profile a scenario runs against; comparisons never cross profiles. */
 type ScenarioProfile = "golden-world" | "typical";
@@ -38,13 +42,6 @@ export type MeasuredScenario = {
   description: string;
 };
 
-// Every scenario is `required` again since 2026-09-18: pre-Wave-3 step 5
-// recalibrated all eleven references from three samples each on the beta
-// candidate build 64063ae0 (runs 2026-09-18T004206826Z-aa6651, 004348887Z-269644
-// and 004630732Z-469daa), retiring the Step 3 and pre-Wave-3 transfer chain
-// (decision D6). A later edit to a measurement-digest input needs a fresh
-// calibration from real samples, never a transfer; `performance-references.test.ts`
-// refuses a required scenario without a reference at the current digest.
 export const MEASURED_SCENARIOS: readonly MeasuredScenario[] = [
   {
     id: "planning.occurrence.cross-session",
@@ -79,8 +76,11 @@ export const MEASURED_SCENARIOS: readonly MeasuredScenario[] = [
     comparison: "required",
     description: "An administrator opens the fixed benchmark date after creating a legacy-date job and sees its month event.",
   },
+  // The calendar of P1-24a: a manager lands on the Plantafel (one week), and
+  // every view switch, horizon change and drop is measured on the typical
+  // profile (10 people, 40 visits per day).
   {
-    id: "calendar.day.cold-open",
+    id: "calendar.board.cold-open",
     version: 1,
     boundary: "navigation-to-usable-content",
     budgetMs: 5_000,
@@ -88,21 +88,32 @@ export const MEASURED_SCENARIOS: readonly MeasuredScenario[] = [
     file: "tests/audit/performance/calendar.spec.ts",
     samples: 3,
     comparison: "required",
-    description: "First navigation to /kalender in a session until the day view reports ready.",
+    description: "First navigation to /kalender in a session until the one-week Plantafel reports ready.",
   },
   {
-    id: "calendar.day-to-week.uncovered",
+    id: "calendar.board.reassign.visible",
     version: 1,
-    boundary: "view-switch-to-usable-content",
-    budgetMs: 2_000,
+    boundary: "interaction-to-visible-change",
+    budgetMs: 250,
     profile: "typical",
     file: "tests/audit/performance/calendar.spec.ts",
     samples: 3,
     comparison: "required",
-    description: "After the shell settled, switch from the covered day to the uncovered week; the week view reports ready.",
+    description: "Releasing a visit on another person's cell until the card is drawn in that row, before the server answers.",
   },
   {
-    id: "calendar.week-to-day.covered",
+    id: "calendar.board.reassign.settled",
+    version: 1,
+    boundary: "interaction-to-settled",
+    budgetMs: 3_000,
+    profile: "typical",
+    file: "tests/audit/performance/calendar.spec.ts",
+    samples: 3,
+    comparison: "required",
+    description: "Releasing a visit on another person's cell until the confirmed banner with Undo appears.",
+  },
+  {
+    id: "calendar.board-to-day.covered",
     version: 1,
     boundary: "view-switch-to-usable-content",
     budgetMs: 500,
@@ -110,24 +121,77 @@ export const MEASURED_SCENARIOS: readonly MeasuredScenario[] = [
     file: "tests/audit/performance/calendar.spec.ts",
     samples: 3,
     comparison: "required",
-    description: "Switch back to the day inside the covered week; no read is required.",
+    description: "Switch from the covered week to its day; no read is required.",
   },
   {
-    id: "calendar.week-to-month.uncovered",
-    version: 2,
-    boundary: "view-switch-to-usable-content",
-    // Calibrated 2026-09-08: 1,778 to 2,435 ms across runs of one build at
-    // 1,760 occurrences; the 2,000 ms hypothesis left no run-to-run headroom.
+    id: "calendar.day.resize.settled",
+    version: 1,
+    boundary: "interaction-to-settled",
     budgetMs: 3_000,
     profile: "typical",
     file: "tests/audit/performance/calendar.spec.ts",
     samples: 3,
     comparison: "required",
-    description: "Switch from the week to the month grid with 40 occurrences per day.",
+    description: "Releasing a visit's end handle in the day view until the confirmed banner appears.",
+  },
+  {
+    id: "calendar.day-to-board.covered",
+    version: 1,
+    boundary: "view-switch-to-usable-content",
+    budgetMs: 500,
+    profile: "typical",
+    file: "tests/audit/performance/calendar.spec.ts",
+    samples: 3,
+    comparison: "required",
+    description: "Switch back from the day to the covered one-week Plantafel.",
+  },
+  {
+    id: "calendar.board.six-weeks",
+    version: 1,
+    boundary: "view-switch-to-usable-content",
+    budgetMs: 3_000,
+    profile: "typical",
+    file: "tests/audit/performance/calendar.spec.ts",
+    samples: 3,
+    comparison: "required",
+    description: "Widen the Plantafel from one to six weeks (about 1,700 visits) until the board reports ready.",
+  },
+  {
+    id: "calendar.board-to-month.uncovered",
+    version: 1,
+    boundary: "view-switch-to-usable-content",
+    budgetMs: 3_000,
+    profile: "typical",
+    file: "tests/audit/performance/calendar.spec.ts",
+    samples: 3,
+    comparison: "required",
+    description: "Switch from the one-week Plantafel to the month grid with 40 visits per day.",
+  },
+  {
+    id: "calendar.month.move.visible",
+    version: 1,
+    boundary: "interaction-to-visible-change",
+    budgetMs: 250,
+    profile: "typical",
+    file: "tests/audit/performance/calendar.spec.ts",
+    samples: 3,
+    comparison: "required",
+    description: "Releasing a visit on the next day's month cell until the card is drawn there, before the server answers.",
+  },
+  {
+    id: "calendar.month.move.settled",
+    version: 1,
+    boundary: "interaction-to-settled",
+    budgetMs: 3_000,
+    profile: "typical",
+    file: "tests/audit/performance/calendar.spec.ts",
+    samples: 3,
+    comparison: "required",
+    description: "Releasing a visit on the next day's month cell until the confirmed banner appears.",
   },
   {
     id: "calendar.month-next.uncovered",
-    version: 2,
+    version: 3,
     boundary: "navigation-to-usable-content",
     budgetMs: 3_000,
     profile: "typical",
@@ -137,7 +201,7 @@ export const MEASURED_SCENARIOS: readonly MeasuredScenario[] = [
     description: "Page to the next month in the month grid.",
   },
   {
-    id: "calendar.month-to-week.covered",
+    id: "calendar.month-to-board.covered",
     version: 1,
     boundary: "view-switch-to-usable-content",
     budgetMs: 500,
@@ -145,7 +209,7 @@ export const MEASURED_SCENARIOS: readonly MeasuredScenario[] = [
     file: "tests/audit/performance/calendar.spec.ts",
     samples: 3,
     comparison: "required",
-    description: "Switch from the month grid to a week inside its covered window.",
+    description: "Switch from the month grid to a Plantafel week inside its covered window.",
   },
   {
     id: "customers.list.open",

@@ -84,6 +84,7 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ["wave-2:p1-22", "wave-2/p1-22.spec.ts", ["time", "personnel", "attention", "work", "planning"]],
   ["wave-2:p1-23", "wave-2/p1-23.spec.ts", ["time", "personnel", "documents"]],
   ["wave-2:p1-24", "wave-2/p1-24.spec.ts", ["personnel", "documents", "time", "work", "attention"]],
+  ["wave-3:p1-24a", "wave-3/p1-24a.spec.ts", ["planning", "time", "personnel", "work", "attention"]],
   ["layout", "layout/mobile-viewport.spec.ts", ["*"]],
   ["security:account", "security/account.spec.ts", ["*"]],
   ["list-pagination", "pagination/list-pagination.spec.ts", ["inventory", "documents", "work"]],

@@ -4,7 +4,7 @@
 // customer window for one planned visit. Recording is a manual office fact —
 // nothing here sends, schedules, or implies any message (P1-46 owns delivery).
 
-import { revalidatePath, updateTag } from 'next/cache';
+import { updateTag } from 'next/cache';
 import { z } from 'zod';
 import { uuidSchema } from '@/lib/validation/uuid';
 
@@ -84,7 +84,6 @@ export async function recordCustomerCommitment(
           : 'update_failed',
     };
   }
-  revalidatePath('/kalender');
   updateTag(CACHE_TAGS.jobs(auth.context.orgId));
   return { success: true, commitmentId: data as string };
 }
@@ -123,7 +122,6 @@ export async function withdrawCustomerCommitment(
         : 'update_failed',
     };
   }
-  revalidatePath('/kalender');
   updateTag(CACHE_TAGS.jobs(auth.context.orgId));
   return { success: true };
 }

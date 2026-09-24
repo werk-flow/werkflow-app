@@ -5,6 +5,7 @@ import {
 } from "./group-evidence";
 import { getGroupExecutionFiles, TEST_SCOPE_PREFIXES, type TestGroup } from "./test-groups";
 import type { PlaywrightTarget } from "./run-policy";
+import { BROWSER_INPUT_DRIFT_MESSAGE } from "./test-evidence";
 
 export type GroupQualificationContext = {
   definitions: readonly EvidenceGroup[];
@@ -75,7 +76,17 @@ export function createGroupQualification(
 type DirectGroupAttempt = Pick<RunManifest,
   "runKey" | "groupId" | "groupFingerprint" | "target" | "status" |
   "startedAt" | "retainedAt" | "cleanedAt"
->;
+> & { failures?: RunManifest["failures"]; failed?: number };
+
+/** A run voided because an input changed while it ran neither proves nor blocks its group. */
+function voidedByDrift(run: DirectGroupAttempt): boolean {
+  return run.failures?.some((failure) => failure.message === BROWSER_INPUT_DRIFT_MESSAGE) ?? false;
+}
+
+/** A recovered interruption without a failed business test is no attempt either: nothing about the group was observed. */
+function interruptedWithoutFailure(run: DirectGroupAttempt): boolean {
+  return run.status === "interrupted" && (run.failed ?? 0) === 0;
+}
 
 /** Applies even when the orchestrator stopped before writing its GroupResult. */
 export function directGroupRetryProblem(input: {
@@ -92,7 +103,7 @@ export function directGroupRetryProblem(input: {
   if (retained) return `Group ${input.groupId} retains world ${retained.runKey}. Diagnose and clean its own world before repeating this group.`;
   const unqualified = groupRuns.find((run) => !run.groupFingerprint && run.status !== "passed");
   if (unqualified) return `Group ${input.groupId} has failed historical run ${unqualified.runKey} without group input qualification. A changed global candidate cannot prove that its cause was repaired.`;
-  const attempts = groupRuns.filter((run) => run.groupFingerprint === input.fingerprint)
+  const attempts = groupRuns.filter((run) => run.groupFingerprint === input.fingerprint && !voidedByDrift(run) && !interruptedWithoutFailure(run))
     .sort((left, right) => left.startedAt.localeCompare(right.startedAt));
   const latest = attempts.at(-1);
   if (!latest || latest.status === "passed") return undefined;

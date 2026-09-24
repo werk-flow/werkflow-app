@@ -12,7 +12,7 @@ import { performanceContextFixture } from "./fixtures/performance";
 
 const tolerance = { relative: 0.25, absoluteMs: 250 };
 const baseline: PerformanceBaseline = {
-  scenarioId: "calendar.day.cold-open", scenarioVersion: 1, profile: "typical", backend: "local",
+  scenarioId: "calendar.board.cold-open", scenarioVersion: 1, profile: "typical", backend: "local",
   context: performanceContextFixture,
   referenceMs: 1_000, samples: [980, 1_000, 1_020],
   source: { runKey: "run-1", runKeys: ["run-1"], buildId: "build-1", recordedAt: "2026-09-08T09:00:00.000Z" },

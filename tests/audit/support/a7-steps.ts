@@ -1,11 +1,10 @@
 import type { Locator, Page } from '@playwright/test';
 
-// FullCalendar exposes the date only as a data attribute, so this raw lookup
-// stays in audit support and is narrowed by both date and run-scoped title.
+// The month grid keys one day's items by data-month-day; the run-scoped title narrows the visit.
 export function planningOccurrenceInDateCell(page: Page, dateIso: string, title: string): Locator {
   return page
-    .locator(`.fc-daygrid-day[data-date="${dateIso}"]`)
-    .locator('.fc-event-job')
+    .locator(`[data-month-day="${dateIso}"]`)
+    .locator('[data-calendar-card]')
     .filter({ hasText: title });
 }
 
@@ -25,8 +24,7 @@ export function unscheduledDispatchRow(page: Page, title: string): Locator {
   return page.locator('[data-dispatch-job]').filter({ hasText: title });
 }
 
-// Timed calendar blocks expose drag geometry only through FullCalendar's
-// positioned element. The run-scoped title makes this target unique.
+// The day view renders one card per visit; the run-scoped title makes it unique.
 export function draggablePlanningBlock(page: Page, title: string): Locator {
-  return page.locator(`div.absolute[title="${title}"]`);
+  return page.locator('[data-day-view] [data-calendar-card]').filter({ hasText: title });
 }

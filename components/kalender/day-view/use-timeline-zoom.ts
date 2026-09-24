@@ -1,155 +1,69 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react';
-import { BASE_HOUR_WIDTH } from './timeline-grid';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { DAY_NAME_COLUMN_PX, fittedHourWidth, TIMELINE_MAX_ZOOM, TIMELINE_MIN_ZOOM, TIMELINE_START_HOUR } from '@/lib/calendar/day-layout';
 
-const VISIBLE_HOURS = 13; // 5am to 6pm
-const DEFAULT_START_HOUR = 5;
-const MAX_ZOOM_MULTIPLIER = 4;
-const MAX_ZOOM_STEP = 0.08;
+const WHEEL_STEP = 0.08;
 
-function getEffectiveHourWidth(zoom: number) {
-  return BASE_HOUR_WIDTH * zoom;
-}
+/**
+ * The hour width of the day view: fitted to the scroller's viewport at zoom
+ * 1, scaled by the zoom the container owns (`+`/`-`), and by ctrl+wheel
+ * anchored under the pointer. The scroller is the page's calendar region,
+ * which owns both axes. Scrolls to the first working hour per shown day.
+ */
+export function useTimelineZoom(input: { zoom: number; onZoomChange: (zoom: number) => void; dateKey: string; scroller: () => HTMLElement | null }): number {
+  const { zoom, onZoomChange, dateKey, scroller } = input;
+  const [viewportWidth, setViewportWidth] = useState(0);
+  const hourWidth = fittedHourWidth(Math.max(0, viewportWidth - DAY_NAME_COLUMN_PX), zoom);
+  const anchorRef = useRef<{ hour: number; cursorX: number } | null>(null);
 
-function getTimelineWidth(zoom: number) {
-  return 24 * getEffectiveHourWidth(zoom);
-}
-
-export function useTimelineZoom() {
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const [zoomLevel, setZoomLevel] = useState(1);
-  const defaultZoomRef = useRef(1);
-  const zoomRef = useRef(1);
-  const isCoarsePointer = useRef(false);
-  const rafId = useRef<number | null>(null);
-
-  const anchorRef = useRef<{ time: number; cursorX: number } | null>(null);
-  const gestureAnchorRef = useRef<{ time: number; cursorX: number } | null>(null);
-  const lastWheelTimeRef = useRef(0);
-
-  useEffect(() => {
-    isCoarsePointer.current = window.matchMedia('(pointer: coarse)').matches;
-  }, []);
-
-  const computeDefaultZoom = useCallback(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return 1;
-    return Math.max(1, container.clientWidth / (VISIBLE_HOURS * BASE_HOUR_WIDTH));
-  }, []);
-
-  const scrollToHour = useCallback((hour: number, zoom: number) => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    container.scrollLeft = hour * BASE_HOUR_WIDTH * zoom;
-  }, []);
-
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    const init = () => {
-      const zoom = computeDefaultZoom();
-      defaultZoomRef.current = zoom;
-      zoomRef.current = zoom;
-      setZoomLevel(zoom);
-      requestAnimationFrame(() => scrollToHour(DEFAULT_START_HOUR, zoom));
-    };
-
-    init();
-
-    const observer = new ResizeObserver(() => {
-      const newDefault = computeDefaultZoom();
-      defaultZoomRef.current = newDefault;
-      if (zoomRef.current < newDefault) {
-        zoomRef.current = newDefault;
-        setZoomLevel(newDefault);
-      }
-    });
-    observer.observe(container);
+  useLayoutEffect(() => {
+    const element = scroller();
+    if (!element) return;
+    setViewportWidth(element.clientWidth);
+    const observer = new ResizeObserver(() => setViewportWidth(element.clientWidth));
+    observer.observe(element);
     return () => observer.disconnect();
-  }, [computeDefaultZoom, scrollToHour]);
+  }, [scroller]);
 
   useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    const handleWheel = (e: WheelEvent) => {
-      if (isCoarsePointer.current) return;
-      if (!e.ctrlKey && !e.metaKey) return;
-      e.preventDefault();
-
-      const rect = container.getBoundingClientRect();
-      const cursorXInContainer = e.clientX - rect.left;
-      const cursorXInTimeline = container.scrollLeft + cursorXInContainer;
-
-      const currentZoom = zoomRef.current;
-      const timeUnderCursor = cursorXInTimeline / (BASE_HOUR_WIDTH * currentZoom);
-
-      const rawFactor = 1 - e.deltaY * 0.003;
-      const clampedFactor = Math.max(1 - MAX_ZOOM_STEP, Math.min(1 + MAX_ZOOM_STEP, rawFactor));
-
-      const minZoom = defaultZoomRef.current;
-      const maxZoom = minZoom * MAX_ZOOM_MULTIPLIER;
-      const newZoom = Math.max(minZoom, Math.min(maxZoom, currentZoom * clampedFactor));
-
-      if (newZoom === currentZoom) return;
-
-      zoomRef.current = newZoom;
-
-      const now = Date.now();
-      if (now - lastWheelTimeRef.current > 120 || !gestureAnchorRef.current) {
-        gestureAnchorRef.current = { time: timeUnderCursor, cursorX: cursorXInContainer };
-      }
-      lastWheelTimeRef.current = now;
-      anchorRef.current = gestureAnchorRef.current;
-
-      if (rafId.current === null) {
-        rafId.current = requestAnimationFrame(() => {
-          rafId.current = null;
-          setZoomLevel(zoomRef.current);
-        });
-      }
+    const element = scroller();
+    if (!element) return;
+    const handleWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      const rect = element.getBoundingClientRect();
+      const cursorX = event.clientX - rect.left - DAY_NAME_COLUMN_PX;
+      anchorRef.current = { hour: (element.scrollLeft + cursorX) / hourWidth, cursorX };
+      const factor = Math.max(1 - WHEEL_STEP, Math.min(1 + WHEEL_STEP, 1 - event.deltaY * 0.003));
+      onZoomChange(Math.max(TIMELINE_MIN_ZOOM, Math.min(TIMELINE_MAX_ZOOM, zoom * factor)));
     };
+    element.addEventListener('wheel', handleWheel, { passive: false });
+    return () => element.removeEventListener('wheel', handleWheel);
+  }, [hourWidth, onZoomChange, scroller, zoom]);
 
-    container.addEventListener('wheel', handleWheel, { passive: false });
-    return () => {
-      container.removeEventListener('wheel', handleWheel);
-      if (rafId.current !== null) {
-        cancelAnimationFrame(rafId.current);
-        rafId.current = null;
-      }
-    };
-  }, []);
-
-  // Anchor scroll after React commits new element positions but before paint
+  // Keep the hour under the pointer where it was after the width changed.
   useLayoutEffect(() => {
     const anchor = anchorRef.current;
-    const container = scrollContainerRef.current;
-    if (!anchor || !container) return;
-
-    container.scrollLeft =
-      anchor.time * BASE_HOUR_WIDTH * zoomLevel - anchor.cursorX;
-  }, [zoomLevel]);
-
-  const resetZoom = useCallback(() => {
-    if (rafId.current !== null) {
-      cancelAnimationFrame(rafId.current);
-      rafId.current = null;
-    }
+    const element = scroller();
+    if (!anchor || !element) return;
+    element.scrollLeft = anchor.hour * hourWidth - anchor.cursorX;
     anchorRef.current = null;
-    const zoom = computeDefaultZoom();
-    defaultZoomRef.current = zoom;
-    zoomRef.current = zoom;
-    setZoomLevel(zoom);
-    requestAnimationFrame(() => scrollToHour(DEFAULT_START_HOUR, zoom));
-  }, [computeDefaultZoom, scrollToHour]);
+  }, [hourWidth, scroller]);
 
-  return {
-    scrollContainerRef,
-    zoomLevel,
-    effectiveHourWidth: getEffectiveHourWidth(zoomLevel),
-    timelineWidth: getTimelineWidth(zoomLevel),
-    resetZoom,
-  };
+  const scrollToStart = useCallback(() => {
+    const element = scroller();
+    if (!element) return;
+    // The scroller is the page's: the board may leave a vertical offset that would hide the first row's top lane under the sticky header.
+    element.scrollTop = 0;
+    element.scrollLeft = TIMELINE_START_HOUR * hourWidth;
+  }, [hourWidth, scroller]);
+
+  const measured = viewportWidth > 0;
+  useEffect(() => {
+    if (measured) scrollToStart();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the day view scrolls to the working hours once per shown day, once the viewport is measured
+  }, [dateKey, measured]);
+
+  return hourWidth;
 }

@@ -71,6 +71,7 @@ import {
 } from '@/lib/commitments/types';
 import { DispatchIssueDialog } from './dispatch-issue-dialog';
 import { usePlanningWarningConfirmation } from './planning-warning-dialog';
+import { CALENDAR_LAYER_CLASS } from './surface/layers';
 
 function berlinTodayIso(): string {
   return new Intl.DateTimeFormat('sv-SE', {
@@ -588,7 +589,7 @@ export function DispatchPanel({
       role="complementary"
       aria-label="Einsätze"
       tabIndex={-1}
-      className="fixed right-0 top-0 bottom-0 z-[60] flex w-full max-w-md flex-col border-l bg-background shadow-xl outline-none animate-in slide-in-from-right duration-200"
+      className={`fixed right-0 top-0 bottom-0 ${CALENDAR_LAYER_CLASS.panel} flex w-full max-w-md flex-col border-l bg-background shadow-xl outline-none animate-in slide-in-from-right duration-200`}
     >
       <div
         className="flex shrink-0 items-center justify-between border-b px-4 py-3 sm:px-6"

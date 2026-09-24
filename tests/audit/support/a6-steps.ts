@@ -2,17 +2,16 @@ import type { Locator, Page } from '@playwright/test';
 
 import { expect } from '../../golden/support/fixtures';
 
-// FullCalendar exposes the date only as a data attribute, so this raw lookup
-// stays in audit support and is narrowed by both date and run-scoped title.
+// The month grid keys one day's items by data-month-day; the run-scoped title narrows the visit.
 export function planningOccurrenceInDateCell(page: Page, dateIso: string, title: string): Locator {
   return page
-    .locator(`.fc-daygrid-day[data-date="${dateIso}"]`)
-    .locator('.fc-event-job')
+    .locator(`[data-month-day="${dateIso}"]`)
+    .locator('[data-calendar-card]')
     .filter({ hasText: title });
 }
 
 export function planningDateCellStatus(page: Page, dateIso: string, status: string): Locator {
-  return page.locator(`.fc-daygrid-day[data-date="${dateIso}"]`).getByText(status, { exact: true });
+  return page.locator(`[data-month-day="${dateIso}"]`).getByText(status, { exact: true });
 }
 
 // Request cards can render in both responsive layouts. The date is the stable

@@ -1,5 +1,6 @@
 import { createContext, useContext } from "react";
 import type { CalendarWindowInput, CalendarWindowResult } from "@/lib/calendar/actions";
+import type { CalendarBoardResult } from "@/lib/calendar/board-actions";
 import type { CalendarJob } from "@/lib/jobs/types";
 import type { RealtimeTable } from "@/lib/realtime/tables";
 
@@ -61,6 +62,10 @@ window.calendarContract = {
 export function getCalendarWindow(input: CalendarWindowInput): Promise<CalendarWindowResult> {
   window.calendarContract.reads.push(input);
   return new Promise((resolve) => reads.push({ input, resolve }));
+}
+// The board context rides beside every window read; the contracts count the window reads.
+export async function getCalendarBoard(): Promise<CalendarBoardResult> {
+  return { success: true, rows: [], days: [], dispatch: [], materialDemandJobIds: [] };
 }
 export async function getChangeRequestsForEntries(): Promise<{ success: true; requests: [] }> {
   return { success: true, requests: [] };

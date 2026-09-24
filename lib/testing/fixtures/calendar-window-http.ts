@@ -150,8 +150,8 @@ try {
       },
     },
     holidays: { holidayRegion: 'BY', holidayRegionHistory: [{ region: 'BY', effectiveFrom: '2026-01-01T00:00:00Z' }], closureDays: [{ id: 'closure-one', closureDate: '2026-06-15', label: 'Betriebsruhe' }] },
-    vacation: [{ id: 'vacation-one', personName: 'Testperson', startDate: '2026-06-15', endDate: '2026-06-16', dayPortion: 'half_day', status: 'pending' }],
-    sickness: [{ id: 'sickness-one', personName: 'Zweite Testperson', startDate: '2026-06-15', endDate: '2026-06-30', dayPortion: 'full', openEnded: true }],
+    vacation: [{ id: 'vacation-one', employeeRecordId: 'employee-one', personName: 'Testperson', startDate: '2026-06-15', endDate: '2026-06-16', dayPortion: 'half_day', status: 'pending' }],
+    sickness: [{ id: 'sickness-one', employeeRecordId: 'employee-two', personName: 'Zweite Testperson', startDate: '2026-06-15', endDate: '2026-06-30', dayPortion: 'full', openEnded: true }],
   };
   const populatedRead = getCalendarWindow(input);
   const populatedPending = pending.at(-1);

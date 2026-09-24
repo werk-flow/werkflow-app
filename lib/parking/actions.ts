@@ -5,7 +5,7 @@
 // context. Legacy parked jobs without context remain a visible labeled
 // exception — nothing is fabricated for them.
 
-import { revalidatePath, updateTag } from 'next/cache';
+import { updateTag } from 'next/cache';
 import { z } from 'zod';
 import { uuidSchema } from '@/lib/validation/uuid';
 
@@ -86,7 +86,6 @@ export async function setJobParkingContext(
           : 'update_failed',
     };
   }
-  revalidatePath('/kalender');
   updateTag(CACHE_TAGS.jobs(auth.context.orgId));
   return { success: true };
 }

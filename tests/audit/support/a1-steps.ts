@@ -186,22 +186,23 @@ export function visibleSortButton(section: Locator, name: string): Locator {
 }
 
 export function calendarDay(page: Page, date: string): Locator {
-  // FullCalendar exposes its date only through data-date.
-  return page.locator(`.fc-daygrid-day[data-date="${date}"]`);
+  // The month grid keys one day's visits and time by this attribute.
+  return page.locator(`[data-month-day="${date}"]`);
 }
 
 export function calendarDayNumber(page: Page, date: string): Locator {
   // A populated cell's center can target an event; the date number owns day navigation.
-  return calendarDay(page, date).locator('.fc-daygrid-day-number');
+  return page.locator(`[data-month-day-number="${date}"]`);
 }
 
 export function calendarDayJobEvent(page: Page, date: string, title: string): Locator {
   return calendarDay(page, date).filter({ hasText: title });
 }
 
-export function dayViewJobBlock(page: Page, title: string): Locator {
-  // Day-view blocks are positioned divs; title is their only semantic identity.
-  return page.locator(`div.absolute[title="${title}"]`).first();
+export function dayViewJobBlock(page: Page, title: string, userId?: string): Locator {
+  // The day view renders one card per visit and row; a visit with two people shows twice, so a stage names the row.
+  const scope = userId ? `[data-day-view] [data-day-row="${userId}"]` : '[data-day-view]';
+  return page.locator(`${scope} [data-calendar-card]`).filter({ hasText: title });
 }
 
 export function visibleCalendarTimeBlock(page: Page, title: RegExp): Locator {
@@ -211,12 +212,12 @@ export function visibleCalendarTimeBlock(page: Page, title: RegExp): Locator {
 
 export function parkedJobPill(page: Page, title: string): Locator {
   // The drag source has no role; its data attribute is the component contract.
-  return page.locator('[data-parkplatz-pill]').filter({ hasText: title });
+  return page.locator('[data-parkplatz-card]').filter({ hasText: title });
 }
 
-export function calendarTimeline(page: Page): Locator {
-  // The day-view drop target is intentionally exposed through this data hook.
-  return page.locator('[data-timeline-scroll]');
+export function calendarTimeline(page: Page, userId: string): Locator {
+  // One person's hour axis in the day view; the drag engine resolves the drop from it.
+  return page.locator(`[data-day-view] [data-day-row="${userId}"] [data-day-timeline]`);
 }
 
 export function clockOutTimeGroup(dialog: Locator): Locator {
@@ -254,8 +255,11 @@ export async function closeDocumentUploadProgressDialog(page: Page): Promise<voi
 export function inventoryLocationCard(page: Page, locationName: string): Locator {
   // The heading is the card's stable semantic anchor; the ancestor only
   // establishes the assertion scope for its type and item count.
+  // Scoped to the visible page: a retained hidden copy of the page or an open dialog can repeat the heading.
   return page
+    .getByRole('main')
     .getByRole('heading', { name: locationName, exact: true })
+    .filter({ visible: true })
     .locator('xpath=ancestor::div[contains(@class, "rounded-lg") and contains(@class, "border")][1]');
 }
 

@@ -364,7 +364,6 @@ function mapRpcError(message: string): string {
 
 function revalidateCorrectionSurfaces(): void {
   revalidatePath('/zeiterfassung');
-  revalidatePath('/kalender');
   revalidatePath('/aufgaben');
   revalidatePath('/auftraege');
 }

@@ -12,7 +12,7 @@ type LifecycleBoundaryState = {
 
 declare global {
   interface Window {
-    uiContractFixture: "default" | "lifecycle" | "personnel" | "own-personnel" | "calendar" | "options" | "list-navigation" | "day-view" | "month-view" | "organization" | "sidebar" | "clock" | "live-view" | "route-refresh" | "customer";
+    uiContractFixture: "default" | "lifecycle" | "personnel" | "own-personnel" | "calendar" | "options" | "list-navigation" | "calendar-board" | "calendar-day" | "calendar-month" | "organization" | "sidebar" | "clock" | "live-view" | "route-refresh" | "customer";
     uiContractLifecycle: LifecycleBoundaryState;
   }
 }

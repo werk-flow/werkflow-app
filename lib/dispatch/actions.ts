@@ -40,7 +40,6 @@ import type {
 type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 
 function revalidateDispatchMutation(organizationId: string): void {
-  revalidatePath('/kalender');
   revalidatePath('/aufgaben');
   updateTag(CACHE_TAGS.jobs(organizationId));
 }

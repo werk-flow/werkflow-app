@@ -361,6 +361,19 @@ const colorLiteralSelectors = [
     message:
       "Hex color literals belong in app/globals.css as tokens; components reference var(--token) (AGENTS.md styling rules; Step 3 finding 2026-09-13).",
   },
+  // Functional colour literals in class strings, style values and <style>
+  // strings (P1-24a work package A, 2026-09-18): the calendar's 72 rgb()
+  // literals and its embedded style block slipped past the hex rule above.
+  {
+    selector: String.raw`Literal[value=/\b(?:rgba?|hsla?|oklch|oklab)\(/]`,
+    message:
+      "Functional colour literals (rgb, rgba, hsl, oklch) belong in app/globals.css as tokens; use the calendar or semantic token classes (werkflow-design skill: color system).",
+  },
+  {
+    selector: String.raw`TemplateElement[value.raw=/\b(?:rgba?|hsla?|oklch|oklab)\(|(?:^|[^\w-])#[0-9a-fA-F]{6}\b/]`,
+    message:
+      "Colour literals inside template strings (embedded styles, gradients) belong in app/globals.css as tokens (werkflow-design skill: color system).",
+  },
 ];
 
 const specSelectors = [
@@ -541,7 +554,7 @@ const eslintConfig = defineConfig([
   ...Object.entries({
     "lib/documents/actions.ts": 4198,
     "components/dokumente/document-library-content.tsx": 3478,
-    "lib/time-tracking/actions.ts": 2727,
+    "lib/time-tracking/actions.ts": 2560,
     "lib/time-accounts/actions.ts": 2694,
     "components/inventar/inventory-content.tsx": 2283,
   }).map(([file, max]) => ({

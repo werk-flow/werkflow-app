@@ -86,7 +86,6 @@ function refreshResponsibilitySurfaces(organizationId: string): void {
   revalidatePath('/einstellungen/mitarbeiter');
   revalidatePath('/mitarbeiter');
   revalidatePath('/zeiterfassung');
-  revalidatePath('/kalender');
 }
 
 export async function previewResponsibilityConfiguration(input: {

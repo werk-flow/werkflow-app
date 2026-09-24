@@ -18,6 +18,8 @@ import type { CalendarView } from './calendar-container';
 interface CalendarHeaderProps {
   currentDate: Date;
   view: CalendarView;
+  /** The board's horizon; the date display names the whole span (P1-24a). */
+  horizonWeeks: number;
   onPrevious: () => void;
   onNext: () => void;
   onToday: () => void;
@@ -29,9 +31,7 @@ interface CalendarHeaderProps {
   parkedJobCount?: number;
   parkplatzOpen?: boolean;
   onParkplatzToggle?: () => void;
-  onParkJob?: (jobId: string) => void;
   parkplatzButtonRef?: React.RefObject<HTMLButtonElement | null>;
-  isPointerOverParkplatz?: boolean;
   dispatchPanelOpen?: boolean;
   onDispatchPanelToggle?: () => void;
 }
@@ -68,7 +68,7 @@ function getISOWeekNumber(date: Date): number {
   return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
 }
 
-function formatDateDisplay(date: Date, view: CalendarView): string {
+function formatDateDisplay(date: Date, view: CalendarView, horizonWeeks: number): string {
   if (view === 'day') {
     return `${DAY_NAMES[date.getDay()]}, ${date.getDate()}. ${
       MONTH_NAMES[date.getMonth()]
@@ -78,20 +78,22 @@ function formatDateDisplay(date: Date, view: CalendarView): string {
   if (view === 'week') {
     const startOfWeek = getStartOfWeek(date);
     const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(startOfWeek.getDate() + 6);
-    const kw = getISOWeekNumber(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 7 * horizonWeeks - 1);
+    const firstWeek = getISOWeekNumber(startOfWeek);
+    const lastWeek = getISOWeekNumber(endOfWeek);
+    const kw = firstWeek === lastWeek ? `KW ${firstWeek}` : `KW ${firstWeek}–${lastWeek}`;
 
     if (startOfWeek.getMonth() === endOfWeek.getMonth()) {
       return `${startOfWeek.getDate()}. - ${endOfWeek.getDate()}. ${
         MONTH_NAMES[startOfWeek.getMonth()]
-      } ${startOfWeek.getFullYear()} · KW ${kw}`;
+      } ${startOfWeek.getFullYear()} · ${kw}`;
     }
 
     return `${startOfWeek.getDate()}. ${
       MONTH_NAMES[startOfWeek.getMonth()]
     } - ${endOfWeek.getDate()}. ${
       MONTH_NAMES[endOfWeek.getMonth()]
-    } ${endOfWeek.getFullYear()} · KW ${kw}`;
+    } ${endOfWeek.getFullYear()} · ${kw}`;
   }
 
   // Month view
@@ -110,6 +112,7 @@ function getStartOfWeek(date: Date): Date {
 export function CalendarHeader({
   currentDate,
   view,
+  horizonWeeks,
   onPrevious,
   onNext,
   onToday,
@@ -120,9 +123,7 @@ export function CalendarHeader({
   parkedJobCount = 0,
   parkplatzOpen = false,
   onParkplatzToggle,
-  onParkJob,
   parkplatzButtonRef,
-  isPointerOverParkplatz,
   dispatchPanelOpen = false,
   onDispatchPanelToggle
 }: CalendarHeaderProps) {
@@ -138,7 +139,7 @@ export function CalendarHeader({
       currentDate.getMonth() === now.getMonth());
 
   const todayLabel =
-    view === 'day' ? 'Heute' : view === 'week' ? 'Diese Woche' : 'Dieser Monat';
+    view === 'day' ? 'Heute' : view === 'week' ? (horizonWeeks > 1 ? 'Aktueller Zeitraum' : 'Diese Woche') : 'Dieser Monat';
 
   return (
     <header className="flex flex-col gap-3 border-b bg-background px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4 sticky top-0 z-10">
@@ -167,7 +168,7 @@ export function CalendarHeader({
             className="ml-2"
           />
           <span className="ml-2 text-sm font-medium text-muted-foreground sm:text-base whitespace-nowrap">
-            {formatDateDisplay(currentDate, view)}
+            {formatDateDisplay(currentDate, view, horizonWeeks)}
           </span>
           {!isCurrentPeriod && (
             <Button
@@ -200,14 +201,12 @@ export function CalendarHeader({
             <span className="hidden sm:inline">Einsätze</span>
           </Button>
         )}
-        {isAdminOrManager && onParkplatzToggle && onParkJob && (
+        {isAdminOrManager && onParkplatzToggle && (
           <ParkplatzButton
             ref={parkplatzButtonRef}
             count={parkedJobCount}
             isOpen={parkplatzOpen}
             onToggle={onParkplatzToggle}
-            onParkJob={onParkJob}
-            isPointerOverParkplatz={isPointerOverParkplatz}
           />
         )}
         <Button size="default" className="gap-2" onClick={() => setEntryDialogOpen(true)}>

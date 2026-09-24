@@ -80,7 +80,7 @@ import { MEASUREMENT_VERSION, getMeasuredScenario } from "./measured-scenarios";
 import type { PerformanceBaselines } from "./performance-baselines";
 import { performanceContextFixture } from "./fixtures/performance";
 
-const scenario = getMeasuredScenario("calendar.week-to-day.covered");
+const scenario = getMeasuredScenario("calendar.board-to-day.covered");
 const scenarioRecord = {
   scenarioId: scenario.id, scenarioVersion: scenario.version, measurementVersion: MEASUREMENT_VERSION,
   boundary: scenario.boundary, budgetMs: scenario.budgetMs, profile: scenario.profile, backend: "local",

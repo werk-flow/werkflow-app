@@ -128,7 +128,7 @@ Setup and teardown do not sweep another group's records. A successful group dele
 
 Seeding reserves UUIDs for the world and all cleanup identities, then archives them before the first external write. A retained world marked `seedStatus: seeding` owns any partial resources but cannot run diagnostics. Clean its exact recorded identities before starting fresh. Historical worlds without this marker keep their existing recovery behavior.
 
-The verification command owns the shared workspace lock for its whole run. Other builds, cleanup commands, environment changes, and independent test commands cannot overlap it. Keep raw resets and unwrapped infrastructure commands separate.
+The verification command owns the shared workspace lock for its whole run. Other builds, cleanup commands, environment changes, and independent test commands cannot overlap it. Editing any input while it runs voids the attempt: the report cannot certify, and a group whose result carries that reason has neither a proof nor a failed attempt on those inputs. A recovered interruption without a failed business test is no attempt either; one with a failed test keeps blocking until it is diagnosed. Keep raw resets and unwrapped infrastructure commands separate.
 
 The default `--jobs 1` executes groups serially. Opt-in `--jobs 2` permits at most two eligible independent application browser groups inside that one owned verification run. The integrated Golden journey, freshness and readiness groups, SQL, cloud canary, and setup or static gates remain exclusive. Every eligible group still owns its data and files. This option does not authorize two separately launched verification commands or a concurrent rebuild.
 

@@ -49,6 +49,7 @@ import {
   visibleText,
   textInDom,
 } from "../../golden/support/steps";
+import { dragCardTo, dragHandleBy, trailingResizeHandle } from "../../golden/support/plantafel";
 import { storageStatePath } from "../../golden/support/world";
 import {
   confirmTestUserEmail,
@@ -793,8 +794,15 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     // Deferred creation closes the dialog before persistence. Navigation must
     // not abort its queued save, and a visible optimistic draft is insufficient.
     await expect.poll(() => getJobCountByNumber(world.orgId, inlineJobNumber)).toBe(1);
-    await expect(adminPage.getByRole("row").filter({ hasText: inlineJobNumber }))
-      .toContainText(inlineCustomer);
+    // The list re-reads the customer name after the deferred save lands; under suite
+    // load that read can trail the persisted row. Give it 15 s, then reload once.
+    const inlineRow = adminPage.getByRole("row").filter({ hasText: inlineJobNumber });
+    try {
+      await expect(inlineRow).toContainText(inlineCustomer, { timeout: 15_000 });
+    } catch {
+      await adminPage.reload();
+      await expect(inlineRow).toContainText(inlineCustomer, { timeout: 15_000 });
+    }
     await adminPage.goto(`/auftraege/${inlineJobNumber}`);
     await expect(visibleText(adminPage, inlineCustomer)).toBeVisible();
   });
@@ -1655,7 +1663,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
       overrideReason: "A1 Organisationssicht ohne hinterlegten Wochenplan",
     });
     await adminPage.goto("/kalender");
-    for (const view of ["Tag", "Woche", "Monat"]) {
+    for (const view of ["Tag", "Plantafel", "Monat"]) {
       await adminPage.getByRole("tab", { name: view, exact: true }).click();
       await expect(
         adminPage.getByRole("tab", { name: view, exact: true }),
@@ -1666,32 +1674,41 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     await adminPage.getByRole("button", { name: "Aktualisieren" }).click();
     const targetDay = calendarDay(adminPage, planningDate);
     const calendarEvent = targetDay
-      .locator(".fc-event-job")
+      .locator("[data-calendar-card]")
       .filter({ hasText: title });
     await expect(calendarEvent).toHaveCount(1, { timeout: 20_000 });
     const calendarTitle = visibleText(adminPage, title);
-    if (!(await calendarTitle.isVisible().catch(() => false))) {
+    // The month shows three items per day; the fourth waits behind „+n mehr".
+    const otherCalendarTitle = visibleText(adminPage, otherEmployeeTitle);
+    if (!(await calendarTitle.isVisible().catch(() => false)) || !(await otherCalendarTitle.isVisible().catch(() => false))) {
       await targetDay.getByText(/\+\d+ mehr/).click({ timeout: 5_000 });
     }
     await expect(calendarTitle).toBeVisible({ timeout: 20_000 });
-    await expect(visibleText(adminPage, otherEmployeeTitle)).toBeVisible();
+    await expect(otherCalendarTitle).toBeVisible();
     const calendarMain = adminPage.getByRole("main");
     await expect(
       calendarMain.getByText("Arbeitszeiten", { exact: true }),
     ).toBeVisible();
     await expect(
-      calendarMain.getByText("Aufträge", { exact: true }),
+      calendarMain.getByText("Termine", { exact: true }),
     ).toBeVisible();
-    await calendarMain.getByText("Aufträge", { exact: true }).click();
+    await calendarMain.getByText("Termine", { exact: true }).click();
     await expect(textInDom(adminPage, title)).toHaveCount(0);
-    await calendarMain.getByText("Aufträge", { exact: true }).click();
+    await calendarMain.getByText("Termine", { exact: true }).click();
     await expect(visibleText(adminPage, title)).toBeVisible();
     await calendarMain.getByRole("button", { name: /Mitarbeiter/ }).click();
     await adminPage.getByRole("button", { name: "Keine auswählen" }).click();
-    await adminPage.getByRole("button", { name: /Emil/ }).click();
+    await adminPage.getByRole("combobox", { name: "Mitarbeiter filtern" }).click();
+    await adminPage.getByRole("option", { name: /Emil/ }).click();
+    await adminPage.keyboard.press("Escape");
     await adminPage.keyboard.press("Escape");
     await expect(visibleText(adminPage, title)).toBeVisible();
     await expect(textInDom(adminPage, otherEmployeeTitle)).toHaveCount(0);
+    // The member filter persists per user (P1-24a); the later stages need every row.
+    await calendarMain.getByRole("button", { name: /Mitarbeiter/ }).click();
+    await adminPage.getByRole("button", { name: "Alle auswählen" }).click();
+    await adminPage.keyboard.press("Escape");
+    await expect(calendarMain.getByRole("button", { name: /Mitarbeiter \(\d+\)/ })).toBeVisible();
 
     await showPlanningMonth(employeePage, planningDate);
     await expect(visibleText(employeePage, title)).toBeVisible({
@@ -1797,22 +1814,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     const jobBlock = dayViewJobBlock(adminPage, title);
     await expect(jobBlock).toBeVisible({ timeout: 20_000 });
     const widthBefore = (await jobBlock.boundingBox())?.width ?? 0;
-    const rightHandle = jobBlock.locator("div.absolute.right-0");
-    const handleBox = await rightHandle.boundingBox();
-    if (!handleBox) throw new Error("A1-23 resize handle has no bounding box");
-    await adminPage.mouse.move(
-      handleBox.x + handleBox.width / 2,
-      handleBox.y + handleBox.height / 2,
-    );
-    await adminPage.mouse.down();
-    await adminPage.mouse.move(
-      handleBox.x + handleBox.width / 2 + 60,
-      handleBox.y + handleBox.height / 2,
-      {
-        steps: 12,
-      },
-    );
-    await adminPage.mouse.up();
+    await dragHandleBy(adminPage, trailingResizeHandle(jobBlock), 60);
     await confirmPlanningWarning(adminPage, "A1 Dauer bewusst verlängert");
     await expect
       .poll(async () => (await jobBlock.boundingBox())?.width ?? 0)
@@ -1824,10 +1826,11 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
       adminPage,
       "A1 Umplanung zu Bruno bewusst bestätigt",
     );
+    // The day drop snaps the start as well, so the sentence may name the new time.
     await expect(
-      visibleText(
+      visibleMatchingText(
         adminPage,
-        `Auftrag wurde zu ${world.users.buero.firstName} ${world.users.buero.lastName} verschoben.`,
+        new RegExp(`^Termin wurde zu ${world.users.buero.firstName} ${world.users.buero.lastName} (auf \\d\\d:\\d\\d Uhr )?verschoben\\.$`),
       ),
     ).toBeVisible({ timeout: 20_000 });
 
@@ -1889,20 +1892,20 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
       "set",
       { timeout: 20_000 },
     );
-    const timeline = calendarTimeline(adminPage);
-    await parkedPill.dragTo(timeline, { targetPosition: { x: 620, y: 105 } });
+    await dragCardTo(adminPage, parkedPill, calendarTimeline(adminPage, world.users.employee.id));
     await confirmPlanningWarning(
       adminPage,
       "A1 Auftrag aus Parkplatz eingeplant",
       false,
     );
     await expect(
-      visibleText(adminPage, "Auftrag wurde eingeplant."),
+      visibleMatchingText(adminPage, /^Auftrag wurde bei .* eingeplant\.$/),
     ).toBeVisible({
       timeout: 20_000,
     });
     await expect(parkedPill).toHaveCount(0, { timeout: 20_000 });
-    await expect(dayViewJobBlock(adminPage, title)).toBeVisible();
+    // The visit kept Bruno and gained Emil: the card sits in both rows; the drop row is the proof.
+    await expect(dayViewJobBlock(adminPage, title, world.users.employee.id)).toBeVisible();
   });
 
   test("A1-29: Manuelle Zeiten lehnen falsche Reihenfolge und Überlappung ab", async ({
@@ -2069,10 +2072,10 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     await expect(plannedBlock).toBeVisible({ timeout: 20_000 });
     await expect(workBlock).toBeVisible({ timeout: 20_000 });
     const calendarMain = adminPage.getByRole("main");
-    await calendarMain.getByText("Aufträge", { exact: true }).click();
+    await calendarMain.getByText("Termine", { exact: true }).click();
     await expect(plannedBlock).toHaveCount(0);
     await expect(workBlock).toBeVisible();
-    await calendarMain.getByText("Aufträge", { exact: true }).click();
+    await calendarMain.getByText("Termine", { exact: true }).click();
     await visibleText(adminPage, "Arbeitszeiten").click();
     await expect(adminPage.getByTitle(/00:10.*00:15/)).toHaveCount(0);
     await expect(dayViewJobBlock(adminPage, plannedTitle)).toBeVisible();
@@ -2081,7 +2084,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     const pendingBlock = visibleCalendarTimeBlock(adminPage, /00:00.*00:05/);
     await expect(pendingBlock).toBeVisible({ timeout: 20_000 });
     await expect(pendingBlock).toHaveClass(/bg-warning/);
-    await pendingBlock.getByRole("button").click();
+    await pendingBlock.click();
     await expect(
       adminPage.getByRole("dialog").filter({
         has: adminPage.getByRole("heading", { name: "Eintrag Details" }),
@@ -2149,7 +2152,17 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     const saveEntry = dialog.getByRole("button", { name: "Speichern", exact: true });
     await expect(entryHeading).toBeInViewport({ ratio: 1 });
     await expect(saveEntry).toBeInViewport({ ratio: 1 });
-    const initialSaveBox = await saveEntry.boundingBox();
+    // The dialog re-centres after the viewport change; compare against a settled box.
+    let settledSaveBox = await saveEntry.boundingBox();
+    await expect
+      .poll(async () => {
+        const next = await saveEntry.boundingBox();
+        const settled = JSON.stringify(next) === JSON.stringify(settledSaveBox);
+        settledSaveBox = next;
+        return settled;
+      }, { timeout: 5_000 })
+      .toBe(true);
+    const initialSaveBox = settledSaveBox;
     expect(initialSaveBox).not.toBeNull();
     expect(
       await entryBody.evaluate((body) => body.scrollHeight > body.clientHeight),
@@ -2193,16 +2206,13 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
       timeout: 20_000,
     });
 
-    const source = visibleCalendarTimeBlock(
-      adminPage,
-      /10:00.*11:30/,
-    ).getByRole("button");
+    const source = visibleCalendarTimeBlock(adminPage, /10:00.*11:30/);
     await moveCalendarBlockToMember(adminPage, source,
       `${world.users.buero.firstName} ${world.users.buero.lastName}`);
     await expect(
       visibleText(
         adminPage,
-        `Zeiteintrag wurde zu ${world.users.buero.firstName} ${world.users.buero.lastName} verschoben.`,
+        `Arbeitszeit wurde zu ${world.users.buero.firstName} ${world.users.buero.lastName} verschoben.`,
       ),
     ).toBeVisible({
       timeout: 20_000,

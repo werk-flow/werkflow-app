@@ -7,14 +7,14 @@
   },
   "baselines": [
     {
-      "scenarioId": "calendar.day.cold-open",
+      "scenarioId": "calendar.board.cold-open",
       "scenarioVersion": 1,
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "9207c50c426b7ffbf357df765dfea837bc4087c353b4779ef180721240dbfa6f",
-        "measurementDigest": "dd2f8743f5f89c64c2af9cfb47a6ab39b1a7d5e956bfda897f476191446b568c",
-        "protocol": "fixed-date-fresh-context-day-week-day-week-month-next-week-browser-raf-v3",
+        "workloadDigest": "94dfc7db42cd19fd22c57004be1c0088a99ad5cfd10ef930e0db1897597df5bb",
+        "measurementDigest": "11b08b5aae0d951a56db4d848cd7f48d3b95d0ac08f3346cedd2e8a5ef128fe3",
+        "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
         "role": "admin",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -30,34 +30,34 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 699.300048828125,
+      "referenceMs": 1061.599853515625,
       "samples": [
-        652.89990234375,
-        699.300048828125,
-        808.199951171875
+        960.699951171875,
+        1061.599853515625,
+        1157.100341796875
       ],
       "source": {
-        "runKey": "2026-09-18T004206826Z-aa6651",
+        "runKey": "2026-09-24T140909099Z-b16417",
         "runKeys": [
-          "2026-09-18T004206826Z-aa6651"
+          "2026-09-24T140909099Z-b16417"
         ],
-        "buildId": "64063ae0-2570-4d68-8915-0eea0607b5ac",
-        "recordedAt": "2026-09-18T00:42:55.044Z"
+        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
+        "recordedAt": "2026-09-24T14:10:29.650Z"
       },
       "review": {
-        "reason": "Recalibration on the beta candidate 64063ae0-2570-4d68-8915-0eea0607b5ac (pre-Wave-3 step 5 release run, 2026-09-18); retires the Step 3 and pre-Wave-3 transfer chain (decision D6)",
-        "reviewedAt": "2026-09-18T00:48:36.288Z"
+        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
+        "reviewedAt": "2026-09-24T14:27:15.238Z"
       }
     },
     {
-      "scenarioId": "calendar.day-to-week.uncovered",
+      "scenarioId": "calendar.board.reassign.visible",
       "scenarioVersion": 1,
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "9207c50c426b7ffbf357df765dfea837bc4087c353b4779ef180721240dbfa6f",
-        "measurementDigest": "a1eb7867502f628f321007d810c8becf1ae1985768f33bd912d1da83ca52c95a",
-        "protocol": "fixed-date-fresh-context-day-week-day-week-month-next-week-browser-raf-v3",
+        "workloadDigest": "94dfc7db42cd19fd22c57004be1c0088a99ad5cfd10ef930e0db1897597df5bb",
+        "measurementDigest": "f6908823d0dc5d0f12ea5a6974ac7aba23d8eeea017202a91269a2e9fad0750d",
+        "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
         "role": "admin",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -73,34 +73,34 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 394.5,
+      "referenceMs": 59.099853515625,
       "samples": [
-        384.5,
-        394.5,
-        416
+        54.800048828125,
+        59.099853515625,
+        62.199951171875
       ],
       "source": {
-        "runKey": "2026-09-18T004206826Z-aa6651",
+        "runKey": "2026-09-24T140909099Z-b16417",
         "runKeys": [
-          "2026-09-18T004206826Z-aa6651"
+          "2026-09-24T140909099Z-b16417"
         ],
-        "buildId": "64063ae0-2570-4d68-8915-0eea0607b5ac",
-        "recordedAt": "2026-09-18T00:42:56.707Z"
+        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
+        "recordedAt": "2026-09-24T14:10:32.632Z"
       },
       "review": {
-        "reason": "Recalibration on the beta candidate 64063ae0-2570-4d68-8915-0eea0607b5ac (pre-Wave-3 step 5 release run, 2026-09-18); retires the Step 3 and pre-Wave-3 transfer chain (decision D6)",
-        "reviewedAt": "2026-09-18T00:48:36.288Z"
+        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
+        "reviewedAt": "2026-09-24T14:27:15.238Z"
       }
     },
     {
-      "scenarioId": "calendar.week-to-day.covered",
+      "scenarioId": "calendar.board.reassign.settled",
       "scenarioVersion": 1,
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "9207c50c426b7ffbf357df765dfea837bc4087c353b4779ef180721240dbfa6f",
-        "measurementDigest": "ebf035d7a8d78971dde4eefa626590792979a942a408c914dee1dd18f8297b4a",
-        "protocol": "fixed-date-fresh-context-day-week-day-week-month-next-week-browser-raf-v3",
+        "workloadDigest": "94dfc7db42cd19fd22c57004be1c0088a99ad5cfd10ef930e0db1897597df5bb",
+        "measurementDigest": "40a1fa028f527fa81c5b665e855861fd0bcffaea26f9af2a9e25d93cae778161",
+        "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
         "role": "admin",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -116,34 +116,34 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 87.699951171875,
+      "referenceMs": 185.199951171875,
       "samples": [
-        83.39990234375,
-        87.699951171875,
-        89
+        179.400146484375,
+        185.199951171875,
+        230.699951171875
       ],
       "source": {
-        "runKey": "2026-09-18T004206826Z-aa6651",
+        "runKey": "2026-09-24T140909099Z-b16417",
         "runKeys": [
-          "2026-09-18T004206826Z-aa6651"
+          "2026-09-24T140909099Z-b16417"
         ],
-        "buildId": "64063ae0-2570-4d68-8915-0eea0607b5ac",
-        "recordedAt": "2026-09-18T00:42:56.910Z"
+        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
+        "recordedAt": "2026-09-24T14:10:36.034Z"
       },
       "review": {
-        "reason": "Recalibration on the beta candidate 64063ae0-2570-4d68-8915-0eea0607b5ac (pre-Wave-3 step 5 release run, 2026-09-18); retires the Step 3 and pre-Wave-3 transfer chain (decision D6)",
-        "reviewedAt": "2026-09-18T00:48:36.288Z"
+        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
+        "reviewedAt": "2026-09-24T14:27:15.238Z"
       }
     },
     {
-      "scenarioId": "calendar.week-to-month.uncovered",
-      "scenarioVersion": 2,
+      "scenarioId": "calendar.board-to-day.covered",
+      "scenarioVersion": 1,
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "9207c50c426b7ffbf357df765dfea837bc4087c353b4779ef180721240dbfa6f",
-        "measurementDigest": "d50d94dc709edcff89dae2d91e2e27537adcd184f6258ba11005713a7a686f2c",
-        "protocol": "fixed-date-fresh-context-day-week-day-week-month-next-week-browser-raf-v3",
+        "workloadDigest": "94dfc7db42cd19fd22c57004be1c0088a99ad5cfd10ef930e0db1897597df5bb",
+        "measurementDigest": "0e08fd05d2906264fc137bb76d2e1ccc78765341c3b8cee1a178411e59e61e87",
+        "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
         "role": "admin",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -159,34 +159,292 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 1206.2998046875,
+      "referenceMs": 87,
       "samples": [
-        1183.89990234375,
-        1206.2998046875,
-        1258.7001953125
+        86.2998046875,
+        87,
+        89.099853515625
       ],
       "source": {
-        "runKey": "2026-09-18T004206826Z-aa6651",
+        "runKey": "2026-09-24T140909099Z-b16417",
         "runKeys": [
-          "2026-09-18T004206826Z-aa6651"
+          "2026-09-24T140909099Z-b16417"
         ],
-        "buildId": "64063ae0-2570-4d68-8915-0eea0607b5ac",
-        "recordedAt": "2026-09-18T00:42:58.718Z"
+        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
+        "recordedAt": "2026-09-24T14:10:38.582Z"
       },
       "review": {
-        "reason": "Recalibration on the beta candidate 64063ae0-2570-4d68-8915-0eea0607b5ac (pre-Wave-3 step 5 release run, 2026-09-18); retires the Step 3 and pre-Wave-3 transfer chain (decision D6)",
-        "reviewedAt": "2026-09-18T00:48:36.288Z"
+        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
+        "reviewedAt": "2026-09-24T14:27:15.238Z"
+      }
+    },
+    {
+      "scenarioId": "calendar.day.resize.settled",
+      "scenarioVersion": 1,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "94dfc7db42cd19fd22c57004be1c0088a99ad5cfd10ef930e0db1897597df5bb",
+        "measurementDigest": "37c4ae2a889a2edf234eeddf5593b5af41370676fa9c6c1bb96dc1f77fea91c3",
+        "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
+        "role": "admin",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 174.199951171875,
+      "samples": [
+        152.599853515625,
+        174.199951171875,
+        248.300048828125
+      ],
+      "source": {
+        "runKey": "2026-09-24T140909099Z-b16417",
+        "runKeys": [
+          "2026-09-24T140909099Z-b16417"
+        ],
+        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
+        "recordedAt": "2026-09-24T14:10:39.114Z"
+      },
+      "review": {
+        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
+        "reviewedAt": "2026-09-24T14:27:15.238Z"
+      }
+    },
+    {
+      "scenarioId": "calendar.day-to-board.covered",
+      "scenarioVersion": 1,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "94dfc7db42cd19fd22c57004be1c0088a99ad5cfd10ef930e0db1897597df5bb",
+        "measurementDigest": "fb02977655d9857d884bae7abb315fc2e7b650a0c814e4b833e52988c6bd28bb",
+        "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
+        "role": "admin",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 373.900146484375,
+      "samples": [
+        284.2001953125,
+        373.900146484375,
+        374.199951171875
+      ],
+      "source": {
+        "runKey": "2026-09-24T140909099Z-b16417",
+        "runKeys": [
+          "2026-09-24T140909099Z-b16417"
+        ],
+        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
+        "recordedAt": "2026-09-24T14:10:44.781Z"
+      },
+      "review": {
+        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
+        "reviewedAt": "2026-09-24T14:27:15.238Z"
+      }
+    },
+    {
+      "scenarioId": "calendar.board.six-weeks",
+      "scenarioVersion": 1,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "94dfc7db42cd19fd22c57004be1c0088a99ad5cfd10ef930e0db1897597df5bb",
+        "measurementDigest": "baf578c4521982d286d6c8b040d74fd2f0815e041975100ab6c3e472aaadc1d0",
+        "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
+        "role": "admin",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 759.199951171875,
+      "samples": [
+        757.800048828125,
+        759.199951171875,
+        973.39990234375
+      ],
+      "source": {
+        "runKey": "2026-09-24T140909099Z-b16417",
+        "runKeys": [
+          "2026-09-24T140909099Z-b16417"
+        ],
+        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
+        "recordedAt": "2026-09-24T14:10:45.883Z"
+      },
+      "review": {
+        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
+        "reviewedAt": "2026-09-24T14:27:15.238Z"
+      }
+    },
+    {
+      "scenarioId": "calendar.board-to-month.uncovered",
+      "scenarioVersion": 1,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "94dfc7db42cd19fd22c57004be1c0088a99ad5cfd10ef930e0db1897597df5bb",
+        "measurementDigest": "71d57c64b8b93425342b2414a998874aafcf7e9dc01bd75f809363d41ffb3109",
+        "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
+        "role": "admin",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 395.699951171875,
+      "samples": [
+        380.7998046875,
+        395.699951171875,
+        397.800048828125
+      ],
+      "source": {
+        "runKey": "2026-09-24T140909099Z-b16417",
+        "runKeys": [
+          "2026-09-24T140909099Z-b16417"
+        ],
+        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
+        "recordedAt": "2026-09-24T14:10:47.050Z"
+      },
+      "review": {
+        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
+        "reviewedAt": "2026-09-24T14:27:15.238Z"
+      }
+    },
+    {
+      "scenarioId": "calendar.month.move.visible",
+      "scenarioVersion": 1,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "94dfc7db42cd19fd22c57004be1c0088a99ad5cfd10ef930e0db1897597df5bb",
+        "measurementDigest": "256483b90cdb93c5d6127411129b13394100b998b3b58c6f7e5fd9c0ac5c0187",
+        "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
+        "role": "admin",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 24.199951171875,
+      "samples": [
+        18.7998046875,
+        24.199951171875,
+        28.5
+      ],
+      "source": {
+        "runKey": "2026-09-24T140909099Z-b16417",
+        "runKeys": [
+          "2026-09-24T140909099Z-b16417"
+        ],
+        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
+        "recordedAt": "2026-09-24T14:10:47.627Z"
+      },
+      "review": {
+        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
+        "reviewedAt": "2026-09-24T14:27:15.238Z"
+      }
+    },
+    {
+      "scenarioId": "calendar.month.move.settled",
+      "scenarioVersion": 1,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "94dfc7db42cd19fd22c57004be1c0088a99ad5cfd10ef930e0db1897597df5bb",
+        "measurementDigest": "8d842c816b54d0a5d4e354b2e996790c82745142f3dac2e359cc5e5a98cb1731",
+        "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
+        "role": "admin",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 161.800048828125,
+      "samples": [
+        154.10009765625,
+        161.800048828125,
+        167.39990234375
+      ],
+      "source": {
+        "runKey": "2026-09-24T140909099Z-b16417",
+        "runKeys": [
+          "2026-09-24T140909099Z-b16417"
+        ],
+        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
+        "recordedAt": "2026-09-24T14:10:50.674Z"
+      },
+      "review": {
+        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
+        "reviewedAt": "2026-09-24T14:27:15.238Z"
       }
     },
     {
       "scenarioId": "calendar.month-next.uncovered",
-      "scenarioVersion": 2,
+      "scenarioVersion": 3,
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "9207c50c426b7ffbf357df765dfea837bc4087c353b4779ef180721240dbfa6f",
-        "measurementDigest": "0e85c0dd2e1924772accf0a9ea6dcda574a01b605d82ff465a9e06d35ad391c9",
-        "protocol": "fixed-date-fresh-context-day-week-day-week-month-next-week-browser-raf-v3",
+        "workloadDigest": "94dfc7db42cd19fd22c57004be1c0088a99ad5cfd10ef930e0db1897597df5bb",
+        "measurementDigest": "fcb568a6cd4a8806612a6381f1d594ebb4c69c44c0b84a26df2f3e712eaf81fa",
+        "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
         "role": "admin",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -202,34 +460,34 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 792.400146484375,
+      "referenceMs": 182.300048828125,
       "samples": [
-        786,
-        792.400146484375,
-        804.5
+        180.800048828125,
+        182.300048828125,
+        190.599853515625
       ],
       "source": {
-        "runKey": "2026-09-18T004206826Z-aa6651",
+        "runKey": "2026-09-24T140909099Z-b16417",
         "runKeys": [
-          "2026-09-18T004206826Z-aa6651"
+          "2026-09-24T140909099Z-b16417"
         ],
-        "buildId": "64063ae0-2570-4d68-8915-0eea0607b5ac",
-        "recordedAt": "2026-09-18T00:42:59.960Z"
+        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
+        "recordedAt": "2026-09-24T14:10:53.270Z"
       },
       "review": {
-        "reason": "Recalibration on the beta candidate 64063ae0-2570-4d68-8915-0eea0607b5ac (pre-Wave-3 step 5 release run, 2026-09-18); retires the Step 3 and pre-Wave-3 transfer chain (decision D6)",
-        "reviewedAt": "2026-09-18T00:48:36.288Z"
+        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
+        "reviewedAt": "2026-09-24T14:27:15.238Z"
       }
     },
     {
-      "scenarioId": "calendar.month-to-week.covered",
+      "scenarioId": "calendar.month-to-board.covered",
       "scenarioVersion": 1,
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "9207c50c426b7ffbf357df765dfea837bc4087c353b4779ef180721240dbfa6f",
-        "measurementDigest": "4c4159ef6b9bb081b389268717f02fd3bc240c77c69c92c1fb361d9121f44698",
-        "protocol": "fixed-date-fresh-context-day-week-day-week-month-next-week-browser-raf-v3",
+        "workloadDigest": "94dfc7db42cd19fd22c57004be1c0088a99ad5cfd10ef930e0db1897597df5bb",
+        "measurementDigest": "671c197860f5a76d01f81e2d29a0fcae752a143287adb9fb139daf9d34993128",
+        "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
         "role": "admin",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -245,109 +503,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 120,
+      "referenceMs": 82.199951171875,
       "samples": [
-        117.60009765625,
-        120,
-        135.5
+        76.10009765625,
+        82.199951171875,
+        94.5
       ],
       "source": {
-        "runKey": "2026-09-18T004206826Z-aa6651",
+        "runKey": "2026-09-24T140909099Z-b16417",
         "runKeys": [
-          "2026-09-18T004206826Z-aa6651"
+          "2026-09-24T140909099Z-b16417"
         ],
-        "buildId": "64063ae0-2570-4d68-8915-0eea0607b5ac",
-        "recordedAt": "2026-09-18T00:43:00.266Z"
+        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
+        "recordedAt": "2026-09-24T14:10:53.466Z"
       },
       "review": {
-        "reason": "Recalibration on the beta candidate 64063ae0-2570-4d68-8915-0eea0607b5ac (pre-Wave-3 step 5 release run, 2026-09-18); retires the Step 3 and pre-Wave-3 transfer chain (decision D6)",
-        "reviewedAt": "2026-09-18T00:48:36.288Z"
-      }
-    },
-    {
-      "scenarioId": "customers.list.open",
-      "scenarioVersion": 1,
-      "profile": "typical",
-      "backend": "local",
-      "context": {
-        "workloadDigest": "9207c50c426b7ffbf357df765dfea837bc4087c353b4779ef180721240dbfa6f",
-        "measurementDigest": "715e532304fa41fd2ffe3e75df3e2f6ef42d72a06580ad34f2a8b2a58de0a2c4",
-        "protocol": "fixed-workload-fresh-context-customer-then-job-navigation-browser-raf-v3",
-        "role": "admin",
-        "browser": "chromium",
-        "browserVersion": "151.0.7922.34",
-        "viewport": {
-          "width": 1440,
-          "height": 900
-        },
-        "deviceScaleFactor": 1,
-        "platform": "win32",
-        "architecture": "x64",
-        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
-        "logicalProcessors": 14,
-        "memoryGiB": 31,
-        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
-      },
-      "referenceMs": 732.2001953125,
-      "samples": [
-        729.599853515625,
-        732.2001953125,
-        857.5
-      ],
-      "source": {
-        "runKey": "2026-09-18T004348887Z-269644",
-        "runKeys": [
-          "2026-09-18T004348887Z-269644"
-        ],
-        "buildId": "64063ae0-2570-4d68-8915-0eea0607b5ac",
-        "recordedAt": "2026-09-18T00:44:26.922Z"
-      },
-      "review": {
-        "reason": "Recalibration on the beta candidate 64063ae0-2570-4d68-8915-0eea0607b5ac (pre-Wave-3 step 5 release run, 2026-09-18); retires the Step 3 and pre-Wave-3 transfer chain (decision D6)",
-        "reviewedAt": "2026-09-18T00:48:36.288Z"
-      }
-    },
-    {
-      "scenarioId": "jobs.list.open",
-      "scenarioVersion": 1,
-      "profile": "typical",
-      "backend": "local",
-      "context": {
-        "workloadDigest": "9207c50c426b7ffbf357df765dfea837bc4087c353b4779ef180721240dbfa6f",
-        "measurementDigest": "77fb7e4147e9f869ff539b0608731e4d8591aede62c67a3bbcee359d7b51e495",
-        "protocol": "fixed-workload-fresh-context-customer-then-job-navigation-browser-raf-v3",
-        "role": "admin",
-        "browser": "chromium",
-        "browserVersion": "151.0.7922.34",
-        "viewport": {
-          "width": 1440,
-          "height": 900
-        },
-        "deviceScaleFactor": 1,
-        "platform": "win32",
-        "architecture": "x64",
-        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
-        "logicalProcessors": 14,
-        "memoryGiB": 31,
-        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
-      },
-      "referenceMs": 560,
-      "samples": [
-        554.099853515625,
-        560,
-        603.699951171875
-      ],
-      "source": {
-        "runKey": "2026-09-18T004348887Z-269644",
-        "runKeys": [
-          "2026-09-18T004348887Z-269644"
-        ],
-        "buildId": "64063ae0-2570-4d68-8915-0eea0607b5ac",
-        "recordedAt": "2026-09-18T00:44:27.780Z"
-      },
-      "review": {
-        "reason": "Recalibration on the beta candidate 64063ae0-2570-4d68-8915-0eea0607b5ac (pre-Wave-3 step 5 release run, 2026-09-18); retires the Step 3 and pre-Wave-3 transfer chain (decision D6)",
-        "reviewedAt": "2026-09-18T00:48:36.288Z"
+        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
+        "reviewedAt": "2026-09-24T14:27:15.238Z"
       }
     },
     {
@@ -357,7 +529,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "bedde7fe5685d40c13aa36c96c32bbbdb4d4ed2aef8a36981c9a6397398f1925",
-        "measurementDigest": "efea4a11af6c452027661ad23dd2a8e933eaaec071135e595abdd852b24e12af",
+        "measurementDigest": "ba54ec620b28ecd4fe82febbd4cbfd9b2e1e8dbd845da556def3c50f43f80823",
         "protocol": "independent-fixed-month-three-distinct-overlap-confirmations-browser-raf-v3",
         "role": "buero",
         "browser": "chromium",
@@ -374,23 +546,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 1033.5,
+      "referenceMs": 1009.60009765625,
       "samples": [
-        1003.5,
-        1033.5,
-        1195.5
+        943.699951171875,
+        1009.60009765625,
+        1214.89990234375
       ],
       "source": {
-        "runKey": "2026-09-18T004630732Z-469daa",
+        "runKey": "2026-09-24T141423521Z-d9fa39",
         "runKeys": [
-          "2026-09-18T004630732Z-469daa"
+          "2026-09-24T141423521Z-d9fa39"
         ],
-        "buildId": "64063ae0-2570-4d68-8915-0eea0607b5ac",
-        "recordedAt": "2026-09-18T00:47:31.167Z"
+        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
+        "recordedAt": "2026-09-24T14:15:17.248Z"
       },
       "review": {
-        "reason": "Recalibration on the beta candidate 64063ae0-2570-4d68-8915-0eea0607b5ac (pre-Wave-3 step 5 release run, 2026-09-18); retires the Step 3 and pre-Wave-3 transfer chain (decision D6)",
-        "reviewedAt": "2026-09-18T00:48:36.288Z"
+        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
+        "reviewedAt": "2026-09-24T14:27:15.238Z"
       }
     },
     {
@@ -400,7 +572,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "bedde7fe5685d40c13aa36c96c32bbbdb4d4ed2aef8a36981c9a6397398f1925",
-        "measurementDigest": "bbc1bae2ce274751ffd26562b901ad7783749a44125a77038d7fc9301ed5b1bb",
+        "measurementDigest": "f1e999d469ef792ed6946e9708ef5f61fd40b17d02ce9e31e68df265cdf1c7f0",
         "protocol": "independent-fixed-month-fresh-employee-after-three-saves-browser-raf-v3",
         "role": "employee",
         "browser": "chromium",
@@ -417,23 +589,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 1269.300048828125,
+      "referenceMs": 432.2998046875,
       "samples": [
-        1200.699951171875,
-        1269.300048828125,
-        1323.500244140625
+        416,
+        432.2998046875,
+        434
       ],
       "source": {
-        "runKey": "2026-09-18T004630732Z-469daa",
+        "runKey": "2026-09-24T141423521Z-d9fa39",
         "runKeys": [
-          "2026-09-18T004630732Z-469daa"
+          "2026-09-24T141423521Z-d9fa39"
         ],
-        "buildId": "64063ae0-2570-4d68-8915-0eea0607b5ac",
-        "recordedAt": "2026-09-18T00:47:38.078Z"
+        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
+        "recordedAt": "2026-09-24T14:15:21.215Z"
       },
       "review": {
-        "reason": "Recalibration on the beta candidate 64063ae0-2570-4d68-8915-0eea0607b5ac (pre-Wave-3 step 5 release run, 2026-09-18); retires the Step 3 and pre-Wave-3 transfer chain (decision D6)",
-        "reviewedAt": "2026-09-18T00:48:36.288Z"
+        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
+        "reviewedAt": "2026-09-24T14:27:15.238Z"
       }
     },
     {
@@ -443,7 +615,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "bedde7fe5685d40c13aa36c96c32bbbdb4d4ed2aef8a36981c9a6397398f1925",
-        "measurementDigest": "ea5b5fd7a70f46434262355fefd4eb68bcb0cdec4b47dd550197854f36871006",
+        "measurementDigest": "79dd6727798b0f49af0e6589899f4f6b731f19c5ec63f7e46bf4efc45eb6748b",
         "protocol": "independent-fixed-month-fresh-admin-after-legacy-save-browser-raf-v3",
         "role": "admin",
         "browser": "chromium",
@@ -460,23 +632,109 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 1101.7001953125,
+      "referenceMs": 453.699951171875,
       "samples": [
-        1056.199951171875,
-        1101.7001953125,
-        1151.699951171875
+        434,
+        453.699951171875,
+        1021.900146484375
       ],
       "source": {
-        "runKey": "2026-09-18T004630732Z-469daa",
+        "runKey": "2026-09-24T141423521Z-d9fa39",
         "runKeys": [
-          "2026-09-18T004630732Z-469daa"
+          "2026-09-24T141423521Z-d9fa39"
         ],
-        "buildId": "64063ae0-2570-4d68-8915-0eea0607b5ac",
-        "recordedAt": "2026-09-18T00:47:46.921Z"
+        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
+        "recordedAt": "2026-09-24T14:15:27.927Z"
       },
       "review": {
-        "reason": "Recalibration on the beta candidate 64063ae0-2570-4d68-8915-0eea0607b5ac (pre-Wave-3 step 5 release run, 2026-09-18); retires the Step 3 and pre-Wave-3 transfer chain (decision D6)",
-        "reviewedAt": "2026-09-18T00:48:36.288Z"
+        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
+        "reviewedAt": "2026-09-24T14:27:15.238Z"
+      }
+    },
+    {
+      "scenarioId": "customers.list.open",
+      "scenarioVersion": 1,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "94dfc7db42cd19fd22c57004be1c0088a99ad5cfd10ef930e0db1897597df5bb",
+        "measurementDigest": "7617df45a89b06f4752a7e4469be79923472bd5fc0565f6cec6d48c87c202f39",
+        "protocol": "fixed-workload-fresh-context-customer-then-job-navigation-browser-raf-v3",
+        "role": "admin",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 770,
+      "samples": [
+        707.5,
+        770,
+        951.599853515625
+      ],
+      "source": {
+        "runKey": "2026-09-24T141150452Z-5fa7d9",
+        "runKeys": [
+          "2026-09-24T141150452Z-5fa7d9"
+        ],
+        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
+        "recordedAt": "2026-09-24T14:12:21.944Z"
+      },
+      "review": {
+        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
+        "reviewedAt": "2026-09-24T14:27:15.238Z"
+      }
+    },
+    {
+      "scenarioId": "jobs.list.open",
+      "scenarioVersion": 1,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "94dfc7db42cd19fd22c57004be1c0088a99ad5cfd10ef930e0db1897597df5bb",
+        "measurementDigest": "de280fbf42ba151eed46375648584d35e552a6a91512e2960a8dbc56b7645769",
+        "protocol": "fixed-workload-fresh-context-customer-then-job-navigation-browser-raf-v3",
+        "role": "admin",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 597.60009765625,
+      "samples": [
+        593.800048828125,
+        597.60009765625,
+        606.099853515625
+      ],
+      "source": {
+        "runKey": "2026-09-24T141150452Z-5fa7d9",
+        "runKeys": [
+          "2026-09-24T141150452Z-5fa7d9"
+        ],
+        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
+        "recordedAt": "2026-09-24T14:12:22.825Z"
+      },
+      "review": {
+        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
+        "reviewedAt": "2026-09-24T14:27:15.238Z"
       }
     }
   ]

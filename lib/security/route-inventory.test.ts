@@ -22,6 +22,10 @@ const reviewedHandlers: Record<string, { authorization: string; mustImport: read
     authorization: 'delegates to getCalendarWindow: verified cookie identity, active organization equality, bounded paired ranges, and constituent role permissions; every response is private and no-store',
     mustImport: ['getCalendarWindow'],
   },
+  'app/api/calendar-board/route.ts': {
+    authorization: 'delegates to getCalendarBoardContext: verified cookie identity, active organization equality, a bounded date window, manager-only rows with the employee reduced to their own record; every response is private and no-store',
+    mustImport: ['getCalendarBoardContext'],
+  },
   'app/api/attention-counts/route.ts': {
     authorization: 'delegates to getAttentionCounts, which authenticates the cookie session, resolves the active organization, and checks membership',
     mustImport: ['getAttentionCounts'],

@@ -11,6 +11,8 @@ export function shiftCalendarDate(
   currentDate: Date,
   view: CalendarNavigationView,
   direction: -1 | 1,
+  /** The board pages by its horizon (P1-24a): one to six weeks per step. */
+  horizonWeeks = 1,
 ): Date {
   const shiftedDate = new Date(currentDate);
 
@@ -20,7 +22,7 @@ export function shiftCalendarDate(
   }
 
   if (view === "week") {
-    shiftedDate.setDate(shiftedDate.getDate() + direction * 7);
+    shiftedDate.setDate(shiftedDate.getDate() + direction * 7 * horizonWeeks);
     return shiftedDate;
   }
 
@@ -70,6 +72,7 @@ function mondayOfWeek(date: Date): Date {
 export function getCalendarFetchRange(
   currentDate: Date,
   view: CalendarNavigationView,
+  horizonWeeks = 1,
 ): CalendarFetchRange {
   if (view === "day") {
     return {
@@ -81,7 +84,7 @@ export function getCalendarFetchRange(
     const monday = mondayOfWeek(currentDate);
     return {
       start: startOfLocalDay(monday, -1),
-      end: endOfLocalDay(monday, 7),
+      end: endOfLocalDay(monday, 7 * horizonWeeks),
     };
   }
   return getCalendarMonthFetchRange(currentDate);

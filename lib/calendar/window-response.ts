@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { holidayRegionHistoryEntrySchema } from '@/lib/personnel/targets';
 import type { CalendarWindowResult } from './actions';
+import type { CalendarBoardResult } from './board-actions';
 
 const text = z.string();
 const nullableText = text.nullable();
@@ -36,7 +37,32 @@ const changeRequest = z.object({
   changeType: z.enum(['edit', 'delete']), proposedTimestamp: nullableText, originalTimestamp: nullableText,
   status: reviewStatus, reviewedBy: nullableText, reviewedAt: nullableText, createdAt: text, updatedAt: text,
 });
-const absence = z.object({ id: text, personName: text, startDate: text, endDate: text, dayPortion: z.enum(['full', 'half_day']) });
+const absence = z.object({ id: text, employeeRecordId: text, personName: text, startDate: text, endDate: text, dayPortion: z.enum(['full', 'half_day']) });
+
+const boardRow = z.object({
+  employeeRecordId: text, userId: nullableText, displayName: text,
+  role: z.enum(['admin', 'buero', 'employee']).nullable(), hasLogin: z.boolean(),
+  teamId: nullableText, teamName: nullableText, entryDate: nullableText, exitDate: nullableText,
+});
+const boardDay = z.object({
+  employeeRecordId: text, date: text, targetMinutes: z.number(), baseTargetMinutes: z.number(),
+  reason: z.enum(['working', 'no_work_day', 'holiday', 'closure']), label: nullableText,
+  absence: z.object({ type: z.enum(['vacation', 'sickness']), portion: z.enum(['full', 'half_day']) }).nullable(),
+  pendingVacation: z.boolean(),
+});
+const boardDispatch = z.object({
+  occurrenceId: text, employeeRecordId: text,
+  state: z.enum(['ausstehend', 'bestaetigt', 'uebernommen', 'rueckfrage', 'nicht_moeglich']),
+});
+
+/** The board context beside the window (P1-24a), validated the same way. */
+export const calendarBoardResponseSchema = z.discriminatedUnion('success', [
+  z.object({ success: z.literal(false), error: text }),
+  z.object({
+    success: z.literal(true), rows: z.array(boardRow), days: z.array(boardDay),
+    dispatch: z.array(boardDispatch), materialDemandJobIds: z.array(text),
+  }),
+]) satisfies z.ZodType<CalendarBoardResult>;
 
 /** Validate transported fields before calendar components consume JSON. */
 export const calendarWindowResponseSchema = z.discriminatedUnion('success', [

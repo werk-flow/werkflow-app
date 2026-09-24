@@ -1,231 +1,80 @@
 'use client';
 
-import { useState } from 'react';
-import { Filter, Check, Search } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { Filter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger
-} from '@/components/ui/popover';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { SearchableMultiSelect } from '@/components/ui/searchable-select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import type { CalendarView, CalendarFilters } from './calendar-container';
-
-interface CalendarMember {
-  user_id: string;
-  first_name: string | null;
-  last_name: string | null;
-  email: string;
-  role: string;
-}
+import type { CalendarView } from './calendar-container';
+import { memberDisplayName, type CalendarMember } from './members';
 
 interface CalendarViewTabsProps {
   view: CalendarView;
   onViewChange: (view: CalendarView) => void;
   members: CalendarMember[];
-  selectedMembers: string[];
-  onSelectedMembersChange: (members: string[]) => void;
+  /** null means every member. */
+  selectedMemberIds: string[] | null;
+  onSelectedMemberIdsChange: (memberIds: string[] | null) => void;
   isAdminOrManager: boolean;
-  filters: CalendarFilters;
-  onFiltersChange: (filters: CalendarFilters) => void;
+  showWorkingHours: boolean;
+  onShowWorkingHoursChange: (value: boolean) => void;
+  showJobs: boolean;
+  onShowJobsChange: (value: boolean) => void;
+  /** The active view's own toolbar (the board's horizon, density and filters). */
+  children?: ReactNode;
 }
 
-function getMemberDisplayName(member: CalendarMember): string {
-  if (member.first_name || member.last_name) {
-    return `${member.first_name || ''} ${member.last_name || ''}`.trim();
-  }
-  return member.email;
-}
-
-export function CalendarViewTabs({
-  view,
-  onViewChange,
-  members,
-  selectedMembers,
-  onSelectedMembersChange,
-  isAdminOrManager,
-  filters,
-  onFiltersChange
-}: CalendarViewTabsProps) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isMemberFilterOpen, setIsMemberFilterOpen] = useState(false);
-
-  const filteredMembers = members.filter((member) => {
-    const name = getMemberDisplayName(member).toLowerCase();
-    const email = member.email.toLowerCase();
-    const query = searchQuery.toLowerCase();
-    return name.includes(query) || email.includes(query);
-  });
-
-  const handleToggleMember = (userId: string) => {
-    if (selectedMembers.includes(userId)) {
-      onSelectedMembersChange(selectedMembers.filter((id) => id !== userId));
-    } else {
-      onSelectedMembersChange([...selectedMembers, userId]);
-    }
-  };
-
-  const handleSelectAll = () => {
-    onSelectedMembersChange(members.map((m) => m.user_id));
-  };
-
-  const handleSelectNone = () => {
-    onSelectedMembersChange([]);
-  };
-
-  const handleMemberFilterOpenChange = (open: boolean) => {
-    setIsMemberFilterOpen(open);
-
-    if (!open) {
-      setSearchQuery('');
-    }
-  };
-
-  const handleToggleWorkingHours = () => {
-    onFiltersChange({
-      ...filters,
-      showWorkingHours: !filters.showWorkingHours
-    });
-  };
-
-  const handleToggleJobs = () => {
-    onFiltersChange({
-      ...filters,
-      showJobs: !filters.showJobs
-    });
-  };
-
-  const memberFilterContent = (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <Search className="h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Mitarbeiter suchen..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="h-8"
-        />
-      </div>
-
-      <div className="flex gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleSelectAll}
-          className="flex-1 text-xs"
-        >
-          Alle auswählen
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleSelectNone}
-          className="flex-1 text-xs"
-        >
-          Keine auswählen
-        </Button>
-      </div>
-
-      <div className="max-h-60 overflow-auto">
-        {filteredMembers.length === 0 ? (
-          <p className="py-2 text-center text-sm text-muted-foreground">
-            Keine Mitarbeiter gefunden
-          </p>
-        ) : (
-          <div className="space-y-1">
-            {filteredMembers.map((member) => (
-              <button
-                key={member.user_id}
-                type="button"
-                onClick={() => handleToggleMember(member.user_id)}
-                className={cn(
-                  'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
-                  'hover:bg-accent',
-                  selectedMembers.includes(member.user_id) && 'bg-accent/50'
-                )}
-              >
-                <div
-                  className={cn(
-                    'flex h-4 w-4 items-center justify-center rounded-sm border',
-                    selectedMembers.includes(member.user_id)
-                      ? 'border-primary bg-primary text-primary-foreground'
-                      : 'border-muted-foreground'
-                  )}
-                >
-                  {selectedMembers.includes(member.user_id) && (
-                    <Check className="h-3 w-3" />
-                  )}
-                </div>
-                <span className="flex-1 truncate text-left">
-                  {getMemberDisplayName(member)}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
+export function CalendarViewTabs({ view, onViewChange, members, selectedMemberIds, onSelectedMemberIdsChange, isAdminOrManager, showWorkingHours, onShowWorkingHoursChange, showJobs, onShowJobsChange, children }: CalendarViewTabsProps) {
+  const selectedCount = selectedMemberIds ? selectedMemberIds.length : members.length;
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
-        <Tabs
-          value={view}
-          onValueChange={(v) => onViewChange(v as CalendarView)}
-          className="min-w-0"
-        >
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+        <Tabs value={view} onValueChange={(value) => onViewChange(value as CalendarView)} className="min-w-0">
           <TabsList>
             <TabsTrigger value="day">Tag</TabsTrigger>
-            <TabsTrigger value="week">Woche</TabsTrigger>
+            <TabsTrigger value="week">{isAdminOrManager ? 'Plantafel' : 'Woche'}</TabsTrigger>
             <TabsTrigger value="month">Monat</TabsTrigger>
           </TabsList>
         </Tabs>
 
-        {/* Event type filters - simple checkbox style */}
         <div role="group" aria-label="Angezeigte Einträge" className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-          <span className="text-muted-foreground">Anzeigen:</span>
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <Checkbox checked={filters.showWorkingHours} onCheckedChange={handleToggleWorkingHours} />
-            <span className={cn('transition-colors', filters.showWorkingHours ? 'text-foreground' : 'text-muted-foreground')}>
-              Arbeitszeiten
-            </span>
+          <label className="flex cursor-pointer select-none items-center gap-2">
+            <Checkbox checked={showWorkingHours} onCheckedChange={(checked) => onShowWorkingHoursChange(checked === true)} />
+            <span className={cn('transition-colors', showWorkingHours ? 'text-foreground' : 'text-muted-foreground')}>Arbeitszeiten</span>
           </label>
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <Checkbox
-              checked={filters.showJobs}
-              onCheckedChange={handleToggleJobs}
-              className="data-[state=checked]:border-brand-purple data-[state=checked]:bg-brand-purple data-[state=checked]:text-white dark:data-[state=checked]:bg-brand-purple"
-            />
-            <span className={cn('transition-colors', filters.showJobs ? 'text-foreground' : 'text-muted-foreground')}>
-              Aufträge
-            </span>
+          <label className="flex cursor-pointer select-none items-center gap-2">
+            <Checkbox checked={showJobs} onCheckedChange={(checked) => onShowJobsChange(checked === true)} className="data-[state=checked]:border-calendar-planning-strong data-[state=checked]:bg-calendar-planning-strong data-[state=checked]:text-white" />
+            <span className={cn('transition-colors', showJobs ? 'text-foreground' : 'text-muted-foreground')}>Termine</span>
           </label>
         </div>
+        {children}
       </div>
 
       {isAdminOrManager && members.length > 0 && (
-        <Popover
-          open={isMemberFilterOpen}
-          onOpenChange={handleMemberFilterOpenChange}
-        >
+        <Popover>
           <PopoverTrigger asChild>
-            <Button variant="outline" size="sm">
-              <Filter className="mr-2 h-4 w-4" />
-              Mitarbeiter ({selectedMembers.length})
+            <Button variant="outline" size="sm" className="h-9">
+              <Filter className="mr-2 size-4" aria-hidden="true" />
+              Mitarbeiter ({selectedCount})
             </Button>
           </PopoverTrigger>
-          <PopoverContent
-            className="w-[min(20rem,calc(100vw-1rem))] p-3 sm:w-72 sm:p-4"
-            align="center"
-            side="bottom"
-            collisionPadding={8}
-            onOpenAutoFocus={(event) => event.preventDefault()}
-          >
-            {memberFilterContent}
+          <PopoverContent className="w-[min(20rem,calc(100vw-1rem))] space-y-3 p-3 sm:w-80" align="end" collisionPadding={8}>
+            <SearchableMultiSelect
+              options={members.map((member) => ({ value: member.user_id, label: memberDisplayName(member), description: member.email }))}
+              selectedIds={selectedMemberIds ?? members.map((member) => member.user_id)}
+              onSelectionChange={(ids) => onSelectedMemberIdsChange(ids.length === members.length ? null : ids)}
+              placeholder="Mitarbeiter wählen"
+              ariaLabel="Mitarbeiter filtern"
+              searchPlaceholder="Mitarbeiter suchen …"
+              emptyMessage="Keine Mitarbeiter gefunden"
+            />
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => onSelectedMemberIdsChange(null)}>Alle auswählen</Button>
+              <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => onSelectedMemberIdsChange([])}>Keine auswählen</Button>
+            </div>
           </PopoverContent>
         </Popover>
       )}

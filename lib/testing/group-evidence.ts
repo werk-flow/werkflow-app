@@ -223,6 +223,14 @@ export function inputsUnchangedBetween(then: InputSnapshot, now: InputSnapshot, 
 
 type ResultMatch = { groupId: string; fingerprint: string; inputs?: readonly string[]; snapshot?: InputSnapshot };
 
+/** The reason prefix of an attempt the run voided because an input changed meanwhile. */
+export const INPUT_DRIFT_REASON = "Inputs changed during verification";
+
+/** A voided attempt neither proves nor blocks its group: the candidate it ran on no longer exists. */
+function voidedByDrift(result: GroupResult): boolean {
+  return result.reason?.startsWith(INPUT_DRIFT_REASON) ?? false;
+}
+
 /**
  * A result proves the current inputs when its fingerprint matches, or when the
  * snapshot it was recorded under holds the same content for every current
@@ -237,13 +245,13 @@ function resultMatches(result: GroupResult, input: ResultMatch): boolean {
 
 export function reusableGroupResult(input: ResultMatch & { results: readonly GroupResult[] }): GroupResult | undefined {
   // A later failure invalidates an older pass for the same inputs. Never cherry-pick a lucky pass.
-  const latest = input.results.filter((result) => resultMatches(result, input))
+  const latest = input.results.filter((result) => resultMatches(result, input) && !voidedByDrift(result))
     .sort((left, right) => left.startedAt.localeCompare(right.startedAt)).at(-1);
   return latest?.status === "passed" ? latest : undefined;
 }
 
 export function groupAttemptProblem(input: ResultMatch & { results: readonly GroupResult[]; recoveredRunKeys?: readonly string[] }): string | undefined {
-  const unique = new Map(input.results.filter((result) => resultMatches(result, input) && result.status !== "blocked").map((result) => [`${result.groupId}:${result.startedAt}`, result]));
+  const unique = new Map(input.results.filter((result) => resultMatches(result, input) && result.status !== "blocked" && !voidedByDrift(result)).map((result) => [`${result.groupId}:${result.startedAt}`, result]));
   const attempts = [...unique.values()].sort((left, right) => left.startedAt.localeCompare(right.startedAt));
   const latest = attempts.at(-1);
   if (latest?.status === "failed") {

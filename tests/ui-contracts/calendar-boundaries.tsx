@@ -40,12 +40,13 @@ function CalendarReader({ organization }: { organization: string }): React.JSX.E
 export function CalendarContractFixture(): React.JSX.Element {
   const [organization, setOrganization] = useState("org-a");
   const [activeView, setActiveView] = useState<CalendarView>("month");
-  const [filters, setFilters] = useState({ showWorkingHours: false, showJobs: true });
+  const [showJobs, setShowJobs] = useState(true);
+  const [showWorkingHours, setShowWorkingHours] = useState(false);
   return <CalendarOrganizationContext.Provider value={organization}>
     <button onClick={() => setOrganization((old) => old === "org-a" ? "org-b" : "org-a")}>Organisation wechseln</button>
     <output aria-label="Organisation">{organization}</output>
-    <CalendarViewTabs view={activeView} onViewChange={setActiveView} members={[]} selectedMembers={[]}
-      onSelectedMembersChange={() => {}} isAdminOrManager={false} filters={filters} onFiltersChange={setFilters} />
+    <CalendarViewTabs view={activeView} onViewChange={setActiveView} members={[]} selectedMemberIds={null}
+      onSelectedMemberIdsChange={() => {}} isAdminOrManager={false} showWorkingHours={showWorkingHours} onShowWorkingHoursChange={setShowWorkingHours} showJobs={showJobs} onShowJobsChange={setShowJobs} />
     <RealtimeProvider><CalendarReader organization={organization} /></RealtimeProvider>
   </CalendarOrganizationContext.Provider>;
 }

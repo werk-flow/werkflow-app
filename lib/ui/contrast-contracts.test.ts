@@ -91,6 +91,24 @@ describe.each([
       assertReadable(color(theme[foreground]), color(theme[background]));
   });
 
+  test("calendar surfaces keep their text readable: planning, note, absence, holiday, gutter, off day, today", () => {
+    for (const [foreground, background] of [
+      ["calendar-planning-foreground", "calendar-planning"],
+      ["calendar-note-foreground", "calendar-note"],
+      ["calendar-absence-foreground", "calendar-absence"],
+      ["calendar-absence-foreground", "calendar-cell-off"],
+      ["calendar-holiday-foreground", "calendar-holiday"],
+      ["calendar-holiday-foreground", "calendar-cell-off"],
+      ["muted-foreground", "calendar-gutter"],
+      ["muted-foreground", "calendar-cell-off"],
+      ["foreground", "calendar-today"],
+      ["muted-foreground", "calendar-today"],
+    ] as const)
+      assertReadable(color(theme[foreground]), color(theme[background]));
+    // The today marker and the board's linked-card ring carry white text on the strong planning tone.
+    assertReadable(color(theme["calendar-planning-strong-foreground"]), color(theme["calendar-planning-strong"]));
+  });
+
   test("primary and destructive controls remain readable in every shared state", () => {
     for (const surface of ["background", "card", "muted", "accent"]) {
       for (const alpha of [1, 0.9, 0.8]) {

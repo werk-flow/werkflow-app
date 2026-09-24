@@ -27,6 +27,6 @@ test('read-request scopes stay confined to the reviewed GET handlers and identit
       }
     }
   }
-  expect(scopeOwners.sort()).toEqual(['app/api/attention-counts/route.ts', 'app/api/background-read/route.ts', 'app/api/calendar-window/route.ts', 'app/api/customer-page/route.ts', 'app/api/time-tracking-state/route.ts']);
+  expect(scopeOwners.sort()).toEqual(['app/api/attention-counts/route.ts', 'app/api/background-read/route.ts', 'app/api/calendar-board/route.ts', 'app/api/calendar-window/route.ts', 'app/api/customer-page/route.ts', 'app/api/time-tracking-state/route.ts']);
   expect(readerOwners.sort()).toEqual(['lib/data/cached.ts', 'lib/responsibilities/server.ts']);
 });

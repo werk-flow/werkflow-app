@@ -17,6 +17,7 @@ import {
 import type {
   DispatchCommitmentSummary,
   DispatchOverview,
+  DispatchRecipientDerivedState,
   DispatchOverviewOccurrence,
   DispatchOverviewUnscheduledJob,
   DispatchRecipientView,
@@ -207,6 +208,41 @@ async function loadDispatchViews(
     });
   }
   return views;
+}
+
+/**
+ * Recipient states of the active dispatches for a set of occurrences, derived
+ * by the same rules as the Einsätze panel (P1-24a board cards). Occurrences
+ * without an active dispatch are absent from the result.
+ */
+export async function loadOccurrenceDispatchStates(
+  admin: AdminClient,
+  orgId: string,
+  occurrenceIds: readonly string[]
+): Promise<Array<{ occurrenceId: string; employeeRecordId: string; state: DispatchRecipientDerivedState }> | null> {
+  if (occurrenceIds.length === 0) return [];
+  const dispatchResult = await readInBatches(occurrenceIds, (batch) =>
+    admin
+      .from('planning_dispatches')
+      .select('id, organization_id, occurrence_id, job_id, status, current_revision_id')
+      .eq('organization_id', orgId)
+      .eq('status', 'active')
+      .in('occurrence_id', [...batch])
+  );
+  if (dispatchResult.error) return null;
+  const dispatches: DispatchRow[] = dispatchResult.data ?? [];
+  const views = await loadDispatchViews(admin, orgId, dispatches);
+  if (!views) return null;
+  return dispatches.flatMap((dispatch) => {
+    const view = views.get(dispatch.id);
+    if (!view || !dispatch.occurrence_id) return [];
+    const occurrenceId = dispatch.occurrence_id;
+    return view.recipients.map((recipient) => ({
+      occurrenceId,
+      employeeRecordId: recipient.employeeRecordId,
+      state: recipient.state,
+    }));
+  });
 }
 
 function toCommitmentSummary(

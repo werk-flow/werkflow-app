@@ -37,7 +37,7 @@ test("browser observation rejects hidden streamed content and detects the same v
 });
 
 test("event observation preserves title matching, occurrence ordinal and zero-size visibility", async ({ page }) => {
-  await page.setContent('<a class="fc-event-job">Messbesuch 1</a><a class="fc-event-job">Messbesuch 1</a><a class="fc-event-job" style="display:none">Messbesuch 1</a>');
+  await page.setContent('<a data-calendar-card="month">Messbesuch 1</a><a data-calendar-card="month">Messbesuch 1</a><a data-calendar-card="month" style="display:none">Messbesuch 1</a>');
   const target = calendarEventTarget(page, "Messbesuch 1", 2);
   expect(await page.evaluate(firstVisibleBrowserTimestamp, target.observation)).toBe(false);
   await page.evaluate(() => document.querySelector('[style]')?.removeAttribute("style"));
@@ -47,15 +47,15 @@ test("event observation preserves title matching, occurrence ordinal and zero-si
 });
 
 test("a new standalone visit cannot be substituted by a recurrence or another date after event reordering", async ({ page }) => {
-  await page.setContent('<div class="fc-daygrid-day" data-date="2026-06-11"><a class="fc-event-job">Messbesuch 1</a></div><div class="fc-daygrid-day" data-date="2026-06-12"><a class="fc-event-job">Messbesuch 1<svg role="img" aria-label="Serientermin"></svg></a></div>');
+  await page.setContent('<div data-month-day="2026-06-11"><a data-calendar-card="month">Messbesuch 1</a></div><div data-month-day="2026-06-12"><a data-calendar-card="month">Messbesuch 1<svg role="img" aria-label="Serientermin"></svg></a></div>');
   const target = standaloneCalendarVisitTarget(page, "Messbesuch 1", "2026-06-12");
   await expect(target.locator).toHaveCount(0);
   expect(await page.evaluate(firstVisibleBrowserTimestamp, target.observation)).toBe(false);
   await page.evaluate(() => {
-    const cell = document.querySelector('[data-date="2026-06-12"]');
+    const cell = document.querySelector('[data-month-day="2026-06-12"]');
     if (!cell) throw new Error("Calendar fixture date is missing.");
     const added = document.createElement("a");
-    added.className = "fc-event-job";
+    added.setAttribute("data-calendar-card", "month");
     added.textContent = "Messbesuch 1";
     added.hidden = true;
     cell.prepend(added);

@@ -18,6 +18,7 @@ import {
   type OrganizationHolidayCalendar,
 } from "../../../lib/personnel/targets";
 import { parseWorkLifecycleSnapshot } from "../../../lib/work-lifecycle/types";
+import { formatBerlinLocalDate } from "../../../lib/planning/date-time";
 import { requireEnv } from "./env";
 import { testSupabaseClientOptions } from "./client-options";
 
@@ -2026,6 +2027,25 @@ export async function getPlanningState(
   };
 }
 
+/** The stored calendar preferences of one member (the `calendar` key), or null before the first save. */
+export async function getCalendarPreferencesFor(orgId: string, userId: string): Promise<Record<string, unknown> | null> {
+  const { data, error } = await createAdminClient()
+    .from("organization_user_preferences")
+    .select("preferences")
+    .eq("organization_id", orgId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw new Error(`Calendar preference read failed: ${error.message}`);
+  const stored = (data?.preferences as { calendar?: unknown } | null)?.calendar;
+  return stored && typeof stored === "object" ? (stored as Record<string, unknown>) : null;
+}
+
+/** The Berlin date an occurrence starts on: the all-day date or the timed instant's local date. */
+export function occurrenceLocalDate(occurrence: { startDate: string | null; startAt: string | null } | undefined): string | null {
+  if (!occurrence) return null;
+  return occurrence.startDate ?? (occurrence.startAt ? formatBerlinLocalDate(occurrence.startAt) : null);
+}
+
 export async function getOrganizationTimeEntryCount(
   orgId: string,
 ): Promise<number> {
@@ -3554,6 +3574,47 @@ export async function getTimeCorrectionCountsAs(
     }
     return counts;
   });
+}
+
+/**
+ * Every employee record of the organization gets one work schedule, so planning
+ * for a person no longer raises the "no schedule" warning that needs a reason.
+ */
+export async function giveEmployeesWorkSchedules(input: {
+  organizationId: string;
+  actorUserId: string;
+  validFrom: string;
+  weekdayMinutes: number;
+  weekendMinutes: number;
+  note: string;
+}): Promise<void> {
+  const admin = createAdminClient();
+  const { data: employees, error: employeeError } = await admin
+    .from("employee_records")
+    .select("id")
+    .eq("organization_id", input.organizationId);
+  if (employeeError || !employees?.length)
+    throw new Error(
+      `Work schedule setup failed: ${employeeError?.message ?? "no employees"}`,
+    );
+  const { error } = await admin.from("work_schedules").upsert(
+    employees.map((employee) => ({
+      organization_id: input.organizationId,
+      employee_record_id: employee.id,
+      valid_from: input.validFrom,
+      monday_minutes: input.weekdayMinutes,
+      tuesday_minutes: input.weekdayMinutes,
+      wednesday_minutes: input.weekdayMinutes,
+      thursday_minutes: input.weekdayMinutes,
+      friday_minutes: input.weekdayMinutes,
+      saturday_minutes: input.weekendMinutes,
+      sunday_minutes: input.weekendMinutes,
+      note: input.note,
+      created_by: input.actorUserId,
+    })),
+    { onConflict: "employee_record_id,valid_from" },
+  );
+  if (error) throw new Error(`Work schedule setup failed: ${error.message}`);
 }
 
 export async function prepareP123PersonnelPrerequisites(input: {

@@ -42,6 +42,7 @@ import {
 } from '@/lib/planning/actions';
 import type { PlanningConflict } from '@/lib/planning/types';
 import { toLocalDateString } from '@/lib/utils';
+import { calendarRefusalMessage } from '@/lib/calendar/messages';
 
 interface PlanningOccurrenceEditDialogProps {
   job: CalendarJob;
@@ -237,12 +238,7 @@ export function PlanningOccurrenceEditDialog({
         }
         return;
       }
-      setSubmitError(
-        result.error === 'started_occurrence' ||
-          result.error === 'no_mutable_occurrences'
-          ? 'Begonnene oder vergangene Termine bleiben unverändert.'
-          : 'Die Änderung konnte nicht gespeichert werden.'
-      );
+      setSubmitError(calendarRefusalMessage(result.error) ?? 'Die Änderung konnte nicht gespeichert werden.');
     } catch {
       setSubmitError('Die Änderung konnte nicht gespeichert werden.');
     } finally {
@@ -302,11 +298,7 @@ export function PlanningOccurrenceEditDialog({
         }
         return;
       }
-      setExtendError(
-        result.error === 'stale_series'
-          ? 'Die Serie wurde zwischenzeitlich geändert. Bitte den Termin neu öffnen.'
-          : 'Die Serie konnte nicht verlängert werden.'
-      );
+      setExtendError(calendarRefusalMessage(result.error) ?? 'Die Serie konnte nicht verlängert werden.');
     } catch {
       setExtendError('Die Serie konnte nicht verlängert werden.');
     } finally {

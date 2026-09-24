@@ -1019,6 +1019,7 @@ function shiftIsoDateByDays(dateIso: string, days: number): string {
 
 export type VacationCalendarEntry = {
   id: string;
+  employeeRecordId: string;
   personName: string;
   startDate: string;
   endDate: string;
@@ -1138,6 +1139,7 @@ export async function getVacationCalendarEntries(
       success: true,
       entries: rows.map((row) => ({
         id: row.id,
+        employeeRecordId: row.employee_record_id,
         personName: nameByRecordId.get(row.employee_record_id) ?? 'Unbekannt',
         startDate: row.start_date,
         endDate: row.end_date,

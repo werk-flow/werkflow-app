@@ -13,6 +13,8 @@ export async function insertFinalFixtureTimeEntry(options: {
   admin: SupabaseClient<Database>;
   world: TestWorld;
   row: Database["public"]["Tables"]["time_entries"]["Insert"] & { id: string };
+  /** The publication deadline; a long campaign lets Realtime lag past the default minute. */
+  timeoutMs?: number;
 }): Promise<void> {
   if (options.row.organization_id !== options.world.orgId) throw new Error("Fixture marker must belong to its owned organization.");
   const receiver = createClient<Database>(requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
@@ -25,6 +27,7 @@ export async function insertFinalFixtureTimeEntry(options: {
     if (error || !data.session) throw new Error("Fixture publication receiver could not authenticate.");
     await receiver.realtime.setAuth(data.session.access_token);
     await waitForFixturePublication({
+      ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
       subscribe: (observer) => {
         let joined = false;
         let postgresReady = false;

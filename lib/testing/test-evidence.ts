@@ -59,9 +59,12 @@ export function validateExecutedSelection(input: {
   if (executed.size !== input.outcomes.length) errors.push("Repeated test executions cannot certify a run.");
   if (selected.size !== executed.size || [...selected].some((id) => !executed.has(id))) errors.push("Executed test identities do not equal the discovered selection.");
   if (input.outcomes.some((outcome) => outcome.status !== "passed")) errors.push("Every selected test must pass without skips or retries.");
-  if (input.candidateBefore !== input.candidateAfter) errors.push("Application, test or environment inputs changed during the browser run; this attempt cannot certify the candidate.");
+  if (input.candidateBefore !== input.candidateAfter) errors.push(BROWSER_INPUT_DRIFT_MESSAGE);
   return errors;
 }
+
+/** The execution-evidence failure a browser run records when an input changed while it ran. */
+export const BROWSER_INPUT_DRIFT_MESSAGE = "Application, test or environment inputs changed during the browser run; this attempt cannot certify the candidate.";
 
 export type BackendProvenance = {
   suite: "golden" | "audit" | "canary";

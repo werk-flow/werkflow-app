@@ -1,1921 +1,357 @@
 'use client';
 
-import {
-  useMemo,
-  useState,
-  useEffect,
-  useLayoutEffect,
-  useCallback,
-  useRef
-} from 'react';
-import { calendarActionResult } from '@/lib/calendar/action-result';
-import { Briefcase, Clock, ParkingSquare, Undo2 } from 'lucide-react';
-import { TimelineHeader } from './timeline-header';
-import { EmployeeTimelineRow } from './employee-timeline-row';
-import {
-  DAY_VIEW_ROW_HEIGHT,
-  DAY_VIEW_ROW_INNER_HEIGHT,
-  DAY_VIEW_ROW_PADDING
-} from './layout-constants';
-import { calculateWorkSessions } from '@/lib/time-tracking/validation';
-import { calculateCalendarWorkBlocks } from '@/lib/time-tracking/calendar-blocks';
-import { Skeleton } from '@/components/ui/skeleton';
-import { useTimelineZoom } from './use-timeline-zoom';
-import {
-  calculateBlockPosition,
-  snapToGrid,
-  formatTimeFromPx,
-  pixelToTimeStr
-} from './timeline-grid';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { Plus } from 'lucide-react';
 import { cn, toLocalDateString } from '@/lib/utils';
-import { CalendarEntryDialog } from '../calendar-entry-dialog';
-import {
-  updateEntry as updateEntryAction,
-  cancelOwnChangeRequest as cancelOwnChangeRequestAction,
-  reassignEntries as reassignEntriesAction,
-  reassignEntryBatch as reassignEntryBatchAction
-} from '@/lib/time-tracking/actions';
-import { updateJob } from '@/lib/jobs/actions';
-import type { JobMoveResizeResult } from './job-block';
-import { useBanner } from '@/components/ui/banner';
-import type { MoveResizeResult } from './work-session-block';
-import type {
-  InteractiveCalendarSession,
-  TimeEntry,
-  WorkSession,
-  EntryChangeRequestMap
-} from '@/lib/time-tracking/types';
+import { boardDayKey, indexBoardDays, type CalendarBoardContext, type CalendarBoardDay, type CalendarBoardRow } from '@/lib/calendar/board';
+import { DAY_LANE_HEIGHT, DAY_NAME_COLUMN_PX, DAY_TRAY_HEIGHT, DEFAULT_VISIT_MINUTES, MIN_ITEM_MINUTES, minutesIntoDay, packTimeLanes, travelGaps, type TimedItem, jobStartMinutes } from '@/lib/calendar/day-layout';
+import { formatMinutesOfDay, snapMinutes } from '@/lib/calendar/drag-math';
+import { formatRefusalDate } from '@/lib/calendar/messages';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { OrgRole } from '@/lib/members/actions';
+import type { JobParkingContext } from '@/lib/parking/types';
+import { getHolidayContextDays, type OrganizationHolidayCalendar } from '@/lib/personnel/targets';
+import { calculateCalendarWorkBlocks, createSessionFromCalendarBlock, getCalendarBlockDisplaySegments, type CalendarWorkBlock } from '@/lib/time-tracking/calendar-blocks';
 import type { OrganizationTimeTrackingSettings } from '@/lib/time-tracking/settings';
-import { JobEventPopover } from '../job-event-popover';
-import { clearCalendarDragState, startCalendarDragState } from '../drag-state';
-import { PARKPLATZ_MIME, getDragGhost, type DragJobPayload } from '../parkplatz-panel';
-import { useCurrentTimePosition } from './use-current-time-position';
-import type { CalendarEntryDraft } from '../calendar-entry-draft';
+import type { EntryChangeRequestMap, InteractiveCalendarSession, TimeEntry } from '@/lib/time-tracking/types';
+import { memberDisplayName, type CalendarMember } from '../members';
+import { UNASSIGNED_USER, type CalendarSurfaceActions } from '../board/types';
+import { useCalendarDrag, useDragSurface } from '../drag-engine/drag-engine';
+import type { CalendarMutations } from '../mutations/use-calendar-mutations';
+import { CalendarCard } from '../surface/calendar-card';
+import { CALENDAR_LAYER_CLASS } from '../surface/layers';
+import { NowIndicator } from '../surface/now-indicator';
+import { useNowTick } from '../surface/use-now-tick';
+import { TimeBlock, type TimeBlockSegment } from './time-block';
+import { TimelineHeader } from './timeline-header';
+import { useDaySurface, type DayRowModel } from './use-day-surface';
+import { useTimelineZoom } from './use-timeline-zoom';
 
-const updateEntry = (...args: Parameters<typeof updateEntryAction>) => calendarActionResult(() => updateEntryAction(...args));
-const cancelOwnChangeRequest = (...args: Parameters<typeof cancelOwnChangeRequestAction>) => calendarActionResult(() => cancelOwnChangeRequestAction(...args));
-const reassignEntries = (...args: Parameters<typeof reassignEntriesAction>) => calendarActionResult(() => reassignEntriesAction(...args));
-const reassignEntryBatch = (...args: Parameters<typeof reassignEntryBatchAction>) => calendarActionResult(() => reassignEntryBatchAction(...args));
-
-type SessionCollisionBlock = {
-  id: string;
-  left: number;
-  width: number;
-};
-
-const DEFAULT_DAY_SCHEDULE_DURATION_MINUTES = 240;
-
-function parseTimeToMinutes(time: string): number | null {
-  const match = /^(\d{2}):(\d{2})$/.exec(time);
-  if (!match) return null;
-
-  const hours = Number(match[1]);
-  const minutes = Number(match[2]);
-  if (
-    !Number.isInteger(hours) ||
-    !Number.isInteger(minutes) ||
-    hours < 0 ||
-    hours > 24 ||
-    minutes < 0 ||
-    minutes > 59 ||
-    (hours === 24 && minutes !== 0)
-  ) {
-    return null;
-  }
-
-  return hours * 60 + minutes;
-}
-
-function getExactLayoutWidth(startTime: Date, endTime: Date | null, hourWidth: number): number {
-  const effectiveEnd =
-    endTime ??
-    (startTime.toDateString() === new Date().toDateString()
-      ? new Date()
-      : new Date(startTime.getFullYear(), startTime.getMonth(), startTime.getDate(), 24, 0, 0, 0));
-
-  const diffHours =
-    (effectiveEnd.getTime() - startTime.getTime()) / (1000 * 60 * 60);
-
-  return Math.max(diffHours * hourWidth, 0.5);
-}
-
-interface CalendarMember {
-  user_id: string;
-  first_name: string | null;
-  last_name: string | null;
-  email: string;
-  role: string;
-}
-
-interface DayViewProps {
+export type DayViewProps = {
   date: Date;
+  todayIso: string;
+  zoom: number;
+  onZoomChange: (zoom: number) => void;
   entries: TimeEntry[];
+  jobs: CalendarJob[];
   members: CalendarMember[];
+  board: CalendarBoardContext;
+  holidays: OrganizationHolidayCalendar;
   organizationSettings: OrganizationTimeTrackingSettings;
   currentUserId: string;
   currentUserRole: OrgRole;
-  isAdminOrManager: boolean;
-  isLoading: boolean;
-  onRefresh: () => void;
-  onSilentRefresh?: () => void;
-  onOperationStart?: () => () => void;
-  isScopeActive?: () => boolean;
-  onUpdateJob?: (
-    jobId: string,
-    input: Parameters<typeof updateJob>[1]
-  ) => Promise<{ success: true } | { success: false; error: string }>;
-  onManualEntrySuccess?: (entries: TimeEntry[]) => void | Promise<void>;
-  onJobSuccess?: () => void | Promise<void>;
-  changeRequestMap?: EntryChangeRequestMap;
-  highlightMemberId?: string | null;
-  jobs?: CalendarJob[];
-  onParkJob?: (jobId: string) => void;
-  onUnparkJob?: (jobId: string, date: string, time?: string, memberId?: string, durationMinutes?: number) => void;
-  onScheduleJob?: (jobId: string, time: string, memberId: string, durationMinutes: number) => void;
-  parkplatzButtonRef?: React.RefObject<HTMLElement | null>;
-  parkplatzDragJob?: CalendarJob | null;
+  changeRequestMap: EntryChangeRequestMap;
+  mutations: CalendarMutations;
+  actions: CalendarSurfaceActions;
+  parkingContexts: ReadonlyMap<string, JobParkingContext> | null;
+  onParkedContextMissing: () => void;
+  onSessionClick: (session: InteractiveCalendarSession) => void;
+  highlightMemberId: string | null;
+  verticalScroller: () => HTMLElement | null;
+};
+
+type RowItem =
+  | (TimedItem & { kind: 'block'; block: CalendarWorkBlock; segments: TimeBlockSegment[] })
+  | (TimedItem & { kind: 'job'; job: CalendarJob });
+
+
+/** Who may move or resize a recorded block: admins everything, Büro their own and employees' blocks, employees nothing. */
+function canManageBlock(block: CalendarWorkBlock, currentUserRole: OrgRole, currentUserId: string, entryUserRole: string | undefined): boolean {
+  if (block.sourceEntries.some((entry) => entry.status === 'pending_delete')) return false;
+  if (currentUserRole === 'admin') return true;
+  if (currentUserRole === 'buero') return entryUserRole === 'employee' || block.userId === currentUserId;
+  return false;
 }
 
-export function DayView({
-  date,
-  entries,
-  members,
-  organizationSettings,
-  currentUserId,
-  currentUserRole,
-  isAdminOrManager,
-  isLoading,
-  onRefresh,
-  onSilentRefresh,
-  onOperationStart,
-  isScopeActive,
-  onUpdateJob: updateCalendarJobAction = updateJob,
-  onManualEntrySuccess,
-  onJobSuccess,
-  changeRequestMap = {},
-  highlightMemberId,
-  jobs = [],
-  onParkJob,
-  onUnparkJob,
-  onScheduleJob,
-  parkplatzButtonRef,
-  parkplatzDragJob
-}: DayViewProps) {
-  const timelineContentMinHeight = members.length * DAY_VIEW_ROW_HEIGHT;
+/**
+ * The day view (P1-24a, package C): people rows against the hour axis in
+ * the same scroller as the page, rows growing with their lanes, recorded
+ * blocks and planned visits side by side, an untimed tray per person, the
+ * now line, drag-to-create on empty time, and every gesture through the
+ * shared engine, pre-checks and the optimistic owner.
+ */
+export function DayView(props: DayViewProps): React.JSX.Element {
+  const { date, todayIso, zoom, onZoomChange, entries, jobs, members, board, holidays, organizationSettings, currentUserId, currentUserRole, changeRequestMap, mutations, actions, parkingContexts, onParkedContextMissing, onSessionClick, highlightMemberId, verticalScroller } = props;
+  const rootRef = useRef<HTMLDivElement>(null);
+  const highlightRef = useRef<HTMLDivElement>(null);
+  const { startDrag, setLocked } = useCalendarDrag();
+  const dateIso = toLocalDateString(date);
+  const dayStart = useMemo(() => new Date(date.getFullYear(), date.getMonth(), date.getDate()), [date]);
+  const isToday = dateIso === todayIso;
+  const nowTick = useNowTick(isToday);
+  const hourWidth = useTimelineZoom({ zoom, onZoomChange, dateKey: dateIso, scroller: verticalScroller });
+  const timelineWidth = 24 * hourWidth;
 
-  const [selectedJob, setSelectedJob] = useState<{
-    job: CalendarJob;
-    position: { x: number; y: number };
-  } | null>(null);
+  useEffect(() => {
+    setLocked(actions.readOnly, '„Nur ansehen" ist aktiv. Schalte es in der Kopfzeile aus, um zu planen.');
+    return () => setLocked(false, '');
+  }, [actions.readOnly, setLocked]);
 
-  // Drag-to-create state
-  const [dragCreateOpen, setDragCreateOpen] = useState(false);
-  const [dragCreateMemberId, setDragCreateMemberId] = useState<string>('');
-  const [dragCreateClockIn, setDragCreateClockIn] = useState<string>('09:00');
-  const [dragCreateClockOut, setDragCreateClockOut] = useState<string>('17:00');
-  const [entryDraft, setEntryDraft] = useState<CalendarEntryDraft | null>(null);
+  const days = useMemo(() => indexBoardDays(board.days), [board.days]);
+  const boardRowByUser = useMemo(() => new Map(board.rows.flatMap((row) => (row.userId ? [[row.userId, row] as const] : []))), [board.rows]);
+  const roleByUser = useMemo(() => new Map(members.map((member) => [member.user_id, member.role])), [members]);
 
-  const handleDragCreate = useCallback((memberId: string, startTime: string, endTime: string) => {
-    const startMinutes = parseTimeToMinutes(startTime);
-    const endMinutes = parseTimeToMinutes(endTime);
-    setDragCreateMemberId(memberId);
-    setDragCreateClockIn(startTime);
-    setDragCreateClockOut(endTime);
-    setEntryDraft(
-      startMinutes !== null && endMinutes !== null && endMinutes > startMinutes
-        ? {
-            date,
-            startTime,
-            durationMinutes: endMinutes - startMinutes,
-            userIds: [memberId]
-          }
-        : null
-    );
-    setDragCreateOpen(true);
-  }, [date]);
+  const dayJobs = useMemo(() => jobs.filter((job) => job.plannedDate && job.plannedDate <= dateIso && dateIso < (job.endDateExclusive ?? `${job.plannedDate}~`)), [jobs, dateIso]);
+  const dayEntries = useMemo(() => entries.filter((entry) => toLocalDateString(new Date(entry.timestamp)) === dateIso), [entries, dateIso]);
 
-  const handleEntryDialogOpenChange = useCallback((open: boolean) => {
-    setDragCreateOpen(open);
-    if (!open) {
-      setEntryDraft(null);
-    }
-  }, []);
-
-  const updateCalendarJob = useCallback((...args: Parameters<typeof updateCalendarJobAction>) =>
-    calendarActionResult(() => updateCalendarJobAction(...args)), [updateCalendarJobAction]);
-  const silentRefresh = onSilentRefresh ?? onRefresh;
-
-  const { showBanner } = useBanner();
-  // Adapter over the global banner (feedback canon): drag/drop successes carry
-  // the undo action, errors persist until dismissed. A failed undo still
-  // settles the in-flight counter via silentRefresh so later Realtime
-  // refreshes are not suppressed forever.
-  const showActionBanner = useCallback(
-    (banner: {
-      variant: 'success' | 'error';
-      message: string;
-      onUndo?: () => Promise<void>;
-    }) => {
-      if (isScopeActive && !isScopeActive()) return;
-      showBanner({
-        variant: banner.variant,
-        message: banner.message,
-        ...(banner.variant === 'success' && banner.onUndo
-          ? {
-              actionLabel: 'Rückgängig',
-              actionIcon: <Undo2 className="size-3.5" />,
-              onAction: () => {
-                if (isScopeActive && !isScopeActive()) return;
-                void banner.onUndo?.().catch(() => {
-                  silentRefresh();
-                  showBanner({
-                    variant: 'error',
-                    message:
-                      'Die Aktion konnte nicht rückgängig gemacht werden.',
-                  });
-                });
-              },
-            }
-          : {}),
+  const rows = useMemo(() => {
+    const now = new Date(nowTick);
+    const list: Array<{ model: DayRowModel; boardDay: CalendarBoardDay | undefined; role: string | undefined; items: RowItem[]; untimed: CalendarJob[]; laneCount: number; lanes: ReturnType<typeof packTimeLanes<RowItem>>['lanes'] }> = [];
+    const buildRow = (userId: string, name: string, row: CalendarBoardRow | null, rowJobs: CalendarJob[], rowEntries: TimeEntry[]) => {
+      const blocks = calculateCalendarWorkBlocks(rowEntries);
+      const items: RowItem[] = [];
+      for (const block of blocks) {
+        const start = minutesIntoDay(new Date(block.start), dayStart);
+        const end = block.end ? minutesIntoDay(new Date(block.end), dayStart) : Math.max(start + MIN_ITEM_MINUTES, minutesIntoDay(now, dayStart));
+        const segments = getCalendarBlockDisplaySegments(block, now, organizationSettings).map((segment) => ({
+          id: segment.id,
+          type: segment.type,
+          startMinutes: minutesIntoDay(new Date(segment.start), dayStart),
+          endMinutes: segment.end ? minutesIntoDay(new Date(segment.end), dayStart) : end,
+        }));
+        items.push({ kind: 'block', key: block.id, block, segments, startMinutes: start, endMinutes: Math.max(end, start + MIN_ITEM_MINUTES) });
+      }
+      const untimed: CalendarJob[] = [];
+      for (const job of rowJobs) {
+        if (!job.plannedTime || job.plannedDate !== dateIso) { untimed.push(job); continue; }
+        const start = jobStartMinutes(job);
+        items.push({ kind: 'job', key: job.id, job, startMinutes: start, endMinutes: Math.min(24 * 60, start + (job.estimatedDurationMinutes ?? DEFAULT_VISIT_MINUTES)) });
+      }
+      const packed = packTimeLanes(items);
+      list.push({
+        model: { userId, name, row, blocks: blocks.map((block) => ({ id: block.id, startMs: new Date(block.start).getTime(), endMs: block.end ? new Date(block.end).getTime() : now.getTime() })) },
+        boardDay: row ? days.get(boardDayKey(row.employeeRecordId, dateIso)) : undefined,
+        role: roleByUser.get(userId),
+        items,
+        untimed,
+        laneCount: Math.max(1, packed.laneCount),
+        lanes: packed.lanes,
       });
-    },
-    [showBanner, silentRefresh, isScopeActive]
-  );
-
-  const {
-    scrollContainerRef,
-    effectiveHourWidth,
-    timelineWidth,
-    resetZoom
-  } = useTimelineZoom();
-  const dayViewRootRef = useRef<HTMLDivElement>(null)
-  const timelineHeaderTrackRef = useRef<HTMLDivElement>(null)
-  const customScrollbarRef = useRef<HTMLDivElement>(null)
-  const syncingScrollbarRef = useRef(false)
-  const [hasHorizontalOverflow, setHasHorizontalOverflow] = useState(false)
-  const [useViewportScrollbarOverlay, setUseViewportScrollbarOverlay] = useState(false)
-
-  const syncTimelineHeader = useCallback((scrollLeft: number) => {
-    const headerTrack = timelineHeaderTrackRef.current
-    if (!headerTrack) return
-    headerTrack.style.transform = `translate3d(${-scrollLeft}px, 0, 0)`
-  }, [])
-
-  useLayoutEffect(() => {
-    syncTimelineHeader(scrollContainerRef.current?.scrollLeft ?? 0)
-  }, [effectiveHourWidth, timelineWidth, scrollContainerRef, syncTimelineHeader])
-
-  const dateKey = date.toISOString();
-  const isToday = date.toDateString() === new Date().toDateString();
-  const currentTimePosition = useCurrentTimePosition(effectiveHourWidth, isToday);
-  const entryDraftPreview = useMemo(() => {
-    if (
-      !dragCreateOpen ||
-      !entryDraft?.date ||
-      !entryDraft.durationMinutes ||
-      entryDraft.durationMinutes <= 0 ||
-      toLocalDateString(entryDraft.date) !== toLocalDateString(date)
-    ) {
-      return null;
-    }
-
-    const startMinutes = parseTimeToMinutes(entryDraft.startTime);
-    if (startMinutes === null || startMinutes >= 24 * 60) {
-      return null;
-    }
-
-    const left = (startMinutes / 60) * effectiveHourWidth;
-    const requestedWidth =
-      (entryDraft.durationMinutes / 60) * effectiveHourWidth;
-
-    return {
-      left,
-      width: Math.min(requestedWidth, timelineWidth - left),
-      userIds: new Set(entryDraft.userIds)
     };
-  }, [
-    date,
-    dragCreateOpen,
-    effectiveHourWidth,
-    entryDraft,
-    timelineWidth
-  ]);
-
-  useEffect(() => {
-    resetZoom();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the zoom resets only when the displayed day changes
-  }, [dateKey]);
-
-  // ── Optimistic entry overrides (instant UI before server round-trip) ──
-  const [optimisticOverrides, setOptimisticOverrides] = useState<
-    Map<string, { timestamp?: string; userId?: string }>
-  >(new Map());
-
-  const effectiveEntries = useMemo(() => {
-    if (optimisticOverrides.size === 0) return entries;
-    return entries.map(entry => {
-      const ov = optimisticOverrides.get(entry.id);
-      if (!ov) return entry;
-      return {
-        ...entry,
-        ...(ov.timestamp !== undefined ? { timestamp: ov.timestamp } : {}),
-        ...(ov.userId !== undefined ? { userId: ov.userId } : {}),
-      };
-    });
-  }, [entries, optimisticOverrides]);
-
-  useEffect(() => {
-    if (optimisticOverrides.size === 0) return;
-    const next = new Map(optimisticOverrides);
-    let changed = false;
-    for (const [entryId, ov] of optimisticOverrides) {
-      const real = entries.find(e => e.id === entryId);
-      if (!real) continue;
-      const tsMatch = !ov.timestamp || real.timestamp === ov.timestamp;
-      const userMatch = !ov.userId || real.userId === ov.userId;
-      if (tsMatch && userMatch) {
-        next.delete(entryId);
-        changed = true;
-      }
+    if (actions.isManager) {
+      const unassigned = dayJobs.filter((job) => job.assignedUserIds.length === 0);
+      if (unassigned.length > 0) buildRow(UNASSIGNED_USER, 'Ohne Zuweisung', null, unassigned, []);
     }
-    if (changed) setOptimisticOverrides(next);
-  }, [entries, optimisticOverrides]);
-
-  // ── Optimistic job overrides (instant UI before server round-trip) ──
-  const [jobOverrides, setJobOverrides] = useState<
-    Map<string, { plannedTime?: string; estimatedDurationMinutes?: number; assignedUserIds?: string[] }>
-  >(new Map());
-
-  const effectiveJobs = useMemo(() => {
-    if (jobOverrides.size === 0) return jobs;
-    return jobs.map(job => {
-      const ov = jobOverrides.get(job.id);
-      if (!ov) return job;
-      return { ...job, ...ov };
-    });
-  }, [jobs, jobOverrides]);
-
-  useEffect(() => {
-    if (jobOverrides.size === 0) return;
-    const next = new Map(jobOverrides);
-    let changed = false;
-    for (const [jobId, ov] of jobOverrides) {
-      const real = jobs.find(j => j.id === jobId);
-      if (!real) continue;
-      const timeMatch = !ov.plannedTime || real.plannedTime === ov.plannedTime;
-      const durationMatch = !ov.estimatedDurationMinutes || real.estimatedDurationMinutes === ov.estimatedDurationMinutes;
-      const assignMatch = !ov.assignedUserIds ||
-        (real.assignedUserIds.length === ov.assignedUserIds.length &&
-         ov.assignedUserIds.every(id => real.assignedUserIds.includes(id)));
-      if (timeMatch && durationMatch && assignMatch) {
-        next.delete(jobId);
-        changed = true;
-      }
+    for (const member of members) {
+      buildRow(member.user_id, memberDisplayName(member), boardRowByUser.get(member.user_id) ?? null, dayJobs.filter((job) => job.assignedUserIds.includes(member.user_id)), dayEntries.filter((entry) => entry.userId === member.user_id));
     }
-    if (changed) setJobOverrides(next);
-  }, [jobs, jobOverrides]);
-
-  const handleMoveResize = useCallback(async (result: MoveResizeResult) => {
-    const clockInChanged =
-      !!result.clockInEntryId &&
-      result.newClockInTimestamp !== result.originalClockInTimestamp;
-    const clockOutChanged =
-      !!result.clockOutEntryId &&
-      result.newClockOutTimestamp !== result.originalClockOutTimestamp;
-
-    if (!clockInChanged && !clockOutChanged) return;
-
-    const isMove = clockInChanged && clockOutChanged;
-
-    const forwardOv = new Map<string, { timestamp: string }>();
-    const reverseOv = new Map<string, { timestamp: string }>();
-    if (clockInChanged) {
-      forwardOv.set(result.clockInEntryId!, { timestamp: result.newClockInTimestamp });
-      reverseOv.set(result.clockInEntryId!, { timestamp: result.originalClockInTimestamp });
-    }
-    if (clockOutChanged) {
-      forwardOv.set(result.clockOutEntryId!, { timestamp: result.newClockOutTimestamp });
-      reverseOv.set(result.clockOutEntryId!, { timestamp: result.originalClockOutTimestamp });
-    }
-    for (const update of result.additionalEntryUpdates ?? []) {
-      forwardOv.set(update.entryId, { timestamp: update.newTimestamp });
-      reverseOv.set(update.entryId, { timestamp: update.originalTimestamp });
-    }
-
-    const releaseOperation = onOperationStart?.();
-    try {
-      setOptimisticOverrides(prev => {
-        const next = new Map(prev);
-        for (const [id, val] of forwardOv) next.set(id, val);
-        return next;
-      });
-
-      const message = isMove
-        ? 'Zeiteintrag wurde verschoben.'
-        : 'Zeiteintrag wurde geändert.';
-      const showConfirmedSuccess = () => showActionBanner({
-        variant: 'success',
-        message,
-        onUndo: async () => {
-          const releaseOperation = onOperationStart?.();
-          try {
-            setOptimisticOverrides(prev => {
-              const next = new Map(prev);
-              for (const [id, val] of reverseOv) next.set(id, val);
-              return next;
-            });
-            const revUpdates: ReturnType<typeof updateEntry>[] = [];
-            for (const [entryId, { timestamp }] of reverseOv) {
-              revUpdates.push(updateEntry(entryId, { timestamp }));
-            }
-            const undoResults = await Promise.all(revUpdates);
-            if (undoResults.some((result) => !result.success)) {
-              setOptimisticOverrides(previous => { const next = new Map(previous); for (const id of reverseOv.keys()) next.delete(id); return next; });
-              throw new Error('calendar_undo_failed');
-            }
-
-          } finally {
-            if (releaseOperation) releaseOperation();
-            else silentRefresh();
-          }
-        },
-      });
-
-      type UpdateItem = { entryId: string; newTs: string; origTs: string };
-      const updates: UpdateItem[] = [];
-
-      if (clockInChanged && clockOutChanged) {
-        const movingLater =
-          new Date(result.newClockInTimestamp).getTime() >
-          new Date(result.originalClockInTimestamp).getTime();
-        const ciItem: UpdateItem = {
-          entryId: result.clockInEntryId!,
-          newTs: result.newClockInTimestamp,
-          origTs: result.originalClockInTimestamp,
-        };
-        const coItem: UpdateItem = {
-          entryId: result.clockOutEntryId!,
-          newTs: result.newClockOutTimestamp,
-          origTs: result.originalClockOutTimestamp,
-        };
-        updates.push(movingLater ? coItem : ciItem, movingLater ? ciItem : coItem);
-      } else {
-        if (clockInChanged) {
-          updates.push({ entryId: result.clockInEntryId!, newTs: result.newClockInTimestamp, origTs: result.originalClockInTimestamp });
-        }
-        if (clockOutChanged) {
-          updates.push({ entryId: result.clockOutEntryId!, newTs: result.newClockOutTimestamp, origTs: result.originalClockOutTimestamp });
-        }
-      }
-      for (const update of result.additionalEntryUpdates ?? []) {
-        updates.push({
-          entryId: update.entryId,
-          newTs: update.newTimestamp,
-          origTs: update.originalTimestamp
-        });
-      }
-
-      const results: Array<{ entryId: string; success: boolean; requestId?: string | undefined }> = [];
-
-      if ((result.additionalEntryUpdates?.length ?? 0) > 0) {
-        // A same-row move or resize changes timestamps only: each entry keeps
-        // its recorded owner. The acting user must never become the owner of
-        // another person's entries through a lookup miss.
-        const ownerByEntryId = new Map(entries.map((entry) => [entry.id, entry.userId] as const));
-        const batchUpdates = updates.map((update) => {
-          const ownerId = ownerByEntryId.get(update.entryId);
-          return ownerId ? { entryId: update.entryId, newUserId: ownerId, newTimestamp: update.newTs } : null;
-        });
-        // An entry without a known owner fails the whole batch: moving fewer
-        // entries than the user dragged and reporting success would be a
-        // silent partial failure.
-        const batchResult = batchUpdates.every((update) => update !== null)
-          ? await reassignEntryBatch(batchUpdates.filter((update) => update !== null))
-          : null;
-
-        if (batchResult?.success) {
-          showConfirmedSuccess();
-        } else {
-          setOptimisticOverrides(prev => {
-            const next = new Map(prev);
-            for (const [id, val] of reverseOv) next.set(id, val);
-            return next;
-          });
-
-          showActionBanner({
-            variant: 'error',
-            message: isMove
-              ? 'Zeiteintrag konnte nicht verschoben werden.'
-              : 'Zeiteintrag konnte nicht geändert werden.',
-          });
-        }
-        return;
-      }
-
-      for (const update of updates) {
-        if (isScopeActive && !isScopeActive()) return;
-        const r = await updateEntry(update.entryId, { timestamp: update.newTs });
-        const requestId = r.success && 'request' in r ? r.request.id : undefined;
-        results.push({ entryId: update.entryId, success: r.success, requestId });
-
-        if (!r.success) {
-          for (const prev of results) {
-            if (!prev.success) continue;
-            if (prev.requestId) {
-              await cancelOwnChangeRequest(prev.requestId);
-            } else {
-              const orig = updates.find((u) => u.entryId === prev.entryId)?.origTs;
-              if (orig) await updateEntry(prev.entryId, { timestamp: orig });
-            }
-          }
-          break;
-        }
-      }
-
-      const allOk = results.length > 0 && results.every((r) => r.success);
-
-      if (allOk) {
-        showConfirmedSuccess();
-      } else {
-        setOptimisticOverrides(prev => {
-          const next = new Map(prev);
-          for (const [id, val] of reverseOv) next.set(id, val);
-          return next;
-        });
-
-        const errorMsg = isMove
-          ? 'Zeiteintrag konnte nicht verschoben werden.'
-          : 'Zeiteintrag konnte nicht geändert werden.';
-        showActionBanner({ variant: 'error', message: errorMsg });
-      }
-    } finally {
-      if (releaseOperation) releaseOperation();
-      else silentRefresh();
-    }
-  }, [currentUserId, entries, silentRefresh, onOperationStart, showActionBanner, isScopeActive]);
-
-  const handleInvalidSessionPlacement = useCallback((message: string) => {
-    showActionBanner({
-      variant: 'error',
-      message
-    });
-  }, [showActionBanner]);
-
-  const handleJobMoveResize = useCallback(async (result: JobMoveResizeResult) => {
-    const { jobId, newPlannedTime, newDurationMinutes, originalPlannedTime, originalDurationMinutes } = result;
-
-    if (newPlannedTime === originalPlannedTime && newDurationMinutes === originalDurationMinutes) return;
-
-    const isMove = newPlannedTime !== originalPlannedTime;
-
-    const releaseOperation = onOperationStart?.();
-    try {
-      setJobOverrides(prev => {
-        const next = new Map(prev);
-        next.set(jobId, { plannedTime: newPlannedTime, estimatedDurationMinutes: newDurationMinutes });
-        return next;
-      });
-
-      const showConfirmedSuccess = () => showActionBanner({
-        variant: 'success',
-        message: isMove ? 'Auftrag wurde verschoben.' : 'Auftrag wurde geändert.',
-        onUndo: async () => {
-          const releaseOperation = onOperationStart?.();
-          try {
-            setJobOverrides(prev => {
-              const next = new Map(prev);
-              next.set(jobId, { plannedTime: originalPlannedTime, estimatedDurationMinutes: originalDurationMinutes });
-              return next;
-            });
-            const undoResult = await updateCalendarJob(jobId, {
-              plannedTime: originalPlannedTime,
-              estimatedDurationMinutes: originalDurationMinutes,
-            });
-            if (!undoResult.success) {
-              setJobOverrides(previous => { const next = new Map(previous); next.delete(jobId); return next; });
-              throw new Error('calendar_undo_failed');
-            }
-          } finally {
-            if (releaseOperation) releaseOperation();
-            else silentRefresh();
-          }
-        },
-      });
-
-      const updateResult = await updateCalendarJob(jobId, {
-        plannedTime: newPlannedTime,
-        estimatedDurationMinutes: newDurationMinutes,
-      });
-
-      if (updateResult.success) {
-        showConfirmedSuccess();
-      } else {
-        setJobOverrides(prev => {
-          const next = new Map(prev);
-          next.set(jobId, { plannedTime: originalPlannedTime, estimatedDurationMinutes: originalDurationMinutes });
-          return next;
-        });
-
-        if (updateResult.error === 'qualification_declined') return;
-        showActionBanner({
-          variant: 'error',
-          message: isMove ? 'Auftrag konnte nicht verschoben werden.' : 'Auftrag konnte nicht geändert werden.',
-        });
-      }
-    } finally {
-      if (releaseOperation) releaseOperation();
-      else silentRefresh();
-    }
-  }, [silentRefresh, onOperationStart, updateCalendarJob, showActionBanner]);
-
-  // ── Cross-row drag state ──
-  type DragBlockPayload =
-    | { type: 'session'; session: InteractiveCalendarSession }
-    | { type: 'job'; job: CalendarJob };
-
-  interface ActiveBlockDrag {
-    payload: DragBlockPayload;
-    sourceMemberId: string;
-    sourceRowIndex: number;
-    originalLeft: number;
-    originalWidth: number;
-    currentLeft: number;
-    currentRowIndex: number;
-    canDrop: boolean;
-    pointerOffsetX: number;
-    isOverParkplatz?: boolean;
-    isAboveGrid?: boolean;
-    pointerClientX?: number;
-    pointerClientY?: number;
-    conflictTargetIds?: string[];
-  }
-  const [activeDrag, setActiveDrag] = useState<ActiveBlockDrag | null>(null);
-  const activeDragRef = useRef<ActiveBlockDrag | null>(null);
-  const dragDidOccurRef = useRef(false);
-
-  // Job block drag shadow state (for mirroring across rows)
-  const [jobDragShadow, setJobDragShadow] = useState<{
-    jobId: string;
-    left: number;
-    width: number;
-    sourceMemberId?: string | undefined;
-  } | null>(null);
-  const dragStartPosRef = useRef({ x: 0, y: 0 });
-  const dragThresholdMetRef = useRef(false);
-  const dragPendingRef = useRef<{
-    payload: DragBlockPayload;
-    memberId: string;
-    left: number;
-    width: number;
-    sourceRowIndex: number;
-    pointerOffsetX: number;
-    pointerId: number;
-  } | null>(null);
-
-  const ROW_HEIGHT = DAY_VIEW_ROW_HEIGHT;
-
-  const canDropOnMember = useCallback(
-    (targetMember: CalendarMember): boolean => {
-      if (currentUserRole === 'admin') return true;
-      if (currentUserRole === 'buero') {
-        if (targetMember.role === 'employee') return true;
-        if (targetMember.user_id === currentUserId) return true;
-        return false;
-      }
-      return false;
-    },
-    [currentUserRole, currentUserId]
-  );
-
-  // Refs that always hold the latest versions of values needed in window listeners
-  const membersRef = useRef(members);
-  membersRef.current = members;
-  const canDropOnMemberRef = useRef(canDropOnMember);
-  canDropOnMemberRef.current = canDropOnMember;
-  const effectiveHourWidthRef = useRef(effectiveHourWidth);
-  effectiveHourWidthRef.current = effectiveHourWidth;
-  const timelineWidthRef = useRef(timelineWidth);
-  timelineWidthRef.current = timelineWidth;
-  const dateRef = useRef(date);
-  dateRef.current = date;
-  const handleMoveResizeRef = useRef(handleMoveResize);
-  handleMoveResizeRef.current = handleMoveResize;
-  const handleJobMoveResizeRef = useRef(handleJobMoveResize);
-  handleJobMoveResizeRef.current = handleJobMoveResize;
-  const parkplatzButtonRefLocal = useRef(parkplatzButtonRef);
-  parkplatzButtonRefLocal.current = parkplatzButtonRef;
-  const onParkJobRef = useRef(onParkJob);
-  onParkJobRef.current = onParkJob;
-  const setJobDragShadowRef = useRef(setJobDragShadow);
-  setJobDragShadowRef.current = setJobDragShadow;
-  const handleInvalidSessionPlacementRef = useRef(handleInvalidSessionPlacement);
-  handleInvalidSessionPlacementRef.current = handleInvalidSessionPlacement;
-
-  // Stable wrapper functions for window event listeners
-  const stableMoveHandler = useCallback((e: PointerEvent) => {
-    const container = scrollContainerRef.current;
-    const pending = dragPendingRef.current;
-    if (!container) return;
-
-    const dx = e.clientX - dragStartPosRef.current.x;
-    const dy = e.clientY - dragStartPosRef.current.y;
-
-    if (!dragThresholdMetRef.current) {
-      if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
-      dragThresholdMetRef.current = true;
-      dragDidOccurRef.current = true;
-    }
-
-    if (!pending && !activeDragRef.current) return;
-
-    const containerRect = container.getBoundingClientRect();
-    const scrollLeft = container.scrollLeft;
-    const scrollTop = container.scrollTop;
-
-    let sourceRowIndex: number;
-    let originalLeft: number;
-    let originalWidth: number;
-    let pointerOffsetX: number;
-    let payload: DragBlockPayload;
-    let sourceMemberId: string;
-
-    if (pending) {
-      sourceRowIndex = pending.sourceRowIndex;
-      originalLeft = pending.left;
-      originalWidth = pending.width;
-      pointerOffsetX = pending.pointerOffsetX;
-      payload = pending.payload;
-      sourceMemberId = pending.memberId;
-      dragPendingRef.current = null;
-    } else {
-      const prev = activeDragRef.current!;
-      sourceRowIndex = prev.sourceRowIndex;
-      originalLeft = prev.originalLeft;
-      originalWidth = prev.originalWidth;
-      pointerOffsetX = prev.pointerOffsetX;
-      payload = prev.payload;
-      sourceMemberId = prev.sourceMemberId;
-    }
-
-    const ehw = effectiveHourWidthRef.current;
-    const tlw = timelineWidthRef.current;
-    const rawLeft = e.clientX - containerRect.left + scrollLeft - pointerOffsetX;
-    const snapped = snapToGrid(rawLeft, ehw);
-    const clampedLeft = Math.max(0, Math.min(snapped, tlw - originalWidth));
-
-    const relativeY = e.clientY - containerRect.top + scrollTop;
-    const rowIdx = Math.floor(relativeY / ROW_HEIGHT);
-    const curMembers = membersRef.current;
-    const clampedRow = Math.max(0, Math.min(rowIdx, curMembers.length - 1));
-    const targetMember = curMembers[clampedRow];
-    let canDrop = targetMember ? canDropOnMemberRef.current(targetMember) : false;
-    let conflictTargetIds: string[] = [];
-
-    if (canDrop && payload.type === 'job' && clampedRow !== sourceRowIndex) {
-      const target = curMembers[clampedRow];
-      if (target && payload.job.assignedUserIds.includes(target.user_id)) {
-        canDrop = false;
-      }
-    }
-
-    if (canDrop && payload.type === 'session' && targetMember) {
-      const draggedBlockId = payload.session.calendarBlockId;
-      const collisionBlocks =
-        sessionCollisionBlocksByUserRef.current[targetMember.user_id] ?? [];
-      conflictTargetIds = collisionBlocks
-        .filter((block) => {
-          if (block.id === draggedBlockId) {
-            return false;
-          }
-          return (
-            block.left < clampedLeft + originalWidth &&
-            clampedLeft < block.left + block.width
-          );
-        })
-        .map((block) => block.id);
-
-      if (conflictTargetIds.length > 0) {
-        canDrop = false;
-      }
-    }
-
-    let overParkplatz = false;
-    if (payload.type === 'job') {
-      const btnRef = parkplatzButtonRefLocal.current;
-      const btn = btnRef?.current;
-      if (btn) {
-        const pRect = btn.getBoundingClientRect();
-        overParkplatz =
-          e.clientX >= pRect.left && e.clientX <= pRect.right &&
-          e.clientY >= pRect.top && e.clientY <= pRect.bottom;
-      }
-      if (!overParkplatz) {
-        const panel = document.querySelector('[data-parkplatz-panel]');
-        if (panel) {
-          const pRect = panel.getBoundingClientRect();
-          overParkplatz =
-            e.clientX >= pRect.left && e.clientX <= pRect.right &&
-            e.clientY >= pRect.top && e.clientY <= pRect.bottom;
-        }
-      }
-    }
-
-    const isAboveGrid = payload.type === 'job' && e.clientY < containerRect.top;
-
-    const next: ActiveBlockDrag = {
-      payload,
-      sourceMemberId,
-      sourceRowIndex,
-      originalLeft,
-      originalWidth,
-      currentLeft: clampedLeft,
-      currentRowIndex: clampedRow,
-      canDrop: overParkplatz ? true : canDrop,
-      pointerOffsetX,
-      isOverParkplatz: overParkplatz,
-      isAboveGrid: isAboveGrid || overParkplatz,
-      pointerClientX: e.clientX,
-      pointerClientY: e.clientY,
-      conflictTargetIds,
-    };
-
-    activeDragRef.current = next;
-    setActiveDrag(next);
-
-    if (payload.type === 'job') {
-      setJobDragShadowRef.current({
-        jobId: payload.job.id,
-        left: clampedLeft,
-        width: originalWidth,
-        sourceMemberId: sourceMemberId,
-      });
-    }
-
-    document.body.style.cursor = (overParkplatz || canDrop) ? 'grabbing' : 'not-allowed';
-    document.body.style.userSelect = 'none';
-  }, [ROW_HEIGHT, scrollContainerRef]); // reads all other values from refs
-
-  const stableUpHandler = useCallback(() => {
-    window.removeEventListener('pointermove', stableMoveHandler);
-    window.removeEventListener('pointerup', stableUpHandler);
-    clearCalendarDragState();
-    dragPendingRef.current = null;
-
-    const drag = activeDragRef.current;
-    activeDragRef.current = null;
-    setActiveDrag(null);
-    setJobDragShadowRef.current(null);
-
-    if (!drag || !dragThresholdMetRef.current) {
-      setTimeout(() => { dragDidOccurRef.current = false; }, 0);
-      return;
-    }
-
-    if (drag.isOverParkplatz && drag.payload.type === 'job') {
-      onParkJobRef.current?.(drag.payload.job.id);
-      setTimeout(() => { dragDidOccurRef.current = false; }, 0);
-      return;
-    }
-
-    if (!drag.canDrop) {
-      if (
-        drag.payload.type === 'session' &&
-        (drag.conflictTargetIds?.length ?? 0) > 0
-      ) {
-        handleInvalidSessionPlacementRef.current(
-          'Arbeitszeit konnte nicht verschoben werden, weil sie sich mit einem anderen Arbeitsblock überschneiden würde.'
-        );
-      }
-      setTimeout(() => { dragDidOccurRef.current = false; }, 0);
-      return;
-    }
-
-    const sameRow = drag.currentRowIndex === drag.sourceRowIndex;
-    const samePosition = drag.currentLeft === drag.originalLeft;
-
-    if (sameRow && samePosition) {
-      setTimeout(() => { dragDidOccurRef.current = false; }, 0);
-      return;
-    }
-
-    const ehw = effectiveHourWidthRef.current;
-    const d = dateRef.current;
-
-    if (sameRow) {
-      if (drag.payload.type === 'session') {
-        const session = drag.payload.session;
-        const result: MoveResizeResult = {
-          clockInEntryId: session.clockIn?.id,
-          clockOutEntryId: session.clockOut?.id,
-          newClockInTimestamp: pixelToTimeStr(drag.currentLeft, ehw, d),
-          newClockOutTimestamp: pixelToTimeStr(drag.currentLeft + drag.originalWidth, ehw, d),
-          originalClockInTimestamp: session.clockIn!.timestamp,
-          originalClockOutTimestamp: session.clockOut!.timestamp,
-        };
-        handleMoveResizeRef.current(result);
-      } else {
-        const job = drag.payload.job;
-        handleJobMoveResizeRef.current({
-          jobId: job.id,
-          newPlannedTime: formatTimeFromPx(drag.currentLeft, ehw),
-          newDurationMinutes: Math.max(1, Math.round((drag.originalWidth / ehw) * 60)),
-          originalPlannedTime: job.plannedTime!,
-          originalDurationMinutes: job.estimatedDurationMinutes!,
-        });
-      }
-    } else {
-      const targetMember = membersRef.current[drag.currentRowIndex];
-      if (targetMember) {
-        if (drag.payload.type === 'session') {
-          handleCrossUserMoveRef.current(drag, targetMember);
-        } else {
-          handleCrossJobMoveRef.current(drag, targetMember);
-        }
-      }
-    }
-
-    setTimeout(() => { dragDidOccurRef.current = false; }, 0);
-  }, [stableMoveHandler]); // stable
-
-  const handleCrossUserMoveRef = useRef<
-    (drag: ActiveBlockDrag, targetMember: CalendarMember) => Promise<void>
-  >(async () => {});
-  handleCrossUserMoveRef.current = useCallback(
-    async (drag: ActiveBlockDrag, targetMember: CalendarMember) => {
-      if (drag.payload.type !== 'session') return;
-      const session = drag.payload.session as InteractiveCalendarSession;
-      if (!session.clockIn || !session.clockOut) return;
-
-      const newClockIn = pixelToTimeStr(drag.currentLeft, effectiveHourWidth, date);
-      const newClockOut = pixelToTimeStr(drag.currentLeft + drag.originalWidth, effectiveHourWidth, date);
-      const origClockIn = session.clockIn.timestamp;
-      const origClockOut = session.clockOut.timestamp;
-      const origUserId = drag.sourceMemberId;
-      const clockInId = session.clockIn.id;
-      const clockOutId = session.clockOut.id;
-
-      const targetName =
-        targetMember.first_name || targetMember.last_name
-          ? `${targetMember.first_name || ''} ${targetMember.last_name || ''}`.trim()
-          : targetMember.email;
-
-      const releaseOperation = onOperationStart?.();
-      try {
-        setOptimisticOverrides(prev => {
-          const next = new Map(prev);
-          const sourceEntries = session.sourceEntries ?? [];
-          const clockInDelta =
-            new Date(newClockIn).getTime() - new Date(origClockIn).getTime();
-          next.set(clockInId, { timestamp: newClockIn, userId: targetMember.user_id });
-          next.set(clockOutId, { timestamp: newClockOut, userId: targetMember.user_id });
-          for (const entry of sourceEntries) {
-            if (entry.id === clockInId || entry.id === clockOutId) continue;
-            next.set(entry.id, {
-              timestamp: new Date(
-                new Date(entry.timestamp).getTime() + clockInDelta
-              ).toISOString(),
-              userId: targetMember.user_id
-            });
-          }
-          return next;
-        });
-
-        const showConfirmedSuccess = () => showActionBanner({
-          variant: 'success',
-          message: `Zeiteintrag wurde zu ${targetName} verschoben.`,
-          onUndo: async () => {
-            const releaseOperation = onOperationStart?.();
-            try {
-              setOptimisticOverrides(prev => {
-                const next = new Map(prev);
-                next.set(clockInId, { timestamp: origClockIn, userId: origUserId });
-                next.set(clockOutId, { timestamp: origClockOut, userId: origUserId });
-              for (const entry of session.sourceEntries ?? []) {
-                if (entry.id === clockInId || entry.id === clockOutId) continue;
-                next.set(entry.id, { timestamp: entry.timestamp, userId: entry.userId });
-              }
-                return next;
-              });
-            const undoResult = (session.sourceEntries?.length ?? 0) > 2
-              ? await reassignEntryBatch(
-                (session.sourceEntries ?? []).map((entry) => ({
-                  entryId: entry.id,
-                  newUserId: origUserId,
-                  newTimestamp: entry.timestamp
-                }))
-              )
-              : await reassignEntries(clockInId, clockOutId, origUserId, origClockIn, origClockOut);
-            if (!undoResult.success) {
-              setOptimisticOverrides(previous => { const next = new Map(previous); next.delete(clockInId); next.delete(clockOutId); for (const entry of session.sourceEntries ?? []) next.delete(entry.id); return next; });
-              throw new Error('calendar_undo_failed');
-            }
-            } finally {
-              if (releaseOperation) releaseOperation();
-              else silentRefresh();
-            }
-          },
-        });
-
-        const result =
-          (session.sourceEntries?.length ?? 0) > 2
-            ? await reassignEntryBatch(
-                (session.sourceEntries ?? []).map((entry) => {
-                  const shiftedTimestamp =
-                    entry.id === clockInId
-                      ? newClockIn
-                      : entry.id === clockOutId
-                        ? newClockOut
-                        : new Date(
-                            new Date(entry.timestamp).getTime() +
-                              (new Date(newClockIn).getTime() -
-                                new Date(origClockIn).getTime())
-                          ).toISOString();
-
-                  return {
-                    entryId: entry.id,
-                    newUserId: targetMember.user_id,
-                    newTimestamp: shiftedTimestamp
-                  };
-                })
-              )
-            : await reassignEntries(clockInId, clockOutId, targetMember.user_id, newClockIn, newClockOut);
-
-        if (result.success) {
-          showConfirmedSuccess();
-        } else {
-          setOptimisticOverrides(prev => {
-            const next = new Map(prev);
-            next.set(clockInId, { timestamp: origClockIn, userId: origUserId });
-            next.set(clockOutId, { timestamp: origClockOut, userId: origUserId });
-            for (const entry of session.sourceEntries ?? []) {
-              if (entry.id === clockInId || entry.id === clockOutId) continue;
-              next.set(entry.id, { timestamp: entry.timestamp, userId: entry.userId });
-            }
-            return next;
-          });
-
-          showActionBanner({
-            variant: 'error',
-            message: result.error === 'overlapping_session'
-              ? `Überschneidung mit bestehendem Eintrag von ${targetName}.`
-              : 'Zeiteintrag konnte nicht verschoben werden.',
-          });
-        }
-      } finally {
-        if (releaseOperation) releaseOperation();
-        else silentRefresh();
-      }
-    },
-    [effectiveHourWidth, date, silentRefresh, onOperationStart, showActionBanner]
-  );
-
-  const handleCrossJobMoveRef = useRef<
-    (drag: ActiveBlockDrag, targetMember: CalendarMember) => Promise<void>
-  >(async () => {});
-  handleCrossJobMoveRef.current = useCallback(
-    async (drag: ActiveBlockDrag, targetMember: CalendarMember) => {
-      if (drag.payload.type !== 'job') return;
-      const job = drag.payload.job;
-
-      const ehw = effectiveHourWidth;
-      const newTime = formatTimeFromPx(drag.currentLeft, ehw);
-      const newDuration = Math.max(1, Math.round((drag.originalWidth / ehw) * 60));
-      const origTime = job.plannedTime!;
-      const origDuration = job.estimatedDurationMinutes!;
-      const origUserId = drag.sourceMemberId;
-
-      const targetName =
-        targetMember.first_name || targetMember.last_name
-          ? `${targetMember.first_name || ''} ${targetMember.last_name || ''}`.trim()
-          : targetMember.email;
-
-      const newAssignedUserIds = job.assignedUserIds
-        .filter((uid) => uid !== origUserId)
-        .concat(targetMember.user_id);
-
-      const releaseOperation = onOperationStart?.();
-      try {
-        setJobOverrides(prev => {
-          const next = new Map(prev);
-          next.set(job.id, {
-            plannedTime: newTime,
-            estimatedDurationMinutes: newDuration,
-            assignedUserIds: newAssignedUserIds,
-          });
-          return next;
-        });
-
-        const showConfirmedSuccess = () => showActionBanner({
-          variant: 'success',
-          message: `Auftrag wurde zu ${targetName} verschoben.`,
-          onUndo: async () => {
-            const releaseOperation = onOperationStart?.();
-            try {
-              setJobOverrides(prev => {
-                const next = new Map(prev);
-                next.set(job.id, {
-                  plannedTime: origTime,
-                  estimatedDurationMinutes: origDuration,
-                  assignedUserIds: job.assignedUserIds,
-                });
-                return next;
-              });
-              const undoResult = await updateCalendarJob(job.id, {
-                selectedUserIds: job.assignedUserIds,
-                plannedTime: origTime,
-                estimatedDurationMinutes: origDuration,
-              });
-            if (!undoResult.success) {
-              setJobOverrides(previous => { const next = new Map(previous); next.delete(job.id); return next; });
-              throw new Error('calendar_undo_failed');
-            }
-            } finally {
-              if (releaseOperation) releaseOperation();
-              else silentRefresh();
-            }
-          },
-        });
-
-        const moveResult = await updateCalendarJob(job.id, {
-          selectedUserIds: newAssignedUserIds,
-          plannedTime: newTime,
-          estimatedDurationMinutes: newDuration,
-        });
-
-        if (moveResult.success) {
-          showConfirmedSuccess();
-        } else {
-          setJobOverrides(prev => {
-            const next = new Map(prev);
-            next.set(job.id, {
-              plannedTime: origTime,
-              estimatedDurationMinutes: origDuration,
-              assignedUserIds: job.assignedUserIds,
-            });
-            return next;
-          });
-
-          if (moveResult.error === 'qualification_declined') return;
-          showActionBanner({
-            variant: 'error',
-            message: `Auftrag konnte nicht zu ${targetName} verschoben werden.`,
-          });
-        }
-      } finally {
-        if (releaseOperation) releaseOperation();
-        else silentRefresh();
-      }
-    },
-    [effectiveHourWidth, silentRefresh, onOperationStart, updateCalendarJob, showActionBanner]
-  );
-
-  const initiateCrossRowDrag = useCallback(
-    (payload: DragBlockPayload, memberId: string, blockLeft: number, blockWidth: number, e: React.PointerEvent) => {
-      const container = scrollContainerRef.current;
-      if (!container) return;
-      const containerRect = container.getBoundingClientRect();
-      const sourceRowIndex = membersRef.current.findIndex((m) => m.user_id === memberId);
-      if (sourceRowIndex < 0) return;
-
-      const pointerXInTimeline = e.clientX - containerRect.left + container.scrollLeft;
-      const pointerOffsetX = pointerXInTimeline - blockLeft;
-
-      dragDidOccurRef.current = false;
-      dragThresholdMetRef.current = false;
-      dragStartPosRef.current = { x: e.clientX, y: e.clientY };
-      dragPendingRef.current = {
-        payload,
-        memberId,
-        left: blockLeft,
-        width: blockWidth,
-        sourceRowIndex,
-        pointerOffsetX,
-        pointerId: e.pointerId,
-      };
-
-      document.body.style.cursor = 'grabbing';
-      document.body.style.userSelect = 'none';
-      window.addEventListener('pointermove', stableMoveHandler);
-      window.addEventListener('pointerup', stableUpHandler);
-    },
-    [scrollContainerRef, stableMoveHandler, stableUpHandler]
-  );
-
-  const handleBlockMoveStart = useCallback(
-    (session: WorkSession, memberId: string, blockLeft: number, blockWidth: number, e: React.PointerEvent) => {
-      initiateCrossRowDrag({ type: 'session', session }, memberId, blockLeft, blockWidth, e);
-    },
-    [initiateCrossRowDrag]
-  );
-
-  const handleJobBlockMoveStart = useCallback(
-    (job: CalendarJob, memberId: string, blockLeft: number, blockWidth: number, e: React.PointerEvent) => {
-      initiateCrossRowDrag({ type: 'job', job }, memberId, blockLeft, blockWidth, e);
-    },
-    [initiateCrossRowDrag]
-  );
-
-  // Clean up drag listeners on unmount
-  useEffect(() => {
-    return () => {
-      window.removeEventListener('pointermove', stableMoveHandler);
-      window.removeEventListener('pointerup', stableUpHandler);
-      clearCalendarDragState();
-    };
-  }, [stableMoveHandler, stableUpHandler]);
-
-  const memberNameMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const m of members) {
-      map[m.user_id] =
-        m.first_name || m.last_name
-          ? `${m.first_name || ''} ${m.last_name || ''}`.trim()
-          : m.email;
-    }
-    return map;
-  }, [members]);
-
-  const { timedDayJobs, untimedDayJobs } = useMemo(() => {
-    const dateStr = toLocalDateString(date);
-    const forDay = effectiveJobs.filter((j) => j.plannedDate === dateStr);
-    const canPlaceOnTimeline = (job: CalendarJob) =>
-      !!job.plannedTime &&
-      !!job.estimatedDurationMinutes &&
-      job.assignedUserIds.length > 0;
-
-    return {
-      timedDayJobs: forDay.filter(canPlaceOnTimeline),
-      untimedDayJobs: forDay.filter((job) => !canPlaceOnTimeline(job)),
-    };
-  }, [effectiveJobs, date]);
-  const selectedJobDisplay = useMemo(() => {
-    if (!selectedJob) return null;
-    return (
-      effectiveJobs.find((job) => job.id === selectedJob.job.id) ??
-      selectedJob.job
-    );
-  }, [effectiveJobs, selectedJob]);
-
-  // ── Parkplatz / untimed-chip drag hover state (for showing shadow pills) ──
-  interface ParkplatzDragHover {
-    snappedLeft: number;
-    width: number;
-    hoveredMemberId: string;
-  }
-  const [parkplatzDragHover, setParkplatzDragHover] = useState<ParkplatzDragHover | null>(null);
-  const parkplatzDragTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Tracks the locally-dragged untimed chip so the preview works without parkplatzDragJob
-  const localChipDragJobRef = useRef<CalendarJob | null>(null);
-  const [draggingChipId, setDraggingChipId] = useState<string | null>(null);
-  const [chipDragCursor, setChipDragCursor] = useState<{ x: number; y: number } | null>(null);
-
-  // Auto-clear draggingChipId when the job leaves the untimed list (e.g. after
-  // a successful drop schedules it). onDragEnd may not fire because the chip
-  // unmounts before the browser dispatches the event.
-  useEffect(() => {
-    if (draggingChipId && !untimedDayJobs.some((j) => j.id === draggingChipId)) {
-      setDraggingChipId(null);
-      localChipDragJobRef.current = null;
-      clearCalendarDragState();
-    }
-  }, [draggingChipId, untimedDayJobs]);
-
-  useEffect(() => {
-    const root = dayViewRootRef.current
-    const timeline = scrollContainerRef.current
-    if (!root || !timeline) return
-
-    const scrollParent = timeline.closest('[data-calendar-scroll-container]') as HTMLElement | null
-    const overlayHysteresisPx = 24
-    const updateScrollbarMetrics = () => {
-      const rootRect = root.getBoundingClientRect()
-      const nextHasHorizontalOverflow = timeline.scrollWidth > timeline.clientWidth + 1
-      setHasHorizontalOverflow(nextHasHorizontalOverflow)
-      setUseViewportScrollbarOverlay((prev) => {
-        if (!nextHasHorizontalOverflow) return false
-        if (prev) {
-          return rootRect.bottom > window.innerHeight - overlayHysteresisPx
-        }
-        return rootRect.bottom > window.innerHeight + overlayHysteresisPx
-      })
-      syncTimelineHeader(timeline.scrollLeft)
-
-      if (customScrollbarRef.current) {
-        customScrollbarRef.current.scrollLeft = timeline.scrollLeft
-      }
-    }
-
-    updateScrollbarMetrics()
-
-    const observer = new ResizeObserver(updateScrollbarMetrics)
-    observer.observe(root)
-    observer.observe(timeline)
-
-    scrollParent?.addEventListener('scroll', updateScrollbarMetrics, { passive: true })
-    window.addEventListener('resize', updateScrollbarMetrics)
-
-    return () => {
-      observer.disconnect()
-      scrollParent?.removeEventListener('scroll', updateScrollbarMetrics)
-      window.removeEventListener('resize', updateScrollbarMetrics)
-    }
-  }, [
-    scrollContainerRef,
-    timelineWidth,
-    members.length,
-    untimedDayJobs.length,
-    syncTimelineHeader
-  ])
-
-  useEffect(() => {
-    const timeline = scrollContainerRef.current
-    const customScrollbar = customScrollbarRef.current
-    if (!timeline) return
-
-    const syncScroll = (source: HTMLDivElement, target: HTMLDivElement | null) => {
-      syncTimelineHeader(source.scrollLeft)
-      if (!target) return
-      if (syncingScrollbarRef.current) return
-      syncingScrollbarRef.current = true
-      target.scrollLeft = source.scrollLeft
-      requestAnimationFrame(() => {
-        syncingScrollbarRef.current = false
-      })
-    }
-
-    const handleTimelineScroll = () => syncScroll(timeline, customScrollbar)
-    const handleCustomScrollbarScroll = () => syncScroll(customScrollbar!, timeline)
-
-    if (customScrollbar) {
-      customScrollbar.scrollLeft = timeline.scrollLeft
-    }
-    timeline.addEventListener('scroll', handleTimelineScroll, { passive: true })
-    customScrollbar?.addEventListener('scroll', handleCustomScrollbarScroll, {
-      passive: true,
-    })
-
-    return () => {
-      timeline.removeEventListener('scroll', handleTimelineScroll)
-      customScrollbar?.removeEventListener('scroll', handleCustomScrollbarScroll)
-    }
-  }, [scrollContainerRef, hasHorizontalOverflow, syncTimelineHeader])
-
-  // Track cursor position during untimed chip drag for floating preview
-  useEffect(() => {
-    if (!draggingChipId) {
-      setChipDragCursor(null);
-      return;
-    }
-    const handler = (e: DragEvent) => {
-      if (e.clientX === 0 && e.clientY === 0) return;
-      setChipDragCursor({ x: e.clientX, y: e.clientY });
-    };
-    window.addEventListener('dragover', handler);
-    return () => window.removeEventListener('dragover', handler);
-  }, [draggingChipId]);
-
-  const handleParkplatzDragOver = useCallback((memberId: string, cursorX: number) => {
-    const dragJob = parkplatzDragJob ?? localChipDragJobRef.current;
-    if (!dragJob) return;
-    const durationMinutes =
-      dragJob.estimatedDurationMinutes ?? DEFAULT_DAY_SCHEDULE_DURATION_MINUTES;
-    const width = (durationMinutes / 60) * effectiveHourWidth;
-    const cursorAnchorOffset = parkplatzDragJob ? width / 2 : 0;
-    const snappedLeft = Math.max(
-      0,
-      Math.min(
-        timelineWidth - width,
-        snapToGrid(cursorX - cursorAnchorOffset, effectiveHourWidth)
-      )
-    );
-    setParkplatzDragHover({ snappedLeft, width, hoveredMemberId: memberId });
-    if (parkplatzDragTimeoutRef.current) clearTimeout(parkplatzDragTimeoutRef.current);
-    parkplatzDragTimeoutRef.current = setTimeout(() => setParkplatzDragHover(null), 150);
-  }, [parkplatzDragJob, effectiveHourWidth, timelineWidth]);
-
-  useEffect(() => {
-    if (!parkplatzDragJob && !localChipDragJobRef.current) setParkplatzDragHover(null);
-  }, [parkplatzDragJob]);
-
-  const handleJobDragUpdate = useCallback((jobId: string, newLeft: number, newWidth: number, memberId?: string) => {
-    setJobDragShadow((prev) =>
-      prev?.jobId === jobId && prev.left === newLeft && prev.width === newWidth && prev.sourceMemberId === memberId
-        ? prev
-        : { jobId, left: newLeft, width: newWidth, sourceMemberId: memberId }
-    );
-  }, []);
-
-  const handleJobDragEnd = useCallback(() => {
-    setJobDragShadow(null);
-  }, []);
-
-  const handleJobClick = useCallback(
-    (job: CalendarJob, position: { x: number; y: number }) => {
-      setSelectedJob({ job, position });
-    },
-    []
-  );
-
-  const entriesByUser = useMemo(() => {
-    const grouped: Record<string, TimeEntry[]> = {};
-    for (const entry of effectiveEntries) {
-      const userEntries = grouped[entry.userId];
-      if (userEntries) userEntries.push(entry);
-      else grouped[entry.userId] = [entry];
-    }
-    return grouped;
-  }, [effectiveEntries]);
-
-  const sessionCollisionBlocksByUser = useMemo(() => {
-    const blocks: Record<string, SessionCollisionBlock[]> = {};
-
-    for (const [userId, userEntries] of Object.entries(entriesByUser)) {
-      const dayEntries = userEntries.filter((entry) => {
-        const entryDate = new Date(entry.timestamp);
-        return entryDate.toDateString() === date.toDateString();
-      });
-
-      blocks[userId] = calculateCalendarWorkBlocks(dayEntries).map((block) => {
-        const start = new Date(block.start);
-        const end = block.end ? new Date(block.end) : null;
-        const { left } = calculateBlockPosition(start, end, effectiveHourWidth);
-
-        return {
-          id: block.id,
-          left,
-          width: getExactLayoutWidth(start, end, effectiveHourWidth)
-        };
-      });
-    }
-
-    return blocks;
-  }, [entriesByUser, date, effectiveHourWidth]);
-  const sessionCollisionBlocksByUserRef = useRef(sessionCollisionBlocksByUser);
-  sessionCollisionBlocksByUserRef.current = sessionCollisionBlocksByUser;
-
-  const sessionsByUser = useMemo(() => {
-    const sessions: Record<
-      string,
-      ReturnType<typeof calculateWorkSessions>
-    > = {};
-    for (const [userId, userEntries] of Object.entries(entriesByUser)) {
-      sessions[userId] = calculateWorkSessions(userEntries);
-    }
-    return sessions;
-  }, [entriesByUser]);
-
-  if (isLoading) {
-    return (
-      <div className="p-4 sm:p-6 space-y-4">
-        <Skeleton className="h-8 w-full" />
-        <Skeleton className="h-24 w-full" />
-        <Skeleton className="h-24 w-full" />
-        <Skeleton className="h-24 w-full" />
-      </div>
-    );
-  }
+    return list;
+  }, [actions.isManager, boardRowByUser, dayEntries, dayJobs, dayStart, days, dateIso, members, nowTick, organizationSettings, roleByUser]);
+
+  const rowModels = useMemo(() => rows.map((row) => row.model), [rows]);
+  const surface = useDaySurface({
+    rootRef,
+    highlightRef,
+    horizontalScroller: verticalScroller,
+    verticalScroller,
+    hourWidth,
+    dateIso,
+    dayStart,
+    rows: rowModels,
+    days,
+    readOnly: actions.readOnly,
+    mutations,
+    parkingContexts,
+    onParkedContextMissing,
+    onPark: actions.onPark,
+    nowMs: () => Date.now(),
+  });
+  useDragSurface(surface);
+
+  const headerLabel = useMemo(() => {
+    const year = Number(dateIso.slice(0, 4));
+    const holiday = getHolidayContextDays(holidays, year, year).find((day) => day.date === dateIso);
+    const closure = holidays.closureDays.find((day) => day.closureDate === dateIso);
+    return holiday?.name ?? (closure ? closure.label ?? 'Betriebsruhe' : null);
+  }, [dateIso, holidays]);
+
+  // Drag-to-create on empty time: DOM-only tracking, the dialog opens on release.
+  const createRef = useRef<{ userId: string; startMinutes: number; endMinutes: number; overlay: HTMLElement; pointerId: number } | null>(null);
+  const canCreate = actions.isManager && !actions.readOnly;
+  const handleCreatePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>, userId: string) => {
+    if (!canCreate || event.button !== 0 || event.pointerType === 'touch') return;
+    if ((event.target as HTMLElement).closest('[data-calendar-card], [data-time-block], button')) return;
+    const timeline = event.currentTarget;
+    const overlay = timeline.querySelector<HTMLElement>('[data-day-create-overlay]');
+    if (!overlay) return;
+    const rect = timeline.getBoundingClientRect();
+    const minutes = snapMinutes(((event.clientX - rect.left) / hourWidth) * 60, 15);
+    createRef.current = { userId, startMinutes: minutes, endMinutes: minutes, overlay, pointerId: event.pointerId };
+    timeline.setPointerCapture(event.pointerId);
+    overlay.hidden = false;
+    overlay.style.left = `${(minutes / 60) * hourWidth}px`;
+    overlay.style.width = '0px';
+    event.preventDefault();
+  }, [canCreate, hourWidth]);
+  const handleCreatePointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const create = createRef.current;
+    if (!create || event.pointerId !== create.pointerId) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    create.endMinutes = Math.max(0, Math.min(24 * 60, snapMinutes(((event.clientX - rect.left) / hourWidth) * 60, event.shiftKey ? 5 : 15)));
+    const start = Math.min(create.startMinutes, create.endMinutes);
+    const end = Math.max(create.startMinutes, create.endMinutes);
+    create.overlay.style.left = `${(start / 60) * hourWidth}px`;
+    create.overlay.style.width = `${((end - start) / 60) * hourWidth}px`;
+    create.overlay.textContent = end > start ? `${formatMinutesOfDay(start)}–${formatMinutesOfDay(end)}` : '';
+  }, [hourWidth]);
+  const handleCreatePointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const create = createRef.current;
+    if (!create || event.pointerId !== create.pointerId) return;
+    createRef.current = null;
+    create.overlay.hidden = true;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+    const start = Math.min(create.startMinutes, create.endMinutes);
+    const end = Math.max(create.startMinutes, create.endMinutes);
+    if (end - start < MIN_ITEM_MINUTES) return;
+    actions.onAddEntry({ date: dateIso, time: formatMinutesOfDay(start), endTime: formatMinutesOfDay(end), userId: create.userId === UNASSIGNED_USER ? undefined : create.userId, kind: 'termin' });
+  }, [actions, dateIso]);
+
+  const nowMinutes = isToday ? minutesIntoDay(new Date(nowTick), dayStart) : null;
+  const draggable = actions.isManager;
+  const rowLabel = (boardDay: CalendarBoardDay | undefined): string | null => {
+    if (!boardDay) return null;
+    if (boardDay.absence) return boardDay.absence.type === 'vacation' ? (boardDay.absence.portion === 'half_day' ? 'Urlaub (halber Tag)' : 'Urlaub') : 'Krank';
+    if (boardDay.reason === 'holiday' || boardDay.reason === 'closure') return boardDay.label ?? (boardDay.reason === 'holiday' ? 'Feiertag' : 'Betriebsruhe');
+    if (boardDay.reason === 'no_work_day' || boardDay.targetMinutes === 0) return 'Kein Arbeitstag';
+    return null;
+  };
 
   return (
-    <div ref={dayViewRootRef} className="flex min-w-0 flex-col">
-      <div className="sticky top-0 z-20 bg-background">
-        {/* All-day jobs row (dated jobs that cannot yet be placed onto a timeline row) */}
-        {untimedDayJobs.length > 0 && (
-          <div className="border-b bg-muted/25 px-4 py-2.5">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="mr-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Ganztägige Aufträge:
-              </span>
-              {untimedDayJobs.map((job) => {
-                const isChipDragging = draggingChipId === job.id;
-                return (
-                  <button
-                    key={job.id}
-                    draggable={isAdminOrManager}
-                    onDragStart={(e) => {
-                      if (!isAdminOrManager) return;
-                      const payload: DragJobPayload = {
-                        jobId: job.id,
-                        source: 'day',
-                        sourceDate: toLocalDateString(date),
-                        durationMinutes:
-                          job.estimatedDurationMinutes ??
-                          DEFAULT_DAY_SCHEDULE_DURATION_MINUTES,
-                      };
-                      e.dataTransfer.setData(PARKPLATZ_MIME, JSON.stringify(payload));
-                      e.dataTransfer.effectAllowed = 'move';
-                      e.dataTransfer.setDragImage(getDragGhost(), 0, 0);
-                      localChipDragJobRef.current = job;
-                      setDraggingChipId(job.id);
-                      startCalendarDragState();
-                    }}
-                    onDragEnd={() => {
-                      localChipDragJobRef.current = null;
-                      setDraggingChipId(null);
-                      setParkplatzDragHover(null);
-                      clearCalendarDragState();
-                    }}
-                    onClick={(e) => {
-                      setSelectedJob({
-                        job,
-                        position: { x: e.clientX + 12, y: e.clientY + 12 }
-                      });
-                    }}
-                    className={cn(
-                      'inline-flex items-center gap-1.5 rounded-md border border-brand-purple/30 bg-brand-purple/10 px-2.5 py-1 text-xs font-medium transition-all',
-                      isAdminOrManager && 'cursor-grab active:cursor-grabbing',
-                      isChipDragging
-                        ? 'opacity-40 scale-[0.95] shadow-none'
-                        : 'hover:bg-brand-purple/20'
-                    )}
-                  >
-                    <Briefcase className="h-3 w-3 text-brand-purple" />
-                    <span className="truncate max-w-[150px]" title={job.title}>{job.title}</span>
-                    {job.jobNumber && (
-                      <span className="text-muted-foreground text-[10px]">
-                        {job.jobNumber}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        <div className="flex border-b bg-background">
-          <div className="z-10 flex h-10 w-48 shrink-0 items-center border-r bg-muted/30 px-3">
-            <span className="text-sm font-medium text-muted-foreground">
-              Mitarbeiter
-            </span>
-          </div>
-
-          <div className="min-w-0 flex-1 overflow-hidden bg-background">
-            <div
-              ref={timelineHeaderTrackRef}
-              style={{
-                width: timelineWidth,
-                transform: 'translate3d(0, 0, 0)',
-              }}
-            >
-              <TimelineHeader
-                className="border-b-0"
-                date={date}
-                effectiveHourWidth={effectiveHourWidth}
-                timelineWidth={timelineWidth}
-                currentTimePosition={currentTimePosition}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Floating preview for untimed chip drag (hidden when over timeline rows — purple block takes over) */}
-      {draggingChipId && chipDragCursor && !parkplatzDragHover && (() => {
-        const chipJob = localChipDragJobRef.current;
-        if (!chipJob) return null;
-        const container = scrollContainerRef.current;
-        if (container) {
-          const rect = container.getBoundingClientRect();
-          if (chipDragCursor.x >= rect.left && chipDragCursor.x <= rect.right &&
-              chipDragCursor.y >= rect.top && chipDragCursor.y <= rect.bottom) {
-            return null;
-          }
-        }
-        return (
-          <div
-            className="fixed pointer-events-none z-[9999]"
-            style={{ left: chipDragCursor.x - 80, top: chipDragCursor.y - 16 }}
-          >
-            <div className="rounded-md border border-brand-purple/40 bg-brand-purple/10 px-2.5 py-1 shadow-lg opacity-90 inline-flex items-center gap-1.5">
-              <Briefcase className="h-3 w-3 text-brand-purple shrink-0" />
-              <span className="font-medium text-xs truncate max-w-[120px]">{chipJob.title}</span>
-            </div>
-          </div>
-        );
-      })()}
-
-      <div className="flex min-h-0 flex-1">
-        {/* Fixed employee names column */}
-        <div
-          className="z-10 w-48 shrink-0 border-r bg-background"
-          style={{ minHeight: timelineContentMinHeight }}
-        >
-          <div className="divide-y">
-            {members.length === 0 ? (
-              <div className="flex items-center justify-center p-8 text-muted-foreground text-sm">
-                Keine Mitarbeiter
+    <div ref={rootRef} role="grid" aria-label="Tageskalender" aria-readonly={actions.readOnly || undefined} data-day-view={dateIso} className="relative" style={{ width: DAY_NAME_COLUMN_PX + timelineWidth }}>
+      <TimelineHeader hourWidth={hourWidth} label={headerLabel} />
+      <div role="rowgroup" className="relative">
+        {rows.map(({ model, boardDay, role, lanes, laneCount, untimed }) => {
+          const trayHeight = untimed.length > 0 ? DAY_TRAY_HEIGHT : 0;
+          const height = trayHeight + laneCount * DAY_LANE_HEIGHT;
+          const off = Boolean(boardDay && (boardDay.absence?.portion === 'full' || boardDay.reason !== 'working' || boardDay.targetMinutes === 0));
+          const label = rowLabel(boardDay);
+          const gaps = travelGaps(lanes.filter(({ item }) => item.kind === 'job').map(({ item }) => item));
+          const highlighted = highlightMemberId === model.userId;
+          return (
+            <div key={model.userId} role="row" data-day-row={model.userId} aria-label={model.name} className={cn('group/row flex', highlighted && 'animate-row-highlight')} style={{ height }}>
+              <div role="rowheader" className={cn('sticky left-0 flex shrink-0 flex-col justify-center gap-0.5 border-b border-r border-calendar-grid-strong bg-calendar-gutter px-3 py-1', CALENDAR_LAYER_CLASS.sticky)} style={{ width: DAY_NAME_COLUMN_PX }}>
+                <span className="flex min-w-0 items-center gap-1">
+                  <span className="min-w-0 truncate text-sm font-medium">{model.name}</span>
+                  {canCreate && model.userId !== UNASSIGNED_USER && (
+                    <button type="button" className="ml-auto rounded-md p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/row:opacity-100" aria-label={`Termin am ${formatRefusalDate(dateIso)} für ${model.name} planen`} onClick={() => actions.onAddEntry({ date: dateIso, userId: model.userId, kind: 'termin' })}>
+                      <Plus className="size-3.5" aria-hidden="true" />
+                    </button>
+                  )}
+                </span>
+                {label && <span className="truncate text-[11px] text-muted-foreground">{label}</span>}
               </div>
-            ) : (
-              members.map((member) => {
-                const sessions = sessionsByUser[member.user_id] || [];
-                const userEntries = entriesByUser[member.user_id] || [];
-                const isHighlighted = highlightMemberId === member.user_id;
-                const activeDragJob = parkplatzDragJob ?? localChipDragJobRef.current;
-                const showParkplatzShadow = !!(parkplatzDragHover && activeDragJob && (
-                  member.user_id === parkplatzDragHover.hoveredMemberId ||
-                  activeDragJob.assignedUserIds.includes(member.user_id)
-                ));
-                return (
-                  <EmployeeTimelineRow
-                    key={member.user_id}
-                    member={member}
-                    sessions={sessions}
-                    entries={userEntries}
-                    organizationSettings={organizationSettings}
-                    showNameOnly
-                    isHighlighted={isHighlighted}
-                    isParkplatzDragTarget={parkplatzDragHover?.hoveredMemberId === member.user_id}
-                    parkplatzShadow={showParkplatzShadow ? { left: parkplatzDragHover!.snappedLeft, width: parkplatzDragHover!.width } : null}
-                  />
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        {/* Scrollable timeline area — zoom-aware pixel layout */}
-        <div
-          ref={scrollContainerRef}
-          data-timeline-scroll=""
-          className="min-h-0 flex-1 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
-        >
-          <div
-            className="relative"
-            style={{
-              width: timelineWidth,
-              minHeight: timelineContentMinHeight
-            }}
-          >
-            {/* Timeline rows */}
-            <div className="divide-y">
-              {members.map((member, memberIndex) => {
-                const sessions = sessionsByUser[member.user_id] || [];
-                const userEntries = entriesByUser[member.user_id] || [];
-                const isHighlighted = highlightMemberId === member.user_id;
-                const memberJobs = timedDayJobs.filter(
-                  (j) => j.assignedUserIds.includes(member.user_id)
-                );
-                const activeDragJobForRow = parkplatzDragJob ?? localChipDragJobRef.current;
-                const showParkplatzShadow = !!(parkplatzDragHover && activeDragJobForRow && (
-                  member.user_id === parkplatzDragHover.hoveredMemberId ||
-                  activeDragJobForRow.assignedUserIds.includes(member.user_id)
-                ));
-                return (
-                  <EmployeeTimelineRow
-                    key={member.user_id}
-                    member={member}
-                    sessions={sessions}
-                    entries={userEntries}
-                    date={date}
-                    organizationSettings={organizationSettings}
-                    currentUserRole={currentUserRole}
-                    currentUserId={currentUserId}
-                    onRefresh={silentRefresh}
-                    showTimelineOnly
-                    changeRequestMap={changeRequestMap}
-                    isHighlighted={isHighlighted}
-                    effectiveHourWidth={effectiveHourWidth}
-                    timelineWidth={timelineWidth}
-                    currentTimePosition={currentTimePosition}
-                    onDragCreate={handleDragCreate}
-                    draftPreview={
-                      entryDraftPreview?.userIds.has(member.user_id)
-                        ? {
-                            left: entryDraftPreview.left,
-                            width: entryDraftPreview.width
-                          }
-                        : null
-                    }
-                    onMoveResize={handleMoveResize}
-                    onBlockMoveStart={handleBlockMoveStart}
-                    activeDragSessionId={
-                      activeDrag?.payload.type === 'session'
-                        ? (
-                            activeDrag.payload.session.calendarBlockId ??
-                            activeDrag.payload.session.clockIn?.id ??
-                            activeDrag.payload.session.clockOut?.id ??
-                            null
-                          )
-                        : null
-                    }
-                    activeConflictTargetIds={
-                      activeDrag?.payload.type === 'session' &&
-                      activeDrag.currentRowIndex === memberIndex
-                        ? (activeDrag.conflictTargetIds ?? [])
-                        : []
-                    }
-                    dayViewDragDidOccurRef={dragDidOccurRef}
-                    jobs={memberJobs}
-                    onJobClick={handleJobClick}
-                    onJobMoveResize={isAdminOrManager ? handleJobMoveResize : undefined}
-                    onJobBlockMoveStart={isAdminOrManager ? handleJobBlockMoveStart : undefined}
-                    activeDragJobId={
-                      activeDrag?.payload.type === 'job'
-                        ? activeDrag.payload.job.id
-                        : null
-                    }
-                    onUnparkJob={isAdminOrManager ? onUnparkJob : undefined}
-                    onScheduleJob={isAdminOrManager ? onScheduleJob : undefined}
-                    parkplatzShadow={showParkplatzShadow ? { left: parkplatzDragHover!.snappedLeft, width: parkplatzDragHover!.width } : null}
-                    isParkplatzDragTarget={parkplatzDragHover?.hoveredMemberId === member.user_id}
-                    onParkplatzDragOver={isAdminOrManager ? handleParkplatzDragOver : undefined}
-                    jobDragShadow={isAdminOrManager ? jobDragShadow : null}
-                    onJobDragUpdate={isAdminOrManager ? handleJobDragUpdate : undefined}
-                    onJobDragEnd={isAdminOrManager ? handleJobDragEnd : undefined}
-                    onInvalidSessionPlacement={handleInvalidSessionPlacement}
-                  />
-                );
-              })}
-            </div>
-
-            {/* Floating preview for Parkplatz / untimed chip → day view drag */}
-            {parkplatzDragHover && (parkplatzDragJob || localChipDragJobRef.current) && (() => {
-              const hovIdx = members.findIndex(m => m.user_id === parkplatzDragHover.hoveredMemberId);
-              if (hovIdx < 0) return null;
-              return (
-                <>
-                  {/* Solid purple block at hovered position */}
-                  <div
-                    className="absolute rounded-md text-xs font-medium pointer-events-none z-50 flex items-center justify-center overflow-hidden bg-brand-purple/70 text-white shadow-lg"
-                    style={{
-                      left: parkplatzDragHover.snappedLeft,
-                      top: hovIdx * ROW_HEIGHT + DAY_VIEW_ROW_PADDING,
-                      width: parkplatzDragHover.width,
-                      height: DAY_VIEW_ROW_INNER_HEIGHT,
-                      opacity: 0.9,
-                    }}
-                  >
-                    <Briefcase className="h-3 w-3 shrink-0 opacity-80 mr-1" />
-                    <span className="truncate">
-                      {formatTimeFromPx(parkplatzDragHover.snappedLeft, effectiveHourWidth)}
-                      {' - '}
-                      {formatTimeFromPx(parkplatzDragHover.snappedLeft + parkplatzDragHover.width, effectiveHourWidth)}
-                    </span>
+              <div
+                role="gridcell"
+                data-day-timeline=""
+                aria-label={`${model.name}, ${formatRefusalDate(dateIso)}${label ? `: ${label}` : ''}`}
+                className={cn('calendar-hour-grid relative shrink-0 border-b border-calendar-grid', off ? 'bg-calendar-cell-off' : 'bg-background', canCreate && 'cursor-crosshair')}
+                style={{ width: timelineWidth, '--calendar-hour-width': `${hourWidth}px`, '--calendar-subline-width': `${hourWidth / (hourWidth >= 220 ? 4 : 2)}px` } as React.CSSProperties}
+                onPointerDown={(event) => handleCreatePointerDown(event, model.userId)}
+                onPointerMove={handleCreatePointerMove}
+                onPointerUp={handleCreatePointerUp}
+                onPointerCancel={handleCreatePointerUp}
+              >
+                <div hidden data-day-create-overlay="" aria-hidden="true" className={cn('pointer-events-none absolute top-1 bottom-1 rounded-md border border-dashed border-calendar-planning-strong bg-calendar-drop-valid px-1 text-[11px] tabular-nums text-calendar-planning-foreground', CALENDAR_LAYER_CLASS.overlay)} />
+                {untimed.length > 0 && (
+                  <div className="sticky left-0 flex h-8 max-w-full items-center gap-1 overflow-x-hidden px-1" style={{ width: 'min(100%, 100vw)' }} aria-label="Ohne Uhrzeit">
+                    {untimed.map((job) => (
+                      <CalendarCard
+                        key={job.id}
+                        job={job}
+                        size="day"
+                        compact
+                        draggable={draggable}
+                        className="h-6 max-w-56 shrink-0"
+                        onOpen={(element) => actions.onOpenCard(job, element, model.row)}
+                        onPointerDown={(event) => {
+                          const rect = event.currentTarget.getBoundingClientRect();
+                          startDrag(event, { payload: { kind: 'untimed', job, sourceDate: dateIso }, ghost: { label: job.title, secondary: job.clientName ?? undefined, width: Math.min(rect.width, 240), height: rect.height }, pointerOffset: { x: Math.min(event.clientX - rect.left, 240), y: event.clientY - rect.top } });
+                        }}
+                      />
+                    ))}
                   </div>
-                  {/* Row highlight for hovered row */}
-                  <div
-                    className="absolute left-0 right-0 pointer-events-none bg-brand-purple/5 ring-1 ring-inset ring-brand-purple/20"
-                    style={{
-                      top: hovIdx * ROW_HEIGHT,
-                      height: ROW_HEIGHT,
-                      width: timelineWidth,
-                      zIndex: 4,
-                    }}
-                  />
-                </>
-              );
-            })()}
-
-            {/* Floating preview + ghost during cross-row drag */}
-            {activeDrag && !activeDrag.isAboveGrid && (
-              <>
-                {/* Floating preview at target position */}
-                <div
-                  className={cn(
-                    'absolute rounded-md text-xs font-medium pointer-events-none z-50',
-                    'flex items-center justify-center overflow-hidden',
-                    activeDrag.isOverParkplatz
-                      ? 'bg-brand-purple/80 text-white shadow-lg'
-                      : activeDrag.canDrop
-                        ? activeDrag.payload.type === 'job'
-                          ? 'bg-brand-purple/70 text-white shadow-lg'
-                          : 'bg-success/70 text-success-foreground shadow-lg'
-                        : 'bg-destructive/50 text-destructive-soft-foreground shadow-lg'
-                  )}
-                  style={{
-                    left: activeDrag.currentLeft,
-                    top:
-                      activeDrag.currentRowIndex * ROW_HEIGHT +
-                      DAY_VIEW_ROW_PADDING,
-                    width: activeDrag.originalWidth,
-                    height: DAY_VIEW_ROW_INNER_HEIGHT,
-                    opacity: 0.9,
-                    transition: 'top 0.08s ease-out',
-                  }}
-                >
-                  {activeDrag.isOverParkplatz ? (
-                    <>
-                      <ParkingSquare className="h-3 w-3 shrink-0 opacity-80 mr-1" />
-                      <span>Parkplatz</span>
-                    </>
-                  ) : (
-                    <>
-                      {activeDrag.payload.type === 'job' ? (
-                        <Briefcase className="h-3 w-3 shrink-0 opacity-80 mr-1" />
-                      ) : (
-                        <Clock className="h-3 w-3 shrink-0 opacity-80 mr-1" />
-                      )}
-                      <span className="truncate">
-                        {formatTimeFromPx(activeDrag.currentLeft, effectiveHourWidth)}
-                        {' - '}
-                        {formatTimeFromPx(activeDrag.currentLeft + activeDrag.originalWidth, effectiveHourWidth)}
-                      </span>
-                    </>
-                  )}
-                </div>
-
-                {/* Row highlight for target */}
-                {activeDrag.currentRowIndex !== activeDrag.sourceRowIndex && (
-                  <div
-                    className={cn(
-                      'absolute left-0 right-0 pointer-events-none',
-                      activeDrag.canDrop
-                        ? 'bg-success/5 ring-1 ring-inset ring-success/20'
-                        : 'bg-destructive/5 ring-1 ring-inset ring-destructive/20'
-                    )}
-                    style={{
-                      top: activeDrag.currentRowIndex * ROW_HEIGHT,
-                      height: ROW_HEIGHT,
-                      width: timelineWidth,
-                      zIndex: 4,
-                    }}
-                  />
                 )}
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {hasHorizontalOverflow && (
-        <div
-          ref={customScrollbarRef}
-          className={cn(
-            'z-30 ml-48 overflow-x-auto overflow-y-hidden border-t bg-background',
-            useViewportScrollbarOverlay ? 'sticky bottom-0' : 'relative'
-          )}
-          aria-label="Horizontale Kalendernavigation"
-        >
-          <div style={{ width: timelineWidth, height: 1 }} />
-        </div>
-      )}
-
-      {/* Free-floating preview when job block is dragged above the calendar grid */}
-      {activeDrag && activeDrag.isAboveGrid && activeDrag.payload.type === 'job' && (
-        <>
-          {/* Ghost at original position (rendered in scroll container via portal-like absolute) */}
-          <div
-            className="fixed pointer-events-none z-[9999]"
-            style={{
-              left: (activeDrag.pointerClientX ?? 0) - Math.min(activeDrag.originalWidth, 180) / 2,
-              top: (activeDrag.pointerClientY ?? 0) - 28,
-            }}
-          >
-            <div
-              className={cn(
-                'rounded-md shadow-lg flex items-center justify-center px-3 text-xs font-medium gap-1',
-                activeDrag.isOverParkplatz
-                  ? 'bg-brand-purple/90 text-white'
-                  : 'bg-muted border text-muted-foreground'
-              )}
-              style={{
-                width: Math.min(activeDrag.originalWidth, 180),
-                height: 44,
-              }}
-            >
-              {activeDrag.isOverParkplatz ? (
-                <>
-                  <ParkingSquare className="h-3 w-3 shrink-0" />
-                  <span>Parkplatz</span>
-                </>
-              ) : (
-                <>
-                  <Briefcase className="h-3 w-3 shrink-0" />
-                  <span className="truncate" title={activeDrag.payload.job.title}>
-                    {activeDrag.payload.job.title}
+                {gaps.map((gap) => ((gap.endMinutes - gap.startMinutes) / 60) * hourWidth > 36 && (
+                  <span key={gap.startMinutes} aria-hidden="true" className="pointer-events-none absolute bottom-0.5 truncate text-center text-[10px] tabular-nums text-muted-foreground" style={{ left: (gap.startMinutes / 60) * hourWidth, width: ((gap.endMinutes - gap.startMinutes) / 60) * hourWidth }}>
+                    {gap.endMinutes - gap.startMinutes} min
                   </span>
-                </>
-              )}
+                ))}
+                {lanes.map(({ item, lane }) => {
+                  const laneTop = trayHeight + lane * DAY_LANE_HEIGHT;
+                  if (item.kind === 'block') {
+                    const manage = draggable !== undefined && canManageBlock(item.block, currentUserRole, currentUserId, role) && !actions.readOnly;
+                    return (
+                      <TimeBlock
+                        key={item.key}
+                        block={item.block}
+                        segments={item.segments}
+                        startMinutes={item.startMinutes}
+                        endMinutes={item.endMinutes}
+                        hourWidth={hourWidth}
+                        laneTop={laneTop}
+                        laneHeight={DAY_LANE_HEIGHT}
+                        changeRequestMap={changeRequestMap}
+                        showName={actions.isManager ? model.name : null}
+                        canManage={manage}
+                        onOpen={(block) => onSessionClick(createSessionFromCalendarBlock(block, new Date(), organizationSettings))}
+                        onPointerDownMove={(event, block) => {
+                          if (block.isOpen) return;
+                          const session = createSessionFromCalendarBlock(block, new Date(), organizationSettings);
+                          const rect = event.currentTarget.getBoundingClientRect();
+                          startDrag(event, { payload: { kind: 'timeBlock', session, sourceUserId: model.userId, sourceDate: dateIso, durationMinutes: item.endMinutes - item.startMinutes }, ghost: { label: `Arbeitszeit ${formatMinutesOfDay(item.startMinutes)}–${formatMinutesOfDay(item.endMinutes)}`, width: Math.min(rect.width, 240), height: rect.height }, pointerOffset: { x: Math.min(event.clientX - rect.left, 240), y: event.clientY - rect.top } });
+                        }}
+                        onPointerDownEdge={(event, block, edge) => {
+                          const session = createSessionFromCalendarBlock(block, new Date(), organizationSettings);
+                          startDrag(event, { payload: { kind: 'resizeBlock', session, edge, sourceUserId: model.userId }, ghost: { label: edge === 'start' ? 'Beginn ändern' : 'Ende ändern', width: 120, height: 24 }, pointerOffset: { x: 60, y: 12 } });
+                        }}
+                      />
+                    );
+                  }
+                  const { job } = item;
+                  const width = Math.max(24, ((item.endMinutes - item.startMinutes) / 60) * hourWidth);
+                  return (
+                    <div key={item.key} className="absolute" style={{ left: (item.startMinutes / 60) * hourWidth, width, top: laneTop + 3, height: DAY_LANE_HEIGHT - 6 }}>
+                      <CalendarCard
+                        job={job}
+                        size="day"
+                        compact={width < 110}
+                        draggable={draggable}
+                        className="h-full w-full"
+                        {...(model.row ? { 'data-employee-record-id': model.row.employeeRecordId } : {})}
+                        onOpen={(element) => actions.onOpenCard(job, element, model.row)}
+                        onPointerDown={(event) => {
+                          const rect = event.currentTarget.getBoundingClientRect();
+                          startDrag(event, { payload: { kind: 'occurrence', job, sourceEmployeeRecordId: model.row?.employeeRecordId ?? null, sourceUserId: model.userId === UNASSIGNED_USER ? null : model.userId, sourceDate: dateIso }, ghost: { label: job.title, secondary: `${formatMinutesOfDay(item.startMinutes)} · ${job.clientName ?? ''}`.trim(), width: Math.min(rect.width, 240), height: rect.height }, pointerOffset: { x: Math.min(event.clientX - rect.left, 240), y: event.clientY - rect.top } });
+                        }}
+                      >
+                        {draggable && (
+                          <>
+                            <span role="presentation" className="absolute inset-y-0 -left-2 w-6 cursor-ew-resize" onPointerDown={(event) => { event.stopPropagation(); startDrag(event, { payload: { kind: 'resizeJob', job, edge: 'start', sourceUserId: model.userId === UNASSIGNED_USER ? null : model.userId }, ghost: { label: 'Beginn ändern', width: 120, height: 24 }, pointerOffset: { x: 60, y: 12 } }); }}>
+                              <span className="absolute inset-y-0 left-2 w-2 bg-calendar-planning-strong opacity-0 transition-opacity group-hover/card:opacity-60" />
+                            </span>
+                            <span role="presentation" className="absolute inset-y-0 -right-2 w-6 cursor-ew-resize" onPointerDown={(event) => { event.stopPropagation(); startDrag(event, { payload: { kind: 'resizeJob', job, edge: 'end', sourceUserId: model.userId === UNASSIGNED_USER ? null : model.userId }, ghost: { label: 'Ende ändern', width: 120, height: 24 }, pointerOffset: { x: 60, y: 12 } }); }}>
+                              <span className="absolute inset-y-0 right-2 w-2 bg-calendar-planning-strong opacity-0 transition-opacity group-hover/card:opacity-60" />
+                            </span>
+                          </>
+                        )}
+                      </CalendarCard>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        </>
-      )}
-
-      {selectedJob && (
-        <JobEventPopover
-          job={selectedJobDisplay ?? selectedJob.job}
-          position={selectedJob.position}
-          onClose={() => setSelectedJob(null)}
-          memberNames={memberNameMap}
-          canEditPlanning={isAdminOrManager}
-        />
-      )}
-
-      {/* Drag-to-create CalendarEntryDialog (controlled, two-tab) */}
-      <CalendarEntryDialog
-        open={dragCreateOpen}
-        onOpenChange={handleEntryDialogOpenChange}
-        preselectedUserId={dragCreateMemberId}
-        preselectedDate={date}
-        preselectedClockInTime={dragCreateClockIn}
-        preselectedClockOutTime={dragCreateClockOut}
-        lockEntryMode
-        onDraftChange={setEntryDraft}
-        onManualEntrySuccess={onManualEntrySuccess}
-        onJobSuccess={onJobSuccess}
+          );
+        })}
+        {rows.length === 0 && <p className="px-4 py-8 text-sm text-muted-foreground">Keine Mitarbeiter für diese Auswahl.</p>}
+        {nowMinutes !== null && <NowIndicator orientation="vertical" offset={DAY_NAME_COLUMN_PX + (nowMinutes / 60) * hourWidth} />}
+      </div>
+      <div
+        ref={highlightRef}
+        hidden
+        aria-hidden="true"
+        data-day-highlight=""
+        data-state="valid"
+        className={cn('pointer-events-none absolute left-0 top-0 rounded-md ring-2 ring-inset will-change-transform data-[state=valid]:bg-calendar-drop-valid data-[state=valid]:ring-success data-[state=refused]:bg-calendar-drop-refused data-[state=refused]:ring-destructive', CALENDAR_LAYER_CLASS.overlay)}
       />
     </div>
   );

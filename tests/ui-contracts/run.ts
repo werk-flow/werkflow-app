@@ -64,11 +64,9 @@ await withWorkspaceTestLock(
               builder.onResolve({ filter: /^next\/link$/ }, (args) => {
                 if (args.importer.endsWith('parkplatz-panel.tsx') || args.importer.endsWith('clients-table.tsx')) return { path: join(import.meta.dir, 'day-view-link-boundary.tsx') };
               });
-              builder.onResolve({ filter: /(?:calendar-entry-dialog|job-event-popover|entry-details-dialog)$/ }, (args) => {
-                if (args.importer.includes('day-view') || args.importer.endsWith('fullcalendar-view.tsx')) return { path: join(import.meta.dir, 'day-view-service-boundaries.tsx') };
-              });
-              builder.onResolve({ filter: /^@\/lib\/(jobs|time-tracking)\/actions$/ }, (args) => {
-                if (args.importer.endsWith('day-view.tsx')) return { path: join(import.meta.dir, 'day-view-service-boundaries.tsx') };
+              // The calendar views' one optimistic owner writes through these actions; the contract holds each write.
+              builder.onResolve({ filter: /^@\/lib\/(jobs|time-tracking|planning|work-lifecycle)\/actions$/ }, (args) => {
+                if (args.importer.endsWith('use-calendar-mutations.ts')) return { path: join(import.meta.dir, 'calendar-views-service-boundaries.tsx') };
               });
               builder.onResolve({ filter: /^next\/navigation$/ }, (args) => {
                 if (args.importer.endsWith('use-list-navigation.ts')) return { path: join(import.meta.dir, 'list-navigation-service-boundaries.ts') };

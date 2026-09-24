@@ -62,8 +62,7 @@ export function qualificationCoverageRow(page: Page, capabilityName: string): Lo
 }
 
 export function calendarDayCell(page: Page, dateIso: string): Locator {
-  // FullCalendar day cells expose their date only through data-date.
-  return page.locator(`.fc-daygrid-day[data-date="${dateIso}"]`);
+  return page.locator(`[data-month-day="${dateIso}"]`);
 }
 
 export function ownQualificationCard(page: Page, capabilityName: string): Locator {

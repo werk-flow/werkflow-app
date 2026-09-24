@@ -1,9 +1,8 @@
 import { RouteRefreshFixture } from './route-refresh-boundaries';
 import { CustomerContractFixture } from './customer-boundaries';
 import { ClockContractFixture } from './clock-boundaries';
-import { MonthViewContractFixture } from './month-view-boundaries';
 import { SidebarContractFixture } from './sidebar-boundaries';
-import { DayViewContractFixture } from './day-view-boundaries';
+import { CalendarBoardContractFixture, CalendarDayContractFixture, CalendarMonthContractFixture } from './calendar-views-boundaries';
 import { OptionContractFixture } from './option-boundaries';
 import { ListNavigationFixture } from './list-navigation-boundaries';
 import { OrganizationContractFixture } from './organization-boundaries';
@@ -384,7 +383,7 @@ createRoot(root).render(
   window.uiContractFixture === "live-view" ? <main><h1>Komponentenverträge</h1><LiveViewEnableFixture /></main> :
   window.uiContractFixture === "clock" ? <ClockContractFixture /> :
   window.uiContractFixture === "sidebar" ? <SidebarContractFixture /> :
-  window.uiContractFixture === "organization" ? <OrganizationContractFixture /> : window.uiContractFixture === "month-view" ? <MonthViewContractFixture /> : window.uiContractFixture === "day-view" ? <DayViewContractFixture /> : window.uiContractFixture === "list-navigation" ? <ListNavigationFixture /> : window.uiContractFixture === "options" ? <OptionContractFixture /> : window.uiContractFixture === "calendar" ? <CalendarContractFixture /> : window.uiContractFixture === "lifecycle" ? (
+  window.uiContractFixture === "organization" ? <OrganizationContractFixture /> : window.uiContractFixture === "calendar-board" ? <CalendarBoardContractFixture /> : window.uiContractFixture === "calendar-day" ? <CalendarDayContractFixture /> : window.uiContractFixture === "calendar-month" ? <CalendarMonthContractFixture /> : window.uiContractFixture === "list-navigation" ? <ListNavigationFixture /> : window.uiContractFixture === "options" ? <OptionContractFixture /> : window.uiContractFixture === "calendar" ? <CalendarContractFixture /> : window.uiContractFixture === "lifecycle" ? (
     <BannerProvider>
       <main>
         <h1>Komponentenverträge</h1>

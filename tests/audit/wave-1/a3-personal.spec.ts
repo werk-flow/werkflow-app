@@ -167,7 +167,6 @@ async function expectInformationalCalendarEvent(
 ): Promise<void> {
   const event = informationalCalendarEvent(page, label);
   await expect(event).toBeVisible({ timeout: 15_000 });
-  await expect(event).not.toHaveClass(/fc-event-draggable/);
   await expect(event).toHaveCSS('pointer-events', 'none');
   await event.dispatchEvent('click');
   await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -200,9 +199,8 @@ async function deleteWorkBlockViaCalendar(
   await page.getByRole('button', { name: 'Aktualisieren' }).click();
   const block = page.getByTitle(title).filter({ visible: true });
   await expect(block).toBeVisible({ timeout: 20_000 });
-  const openDetailsButton = block.getByRole('button');
-  await openDetailsButton.focus();
-  await openDetailsButton.press('Enter');
+  await block.focus();
+  await block.press('Enter');
   const dialog = page.getByRole('dialog').filter({
     has: page.getByRole('heading', { name: 'Eintrag Details' }),
   });

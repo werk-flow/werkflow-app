@@ -1,5 +1,0 @@
-
-export const DAY_VIEW_ROW_HEIGHT = 110;
-export const DAY_VIEW_ROW_PADDING = 6;
-export const DAY_VIEW_ROW_INNER_HEIGHT =
-  DAY_VIEW_ROW_HEIGHT - DAY_VIEW_ROW_PADDING * 2;

@@ -4,16 +4,31 @@ import { subscribeReceiverNavigation } from "./receiver-navigation";
 
 /** The measured audit owns these DOM contracts. Ordinary test locators remain unrestricted. */
 export type BrowserObservationTarget =
-  | { kind: "calendar"; view: "day" | "week" | "month"; rangeStartIso?: string }
+  | { kind: "calendar"; view: "day" | "week" | "month"; rangeStartIso?: string; horizon?: number }
+  | { kind: "board-card"; title: string; employeeRecordId: string }
+  | { kind: "banner"; text: string }
   | { kind: "list"; name: "kunden" | "auftraege" }
   | { kind: "calendar-event"; title: string; index: number }
   | { kind: "standalone-calendar-visit"; title: string; dateIso: string };
 
 export type MeasuredTarget = { locator: Locator; observation: BrowserObservationTarget };
 
-export function calendarTarget(page: Page, view: "day" | "week" | "month", rangeStartIso?: string): MeasuredTarget {
+export function calendarTarget(page: Page, view: "day" | "week" | "month", rangeStartIso?: string, horizon?: number): MeasuredTarget {
   const range = rangeStartIso ? `[data-calendar-range-start="${rangeStartIso}"]` : "";
-  return { locator: page.locator(`[data-calendar-scroll-container][data-calendar-state="ready"][data-calendar-view="${view}"]${range}`), observation: { kind: "calendar", view, ...(rangeStartIso !== undefined ? { rangeStartIso } : {}) } };
+  const weeks = horizon !== undefined ? `[data-calendar-horizon="${horizon}"]` : "";
+  return { locator: page.locator(`[data-calendar-scroll-container][data-calendar-state="ready"][data-calendar-view="${view}"]${range}${weeks}`), observation: { kind: "calendar", view, ...(rangeStartIso !== undefined ? { rangeStartIso } : {}), ...(horizon !== undefined ? { horizon } : {}) } };
+}
+
+/** A visit card drawn in one person's row of the Plantafel. */
+export function boardCardTarget(page: Page, title: string, employeeRecordId: string): MeasuredTarget {
+  if (!title.trim() || !employeeRecordId.trim()) throw new Error("A measured board card needs a title and a row.");
+  return { locator: page.locator(`[data-board-row="${employeeRecordId}"] [data-calendar-card]`).filter({ hasText: title }), observation: { kind: "board-card", title, employeeRecordId } };
+}
+
+/** The confirmed banner of an optimistic drop. */
+export function bannerTarget(page: Page, text: string): MeasuredTarget {
+  if (!text.trim()) throw new Error("A measured banner needs its text.");
+  return { locator: page.getByRole("alert").filter({ hasText: text }), observation: { kind: "banner", text } };
 }
 
 export function listTarget(page: Page, name: "kunden" | "auftraege"): MeasuredTarget {
@@ -22,13 +37,13 @@ export function listTarget(page: Page, name: "kunden" | "auftraege"): MeasuredTa
 
 export function calendarEventTarget(page: Page, title: string, index = 0): MeasuredTarget {
   if (!Number.isInteger(index) || index < 0 || !title.trim()) throw new Error("A measured calendar event needs a title and nonnegative index.");
-  return { locator: page.locator(".fc-event-job").filter({ hasText: title }).nth(index), observation: { kind: "calendar-event", title, index } };
+  return { locator: page.locator("[data-calendar-card]").filter({ hasText: title }).nth(index), observation: { kind: "calendar-event", title, index } };
 }
 
 /** All job visits in one actual month-grid date cell, including overflowed visits. */
 export function calendarDateVisits(page: Page, dateIso: string): Locator {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) throw new Error("A measured calendar date needs an ISO date.");
-  return page.locator(`.fc-daygrid-day[data-date="${dateIso}"] .fc-event-job`);
+  return page.locator(`[data-month-day="${dateIso}"] [data-calendar-card]`);
 }
 
 /** A newly saved standalone visit cannot match either occurrence of the seeded recurrence. */
@@ -46,16 +61,22 @@ export function firstVisibleBrowserTimestamp(target: BrowserObservationTarget): 
   let candidates: Element[];
   if (target.kind === "calendar") {
     candidates = Array.from(document.querySelectorAll('[data-calendar-scroll-container][data-calendar-state="ready"]'))
-      .filter((element) => element.getAttribute("data-calendar-view") === target.view && (!target.rangeStartIso || element.getAttribute("data-calendar-range-start") === target.rangeStartIso));
+      .filter((element) => element.getAttribute("data-calendar-view") === target.view && (!target.rangeStartIso || element.getAttribute("data-calendar-range-start") === target.rangeStartIso) && (target.horizon === undefined || element.getAttribute("data-calendar-horizon") === String(target.horizon)));
+  } else if (target.kind === "board-card") {
+    const normalize = (value: string): string => value.replace(/[\u200b\u00ad]/g, "").trim().replace(/\s+/g, " ").toLowerCase();
+    candidates = Array.from(document.querySelectorAll(`[data-board-row="${target.employeeRecordId}"] [data-calendar-card]`))
+      .filter((element) => normalize(element.textContent ?? "").includes(normalize(target.title)));
+  } else if (target.kind === "banner") {
+    candidates = Array.from(document.querySelectorAll('[role="alert"]')).filter((element) => (element.textContent ?? "").includes(target.text));
   } else if (target.kind === "list") {
     candidates = Array.from(document.querySelectorAll('[data-usable-content="ready"]'))
       .filter((element) => element.getAttribute("data-usable-content-name") === target.name);
   } else {
     const normalize = (value: string): string => value.replace(/[\u200b\u00ad]/g, "").trim().replace(/\s+/g, " ").toLowerCase();
-    const matching = Array.from(document.querySelectorAll(".fc-event-job"))
+    const matching = Array.from(document.querySelectorAll("[data-calendar-card]"))
       .filter((element) => normalize(element.textContent ?? "").includes(normalize(target.title)));
     if (target.kind === "standalone-calendar-visit") {
-      candidates = matching.filter((element) => element.closest(".fc-daygrid-day")?.getAttribute("data-date") === target.dateIso && !element.querySelector('[role="img"][aria-label="Serientermin"]'));
+      candidates = matching.filter((element) => element.closest("[data-month-day]")?.getAttribute("data-month-day") === target.dateIso && !element.querySelector('[role="img"][aria-label="Serientermin"]'));
     } else {
       const selected = matching[target.index];
       candidates = selected ? [selected] : [];

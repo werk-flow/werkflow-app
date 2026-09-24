@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { sourceImportGraph, UNKNOWN_IMPORT_DEPENDENCY, changedInputs, groupAttemptProblem, groupFingerprint, groupInputFiles, hashValue, inputsUnchangedBetween, isDocumentationInput, reusableGroupResult, type EvidenceGroup, type GroupResult, type InputSnapshot } from "./group-evidence";
+import { sourceImportGraph, UNKNOWN_IMPORT_DEPENDENCY, changedInputs, groupAttemptProblem, groupFingerprint, groupInputFiles, hashValue, INPUT_DRIFT_REASON, inputsUnchangedBetween, isDocumentationInput, reusableGroupResult, type EvidenceGroup, type GroupResult, type InputSnapshot } from "./group-evidence";
 
 const groups: [EvidenceGroup, EvidenceGroup] = [
   { id: "people", files: ["tests/people.ts"], sourcePrefixes: ["lib/people"] },
@@ -56,6 +56,11 @@ describe("independent group proof", () => {
     expect(reusableGroupResult({ groupId: "people", fingerprint: hashValue("new"), results: [pass] })).toBeUndefined();
     expect(groupAttemptProblem({ groupId: "people", fingerprint: pass.fingerprint, results: [pass, failed] })).toContain("unchanged inputs");
     expect(groupAttemptProblem({ groupId: "people", fingerprint: hashValue("fixed"), results: [failed] })).toBeUndefined();
+  });
+  test("an attempt voided by an input change neither proves nor blocks the group", () => {
+    const voided: GroupResult = { ...pass, startedAt: "2026-09-06T12:00:00.000Z", status: "failed", reason: `${INPUT_DRIFT_REASON}: tests/other.spec.ts` };
+    expect(reusableGroupResult({ groupId: "people", fingerprint: pass.fingerprint, results: [pass, voided] })).toBe(pass);
+    expect(groupAttemptProblem({ groupId: "people", fingerprint: pass.fingerprint, results: [voided] })).toBeUndefined();
   });
 });
 

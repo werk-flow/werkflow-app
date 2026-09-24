@@ -117,7 +117,6 @@ function formatAddress(site: {
 function refreshMaintenancePaths(): void {
   revalidatePath("/service/wartung");
   revalidatePath("/auftraege");
-  revalidatePath("/kalender");
 }
 
 async function loadMaintenanceOptions(

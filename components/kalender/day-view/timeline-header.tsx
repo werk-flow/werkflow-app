@@ -1,101 +1,35 @@
 'use client';
 
-import { memo, useMemo } from 'react';
+import { memo } from 'react';
 import { cn } from '@/lib/utils';
-import {
-  BASE_HOUR_WIDTH,
-  getVisibleGridSubdivisions
-} from './timeline-grid';
+import { DAY_NAME_COLUMN_PX } from '@/lib/calendar/day-layout';
+import { CALENDAR_LAYER_CLASS } from '../surface/layers';
 
-const HOURS = Array.from({ length: 24 }, (_, i) => i);
+const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 
-interface TimelineHeaderProps {
-  className?: string;
-  date?: Date;
-  effectiveHourWidth?: number;
-  timelineWidth?: number;
-  currentTimePosition?: number | null;
-}
-
-export const TimelineHeader = memo(function TimelineHeader({
-  className,
-  date,
-  effectiveHourWidth = BASE_HOUR_WIDTH,
-  timelineWidth: totalWidth,
-  currentTimePosition = null
-}: TimelineHeaderProps) {
-  const timelineWidth = totalWidth ?? 24 * effectiveHourWidth;
-
-  const isToday = date
-    ? date.toDateString() === new Date().toDateString()
-    : true;
-  const subLabels = useMemo(
-    () => getVisibleGridSubdivisions(effectiveHourWidth),
-    [effectiveHourWidth]
-  );
-
-  // Opacity for sub-labels: fade in at threshold boundaries
-  const subLabelOpacity = useMemo(() => {
-    if (effectiveHourWidth >= 200) {
-      const t = Math.min((effectiveHourWidth - 200) / 40, 1);
-      return { half: 1, quarter: 0.5 + t * 0.5 };
-    }
-    if (effectiveHourWidth >= 120) {
-      const t = Math.min((effectiveHourWidth - 120) / 40, 1);
-      return { half: 0.5 + t * 0.5, quarter: 0 };
-    }
-    return { half: 0, quarter: 0 };
-  }, [effectiveHourWidth]);
-
+/** The hour axis of the day view; sub-labels appear as the zoom makes room. */
+export const TimelineHeader = memo(function TimelineHeader({ hourWidth, label }: { hourWidth: number; label: string | null }) {
+  const showHalves = hourWidth >= 120;
+  const showQuarters = hourWidth >= 220;
   return (
-    <div
-      className={cn('relative h-10 border-b bg-muted/30', className)}
-      style={{ width: timelineWidth }}
-    >
-      {HOURS.map((hour) => (
-        <div key={hour}>
-          {/* Hour marker */}
-          <div
-            className="absolute top-0 h-full border-l border-border/50"
-            style={{ left: hour * effectiveHourWidth }}
-          >
-            <span className="absolute top-2 -translate-x-1/2 text-xs font-medium text-muted-foreground whitespace-nowrap">
-              {hour.toString().padStart(2, '0')}:00
-            </span>
+    <div role="row" className={cn('sticky top-0 flex bg-background', CALENDAR_LAYER_CLASS.sticky)}>
+      <div role="columnheader" className={cn('sticky left-0 flex shrink-0 items-end truncate border-b border-r border-calendar-grid-strong bg-calendar-gutter px-3 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground', CALENDAR_LAYER_CLASS.sticky)} style={{ width: DAY_NAME_COLUMN_PX }} title={label ?? undefined}>
+        {label ?? 'Mitarbeiter'}
+      </div>
+      <div role="columnheader" aria-label="Uhrzeit" className="relative h-9 shrink-0 border-b border-calendar-grid" style={{ width: 24 * hourWidth }}>
+        {HOURS.map((hour) => (
+          <div key={hour} className="absolute top-0 h-full border-l border-calendar-grid-strong" style={{ left: hour * hourWidth }}>
+            <span className="absolute top-1.5 left-1 whitespace-nowrap text-xs font-medium tabular-nums text-muted-foreground">{String(hour).padStart(2, '0')}:00</span>
+            {showHalves && <span className="absolute top-2.5 whitespace-nowrap text-[10px] tabular-nums text-muted-foreground/70" style={{ left: hourWidth / 2 + 2 }}>:30</span>}
+            {showQuarters && (
+              <>
+                <span className="absolute top-2.5 whitespace-nowrap text-[10px] tabular-nums text-muted-foreground/60" style={{ left: hourWidth / 4 + 2 }}>:15</span>
+                <span className="absolute top-2.5 whitespace-nowrap text-[10px] tabular-nums text-muted-foreground/60" style={{ left: (hourWidth * 3) / 4 + 2 }}>:45</span>
+              </>
+            )}
           </div>
-
-          {/* Sub-labels */}
-          {subLabels.map((minute) => {
-            const offset = hour * effectiveHourWidth + (minute / 60) * effectiveHourWidth;
-            const opacity = minute === 30 ? subLabelOpacity.half : subLabelOpacity.quarter;
-            if (opacity <= 0) return null;
-            return (
-              <div
-                key={`${hour}-${minute}`}
-                className="absolute top-0 h-full border-l border-border/20"
-                style={{ left: offset, opacity, transition: 'opacity 0.15s ease' }}
-              >
-                <span
-                  className="absolute top-2.5 -translate-x-1/2 text-[10px] text-muted-foreground/60 whitespace-nowrap"
-                  style={{ opacity, transition: 'opacity 0.15s ease' }}
-                >
-                  :{minute.toString().padStart(2, '0')}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      ))}
-
-      {/* Current time indicator */}
-      {isToday && currentTimePosition !== null && (
-        <div
-          className="absolute top-0 z-10 h-full w-0.5 -translate-x-1/2 bg-destructive"
-          style={{ left: currentTimePosition }}
-        >
-          <div className="absolute -top-0.5 left-1/2 h-2 w-2 -translate-x-1/2 rounded-full bg-destructive" />
-        </div>
-      )}
+        ))}
+      </div>
     </div>
   );
 });

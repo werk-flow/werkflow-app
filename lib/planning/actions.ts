@@ -1,6 +1,6 @@
 'use server';
 
-import { revalidatePath, updateTag } from 'next/cache';
+import { updateTag } from 'next/cache';
 
 import { CACHE_TAGS } from '@/lib/data/cached';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
@@ -38,7 +38,6 @@ import type {
 } from './types';
 
 function revalidatePlanningMutation(organizationId: string): void {
-  revalidatePath('/kalender');
   updateTag(CACHE_TAGS.jobs(organizationId));
   updateTag(CACHE_TAGS.projects(organizationId));
 }
@@ -474,6 +473,7 @@ export type UpdatePlanningCalendarInput = {
   plannedDate?: string;
   plannedTime?: string;
   estimatedDurationMinutes?: number | null;
+  durationDays?: number;
   selectedUserIds?: string[];
   selectedEmployeeRecordIds?: string[];
   overrideReason?: string | null;
@@ -593,7 +593,7 @@ export async function updatePlanningCalendarEntry(
     if (!occurrence.start_date || !occurrence.end_date_exclusive) {
       return { success: false as const, error: 'invalid_occurrence' };
     }
-    const durationDays = Math.round(
+    const durationDays = input.durationDays ?? Math.round(
       (new Date(`${occurrence.end_date_exclusive}T00:00:00Z`).getTime() -
         new Date(`${occurrence.start_date}T00:00:00Z`).getTime()) /
         86_400_000
@@ -805,7 +805,7 @@ export async function reschedulePlanningSeries(
         : null,
     durationDays:
       series.time_kind === 'all_day'
-        ? existingDurationDays ?? series.duration_days
+        ? input.durationDays ?? existingDurationDays ?? series.duration_days
         : null,
     timezone: 'Europe/Berlin',
     frequency: series.recurrence_frequency as PlanningSeriesDraft['frequency'],

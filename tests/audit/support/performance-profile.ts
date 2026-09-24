@@ -5,11 +5,13 @@ import { resolve } from "node:path";
 import type { Database } from "../../../lib/supabase/database.types";
 import { resolveBerlinWallTime } from "../../../lib/planning/date-time";
 import { shiftIsoDateByDays } from "../../../lib/personnel/types";
+import { ownedBerlinDateAtOffset } from "../../golden/support/date-ownership";
 import { requireEnv } from "../../golden/support/env";
 import { testSupabaseClientOptions } from "../../golden/support/client-options";
 import type { TestWorld } from "../../golden/support/world";
 import { currentRunKey, runDirectory } from "../../golden/support/run-state";
 import { insertFinalFixtureTimeEntry } from "./seed-publication";
+import { giveEmployeesWorkSchedules } from "../../golden/support/db";
 
 /**
  * The "typical beta example" workload from the Step 2 plan, generated inside
@@ -33,6 +35,23 @@ export const TYPICAL_PROFILE = {
 /** Fixed historical benchmark date; the browser follows the real calendar deep link. */
 export const TYPICAL_PROFILE_BUSINESS_DATE = "2026-06-15";
 
+function syntheticJobTitle(index: number): string {
+  return `Auftrag ${index + 1}: ${index % 2 === 0 ? "Heizung warten" : "Bad sanieren"}`;
+}
+
+/** The visit the drop, resize and move scenarios measure: the assigned job's early slot on the live day. */
+export const MEASURED_VISIT_TITLE = syntheticJobTitle(TYPICAL_PROFILE.jobs - 1);
+
+/**
+ * The live week: seven future days with the busy-day load and the measured
+ * visit, because a visit that has started cannot be moved (`started_occurrence`).
+ * The historical month stays the cold-open load.
+ */
+export const LIVE_WEEK_DAYS = 7;
+export function liveWeekStart(): string {
+  return ownedBerlinDateAtOffset("performance-calendar", 141);
+}
+
 export type TypicalProfileCounts = {
   employeeRecords: number;
   customers: number;
@@ -45,6 +64,8 @@ export type TypicalProfileCounts = {
   workdays: number;
   /** The world employee assigned to the newest job (renders first on /auftraege). */
   assignedJobNumber: string;
+  /** The person row the measured reassign drops on: the personnel row below the measured visit, four visits, never the doubled one. */
+  reassignTargetRecordId: string;
 };
 
 type Tables = Database["public"]["Tables"];
@@ -118,6 +139,8 @@ export async function seedTypicalProfile(world: TestWorld): Promise<TypicalProfi
     .eq("organization_id", organizationId)
     .order("created_at", { ascending: true });
   if (allRecordsError || !records) throw new Error(`Failed to reload employee records: ${allRecordsError?.message}`);
+  // Twelve-hour targets keep the seeded nine-hour days and one moved visit under capacity, so the measured drops raise no warning.
+  await giveEmployeesWorkSchedules({ organizationId, actorUserId: actorId, validFrom: shiftIsoDateByDays(businessDate, -400), weekdayMinutes: 720, weekendMinutes: 720, note: "Typical profile" });
 
   // Customers with a deterministic long tail of names and addresses.
   const clientIds = Array.from({ length: TYPICAL_PROFILE.customers }, () => crypto.randomUUID());
@@ -149,7 +172,7 @@ export async function seedTypicalProfile(world: TestWorld): Promise<TypicalProfi
       organization_id: organizationId,
       created_by: actorId,
       job_number: jobNumber(index),
-      title: `Auftrag ${index + 1}: ${index % 2 === 0 ? "Heizung warten" : "Bad sanieren"}`,
+      title: syntheticJobTitle(index),
       created_at: new Date(Date.UTC(2025, 0, 1) + index * 1000).toISOString(),
       description: index % 7 === 0 ? "Langer Beschreibungstext ".repeat(20).trim() : null,
       client_id: clientId,
@@ -176,9 +199,12 @@ export async function seedTypicalProfile(world: TestWorld): Promise<TypicalProfi
   const occurrences: Tables["planning_occurrences"]["Insert"][] = [];
   const assignments: Tables["planning_occurrence_assignments"]["Insert"][] = [];
   let workdays = 0;
-  for (let day = 0; day < window.days; day += 1) {
-    const dateIso = shiftIsoDateByDays(window.from, day);
-    if (isWeekday(dateIso)) workdays += 1;
+  const seededDays = [
+    ...Array.from({ length: window.days }, (_, day) => shiftIsoDateByDays(window.from, day)),
+    ...Array.from({ length: LIVE_WEEK_DAYS }, (_, day) => shiftIsoDateByDays(liveWeekStart(), day)),
+  ];
+  for (const [day, dateIso] of seededDays.entries()) {
+    if (day < window.days && isWeekday(dateIso)) workdays += 1;
     for (let slot = 0; slot < TYPICAL_PROFILE.occurrencesPerDay; slot += 1) {
       const id = crypto.randomUUID();
       const startHour = 7 + (slot % 9);
@@ -193,6 +219,8 @@ export async function seedTypicalProfile(world: TestWorld): Promise<TypicalProfi
         end_at: berlinInstant(dateIso, `${String(startHour + durationHours).padStart(2, "0")}:00`),
         created_by: actorId,
       });
+      // Four visits a record and day (seven to nine hours of the twelve-hour day), so the reassign target
+      // has room for the measured visit and every row stays about four cards tall.
       const primary = records[slot % records.length];
       if (!primary) throw new Error("No employee record for the primary occurrence assignment.");
       assignments.push({ organization_id: organizationId, occurrence_id: id, employee_record_id: primary.id, assigned_by: actorId });
@@ -203,6 +231,29 @@ export async function seedTypicalProfile(world: TestWorld): Promise<TypicalProfi
       }
     }
   }
+  // The measured visit: 04:00 to 05:00 on the live week's first day, before
+  // every synthetic visit starts, so a reassign, a resize or a date move
+  // overlaps nothing and raises no planning warning; it has not started, so
+  // the planning action accepts the move. It sorts first in the month cell.
+  // A personnel record without a login: the member records enter on the run day and have
+  // no row on the historical business date.
+  const measuredRecord = records.find((record) => record.user_id === null);
+  if (!measuredRecord) throw new Error("The profile has no personnel record for the measured visit.");
+  // The next personnel record: the board sorts the personnel rows by name, so it is the row below.
+  const reassignTarget = records.find((record) => record.user_id === null && record.id !== measuredRecord.id);
+  if (!reassignTarget) throw new Error("The profile needs a second personnel record as the reassign target.");
+  const measuredOccurrenceId = crypto.randomUUID();
+  occurrences.push({
+    id: measuredOccurrenceId,
+    organization_id: organizationId,
+    entry_kind: "job_visit",
+    time_kind: "timed",
+    job_id: jobIdAt(assignedJobIndex),
+    start_at: berlinInstant(liveWeekStart(), "04:00"),
+    end_at: berlinInstant(liveWeekStart(), "05:00"),
+    created_by: actorId,
+  });
+  assignments.push({ organization_id: organizationId, occurrence_id: measuredOccurrenceId, employee_record_id: measuredRecord.id, assigned_by: actorId });
   await insertInBatches(admin, "planning_occurrences", occurrences);
   await insertInBatches(admin, "planning_occurrence_assignments", assignments);
 
@@ -223,7 +274,9 @@ export async function seedTypicalProfile(world: TestWorld): Promise<TypicalProfi
   const finalEntry = timeEntries.at(-1);
   if (!finalEntry) throw new Error("The typical profile needs a final time entry to confirm fixture publication.");
   await insertInBatches(admin, "time_entries", timeEntries.slice(0, -1));
-  await insertFinalFixtureTimeEntry({ admin, world, row: { ...finalEntry, id: crypto.randomUUID() } });
+  // Three minutes: after hours of campaign the local Realtime service has missed the default minute once
+  // and, seventeen hours in with every container healthy, two minutes once (2026-09-24).
+  await insertFinalFixtureTimeEntry({ admin, world, row: { ...finalEntry, id: crypto.randomUUID() }, timeoutMs: 180_000 });
 
   const counts: TypicalProfileCounts = {
     employeeRecords: records.length,
@@ -235,6 +288,7 @@ export async function seedTypicalProfile(world: TestWorld): Promise<TypicalProfi
     window,
     workdays,
     assignedJobNumber: jobNumber(assignedJobIndex),
+    reassignTargetRecordId: reassignTarget.id,
   };
   writeFileSync(resolve(runDirectory(currentRunKey()), "performance-workload.json"), JSON.stringify({
     profile: "typical", businessDate, definition: TYPICAL_PROFILE,

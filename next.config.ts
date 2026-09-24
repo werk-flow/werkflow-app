@@ -21,6 +21,9 @@ export const SECURITY_HEADERS = [
 
 const nextConfig: NextConfig = {
   cacheComponents: true,
+  // `next dev` would otherwise append its own block to the repository's
+  // AGENTS.md on every start and dirty the tree (found 2026-09-18, P1-24a).
+  agentRules: false,
   headers: async () => [
     { source: "/:path*", headers: [...SECURITY_HEADERS] },
     // Persist only an opaque build ID in Next's route manifest. The private receipt

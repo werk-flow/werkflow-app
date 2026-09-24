@@ -10,7 +10,7 @@ import {
   toEmploymentCondition,
   type EmploymentType,
 } from '@/lib/personnel/types';
-import { DEFAULT_DAILY_TARGET_MINUTES, resolveDailyTarget } from '@/lib/personnel/targets';
+import { DEFAULT_DAILY_TARGET_MINUTES, resolveDailyTarget, type DailyTarget } from '@/lib/personnel/targets';
 import {
   toCapabilityDefinition,
   toEmployeeCapability,
@@ -480,6 +480,98 @@ function enumerateOccurrenceAllocations(
   return allocations;
 }
 
+type PendingVacationRow = {
+  employee_record_id: string;
+  start_date: string;
+  end_date: string;
+  day_portion: 'full' | 'half_day';
+};
+
+export type DailyTargetsByRecord = {
+  /** Keyed by `${employeeRecordId}:${date}`. */
+  targetByEmployeeDate: Map<string, DailyTarget>;
+  pendingVacation: PendingVacationRow[];
+};
+
+/**
+ * The per-person daily targets the P1-11 assessment and the P1-24a board read
+ * share: schedules, employment conditions, holiday context, approved vacation
+ * and sickness spans, plus the pending vacation requests that only warn.
+ * One home, so a board cell and a planning warning can never disagree.
+ */
+export async function loadDailyTargetsByRecord(input: {
+  admin: AdminClient;
+  orgId: string;
+  employeeRecordIds: string[];
+  /** Sorted ISO dates; the first and last bound every read. */
+  dates: string[];
+}): Promise<DailyTargetsByRecord | null> {
+  const windowStart = input.dates[0];
+  const windowEnd = input.dates.at(-1);
+  if (!windowStart || !windowEnd || input.employeeRecordIds.length === 0) {
+    return { targetByEmployeeDate: new Map(), pendingVacation: [] };
+  }
+  const [schedulesResult, conditionsResult, calendar, vacationSpans, sicknessSpans, pendingVacationResult] =
+    await Promise.all([
+      input.admin
+        .from('work_schedules')
+        .select('*')
+        .eq('organization_id', input.orgId)
+        .in('employee_record_id', input.employeeRecordIds),
+      input.admin
+        .from('employment_conditions')
+        .select('*')
+        .eq('organization_id', input.orgId)
+        .in('employee_record_id', input.employeeRecordIds),
+      getCachedOrganizationCalendar(input.orgId),
+      loadApprovedVacationSpansByRecord(input.orgId, windowStart, windowEnd),
+      loadActiveSicknessSpansByRecord(input.orgId, windowStart, windowEnd),
+      input.admin
+        .from('vacation_requests')
+        .select('employee_record_id, start_date, end_date, day_portion')
+        .eq('organization_id', input.orgId)
+        .eq('status', 'pending')
+        .in('employee_record_id', input.employeeRecordIds)
+        .lte('start_date', windowEnd)
+        .gte('end_date', windowStart),
+    ]);
+  if (schedulesResult.error || conditionsResult.error || pendingVacationResult.error) return null;
+
+  const schedulesByRecord = new Map<string, ReturnType<typeof toWorkSchedule>[]>();
+  for (const row of schedulesResult.data ?? []) {
+    const schedule = toWorkSchedule(row);
+    const schedules = schedulesByRecord.get(schedule.employeeRecordId) ?? [];
+    schedules.push(schedule);
+    schedulesByRecord.set(schedule.employeeRecordId, schedules);
+  }
+  const conditionsByRecord = new Map<string, ReturnType<typeof toEmploymentCondition>[]>();
+  for (const row of conditionsResult.data ?? []) {
+    const condition = toEmploymentCondition(row);
+    const conditions = conditionsByRecord.get(condition.employeeRecordId) ?? [];
+    conditions.push(condition);
+    conditionsByRecord.set(condition.employeeRecordId, conditions);
+  }
+  const targetByEmployeeDate = new Map<string, DailyTarget>();
+  for (const employeeRecordId of input.employeeRecordIds) {
+    for (const date of input.dates) {
+      targetByEmployeeDate.set(
+        `${employeeRecordId}:${date}`,
+        resolveDailyTarget({
+          dateIso: date,
+          schedules: schedulesByRecord.get(employeeRecordId) ?? [],
+          conditions: conditionsByRecord.get(employeeRecordId) ?? [],
+          calendar,
+          absences: [
+            ...(vacationSpans.get(employeeRecordId) ?? []),
+            ...(sicknessSpans.get(employeeRecordId) ?? []),
+          ],
+        }),
+      );
+    }
+  }
+  return { targetByEmployeeDate, pendingVacation: pendingVacationResult.data ?? [] };
+}
+
 export async function assessPlanningOccurrences(input: {
   orgId: string;
   jobId: string | null;
@@ -565,42 +657,13 @@ export async function assessPlanningOccurrences(input: {
   );
   if (!windowStartInstant || !windowEndInstant) return null;
   const admin = createSupabaseAdminClient();
-  const [
-    recordsResult,
-    schedulesResult,
-    conditionsResult,
-    calendar,
-    vacationSpans,
-    sicknessSpans,
-    pendingVacationResult,
-    existingOccurrenceResult,
-  ] = await Promise.all([
+  const [recordsResult, targets, existingOccurrenceResult] = await Promise.all([
     admin
       .from('employee_records')
       .select('id, user_id, first_name, last_name')
       .eq('organization_id', input.orgId)
       .in('id', employeeRecordIds),
-    admin
-      .from('work_schedules')
-      .select('*')
-      .eq('organization_id', input.orgId)
-      .in('employee_record_id', employeeRecordIds),
-    admin
-      .from('employment_conditions')
-      .select('*')
-      .eq('organization_id', input.orgId)
-      .in('employee_record_id', employeeRecordIds),
-    getCachedOrganizationCalendar(input.orgId),
-    loadApprovedVacationSpansByRecord(input.orgId, windowStart, windowEnd),
-    loadActiveSicknessSpansByRecord(input.orgId, windowStart, windowEnd),
-    admin
-      .from('vacation_requests')
-      .select('employee_record_id, start_date, end_date, day_portion')
-      .eq('organization_id', input.orgId)
-      .eq('status', 'pending')
-      .in('employee_record_id', employeeRecordIds)
-      .lte('start_date', windowEnd)
-      .gte('end_date', windowStart),
+    loadDailyTargetsByRecord({ admin, orgId: input.orgId, employeeRecordIds, dates: uniqueDates }),
     admin
       .from('planning_occurrences')
       .select(
@@ -615,58 +678,14 @@ export async function assessPlanningOccurrences(input: {
   ]);
   if (
     recordsResult.error ||
-    schedulesResult.error ||
-    conditionsResult.error ||
-    pendingVacationResult.error ||
+    !targets ||
     existingOccurrenceResult.error ||
     recordsResult.data?.length !== employeeRecordIds.length ||
     (existingOccurrenceResult.data?.length ?? 0) > 5000
   ) {
     return null;
   }
-
-  const schedulesByRecord = new Map<
-    string,
-    ReturnType<typeof toWorkSchedule>[]
-  >();
-  for (const row of schedulesResult.data ?? []) {
-    const schedule = toWorkSchedule(row);
-    const schedules = schedulesByRecord.get(schedule.employeeRecordId) ?? [];
-    schedules.push(schedule);
-    schedulesByRecord.set(schedule.employeeRecordId, schedules);
-  }
-  const conditionsByRecord = new Map<
-    string,
-    ReturnType<typeof toEmploymentCondition>[]
-  >();
-  for (const row of conditionsResult.data ?? []) {
-    const condition = toEmploymentCondition(row);
-    const conditions = conditionsByRecord.get(condition.employeeRecordId) ?? [];
-    conditions.push(condition);
-    conditionsByRecord.set(condition.employeeRecordId, conditions);
-  }
-
-  const targetByEmployeeDate = new Map<
-    string,
-    ReturnType<typeof resolveDailyTarget>
-  >();
-  for (const employeeRecordId of employeeRecordIds) {
-    for (const date of uniqueDates) {
-      targetByEmployeeDate.set(
-        `${employeeRecordId}:${date}`,
-        resolveDailyTarget({
-          dateIso: date,
-          schedules: schedulesByRecord.get(employeeRecordId) ?? [],
-          conditions: conditionsByRecord.get(employeeRecordId) ?? [],
-          calendar,
-          absences: [
-            ...(vacationSpans.get(employeeRecordId) ?? []),
-            ...(sicknessSpans.get(employeeRecordId) ?? []),
-          ],
-        }),
-      );
-    }
-  }
+  const { targetByEmployeeDate, pendingVacation } = targets;
 
   const excludedOccurrenceIds = new Set([
     ...(input.excludeOccurrenceId ? [input.excludeOccurrenceId] : []),
@@ -842,7 +861,7 @@ export async function assessPlanningOccurrences(input: {
       if (!proposedKeys.has(key)) continue;
       const target = targetByEmployeeDate.get(key);
       if (!target) continue;
-      const pending = (pendingVacationResult.data ?? []).filter(
+      const pending = pendingVacation.filter(
         (request) =>
           request.employee_record_id === employeeRecordId &&
           request.start_date <= date &&

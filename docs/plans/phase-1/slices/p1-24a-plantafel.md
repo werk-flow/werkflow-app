@@ -1,6 +1,6 @@
 # P1-24a — Plantafel And The Calendar Overhaul
 
-Status: living — last reviewed 2026-09-18; slice plan written before implementation on 2026-09-15 and extended on 2026-09-18 to the whole calendar on the owner's instruction, the slice has not started
+Status: closed (2026-09-24) — accepted P1-24a acceptance record; canonical home for the slice's evidence (started 2026-09-18 by the implementing session after the discovery and the pre-implementation report below)
 
 ## Read This First
 
@@ -103,6 +103,187 @@ Measured references today (`lib/testing/performance-baselines.json`, budgets in 
 **What is tangled.** `CalendarView` and `CalendarFilters` are exported from the container and imported back by children (`week-view.tsx:25`, `fullcalendar-view.tsx:24`); Parkplatz cursor tracking for two views lives in the container (`:287-346`); `handleSessionWeekMove` and the day view's `handleCrossUserMove` duplicate the reassign logic; `snapToGrid`, `pixelToTimeStr` and `formatTimeFromPx` exist three to four times (`timeline-grid.ts:55-75`, `use-block-drag.ts:22-26`, `drag-to-create.tsx:22-30`, `work-session-block.tsx:120-130`, `job-block.tsx:43-56`); two optimistic layers. A hand-rolled `components/kalender/month-view/month-view.tsx` existed until Step 2 deleted it (Step 2 record, state to preserve); git history holds it.
 
 **Markers to carry forward.** CL-D3 (step 3 record): the `rgb` colours and embedded style block of the month renderer. Calendar spec limitations: the browser-local timezone window, the dispatch overview's 500-occurrence cap that the typical profile already exceeds, and the FullCalendar hidden-overflow cost that is never hidden behind a later measurement start. [Realtime and caching](../../../technical/realtime-and-caching.md): do not reopen replacing FullCalendar without new measured evidence (this slice supplies that evidence, see decision Q2 below), and month readiness requires the month renderer to confirm its date. Code comments: `fullcalendar-view.tsx:484-486` capacity display "later scope (P1-11)"; `day-view.tsx:1484` untimed jobs "cannot yet be placed"; `use-calendar-range-data.ts:38` and `lib/planning/server.ts:1061-1119` carry the Step 2 `PF-*` findings.
+
+## Discovery Of The Implementing Session (2026-09-18)
+
+Read-only verification of the audit above against `b206ca4` (the tree at the start of the slice), plus my own screenshots and DOM probes of the demo organization `Kaltenbach Haustechnik GmbH` on the dev server against DEV at 1280×720, 1920×1080, 2560×1440, 1180×820 and 375×812 in both themes (`.agent-logs/p1-24a-screens/`, not committed).
+
+### Verified
+
+- Every architecture, optimistic-ownership, network-cost, performance, message, visual, accessibility and tangling finding of the audit holds at `b206ca4`. Line numbers moved by at most a few lines; no finding is stale. The audit is sound and needs no correction.
+- Seen with my own eyes: the week grid is 98 bordered cards with gutters, the today column is vivid violet in both themes, the month grid shows two cards then „+n mehr", the day rows carry no schedule shading, the leftmost hour label is cut at the scroll start, 375 px shows a cropped grid in the day and week views, and the Einsätze panel is still a skeleton 1.5 s after opening on DEV (the 14-day overview read). DOM probe on the demo organization (13 members, 1 to 3 visits per day): 853 elements inside the day scroller at 1280 px, 1,227 at 2560 px (the zoom ladder adds sub-lines), 897 in the month grid, 329 in the week grid.
+- The employee's week view is one row; the tabs are already "Tag, Woche, Monat" for both roles.
+- The four `snapToGrid` copies, the three drag mechanisms and the two optimistic layers exist as described. `drag-state.ts` mutates `document.body` with `!important` cursor CSS in `globals.css`.
+
+### Contradicted or sharpened
+
+- The audit says period close is not checked on `updateEntry` and `reassignEntries`. Confirmed: neither action, nor `reassignEntryBatch`, consults `time_periods`/closed periods (`grep period_closed lib/time-tracking/actions.ts` finds nothing). A manager can drag a time block inside a closed period. Recorded as finding **F-1 for the time-tracking owner** (`P1-23` semantics, not this slice's to change): the calendar will show the server's answer, and the server has no answer yet. Listed in the roadmap's Wave 3 planning as a `P1-33`/time follow-up and in the time-tracking spec's limitations.
+- The action result types the message map must cover are `error: string` in every action the calendar calls (`UpdateJobResult`, `PlanningActionResult`, `WorkActionFailure`, `UpdateEntryResult`, `RequestChangeResult`, the reassign results). A union "built from the action result types" is therefore not derivable by `tsc` today. The map is exhaustive over a hand-listed union (`satisfies Record<CalendarActionErrorCode, …>`, tier 1 for the map's own completeness) and a unit test scans the calendar-reachable action modules for `error: '<code>'` literals and fails on any code the union does not carry (tier 2), which is the strongest guarantee reachable without narrowing five domains' result types in a calendar slice. Narrowing those types is a backlog row.
+- `next dev` (Next 16 `agentRules`) appends a ten-line block to the repository's `AGENTS.md` on every start. Reverted; `agentRules: false` in `next.config.ts` lands with package A (harness hygiene, no product effect).
+- Colour literals outside the calendar: five `hsl(` strings in `components/password/PasswordStrengthMeter.tsx`. The new lint selector covers all product JSX, so the meter moves to the semantic tokens in the same change (four steps map to destructive, warning, success-text, success).
+
+### Added (what the plan left vague, decided here)
+
+1. **The board read is a sixth dataset of the range owner, not a side channel.** `GET /api/calendar-board` returns, for the same window as the calendar GET, the rows (active employee records with team, login state and user id), per person-day capacity (target, absence, planned, overbooked) and non-working flags, per (occurrence, employee record) dispatch state, and per job the material readiness dimension from `composeReadiness`. `readWindow` fires both GETs in parallel and commits both under one generation, so freshness, mutation ownership, retained-grid and stale states hold for the board data exactly as for the five existing datasets. Every view requires every dataset (the day view shades working time and shows dispatch chips too); the previous day/week exception for absence datasets bought nothing because one GET already fails as a whole.
+2. **Capacity is computed by the planning owner, not by the board.** The per-employee-day target resolution inside `assessPlanningOccurrences` is extracted into a shared loader in `lib/planning/server.ts` and reused by the window read, so a board cell and a planning warning can never disagree. Fingerprints stay byte-identical because the extraction moves code without changing values.
+3. **Dispatch state per card** comes from the same `loadDispatchViews` derivation the Einsätze panel uses (exported for occurrence sets); a card in a person's row shows that person's recipient state, or „nicht gesendet".
+4. **Unpark is one server action** (`unparkJobIntoSchedule` in `lib/planning/actions.ts`): unpark, then the schedule write, then re-park with the previous context if the write fails. A qualification warning returns after the unpark without re-parking, exactly as today's client flow leaves the job while the dialog is open; the client retries the schedule write with the approval or restores the parking on decline.
+5. **`revalidatePath('/kalender')` leaves all ten call sites** (planning, dispatch, work lifecycle, time tracking, commitments, parking, maintenance, responsibilities, time corrections). The page is dynamic and the range owner plus Realtime own the calendar's freshness; the members, settings and profile route refresh stays.
+6. **Preferences** live under a `calendar` key of `organization_user_preferences.preferences`, written by one new Server Action (`saveCalendarPreferences`) and read by the page through the existing cached preference reader; parsed by zod, invalid JSON falls back to defaults. Remembered: view, horizon, density, weekends, read-only, actual time, filters, search.
+7. **Server prefetch follows the landing view**: the page prefetches the window of the view the user lands on (board for managers, day for employees, or the remembered view) including absences, holidays and the board context, so the first paint is covered for every dataset and the client reads again only on a scope change.
+8. **Board layout** is one CSS grid per row: `grid-template-columns` from the horizon, cards placed by a pure lane packer (`lib/calendar/board-layout.ts`) with `grid-column` spans for multi-day bars, so row height is content-driven for free and absences are bars in the same lanes. Longer horizons scroll sideways inside the region with a sticky name column; one week fits at 1280 px (Q5).
+9. **Month cells** grow with the grid (`grid-template-rows: repeat(6, minmax(0, 1fr))`); each cell renders as many cards as its measured height allows and one „+n mehr" button that opens the day list in a `Popover`. Nothing hidden is mounted. Absences, holidays and closures are per-day bar segments with joined edges; the same segment component draws multi-day bars on the board.
+10. **Employee board on a phone**: the own row renders as a day list (one section per date with the person's cards), never the grid.
+11. **The AGENTS.md dev-server edit** is a harness defect fixed in `next.config.ts`, recorded as tier 1 (the option removes the write).
+
+## Pre-Implementation Report (2026-09-18)
+
+### Bounded outcome, roles, prerequisites, non-goals
+
+As in the sections above, unchanged. Roles: `admin` and `buero` plan; `employee` sees the own row and own day and month. Direct prerequisites all `complete`. Non-goals unchanged; additionally out of scope: narrowing the five domains' action result types to literal unions (backlog row), period close on the time drag path (finding F-1).
+
+### Owner questions
+
+None. Every open point was decidable from the record's ten decisions of 2026-09-18 and the code; the judgment calls are listed under "Added" above and in the decisions below, for the owner to overrule in the record.
+
+### Decisions made by the implementing session
+
+| # | Decision | Reason |
+| --- | --- | --- |
+| D1 | Managers land on the board, employees on the day view, the last chosen view is remembered per user (the owner's recorded judgment call) | Confirmed, no override received |
+| D2 | Density default „Komfortabel"; „Kompakt" halves card padding and drops the second card line | Q4 |
+| D3 | The now indicator is `--calendar-now` in the destructive hue family, one component `NowIndicator` in all three views | Q3 |
+| D4 | Drag snap 15 minutes, `Shift` snaps to 5, `Alt` copies (board only) | Principles 5 and Q10 |
+| D5 | Capacity states: `free` (planned 0), `partial` (planned below target), `full` (planned equals target within 15 minutes), `overbooked` (planned above target or any absence overlap), `off` (target 0: weekend, holiday, closure, full absence) | Derived from the P1-11 assessment inputs |
+| D6 | Keyboard shortcuts: `t` today, `j`/`k` next and previous, `d`/`w`/`m` views, `z` undo while the banner shows, `?` overlay, `+`/`-` day-view zoom; never inside inputs, comboboxes or while a dialog is open | Criterion 18 plus the Google set |
+| D7 | The card's keyboard path is the `JobEventPopover` on the `Popover` primitive with „Termin bearbeiten", „Verschieben …" (date and person in the popover), „Parken" | Q6 |
+| D8 | Team grouping uses the membership valid on the window's first day; a person without a team is grouped under „Ohne Team" at the end | Rows must not jump when a membership ends mid-window |
+| D9 | The "Ohne Zuweisung" row accepts drops: dropping a person's card there removes that assignment (today's header drop) | Keeps the existing behaviour reachable |
+| D10 | A note is an all-day `internal` occurrence of kind `Sonstiges` created through the existing planning form preset to that shape; the cell's „Notiz" button is the two-click path | Owner decision 14 |
+| D11 | The z-index scale for the calendar: sticky axes 10, overlays 20, drag ghost 30, side panels 40, popovers and dialogs keep the primitives' 50 | Criterion 23 |
+| D12 | The board GET runs at foreground priority through its own route handler (not the background-read registry), because it gates the board's readiness like the window GET | The scheduler doc keeps calendar reads foreground |
+| D13 | The measured navigation scenarios get new versions and one new cold-open scenario for the board; references are recalibrated from three fresh runs on the candidate build, never transferred | The protocol changes (board landing, no FullCalendar) |
+| D14 | All six datasets (entries, occurrences, vacation, sickness, holidays, board) are required by every view and read under one generation; a failed board read fails the window | One readiness marker for every view; the board GET gates the day and the month too, because absence shading and dispatch chips reach them |
+| D15 | `updatePlanningCalendarEntry` gained an additive `durationDays` input for the bar-edge drag; no other action changed its input shape | The all-day span was only settable through the dialog; the drag needs it as one write |
+| D16 | The tools readiness chip is not rendered: the calendar holds no tool-assessment fact, and inventing „nicht bewertet" on every card was noise in the rendered review. The material chip appears when `job_material_lines` exist, with the readiness module's wording | Criterion 13 named both chips; the record's compromise keeps the one fact-based chip and hands the tools fact to the Wave 3 tools slice |
+| D17 | The day view shades whole non-working days and absences of a person, not the hours outside a schedule: the board read carries daily targets, not shift hours | Adding shift hours to the GET would widen the read and the target loader for a decoration; recorded as a limitation |
+| D18 | Every measured scenario is `calibrating` until the closure run recalibrates: the rewrite changed two digest inputs (browser-observation.ts, performance-steps.ts), which orphans every reference | `performance-references.test.ts` refuses a required scenario without a reference at the current digest |
+| D19 | The read-only lock lives in the drag engine: cards stay drag sources in read-only mode, the engine refuses the start and shows the reason for four seconds | A refused start is the only way to tell the planner why nothing moves |
+| D20 | One scroller for both axes: the page's calendar region scrolls the wide board and the day axis, so sticky headers and name columns work against the same element | A nested horizontal scroller broke sticky headers in the first rendered check |
+
+### Flow list (German, provisional IDs)
+
+- `P1-24a-F01` — Büro/Admin: Der Reiter „Woche" heißt für Büro und Admin „Plantafel" und zeigt eine Zeile je aktivem Mitarbeiter, Spalten je Tag. Handwerker sehen denselben Reiter als „Woche" mit genau ihrer eigenen Zeile.
+- `P1-24a-F02` — Alle: Der Horizont der Plantafel ist 1, 2, 4 oder 6 Wochen (Kopfzeile); „Zurück"/„Weiter" springen wochenweise, „Heute" scrollt den heutigen Tag ins Bild und markiert ihn.
+- `P1-24a-F03` — Büro/Admin: Zeilen sind nach Team gruppiert (Teamkopf einklappbar, danach „Ohne Team"), innerhalb alphabetisch; Personal ohne Login erscheint und ist planbar; die Zeile „Ohne Zuweisung" oben sammelt Termine ohne Person.
+- `P1-24a-F04` — Alle: Spalten sind Berliner Kalendertage. Wochenenden sind schattiert und per Schalter „Wochenende ausblenden" ausblendbar; Feiertage und Betriebsruhe schattieren die ganze Spalte und tragen ihre Bezeichnung im Kopf; arbeitsfreie Tage einer Person sind in ihrer Zeile schattiert.
+- `P1-24a-F05` — Alle: Eine Karte ist ein Termin: Uhrzeit und Dauer, Titel, Kunde, Ort, Auftragsnummer; ganztägige und mehrtägige Termine sind ein Balken über ihre Tage; Serientermine tragen das Serienzeichen; ausgelassene und abgesagte Termine sind gedämpft und nicht verschiebbar.
+- `P1-24a-F06` — Alle: Jede Karte zeigt den Einsatzstatus der Person als Chip: nicht gesendet, gesendet, bestätigt, Rückfrage, nicht möglich.
+- `P1-24a-F07` — Büro/Admin: Karten zeigen die Bereitschafts-Chips „Material nicht reserviert" und „Werkzeug nicht bewertet" aus demselben Bereitschaftsbild wie das Einsätze-Panel.
+- `P1-24a-F08` — Alle: Abwesenheiten liegen als Balken in der Zeile: „Urlaub", angefragter Urlaub gestrichelt mit „angefragt", Krankheit neutral als „Abwesend"; Handwerker sehen nur eigene Abwesenheiten.
+- `P1-24a-F09` — Büro/Admin: Jede Person-Tag-Zelle zeigt ihre Auslastung (frei, teilweise, voll, überbucht) als stille Markierung; die geplanten und verfügbaren Minuten erscheinen beim Überfahren und per Tastatur.
+- `P1-24a-F10` — Büro/Admin: Eine Karte in eine andere Zeile ziehen besetzt den Termin um, mit denselben Dialogen wie bisher (Qualifikation, Kapazität, Einsatz-Ablösung, Kundenzusage). In eine andere Spalte ziehen verschiebt das Datum; Uhrzeit und Dauer bleiben.
+- `P1-24a-F11` — Büro/Admin: Der rechte oder linke Rand eines ganztägigen Balkens verlängert oder verkürzt ihn tageweise.
+- `P1-24a-F12` — Büro/Admin: Eine Karte auf den Parkplatz-Schalter oder das Parkplatz-Panel ziehen parkt den Auftrag: die Karte verschwindet sofort, der Kontext-Dialog öffnet sich; Abbrechen stellt die Karte wieder her. Interne Termine lassen sich nicht parken; die Meldung sagt das.
+- `P1-24a-F13` — Büro/Admin: Eine Parkplatz-Karte auf eine Zelle ziehen plant den Auftrag bei dieser Person an diesem Tag ein, mit einem Serveraufruf; im Tag auf eine Uhrzeit.
+- `P1-24a-F14` — Büro/Admin: Ein Termin mit mehreren Personen zeigt eine Karte je Zeile; beim Überfahren sind die Karten verbunden; Ziehen verschiebt nur diese Zuweisung. Mit gedrückter Alt-Taste kopiert das Ziehen den Termin auf die Zielperson oder den Zieltag.
+- `P1-24a-F15` — Alle: Jede Ablage wirkt sofort in der Ansicht; nach dem Speichern erscheint ein grüner Hinweis mit „Rückgängig"; schlägt das Speichern fehl, springt die Karte zurück und der Hinweis nennt die Regel und den nächsten Schritt.
+- `P1-24a-F16` — Büro/Admin: Karten sind per Tab erreichbar; Enter öffnet die Terminübersicht mit „Termin bearbeiten", „Verschieben …" (Tag und Person) und „Parken"; Escape schließt sie. Nach jeder Ablage und jedem Dialog kehrt der Fokus auf die Karte zurück, und ein Vorlese-Hinweis nennt das Ergebnis.
+- `P1-24a-F17` — Büro/Admin: „Notiz" an einer Zelle legt in zwei Klicks einen ganztägigen internen Eintrag „Sonstiges" für diese Person und diesen Tag an; er erscheint als eigene Notizkarte ohne Einsatz und ohne Kapazitätswirkung.
+- `P1-24a-F18` — Büro/Admin: „Nur ansehen" in der Kopfzeile sperrt jedes Ziehen, bis der Schalter wieder ausgeht; die Einstellung bleibt je Benutzer erhalten.
+- `P1-24a-F19` — Büro/Admin: Filter nach Team, Mitarbeiter, Auftrag, Kunde und Einsatzstatus sowie „nur Konflikte"; die Suche findet Titel, Kunde und Auftragsnummer; ein Klick auf einen Namen isoliert die Zeile.
+- `P1-24a-F20` — Alle: Tastenkürzel `t` heute, `j`/`k` weiter/zurück, `d`/`w`/`m` Ansicht, `z` macht die letzte Ablage rückgängig solange der Hinweis sichtbar ist, `?` zeigt die Liste; in Eingabefeldern und offenen Dialogen passiert nichts.
+- `P1-24a-F21` — Alle: Ansicht, Horizont, Dichte („Kompakt"/„Komfortabel"), Wochenende, Filter, Suche, „Nur ansehen" und „Ist-Zeiten anzeigen" bleiben je Benutzer und Organisation erhalten; Scrollposition und ausgewählte Karte überleben ein Speichern, eine Live-Aktualisierung und „Aktualisieren".
+- `P1-24a-F22` — Alle: „Ist-Zeiten anzeigen" blendet erfasste Arbeitszeitblöcke und provisorische Korrekturen in die Zeile ein; bei einer Woche standardmäßig an, bei längeren Horizonten aus.
+- `P1-24a-F23` — Alle: Änderungen anderer Sitzungen (Verschieben, Parken, Einsatz, Abwesenheit) erscheinen innerhalb von zwei Sekunden; während eines Nachladens bleibt die Ansicht sichtbar und gesperrt, ein fehlgeschlagenes Nachladen markiert sie als veraltet.
+- `P1-24a-F24` — Handwerker: sehen nur die eigene Zeile, eigene Termine, eigene Abwesenheiten und Ist-Zeiten; keine Kapazität, Abwesenheit oder Termine anderer; kein Ziehen. Mitglieder anderer Organisationen sehen nichts.
+- `P1-24a-F25` — Alle: Keine Plantafel-Aktion versendet eine Nachricht, reserviert Material, erzeugt Ist-Zeit oder ändert den Ausführungsstand eines Auftrags.
+- `P1-24a-F26` — Alle: Die Tagesansicht zeigt Zeilen mit inhaltsabhängiger Höhe; überlappende Blöcke liegen nebeneinander; das Raster rastet auf 15 Minuten; Griffe zum Verlängern sind 8 px breit mit 24 px Trefffläche; die Arbeitszeit der Person ist hell, Nichtarbeitszeit schattiert; Lücken zwischen Terminen an verschiedenen Orten sind markiert; die erste Stundenbeschriftung ist nie abgeschnitten.
+- `P1-24a-F27` — Büro/Admin: Ziehen auf leerer Fläche erstellt einen Eintrag; ungeplante Aufträge des Tages liegen in einer Ablage je Zeile und lassen sich auf das Raster ziehen.
+- `P1-24a-F28` — Alle: Die Jetzt-Linie ist in Tag, Plantafel (heutige Spalte) und Monat (heutige Zelle) dieselbe: eine Linie mit Punkt, durchgehend von der Achse bis zur letzten Zeile.
+- `P1-24a-F29` — Büro/Admin: Ist-Zeit-Blöcke lassen sich im Tag verschieben, verlängern, verkürzen und auf eine andere Person hängen; Überlappung mit einem anderen Block, ein Zeitpunkt in der Zukunft und eine falsche Reihenfolge werden schon beim Ziehen rot mit Satz abgelehnt.
+- `P1-24a-F30` — Alle: Die Monatsansicht füllt die Fläche; Zellen wachsen mit dem Fenster; „+n mehr" öffnet die Tagesliste an Ort und Stelle; vergangene Tage sind gedämpft; Feiertage, Betriebsruhe und Abwesenheiten sind Balken.
+- `P1-24a-F31` — Büro/Admin: Im Monat verschiebt Ziehen einen Besuch auf einen anderen Tag mit denselben Dialogen; die Karte landet sofort und springt nie zurück.
+- `P1-24a-F32` — Alle: Jede Ablehnung einer Kalenderaktion nennt die Regel und den nächsten Schritt auf Deutsch; nirgends erscheint ein technischer Code; das gilt für Ziehen, Dialoge, Panels und „Rückgängig".
+- `P1-24a-F33` — Büro/Admin: Parkplatz und Einsätze sind Seitenpanels im selben Raster; Parkplatz-Karten sind fokussierbar und bieten per Tastatur „Einplanen am …".
+- `P1-24a-F34` — Alle: Bei 1280 px Breite scrollt keine Ansicht seitlich (Plantafel bei einer Woche, Tag, Monat); bei 2560 px wachsen Spalten und Karten; auf dem Tablet quer sind Plantafel und Tag bedienbar; auf dem Telefon zeigt die Woche eines Handwerkers eine Liste, nie ein beschnittenes Raster.
+- `P1-24a-F35` — Alle: Jeder Zustand (heute, jetzt, Abwesenheit, Feiertag, Betriebsruhe, provisorische Zeit, Auswahl, Ziehen, Ziel, Ablehnung) ist im hellen und dunklen Modus lesbar; Text in Karten ist nie kleiner als 11 px.
+
+Repointed clauses: `BASE-CALENDAR-F01` (the week view is the Plantafel for managers), `BASE-CALENDAR-F02` (drags now optimistic in every view, month drag kept), `A1-21`, `A1-24`, `A1-25` evidence moves to the new DOM; `P1-11-F03` and `P1-12-F01`/`F04`/`F08` keep their clauses (dialogs unchanged).
+
+### Message table (code, situation, sentence, next step)
+
+The sentences live in `lib/calendar/messages.ts`; the table is the review copy. Placeholders in braces are filled from the action's data where it carries them.
+
+| Code | Situation | Sentence |
+| --- | --- | --- |
+| `not_authenticated`, `not_a_member`, `no_active_org` | Session or membership gone | „Deine Anmeldung ist abgelaufen. Melde dich neu an und versuche es noch einmal." |
+| `not_authorized`, `not_authorized_source`, `not_authorized_target` | Role may not change this | „Dafür fehlt dir die Berechtigung. Nur Büro und Admin planen um; eigene Einträge eines Büro-Mitglieds braucht ein Admin." |
+| `job_not_found`, `not_found`, `entry_not_found`, `entries_not_found`, `dispatch_job_not_found` | Target vanished | „Der Eintrag wurde inzwischen gelöscht oder verschoben. Aktualisiere die Ansicht." |
+| `stale_occurrence`, `stale_version`, `stale_series`, `stale_dispatch_revision`, `stale_assessment` | Someone changed it meanwhile | „Dieser Termin wurde gerade von jemand anderem geändert. Die Ansicht wird aktualisiert; versuche es dann noch einmal." |
+| `started_occurrence`, `no_mutable_occurrences` | Past or started | „Begonnene oder vergangene Termine bleiben unverändert. Plane einen neuen Termin, wenn die Arbeit weitergeht." |
+| `planning_warning`, `qualification_warning`, `stale_evaluation` | Handled by the dialogs, never shown as text | (dialog) |
+| `qualification_declined` | User cancelled the dialog | (silent rollback) |
+| `member_not_found`, `employee_not_found` | Target person unknown | „Diese Person ist nicht mehr Mitglied der Organisation. Wähle eine andere Person." |
+| `invalid_occurrence`, `invalid_input`, `validation_failed` | Bad shape | „Diese Änderung ist so nicht möglich. Öffne den Termin und prüfe Datum, Uhrzeit und Dauer." |
+| `invalid_time_range` | End before start | „Das Ende liegt vor dem Anfang. Ziehe den Block so, dass er nach dem Anfang endet." |
+| `overlapping_session` | Target person has time there | „{name} hat in diesem Zeitraum bereits Arbeitszeit. Wähle eine freie Zeit oder eine andere Person." |
+| `future_timestamp` (client pre-check) | Time block into the future | „Arbeitszeit kann nicht in der Zukunft liegen. Plane die Arbeit als Termin statt als Ist-Zeit." |
+| `read_only_mode` (client) | Switch on | „„Nur ansehen" ist aktiv. Schalte es in der Kopfzeile aus, um zu planen." |
+| `internal_not_parkable` (client) | Note or internal entry to Parkplatz | „Interne Termine werden abgesagt oder verschoben, nicht geparkt." |
+| `person_absent` (client) | Drop on an absence | „{name} ist am {date} abwesend. Wähle einen anderen Tag oder eine andere Person." (the drop still opens the capacity dialog if forced with Shift) |
+| `person_off_day` (client) | Drop on a non-working day | „{name} arbeitet am {date} laut Arbeitszeitmodell nicht. Wähle einen Arbeitstag oder bestätige die Ausnahme im Dialog." |
+| `person_without_login_dispatch` (information) | Card of a person without login | „Ohne App-Zugang; das Büro informiert diese Person selbst." |
+| `partial_update` | Assignment write failed after the job write | „Der Termin wurde gespeichert, die Zuweisung nicht. Öffne den Termin und weise die Personen erneut zu." |
+| `update_failed`, `create_failed`, `work_action_failed`, `unexpected_error`, `load_failed`, `assessment_failed`, `calendar_transport_failed`, `calendar_read_failed`, `background_read_failed` | Server or transport | „Die Änderung konnte nicht gespeichert werden. Prüfe die Verbindung und versuche es noch einmal; die Ansicht zeigt wieder den gespeicherten Stand." |
+| `calendar_scope_changed` | Organization or role changed mid-flight | „Die Organisation wurde gewechselt. Die Änderung wurde verworfen." |
+| `no_changes` | Drop on the same slot | (silent) |
+| `job_not_parked`, `work_blocker_invalid_input`, `responsible_not_manager` | Parking context problems | Existing `PARKING_ERROR_MESSAGES` reused |
+| `dispatch_*`, `batch_*`, `challenge_*` | Dispatch panel | Existing `DISPATCH_ERROR_MESSAGES` reused |
+| `mixed_organizations`, `organization_changed` | Cross-organization batch | „Diese Einträge gehören zu verschiedenen Organisationen und können nicht zusammen verschoben werden." |
+| a German sentence from `validateTimestampUpdate` or `validateDayEntrySequence` | Time rule refused server-side | shown verbatim (it already names the rule) |
+| Undo failure with any of the above | | „Rückgängig war nicht möglich: " plus the sentence |
+
+### Token set (added to `app/globals.css`, light and dark)
+
+`--calendar-grid` (hairline, 8 % foreground), `--calendar-grid-strong` (16 %), `--calendar-gutter` (axis and name-column background), `--calendar-cell-off` (weekend, holiday, closure, non-working time), `--calendar-today` (5 % primary-free tint from the purple family), `--calendar-now` (destructive family), `--calendar-planning`, `--calendar-planning-border`, `--calendar-planning-foreground` (purple card family), `--calendar-note`, `--calendar-note-foreground`, `--calendar-absence`, `--calendar-absence-foreground`, `--calendar-absence-pending-border`, `--calendar-holiday`, `--calendar-holiday-foreground`, `--calendar-actual`, `--calendar-actual-foreground` (success family), `--calendar-actual-pending` (warning family), `--calendar-capacity-full` (info soft), `--calendar-capacity-over` (destructive soft), `--calendar-drop-valid`, `--calendar-drop-refused`. All mapped in `@theme inline` as `--color-calendar-*` so Tailwind classes `bg-calendar-grid` and so on exist; the contrast contract test gains the card, bar and chip pairs.
+
+### The drag engine's contract (`components/kalender/drag-engine/`)
+
+- `useDragEngine({ surfaceRef, resolveSlot, onTarget, onDrop, onCancel })` returns `startDrag(event, session)`. A session names the payload (`occurrence`, `parkedJob`, `untimedJob`, `timeBlock`, `barEdge`, `createRange`), the ghost (width, height, label), the origin slot and the pointer offset.
+- Pointer capture on the handle, a 5 px threshold before a drag starts, a 250 ms long press on touch, `touch-action: none` on handles. Every `pointermove` is coalesced into one `requestAnimationFrame`; the ghost moves by `transform` on a fixed element; the target highlight is one absolutely positioned element per surface moved by `transform`; auto-scroll near the edges runs inside the same frame loop.
+- `resolveSlot(x, y)` reads a slot map the view builds at drag start (row offsets, column offsets, container rect and scroll offsets) and never calls `getBoundingClientRect` per move. Side panels register drop zones with rects captured at drag start.
+- `onTarget(slot)` runs the view's pre-check; the result (valid or refused with a message code) is written into the ghost's DOM (class and text) without React state.
+- `Escape` cancels, `pointercancel` cancels, a drop calls `onDrop(slot, { copy, fine })` with the modifier state; no React commit happens between start and drop, which the component contract proves with a `Profiler` around the surface.
+
+### State and rollback model per drop kind
+
+| Drop | Optimistic write into the range owner | Server call | Rollback | Undo |
+| --- | --- | --- | --- | --- |
+| Reassign or move a visit (board, day, month) | `updateJobs`: the entry's date, time, duration, assignees | `updateJob` (legacy) or `updatePlanningCalendarEntry` through the existing dialog wrapper | previous entry restored | inverse update |
+| Extend an all-day bar | `endDateExclusive`, `estimatedDurationMinutes` | same | same | same |
+| Park by drag | entry removed, parked list gains the job, context dialog opens | `parkWorkTarget` from the dialog | cancel or failure restores the entry and removes the parked card | unpark with the previous placement |
+| Unpark by drag | parked card removed, entry added | `unparkJobIntoSchedule` (one call; warning path retries the schedule write) | restore both lists; re-park on the server when the schedule write failed | park again |
+| Schedule an untimed job | time and assignees | `updateJob` | restore | inverse |
+| Move or resize a time block | `updateEntries` timestamps and owner for every source entry | `updateEntry` sequence or `reassignEntryBatch` as today | restore entries | inverse |
+| Copy (Alt) | entry added with a temporary id | `createPlanningEntry` | remove the temporary entry | `setPlanningOccurrenceStatus` cancel is not a delete; Undo is not offered for copies (the created entry stays and the banner says so) |
+
+Every operation calls `beginMutation` before the optimistic write and releases in `finally`; the settle read after the release is the truth, so an optimistic state the server refused can survive at most one debounce interval before the read replaces it, and the refusal sentence appears at once from the action result.
+
+### Test design (decision 0007)
+
+- `unit:all`: `lib/calendar/messages.test.ts` (exhaustiveness scan over the action modules, no raw code in `components/kalender`), `lib/calendar/board-layout.test.ts` (lane packing, spans, Berlin dates, horizon columns), `lib/calendar/capacity.test.ts` (state derivation), `lib/calendar/preferences.test.ts` (parse and defaults), `lib/calendar/board-http.test.ts` (route, denial of outsiders, employee sees only own row), `lib/calendar/drag-math.test.ts` (slot resolution, snapping, auto-scroll thresholds), the lint contract for the colour-literal selector, the module cap on every calendar file.
+- `ui:contracts`: `calendar-board.spec.ts` (Profiler commit count zero during a synthetic drag; optimistic drop and rollback with the sentence; keyboard path through the popover; read-only mode; focus return; live region), `calendar-day.spec.ts` (successor of `day-view.spec.ts`: resize through the range owner, transport rejection, Undo failure, pre-check refusal sentences), `calendar-month.spec.ts` (successor of `month-view.spec.ts`: readiness date reported, no hidden overflow mounts, „+n mehr" popover, drag move without snap-back), `calendar.spec.ts` extended for the sixth dataset.
+- Application groups: `golden:p1-24a` (`tests/golden/p1-24a.spec.ts`, `@FRESHNESS` stage for a cross-session move), `audit:wave-3:p1-24a` (`tests/audit/wave-3/p1-24a.spec.ts`, exhaustive over F01 to F35 with scope `planning, personnel, work, time`), the A1 calendar tests repointed to the new DOM, `audit:performance:calendar` rewritten around the board landing with the scenarios below.
+- Measured scenarios (`lib/testing/measured-scenarios.ts`): two new boundaries `interaction-to-visible-change` and `interaction-to-settled`; scenarios `calendar.board.cold-open` (navigation), `calendar.board.six-weeks` (navigation), `calendar.board-to-day.covered`, `calendar.day-to-board.covered`, `calendar.board-to-month.uncovered`, `calendar.month-next.uncovered` v3, `calendar.month-to-board.covered`, `calendar.board.reassign.visible` and `.settled`, `calendar.day.resize.visible` and `.settled`, `calendar.month.move.visible` and `.settled`. Budgets are set after the first measured run on the candidate build and reviewed here; the interaction budgets start from the 100 ms first-frame rule (visible) and the two-second freshness rule (settled).
+
+### Documentation the slice changes
+
+Calendar spec (baseline, limitations, open decisions), user-flow catalog (new section, repointed base clauses), [`werkflow-design` skill](../../../../.claude/skills/werkflow-design/SKILL.md) (calendar section: tokens, card anatomy, drag engine, message rules, the now indicator's hue exception; mirrored to `.agents/skills`), [realtime-and-caching.md](../../../technical/realtime-and-caching.md) (sixth dataset, board GET, month readiness sentence, the Step 2 note), [security.md](../../../technical/security.md) (board route row, preferences action), [testing.md](../../../technical/testing.md) (new boundaries, calendar spec protocol), [enforcement-ladder-backlog.md](../../../technical/enforcement-ladder-backlog.md) (two rows closed, two opened: result-type unions, period close on the drag path), time-tracking spec limitation (F-1), roadmap, log, this record, decision 0001 amendment note for the FullCalendar removal is not needed (no stack change; the freshness contract's Step 2 note is the home).
+
+### Work-package order
+
+A foundation (tokens, lint, `next.config.ts`, grid and card primitives, drag engine, board GET and dataset, mutations hook, message layer, preferences, z-scale), B board, C day, D month and FullCalendar removal, E panels and popover, F message sweep through dialogs and panels, G measured scenarios and calibration, H accessibility and viewport review with screenshots, I docs, catalog, coverage, backlog. Gates after each package; the slice is accepted as a whole.
 
 ## Direct Prerequisites And Evidence
 
@@ -329,12 +510,45 @@ Calendar spec baseline, limitations and open decisions; user-flow catalog (new s
 
 ## Durable Homes
 
-Filled at closure: where every lasting fact of this record lives (the spec baseline, the design skill, the freshness contract, the measured scenarios, the message map's location).
+- Product behaviour: the calendar spec's baseline bullets „Views and direct manipulation", „Windows, loading, and freshness" and „Absence and holiday context", plus its limitations ([calendar-and-resource-planning.md](../../../features/calendar-and-resource-planning.md)); the user-flow catalog section `P1-24a`.
+- Design: the design skill's „Calendar canon (P1-24a)" section (tokens, layers, cards, bars, the engine, the optimistic owner, messages, keyboard paths, readiness), mirrored under `.agents/skills`.
+- Freshness and reads: [realtime-and-caching.md](../../../technical/realtime-and-caching.md) „Range-scoped data owner (calendar)"; the board GET and the preferences write in [security.md](../../../technical/security.md).
+- Measurement: `lib/testing/measured-scenarios.ts` (the calendar scenarios and the two interaction boundaries), `tests/audit/performance/calendar.spec.ts`, the observation targets in `tests/golden/support/browser-observation.ts`.
+- Messages: `lib/calendar/messages.ts` with `lib/calendar/messages.test.ts`; the client pre-checks in `lib/calendar/refusal-checks.ts`.
+- Open conversions: the „P1-24a Plantafel" section of [enforcement-ladder-backlog.md](../../../technical/enforcement-ladder-backlog.md) and the F-1 limitation in [time-tracking.md](../../../features/time-tracking.md).
 
 ## Deletion Pass And Review
 
-To be recorded at closure.
+`components/kalender` went from 18,115 lines (day view, week view, FullCalendar month, three drag mechanisms) to 10,240 lines (three views, one engine, one optimistic owner, one message layer), against the 16,700 ceiling. Deleted: `week-view/` (two files), the old `day-view/` (twelve files), `fullcalendar-view.tsx`, `fullcalendar-skeleton.tsx`, `drag-state.ts`, `lib/calendar/overlap.ts`, the five `@fullcalendar/*` packages (`package.json`, `bun.lock`), every `.fc-*` rule in `globals.css`, the two Server Actions the old day view alone called (`reassignEntries`, `cancelOwnChangeRequest`; `lib/time-tracking/actions.ts` cap lowered 2,727 → 2,560), the old day and month component contracts and their fixtures, and `TOOLS_UNASSESSED_LABEL`. knip reports no unused file or export; `duplicate-helpers.test.ts` lost nine known copies (`snapToGrid`, `pixelToTimeStr`, `formatTimeFromPx`, `getExactLayoutWidth`, `getMemberDisplayName`, `reassignEntries`, `reassignEntryBatch` copies, `cancelOwnChangeRequest`, `updateEntry`) and `formatTime` fell from four to three; the new helpers each have one home (`jobStartMinutes`, `formatMinutesOfDay`, `memberDisplayName`, `reassignmentChanges`, `moveSuccessMessage`). Every export knip flagged as unused was un-exported or deleted (`payloadTitle`, `hasChallenge`, the timeline constants, three preference type aliases, `CalendarActionErrorCode`).
+
+`git diff --shortstat HEAD` before the pass (end of package F, staged deletions counted separately): ` 85 files changed, 2349 insertions(+), 3382 deletions(-)` plus ` 24 files changed, 8292 deletions(-)` staged, 57 untracked files.
+`git diff --shortstat HEAD` after the pass: ` 112 files changed, 2376 insertions(+), 11680 deletions(-)`, 57 untracked files with 6,962 lines.
+
+Independent review: the fresh-session reviewer of 2026-09-18 failed on a rate limit before reading a file and was not repeated; the independent review is CodeRabbit on the working tree on 2026-09-23, in three scopes because the free plan reviews at most 150 files (`bun run review --uncommitted --dir components`, `--dir lib`, `--dir tests`). Twelve findings, eleven kept:
+
+- `drag-engine.tsx` (major): the click the browser fires after a pointer release opened the card after every drop. `finish` now installs a one-shot capture-phase click listener after a moved drag, dropped or refused.
+- `use-day-surface.ts` (major): the „Ohne Zuweisung" row's sentinel reached `assignedUserIds` through a drop and an edge drag could change rows. Targets carry `null` for that row (`UNASSIGNED_USER` lives in `board/types.ts`), edge drags stay on their own row, and a time block needs a person.
+- `use-calendar-mutations.ts` (major): `z` could undo an operation older than the last one. Every operation and every park clears the earlier undo first. The banner has no dismiss callback, so the undo stays available until the next operation (recorded, not changed).
+- `calendar-container.tsx` (minor): the preference save was scheduled inside a state updater and a pending save died with the component. The updater is pure and the unmount flushes the pending save.
+- `layers.ts` (minor): the drag ghost rendered under the side panels. Panels are `z-30`, the ghost `z-40`.
+- `time-block.tsx` (minor): the visible range showed the padded lane end. It shows the recorded end like the title.
+- `plantafel.tsx` (minor): the header's now marker assumed a 100 px column. `NowIndicator` takes a percentage for the header.
+- `preferences-actions.ts` (minor): the write merged into the cached row. It reads the row fresh through the admin client first.
+- `board.ts` (minor): a legacy job without record ids never counted toward capacity. `plannedMinutesByEmployeeDate` resolves user ids through the board rows; unit test added.
+- `planning/actions.ts` (minor): rescheduling an all-day series dropped a supplied `durationDays`. It is honoured.
+- `messages.ts` (minor): a closing quotation mark.
+- `tests/audit/wave-3/p1-24a.spec.ts` (minor): a self-referential count became the month's length.
+
+Not kept: none. The review's stored findings are in the CodeRabbit CLI (`bun run review findings`).
 
 ## Completion Evidence
 
-To be recorded at closure.
+Static gates on the closing tree: `typecheck`, `lint` (36 pre-existing warnings, zero errors), `knip`, `docs:check`, `test:coverage` (1,005 catalog flows, 192 mappings) and `test:unit` (1,350 tests) pass. `ui:contracts` passes with the three calendar contracts (twelve tests: optimistic move, refusal with sentence, Undo and its failure, transport rejection, read-only refusal, zero React commits per pointer move, Enter and arrow keys, resize with rollback and Undo, refusal past midnight, month move and overflow popover).
+
+Rendered review: `.agent-logs/p1-24a-screens/new/` holds both themes at 1280×720, 1920×1080 and 375×812 for the manager (board at one and four weeks, day, month, the card popover, the Parkplatz) and the employee (week list, day, month); no page-level horizontal scroll at any width; the board and the day scroll only inside the calendar region.
+
+Browser groups: the complete change plan passed on the local stack as report `2026-09-24T142058930Z-51c3482f` (67 of 67 selected groups, 8 run fresh after the last repairs and 59 reused under the content-based rule, build `33b56e85`), after the reports of 2026-09-23 and 2026-09-24 in the [incident log](../../../technical/test-incident-log.md#2026-09-24-p1-24a-full-change-plan-three-attempts) whose failures were repaired one by one (six product defects among them: the cell quick actions under the card lanes, the month lane template, the drag target key of rows without a board row, the read-only lock one frame late, the employee's phone list at every width, the day view's carried vertical scroll). The performance references were then recalibrated from the runs of that campaign on the same build (`2026-09-24T140909099Z-b16417` calendar, `2026-09-24T141423521Z-d9fa39` planning, `2026-09-24T141150452Z-5fa7d9` lists; draft `.agent-logs/performance-calibration/2026-09-24T142715238Z`), every scenario is `required` again, and the closure report `2026-09-24T142929054Z-15a1d884` passed with the comparisons active (21 selected groups, all run fresh: the statics, the unit tests, the four performance groups, the calendar-touching audits and golden journeys). The calendar scenarios' medians on that build: board cold open 1,062 ms, reassign visible 59 ms and settled 185 ms, board to day 87 ms, day resize settled 174 ms, day to board 374 ms, six weeks 759 ms, board to month 396 ms, month move visible 24 ms and settled 162 ms, next month 182 ms, month to board 82 ms.
+
+Follow-ups recorded outside this record: the day view's rows per employee record (calendar spec limitations, [backlog](../../../technical/enforcement-ladder-backlog.md#p1-24a-plantafel-2026-09-18)), the period-close check on the time drag path (time-tracking limitations), the tools readiness chip (Wave 3), and the 600 ms preference debounce as a documented limitation.
+
+Accepted complete on 2026-09-24 by the implementing session under the standing authorizations; the owner's review of the preview deployment follows the publication to `partner-preview`.
