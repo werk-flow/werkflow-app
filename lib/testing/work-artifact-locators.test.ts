@@ -5,9 +5,9 @@ import ts from 'typescript';
 
 const SECTION_OWNERS: Record<string, { path: string; helper: string }> = {
   'work-artifacts-section': { path: 'tests/golden/support/spec-helpers/work-artifact-dialog.ts', helper: 'workArtifactsSection' },
-  'work-handover-section': { path: 'tests/golden/support/steps.ts', helper: 'workHandoverSection' },
-  'job-dispatch-section': { path: 'tests/golden/support/steps.ts', helper: 'jobDispatchSection' },
-  'work-lifecycle-card': { path: 'tests/golden/support/steps.ts', helper: 'workLifecycleCard' },
+  'work-handover-section': { path: 'tests/golden/support/steps/work.ts', helper: 'workHandoverSection' },
+  'job-dispatch-section': { path: 'tests/golden/support/steps/dispatch.ts', helper: 'jobDispatchSection' },
+  'work-lifecycle-card': { path: 'tests/golden/support/steps/work.ts', helper: 'workLifecycleCard' },
 };
 const ROOT = join(import.meta.dir, '../..');
 

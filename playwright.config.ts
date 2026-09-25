@@ -28,11 +28,9 @@ export default defineConfig({
   // add per-test setTimeout overrides without new measured evidence.
   timeout: process.env.WERKFLOW_TEST_TARGET === 'cloud' ? 300_000 : 180_000,
   expect: { timeout: 10_000 },
-  // The world is shared, mutable state; gates run serially by design.
+  // The world is shared, mutable state: one worker runs the file's tests in declaration order.
   workers: 1,
   retries: 0,
-  // Later shared-world results are not meaningful after the first failure.
-  maxFailures: 1,
   reporter: listingTests
     ? 'list'
     : [

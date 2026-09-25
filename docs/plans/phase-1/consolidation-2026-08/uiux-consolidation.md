@@ -19,7 +19,7 @@ Every session in this effort followed the same protocol. Before touching anythin
 Working agreements:
 
 - **Starting position verified first:** local `main` clean at the previous session's ledger commit or a descendant; `git ls-remote origin refs/heads/main refs/heads/partner-preview` showed `partner-preview` at local HEAD or an ancestor and `origin/main` older. `origin/main` is Vercel production and was **never pushed**; publishing was only `git push origin main:partner-preview`.
-- **The migrating session owned its harness churn.** Swapping raw selects/native inputs for registry components broke golden/audit locators, so the session updated `tests/golden/support/steps.ts` in the same change, preferring the shared helpers (`selectFromSearchable` etc., added in S2) so future component changes touch one place.
+- **The migrating session owned its harness churn.** Swapping raw selects/native inputs for registry components broke golden/audit locators, so the session updated `tests/golden/support/steps/` (one file per domain since 2026-09-25) in the same change, preferring the shared helpers (`selectFromSearchable` etc., added in S2) so future component changes touch one place.
 - **Validation ladder per session** (testing.md rules by number): statics (`bunx tsc --noEmit`, lint, `bun run test:unit`) → production build on a fresh server (rules 1, 3, 7, 11) → the focused golden + focused audit specs the cluster touched (rule 9; the audit config shares the golden world artifacts, so golden and audit batteries never ran concurrently) → CodeRabbit review and fixes, focused re-verification (rules 9, 10) → freeze (rule 8) → one full golden run. Success assertions read persisted state (rule 13). The final gate after M5 added the full Wave-1 audit battery on the same frozen build, run sequentially after the full golden run.
 - **Every session ended committed on local `main`** (commit messages ending with the Claude Fable co-author line) **and published via `git push origin main:partner-preview`**, with this document's ledger updated in the same commit: what was migrated, what was fixed, what state/harness changes the next session inherited.
 - **Deviation rule:** when a cluster genuinely needed a new interaction pattern, the session designed it deliberately and added its registry row to the skill in the same change. Silent one-offs were the defect this effort existed to remove.
@@ -64,7 +64,7 @@ Everything migrations need, so M-sessions stay mechanical:
 - `DialogBody` + default max-height in `components/ui/dialog.tsx` (fixed header/footer, scrollable body — generalizing the document-library move-dialog pattern).
 - Realtime-suspend context: open-dialog registration in `Dialog`/`AlertDialog`/`Sheet`; `useRealtimeRouterRefresh` consumes it internally and fires one catch-up refresh on close. Existing per-dialog patch in `job-detail-content.tsx` folds into it.
 - `metadata-section.tsx` select branch switches to `SearchableSelect` above ~8 options.
-- Harness: add shared steps (`selectFromSearchable`, `setDatePickerValue`, `setTimeInputValue`) to `tests/golden/support/steps.ts`.
+- Harness: add shared steps (`selectFromSearchable`, `setDatePickerValue`, `setTimeInputValue`) to `tests/golden/support/steps/` (one file per domain since 2026-09-25).
 
 Validation: statics → focused `@GG-00` smoke → CodeRabbit → one full golden run. Expected churn: low (additive), except `metadata-section` may touch detail-page steps.
 

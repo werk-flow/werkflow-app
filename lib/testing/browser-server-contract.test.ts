@@ -38,6 +38,16 @@ test('preflight requires the recorded app server for every lane before backend p
   expect(source.text).not.toContain('assertReusableServer');
 });
 
+test('a group runner skips the preflight only with a prepared plan from the verification run', () => {
+  // The verification run preflights once and hands each group a plan; a direct lane still preflights itself.
+  const runner = sourceAt('scripts/run-playwright.ts').text;
+  expect(runner).toContain("if (!preparedRun) await runPlaywrightPreflight({ lane, target, repositoryRoot });");
+  expect(runner).toContain("const preparedPlan = lane === 'group' ? readPreparedPlan() : null;");
+  const verify = sourceAt('scripts/verify.ts').text;
+  expect(verify).toContain('await runPlaywrightPreflight({ lane: "group", target: options.target, repositoryRoot: repository });');
+  expect(verify).toContain('process.env[PREPARED_PLAN_ENV] = preparedPath;');
+});
+
 test('provider-only bootstrap cannot be selected as a business browser lane', () => {
   expect(PLAYWRIGHT_LANES).not.toContain('backend');
   const bootstrap = sourceAt('scripts/test-server.ts').text;

@@ -1,33 +1,16 @@
 import { resolve } from "node:path";
 
 import { expect, test } from "./support/fixtures";
-import {
-  getInstalledEquipmentCountsAs,
-  getInstalledEquipmentNumberByName,
-  getInstalledEquipmentState,
-} from "./support/db";
+import { getInstalledEquipmentCountsAs, getInstalledEquipmentNumberByName, getInstalledEquipmentState } from "./support/db/service";
 import { expectLiveWithin } from "./support/live";
 import { requireChainedValue } from "./support/preconditions";
-import {
-  addSiteOnCustomerDetail,
-  createCustomer,
-  createInstalledEquipment,
-  createJob,
-  linkInstalledEquipmentSourceToJob,
-  linkInstalledEquipmentToJob,
-  openCustomerDetail,
-  openFieldWorkPack,
-  replaceInstalledEquipment,
-  textInDom,
-  transitionInstalledEquipment,
-  updateInstalledEquipmentModel,
-  uploadIntoDocumentsSection,
-  visibleText,
-} from "./support/steps";
+import { addSiteOnCustomerDetail, createCustomer, openCustomerDetail } from "./support/steps/customers";
+import { uploadIntoDocumentsSection } from "./support/steps/documents";
+import { createInstalledEquipment, linkInstalledEquipmentSourceToJob, linkInstalledEquipmentToJob, replaceInstalledEquipment, transitionInstalledEquipment, updateInstalledEquipmentModel } from "./support/steps/service";
+import { textInDom, visibleText } from "./support/steps/shared";
+import { createJob, openFieldWorkPack } from "./support/steps/work";
 import { ownedBerlinDateAtOffset } from "./support/date-ownership";
 import { artifactsDirectory, type TestWorld } from "./support/world";
-
-test.describe.configure({ mode: "serial" });
 
 const DATES = [
   ownedBerlinDateAtOffset("p1-18", 95),

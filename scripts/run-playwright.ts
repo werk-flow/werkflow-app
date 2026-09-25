@@ -1,4 +1,3 @@
-import { spawnSync } from 'node:child_process';
 import { createWriteStream, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseRunnerArguments } from '../lib/testing/runner-arguments';
@@ -8,13 +7,14 @@ import { calculateCandidateFingerprint } from '../lib/testing/candidate-identity
 import { runSessionCommand, withLocalStackLease } from '../lib/testing/local-stack-lease';
 import { resolveBusinessDate } from '../lib/testing/business-date';
 import { runWithLogCleanup } from '../lib/testing/command-log';
-import { z } from 'zod';
 import { getTestGroups, getGroupExecutionFiles, getGroupTimingRequirements } from '../lib/testing/test-groups';
 import { checkLatencyEvidence } from '../lib/testing/latency-evidence';
 import { recoveredEnvironmentRuns } from '../lib/testing/group-recovery';
 import { captureInputSnapshot } from '../lib/testing/group-evidence';
 import { createGroupQualification, directGroupRetryProblem } from '../lib/testing/group-qualification';
 import { archiveSizeProblem, prunableArchiveBytes } from '../lib/testing/run-retention';
+import { discoverPlaywrightSelection, selectionForFiles, SUITE_CONFIG } from '../lib/testing/playwright-discovery';
+import { preparedGroupRun, readPreparedPlan } from '../lib/testing/prepared-plan';
 
 import {
   PLAYWRIGHT_TARGETS,
@@ -27,7 +27,6 @@ import {
   type PlaywrightSuite,
   type PlaywrightTarget,
 } from '../lib/testing/run-policy';
-import { getSpawnFailureDetail } from '../lib/testing/spawn-result';
 import { runPlaywrightPreflight } from './playwright-preflight';
 import { loadEnvLocal } from '../tests/golden/support/env';
 import {
@@ -43,12 +42,6 @@ import {
   updateRunManifest,
 } from '../tests/golden/support/run-state';
 
-const SUITE_CONFIG: Record<PlaywrightSuite, string[]> = {
-  golden: [],
-  audit: ['--config', 'playwright.audit.config.ts'],
-  canary: ['--config', 'playwright.canary.config.ts'],
-};
-const discoveredTestSchema = z.object({ id: z.string(), file: z.string(), title: z.string(), annotations: z.array(z.object({ type: z.string(), description: z.string().optional() })) });
 
 function focusedIterationAttemptsSinceLastPass(input: {
   suite: PlaywrightSuite;
@@ -80,42 +73,6 @@ function focusedIterationAttemptsSinceLastPass(input: {
   }));
 }
 
-function discoverPlaywrightSelection(
-  suite: PlaywrightSuite,
-  playwrightArgs: readonly string[],
-  signal: AbortSignal,
-) {
-  signal.throwIfAborted();
-  const commandArgs = [
-    'x',
-    'playwright',
-    'test',
-    ...SUITE_CONFIG[suite],
-    ...playwrightArgs,
-    '--list',
-    '--reporter', './tests/golden/support/discovery-reporter.ts',
-  ];
-  const result = spawnSync(process.execPath, commandArgs, {
-    cwd: resolve(import.meta.dir, '..'),
-    encoding: 'utf8',
-    maxBuffer: 16 * 1024 * 1024,
-    timeout: 60_000,
-    windowsHide: true,
-  });
-  signal.throwIfAborted();
-  if (result.error) throw new Error(`Playwright discovery failed or exceeded its 60-second deadline: ${result.error.message}`);
-  if (result.status !== 0) {
-    throw new Error(
-      `Could not discover ${suite} tests: ${getSpawnFailureDetail(result, `Playwright exited ${result.status}`)}`,
-    );
-  }
-  const line = result.stdout.split(/\r?\n/).findLast((candidate) => candidate.startsWith('['));
-  const tests = z.array(discoveredTestSchema).parse(line ? JSON.parse(line) : null);
-  const titles = tests.map((test) => test.id);
-  if (new Set(titles).size !== titles.length) throw new Error('Playwright discovery did not return unique test identities.');
-  return { tests, titles, total: titles.length };
-}
-
 async function main(signal: AbortSignal): Promise<number> {
   signal.throwIfAborted();
   loadEnvLocal();
@@ -132,12 +89,18 @@ async function main(signal: AbortSignal): Promise<number> {
   }
 
   const argumentsByName = parseRunnerArguments(lane, process.argv.slice(4));
-  const archiveProblem = archiveSizeProblem(prunableArchiveBytes(resolve(import.meta.dir, '../.agent-logs/playwright-runs')));
-  if (archiveProblem) throw new Error(archiveProblem);
+  const repositoryRoot = resolve(import.meta.dir, '..');
   const groupId = argumentsByName['--group'];
-  const groups = groupId ? getTestGroups(resolve(import.meta.dir, '..')) : [];
+  const groups = groupId ? getTestGroups(repositoryRoot) : [];
   const group = groupId ? groups.find((entry) => entry.id === groupId) : undefined;
   if (groupId && (!group || group.kind !== suite)) throw new Error(`Group ${groupId} does not belong to suite ${suite}.`);
+  // A verification run prepared the shared work (preflight, discovery, qualification, the run
+  // identity) once for every group it starts; a direct lane does that work here.
+  const preparedPlan = lane === 'group' ? readPreparedPlan() : null;
+  if (!preparedPlan) {
+    const archiveProblem = archiveSizeProblem(prunableArchiveBytes(resolve(repositoryRoot, '.agent-logs/playwright-runs')));
+    if (archiveProblem) throw new Error(archiveProblem);
+  }
   const groupFiles = group ? getGroupExecutionFiles(group, groups) : [];
   if (groupId) process.env.WERKFLOW_TEST_GROUP = groupId;
   else delete process.env.WERKFLOW_TEST_GROUP;
@@ -157,6 +120,7 @@ async function main(signal: AbortSignal): Promise<number> {
   }
   const target =
     (targetArgument as PlaywrightTarget | null) ?? defaultTargetForSuite(suite);
+  const preparedRun = preparedPlan && group ? preparedGroupRun(preparedPlan, { groupId: group.id, suite, target }) : null;
   const grep = argumentsByName['--grep'] ?? null;
   const playwrightArgs = group ? groupFiles.map((file) => file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$') : grep ? ['--grep', grep] : [];
   const requestErrors = validateRunRequest({
@@ -190,15 +154,12 @@ async function main(signal: AbortSignal): Promise<number> {
   const businessDate = resolveBusinessDate(retainedSource?.businessDate);
   process.env.WERKFLOW_TEST_BUSINESS_DATE = businessDate;
 
-  const fullSelection = discoverPlaywrightSelection(
-    suite,
-    [],
-    signal,
-  );
+  const fullSelection = preparedRun?.selection ?? discoverPlaywrightSelection({ suite, playwrightArgs: [], repositoryRoot, signal });
   if (!fullSelection.total) throw new Error(`The ${suite} suite contains no tests. Refusing to create a world.`);
-  const requestedSelection = grep || group
-    ? discoverPlaywrightSelection(suite, playwrightArgs, signal)
-    : fullSelection;
+  // A group's selection is its registered files; only a grep needs Playwright's own filtering.
+  const requestedSelection = group
+    ? selectionForFiles(fullSelection, groupFiles)
+    : grep ? discoverPlaywrightSelection({ suite, playwrightArgs, repositoryRoot, signal }) : fullSelection;
   const declaredTests = resolveTestPrerequisites(fullSelection.tests);
   const selectionErrors = [
     ...(lane === 'iteration' || lane === 'group' ? validateDeclaredPrerequisites({ selectedTestIds: requestedSelection.titles, tests: declaredTests }) : []),
@@ -212,11 +173,10 @@ async function main(signal: AbortSignal): Promise<number> {
   if (selectionErrors.length > 0) throw new Error(selectionErrors.join('\n'));
   if (!requestedSelection.total || (group && requestedSelection.tests.some((test) => !groupFiles.includes(test.file)))) throw new Error('Group discovery did not match its registered files.');
 
-  const candidateFingerprint = calculateCandidateFingerprint(resolve(import.meta.dir, '..'));
-  const manifests = listRunManifests();
-  let groupFingerprint: string | undefined;
-  if (group) {
-    const repositoryRoot = resolve(import.meta.dir, '..');
+  const candidateFingerprint = calculateCandidateFingerprint(repositoryRoot);
+  let groupFingerprint: string | undefined = preparedRun?.fingerprint;
+  if (group && !preparedRun) {
+    const manifests = listRunManifests();
     const snapshot = captureInputSnapshot(repositoryRoot);
     groupFingerprint = createGroupQualification(repositoryRoot, groups, snapshot).qualify(group).fingerprint;
     const problem = directGroupRetryProblem({
@@ -237,9 +197,9 @@ async function main(signal: AbortSignal): Promise<number> {
       throw new Error(policy.reason ?? 'Focused iteration rerun blocked.');
   }
 
-  await runPlaywrightPreflight({ lane, target });
+  if (!preparedRun) await runPlaywrightPreflight({ lane, target, repositoryRoot });
   signal.throwIfAborted();
-  const runKey = createRunKey();
+  const runKey = preparedRun?.runKey ?? createRunKey();
   process.env.WERKFLOW_RUN_KEY = runKey;
   process.env.WERKFLOW_TEST_LANE = lane;
   process.env.WERKFLOW_TEST_SUITE = suite;
@@ -279,7 +239,7 @@ async function main(signal: AbortSignal): Promise<number> {
   }, 60_000);
   const exitCode = await runWithLogCleanup({
     command: () => runSessionCommand([process.execPath, ...commandArgs], {
-      signal, cwd: resolve(import.meta.dir, '..'), env: process.env,
+      signal, cwd: repositoryRoot, env: process.env,
       onStdout: (chunk) => { log.write(chunk); },
       onStderr: (chunk) => { log.write(chunk); },
     }),
@@ -300,12 +260,12 @@ async function main(signal: AbortSignal): Promise<number> {
       `Playwright exited ${exitCode} without manifest ${manifestPath(runKey)}.`,
     );
   }
-  const timing = group ? getGroupTimingRequirements(group, groups, resolve(import.meta.dir, '..')) : { requireFreshness: requestedSelection.titles.some((title) => title.includes('@FRESHNESS')), requireReadiness: requestedSelection.titles.some((title) => title.includes('@READINESS')) };
+  const timing = group ? getGroupTimingRequirements(group, groups, repositoryRoot) : { requireFreshness: requestedSelection.titles.some((title) => title.includes('@FRESHNESS')), requireReadiness: requestedSelection.titles.some((title) => title.includes('@READINESS')) };
   const latencyEvidence = checkLatencyEvidence({ directory: runDirectory(runKey), ...timing });
   writeFileSync(resolve(runDirectory(runKey), 'latency-summary.json'), JSON.stringify(latencyEvidence, null, 2));
   for (const measured of latencyEvidence.comparisons) console.log(`[werkflow-test] ${measured.scenarioId} ${measured.basis === "median" ? `median of ${measured.samples.length} samples` : `sample ${measured.sample}`}: correctness=${measured.correctness}; responsiveness=${measured.responsiveness}; baseline=${measured.comparison.status}`);
   if (['passed', 'diagnostic_passed'].includes(manifest.status)) {
-    const evidenceErrors = validateExecutedSelection({ selectedTestIds: requestedSelection.titles, outcomes: manifest.outcomes ?? [], candidateBefore: candidateFingerprint, candidateAfter: calculateCandidateFingerprint(resolve(import.meta.dir, '..')) });
+    const evidenceErrors = validateExecutedSelection({ selectedTestIds: requestedSelection.titles, outcomes: manifest.outcomes ?? [], candidateBefore: candidateFingerprint, candidateAfter: calculateCandidateFingerprint(repositoryRoot) });
     evidenceErrors.push(...latencyEvidence.problems);
     if (evidenceErrors.length) manifest = updateRunManifest(runKey, (current) => ({ status: 'failed', failures: [...current.failures, { title: 'Execution evidence', file: null, message: evidenceErrors.join('\n') }] }));
   }

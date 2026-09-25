@@ -3,49 +3,20 @@ import type { Page } from '@playwright/test';
 import { expect, test } from './support/fixtures';
 import { resolveDailyTargets } from '../../lib/personnel/targets';
 import { getBusinessWeekDates } from '../../lib/personnel/schedule';
-import {
-  countOpenClientRequests,
-  getAttentionPatternStateForUser,
-  getEmployeeRecordStateByUser,
-  getLatestManualTimeEntryState,
-  getLatestVacationRequestState,
-  getTargetContextForRecord,
-  getVacationRequestIdsByStartDate,
-  getVisibleAttentionOwnersAs,
-} from './support/db';
-import {
-  addWorkScheduleViaDialog,
-  addJobCapabilityRequirement,
-  approvePendingTimeEntry,
-  assignJobWithQualificationWarning,
-  assignRequestAssigneeViaEditDialog,
-  attentionNotificationRow,
-  attentionTaskLink,
-  aufgabenSidebarBadge,
-  cancelApprovedVacationForRangeText,
-  closeRequestViaDialog,
-  confirmResponsibilityPreview,
-  createCapabilityViaManagement,
-  createJob,
-  createOwnManualTimeEntry,
-  createOwnVacationRequestViaDialog,
-  createRequestViaDialog,
-  createResponsibilityDelegationViaSettings,
-  endResponsibilityDelegationViaSettings,
-  expectVacationOverlapRejectedViaDialog,
-  expectVisibleAfterSave,
-  markAllAttentionNotificationsReadViaButton,
-  markAttentionNotificationReadViaButton,
-  openAufgaben,
-  openMemberDetailFromList,
-  previewResponsibilityChange,
-  reportOwnSicknessViaDialog,
-  rejectVacationRequestFor,
-  cancelSicknessReportViaMenuWithReason,
-  visibleText,
-  textInDom,
-  withdrawOwnPendingVacationRequest,
-} from './support/steps';
+import { getAttentionPatternStateForUser, getVisibleAttentionOwnersAs } from './support/db/attention';
+import { getEmployeeRecordStateByUser } from './support/db/personnel';
+import { countOpenClientRequests } from './support/db/requests';
+import { getLatestManualTimeEntryState } from './support/db/time-tracking';
+import { getLatestVacationRequestState, getTargetContextForRecord, getVacationRequestIdsByStartDate } from './support/db/vacation';
+import { attentionNotificationRow, attentionTaskLink, aufgabenSidebarBadge, markAllAttentionNotificationsReadViaButton, markAttentionNotificationReadViaButton, openAufgaben } from './support/steps/attention';
+import { addWorkScheduleViaDialog, confirmResponsibilityPreview, createResponsibilityDelegationViaSettings, endResponsibilityDelegationViaSettings, openMemberDetailFromList, previewResponsibilityChange } from './support/steps/personnel';
+import { addJobCapabilityRequirement, assignJobWithQualificationWarning, createCapabilityViaManagement } from './support/steps/qualifications';
+import { assignRequestAssigneeViaEditDialog, closeRequestViaDialog, createRequestViaDialog } from './support/steps/requests';
+import { expectVisibleAfterSave, visibleText, textInDom } from './support/steps/shared';
+import { reportOwnSicknessViaDialog, cancelSicknessReportViaMenuWithReason } from './support/steps/sickness';
+import { approvePendingTimeEntry, createOwnManualTimeEntry } from './support/steps/time-tracking';
+import { cancelApprovedVacationForRangeText, createOwnVacationRequestViaDialog, expectVacationOverlapRejectedViaDialog, rejectVacationRequestFor, withdrawOwnPendingVacationRequest } from './support/steps/vacation';
+import { createJob } from './support/steps/work';
 
 // GG-02 — Schedule, vacation, approval, and attention (@GG-02), the exit gate
 // of P1-07. One role-aware task/approval/notification pattern: derived items,
@@ -69,8 +40,6 @@ import {
 // one run-scoped qualification requirement, and its append-only assignment
 // assessment. Later slices use distinct dates/names and derive counts from the
 // database, so focused and full-suite execution remain equivalent.
-
-test.describe.configure({ mode: 'serial' });
 
 function berlinTodayIso(): string {
   return new Intl.DateTimeFormat('sv-SE', {

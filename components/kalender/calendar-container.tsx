@@ -155,7 +155,12 @@ function ScopedCalendarContainer({
     setPreferences(next);
     pendingPreferencesRef.current = next;
     if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = window.setTimeout(flushPreferences, PREFERENCE_SAVE_DELAY_MS);
+    // A click on a toggle, a filter or the horizon saves at once; the search text is the one burst.
+    if (Object.keys(update).every((key) => key === 'search')) {
+      saveTimerRef.current = window.setTimeout(flushPreferences, PREFERENCE_SAVE_DELAY_MS);
+      return;
+    }
+    flushPreferences();
   }, [flushPreferences]);
   useEffect(() => flushPreferences, [flushPreferences]);
 
@@ -528,7 +533,9 @@ function ScopedCalendarContainer({
       {/* The calendar keeps its own scroller (the day grid and the wide board
           scroll sideways inside it, a named canon exception), so PageBody only
           supplies the column slot: padding and clock clearance switched off. */}
-      <PageBody className="flex flex-col overflow-hidden p-0 pb-0 sm:p-0 sm:pb-0">
+      {/* The Parkplatz sits beside the calendar on a desktop, so the board keeps every column reachable. */}
+      <div className="flex min-h-0 flex-1">
+      <PageBody className="flex min-w-0 flex-col overflow-hidden p-0 pb-0 sm:p-0 sm:pb-0">
         <div
           className={cn('flex-1 overflow-auto overscroll-none transition-opacity', isReloading && 'opacity-60')}
           data-calendar-scroll-container=""
@@ -614,13 +621,11 @@ function ScopedCalendarContainer({
           )}
         </div>
       </PageBody>
-
       {isAdminOrManager && parkplatzOpen && (
         <ParkplatzPanel
           jobs={filteredParkedJobs}
           onClose={() => setParkplatzOpen(false)}
           memberNames={memberNameMap}
-          headerHeight={calendarHeaderHeight}
           parkingContexts={parkingContexts}
           onEditContext={(job) => { parkFlowRef.current = null; setParkingContextJob(job); }}
           onDispatchJob={(job) => setParkedDispatchJob(job)}
@@ -628,6 +633,7 @@ function ScopedCalendarContainer({
           readOnly={readOnly}
         />
       )}
+      </div>
 
       {isAdminOrManager && dispatchPanelOpen && (
         <DispatchPanel onClose={() => setDispatchPanelOpen(false)} onChanged={handleSilentRefresh} primaryHeaderHeight={calendarHeaderHeight} />
@@ -647,12 +653,14 @@ function ScopedCalendarContainer({
           }}
           onSaveStart={() => (parkFlowRef.current ? () => undefined : handleOperationStart())}
           onSaveFailed={() => { parkFlowRef.current?.failed(); parkFlowRef.current = null; }}
-          onSaved={() => {
+          onSaved={async () => {
             const job = parkingContextJob;
             const flow = parkFlowRef.current;
             parkFlowRef.current = null;
+            // The contexts map is current before the dialog closes: a Parkplatz card dragged right after the
+            // save reads it at the pointer, and a stale map would refuse the drop as „ohne Kontext“.
+            await fetchParkingContexts();
             setParkingContextJob(null);
-            void fetchParkingContexts();
             if (flow) { flow.saved(() => undoPark(job)); return; }
             showBanner({ variant: 'success', message: 'Parkplatz-Kontext wurde gespeichert.' });
           }}

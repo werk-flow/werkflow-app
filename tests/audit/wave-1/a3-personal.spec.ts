@@ -6,46 +6,19 @@ import {
 import { formatDuration } from '../../../lib/time-tracking/helpers';
 import { expect, test } from "../support/fixtures";
 import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
-import {
-  getEmployeeRecordEventStates,
-  getEmployeeRecordStateByUser,
-  getLatestManualTimeEntryState,
-  getLatestResponsibilityConfigurationState,
-  getTargetContextForRecord,
-} from '../../golden/support/db';
+import { getEmployeeRecordEventStates, getEmployeeRecordStateByUser, getLatestResponsibilityConfigurationState } from '../../golden/support/db/personnel';
+import { getLatestManualTimeEntryState } from '../../golden/support/db/time-tracking';
+import { getTargetContextForRecord } from '../../golden/support/db/vacation';
 import { requireChainedValue } from '../../golden/support/preconditions';
 import { goldenTestEmail } from '../../golden/support/seed';
-import {
-  addClosureDayViaSettings,
-  addConditionViaDialog,
-  addWorkScheduleViaDialog,
-  approvePendingTimeEntry,
-  confirmResponsibilityPreview,
-  createOwnManualTimeEntry,
-  createPersonnelRecordViaDialog,
-  createResponsibilityDelegationViaSettings,
-  editConditionWeeklyHours,
-  editPersonnelTextField,
-  endResponsibilityDelegationViaSettings,
-  expectPendingTimeApprovalHidden,
-  expectPendingTimeApprovalVisible,
-  expectTimeApprovalsUnavailable,
-  openMemberDetailFromList,
-  openTimeApprovals,
-  previewResponsibilityChange,
-  removeClosureDayViaSettings,
-  sendInviteFromPersonnelRecord,
-  setHolidayRegionViaSettings,
-  typeIntoDatePicker,
-  visibleText,
-} from '../../golden/support/steps';
+import { addClosureDayViaSettings, addConditionViaDialog, addWorkScheduleViaDialog, confirmResponsibilityPreview, createPersonnelRecordViaDialog, createResponsibilityDelegationViaSettings, editConditionWeeklyHours, editPersonnelTextField, endResponsibilityDelegationViaSettings, openMemberDetailFromList, previewResponsibilityChange, removeClosureDayViaSettings, sendInviteFromPersonnelRecord, setHolidayRegionViaSettings } from '../../golden/support/steps/personnel';
+import { typeIntoDatePicker, visibleText } from '../../golden/support/steps/shared';
+import { approvePendingTimeEntry, createOwnManualTimeEntry, expectPendingTimeApprovalHidden, expectPendingTimeApprovalVisible, expectTimeApprovalsUnavailable, openTimeApprovals } from '../../golden/support/steps/time-tracking';
 import {
   firstPersonnelHistoryEvent,
   informationalCalendarEvent,
   waitForPersonnelSuggestionIntercept,
 } from '../support/a3-steps';
-
-test.describe.configure({ mode: 'serial' });
 
 import { auditCheckpoint, saveAuditCheckpoint } from "../support/checkpoints";
 

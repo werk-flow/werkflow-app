@@ -1,16 +1,8 @@
 import { expect, test } from './support/fixtures';
-import { getVisibleWorkLifecycleCountsAs, getWorkLifecycleState } from './support/db';
-import {
-  workLifecycleCard,
-  clockInOnJob,
-  clockOut,
-  createJob,
-  createProject,
-  selectFromSearchable,
-  typeIntoDatePickerById,
-} from './support/steps';
-
-test.describe.configure({ mode: 'serial' });
+import { getVisibleWorkLifecycleCountsAs, getWorkLifecycleState } from './support/db/work';
+import { selectFromSearchable, typeIntoDatePickerById } from './support/steps/shared';
+import { clockInOnJob, clockOut } from './support/steps/time-tracking';
+import { workLifecycleCard, createJob, createProject } from './support/steps/work';
 
 function tomorrowIso(): string {
   return new Intl.DateTimeFormat('sv-SE', {

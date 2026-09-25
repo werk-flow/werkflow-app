@@ -1,8 +1,7 @@
 import { expect, test } from "../support/fixtures";
 import { assertDocumentAttachableExclusion, documentWorkRow, inventoryItemRow, persistedInventoryItem, renameInventoryItem, seedDocumentPages, seedInventoryPages } from "../support/list-pagination";
-import { createInventoryItem, visibleText } from "../../golden/support/steps";
-
-test.describe.configure({ mode: "serial" });
+import { createInventoryItem } from "../../golden/support/steps/inventory";
+import { visibleText } from "../../golden/support/steps/shared";
 
 test.describe("Bounded document and inventory pages @AUDIT-PERFORMANCE-PAGINATION", () => {
   test("inventory pages preserve global filters, editing and creation @AUDIT-PERFORMANCE-PAGINATION-INVENTORY", async ({ adminPage, world }) => {

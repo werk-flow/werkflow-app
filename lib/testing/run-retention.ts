@@ -63,7 +63,7 @@ export function prunableRunKeys(input: {
 
 /**
  * A live run's `active/` directory holds atomic-write temp files for a few
- * milliseconds. Under `--jobs 2` the next runner's size scan can list one and
+ * milliseconds. With several workers the next runner's size scan can list one and
  * find it renamed away at stat time (release run of 2026-09-18, the
  * list-pagination runner crashed on the layout run's manifest temp file), or
  * still locked by the rename on Windows. A vanished or transiently locked

@@ -62,7 +62,7 @@ describe('browser spec conventions (testing.md)', () => {
     }
   });
 
-  test('serial-precondition errors carry the exact recovery command', () => {
+  test('chained-precondition errors carry the exact recovery command', () => {
     expect(() =>
       requireChainedValue('', {
         test: 'A1-09',
@@ -71,10 +71,10 @@ describe('browser spec conventions (testing.md)', () => {
         suite: 'audit',
       })
     ).toThrow(
-      'Serial precondition missing for A1-09: the app-assigned value created by A1-01. ' +
-        'Earlier tests in this serial file create that state — run the chain in one world: ' +
+      'Chained precondition missing for A1-09: the app-assigned value created by A1-01. ' +
+        'Earlier tests in this file create that state — run the chain in one world: ' +
         'bun run test:audit:focused --grep "A1-01|A1-09" (focused diagnostic lane; acceptance evidence comes from bun run test:verify --group <owning group>). ' +
-        '(A partial grep of a serial file would otherwise fail after minutes on a misleading locator timeout.)'
+        '(Without the chain the test would otherwise fail after minutes on a misleading locator timeout.)'
     );
   });
 
@@ -106,10 +106,12 @@ describe('browser spec conventions (testing.md)', () => {
     const source = readFileSync(path, 'utf8');
     const name = specName(path);
 
-    test(`${name} runs in serial mode`, () => {
-      // Shared-world state makes parallel execution meaningless; every spec
-      // declares it explicitly.
-      expect(source).toMatch(/test\.describe\.configure\(\{\s*mode:\s*['"]serial['"]/);
+    test(`${name} runs every test in file order and continues after a failure`, () => {
+      // Serial mode stopped a file at its first failure, so a spec revealed one
+      // failure per run (P1-24a campaign, 2026-09-24). Tests run in declaration
+      // order on one worker; a dependent test guards its producer's state with
+      // a chained precondition and fails fast when that state is missing.
+      expect(source).not.toMatch(/test\.describe\.configure\(/);
     });
 
     test(`${name} never filters with a page-rooted main locator inside has:`, () => {

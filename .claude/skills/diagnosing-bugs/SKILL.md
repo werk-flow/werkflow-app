@@ -5,17 +5,17 @@ description: Diagnosis loop for hard bugs and performance regressions. Use when 
 
 # Diagnose a defect
 
-Adapted for WerkFlow from mattpocock/skills (MIT). For a test failure, first read `docs/technical/testing.md`. That guide owns group selection, deadlines, retained diagnosis, recovery, and stopping rules under decision 0007. Apply this skill to the suspected product, test, or environment defect. Read the owning feature contract before deciding what behavior is wrong.
+Adapted for WerkFlow from mattpocock/skills (MIT). For a test failure, first read `docs/technical/testing.md`. That guide owns group selection, the run's execution model, deadlines, retained diagnosis, recovery, the blocking rules and the campaign budget under decision 0007. Apply this skill to the suspected product, test, or environment defect. Read the owning feature contract before deciding what behavior is wrong.
 
 Application tests use local Supabase. The canary and named provider checks use cloud DEV. Production is read-only during diagnosis. Use the repository wrappers and workspace ownership rules. Do not start a competing server, database reset, or test command.
 
-When repairing an existing test, follow `docs/technical/testing.md#repair-an-existing-test-under-the-current-workflow`. It routes legacy fixture, selector, save, and timing failures to their current owners. Historical acceptance records do not override that procedure.
+When repairing an existing test, follow `docs/technical/testing.md#specs` and `#failures`: compare the failed assertion with the feature specification and the catalog clause first, decide whether the application violates its promise or the test misrepresents it, and repair the shared helper in its domain module when it owns the cause. Historical acceptance records do not override that procedure.
 
 ## 1. Establish the symptom and evidence
 
 State the exact expected and observed behavior. Identify which user, record, operation, and execution boundary are involved. Distinguish a contract violation from an incorrect test assumption.
 
-Inspect existing evidence first: the failed group's error context, screenshot, trace, relevant logs, and exact persisted state. A captured failure is evidence. You do not need to recreate it repeatedly before reading the code or forming a hypothesis.
+Inspect existing evidence first: the failed group's error context, screenshot, trace, relevant logs, and exact persisted state. A captured failure is evidence. You do not need to recreate it repeatedly before reading the code or forming a hypothesis. Playwright's error snapshot shows the fixture page, not a page a test opened in its own context; for those, replay the step on the retained world.
 
 Redact credentials and personal data before showing artifacts. Keep secrets in environment variables. Read selected trace fields rather than dumping requests, cookies, or storage state.
 
@@ -23,7 +23,7 @@ Choose a bounded feedback method that can distinguish the leading explanations:
 
 - A focused unit or SQL assertion for a domain or database rule.
 - A real-component browser check for control behavior.
-- A retained diagnostic or fresh affected group for application behavior.
+- A retained diagnostic (`--reuse-run <key>`) or fresh affected group for application behavior; for a measured scenario, a focused run with `KEEP_WORLD=1` and replays on that world.
 - A read-only request or state comparison for a disputed saved result.
 - A focused timing measurement for a performance defect.
 
@@ -49,7 +49,7 @@ Completion means the next experiment distinguishes explanations rather than mere
 
 Change one relevant variable at a time. Prefer existing logs, a debugger, or a focused read. Add temporary instrumentation only where it can distinguish the explanations. Prefix temporary logs with a unique marker and remove them before completion.
 
-For performance, record the start event, completion event, elapsed time, and required deadline. Do not start the clock after a loading delay or reload a receiving page to manufacture freshness. An emergency timeout does not define acceptable response time. Measure a repeatable interaction as a registered scenario (`lib/testing/measured-scenarios.ts`, recorded through `expectUsableWithin` or `expectScenarioLiveWithin` in `tests/golden/support/scenario-measurement.ts`) so the value gets a budget, a baseline comparison, and browser attribution instead of a one-off stopwatch. End a navigation or view-switch measurement on the actual usable renderer or control. Calendar month readiness requires both range coverage and `FullCalendarView` completion; the parent marker alone cannot certify a dynamic fallback. A server response, a dialog shell, or hydration of a parent does not prove child readiness.
+For performance, record the start event, completion event, elapsed time, and required deadline. Do not start the clock after a loading delay or reload a receiving page to manufacture freshness. An emergency timeout does not define acceptable response time. Measure a repeatable interaction as a registered scenario (`lib/testing/measured-scenarios.ts`, recorded through `expectUsableWithin` or `expectScenarioLiveWithin` in `tests/golden/support/scenario-measurement.ts`) so the value gets a budget, a baseline comparison, and browser attribution instead of a one-off stopwatch. End a navigation or view-switch measurement on the actual usable renderer or control (`data-calendar-state`, `data-usable-content`). A server response, a dialog shell, or hydration of a parent does not prove child readiness.
 
 If a mutation response is unclear, inspect its exact persisted identity or version before any recovery. A repeat write is not an observation.
 
@@ -63,9 +63,11 @@ Where practical, demonstrate that the check rejects the defect and passes the re
 
 Use the enforcement ladder from decision 0005: first remove the invalid state through a type or shared API, then add an automated check, then document a remaining judgment. State the prevention tier. If no suitable automated boundary exists, record why and the focused follow-up needed.
 
+A harness failure is a defect of the harness, not a detail of the run. The same class twice in one slice (a leaked state, a locator that matched a hidden copy, a fixture that did not fit the viewport) ends with a fixture, a convention test or a runner rule, never with a second local repair; the protocol's "Campaign Budget" binds the slice's closure to that.
+
 ## 6. Verify the affected scope and close the investigation
 
-Run the affected checks through the current test plan. Preserve valid unrelated group evidence. An unchanged failed group cannot be retried as acceptance except for the bounded environment-recovery path in `docs/technical/testing.md`: classify the environment cause, obtain matching retained diagnostic evidence, clean its owned world, and use the single permitted fresh retry. Two failures on the same inputs remain blocked until the underlying cause is resolved.
+Run the affected checks through the current test plan. Preserve valid unrelated group evidence. An unchanged failed group cannot be retried as acceptance except for the bounded environment-recovery path in `docs/technical/testing.md`: classify the environment cause, obtain the matching retained diagnostic pass, and only then clean its owned world; cleaning first forfeits the retry. Two failures on the same inputs remain blocked until the underlying cause is resolved.
 
 Before closing the finding, confirm:
 
@@ -74,6 +76,7 @@ Before closing the finding, confirm:
 - Temporary instrumentation and throwaway prototypes are removed or clearly archived.
 - The incident record names the cause, correction, affected proof, cleanup, and prevention tier.
 - No required selected group is falsely reported green while failed, blocked, or too slow.
+- The campaign line at the end of the verify run is inside its budget, or the harness change that answers it is in the same change.
 
 Do not restart all passing groups, enlarge a timeout, or reset attempt history to obtain a clean-looking report. The result can be a confirmed repair, a disproved hypothesis, or an unresolved observation with a precise next step. Report which conclusion the evidence supports.
 

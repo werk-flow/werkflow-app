@@ -122,6 +122,7 @@ export type CalendarClientRefusalCode =
   | 'person_not_employed'
   | 'target_already_assigned'
   | 'inactive_occurrence'
+  | 'parked_without_context'
   | 'outside_day'
   | 'no_drop_target';
 
@@ -266,6 +267,7 @@ const CALENDAR_MESSAGES = {
   person_not_employed: (context) => `${context.name ?? 'Diese Person'} ist am ${withDate(context)} nicht beschäftigt. Wähle einen Tag innerhalb der Beschäftigung.`,
   target_already_assigned: (context) => `${context.name ?? 'Diese Person'} ist diesem Termin bereits zugewiesen.`,
   inactive_occurrence: 'Ausgelassene und abgesagte Termine bleiben, wo sie sind. Plane einen neuen Termin.',
+  parked_without_context: 'Der Auftrag hat noch keinen Parkplatz-Kontext. Ergänze ihn im Parkplatz über „Kontext ergänzen“, dann lässt er sich einplanen.',
   outside_day: 'Der Termin würde über Mitternacht hinausgehen. Wähle eine frühere Uhrzeit oder kürze die Dauer.',
   no_drop_target: 'Hier kann nichts abgelegt werden. Lege die Karte auf einer Person und einem Tag ab.',
 } satisfies Record<CalendarRefusalCode, Sentence | null>;

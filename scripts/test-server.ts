@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createClient } from '@supabase/supabase-js';
+import { subscribeForDatabaseReadiness } from './realtime-probe';
 import { runSessionCommand, withLocalStackLease } from '../lib/testing/local-stack-lease';
 import { withWorkspaceTestLock } from '../lib/testing/workspace-test-lock';
 
@@ -51,22 +52,7 @@ async function keepRealtimeWarm(): Promise<() => Promise<void>> {
     // join later, so each attempt uses a fresh channel until one is confirmed.
     const deadline = Date.now() + 120_000;
     for (let attempt = 1; ; attempt += 1) {
-      const outcome = await new Promise<'ok' | string>((resolveAttempt) => {
-        const timer = setTimeout(() => resolveAttempt('no readiness message within 15 s'), 15_000);
-        channel
-          .on('system', {}, (payload: unknown) => {
-            if (!payload || typeof payload !== 'object' || !('extension' in payload) || payload.extension !== 'postgres_changes' || !('status' in payload)) return;
-            clearTimeout(timer);
-            resolveAttempt(payload.status === 'ok' ? 'ok' : `postgres changes ${String(payload.status)}`);
-          })
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'organization_settings' }, () => {})
-          .subscribe((status: string, error?: Error) => {
-            if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-              clearTimeout(timer);
-              resolveAttempt(`join ${status}${error ? ` (${error.message})` : ''}`);
-            }
-          });
-      });
+      const outcome = await subscribeForDatabaseReadiness(channel, 15_000);
       if (outcome === 'ok') break;
       await client.removeChannel(channel);
       if (Date.now() >= deadline) throw new Error(`The local Realtime tenant did not report database readiness within 120 s; last attempt: ${outcome}.`);

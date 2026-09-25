@@ -17,7 +17,7 @@ const listingTests = process.argv.includes('--list');
 // selected Supabase target, local by default, reusing the golden harness (world seeder, steps, db
 // helpers). testDir covers every wave; scope runs with --grep @AUDIT-W<N>
 // (or a slice tag like @AUDIT-W2-P1-13). A no-grep run executes all waves in
-// one owned world per spec file. Stages inside each file remain serial;
+// one owned world per spec file. Tests inside each file run in order and continue after a failure;
 // the audit fixture retires the preceding successful file's world.
 //
 // Each invocation owns its state and output files. The group runner invokes
@@ -34,11 +34,9 @@ export default defineConfig({
   // add per-test setTimeout overrides; update the target budget with evidence.
   timeout: process.env.WERKFLOW_TEST_TARGET === 'cloud' ? 300_000 : 240_000,
   expect: { timeout: 10_000 },
-  // One active world at a time; file groups are isolated by audit fixtures.
+  // One world per Playwright process; a verification run may start several processes, each with its own world.
   workers: 1,
   retries: 0,
-  // Preserve the first useful failure instead of emitting dependent cascades.
-  maxFailures: 1,
   reporter: listingTests
     ? 'list'
     : [

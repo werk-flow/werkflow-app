@@ -1,15 +1,15 @@
 import type { Locator, Page } from '@playwright/test';
 
-// Serial-precondition guards (enforcement ladder, Stage C 2026-08-29).
+// Chained-precondition guards (enforcement ladder, Stage C 2026-08-29; reworded 2026-09-25).
 //
-// Mid-suite tests in a serial file legitimately depend on state their
-// predecessors created (testing.md: "Mid-suite specs are not dual-mode").
-// Running such a test without its producers — a partial iteration grep or a
-// diagnostic replay in a fresh process — used to fail after minutes on a
-// misleading locator timeout. These guards make the dependency explicit and
-// fail in seconds with the exact grep chain to run instead.
+// A test may depend on state an earlier test of the same file created
+// (testing.md: "Chained tests"). Tests run in file order and continue after
+// a failure, so a dependent test whose producer failed, or that runs without
+// its producers in a partial grep or a diagnostic replay, must fail in seconds
+// with the exact grep chain to run, never after minutes on a misleading
+// locator timeout. These guards do that.
 
-export interface SerialPrecondition {
+export interface ChainedPrecondition {
   /** The dependent test's ID as it appears in its title, e.g. 'A1-09'. */
   test: string;
   /** The persisted fact this test inherits, e.g. 'the customer created by A1-01'. */
@@ -19,19 +19,19 @@ export interface SerialPrecondition {
   suite: 'audit' | 'golden';
 }
 
-function preconditionError(input: SerialPrecondition): Error {
+function preconditionError(input: ChainedPrecondition): Error {
   return new Error(
-    `Serial precondition missing for ${input.test}: ${input.needs}. ` +
-      `Earlier tests in this serial file create that state — run the chain in one world: ` +
+    `Chained precondition missing for ${input.test}: ${input.needs}. ` +
+      `Earlier tests in this file create that state — run the chain in one world: ` +
       `bun run test:${input.suite}:focused --grep "${input.grep}" (focused diagnostic lane; acceptance evidence comes from bun run test:verify --group <owning group>). ` +
-      `(A partial grep of a serial file would otherwise fail after minutes on a misleading locator timeout.)`
+      `(Without the chain the test would otherwise fail after minutes on a misleading locator timeout.)`
   );
 }
 
 /** Throws the self-explaining grep-chain error unless the condition holds. */
-export function requireSerialPrecondition(
+export function requireChainedPrecondition(
   satisfied: boolean,
-  input: SerialPrecondition
+  input: ChainedPrecondition
 ): void {
   if (!satisfied) throw preconditionError(input);
 }
@@ -44,7 +44,7 @@ export function requireSerialPrecondition(
  */
 export function requireChainedValue<T>(
   value: T | null | undefined | '',
-  input: SerialPrecondition
+  input: ChainedPrecondition
 ): T {
   if (value === null || value === undefined || value === '') {
     throw preconditionError(input);
@@ -59,7 +59,7 @@ export function requireChainedValue<T>(
  */
 export async function requireVisiblePrecondition(
   locator: Locator,
-  input: SerialPrecondition & { timeoutMs?: number }
+  input: ChainedPrecondition & { timeoutMs?: number }
 ): Promise<void> {
   const timeout = input.timeoutMs ?? 10_000;
   try {

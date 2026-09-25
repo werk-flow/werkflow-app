@@ -1,15 +1,8 @@
 import { expect, test } from "../support/fixtures";
-import { getP124CountsAs, getP124NoLoginRecordId, getP124State } from "../../golden/support/db";
+import { getP124CountsAs, getP124NoLoginRecordId, getP124State } from "../../golden/support/db/personnel";
 import { ownedBerlinDateAtOffset } from "../../golden/support/date-ownership";
-import {
-  createPersonnelRecordViaDialog,
-  selectFromSearchable,
-  textInDom,
-  typeIntoDatePicker,
-  visibleText,
-} from "../../golden/support/steps";
-
-test.describe.configure({ mode: "serial" });
+import { createPersonnelRecordViaDialog } from "../../golden/support/steps/personnel";
+import { selectFromSearchable, textInDom, typeIntoDatePicker, visibleText } from "../../golden/support/steps/shared";
 
 const entryDate = ownedBerlinDateAtOffset("p1-24", 125);
 

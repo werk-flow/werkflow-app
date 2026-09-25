@@ -2,8 +2,15 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { calculateBuildInputs } from "./build-identity";
+import { contentDigest } from "./source-content";
 
-/** Application, environment, database and test inputs qualify proof; prose remains archival provenance. */
+/**
+ * Application, environment, database and test inputs qualify proof; prose remains
+ * archival provenance. Test inputs are identified by their comment-free token
+ * stream, the same identity the group qualification uses, so a comment edit
+ * during a run does not void the attempt (2026-09-25: five comment edits voided
+ * a full plan).
+ */
 export function calculateCandidateFingerprint(repositoryRoot: string, environment: NodeJS.ProcessEnv = process.env): string {
   const build = calculateBuildInputs(repositoryRoot, environment);
   const hash = createHash("sha256").update(build.sourceDigest).update(build.environmentDigest);
@@ -27,6 +34,6 @@ export function calculateCandidateFingerprint(repositoryRoot: string, environmen
   for (const path of ['supabase/config.toml', 'eslint.config.mjs', 'eslint.config.ts', 'eslint.config.js', 'bunfig.toml']) {
     if (existsSync(join(repositoryRoot, path))) paths.push(path);
   }
-  for (const path of [...new Set(paths)].sort()) hash.update(path).update("\0").update(readFileSync(join(repositoryRoot, path))).update("\0");
+  for (const path of [...new Set(paths)].sort()) hash.update(path).update("\0").update(contentDigest(path, readFileSync(join(repositoryRoot, path)))).update("\0");
   return hash.digest("hex");
 }

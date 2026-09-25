@@ -29,11 +29,9 @@ export default defineConfig({
   // cloud envelope directly (see playwright.config.ts for the evidence).
   timeout: 300_000,
   expect: { timeout: 10_000 },
-  // The world is shared, mutable state; canary checks run serially by design.
+  // The world is shared, mutable state: one worker runs the checks in declaration order.
   workers: 1,
   retries: 0,
-  // Later shared-world results are not meaningful after the first failure.
-  maxFailures: 1,
   reporter: listingTests
     ? 'list'
     : [

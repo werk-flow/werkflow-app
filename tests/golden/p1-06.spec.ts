@@ -6,30 +6,11 @@ import {
 } from '../../lib/vacation/balance';
 import { resolveDailyTargets } from '../../lib/personnel/targets';
 import { getBusinessWeekDates } from '../../lib/personnel/schedule';
-import {
-  getEmployeeRecordStateByUser,
-  getLatestVacationRequestState,
-  getTargetContextForRecord,
-  getVisibleVacationRequestRecordIdsAs,
-} from './support/db';
-import {
-  addConditionViaDialog,
-  approveVacationRequestFor,
-  cancelApprovedVacationFor,
-  confirmResponsibilityPreview,
-  createOwnVacationRequestViaDialog,
-  expectClockInBlockedByVacation,
-  expectVacationOverlapRejectedViaDialog,
-  expectVisibleAfterSave,
-  openMemberDetailFromList,
-  openOwnVacationSection,
-  openVacationApprovals,
-  previewResponsibilityChange,
-  rejectVacationRequestFor,
-  visibleText,
-  textInDom,
-  withdrawOwnPendingVacationRequest,
-} from './support/steps';
+import { getEmployeeRecordStateByUser } from './support/db/personnel';
+import { getLatestVacationRequestState, getTargetContextForRecord, getVisibleVacationRequestRecordIdsAs } from './support/db/vacation';
+import { addConditionViaDialog, confirmResponsibilityPreview, openMemberDetailFromList, previewResponsibilityChange } from './support/steps/personnel';
+import { expectVisibleAfterSave, visibleText, textInDom } from './support/steps/shared';
+import { approveVacationRequestFor, cancelApprovedVacationFor, createOwnVacationRequestViaDialog, expectClockInBlockedByVacation, expectVacationOverlapRejectedViaDialog, openOwnVacationSection, openVacationApprovals, rejectVacationRequestFor, withdrawOwnPendingVacationRequest } from './support/steps/vacation';
 import { expectCalendarVacationEventOnDate } from './support/p1-06-calendar';
 
 // P1-06 — Vacation requests, decisions, balances, availability, and target
@@ -48,8 +29,6 @@ import { expectCalendarVacationEventOnDate } from './support/p1-06-calendar';
 // from that stored state at runtime. leave_approval starts at its role default
 // (Admin + Büro) and ends this spec in `selected` mode with the admin as sole
 // holder.
-
-test.describe.configure({ mode: 'serial' });
 
 function berlinTodayIso(): string {
   return new Intl.DateTimeFormat('sv-SE', {

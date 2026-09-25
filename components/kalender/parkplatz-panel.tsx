@@ -23,7 +23,6 @@ interface ParkplatzPanelProps {
   jobs: CalendarJob[];
   onClose: () => void;
   memberNames: Record<string, string>;
-  headerHeight: number;
   /** null until the first successful load, so a missing context stays distinguishable. */
   parkingContexts: ReadonlyMap<string, JobParkingContext> | null;
   onEditContext: (job: CalendarJob) => void;
@@ -36,9 +35,11 @@ interface ParkplatzPanelProps {
 /**
  * The Parkplatz on the shared engine (P1-24a, criterion 24): every card is
  * a focusable drag source, the panel is a drop zone, and „Einplanen am …"
- * is the keyboard route back onto the calendar.
+ * is the keyboard route back onto the calendar. On a desktop the panel sits
+ * beside the calendar and narrows it, so every column stays a drop target;
+ * on a phone it covers the list.
  */
-export function ParkplatzPanel({ jobs, onClose, memberNames, headerHeight, parkingContexts, onEditContext, onDispatchJob, onScheduleJob, readOnly }: ParkplatzPanelProps) {
+export function ParkplatzPanel({ jobs, onClose, memberNames, parkingContexts, onEditContext, onDispatchJob, onScheduleJob, readOnly }: ParkplatzPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const { registerDropZone, startDrag } = useCalendarDrag();
 
@@ -48,14 +49,23 @@ export function ParkplatzPanel({ jobs, onClose, memberNames, headerHeight, parki
     return registerDropZone({ zone: 'parkplatz', element });
   }, [registerDropZone]);
 
+  useEffect(() => {
+    // Escape closes the panel unless a dialog above it owns the key.
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented && !document.querySelector('[role="dialog"]')) onClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
   return (
     <aside
       ref={panelRef}
       data-parkplatz-panel=""
       aria-label="Parkplatz"
-      className={cn('fixed bottom-0 right-0 top-0 flex w-80 max-w-full flex-col border-l bg-background shadow-xl animate-in slide-in-from-right duration-200', CALENDAR_LAYER_CLASS.panel)}
+      className={cn('flex w-80 max-w-full shrink-0 flex-col border-l bg-background animate-in slide-in-from-right duration-200 max-sm:fixed max-sm:inset-y-0 max-sm:right-0 max-sm:shadow-xl', CALENDAR_LAYER_CLASS.panel)}
     >
-      <div className="flex shrink-0 items-center justify-between border-b px-4 sm:px-6" style={{ height: headerHeight }}>
+      <div className="flex h-12 shrink-0 items-center justify-between border-b px-4">
         <div className="flex items-center gap-2">
           <ParkingSquare className="size-5 text-brand-purple" aria-hidden="true" />
           <h2 className="text-base font-semibold">Parkplatz</h2>
@@ -83,7 +93,7 @@ export function ParkplatzPanel({ jobs, onClose, memberNames, headerHeight, parki
                 data-job-id={job.id}
                 className={cn('group relative rounded-lg border bg-card p-3 shadow-xs transition-colors hover:border-brand-purple/40', !readOnly && 'cursor-grab active:cursor-grabbing')}
                 onPointerDown={(event) => {
-                  if (readOnly) return;
+                  // In read-only mode the engine's lock notice answers the press; the card stays put.
                   if ((event.target as HTMLElement).closest('a, button')) return;
                   const rect = event.currentTarget.getBoundingClientRect();
                   startDrag(event, {
@@ -145,7 +155,7 @@ export function ParkplatzPanel({ jobs, onClose, memberNames, headerHeight, parki
                     </div>
                   )}
                   <div className="mt-1 flex flex-wrap gap-1">
-                    {!readOnly && (
+                    {!readOnly && context && (
                       <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-[11px]" aria-label={`${job.title} einplanen`} onClick={() => onScheduleJob(job)}>
                         <CalendarPlus className="size-3" aria-hidden="true" />
                         Einplanen am …

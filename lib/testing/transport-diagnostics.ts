@@ -86,7 +86,19 @@ function diagnosticFor(input: unknown, init: unknown, error: unknown): Transport
 
 type DiagnosticRecorder = (diagnostic: TransportDiagnostic) => void | Promise<void>;
 
-/** Test-client observability only: one request, unchanged response or original rejection. */
+/** A connection that never carried the request; the read can be sent again without a second write. */
+const RETRIED_READ_CODES = new Set(['EACCES', 'ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'EPIPE', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_SOCKET']);
+const READ_RETRY_DELAY_MS = 250;
+
+function retriesAsRead(diagnostic: TransportDiagnostic): boolean {
+  return (diagnostic.method === 'GET' || diagnostic.method === 'HEAD') && diagnostic.errors.some((error) => error.code !== undefined && RETRIED_READ_CODES.has(error.code));
+}
+
+/**
+ * Test-client observability, plus one retry of an idempotent read whose
+ * connection failed: a write is attempted exactly once, a rejected read is
+ * recorded and, for a connection-level cause, sent a second time.
+ */
 export function createTransportDiagnosticFetch(options?: { record?: DiagnosticRecorder }): typeof globalThis.fetch;
 export function createTransportDiagnosticFetch<Fetch extends TestFetch>(options: {
   fetchImplementation: Fetch;
@@ -106,13 +118,17 @@ export function createTransportDiagnosticFetch(options: {
       try {
         return await Reflect.apply(target, receiver, argumentsList);
       } catch (error) {
+        let diagnostic: TransportDiagnostic | null = null;
         try {
+          diagnostic = diagnosticFor(argumentsList[0], argumentsList[1], error);
           // Async recorders are best-effort: neither slow I/O nor rejection delays the request failure.
-          void Promise.resolve(record(diagnosticFor(argumentsList[0], argumentsList[1], error))).catch(() => undefined);
+          void Promise.resolve(record(diagnostic)).catch(() => undefined);
         } catch {
           // Diagnostic failure must never replace the request's original rejection.
         }
-        throw error;
+        if (!diagnostic || !retriesAsRead(diagnostic)) throw error;
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, READ_RETRY_DELAY_MS));
+        return await Reflect.apply(target, receiver, argumentsList);
       }
     },
   });

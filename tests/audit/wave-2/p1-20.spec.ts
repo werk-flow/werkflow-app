@@ -4,31 +4,15 @@ import type { Locator, Page, Route } from "@playwright/test";
 import { expect, test } from "../support/fixtures";
 import { auditCheckpoint, saveAuditCheckpoint } from "../support/checkpoints";
 import { captureResponsiveSection } from "../support/visual-evidence";
-import {
-  getMaintenanceCountsAs,
-  getMaintenanceCoverageStateByReference,
-  getMaintenancePlanNumbersByClient,
-  getMaintenanceStateByPlanNumber,
-} from "../../golden/support/db";
+import { getMaintenanceCountsAs, getMaintenanceCoverageStateByReference, getMaintenancePlanNumbersByClient, getMaintenanceStateByPlanNumber } from "../../golden/support/db/service";
 import { ownedBerlinDateAtOffset } from "../../golden/support/date-ownership";
 import { requireChainedValue } from "../../golden/support/preconditions";
-import {
-  addSiteOnCustomerDetail,
-  createAndPublishWorkTemplate,
-  createCustomer,
-  createDirectServiceCase,
-  createInstalledEquipment,
-  createMaintenanceCoverageViaDialog,
-  createMaintenancePlanViaDialog,
-  openCustomerDetail,
-  selectFromSearchable,
-  textInDom,
-  typeIntoDatePickerById,
-  uploadIntoDocumentsSection,
-} from "../../golden/support/steps";
+import { addSiteOnCustomerDetail, createCustomer, openCustomerDetail } from "../../golden/support/steps/customers";
+import { uploadIntoDocumentsSection } from "../../golden/support/steps/documents";
+import { createDirectServiceCase, createInstalledEquipment, createMaintenanceCoverageViaDialog, createMaintenancePlanViaDialog } from "../../golden/support/steps/service";
+import { selectFromSearchable, textInDom, typeIntoDatePickerById } from "../../golden/support/steps/shared";
+import { createAndPublishWorkTemplate } from "../../golden/support/steps/work";
 import { artifactsDirectory, type TestWorld } from "../../golden/support/world";
-
-test.describe.configure({ mode: "serial" });
 
 const DATES = [
   ownedBerlinDateAtOffset("p1-20", 105),

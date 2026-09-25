@@ -3,47 +3,21 @@ import { resolve } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
 
 import { expect, test } from './support/fixtures';
-import {
-  getAppliedWorkTemplateState,
-  getDispatchState,
-  getVisibleWorkHandoverCountsAs,
-  getWorkArtifactState,
-  getWorkHandoverState,
-  getWorkLifecycleState,
-} from './support/db';
+import { getDispatchState } from './support/db/dispatch';
+import { getAppliedWorkTemplateState, getVisibleWorkHandoverCountsAs, getWorkArtifactState, getWorkHandoverState, getWorkLifecycleState } from './support/db/work';
 import {
   closeWorkArtifactDialog,
   readPopupBodyText,
   workArtifactsSection,
 } from './support/spec-helpers/work-artifact-dialog';
-import {
-  workLifecycleCard,
-  acknowledgeDispatchOnJobPage,
-  addContactOnCustomerDetail,
-  addSiteOnCustomerDetail,
-  changeTimeOnWorkPack,
-  createAndPublishWorkTemplate,
-  createCustomer,
-  createJob,
-  createPlannedCalendarEntry,
-  dispatchParkedJobFromParkplatz,
-  openCustomerDetail,
-  openFieldWorkPack,
-  openParkplatzPanel,
-  parkJobOnJobPage,
-  planMaterialOnJobPage,
-  selectAllHandoverSources,
-  workHandoverSection,
-  setInstructionCompletionOnJobPage,
-  takeMaterialOnJobPage,
-  transitionWorkOnJobPage,
-  typeIntoDatePickerById,
-  typeIntoDateTimeField,
-  uploadDocumentOnJobPage,
-} from './support/steps';
+import { createPlannedCalendarEntry } from './support/steps/calendar';
+import { addContactOnCustomerDetail, addSiteOnCustomerDetail, createCustomer, openCustomerDetail } from './support/steps/customers';
+import { acknowledgeDispatchOnJobPage, dispatchParkedJobFromParkplatz, openParkplatzPanel } from './support/steps/dispatch';
+import { uploadDocumentOnJobPage } from './support/steps/documents';
+import { planMaterialOnJobPage, takeMaterialOnJobPage } from './support/steps/inventory';
+import { typeIntoDatePickerById, typeIntoDateTimeField } from './support/steps/shared';
+import { workLifecycleCard, changeTimeOnWorkPack, createAndPublishWorkTemplate, createJob, openFieldWorkPack, parkJobOnJobPage, selectAllHandoverSources, workHandoverSection, setInstructionCompletionOnJobPage, transitionWorkOnJobPage } from './support/steps/work';
 import type { TestWorld } from './support/world';
-
-test.describe.configure({ mode: 'serial' });
 
 function berlinDateAfter(days: number): string {
   const today = new Intl.DateTimeFormat('sv-SE', {

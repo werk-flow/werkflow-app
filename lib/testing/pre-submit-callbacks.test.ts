@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { Page } from '@playwright/test';
-import { updateInstalledEquipmentModel, updateServiceCaseViaDialog } from '../../tests/golden/support/steps';
+import { updateInstalledEquipmentModel, updateServiceCaseViaDialog } from '../../tests/golden/support/steps/service';
 
 function pageBeforeSubmission(submit: () => Promise<void>): Page {
   const dialog = {

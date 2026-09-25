@@ -25,6 +25,30 @@ test('a rejected POST is attempted once and preserves its error and request inpu
   }]);
 });
 
+test('a read whose connection failed is sent a second time; a second failure is the original rejection', async () => {
+  const cause = Object.assign(new Error('connect'), { code: 'ECONNRESET', syscall: 'connect' });
+  const failure = new TypeError('fetch failed', { cause });
+  const response = new Response('ok');
+  let calls = 0;
+  const records: TransportDiagnostic[] = [];
+  const fetch = createTransportDiagnosticFetch({
+    fetchImplementation: async () => { calls += 1; if (calls === 1) throw failure; return response; },
+    record: (record) => { records.push(record); },
+  });
+  expect(await fetch('https://example.test/rows', { method: 'GET' })).toBe(response);
+  expect(calls).toBe(2);
+  expect(records).toHaveLength(1);
+  calls = 0;
+  const twice = createTransportDiagnosticFetch({ fetchImplementation: async () => { calls += 1; throw failure; }, record: () => undefined });
+  await expect(twice('https://example.test/rows')).rejects.toBe(failure);
+  expect(calls).toBe(2);
+  calls = 0;
+  const other = new TypeError('fetch failed', { cause: Object.assign(new Error('name'), { code: 'ENOTFOUND' }) });
+  const unresolvable = createTransportDiagnosticFetch({ fetchImplementation: async () => { calls += 1; throw other; }, record: () => undefined });
+  await expect(unresolvable('https://example.test/rows')).rejects.toBe(other);
+  expect(calls).toBe(1);
+});
+
 test('HTTP errors remain the identical unread response and are never retried or reported', async () => {
   for (const status of [200, 401, 429, 503]) {
     const response = new Response('body remains available', { status });

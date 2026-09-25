@@ -40,7 +40,7 @@ Amendment 2026-09-18 (pre-Wave-3 step 5): the environment-recovery retry compare
 
 ## Failure and responsiveness rules
 
-A failed group retains its evidence and owned world. Unrelated groups continue where the environment is valid. A dependent stage does not run after its prerequisite fails. Setup and teardown must never sweep unrelated groups' records.
+A failed group retains its evidence and owned world. Unrelated groups continue where the environment is valid. A test that depends on a failed producer fails at once on its chained precondition; the rest of its file still runs, so one run shows every failure the file holds (amendment of 2026-09-25). Setup and teardown must never sweep unrelated groups' records.
 
 An unchanged failed group cannot be retried as acceptance until its cause is addressed. One environment-recovery retry is allowed after classification, a later matching retained diagnostic pass on the same candidate and target, and owned-world cleanup. Two same-input failures remain blocked. A preflight failure with no run or world is blocked verification and can be retried after environment repair without fabricating business evidence. Investigate the smallest relevant failure, classify it from evidence, add prevention, and rerun the affected group. Unexplained repetition stays blocked. Do not manufacture progress through complete-battery reruns, timeout increases, or repeated budget extensions. Preserve cumulative campaign cost and historical failures.
 
@@ -58,9 +58,25 @@ The [enforcement ladder](0005-enforcement-ladder.md) remains the governing princ
 
 ## Host and rollout limits
 
-No new Linux machine or test infrastructure is part of this decision. The verification command retains the shared workspace lock. Execution defaults to one group at a time. Opt-in `--jobs 2` permits at most two eligible independent browser groups within that owned command; integrated journeys, timing-sensitive groups, SQL, and setup gates remain exclusive. Independent files and worlds are prerequisites for concurrency, not evidence of a measured speedup. The implementation plan must record host validation, resource limits, and coverage equivalence before claiming the concurrent mode verified.
+No new Linux machine or test infrastructure is part of this decision. The verification command holds the shared workspace lock for its whole run; two verification commands never overlap. Concurrency inside one run is governed by the amendment below.
 
-The [implementation plan](../plans/phase-1/hardening-2026-09/04-testing-system-restructure.md) owns rollout status, measurements, and outstanding verification. Acceptance of this policy is not a claim that migration or end-to-end verification is complete. No fixed speedup, zero-flake guarantee, security certification, or production release is implied.
+The [implementation plan](../plans/phase-1/hardening-2026-09/04-testing-system-restructure.md) owned the 2026-09 rollout. Acceptance of this policy is not a claim of a fixed speedup, a zero-flake guarantee, a security certification or a production release.
+
+## Amendment 2026-09-25: the execution model
+
+The P1-24a campaign (2026-09-23 to 2026-09-24) cost fourteen hours of verification and thirty-five browser failures for six product defects, with the account in the [incident log](../technical/test-incident-log.md#2026-09-24-p1-24a-full-change-plan-three-attempts). The cost came from the execution model, which no earlier repair had touched: every group repeated the preflight, two Playwright discoveries and two archive scans (about a minute per group); two support monoliths of nine thousand lines made every helper edit rerun every browser group; every spec ran in serial mode and revealed one failure per run; per-user preferences persisted between the tests of a file; and a lagging local Realtime service was diagnosed after the fact, never before a measurement. The owner ruled that the model changes, not the guidance.
+
+Decided, implemented the same day:
+
+- The shared work of a browser run happens once per verification run and reaches every group through a prepared plan; a group runner starts Playwright directly. Blocking narrows to a failed static gate, an input drift or an interruption.
+- Independent browser groups may run on N workers (`--jobs`, default 1); groups with freshness, readiness or measured scenarios always run alone. The default follows the workstation measurement of 2026-09-25 (two workers: 11 percent faster, each overlapping group about 70 percent slower on the one shared server; three workers: about 20 percent). The measurement, not the option, is what a future machine changes.
+- Browser support is split into domain modules under `tests/golden/support/steps/` and `db/`; a helper edit reruns the groups of its area.
+- Specs run their tests in file order and continue after a failure; a dependent test guards its producer with a chained precondition and fails fast. Serial mode and `maxFailures` are gone and a convention test refuses them.
+- Every test starts without persisted per-user UI preferences (an automatic fixture), and the calendar saves a discrete preference at once.
+- A Realtime readiness probe runs before every timing-sensitive group and restarts the service once when it lags.
+- Every verification run and `bun run test:campaign` report the campaign's cost since the last commit against a budget of 240 minutes or eight harness failures; past the budget, the slice does not close until the harness changed as a mechanism ([protocol](../plans/phase-1/protocol.md#campaign-budget)).
+
+Mechanisms and commands: [testing.md](../technical/testing.md).
 
 ## Alternatives considered
 

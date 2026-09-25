@@ -5,50 +5,18 @@ import { auditCheckpoint, saveAuditCheckpoint } from "../support/checkpoints";
 
 import { expect, test } from "../support/fixtures";
 import { expectButtonTextContrast } from "../support/button-contrast";
-import {
-  getInventoryLedgerState,
-  findLatestManualTimeEntryState,
-  getJobCountByNumber,
-  getJobProjectNumber,
-  getOrganizationTimeEntrySnapshot,
-  getTimeCaptureState,
-  getPendingInviteCode,
-} from "../../golden/support/db";
-import {
-  workLifecycleCard,
-  clockInOnJob,
-  clockOut,
-  createCustomer,
-  createInventoryItem,
-  createInventoryLocation,
-  createJob,
-  createOwnManualTimeEntry,
-  createPlannedCalendarEntry,
-  createProject,
-  dragPlanningMonthEvent,
-  endClockBreak,
-  expectVisibleAfterSave,
-  editMetadataTextField,
-  expectRedirectedAway,
-  inviteMember,
-  inputByValue,
-  joinOrganizationViaInviteLink,
-  loginViaUi,
-  openCustomerDetail,
-  openDialogWithRetry,
-  openTimeApprovals,
-  approvePendingTimeEntry,
-  selectFromSearchable,
-  showPlanningMonth,
-  signOutViaUi,
-  startClockBreak,
-  switchClockJob,
-  takeMaterialOnJobPage,
-  typeIntoDatePicker,
-  typeIntoTimeInput,
-  visibleText,
-  textInDom,
-} from "../../golden/support/steps";
+import { getInventoryLedgerState } from "../../golden/support/db/inventory";
+import { getPendingInviteCode } from "../../golden/support/db/shared";
+import { findLatestManualTimeEntryState, getOrganizationTimeEntrySnapshot, getTimeCaptureState } from "../../golden/support/db/time-tracking";
+import { getJobCountByNumber, getJobProjectNumber } from "../../golden/support/db/work";
+import { createPlannedCalendarEntry, dragPlanningMonthEvent, showPlanningMonth } from "../../golden/support/steps/calendar";
+import { createCustomer, openCustomerDetail } from "../../golden/support/steps/customers";
+import { createInventoryItem, createInventoryLocation, takeMaterialOnJobPage } from "../../golden/support/steps/inventory";
+import { expectRedirectedAway, inviteMember, joinOrganizationViaInviteLink, loginViaUi, signOutViaUi } from "../../golden/support/steps/organization";
+import { editMetadataTextField } from "../../golden/support/steps/personnel";
+import { expectVisibleAfterSave, inputByValue, openDialogWithRetry, selectFromSearchable, typeIntoDatePicker, typeIntoTimeInput, visibleText, textInDom } from "../../golden/support/steps/shared";
+import { clockInOnJob, clockOut, createOwnManualTimeEntry, endClockBreak, openTimeApprovals, approvePendingTimeEntry, startClockBreak, switchClockJob } from "../../golden/support/steps/time-tracking";
+import { workLifecycleCard, createJob, createProject } from "../../golden/support/steps/work";
 import { dragCardTo, dragHandleBy, trailingResizeHandle } from "../../golden/support/plantafel";
 import { storageStatePath } from "../../golden/support/world";
 import {
@@ -63,7 +31,7 @@ import {
 import {
   gotoReadOnlyRoute,
   requireChainedValue,
-  requireSerialPrecondition,
+  requireChainedPrecondition,
   requireVisiblePrecondition,
 } from "../../golden/support/preconditions";
 import {
@@ -112,8 +80,6 @@ async function moveCalendarBlockToMember(page: Page, block: Locator, memberName:
     await page.mouse.up();
   }
 }
-
-test.describe.configure({ mode: "serial" });
 
 test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
   test("A1-01/A1-07: Konto, erste Organisation und Auto-Ausstempeln beim Abmelden", async ({
@@ -1414,7 +1380,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     bueroPage,
     world,
   }) => {
-    requireSerialPrecondition(
+    requireChainedPrecondition(
       (await getJobCountByNumber(world.orgId, `A1-Z1-${world.runId}`)) === 1,
       {
         test: "A1-19",
@@ -2005,7 +1971,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
       world.orgId,
       world.users.employee.id,
     );
-    requireSerialPrecondition(manualTimeState?.status === "pending", {
+    requireChainedPrecondition(manualTimeState?.status === "pending", {
       test: "A1-24/A1-25",
       needs: "the pending manual time entry created by A1-29",
       grep: "A1-29|A1-24/A1-25",
@@ -2249,7 +2215,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     const inheritedTimeEntries = await getOrganizationTimeEntrySnapshot(
       world.orgId,
     );
-    requireSerialPrecondition(
+    requireChainedPrecondition(
       inheritedTimeEntries.some(
         (entry) =>
           entry.user_id === world.users.employee.id &&
@@ -2614,7 +2580,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     const checklistJobNumber = `A1-CHECK-${world.runId}`;
     const listProjectNumber = `A1-LIST-P-${world.runId}`;
     const listCustomerName = `A1 Listenkunde ${world.runId}`;
-    requireSerialPrecondition(
+    requireChainedPrecondition(
       (await getJobCountByNumber(world.orgId, checklistJobNumber)) === 1,
       {
         test: "A1-34/A1-35",

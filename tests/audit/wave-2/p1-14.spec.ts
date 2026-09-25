@@ -1,31 +1,14 @@
 import { expect, test } from "../support/fixtures";
 import type { Page } from '@playwright/test';
-import {
-  getAppliedWorkTemplateState,
-  getVisibleWorkLifecycleCountsAs,
-  getWorkLifecycleState,
-} from '../../golden/support/db';
-import {
-  workLifecycleCard,
-  clockInOnJob,
-  clockOut,
-  createAndPublishWorkTemplate,
-  createJob,
-  createProject,
-  selectAllHandoverSources,
-  workHandoverSection,
-  selectFromSearchable,
-  typeIntoDatePickerById,
-  visibleText,
-  textInDom,
-} from '../../golden/support/steps';
+import { getAppliedWorkTemplateState, getVisibleWorkLifecycleCountsAs, getWorkLifecycleState } from '../../golden/support/db/work';
+import { selectFromSearchable, typeIntoDatePickerById, visibleText, textInDom } from '../../golden/support/steps/shared';
+import { clockInOnJob, clockOut } from '../../golden/support/steps/time-tracking';
+import { workLifecycleCard, createAndPublishWorkTemplate, createJob, createProject, selectAllHandoverSources, workHandoverSection } from '../../golden/support/steps/work';
 import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
 import {
   instructionItemByPrimaryText,
   representativeReadinessState,
 } from '../support/p1-14-steps';
-
-test.describe.configure({ mode: 'serial' });
 
 function digits(dateIso: string): string {
   const [year, month, day] = dateIso.split('-');

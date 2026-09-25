@@ -136,7 +136,7 @@ The agent stops and asks, with the `grilling` skill's numbered questions and a r
 - Make consequential actions explicit, previewable, attributable, and correctable.
 - Use backward-compatible migrations and preserve historical meaning.
 - Make failures and partial external states visible with a recovery path.
-- Cover every promised clause at the real boundary that can prove it. Use domain units for rules, SQL for database permissions and invariants, component browser checks for controls, and application browser groups for connected outcomes and visible role behavior. A slice still needs an automated browser proof of its own outcome. Reuse shared actions where they remove duplication; do not add every helper to one growing file.
+- Cover every promised clause at the real boundary that can prove it. Use domain units for rules, SQL for database permissions and invariants, component browser checks for controls, and application browser groups for connected outcomes and visible role behavior. A slice still needs an automated browser proof of its own outcome. Reuse shared actions where they remove duplication; a browser helper lives in the domain module of its product area under `tests/golden/support/steps/` or `db/`, never in a file every group imports.
 - Use explicit groups during implementation and the complete selected change plan for acceptance. Separate connected journey stages at persisted boundaries. Declare producer prerequisites and verify their actual preconditions. Each independent group owns its world and output files. Retained diagnostics explain failures but do not qualify as fresh acceptance evidence.
 - Ship complete catalog coverage with the slice. Update `lib/testing/coverage-map.json` and the owning executable groups in `lib/testing/test-groups.ts`. Record which assertions prove each observable clause and review their meaning. Audit browser specs cover the clauses that require the running app; other clauses can use domain, SQL, or component evidence. Remove duplicate execution only when its coverage remains explicit. The wave ledger records accepted evidence and links its owners.
 - Keep field-worker paths simpler than office paths and use natural German for user-facing language.
@@ -162,7 +162,17 @@ The slice is not complete until all applicable items are satisfied:
 - the slice's acceptance is recorded in its owning files: the slice record under `slices/` closes with the full acceptance evidence, completion date, follow-up work, and any split/superseding slices (the record is the canonical home for the slice's facts); [roadmap.md](roadmap.md) updates the index-row status, the checkpoint table, the accepted counter, and the recomputed `ready` set; [log.md](log.md) gains one short appended entry linking the record;
 - the complete selected local change plan passes on qualified inputs, including affected browser groups on a recorded production build; provider changes also receive the applicable cloud canary evidence; the slice record and [gate log](audits/golden-gate-log.md) identify the verification report, selected scope, reused results, and fresh runs;
 - failures have evidence and classification in [test-incident-log.md](../../technical/test-incident-log.md); unresolved selected groups block acceptance, unchanged failed inputs cannot be retried as a substitute for diagnosis, and retained ownership is resolved before release closure;
+- the closing report's campaign line is within the budget below, or the harness change that answers it ships in the same slice;
 - the deletion pass and the independent review below are recorded in the slice record, and the review leaves no unresolved correctness, security, data-loss, or documentation issue.
+
+### Campaign Budget
+
+Owner rule of 2026-09-25, after the P1-24a campaign (fourteen hours of verification and thirty-five browser failures for six product defects, [decision 0007 amendment](../../decisions/0007-independent-test-groups.md#amendment-2026-09-25-the-execution-model)). Every verification run ends with the campaign line that `bun run test:campaign` prints: the reports, minutes, groups run and reused, and failures by classification since the last commit. The budget per slice is 240 minutes of verification or eight harness failures.
+
+- Past either bound, the slice does not close until the harness changed in a way the next agent cannot undo by reading less carefully: a fixture, a runner rule, a convention test, a split of ownership, a product change that removes a failure class. A sentence in a document is not that change.
+- A harness failure class that appears twice in one slice gets the same treatment regardless of the budget, and its incident entry names the mechanism.
+- Asking whether the way we test makes sense is not optional and not a reflection at the end: the second time a run fails for a reason that is not the product, the agent stops the campaign and changes the harness before the next run.
+- The slice record's completion evidence quotes the campaign line of the closing report.
 
 ### Deletion Pass And Independent Review
 

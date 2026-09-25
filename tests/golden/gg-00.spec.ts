@@ -1,31 +1,21 @@
 import { resolve } from 'node:path';
 
 import { expect, test } from './support/fixtures';
-import { getInventoryLedgerState, getPendingInviteCode } from './support/db';
-import {
-  clockInOnJob,
-  clockOut,
-  createCustomer,
-  createJob,
-  expectRedirectedAway,
-  inviteMember,
-  joinOrganizationViaInviteLink,
-  loginViaUi,
-  returnMaterialOnJobPage,
-  signOutViaUi,
-  takeMaterialOnJobPage,
-  uploadDocumentOnJobPage,
-  visibleText,
-  textInDom,
-} from './support/steps';
+import { getInventoryLedgerState } from './support/db/inventory';
+import { getPendingInviteCode } from './support/db/shared';
+import { createCustomer } from './support/steps/customers';
+import { uploadDocumentOnJobPage } from './support/steps/documents';
+import { returnMaterialOnJobPage, takeMaterialOnJobPage } from './support/steps/inventory';
+import { expectRedirectedAway, inviteMember, joinOrganizationViaInviteLink, loginViaUi, signOutViaUi } from './support/steps/organization';
+import { visibleText, textInDom } from './support/steps/shared';
+import { clockInOnJob, clockOut } from './support/steps/time-tracking';
+import { createJob } from './support/steps/work';
 import { artifactsDirectory, storageStatePath } from './support/world';
 import { expectLiveWithin, realtimeSubscribed } from './support/live';
 
 // GG-00 — Existing Foundation Regression (@GG-00)
 // Verifies the roadmap's baseline scenario: role-scoped core flows, document
 // upload via direct-to-R2, organization isolation, and sign-out.
-
-test.describe.configure({ mode: 'serial' });
 
 test.describe('GG-00 Bestandsfunktionen @GG-00', () => {
   test('Admin legt einen Kunden an', async ({ adminPage, world }) => {

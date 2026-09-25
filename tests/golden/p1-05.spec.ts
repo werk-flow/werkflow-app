@@ -1,31 +1,10 @@
 import { expect, test } from './support/fixtures';
-import {
-  expectOwnerRoleMutationRejected,
-  findLatestManualTimeEntryState,
-  getEmployeeRecordStateByUser,
-  getLatestManualTimeEntryState,
-  getLatestResponsibilityConfigurationState,
-  getVisibleResponsibilityEmployeeRecordIdsAs,
-} from './support/db';
-import {
-  approvePendingTimeEntry,
-  confirmResponsibilityPreview,
-  createOwnManualTimeEntry,
-  createResponsibilityDelegationViaSettings,
-  endResponsibilityDelegationViaSettings,
-  expectExpiredResponsibilityDeniedAtAction,
-  expectMemberRemovalBlockedByResponsibility,
-  expectPendingTimeApprovalHidden,
-  expectPendingTimeApprovalVisible,
-  expectTimeApprovalsUnavailable,
-  expectVisibleAfterSave,
-  openTimeApprovals,
-  previewResponsibilityChange,
-  textInDom,
-  visibleText,
-} from './support/steps';
-
-test.describe.configure({ mode: 'serial' });
+import { getEmployeeRecordStateByUser, getLatestResponsibilityConfigurationState, getVisibleResponsibilityEmployeeRecordIdsAs } from './support/db/personnel';
+import { expectOwnerRoleMutationRejected } from './support/db/shared';
+import { findLatestManualTimeEntryState, getLatestManualTimeEntryState } from './support/db/time-tracking';
+import { confirmResponsibilityPreview, createResponsibilityDelegationViaSettings, endResponsibilityDelegationViaSettings, previewResponsibilityChange } from './support/steps/personnel';
+import { expectVisibleAfterSave, textInDom, visibleText } from './support/steps/shared';
+import { approvePendingTimeEntry, createOwnManualTimeEntry, expectExpiredResponsibilityDeniedAtAction, expectMemberRemovalBlockedByResponsibility, expectPendingTimeApprovalHidden, expectPendingTimeApprovalVisible, expectTimeApprovalsUnavailable, openTimeApprovals } from './support/steps/time-tracking';
 
 function berlinTodayIso(): string {
   return new Intl.DateTimeFormat('sv-SE', {

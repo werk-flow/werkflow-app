@@ -1,27 +1,12 @@
 import { expect, test } from "../support/fixtures";
-import {
-  getInstalledEquipmentNumberByName,
-  getInstalledEquipmentState,
-} from "../../golden/support/db";
+import { getInstalledEquipmentNumberByName, getInstalledEquipmentState } from "../../golden/support/db/service";
 import { ownedBerlinDateAtOffset } from "../../golden/support/date-ownership";
 import { requireChainedValue } from "../../golden/support/preconditions";
-import {
-  addSiteOnCustomerDetail,
-  correctInstalledEquipmentTerminalAction,
-  createCustomer,
-  createInstalledEquipment,
-  createJob,
-  expectDuplicateInstalledEquipmentRejected,
-  openCustomerDetail,
-  openInstalledEquipmentByName,
-  openInstalledEquipmentWorkLinkDialog,
-  replaceInstalledEquipment,
-  transitionInstalledEquipment,
-  visibleText,
-} from "../../golden/support/steps";
+import { addSiteOnCustomerDetail, createCustomer, openCustomerDetail } from "../../golden/support/steps/customers";
+import { correctInstalledEquipmentTerminalAction, createInstalledEquipment, expectDuplicateInstalledEquipmentRejected, openInstalledEquipmentByName, openInstalledEquipmentWorkLinkDialog, replaceInstalledEquipment, transitionInstalledEquipment } from "../../golden/support/steps/service";
+import { visibleText } from "../../golden/support/steps/shared";
+import { createJob } from "../../golden/support/steps/work";
 import type { TestWorld } from "../../golden/support/world";
-
-test.describe.configure({ mode: "serial" });
 
 const INSTALLATION_DATE = ownedBerlinDateAtOffset("p1-18", 95);
 

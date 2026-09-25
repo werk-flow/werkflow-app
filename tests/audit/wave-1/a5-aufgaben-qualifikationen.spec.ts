@@ -5,48 +5,22 @@ import { VACATION_STATUS_LABELS } from '../../../lib/vacation/types';
 import { expect, test } from "../support/fixtures";
 import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
 import { requireEnv } from '../../golden/support/env';
-import {
-  getAttentionPatternStateForUser,
-  getCapabilityHistoryState,
-  getEmployeeRecordStateByUser,
-  findJobQualificationState,
-  getJobQualificationState,
-  getLatestManualTimeEntryState,
-  getPlanningState,
-  getVacationRequestIdsByStartDate,
-} from '../../golden/support/db';
-import { requireSerialPrecondition } from '../../golden/support/preconditions';
-import {
-  addConditionViaDialog,
-  addJobCapabilityRequirement,
-  addTeamMemberViaManagement,
-  approvePendingTimeEntry,
-  approveVacationRequestFor,
-  assignCapabilityViaManagement,
-  cancelApprovedVacationForRangeText,
-  closeRequestViaDialog,
-  createCapabilityViaManagement,
-  createJob,
-  createOwnManualTimeEntry,
-  createOwnVacationRequestViaDialog,
-  createPersonnelRecordViaDialog,
-  createPlannedCalendarEntry,
-  createRequestViaDialog,
-  createTeamViaManagement,
-  dragPlanningMonthEvent,
-  markAllAttentionNotificationsReadViaButton,
-  markAttentionNotificationReadViaButton,
-  openAufgaben,
-  openMemberDetailFromList,
-  plannedCalendarEvent,
-  rejectVacationRequestFor,
-  selectFromSearchable,
-  setApprenticeWarningViaManagement,
-  showPlanningMonth,
-  typeIntoDatePicker,
-  visibleText,
-  textInDom,
-} from '../../golden/support/steps';
+import { getAttentionPatternStateForUser } from '../../golden/support/db/attention';
+import { getPlanningState } from '../../golden/support/db/calendar';
+import { getEmployeeRecordStateByUser } from '../../golden/support/db/personnel';
+import { getCapabilityHistoryState, findJobQualificationState, getJobQualificationState } from '../../golden/support/db/qualifications';
+import { getLatestManualTimeEntryState } from '../../golden/support/db/time-tracking';
+import { getVacationRequestIdsByStartDate } from '../../golden/support/db/vacation';
+import { requireChainedPrecondition } from '../../golden/support/preconditions';
+import { markAllAttentionNotificationsReadViaButton, markAttentionNotificationReadViaButton, openAufgaben } from '../../golden/support/steps/attention';
+import { createPlannedCalendarEntry, dragPlanningMonthEvent, plannedCalendarEvent, showPlanningMonth } from '../../golden/support/steps/calendar';
+import { addConditionViaDialog, createPersonnelRecordViaDialog, openMemberDetailFromList } from '../../golden/support/steps/personnel';
+import { addJobCapabilityRequirement, addTeamMemberViaManagement, assignCapabilityViaManagement, createCapabilityViaManagement, createTeamViaManagement, setApprenticeWarningViaManagement } from '../../golden/support/steps/qualifications';
+import { closeRequestViaDialog, createRequestViaDialog } from '../../golden/support/steps/requests';
+import { selectFromSearchable, typeIntoDatePicker, visibleText, textInDom } from '../../golden/support/steps/shared';
+import { approvePendingTimeEntry, createOwnManualTimeEntry } from '../../golden/support/steps/time-tracking';
+import { approveVacationRequestFor, cancelApprovedVacationForRangeText, createOwnVacationRequestViaDialog, rejectVacationRequestFor } from '../../golden/support/steps/vacation';
+import { createJob } from '../../golden/support/steps/work';
 import {
   calendarDayCell,
   notificationRow,
@@ -68,8 +42,6 @@ import {
 // database access below is read-only assertion state. Owned run-day offsets:
 // +40 … +44. The manual time entry deliberately lies on the previous day
 // because the dialog rejects future times (documented fixture exception).
-
-test.describe.configure({ mode: 'serial' });
 
 function toDatePickerDigits(dateIso: string): string {
   const [year, month, day] = dateIso.split('-');
@@ -284,9 +256,9 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
 
     // The Aufgaben badge is exactly "actionable + unread" — asserted as a
     // page-internal equality that is valid in fresh and inherited runs alike.
-    const adminTaskCount = await taskRows(adminPage).count();
-    const adminUnreadCount = await unreadRows(adminPage).count();
-    await expectBadgeCount(adminPage, '/aufgaben', adminTaskCount + adminUnreadCount);
+    // The badge and the rows settle from separate reads (a notification row can render after its
+    // badge count), so the equality is polled over all three together.
+    await expect.poll(async () => (await readBadgeCount(adminPage, '/aufgaben')) - (await taskRows(adminPage).count()) - (await unreadRows(adminPage).count()), { timeout: 20_000 }).toBe(0);
 
     // Meine Anträge (employee transparency): the pending request is listed
     // with range, day count and status.
@@ -823,7 +795,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
   }) => {
     const jobNumber = `A5-QUAL-${world.runId}`;
     const producerState = await findJobQualificationState(world.orgId, jobNumber);
-    requireSerialPrecondition(
+    requireChainedPrecondition(
       producerState?.requirementCount === 5 &&
         producerState.assessments.some(
           (assessment) =>

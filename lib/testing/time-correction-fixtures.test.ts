@@ -23,7 +23,7 @@ describe("canonical correction batch preparation", () => {
     expect(serverIdentityCalls).toHaveLength(1);
     expect(serverIdentityCalls[0]?.arguments.map((argument) => argument.getText(source))).toEqual(["world.orgId", "world.users.employee.id"]);
     expect(source.statements.some((statement) => ts.isImportDeclaration(statement)
-      && ts.isStringLiteral(statement.moduleSpecifier) && statement.moduleSpecifier.text === "../../golden/support/db"
+      && ts.isStringLiteral(statement.moduleSpecifier) && statement.moduleSpecifier.text === "../../golden/support/db/personnel"
       && statement.importClause?.namedBindings && ts.isNamedImports(statement.importClause.namedBindings)
       && statement.importClause.namedBindings.elements.some((binding) => binding.name.text === "getEmployeeRecordStateByUser"))).toBe(true);
   });

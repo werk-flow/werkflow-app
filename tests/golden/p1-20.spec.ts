@@ -2,33 +2,18 @@ import type { Locator, Page } from "@playwright/test";
 
 import { closeWorkArtifactDialog, workArtifactsSection } from "./support/spec-helpers/work-artifact-dialog";
 import { expect, test } from "./support/fixtures";
-import {
-  getMaintenanceCoverageStateByReference,
-  getJobNumberById,
-  getMaintenancePlanNumberByClient,
-  getMaintenanceStateByPlanNumber,
-} from "./support/db";
+import { getMaintenanceCoverageStateByReference, getMaintenancePlanNumberByClient, getMaintenanceStateByPlanNumber } from "./support/db/service";
+import { getJobNumberById } from "./support/db/work";
 import {
   berlinDateAtOffset,
   ownedBerlinDateAtOffset,
 } from "./support/date-ownership";
 import { requireChainedValue } from "./support/preconditions";
-import {
-  addSiteOnCustomerDetail,
-  createAndPublishWorkTemplate,
-  createCustomer,
-  createDirectServiceCase,
-  createInstalledEquipment,
-  createMaintenanceCoverageViaDialog,
-  createMaintenancePlanViaDialog,
-  openCustomerDetail,
-  openFieldWorkPack,
-  typeIntoDateTimeField,
-  visibleText,
-} from "./support/steps";
+import { addSiteOnCustomerDetail, createCustomer, openCustomerDetail } from "./support/steps/customers";
+import { createDirectServiceCase, createInstalledEquipment, createMaintenanceCoverageViaDialog, createMaintenancePlanViaDialog } from "./support/steps/service";
+import { typeIntoDateTimeField, visibleText } from "./support/steps/shared";
+import { createAndPublishWorkTemplate, openFieldWorkPack } from "./support/steps/work";
 import type { TestWorld } from "./support/world";
-
-test.describe.configure({ mode: "serial" });
 
 const DATES = [
   ownedBerlinDateAtOffset("p1-20", 105),

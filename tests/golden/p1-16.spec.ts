@@ -1,33 +1,15 @@
 import { resolve } from 'node:path';
 
 import { expect, test } from './support/fixtures';
-import {
-  getAppliedWorkTemplateState,
-  getInventoryLedgerState,
-  getJobCountByNumber,
-  getWorkArtifactState,
-  getWorkLifecycleState,
-} from './support/db';
+import { getInventoryLedgerState } from './support/db/inventory';
+import { getAppliedWorkTemplateState, getJobCountByNumber, getWorkArtifactState, getWorkLifecycleState } from './support/db/work';
 import { closeWorkArtifactDialog, workArtifactsSection } from './support/spec-helpers/work-artifact-dialog';
-import {
-  addContactOnCustomerDetail,
-  addSiteOnCustomerDetail,
-  changeTimeOnWorkPack,
-  createAndPublishWorkTemplate,
-  createCustomer,
-  createJob,
-  loginViaUi,
-  openCustomerDetail,
-  openFieldWorkPack,
-  returnMaterialOnJobPage,
-  setInstructionCompletionOnJobPage,
-  takeMaterialOnJobPage,
-  transitionWorkOnJobPage,
-  uploadDocumentOnJobPage,
-} from './support/steps';
+import { addContactOnCustomerDetail, addSiteOnCustomerDetail, createCustomer, openCustomerDetail } from './support/steps/customers';
+import { uploadDocumentOnJobPage } from './support/steps/documents';
+import { returnMaterialOnJobPage, takeMaterialOnJobPage } from './support/steps/inventory';
+import { loginViaUi } from './support/steps/organization';
+import { changeTimeOnWorkPack, createAndPublishWorkTemplate, createJob, openFieldWorkPack, setInstructionCompletionOnJobPage, transitionWorkOnJobPage } from './support/steps/work';
 import { artifactsDirectory, type TestWorld } from './support/world';
-
-test.describe.configure({ mode: 'serial' });
 
 function berlinDateAfter(days: number): string {
   const today = new Intl.DateTimeFormat('sv-SE', {

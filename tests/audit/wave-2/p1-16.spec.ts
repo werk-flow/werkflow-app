@@ -1,46 +1,20 @@
 import { resolve } from 'node:path';
 
 import { expect, test } from "../support/fixtures";
-import {
-  getAppliedWorkTemplateState,
-  getDispatchState,
-  getInventoryLedgerState,
-  getWorkArtifactState,
-  getWorkLifecycleState,
-} from '../../golden/support/db';
-import {
-  acknowledgeDispatchOnJobPage,
-  addContactOnCustomerDetail,
-  addSiteOnCustomerDetail,
-  challengeDispatchOnJobPage,
-  changeTimeOnWorkPack,
-  createAndPublishWorkTemplate,
-  createCustomer,
-  createJob,
-  createPlannedCalendarEntry,
-  createProject,
-  openCustomerDetail,
-  dispatchParkedJobFromParkplatz,
-  openFieldWorkPack,
-  openParkplatzPanel,
-  parkJobOnJobPage,
-  planMaterialOnJobPage,
-  removeJobAssignment,
-  reportOwnBlockerOnJobPage,
-  resolveOwnBlockerOnJobPage,
-  returnMaterialOnJobPage,
-  setInstructionCompletionOnJobPage,
-  takeMaterialOnJobPage,
-  transitionWorkOnJobPage,
-  uploadDocumentOnJobPage,
-  visibleText,
-} from '../../golden/support/steps';
+import { getDispatchState } from '../../golden/support/db/dispatch';
+import { getInventoryLedgerState } from '../../golden/support/db/inventory';
+import { getAppliedWorkTemplateState, getWorkArtifactState, getWorkLifecycleState } from '../../golden/support/db/work';
+import { createPlannedCalendarEntry } from '../../golden/support/steps/calendar';
+import { addContactOnCustomerDetail, addSiteOnCustomerDetail, createCustomer, openCustomerDetail } from '../../golden/support/steps/customers';
+import { acknowledgeDispatchOnJobPage, challengeDispatchOnJobPage, dispatchParkedJobFromParkplatz, openParkplatzPanel } from '../../golden/support/steps/dispatch';
+import { uploadDocumentOnJobPage } from '../../golden/support/steps/documents';
+import { planMaterialOnJobPage, returnMaterialOnJobPage, takeMaterialOnJobPage } from '../../golden/support/steps/inventory';
+import { visibleText } from '../../golden/support/steps/shared';
+import { changeTimeOnWorkPack, createAndPublishWorkTemplate, createJob, createProject, openFieldWorkPack, parkJobOnJobPage, removeJobAssignment, reportOwnBlockerOnJobPage, resolveOwnBlockerOnJobPage, setInstructionCompletionOnJobPage, transitionWorkOnJobPage } from '../../golden/support/steps/work';
 import { ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
 import { artifactsDirectory } from '../../golden/support/world';
 import { closeWorkArtifactDialog, workArtifactsSection } from '../../golden/support/spec-helpers/work-artifact-dialog';
 import { representativeFieldWorkPackState } from '../support/p1-16-steps';
-
-test.describe.configure({ mode: 'serial' });
 
 function dateDigits(dateIso: string): string {
   return dateIso.split('-').reverse().join('');

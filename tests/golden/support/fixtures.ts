@@ -1,10 +1,13 @@
 import { expect, test as base, type Browser, type Page } from '@playwright/test';
 
 import { createRolePage, type SessionRole } from './sessions';
+import { resetPersistedPreferences } from './preferences-reset';
 import { loadWorld, storageStatePath, type TestWorld } from './world';
 
 type GoldenFixtures = {
   world: TestWorld;
+  /** Automatic: the world's persisted per-user preferences are gone before every test. */
+  freshPreferences: void;
   adminPage: Page;
   bueroPage: Page;
   employeePage: Page;
@@ -60,6 +63,12 @@ export const test = base.extend<GoldenFixtures>({
   world: async ({}, provide) => {
     await provide(loadWorld());
   },
+  freshPreferences: [async ({}, provide) => {
+    // Reads the world itself: the audit lane replaces the world in its own automatic fixture first.
+    const world = loadWorld();
+    await resetPersistedPreferences([world.orgId, world.outsider.orgId]);
+    await provide();
+  }, { auto: true }],
   adminPage: async ({ browser, baseURL }, provide) =>
     rolePage(browser, baseURL ?? DEFAULT_BASE_URL, 'admin', provide),
   bueroPage: async ({ browser, baseURL }, provide) =>

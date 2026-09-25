@@ -2,29 +2,17 @@ import { expect, test } from './support/fixtures';
 import { checkpointValue, saveCheckpoint } from "./support/checkpoints";
 import { requireChainedValue } from "./support/preconditions";
 import { testBusinessDate } from "../../lib/testing/business-date";
-import { getEmployeeRecordStateByUser, getPendingInviteCode } from './support/db';
-import {
-  addConditionViaDialog,
-  createPersonnelRecordViaDialog,
-  editConditionWeeklyHours,
-  editPersonnelTextField,
-  expectRedirectedAway,
-  expectVisibleAfterSave,
-  joinOrganizationViaInviteLink,
-  openMemberDetailFromList,
-  removeMemberFromDetail,
-  sendInviteFromPersonnelRecord,
-  visibleText,
-  textInDom,
-} from './support/steps';
+import { getEmployeeRecordStateByUser } from './support/db/personnel';
+import { getPendingInviteCode } from './support/db/shared';
+import { expectRedirectedAway, joinOrganizationViaInviteLink, removeMemberFromDetail } from './support/steps/organization';
+import { addConditionViaDialog, createPersonnelRecordViaDialog, editConditionWeeklyHours, editPersonnelTextField, openMemberDetailFromList, sendInviteFromPersonnelRecord } from './support/steps/personnel';
+import { expectVisibleAfterSave, visibleText, textInDom } from './support/steps/shared';
 
 // P1-03 — Employee/personnel identity with date-effective employment
 // conditions (@P1-03). Bounded outcome: Admin/Büro maintain a stable personnel
 // identity with master data and date-effective conditions; existing members
 // were migrated automatically; future starters/non-login personnel and exited
 // people stay visibly distinguishable; nothing reinterprets historical time.
-
-test.describe.configure({ mode: 'serial' });
 
 function requirePersonnelRecordId(): string {
   return requireChainedValue(checkpointValue("p1-03.personnelRecordId"), {

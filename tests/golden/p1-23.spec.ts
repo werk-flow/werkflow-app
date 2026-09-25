@@ -1,17 +1,9 @@
 import { expect, test } from "./support/fixtures";
 import { previousTestBusinessMonth } from "../../lib/testing/business-date";
-import {
-  getEmployeeRecordStateByUser,
-  getLatestResponsibilityConfigurationState,
-  getP123CountsAs,
-  getP123State,
-  openRemainingP123Accounts,
-  prepareP123PersonnelPrerequisites,
-} from "./support/db";
+import { getEmployeeRecordStateByUser, getLatestResponsibilityConfigurationState, openRemainingP123Accounts, prepareP123PersonnelPrerequisites } from "./support/db/personnel";
+import { getP123CountsAs, getP123State } from "./support/db/time-tracking";
 import { requireVisiblePrecondition } from "./support/preconditions";
-import { typeIntoDatePicker, visibleText } from "./support/steps";
-
-test.describe.configure({ mode: "serial" });
+import { typeIntoDatePicker, visibleText } from "./support/steps/shared";
 
 function toDatePickerDigits(dateIso: string): string {
   return `${dateIso.slice(8, 10)}${dateIso.slice(5, 7)}${dateIso.slice(0, 4)}`;

@@ -2,30 +2,17 @@ import { resolve } from 'node:path';
 
 import { expect, test } from './support/fixtures';
 import { artifactsDirectory } from './support/world';
-import { getCustomerRelationshipState, getVisibleCustomerRelationshipStateAs } from './support/db';
-import {
-  addContactOnCustomerDetail,
-  addSiteOnCustomerDetail,
-  attentionTaskLink,
-  completeFollowUpOnCustomerDetail,
-  configureCustomerCommunicationSettings,
-  createCustomer,
-  createFollowUpOnCustomerDetail,
-  createJob,
-  openAufgaben,
-  openCustomerDetail,
-  proceedThroughContactWarning,
-  setCustomerCommunicationPreference,
-  uploadDocumentOnJobPage,
-  visibleText,
-} from './support/steps';
+import { getCustomerRelationshipState, getVisibleCustomerRelationshipStateAs } from './support/db/customers';
+import { attentionTaskLink, openAufgaben } from './support/steps/attention';
+import { addContactOnCustomerDetail, addSiteOnCustomerDetail, completeFollowUpOnCustomerDetail, configureCustomerCommunicationSettings, createCustomer, createFollowUpOnCustomerDetail, openCustomerDetail, proceedThroughContactWarning, setCustomerCommunicationPreference } from './support/steps/customers';
+import { uploadDocumentOnJobPage } from './support/steps/documents';
+import { visibleText } from './support/steps/shared';
+import { createJob } from './support/steps/work';
 import { formatBerlinDateTimeInput } from '../../lib/customer-relationships/date-time';
 import { expectLiveWithin } from './support/live';
 
 // P1-10 sorts last. It owns no effective-date keys and uses run-scoped names,
 // so it can start on the fresh seed or inherit the complete P1-09 world.
-test.describe.configure({ mode: 'serial' });
-
 function customerName(runId: string): string {
   return `P1-10 Kundenpflege ${runId}`;
 }

@@ -22,6 +22,15 @@ test("independent groups overlap within two slots; freshness and database gates 
   expect(visits).toEqual(["static", "audit-a", "audit-b", "freshness", "audit-c", "sql"]);
 });
 
+test("workers are bounded below by one and above by the requested count", async () => {
+  let active = 0;
+  let maximum = 0;
+  await runGroupSchedule({ entries: ["a", "b", "c", "d"], jobs: 0, canOverlap: () => true, run: async () => { active++; maximum = Math.max(maximum, active); await Promise.resolve(); active--; } });
+  expect(maximum).toBe(1);
+  await runGroupSchedule({ entries: ["a", "b", "c", "d"], jobs: 3, canOverlap: () => true, run: async () => { active++; maximum = Math.max(maximum, active); await new Promise((done) => setTimeout(done, 5)); active--; } });
+  expect(maximum).toBe(3);
+});
+
 test("a failed result does not suppress unrelated entries; unexpected runner errors wait for active work", async () => {
   const outcomes: string[] = [];
   await runGroupSchedule({ entries: ["failed", "passed"], jobs: 1, canOverlap: () => true, run: async (entry) => { outcomes.push(entry); } });

@@ -1,15 +1,10 @@
 import type { Locator, Page } from '@playwright/test';
 
 import { expect, test } from './support/fixtures';
-import {
-  getVisibleWorkArtifactCountsAs,
-  getWorkArtifactState,
-  getWorkLifecycleState,
-} from './support/db';
+import { getVisibleWorkArtifactCountsAs, getWorkArtifactState, getWorkLifecycleState } from './support/db/work';
 import { closeWorkArtifactDialog, workArtifactsSection } from './support/spec-helpers/work-artifact-dialog';
-import { createJob, typeIntoDatePickerById, typeIntoDateTimeField } from './support/steps';
-
-test.describe.configure({ mode: 'serial' });
+import { typeIntoDatePickerById, typeIntoDateTimeField } from './support/steps/shared';
+import { createJob } from './support/steps/work';
 
 function futureDate(days: number): string {
   const today = new Intl.DateTimeFormat('sv-SE', {

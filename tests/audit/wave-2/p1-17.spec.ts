@@ -3,31 +3,14 @@ import { resolve } from 'node:path';
 import type { Page } from '@playwright/test';
 
 import { expect, test } from "../support/fixtures";
-import {
-  getJobCountByNumber,
-  getVisibleWorkHandoverCountsAs,
-  getWorkHandoverState,
-  getWorkLifecycleState,
-} from '../../golden/support/db';
-import {
-  workLifecycleCard,
-  addContactOnCustomerDetail,
-  addSiteOnCustomerDetail,
-  createCustomer,
-  createJob,
-  createPlannedCalendarEntry,
-  createProject,
-  openCustomerDetail,
-  selectAllHandoverSources,
-  workHandoverSection,
-  transitionWorkOnJobPage,
-  uploadIntoDocumentsSection,
-} from '../../golden/support/steps';
+import { getJobCountByNumber, getVisibleWorkHandoverCountsAs, getWorkHandoverState, getWorkLifecycleState } from '../../golden/support/db/work';
+import { createPlannedCalendarEntry } from '../../golden/support/steps/calendar';
+import { addContactOnCustomerDetail, addSiteOnCustomerDetail, createCustomer, openCustomerDetail } from '../../golden/support/steps/customers';
+import { uploadIntoDocumentsSection } from '../../golden/support/steps/documents';
+import { workLifecycleCard, createJob, createProject, selectAllHandoverSources, workHandoverSection, transitionWorkOnJobPage } from '../../golden/support/steps/work';
 import { ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
-import { requireSerialPrecondition } from '../../golden/support/preconditions';
+import { requireChainedPrecondition } from '../../golden/support/preconditions';
 import { artifactsDirectory, type TestWorld } from '../../golden/support/world';
-
-test.describe.configure({ mode: 'serial' });
 
 const DATES = [
   ownedBerlinDateAtOffset('p1-17', 90),
@@ -234,7 +217,7 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
       getJobCountByNumber(world.orgId, fixture.firstJobNumber),
       getJobCountByNumber(world.orgId, fixture.secondJobNumber),
     ]);
-    requireSerialPrecondition(
+    requireChainedPrecondition(
       setupJobCounts.every((count) => count === 1),
       {
         test: 'P1-17-F23',
@@ -317,7 +300,7 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
       getJobCountByNumber(world.orgId, fixture.firstJobNumber),
       getJobCountByNumber(world.orgId, fixture.secondJobNumber),
     ]);
-    requireSerialPrecondition(
+    requireChainedPrecondition(
       setupJobCounts.every((count) => count === 1),
       {
         test: 'P1-17-F72',
@@ -330,7 +313,7 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
       getWorkHandoverState(world.orgId, { jobNumber: fixture.firstJobNumber }),
       getWorkHandoverState(world.orgId, { jobNumber: fixture.secondJobNumber }),
     ]);
-    requireSerialPrecondition(
+    requireChainedPrecondition(
       childStatesBeforeProjectRelease.every(
         (child) => child.package?.state === 'released' && child.releases.length === 1
       ),
@@ -403,7 +386,7 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
     const fixture = names(world);
     const route = `/auftraege/projekt/${fixture.projectNumber}/uebergabe`;
     const setupJobCount = await getJobCountByNumber(world.orgId, fixture.firstJobNumber);
-    requireSerialPrecondition(setupJobCount === 1, {
+    requireChainedPrecondition(setupJobCount === 1, {
       test: 'P1-17-F89',
       needs: 'the project and child jobs created by the scope and role-boundary test',
       grep: 'establishes job/project scope|releases child jobs|composes a project|preserves predecessor releases',
@@ -412,7 +395,7 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
     const initialState = await getWorkHandoverState(world.orgId, {
       projectNumber: fixture.projectNumber,
     });
-    requireSerialPrecondition(initialState.package !== null && initialState.releases.length >= 1, {
+    requireChainedPrecondition(initialState.package !== null && initialState.releases.length >= 1, {
       test: 'P1-17-F89',
       needs: 'the released project handover package created by the project-composition test',
       grep: 'establishes job/project scope|releases child jobs|composes a project|preserves predecessor releases',

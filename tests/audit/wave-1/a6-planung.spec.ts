@@ -3,28 +3,16 @@ import type { Locator, Page } from '@playwright/test';
 
 import { expect, test } from "../support/fixtures";
 import { requireEnv } from '../../golden/support/env';
-import { getOrganizationTimeEntryCount, getPlanningState } from '../../golden/support/db';
-import {
-  addClosureDayViaSettings,
-  approveVacationRequestFor,
-  cancelApprovedVacationFor,
-  createJob,
-  createOwnVacationRequestViaDialog,
-  createPersonnelRecordViaDialog,
-  createPlannedCalendarEntry,
-  openAufgaben,
-  openOwnSicknessSection,
-  openOwnVacationSection,
-  plannedCalendarEvent,
-  removeClosureDayViaSettings,
-  reportOwnSicknessViaDialog,
-  setHolidayRegionViaSettings,
-  showPlanningMonth,
-  typeIntoDatePickerById,
-  typeIntoTimeInput,
-  visibleText,
-} from '../../golden/support/steps';
-import { requireChainedValue, requireSerialPrecondition } from '../../golden/support/preconditions';
+import { getPlanningState } from '../../golden/support/db/calendar';
+import { getOrganizationTimeEntryCount } from '../../golden/support/db/time-tracking';
+import { openAufgaben } from '../../golden/support/steps/attention';
+import { createPlannedCalendarEntry, plannedCalendarEvent, showPlanningMonth } from '../../golden/support/steps/calendar';
+import { addClosureDayViaSettings, createPersonnelRecordViaDialog, removeClosureDayViaSettings, setHolidayRegionViaSettings } from '../../golden/support/steps/personnel';
+import { typeIntoDatePickerById, typeIntoTimeInput, visibleText } from '../../golden/support/steps/shared';
+import { openOwnSicknessSection, reportOwnSicknessViaDialog } from '../../golden/support/steps/sickness';
+import { approveVacationRequestFor, cancelApprovedVacationFor, createOwnVacationRequestViaDialog, openOwnVacationSection } from '../../golden/support/steps/vacation';
+import { createJob } from '../../golden/support/steps/work';
+import { requireChainedValue, requireChainedPrecondition } from '../../golden/support/preconditions';
 import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
 import {
   closePlanningDialogWithNamedControl,
@@ -42,8 +30,6 @@ import { getPublicHolidaysForYear } from '../../../lib/personnel/holidays';
 // +45 … +54 (vacation/sickness/closure fixtures). Planning occurrence dates
 // themselves are not uniqueness-constrained; series fixtures use run-scoped
 // titles on far-future dates so inherited state can never collide.
-
-test.describe.configure({ mode: 'serial' });
 
 const WEEKDAY_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'] as const;
 
@@ -944,7 +930,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     const inheritedEmployeeOccurrence = await getPlanningState(world.orgId, {
       internalTitle: `A6 Kapazität ${world.runId}`,
     });
-    requireSerialPrecondition(inheritedEmployeeOccurrence.occurrenceCount > 0, {
+    requireChainedPrecondition(inheritedEmployeeOccurrence.occurrenceCount > 0, {
       test: 'A6-T7',
       needs: 'the employee planning occurrence created by A6-T5',
       grep: 'A6-T1|A6-T5|A6-T7',

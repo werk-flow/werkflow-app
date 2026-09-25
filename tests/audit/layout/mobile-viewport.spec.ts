@@ -13,8 +13,6 @@ import type { TestWorld } from "../../golden/support/world";
 // This audit walks every authenticated area at a phone width and fails on the
 // first route that breaks either rule. Tag: @AUDIT-LAYOUT.
 
-test.describe.configure({ mode: "serial" });
-
 const PHONE = { width: 375, height: 812 };
 
 const EMPLOYEE_ROUTES = [

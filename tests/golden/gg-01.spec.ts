@@ -3,21 +3,12 @@ import { checkpointValue, saveCheckpoint } from "./support/checkpoints";
 import { requireChainedValue } from "./support/preconditions";
 
 import { expect, test } from './support/fixtures';
-import { getRequestConversionState } from './support/db';
-import {
-  addContactOnCustomerDetail,
-  addSiteOnCustomerDetail,
-  closeRequestViaDialog,
-  convertRequestToJobViaDialog,
-  createCustomer,
-  createJob,
-  createRequestViaDialog,
-  expectRedirectedAway,
-  openCustomerDetail,
-  uploadDocumentOnRequestDetail,
-  visibleText,
-  textInDom,
-} from './support/steps';
+import { getRequestConversionState } from './support/db/requests';
+import { addContactOnCustomerDetail, addSiteOnCustomerDetail, createCustomer, openCustomerDetail } from './support/steps/customers';
+import { expectRedirectedAway } from './support/steps/organization';
+import { closeRequestViaDialog, convertRequestToJobViaDialog, createRequestViaDialog, uploadDocumentOnRequestDetail } from './support/steps/requests';
+import { visibleText, textInDom } from './support/steps/shared';
+import { createJob } from './support/steps/work';
 import { artifactsDirectory } from './support/world';
 
 // GG-01 — Customer Request To Work (@GG-01)
@@ -25,8 +16,6 @@ import { artifactsDirectory } from './support/world';
 // capture a request while speaking to the caller, attach evidence, convert it
 // once into operational work carrying the correct customer/contact/site and
 // context, and verify direct repeat-job creation without a synthetic request.
-
-test.describe.configure({ mode: 'serial' });
 
 function requireFirstRequestId(): string {
   return requireChainedValue(checkpointValue("gg-01.firstRequestId"), {

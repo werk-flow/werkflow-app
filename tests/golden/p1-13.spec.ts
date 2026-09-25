@@ -1,15 +1,7 @@
 import { expect, test } from './support/fixtures';
-import { getAppliedWorkTemplateState, getWorkTemplateStateByName } from './support/db';
-import {
-  createAndPublishWorkTemplate,
-  createJob,
-  createProject,
-  inputByValue,
-  setInstructionCompletionOnJobPage,
-  visibleText,
-} from './support/steps';
-
-test.describe.configure({ mode: 'serial' });
+import { getAppliedWorkTemplateState, getWorkTemplateStateByName } from './support/db/work';
+import { inputByValue, visibleText } from './support/steps/shared';
+import { createAndPublishWorkTemplate, createJob, createProject, setInstructionCompletionOnJobPage } from './support/steps/work';
 
 test.describe('P1-13 versioned work templates @P1-13', () => {
   test('a manager publishes an immutable job template with unified checklist metadata', async ({

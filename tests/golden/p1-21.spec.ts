@@ -2,10 +2,9 @@ import type { Page } from "@playwright/test";
 import { checkpointValue, saveCheckpoint } from "./support/checkpoints";
 
 import { expect, test } from "./support/fixtures";
-import { getTimeCaptureState, seedLegacyOpenTimeEntry } from "./support/db";
-import { clockInOnJob, clockOut, createJob, openActivityDialogFromSheet } from "./support/steps";
-
-test.describe.configure({ mode: "serial" });
+import { getTimeCaptureState, seedLegacyOpenTimeEntry } from "./support/db/time-tracking";
+import { clockInOnJob, clockOut, openActivityDialogFromSheet } from "./support/steps/time-tracking";
+import { createJob } from "./support/steps/work";
 
 function requireCanonicalSessionId(): string {
   const canonicalSessionId = checkpointValue("p1-21.canonicalSessionId");

@@ -3,36 +3,16 @@ import type { Locator, Page } from '@playwright/test';
 
 import { expect, test } from "../support/fixtures";
 import { requireEnv } from '../../golden/support/env';
-import {
-  getCommitmentState,
-  getDispatchState,
-  getOrganizationTimeEntryCount,
-  getParkingState,
-} from '../../golden/support/db';
-import {
-  workLifecycleCard,
-  acknowledgeDispatchOnJobPage,
-  addSiteOnCustomerDetail,
-  createCustomer,
-  createJob,
-  createPersonnelRecordViaDialog,
-  createPlannedCalendarEntry,
-  dispatchOccurrenceRow,
-  editPlannedCalendarOccurrence,
-  issueDispatchForOccurrence,
-  jobDispatchSection,
-  openAufgaben,
-  openCustomerDetail,
-  openDispatchPanel,
-  openParkplatzPanel,
-  parkplatzCard,
-  selectFromSearchable,
-  showPlanningMonth,
-  typeIntoDatePicker,
-  typeIntoTimeInput,
-  visibleText,
-} from '../../golden/support/steps';
-import { requireChainedValue, requireSerialPrecondition } from '../../golden/support/preconditions';
+import { getCommitmentState, getDispatchState, getParkingState } from '../../golden/support/db/dispatch';
+import { getOrganizationTimeEntryCount } from '../../golden/support/db/time-tracking';
+import { openAufgaben } from '../../golden/support/steps/attention';
+import { createPlannedCalendarEntry, editPlannedCalendarOccurrence, showPlanningMonth } from '../../golden/support/steps/calendar';
+import { addSiteOnCustomerDetail, createCustomer, openCustomerDetail } from '../../golden/support/steps/customers';
+import { acknowledgeDispatchOnJobPage, dispatchOccurrenceRow, issueDispatchForOccurrence, jobDispatchSection, openDispatchPanel, openParkplatzPanel, parkplatzCard } from '../../golden/support/steps/dispatch';
+import { createPersonnelRecordViaDialog } from '../../golden/support/steps/personnel';
+import { selectFromSearchable, typeIntoDatePicker, typeIntoTimeInput, visibleText } from '../../golden/support/steps/shared';
+import { workLifecycleCard, createJob } from '../../golden/support/steps/work';
+import { requireChainedValue, requireChainedPrecondition } from '../../golden/support/preconditions';
 import { berlinDateAtOffset } from '../../golden/support/date-ownership';
 import {
   dispatchPanel,
@@ -49,8 +29,6 @@ import { formatBerlinLocalDateTime } from '../../../lib/planning/date-time';
 // (conditions, absences, closure days); its planning fixtures use run-scoped
 // titles on near dates because the dispatch panel's overview window covers
 // only the next 14 days. The owned +55…+64 reserve therefore stays unused.
-
-test.describe.configure({ mode: 'serial' });
 
 function toDatePickerDigits(dateIso: string): string {
   const [year, month, day] = dateIso.split('-');
@@ -582,7 +560,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       world.orgId,
       `A7-MAIN-${world.runId}`
     );
-    requireSerialPrecondition(inheritedMainDispatch?.dispatches.length === 1, {
+    requireChainedPrecondition(inheritedMainDispatch?.dispatches.length === 1, {
       test: 'A7-T2',
       needs: 'the main dispatch issued by A7-T1',
       grep: 'A7-T1|A7-T2',
@@ -672,7 +650,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       world.orgId,
       `A7-MAIN-${world.runId}`
     );
-    requireSerialPrecondition(
+    requireChainedPrecondition(
       inheritedMainDispatch?.dispatches[0]?.acknowledgements.some(
         (acknowledgement) => acknowledgement.state === 'acknowledged'
       ) === true,
@@ -762,7 +740,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       world.orgId,
       `A7-MAIN-${world.runId}`
     );
-    requireSerialPrecondition(inheritedMainDispatch?.dispatches[0]?.currentRevisionNumber === 2, {
+    requireChainedPrecondition(inheritedMainDispatch?.dispatches[0]?.currentRevisionNumber === 2, {
       test: 'A7-T4',
       needs: 'the reassigned main dispatch produced by A7-T3',
       grep: 'A7-T1|A7-T2|A7-T3|A7-T4',

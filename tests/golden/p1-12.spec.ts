@@ -1,35 +1,11 @@
 import { expect, test } from './support/fixtures';
 import { expectLiveWithin } from './support/live';
-import {
-  getCommitmentState,
-  getDispatchState,
-  getParkingState,
-  getPlanningState,
-  getVisibleDispatchStateAs,
-} from './support/db';
-import {
-  workLifecycleCard,
-  acknowledgeDispatchOnJobPage,
-  challengeDispatchOnJobPage,
-  confirmBatchReschedule,
-  createJob,
-  createPlannedCalendarEntry,
-  dispatchOccurrenceRow,
-  dispatchParkedJobFromParkplatz,
-  editPlannedCalendarOccurrence,
-  expectDispatchStateOnJobPage,
-  issueDispatchForOccurrence,
-  openDispatchPanel,
-  openParkplatzPanel,
-  parkplatzCard,
-  recordCommitmentForOccurrence,
-  resolveDispatchChallengeInPanel,
-  selectFromSearchable,
-  startBatchRescheduleInPanel,
-  typeIntoDatePickerById,
-} from './support/steps';
-
-test.describe.configure({ mode: 'serial' });
+import { getPlanningState } from './support/db/calendar';
+import { getCommitmentState, getDispatchState, getParkingState, getVisibleDispatchStateAs } from './support/db/dispatch';
+import { createPlannedCalendarEntry, editPlannedCalendarOccurrence } from './support/steps/calendar';
+import { acknowledgeDispatchOnJobPage, challengeDispatchOnJobPage, confirmBatchReschedule, dispatchOccurrenceRow, dispatchParkedJobFromParkplatz, expectDispatchStateOnJobPage, issueDispatchForOccurrence, openDispatchPanel, openParkplatzPanel, parkplatzCard, recordCommitmentForOccurrence, resolveDispatchChallengeInPanel, startBatchRescheduleInPanel } from './support/steps/dispatch';
+import { selectFromSearchable, typeIntoDatePickerById } from './support/steps/shared';
+import { workLifecycleCard, createJob } from './support/steps/work';
 
 const TODAY_ISO = new Intl.DateTimeFormat('sv-SE', {
   timeZone: 'Europe/Berlin',

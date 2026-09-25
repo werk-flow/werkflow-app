@@ -25,6 +25,11 @@ export function checkOccurrenceMovable(job: Pick<CalendarJob, 'occurrenceStatus'
   return job.occurrenceStatus === 'skipped' || job.occurrenceStatus === 'cancelled' ? refuse('inactive_occurrence') : { ok: true };
 }
 
+/** A parked job plans only with its Parkplatz context (P1-12); a job parked before that context existed is a labelled exception until a manager adds one. */
+export function checkParkedContext(contexts: ReadonlyMap<string, unknown> | null, job: Pick<CalendarJob, 'jobId' | 'id'>): RefusalCheckResult {
+  return contexts && !contexts.has(job.jobId ?? job.id) ? refuse('parked_without_context') : { ok: true };
+}
+
 export function checkParkable(job: Pick<CalendarJob, 'entryKind' | 'jobId' | 'occurrenceId' | 'id'>): RefusalCheckResult {
   const jobId = job.jobId ?? (job.occurrenceId ? null : job.id);
   return job.entryKind === 'internal' || !jobId ? refuse('internal_not_parkable') : { ok: true };

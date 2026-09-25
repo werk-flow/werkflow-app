@@ -1,12 +1,11 @@
 import { expect, test } from "../support/fixtures";
 import { submitMissedTime } from "../support/time-corrections";
 import { calendarClosure, calendarCorrectionBlock, calendarReady, correctionRequestCard, realtimeSubscribed } from "../support/performance-steps";
-import { addClosureDayViaSettings, removeClosureDayViaSettings, showPlanningMonth } from "../../golden/support/steps";
+import { showPlanningMonth } from "../../golden/support/steps/calendar";
+import { addClosureDayViaSettings, removeClosureDayViaSettings } from "../../golden/support/steps/personnel";
 import { expectCalendarChangeWithin } from "../support/calendar-live";
 import { ownedBerlinDateAtOffset } from "../../golden/support/date-ownership";
-import { getTimeCorrectionState } from "../../golden/support/db";
-
-test.describe.configure({ mode: "serial" });
+import { getTimeCorrectionState } from "../../golden/support/db/time-tracking";
 
 const closureDate = ownedBerlinDateAtOffset("performance-calendar-live", 130);
 // Worked-time projections deliberately exclude future timestamps.

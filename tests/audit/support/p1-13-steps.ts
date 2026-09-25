@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
-import { inputByValue, visibleText } from '../../golden/support/steps';
-export { visibleMatchingText } from '../../golden/support/steps';
+import { inputByValue, visibleText } from '../../golden/support/steps/shared';
+export { visibleMatchingText } from '../../golden/support/steps/shared';
 
 export function visibleExactText(page: Page, text: string): Locator {
   return visibleText(page, text, true);

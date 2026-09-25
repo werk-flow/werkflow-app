@@ -1,35 +1,16 @@
 import { expect, test } from './support/fixtures';
-import {
-  getCapabilityHistoryState,
-  getEmployeeRecordStateByUser,
-  getJobQualificationState,
-  getVisibleQualificationStateAs,
-} from './support/db';
-import {
-  addConditionViaDialog,
-  addJobCapabilityRequirement,
-  addTeamMemberViaManagement,
-  assignCapabilityViaManagement,
-  assignJobWithQualificationWarning,
-  attentionNotificationRow,
-  createCapabilityViaManagement,
-  createJob,
-  createTeamViaManagement,
-  markAttentionNotificationReadViaButton,
-  openAufgaben,
-  openMemberDetailFromList,
-  renewCapabilityViaManagement,
-  setApprenticeWarningViaManagement,
-  visibleText,
-  textInDom,
-} from './support/steps';
+import { getEmployeeRecordStateByUser } from './support/db/personnel';
+import { getCapabilityHistoryState, getJobQualificationState, getVisibleQualificationStateAs } from './support/db/qualifications';
+import { attentionNotificationRow, markAttentionNotificationReadViaButton, openAufgaben } from './support/steps/attention';
+import { addConditionViaDialog, openMemberDetailFromList } from './support/steps/personnel';
+import { addJobCapabilityRequirement, addTeamMemberViaManagement, assignCapabilityViaManagement, assignJobWithQualificationWarning, createCapabilityViaManagement, createTeamViaManagement, renewCapabilityViaManagement, setApprenticeWarningViaManagement } from './support/steps/qualifications';
+import { visibleText, textInDom } from './support/steps/shared';
+import { createJob } from './support/steps/work';
 
 // P1-09 sorts last. It therefore runs after the complete inherited P1-08
 // world in the full suite and on a fresh world when focused. It depends on no
 // responsibility holder, uses run-scoped names, and derives every row/count
 // expectation from the database, so both modes exercise the same facts.
-
-test.describe.configure({ mode: 'serial' });
 
 const TODAY_ISO = new Intl.DateTimeFormat('sv-SE', {
   timeZone: 'Europe/Berlin',

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useLayoutEffect, useMemo, useRef } from 'react';
-import { checkOccurrenceMovable, checkParkable, checkReadOnly, checkTimeBlockTarget } from '@/lib/calendar/refusal-checks';
+import { checkParkedContext, checkOccurrenceMovable, checkParkable, checkReadOnly, checkTimeBlockTarget } from '@/lib/calendar/refusal-checks';
 import { formatRefusalDate } from '@/lib/calendar/messages';
 import { shiftedBlockUpdates } from '@/lib/calendar/day-layout';
 import type { CalendarJob } from '@/lib/jobs/types';
@@ -74,9 +74,13 @@ export function useMonthSurface(input: MonthSurfaceInput): DragSurface {
   }, []);
 
   const checkTarget = useCallback((target: CalendarDragTarget, payload: CalendarDragPayload): DragVerdict => {
-    const { readOnly, blocksByUserDate, nowMs } = inputRef.current;
+    const { readOnly, blocksByUserDate, nowMs, parkingContexts } = inputRef.current;
     const readOnlyCheck = checkReadOnly(readOnly);
     if (!readOnlyCheck.ok) return { ok: false, message: readOnlyCheck.message };
+    if (payload.kind === 'parked' && target.kind !== 'zone') {
+      const parked = checkParkedContext(parkingContexts, payload.job);
+      if (!parked.ok) return { ok: false, message: parked.message };
+    }
     if (target.kind === 'zone') {
       if (payload.kind !== 'occurrence') return { ok: false, message: 'Nur Termine lassen sich parken.' };
       const parkable = checkParkable(payload.job);

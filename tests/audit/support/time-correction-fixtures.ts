@@ -7,7 +7,7 @@ import type { TimeCorrectionSnapshot } from "../../../lib/time-corrections/types
 import { resolveBerlinWallTime } from "../../../lib/planning/date-time";
 import { requireEnv } from "../../golden/support/env";
 import { testSupabaseClientOptions } from "../../golden/support/client-options";
-import { getEmployeeRecordStateByUser } from "../../golden/support/db";
+import { getEmployeeRecordStateByUser } from "../../golden/support/db/personnel";
 import type { TestWorld } from "../../golden/support/world";
 
 type CorrectionArguments = Database["public"]["Functions"]["create_time_correction_request"]["Args"];

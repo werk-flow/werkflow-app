@@ -3,24 +3,11 @@ import { previousTestBusinessMonth } from "../../../lib/testing/business-date";
 import { auditCheckpoint, saveAuditCheckpoint } from "../support/checkpoints";
 import { prepareOutsidePeriodCorrection } from "../support/time-correction-fixtures";
 import { captureResponsiveSection } from "../support/visual-evidence";
-import {
-  closeP123LegacySequence,
-  getP123State,
-  getP123LegacyTransition,
-  getTimeCorrectionState,
-  openRemainingP123Accounts,
-  prepareP123PersonnelPrerequisites,
-  seedP123UnclosedLegacySequence,
-} from "../../golden/support/db";
+import { openRemainingP123Accounts, prepareP123PersonnelPrerequisites } from "../../golden/support/db/personnel";
+import { closeP123LegacySequence, getP123State, getP123LegacyTransition, getTimeCorrectionState, seedP123UnclosedLegacySequence } from "../../golden/support/db/time-tracking";
 import { ownedBerlinDateAtOffset } from "../../golden/support/date-ownership";
 import { requireVisiblePrecondition } from "../../golden/support/preconditions";
-import {
-  textInDom,
-  typeIntoDatePicker,
-  visibleText,
-} from "../../golden/support/steps";
-
-test.describe.configure({ mode: "serial" });
+import { textInDom, typeIntoDatePicker, visibleText } from "../../golden/support/steps/shared";
 
 function datePickerDigits(dateIso: string): string {
   return `${dateIso.slice(8, 10)}${dateIso.slice(5, 7)}${dateIso.slice(0, 4)}`;

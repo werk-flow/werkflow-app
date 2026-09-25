@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { assertWorkspaceTestLock } from '@/lib/testing/workspace-test-lock';
-import { textInDom } from '../golden/support/steps';
+import { textInDom } from '../golden/support/steps/shared';
 
 test.beforeEach(async ({ page }) => {
   assertWorkspaceTestLock();

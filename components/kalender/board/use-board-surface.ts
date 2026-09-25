@@ -6,7 +6,7 @@ import type { CalendarBoardDay, CalendarBoardRow } from '@/lib/calendar/board';
 import { addLocalDays } from '@/lib/planning/date-time';
 import type { BoardColumn } from '@/lib/calendar/board-layout';
 import { reassignmentChanges, type BoardRowModel } from '@/lib/calendar/board-model';
-import { checkNotAlreadyAssigned, checkOccurrenceMovable, checkParkable, checkPersonDay, checkReadOnly, dayFor } from '@/lib/calendar/refusal-checks';
+import { checkParkedContext, checkNotAlreadyAssigned, checkOccurrenceMovable, checkParkable, checkPersonDay, checkReadOnly, dayFor } from '@/lib/calendar/refusal-checks';
 import { formatRefusalDate } from '@/lib/calendar/messages';
 import type { CalendarJob } from '@/lib/jobs/types';
 import { useCalendarAnnounce } from '../surface/live-region';
@@ -116,9 +116,13 @@ export function useBoardSurface(input: BoardSurfaceInput): DragSurface {
   }, []);
 
   const checkTarget = useCallback((target: CalendarDragTarget, payload: CalendarDragPayload, modifiers: DragModifiers): DragVerdict => {
-    const { readOnly, days, rowModels } = inputRef.current;
+    const { readOnly, days, rowModels, parkingContexts } = inputRef.current;
     const readOnlyCheck = checkReadOnly(readOnly);
     if (!readOnlyCheck.ok) return { ok: false, message: readOnlyCheck.message };
+    if (payload.kind === 'parked' && target.kind !== 'zone') {
+      const parked = checkParkedContext(parkingContexts, payload.job);
+      if (!parked.ok) return { ok: false, message: parked.message };
+    }
     if (target.kind === 'zone') {
       if (payload.kind === 'parked') return { ok: false, message: 'Die Karte ist schon geparkt.' };
       if (payload.kind !== 'occurrence') return { ok: false, message: 'Nur Termine lassen sich parken.' };

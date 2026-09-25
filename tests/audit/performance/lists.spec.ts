@@ -1,7 +1,7 @@
 import { expect, test } from "../support/fixtures";
 import { expectUsableWithin } from "../../golden/support/scenario-measurement";
 import { listTarget } from "../../golden/support/browser-observation";
-import { visibleText } from "../../golden/support/steps";
+import { visibleText } from "../../golden/support/steps/shared";
 import { seedTypicalProfile, TYPICAL_PROFILE, type TypicalProfileCounts } from "../support/performance-profile";
 import { createPerformancePage, loadingList, usableListCount } from "../support/performance-steps";
 import { requireChainedValue } from "../../golden/support/preconditions";
@@ -10,8 +10,6 @@ import { LIST_PAGE_SIZE } from "../../../lib/ui/list-pagination";
 
 // Measures a usable first page under the full organization workload.
 // Separate untimed checks below prove global search and page navigation.
-
-test.describe.configure({ mode: "serial" });
 
 test.describe("Performance profile lists @AUDIT-PERFORMANCE", () => {
   test("PERF-L1 seeds the typical profile into the group's organization @AUDIT-PERFORMANCE-L1", async ({ world }) => {

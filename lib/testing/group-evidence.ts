@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { BROWSER_INPUT_DRIFT_MESSAGE } from "./test-evidence";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, posix, resolve } from "node:path";
@@ -226,9 +227,11 @@ type ResultMatch = { groupId: string; fingerprint: string; inputs?: readonly str
 /** The reason prefix of an attempt the run voided because an input changed meanwhile. */
 export const INPUT_DRIFT_REASON = "Inputs changed during verification";
 
-/** A voided attempt neither proves nor blocks its group: the candidate it ran on no longer exists. */
+/** A voided attempt neither proves nor blocks its group: the candidate it ran on no longer exists. The
+    parent voids on its own snapshot drift; the group runner voids on the candidate fingerprint (its
+    message reaches the result as the reason). */
 function voidedByDrift(result: GroupResult): boolean {
-  return result.reason?.startsWith(INPUT_DRIFT_REASON) ?? false;
+  return result.reason?.startsWith(INPUT_DRIFT_REASON) || result.reason?.startsWith(BROWSER_INPUT_DRIFT_MESSAGE) || false;
 }
 
 /**

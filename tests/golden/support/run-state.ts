@@ -469,14 +469,25 @@ export function archiveRunOutputs(runKey = currentRunKey()): void {
   archiveActiveState(runKey);
 }
 
+/**
+ * A concurrent group replaces its manifest by atomic rename while this list is
+ * read; a vanished or transiently locked file is skipped, every other error
+ * still propagates.
+ */
+const TRANSIENT_MANIFEST_READ_ERRORS = new Set(["ENOENT", "EPERM", "EBUSY"]);
+
 export function listRunManifests(): RunManifest[] {
   if (!existsSync(RUN_ARCHIVE_ROOT)) return [];
-  return readdirSync(RUN_ARCHIVE_ROOT, { withFileTypes: true })
-    .filter(
-      (entry) => entry.isDirectory() && existsSync(manifestPath(entry.name)),
-    )
-    .map((entry) => readRunManifest(entry.name))
-    .sort((left, right) => left.startedAt.localeCompare(right.startedAt));
+  const manifests: RunManifest[] = [];
+  for (const entry of readdirSync(RUN_ARCHIVE_ROOT, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    try {
+      manifests.push(readRunManifest(entry.name));
+    } catch (error) {
+      if (!TRANSIENT_MANIFEST_READ_ERRORS.has((error as NodeJS.ErrnoException).code ?? "")) throw error;
+    }
+  }
+  return manifests.sort((left, right) => left.startedAt.localeCompare(right.startedAt));
 }
 
 export function markWorldCleaned(world: TestWorld): void {

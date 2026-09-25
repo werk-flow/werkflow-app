@@ -23,7 +23,7 @@ export type TestWorld = {
   seedStatus?: 'seeding' | 'ready';
   /** Exact addresses reserved before UI signup or contact entry, including failed submissions. */
   additionalUserEmails?: string[];
-  /** Audit worlds belong to exactly one serial spec-file group. */
+  /** Audit worlds belong to exactly one spec-file group. */
   auditGroup?: string;
   orgId: string;
   orgName: string;

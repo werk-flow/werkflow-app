@@ -7,41 +7,21 @@ import { doesDateConsumeVacation, formatVacationDays } from '../../../lib/vacati
 import { formatSicknessRange } from '../../../lib/sickness/types';
 import { expect, test } from "../support/fixtures";
 import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
-import {
-  getEmployeeRecordStateByUser,
-  getLatestSicknessReportState,
-  getLatestVacationRequestState,
-  getTargetContextForRecord,
-} from '../../golden/support/db';
-import { requireSerialPrecondition } from '../../golden/support/preconditions';
-import {
-  addConditionViaDialog,
-  addClosureDayViaSettings,
-  addWorkScheduleViaDialog,
-  approveVacationRequestFor,
-  cancelApprovedVacationForRangeText,
-  cancelSicknessReportViaMenuWithReason,
-  createJob,
-  createOwnVacationRequestViaDialog,
-  openMemberDetailFromList,
-  openOwnSicknessSection,
-  openOwnVacationSection,
-  rejectVacationRequestFor,
-  removeClosureDayViaSettings,
-  reportOwnSicknessViaDialog,
-  setHolidayRegionViaSettings,
-  typeIntoDatePicker,
-  visibleText,
-  textInDom,
-} from '../../golden/support/steps';
+import { getEmployeeRecordStateByUser } from '../../golden/support/db/personnel';
+import { getLatestSicknessReportState } from '../../golden/support/db/sickness';
+import { getLatestVacationRequestState, getTargetContextForRecord } from '../../golden/support/db/vacation';
+import { requireChainedPrecondition } from '../../golden/support/preconditions';
+import { addConditionViaDialog, addClosureDayViaSettings, addWorkScheduleViaDialog, openMemberDetailFromList, removeClosureDayViaSettings, setHolidayRegionViaSettings } from '../../golden/support/steps/personnel';
+import { typeIntoDatePicker, visibleText, textInDom } from '../../golden/support/steps/shared';
+import { cancelSicknessReportViaMenuWithReason, openOwnSicknessSection, reportOwnSicknessViaDialog } from '../../golden/support/steps/sickness';
+import { approveVacationRequestFor, cancelApprovedVacationForRangeText, createOwnVacationRequestViaDialog, openOwnVacationSection, rejectVacationRequestFor } from '../../golden/support/steps/vacation';
+import { createJob } from '../../golden/support/steps/work';
 import {
   absenceCalendarEvent,
   deleteWorkScheduleViaDetail,
   vacationCalendarEvent,
   vacationRequestCard,
 } from '../support/a4-steps';
-
-test.describe.configure({ mode: 'serial' });
 
 /** Year, month and day of a `YYYY-MM-DD` string; a missing or non-numeric part is an error, never NaN arithmetic. */
 function parseIsoDateParts(dateIso: string): [number, number, number] {
@@ -277,7 +257,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
     const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
     const context = await getTargetContextForRecord(world.orgId, employeeRecord.id);
-    requireSerialPrecondition(
+    requireChainedPrecondition(
       context.conditions.some(
         (condition) =>
           condition.note === `A4 Anspruch 31 ${world.runId}` && condition.vacationDaysPerYear === 31

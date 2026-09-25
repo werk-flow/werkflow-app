@@ -37,6 +37,7 @@
     "test:diagnostic:audit": "bun scripts/run-playwright.ts diagnostic audit",
     "test:preflight": "bun scripts/playwright-preflight.ts",
     "test:runs": "bun scripts/manage-playwright-runs.ts",
+    "test:campaign": "bun scripts/campaign-summary.ts",
     "migrations:check": "bun scripts/check-dev-migration-history.ts",
     "types:generate": "bun scripts/generate-supabase-types.ts",
     "types:check": "bun scripts/generate-supabase-types.ts --check",

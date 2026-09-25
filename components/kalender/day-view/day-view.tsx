@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Plus } from 'lucide-react';
 import { cn, toLocalDateString } from '@/lib/utils';
 import { boardDayKey, indexBoardDays, type CalendarBoardContext, type CalendarBoardDay, type CalendarBoardRow } from '@/lib/calendar/board';
+import { groupBoardRows } from '@/lib/calendar/board-model';
 import { DAY_LANE_HEIGHT, DAY_NAME_COLUMN_PX, DAY_TRAY_HEIGHT, DEFAULT_VISIT_MINUTES, MIN_ITEM_MINUTES, minutesIntoDay, packTimeLanes, travelGaps, type TimedItem, jobStartMinutes } from '@/lib/calendar/day-layout';
 import { formatMinutesOfDay, snapMinutes } from '@/lib/calendar/drag-math';
 import { formatRefusalDate } from '@/lib/calendar/messages';
@@ -89,6 +90,11 @@ export function DayView(props: DayViewProps): React.JSX.Element {
 
   const days = useMemo(() => indexBoardDays(board.days), [board.days]);
   const boardRowByUser = useMemo(() => new Map(board.rows.flatMap((row) => (row.userId ? [[row.userId, row] as const] : []))), [board.rows]);
+  // The board's order (teams, then names); a member without a board row on this date keeps the membership order at the end.
+  const orderedMembers = useMemo(() => {
+    const order = new Map(groupBoardRows({ rows: board.rows, includeUnassigned: false, memberUserIds: null, teamIds: [] }).flatMap((group) => group.rows).flatMap((row, index) => (row.kind === 'person' && row.row.userId ? [[row.row.userId, index] as const] : [])));
+    return [...members].sort((left, right) => (order.get(left.user_id) ?? Number.MAX_SAFE_INTEGER) - (order.get(right.user_id) ?? Number.MAX_SAFE_INTEGER));
+  }, [board.rows, members]);
   const roleByUser = useMemo(() => new Map(members.map((member) => [member.user_id, member.role])), [members]);
 
   const dayJobs = useMemo(() => jobs.filter((job) => job.plannedDate && job.plannedDate <= dateIso && dateIso < (job.endDateExclusive ?? `${job.plannedDate}~`)), [jobs, dateIso]);
@@ -132,11 +138,11 @@ export function DayView(props: DayViewProps): React.JSX.Element {
       const unassigned = dayJobs.filter((job) => job.assignedUserIds.length === 0);
       if (unassigned.length > 0) buildRow(UNASSIGNED_USER, 'Ohne Zuweisung', null, unassigned, []);
     }
-    for (const member of members) {
+    for (const member of orderedMembers) {
       buildRow(member.user_id, memberDisplayName(member), boardRowByUser.get(member.user_id) ?? null, dayJobs.filter((job) => job.assignedUserIds.includes(member.user_id)), dayEntries.filter((entry) => entry.userId === member.user_id));
     }
     return list;
-  }, [actions.isManager, boardRowByUser, dayEntries, dayJobs, dayStart, days, dateIso, members, nowTick, organizationSettings, roleByUser]);
+  }, [actions.isManager, boardRowByUser, dayEntries, dayJobs, dayStart, days, dateIso, orderedMembers, nowTick, organizationSettings, roleByUser]);
 
   const rowModels = useMemo(() => rows.map((row) => row.model), [rows]);
   const surface = useDaySurface({

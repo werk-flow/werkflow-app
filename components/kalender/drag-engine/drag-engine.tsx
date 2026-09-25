@@ -64,9 +64,12 @@ type ActiveDrag = {
   verdict: DragVerdict | null;
   frame: number | null;
   captured: Element | null;
+  /** When the pointer entered the container's auto-scroll edge; a pointer crossing the edge does not scroll. */
+  edgeSince: number | null;
 };
 
 const LONG_PRESS_MS = 250;
+const AUTO_SCROLL_DWELL_MS = 150;
 
 export function CalendarDragProvider({ children }: { children: ReactNode }): React.JSX.Element {
   const ghostRef = useRef<HTMLDivElement>(null);
@@ -137,13 +140,19 @@ export function CalendarDragProvider({ children }: { children: ReactNode }): Rea
       const dx = autoScrollVelocity(point.x, rect.left, rect.right);
       const dy = autoScrollVelocity(point.y, rect.top, rect.bottom);
       if (dx !== 0 || dy !== 0) {
-        container.scrollBy(dx, dy);
+        // The pointer stays in the edge zone for a moment before the container scrolls, so a card
+        // carried across the edge from a side panel lands where the planner sees it.
+        drag.edgeSince ??= performance.now();
+        if (performance.now() - drag.edgeSince >= AUTO_SCROLL_DWELL_MS) container.scrollBy(dx, dy);
         drag.frame = requestAnimationFrame(() => stepRef.current());
+      } else {
+        drag.edgeSince = null;
       }
     }
     const modifiers: DragModifiers = { copy: drag.last.alt, fine: drag.last.shift };
     const origin = { x: point.x - drag.session.pointerOffset.x, y: point.y - drag.session.pointerOffset.y };
-    const zone = drag.zones.find((entry) => point.x >= entry.rect.left && point.x <= entry.rect.right && point.y >= entry.rect.top && point.y <= entry.rect.bottom);
+    // A card that left the Parkplatz cannot land back on it: the panel's zone is invisible to a parked payload.
+    const zone = drag.session.payload.kind === 'parked' ? undefined : drag.zones.find((entry) => point.x >= entry.rect.left && point.x <= entry.rect.right && point.y >= entry.rect.top && point.y <= entry.rect.bottom);
     const target: CalendarDragTarget | null = zone
       ? { kind: 'zone', zone: zone.zone }
       : (surface?.resolveTarget(point, drag.session.payload, modifiers, origin) ?? null);
@@ -264,6 +273,7 @@ export function CalendarDragProvider({ children }: { children: ReactNode }): Rea
       verdict: null,
       frame: null,
       captured: element,
+      edgeSince: null,
     };
     activeRef.current = drag;
     try { element.setPointerCapture(event.pointerId); } catch { drag.captured = null; }

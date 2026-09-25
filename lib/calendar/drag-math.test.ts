@@ -43,6 +43,9 @@ describe('drag math', () => {
     expect(autoScrollVelocity(20, 0, 1000)).toBe(-12);
     expect(autoScrollVelocity(1000, 0, 1000)).toBe(24);
     expect(autoScrollVelocity(10, 0, 60)).toBe(0);
+    // Outside the container, on either side, nothing scrolls.
+    expect(autoScrollVelocity(-1, 0, 1000)).toBe(0);
+    expect(autoScrollVelocity(1001, 0, 1000)).toBe(0);
   });
 
   test('applies the five pixel threshold on the distance, not per axis', () => {

@@ -2,41 +2,22 @@ import { resolve } from "node:path";
 import type { Locator, Page } from "@playwright/test";
 
 import { expect, test } from "../support/fixtures";
-import {
-  getServiceCaseCountsAs,
-  getServiceCaseNumberBySummary,
-  getServiceCaseStateByNumber,
-} from "../../golden/support/db";
+import { getServiceCaseCountsAs, getServiceCaseNumberBySummary, getServiceCaseStateByNumber } from "../../golden/support/db/service";
 import {
   dispatchOverviewBerlinDateAtOffset,
   ownedBerlinDateAtOffset,
 } from "../../golden/support/date-ownership";
 import { requireChainedValue } from "../../golden/support/preconditions";
 import { closeWorkArtifactDialog, workArtifactsSection } from "../../golden/support/spec-helpers/work-artifact-dialog";
-import {
-  acknowledgeDispatchOnJobPage,
-  addSiteOnCustomerDetail,
-  convertRequestToServiceCase,
-  createCustomer,
-  createDirectServiceCase,
-  createInstalledEquipment,
-  createJob,
-  createPlannedCalendarEntry,
-  createRequestViaDialog,
-  issueDispatchForOccurrence,
-  openCustomerDetail,
-  openDispatchPanel,
-  openFieldWorkPack,
-  selectFromSearchable,
-  textInDom,
-  typeIntoDateTimeField,
-  updateServiceCaseViaDialog,
-  uploadIntoDocumentsSection,
-  visibleText,
-} from "../../golden/support/steps";
+import { createPlannedCalendarEntry } from "../../golden/support/steps/calendar";
+import { addSiteOnCustomerDetail, createCustomer, openCustomerDetail } from "../../golden/support/steps/customers";
+import { acknowledgeDispatchOnJobPage, issueDispatchForOccurrence, openDispatchPanel } from "../../golden/support/steps/dispatch";
+import { uploadIntoDocumentsSection } from "../../golden/support/steps/documents";
+import { createRequestViaDialog } from "../../golden/support/steps/requests";
+import { convertRequestToServiceCase, createDirectServiceCase, createInstalledEquipment, updateServiceCaseViaDialog } from "../../golden/support/steps/service";
+import { selectFromSearchable, textInDom, typeIntoDateTimeField, visibleText } from "../../golden/support/steps/shared";
+import { createJob, openFieldWorkPack } from "../../golden/support/steps/work";
 import { artifactsDirectory, type TestWorld } from "../../golden/support/world";
-
-test.describe.configure({ mode: "serial" });
 
 const DATES = Array.from({ length: 5 }, (_, index) =>
   ownedBerlinDateAtOffset("p1-19", 100 + index),

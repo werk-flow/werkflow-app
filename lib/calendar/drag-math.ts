@@ -55,6 +55,8 @@ const AUTO_SCROLL_MAX_PX_PER_FRAME = 24;
  */
 export function autoScrollVelocity(position: number, start: number, end: number): number {
   if (end - start <= AUTO_SCROLL_EDGE_PX * 2) return 0;
+  // A pointer outside the container (over a side panel, the header) scrolls nothing.
+  if (position < start || position > end) return 0;
   if (position < start + AUTO_SCROLL_EDGE_PX) {
     const depth = Math.min(1, Math.max(0, (start + AUTO_SCROLL_EDGE_PX - position) / AUTO_SCROLL_EDGE_PX));
     return -Math.round(depth * AUTO_SCROLL_MAX_PX_PER_FRAME);

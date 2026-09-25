@@ -20,7 +20,7 @@ The preview on DEV data is the staging environment. There is no other.
 ## The flow
 
 1. Write code on local `main`. Migrations reach DEV as they are written (the dev-first rule of [decision 0003](0003-dev-prod-environment-split.md)); the local stack is where the tests run.
-2. When a unit of work is done, run the gates locally: `bun run test:plan` and `bun run test:verify` for the selected change, the full release mode at a wave end and before a release, the cloud canary against DEV. Commit on local `main` when they pass. The protocol's slice acceptance owns the evidence.
+2. When a unit of work is done, run the gates locally: `bun run test:plan` and `bun run test:verify` for the selected change, the full release mode at a wave end and before a release, the cloud canary against DEV. Commit on local `main` when they pass. The protocol's slice acceptance owns the evidence, and the commit is the boundary the campaign budget counts from (`bun run test:campaign`).
 3. Push `main` to `partner-preview`. Vercel builds a preview against DEV. Nobody outside sees it. The partner reviews it behind the Vercel login.
 4. Release, on the owner's decision: apply the pending migrations to PROD inside a short maintenance window in the compatibility order the [migration rule](../technical/environments.md#the-migration-rule) sets, deploy the edge functions, then push `origin/main`. Vercel builds production against PROD. `origin/main` is the same commit the preview showed, so nothing is merged or caught up.
 5. Hotfix: steps 1, 2 and 4 without step 3. Vercel's instant rollback is the undo when a production deployment misbehaves; undo the rollback afterwards so automatic assignment resumes.

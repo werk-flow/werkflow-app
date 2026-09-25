@@ -30,9 +30,10 @@ interface CalendarViewTabsProps {
 export function CalendarViewTabs({ view, onViewChange, members, selectedMemberIds, onSelectedMemberIdsChange, isAdminOrManager, showWorkingHours, onShowWorkingHoursChange, showJobs, onShowJobsChange, children }: CalendarViewTabsProps) {
   const selectedCount = selectedMemberIds ? selectedMemberIds.length : members.length;
   return (
-    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-        <Tabs value={view} onValueChange={(value) => onViewChange(value as CalendarView)} className="min-w-0">
+    // The tabs never give ground: the row wraps, and the active view's toolbar sits on its own row below.
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <Tabs value={view} onValueChange={(value) => onViewChange(value as CalendarView)} className="shrink-0">
           <TabsList>
             <TabsTrigger value="day">Tag</TabsTrigger>
             <TabsTrigger value="week">{isAdminOrManager ? 'Plantafel' : 'Woche'}</TabsTrigger>
@@ -50,13 +51,11 @@ export function CalendarViewTabs({ view, onViewChange, members, selectedMemberId
             <span className={cn('transition-colors', showJobs ? 'text-foreground' : 'text-muted-foreground')}>Termine</span>
           </label>
         </div>
-        {children}
-      </div>
 
-      {isAdminOrManager && members.length > 0 && (
+        {isAdminOrManager && members.length > 0 && (
         <Popover>
           <PopoverTrigger asChild>
-            <Button variant="outline" size="sm" className="h-9">
+            <Button variant="outline" size="sm" className="ml-auto h-9">
               <Filter className="mr-2 size-4" aria-hidden="true" />
               Mitarbeiter ({selectedCount})
             </Button>
@@ -77,7 +76,9 @@ export function CalendarViewTabs({ view, onViewChange, members, selectedMemberId
             </div>
           </PopoverContent>
         </Popover>
-      )}
+        )}
+      </div>
+      {children}
     </div>
   );
 }

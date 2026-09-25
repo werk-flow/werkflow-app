@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { BROWSER_INPUT_DRIFT_MESSAGE } from "./test-evidence";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -61,6 +62,10 @@ describe("independent group proof", () => {
     const voided: GroupResult = { ...pass, startedAt: "2026-09-06T12:00:00.000Z", status: "failed", reason: `${INPUT_DRIFT_REASON}: tests/other.spec.ts` };
     expect(reusableGroupResult({ groupId: "people", fingerprint: pass.fingerprint, results: [pass, voided] })).toBe(pass);
     expect(groupAttemptProblem({ groupId: "people", fingerprint: pass.fingerprint, results: [voided] })).toBeUndefined();
+    // The group runner voids on its candidate fingerprint; its message reaches the result as the reason (2026-09-25: a1 was blocked by one).
+    const voidedByRunner: GroupResult = { ...voided, reason: BROWSER_INPUT_DRIFT_MESSAGE };
+    expect(reusableGroupResult({ groupId: "people", fingerprint: pass.fingerprint, results: [pass, voidedByRunner] })).toBe(pass);
+    expect(groupAttemptProblem({ groupId: "people", fingerprint: pass.fingerprint, results: [voidedByRunner] })).toBeUndefined();
   });
 });
 
@@ -203,6 +208,23 @@ test("harness support modules qualify only the groups that import them; config-l
   expect(inventory).not.toContain("tests/golden/support/live.ts");
   expect(inventory).not.toContain("lib/testing/latency-evidence.ts");
   expect(inventory).toContain("tests/golden/support/run-reporter.ts");
+});
+
+test("a domain support module qualifies only the groups whose specs import it", () => {
+  // The monoliths steps.ts and db.ts qualified every browser group; the domain split of 2026-09-25 exists for this rule.
+  const domainFiles = [...files, "tests/golden/support/steps/calendar.ts", "tests/golden/support/steps/shared.ts", "tests/golden/support/db/customers.ts"];
+  const graph = new Map([
+    ["tests/people.ts", ["tests/golden/support/steps/calendar.ts"]],
+    ["tests/golden/support/steps/calendar.ts", ["tests/golden/support/steps/shared.ts"]],
+    ["tests/inventory.ts", ["tests/golden/support/db/customers.ts"]],
+  ]);
+  const people = groupInputFiles({ group: groups[0], groups, files: domainFiles, graph });
+  expect(people).toContain("tests/golden/support/steps/calendar.ts");
+  expect(people).toContain("tests/golden/support/steps/shared.ts");
+  expect(people).not.toContain("tests/golden/support/db/customers.ts");
+  const inventory = groupInputFiles({ group: groups[1], groups, files: domainFiles, graph });
+  expect(inventory).toContain("tests/golden/support/db/customers.ts");
+  expect(inventory).not.toContain("tests/golden/support/steps/calendar.ts");
 });
 
 test("a pass recorded under a wider input set is reused when every current input is unchanged", () => {

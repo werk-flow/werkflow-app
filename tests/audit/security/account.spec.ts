@@ -2,14 +2,12 @@ import { createClient } from '@supabase/supabase-js';
 import { expect, test } from '../support/fixtures';
 import { requireEnv } from '../../golden/support/env';
 import { testSupabaseClientOptions } from '../../golden/support/client-options';
-import { visibleText } from '../../golden/support/steps';
+import { visibleText } from '../../golden/support/steps/shared';
 import { loadWorld, registerTestUserEmail, saveWorld } from '../../golden/support/world';
 import { attachWorldToRun, archiveActiveState } from '../../golden/support/run-state';
 import {
   deleteOwnedMailpitMessages, findOwnedMailpitMessages, localMailpitUrl, readOwnedMailpitOtp,
 } from '../../../lib/testing/local-mailpit';
-
-test.describe.configure({ mode: 'serial' });
 
 test('both mailbox confirmations change the account once @AUDIT-SECURITY-ACCOUNT', async ({ adminPage, world }) => {
   const backendUrl = requireEnv('NEXT_PUBLIC_SUPABASE_URL');

@@ -1,7 +1,8 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
-export { visibleMatchingText } from '../../golden/support/steps';
-import { retryDialogTransaction, workLifecycleCard } from '../../golden/support/steps';
+export { visibleMatchingText } from '../../golden/support/steps/shared';
+import { retryDialogTransaction } from '../../golden/support/steps/shared';
+import { workLifecycleCard } from '../../golden/support/steps/work';
 
 export async function bookMaterialDialog(
   page: Page,

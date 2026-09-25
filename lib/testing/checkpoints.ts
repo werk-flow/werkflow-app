@@ -28,7 +28,6 @@ const valuesSchema = z
       windowFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       assignedJobNumber: z.string().min(1),
       /** The calendar scenarios drop the measured visit on this personnel record. */
-      reassignTargetRecordId: uuidSchema.optional(),
     }).strict().optional(),
   })
   .strict();

@@ -5,48 +5,18 @@ import { expect, test } from "../support/fixtures";
 import { artifactsDirectory } from '../../golden/support/world';
 import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
 import { requireVisiblePrecondition } from '../../golden/support/preconditions';
-import {
-  getConvertedRequestJobState,
-  getCustomerNumber,
-  getCustomerRelationshipState,
-  getEmployeeRecordStateByUser,
-  getJobSiteContactState,
-  getPendingInviteCode,
-  getProjectJobRelationState,
-  getRequestAuditState,
-  getRequestConversionState,
-} from '../../golden/support/db';
-import {
-  addContactOnCustomerDetail,
-  addSiteOnCustomerDetail,
-  adoptCustomerAddressAsSite,
-  archiveCustomerRelation,
-  attentionTaskLink,
-  closeRequestViaDialog,
-  completeFollowUpOnCustomerDetail,
-  configureCustomerCommunicationSettings,
-  convertRequestToProjectViaDialog,
-  createCustomer,
-  createFollowUpOnCustomerDetail,
-  createJob,
-  createProject,
-  createRequestViaDialog,
-  inviteMember,
-  joinOrganizationViaInviteLink,
-  matchRequestToExistingCustomer,
-  openAufgaben,
-  openCustomerDetail,
-  removeMemberFromDetail,
-  restoreCustomerRelation,
-  setCustomerCommunicationPreference,
-  selectFromSearchable,
-  setRequestStatusFromDetail,
-  typeIntoDateTimeField,
-  uploadDocumentOnJobPage,
-  uploadDocumentOnRequestDetail,
-  visibleText,
-  textInDom,
-} from '../../golden/support/steps';
+import { getCustomerRelationshipState } from '../../golden/support/db/customers';
+import { getEmployeeRecordStateByUser } from '../../golden/support/db/personnel';
+import { getConvertedRequestJobState, getRequestAuditState, getRequestConversionState } from '../../golden/support/db/requests';
+import { getCustomerNumber, getPendingInviteCode } from '../../golden/support/db/shared';
+import { getJobSiteContactState, getProjectJobRelationState } from '../../golden/support/db/work';
+import { attentionTaskLink, openAufgaben } from '../../golden/support/steps/attention';
+import { addContactOnCustomerDetail, addSiteOnCustomerDetail, adoptCustomerAddressAsSite, archiveCustomerRelation, completeFollowUpOnCustomerDetail, configureCustomerCommunicationSettings, createCustomer, createFollowUpOnCustomerDetail, openCustomerDetail, restoreCustomerRelation, setCustomerCommunicationPreference } from '../../golden/support/steps/customers';
+import { uploadDocumentOnJobPage } from '../../golden/support/steps/documents';
+import { inviteMember, joinOrganizationViaInviteLink, removeMemberFromDetail } from '../../golden/support/steps/organization';
+import { closeRequestViaDialog, convertRequestToProjectViaDialog, createRequestViaDialog, matchRequestToExistingCustomer, setRequestStatusFromDetail, uploadDocumentOnRequestDetail } from '../../golden/support/steps/requests';
+import { selectFromSearchable, typeIntoDateTimeField, visibleText, textInDom } from '../../golden/support/steps/shared';
+import { createJob, createProject } from '../../golden/support/steps/work';
 import {
   contextualDocumentFileInput,
   customerContactRow,
@@ -54,8 +24,6 @@ import {
   newestCustomerTimelineRow,
 } from '../support/a2-steps';
 import { waitForRouteIntercept } from '../support/network';
-
-test.describe.configure({ mode: 'serial' });
 
 function datePickerDigits(dateIso: string): string {
   const [year, month, day] = dateIso.split('-');

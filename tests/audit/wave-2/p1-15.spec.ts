@@ -1,33 +1,14 @@
 import type { Locator, Page } from '@playwright/test';
 
 import { expect, test } from "../support/fixtures";
-import {
-  getJobSiteContactState,
-  getVisibleWorkArtifactCountsAs,
-  getWorkArtifactState,
-  getWorkLifecycleState,
-} from '../../golden/support/db';
-import {
-  workLifecycleCard,
-  addSiteOnCustomerDetail,
-  clockInOnJob,
-  clockOut,
-  createAndPublishWorkTemplate,
-  createCustomer,
-  createJob,
-  createProject,
-  openCustomerDetail,
-  selectFromSearchable,
-  typeIntoDatePickerById,
-  typeIntoDateTimeField,
-  visibleText,
-  textInDom,
-} from '../../golden/support/steps';
+import { getJobSiteContactState, getVisibleWorkArtifactCountsAs, getWorkArtifactState, getWorkLifecycleState } from '../../golden/support/db/work';
+import { addSiteOnCustomerDetail, createCustomer, openCustomerDetail } from '../../golden/support/steps/customers';
+import { selectFromSearchable, typeIntoDatePickerById, typeIntoDateTimeField, visibleText, textInDom } from '../../golden/support/steps/shared';
+import { clockInOnJob, clockOut } from '../../golden/support/steps/time-tracking';
+import { workLifecycleCard, createAndPublishWorkTemplate, createJob, createProject } from '../../golden/support/steps/work';
 import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
 import { requireVisiblePrecondition } from '../../golden/support/preconditions';
 import { closeWorkArtifactDialog, workArtifactsSection } from '../../golden/support/spec-helpers/work-artifact-dialog';
-
-test.describe.configure({ mode: 'serial' });
 
 function digits(dateIso: string): string {
   const [year, month, day] = dateIso.split('-');

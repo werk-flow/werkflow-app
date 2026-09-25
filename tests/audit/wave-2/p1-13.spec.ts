@@ -1,25 +1,13 @@
 import { expect, test } from "../support/fixtures";
-import {
-  getAppliedWorkTemplateState,
-  getCustomerNumber,
-  getJobCountByNumber,
-  getRequestConversionState,
-  getWorkTemplateApplicationCountForTarget,
-  getWorkTemplateStateByName,
-} from '../../golden/support/db';
-import {
-  convertRequestToJobViaDialog,
-  createAndPublishWorkTemplate,
-  createCustomer,
-  createJob,
-  createProject,
-  createRequestViaDialog,
-  inputByValue,
-  selectFromSearchable,
-  toggleInSearchableMulti,
-} from '../../golden/support/steps';
+import { getRequestConversionState } from '../../golden/support/db/requests';
+import { getCustomerNumber } from '../../golden/support/db/shared';
+import { getAppliedWorkTemplateState, getJobCountByNumber, getWorkTemplateApplicationCountForTarget, getWorkTemplateStateByName } from '../../golden/support/db/work';
+import { createCustomer } from '../../golden/support/steps/customers';
+import { convertRequestToJobViaDialog, createRequestViaDialog } from '../../golden/support/steps/requests';
+import { inputByValue, selectFromSearchable, toggleInSearchableMulti } from '../../golden/support/steps/shared';
+import { createAndPublishWorkTemplate, createJob, createProject } from '../../golden/support/steps/work';
 import { ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
-import { requireSerialPrecondition } from '../../golden/support/preconditions';
+import { requireChainedPrecondition } from '../../golden/support/preconditions';
 import {
   appendedTemplateItemCard,
   exactText,
@@ -33,8 +21,6 @@ import {
   visibleExactText,
   visibleMatchingText,
 } from '../support/p1-13-steps';
-
-test.describe.configure({ mode: 'serial' });
 
 function digits(dateIso: string): string {
   const [year, month, day] = dateIso.split('-');
@@ -305,7 +291,7 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
     // P1-13-F11, F12, F13, F14, F19, F20, F21, F22.
     const name = `Audit Komplett ${world.runId}`;
     const templatePrecondition = await workTemplateStateOrNull(world.orgId, name);
-    requireSerialPrecondition(templatePrecondition !== null, {
+    requireChainedPrecondition(templatePrecondition !== null, {
       test: 'P1-13-F11',
       needs: 'the published Audit Komplett template created by the draft-content test',
       grep: 'draft content covers|version history',
@@ -525,7 +511,7 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
       world.orgId,
       `Audit Komplett ${world.runId}`
     );
-    requireSerialPrecondition(
+    requireChainedPrecondition(
       Boolean(
         completeTemplateState?.versions.length === 3 &&
         completeTemplateState.items.some((item) => item.content === 'Messung in neuer Vorlage')
@@ -699,7 +685,7 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
     const projectPrecondition = await appliedTemplateStateOrNull(world.orgId, {
       projectNumber,
     });
-    requireSerialPrecondition(projectPrecondition !== null, {
+    requireChainedPrecondition(projectPrecondition !== null, {
       test: 'P1-13-F15',
       needs: 'the template-backed project created by the after-creation test',
       grep: 'draft content covers|version history|after-creation preview|request conversion applies atomically',
@@ -809,7 +795,7 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
       }),
       customerExists(world.orgId, customerName),
     ]);
-    requireSerialPrecondition(
+    requireChainedPrecondition(
       additionalTemplateState !== null && originalJobState !== null && hasCustomer,
       {
         test: 'P1-13-F25',

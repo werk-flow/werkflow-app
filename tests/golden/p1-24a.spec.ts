@@ -1,5 +1,7 @@
 import { expect, test } from "./support/fixtures";
-import { getCalendarPreferencesFor, getDispatchState, getEmployeeRecordStateByUser, getParkingState, getPlanningState, getVisiblePlanningStateAs, giveEmployeesWorkSchedules, occurrenceLocalDate } from "./support/db";
+import { getCalendarPreferencesFor, getPlanningState, getVisiblePlanningStateAs, occurrenceLocalDate } from "./support/db/calendar";
+import { getDispatchState, getParkingState } from "./support/db/dispatch";
+import { getEmployeeRecordStateByUser, giveEmployeesWorkSchedules } from "./support/db/personnel";
 import { expectLiveWithin } from "./support/live";
 import {
   boardCard,
@@ -13,16 +15,10 @@ import {
   parkplatzCardOf,
   successBanner,
 } from "./support/plantafel";
-import {
-  acknowledgeDispatchOnJobPage,
-  createJob,
-  createPlannedCalendarEntry,
-  issueDispatchForOccurrence,
-  openDispatchPanel,
-  selectFromSearchable,
-  textInDom,
-  typeIntoDatePickerById,
-} from "./support/steps";
+import { createPlannedCalendarEntry } from "./support/steps/calendar";
+import { acknowledgeDispatchOnJobPage, issueDispatchForOccurrence, openDispatchPanel } from "./support/steps/dispatch";
+import { selectFromSearchable, textInDom, typeIntoDatePickerById } from "./support/steps/shared";
+import { createJob } from "./support/steps/work";
 
 // P1-24a: one journey across the Plantafel. A manager plans a visit, moves it
 // to another person by drag (optimistic, then confirmed with Undo), a second
@@ -30,8 +26,6 @@ import {
 // by drag opens the context dialog and the card returns through „Einplanen
 // am …“, read-only mode refuses a drag with its sentence, the horizon is
 // remembered per user, and the employee sees only the own row.
-
-test.describe.configure({ mode: "serial" });
 
 const TODAY_ISO = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 

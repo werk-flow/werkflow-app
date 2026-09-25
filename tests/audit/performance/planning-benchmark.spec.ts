@@ -2,13 +2,13 @@ import { expect, test } from "../support/fixtures";
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { calendarReady, openBenchmarkMonth, realtimeSubscribed } from "../support/performance-steps";
-import { addTeamMemberViaManagement, createJob, createPlannedCalendarEntry, createTeamViaManagement, plannedCalendarEvent } from "../../golden/support/steps";
+import { createPlannedCalendarEntry, plannedCalendarEvent } from "../../golden/support/steps/calendar";
+import { addTeamMemberViaManagement, createTeamViaManagement } from "../../golden/support/steps/qualifications";
+import { createJob } from "../../golden/support/steps/work";
 import { createMeasurementPage, expectScenarioLiveWithin, expectUsableWithin } from "../../golden/support/scenario-measurement";
-import { getPlanningState } from "../../golden/support/db";
+import { getPlanningState } from "../../golden/support/db/calendar";
 import { calendarDateVisits, calendarEventTarget, standaloneCalendarVisitTarget } from "../../golden/support/browser-observation";
 import { currentRunKey, runDirectory } from "../../golden/support/run-state";
-
-test.describe.configure({ mode: "serial" });
 
 const PLANNING_DATE = "2026-06-11";
 const LEGACY_DATE = "2026-06-28";

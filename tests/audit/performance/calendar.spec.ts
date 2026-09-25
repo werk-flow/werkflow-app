@@ -17,8 +17,6 @@ import { shiftIsoDateByDays } from "../../../lib/personnel/types";
 // only when each records its three declared samples, within budget, and
 // without a regression against its reviewed baseline. The group runs exclusively.
 
-test.describe.configure({ mode: "serial" });
-
 const BUSINESS_DATE = TYPICAL_PROFILE_BUSINESS_DATE;
 const CALENDAR_ENTRY = `/kalender?date=${BUSINESS_DATE}`;
 /** The live week carries the measured visit; a started visit cannot be moved. */
@@ -40,7 +38,7 @@ function nextMonthRangeStartIso(dateIso: string): string {
 test.describe("Performance profile @AUDIT-PERFORMANCE", () => {
   test("PERF-01 seeds the typical profile into the group's organization @AUDIT-PERFORMANCE-01", async ({ world }) => {
     const counts: TypicalProfileCounts = await seedTypicalProfile(world);
-    saveAuditCheckpoint("performance.typicalProfile", { windowFrom: counts.window.from, assignedJobNumber: counts.assignedJobNumber, reassignTargetRecordId: counts.reassignTargetRecordId });
+    saveAuditCheckpoint("performance.typicalProfile", { windowFrom: counts.window.from, assignedJobNumber: counts.assignedJobNumber });
     expect(counts.employeeRecords).toBe(TYPICAL_PROFILE.employees);
     expect(counts.customers).toBe(TYPICAL_PROFILE.customers);
     expect(counts.jobs).toBe(TYPICAL_PROFILE.jobs);
@@ -81,11 +79,13 @@ test.describe("Performance profile @AUDIT-PERFORMANCE", () => {
     const title = (await card.textContent() ?? "").match(/Auftrag \d+: (?:Heizung warten|Bad sanieren)/)?.[0] ?? "";
     expect(title).not.toBe("");
     const sourceRow = await card.evaluate((element) => element.closest("[data-board-row]")?.getAttribute("data-board-row") ?? "");
-    // The profile names the target: a personnel record with four visits and room for one more.
-    const targetRow = requireChainedValue(auditCheckpoint("performance.typicalProfile")?.reassignTargetRecordId ?? "", {
-      test: "PERF-02", needs: "the reassign target record of PERF-01", grep: "PERF-01|PERF-02", suite: "audit",
-    });
-    if (!sourceRow || sourceRow === targetRow) throw new Error("The Plantafel needs two person rows for the reassign scenario.");
+    // The target is the person row beside the source on the board (four visits, room for one more): both
+    // rows share the viewport, so the pointer never scrolls the board.
+    const rowIds = await page.locator("[data-plantafel] [data-board-row]").evaluateAll((rows) => rows.map((row) => row.getAttribute("data-board-row") ?? ""));
+    const sourceIndex = rowIds.indexOf(sourceRow);
+    const neighbours = [rowIds[sourceIndex + 1], rowIds[sourceIndex - 1]].filter((row): row is string => Boolean(row) && row !== "unassigned");
+    const targetRow = neighbours[0];
+    if (!sourceRow || !targetRow) throw new Error("The Plantafel needs a person row beside the measured visit for the reassign scenario.");
     await expect(boardCellOf(page, targetRow, LIVE_DATE)).toBeVisible();
     const releaseThere = await holdPointerDrag(page, card, boardCellOf(page, targetRow, LIVE_DATE));
     await expectUsableWithin("calendar.board.reassign.visible", {

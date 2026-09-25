@@ -1,5 +1,8 @@
 import { expect, test } from "../support/fixtures";
-import { getCalendarPreferencesFor, getEmployeeRecordStateByUser, getOrganizationTimeEntryCount, getParkingState, getPlanningState, getVisibleDispatchStateAs, giveEmployeesWorkSchedules, occurrenceLocalDate } from "../../golden/support/db";
+import { getCalendarPreferencesFor, getPlanningState, occurrenceLocalDate } from "../../golden/support/db/calendar";
+import { getParkingState, getVisibleDispatchStateAs } from "../../golden/support/db/dispatch";
+import { getEmployeeRecordStateByUser, giveEmployeesWorkSchedules } from "../../golden/support/db/personnel";
+import { getOrganizationTimeEntryCount } from "../../golden/support/db/time-tracking";
 import { ownedBerlinDateAtOffset } from "../../golden/support/date-ownership";
 import {
   banners,
@@ -36,24 +39,16 @@ import {
   successBanner,
   trailingResizeHandle,
 } from "../../golden/support/plantafel";
-import {
-  addClosureDayViaSettings,
-  addTeamMemberViaManagement,
-  createJob,
-  createPlannedCalendarEntry,
-  createTeamViaManagement,
-  removeClosureDayViaSettings,
-  reportOwnSicknessViaDialog,
-  selectFromSearchable,
-  textInDom,
-  typeIntoDatePickerById,
-} from "../../golden/support/steps";
+import { createPlannedCalendarEntry } from "../../golden/support/steps/calendar";
+import { addClosureDayViaSettings, removeClosureDayViaSettings } from "../../golden/support/steps/personnel";
+import { addTeamMemberViaManagement, createTeamViaManagement } from "../../golden/support/steps/qualifications";
+import { selectFromSearchable, textInDom, typeIntoDatePickerById } from "../../golden/support/steps/shared";
+import { reportOwnSicknessViaDialog } from "../../golden/support/steps/sickness";
+import { createJob } from "../../golden/support/steps/work";
 
 // P1-24a audit: the Plantafel, the day and the month view flow by flow
 // (docs/product/user-flow-catalog.md, P1-24a-F01 to F35). The world is this
 // group's own; dates are run-day +131 to +140 (date-ownership registry).
-
-test.describe.configure({ mode: "serial" });
 
 const MONDAY = mondayOf(ownedBerlinDateAtOffset("p1-24a", 134));
 const DAY_A = MONDAY;

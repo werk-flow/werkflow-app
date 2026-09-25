@@ -1,9 +1,9 @@
 import { expect, test } from "./support/fixtures";
-import { getEmployeeRecordStateByUser, getP124CountsAs, getP124State } from "./support/db";
+import { getEmployeeRecordStateByUser, getP124CountsAs, getP124State } from "./support/db/personnel";
 import { expectLiveWithin } from "./support/live";
-import { openMemberDetailFromList, selectFromSearchable, textInDom, visibleText } from "./support/steps";
+import { openMemberDetailFromList } from "./support/steps/personnel";
+import { selectFromSearchable, textInDom, visibleText } from "./support/steps/shared";
 
-test.describe.configure({ mode: "serial" });
 const templateName = "Sicherer Einstieg";
 const acknowledgementTitle = "Betriebsregeln bestätigen";
 const protectedFileName = "willkommen-p1-24.txt";

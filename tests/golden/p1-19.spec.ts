@@ -2,40 +2,21 @@ import type { Locator, Page } from "@playwright/test";
 
 import { closeWorkArtifactDialog, workArtifactsSection } from "./support/spec-helpers/work-artifact-dialog";
 import { expect, test } from "./support/fixtures";
-import {
-  getServiceCaseCountsAs,
-  getServiceCaseNumberBySummary,
-  getServiceCaseStateByNumber,
-} from "./support/db";
+import { getServiceCaseCountsAs, getServiceCaseNumberBySummary, getServiceCaseStateByNumber } from "./support/db/service";
 import {
   dispatchOverviewBerlinDateAtOffset,
   ownedBerlinDateAtOffset,
 } from "./support/date-ownership";
 import { expectLiveWithin } from "./support/live";
 import { requireChainedValue } from "./support/preconditions";
-import {
-  acknowledgeDispatchOnJobPage,
-  addSiteOnCustomerDetail,
-  convertRequestToServiceCase,
-  createCustomer,
-  createDirectServiceCase,
-  createInstalledEquipment,
-  createJob,
-  createPlannedCalendarEntry,
-  createRequestViaDialog,
-  issueDispatchForOccurrence,
-  openCustomerDetail,
-  openDispatchPanel,
-  openFieldWorkPack,
-  selectFromSearchable,
-  textInDom,
-  typeIntoDateTimeField,
-  updateServiceCaseViaDialog,
-  visibleText,
-} from "./support/steps";
+import { createPlannedCalendarEntry } from "./support/steps/calendar";
+import { addSiteOnCustomerDetail, createCustomer, openCustomerDetail } from "./support/steps/customers";
+import { acknowledgeDispatchOnJobPage, issueDispatchForOccurrence, openDispatchPanel } from "./support/steps/dispatch";
+import { createRequestViaDialog } from "./support/steps/requests";
+import { convertRequestToServiceCase, createDirectServiceCase, createInstalledEquipment, updateServiceCaseViaDialog } from "./support/steps/service";
+import { selectFromSearchable, textInDom, typeIntoDateTimeField, visibleText } from "./support/steps/shared";
+import { createJob, openFieldWorkPack } from "./support/steps/work";
 import type { TestWorld } from "./support/world";
-
-test.describe.configure({ mode: "serial" });
 
 const DATES = Array.from({ length: 5 }, (_, index) =>
   ownedBerlinDateAtOffset("p1-19", 100 + index),

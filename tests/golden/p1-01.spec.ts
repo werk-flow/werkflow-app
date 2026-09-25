@@ -1,22 +1,12 @@
 import { expect, test } from './support/fixtures';
-import {
-  addContactOnCustomerDetail,
-  addSiteOnCustomerDetail,
-  createCustomer,
-  createJob,
-  editSiteStreetOnCustomerDetail,
-  openCustomerDetail,
-  searchCustomers,
-  visibleText,
-  textInDom,
-} from './support/steps';
+import { addContactOnCustomerDetail, addSiteOnCustomerDetail, createCustomer, editSiteStreetOnCustomerDetail, openCustomerDetail, searchCustomers } from './support/steps/customers';
+import { visibleText, textInDom } from './support/steps/shared';
+import { createJob } from './support/steps/work';
 
 // P1-01 — Customer contacts and work sites (@P1-01)
 // Bounded outcome: Admin/Büro maintain multiple contacts and durable work
 // sites per customer; work references the correct site/contact without
 // duplicate customer records; site edits never rewrite recorded job locations.
-
-test.describe.configure({ mode: 'serial' });
 
 test.describe('P1-01 Kontakte und Einsatzorte @P1-01', () => {
   test('Admin pflegt Ansprechpartner und Einsatzorte am Kunden', async ({ adminPage, world }) => {

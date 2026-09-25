@@ -12,8 +12,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "94dfc7db42cd19fd22c57004be1c0088a99ad5cfd10ef930e0db1897597df5bb",
-        "measurementDigest": "11b08b5aae0d951a56db4d848cd7f48d3b95d0ac08f3346cedd2e8a5ef128fe3",
+        "workloadDigest": "0e866add2b8eab984c5efce8aa1a84cefb857c722f0689844454dcd757019ae9",
+        "measurementDigest": "02b3eb4db6af029d234481b58090b97d9f058cf3e14b69d5661c1970da67df5d",
         "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
         "role": "admin",
         "browser": "chromium",
@@ -30,23 +30,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 1061.599853515625,
+      "referenceMs": 1248.10009765625,
       "samples": [
-        960.699951171875,
-        1061.599853515625,
-        1157.100341796875
+        1137.699951171875,
+        1248.10009765625,
+        1325.60009765625
       ],
       "source": {
-        "runKey": "2026-09-24T140909099Z-b16417",
+        "runKey": "2026-09-25T025755457Z-2a9fab",
         "runKeys": [
-          "2026-09-24T140909099Z-b16417"
+          "2026-09-25T025755457Z-2a9fab"
         ],
-        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
-        "recordedAt": "2026-09-24T14:10:29.650Z"
+        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
+        "recordedAt": "2026-09-25T03:52:49.789Z"
       },
       "review": {
-        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
-        "reviewedAt": "2026-09-24T14:27:15.238Z"
+        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
+        "reviewedAt": "2026-09-25T04:30:55.687Z"
       }
     },
     {
@@ -55,8 +55,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "94dfc7db42cd19fd22c57004be1c0088a99ad5cfd10ef930e0db1897597df5bb",
-        "measurementDigest": "f6908823d0dc5d0f12ea5a6974ac7aba23d8eeea017202a91269a2e9fad0750d",
+        "workloadDigest": "0e866add2b8eab984c5efce8aa1a84cefb857c722f0689844454dcd757019ae9",
+        "measurementDigest": "4889270febe1f68233f846c9ab95b48717fc984be5f403f2b84dcd52c78e920b",
         "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
         "role": "admin",
         "browser": "chromium",
@@ -73,23 +73,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 59.099853515625,
+      "referenceMs": 61.5,
       "samples": [
-        54.800048828125,
-        59.099853515625,
-        62.199951171875
+        48.89990234375,
+        61.5,
+        78
       ],
       "source": {
-        "runKey": "2026-09-24T140909099Z-b16417",
+        "runKey": "2026-09-25T025755457Z-2a9fab",
         "runKeys": [
-          "2026-09-24T140909099Z-b16417"
+          "2026-09-25T025755457Z-2a9fab"
         ],
-        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
-        "recordedAt": "2026-09-24T14:10:32.632Z"
+        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
+        "recordedAt": "2026-09-25T03:52:53.166Z"
       },
       "review": {
-        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
-        "reviewedAt": "2026-09-24T14:27:15.238Z"
+        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
+        "reviewedAt": "2026-09-25T04:30:55.687Z"
       }
     },
     {
@@ -98,8 +98,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "94dfc7db42cd19fd22c57004be1c0088a99ad5cfd10ef930e0db1897597df5bb",
-        "measurementDigest": "40a1fa028f527fa81c5b665e855861fd0bcffaea26f9af2a9e25d93cae778161",
+        "workloadDigest": "0e866add2b8eab984c5efce8aa1a84cefb857c722f0689844454dcd757019ae9",
+        "measurementDigest": "e56f304e686997ad8ccc077718a15117bdf4c3c4414c7a4a6e93a35040f6b9f3",
         "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
         "role": "admin",
         "browser": "chromium",
@@ -116,23 +116,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 185.199951171875,
+      "referenceMs": 230.099853515625,
       "samples": [
-        179.400146484375,
-        185.199951171875,
-        230.699951171875
+        216.300048828125,
+        230.099853515625,
+        234.199951171875
       ],
       "source": {
-        "runKey": "2026-09-24T140909099Z-b16417",
+        "runKey": "2026-09-25T025755457Z-2a9fab",
         "runKeys": [
-          "2026-09-24T140909099Z-b16417"
+          "2026-09-25T025755457Z-2a9fab"
         ],
-        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
-        "recordedAt": "2026-09-24T14:10:36.034Z"
+        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
+        "recordedAt": "2026-09-25T03:52:56.644Z"
       },
       "review": {
-        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
-        "reviewedAt": "2026-09-24T14:27:15.238Z"
+        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
+        "reviewedAt": "2026-09-25T04:30:55.687Z"
       }
     },
     {
@@ -141,8 +141,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "94dfc7db42cd19fd22c57004be1c0088a99ad5cfd10ef930e0db1897597df5bb",
-        "measurementDigest": "0e08fd05d2906264fc137bb76d2e1ccc78765341c3b8cee1a178411e59e61e87",
+        "workloadDigest": "0e866add2b8eab984c5efce8aa1a84cefb857c722f0689844454dcd757019ae9",
+        "measurementDigest": "ed1ee9365c1a1a3b59ecec81e624c7c86affd4359855f048c6ff4ba3811e62ee",
         "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
         "role": "admin",
         "browser": "chromium",
@@ -159,23 +159,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 87,
+      "referenceMs": 102.10009765625,
       "samples": [
-        86.2998046875,
-        87,
-        89.099853515625
+        84.199951171875,
+        102.10009765625,
+        107.60009765625
       ],
       "source": {
-        "runKey": "2026-09-24T140909099Z-b16417",
+        "runKey": "2026-09-25T025755457Z-2a9fab",
         "runKeys": [
-          "2026-09-24T140909099Z-b16417"
+          "2026-09-25T025755457Z-2a9fab"
         ],
-        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
-        "recordedAt": "2026-09-24T14:10:38.582Z"
+        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
+        "recordedAt": "2026-09-25T03:52:59.347Z"
       },
       "review": {
-        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
-        "reviewedAt": "2026-09-24T14:27:15.238Z"
+        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
+        "reviewedAt": "2026-09-25T04:30:55.687Z"
       }
     },
     {
@@ -184,8 +184,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "94dfc7db42cd19fd22c57004be1c0088a99ad5cfd10ef930e0db1897597df5bb",
-        "measurementDigest": "37c4ae2a889a2edf234eeddf5593b5af41370676fa9c6c1bb96dc1f77fea91c3",
+        "workloadDigest": "0e866add2b8eab984c5efce8aa1a84cefb857c722f0689844454dcd757019ae9",
+        "measurementDigest": "e6469fc065ee380c8500319bb5f550c672b17a97bfc7df973c24895efab5ec77",
         "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
         "role": "admin",
         "browser": "chromium",
@@ -202,23 +202,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 174.199951171875,
+      "referenceMs": 158.699951171875,
       "samples": [
-        152.599853515625,
-        174.199951171875,
-        248.300048828125
+        154.7001953125,
+        158.699951171875,
+        159.5
       ],
       "source": {
-        "runKey": "2026-09-24T140909099Z-b16417",
+        "runKey": "2026-09-25T025755457Z-2a9fab",
         "runKeys": [
-          "2026-09-24T140909099Z-b16417"
+          "2026-09-25T025755457Z-2a9fab"
         ],
-        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
-        "recordedAt": "2026-09-24T14:10:39.114Z"
+        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
+        "recordedAt": "2026-09-25T03:52:59.970Z"
       },
       "review": {
-        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
-        "reviewedAt": "2026-09-24T14:27:15.238Z"
+        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
+        "reviewedAt": "2026-09-25T04:30:55.687Z"
       }
     },
     {
@@ -227,8 +227,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "94dfc7db42cd19fd22c57004be1c0088a99ad5cfd10ef930e0db1897597df5bb",
-        "measurementDigest": "fb02977655d9857d884bae7abb315fc2e7b650a0c814e4b833e52988c6bd28bb",
+        "workloadDigest": "0e866add2b8eab984c5efce8aa1a84cefb857c722f0689844454dcd757019ae9",
+        "measurementDigest": "d13b5e1bbcb41c3af028a11a776380a4c4d320e83071c03d3210b9d1d091630e",
         "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
         "role": "admin",
         "browser": "chromium",
@@ -245,23 +245,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 373.900146484375,
+      "referenceMs": 379.7998046875,
       "samples": [
-        284.2001953125,
-        373.900146484375,
-        374.199951171875
+        374.60009765625,
+        379.7998046875,
+        390.60009765625
       ],
       "source": {
-        "runKey": "2026-09-24T140909099Z-b16417",
+        "runKey": "2026-09-25T025755457Z-2a9fab",
         "runKeys": [
-          "2026-09-24T140909099Z-b16417"
+          "2026-09-25T025755457Z-2a9fab"
         ],
-        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
-        "recordedAt": "2026-09-24T14:10:44.781Z"
+        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
+        "recordedAt": "2026-09-25T03:53:05.725Z"
       },
       "review": {
-        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
-        "reviewedAt": "2026-09-24T14:27:15.238Z"
+        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
+        "reviewedAt": "2026-09-25T04:30:55.687Z"
       }
     },
     {
@@ -270,8 +270,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "94dfc7db42cd19fd22c57004be1c0088a99ad5cfd10ef930e0db1897597df5bb",
-        "measurementDigest": "baf578c4521982d286d6c8b040d74fd2f0815e041975100ab6c3e472aaadc1d0",
+        "workloadDigest": "0e866add2b8eab984c5efce8aa1a84cefb857c722f0689844454dcd757019ae9",
+        "measurementDigest": "29922cabe4c0df16d7e82e2df787719381a61feeaaa25494ff017fc33b00a72c",
         "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
         "role": "admin",
         "browser": "chromium",
@@ -288,23 +288,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 759.199951171875,
+      "referenceMs": 877,
       "samples": [
-        757.800048828125,
-        759.199951171875,
-        973.39990234375
+        869.89990234375,
+        877,
+        914.39990234375
       ],
       "source": {
-        "runKey": "2026-09-24T140909099Z-b16417",
+        "runKey": "2026-09-25T025755457Z-2a9fab",
         "runKeys": [
-          "2026-09-24T140909099Z-b16417"
+          "2026-09-25T025755457Z-2a9fab"
         ],
-        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
-        "recordedAt": "2026-09-24T14:10:45.883Z"
+        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
+        "recordedAt": "2026-09-25T03:53:07.094Z"
       },
       "review": {
-        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
-        "reviewedAt": "2026-09-24T14:27:15.238Z"
+        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
+        "reviewedAt": "2026-09-25T04:30:55.687Z"
       }
     },
     {
@@ -313,8 +313,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "94dfc7db42cd19fd22c57004be1c0088a99ad5cfd10ef930e0db1897597df5bb",
-        "measurementDigest": "71d57c64b8b93425342b2414a998874aafcf7e9dc01bd75f809363d41ffb3109",
+        "workloadDigest": "0e866add2b8eab984c5efce8aa1a84cefb857c722f0689844454dcd757019ae9",
+        "measurementDigest": "80e0b61494143ffa1b4d84af734040feb0590e40baf8da22ea2cd44677737b1c",
         "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
         "role": "admin",
         "browser": "chromium",
@@ -331,23 +331,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 395.699951171875,
+      "referenceMs": 415.199951171875,
       "samples": [
-        380.7998046875,
-        395.699951171875,
-        397.800048828125
+        400.2001953125,
+        415.199951171875,
+        415.400146484375
       ],
       "source": {
-        "runKey": "2026-09-24T140909099Z-b16417",
+        "runKey": "2026-09-25T025755457Z-2a9fab",
         "runKeys": [
-          "2026-09-24T140909099Z-b16417"
+          "2026-09-25T025755457Z-2a9fab"
         ],
-        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
-        "recordedAt": "2026-09-24T14:10:47.050Z"
+        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
+        "recordedAt": "2026-09-25T03:53:08.203Z"
       },
       "review": {
-        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
-        "reviewedAt": "2026-09-24T14:27:15.238Z"
+        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
+        "reviewedAt": "2026-09-25T04:30:55.687Z"
       }
     },
     {
@@ -356,8 +356,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "94dfc7db42cd19fd22c57004be1c0088a99ad5cfd10ef930e0db1897597df5bb",
-        "measurementDigest": "256483b90cdb93c5d6127411129b13394100b998b3b58c6f7e5fd9c0ac5c0187",
+        "workloadDigest": "0e866add2b8eab984c5efce8aa1a84cefb857c722f0689844454dcd757019ae9",
+        "measurementDigest": "d7812693feabf3472ed9637dbae2f2674c44de99a4ca87497dddcbcb7e4a8b14",
         "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
         "role": "admin",
         "browser": "chromium",
@@ -374,23 +374,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 24.199951171875,
+      "referenceMs": 21,
       "samples": [
-        18.7998046875,
-        24.199951171875,
-        28.5
+        20.89990234375,
+        21,
+        22.300048828125
       ],
       "source": {
-        "runKey": "2026-09-24T140909099Z-b16417",
+        "runKey": "2026-09-25T025755457Z-2a9fab",
         "runKeys": [
-          "2026-09-24T140909099Z-b16417"
+          "2026-09-25T025755457Z-2a9fab"
         ],
-        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
-        "recordedAt": "2026-09-24T14:10:47.627Z"
+        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
+        "recordedAt": "2026-09-25T03:53:08.714Z"
       },
       "review": {
-        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
-        "reviewedAt": "2026-09-24T14:27:15.238Z"
+        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
+        "reviewedAt": "2026-09-25T04:30:55.687Z"
       }
     },
     {
@@ -399,8 +399,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "94dfc7db42cd19fd22c57004be1c0088a99ad5cfd10ef930e0db1897597df5bb",
-        "measurementDigest": "8d842c816b54d0a5d4e354b2e996790c82745142f3dac2e359cc5e5a98cb1731",
+        "workloadDigest": "0e866add2b8eab984c5efce8aa1a84cefb857c722f0689844454dcd757019ae9",
+        "measurementDigest": "6af8371673c57554e9365a60d2637eb04892ef4716f50fbc4736bbca5054082b",
         "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
         "role": "admin",
         "browser": "chromium",
@@ -417,23 +417,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 161.800048828125,
+      "referenceMs": 159.099853515625,
       "samples": [
-        154.10009765625,
-        161.800048828125,
-        167.39990234375
+        145.400146484375,
+        159.099853515625,
+        175.2998046875
       ],
       "source": {
-        "runKey": "2026-09-24T140909099Z-b16417",
+        "runKey": "2026-09-25T025755457Z-2a9fab",
         "runKeys": [
-          "2026-09-24T140909099Z-b16417"
+          "2026-09-25T025755457Z-2a9fab"
         ],
-        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
-        "recordedAt": "2026-09-24T14:10:50.674Z"
+        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
+        "recordedAt": "2026-09-25T03:53:11.844Z"
       },
       "review": {
-        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
-        "reviewedAt": "2026-09-24T14:27:15.238Z"
+        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
+        "reviewedAt": "2026-09-25T04:30:55.687Z"
       }
     },
     {
@@ -442,8 +442,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "94dfc7db42cd19fd22c57004be1c0088a99ad5cfd10ef930e0db1897597df5bb",
-        "measurementDigest": "fcb568a6cd4a8806612a6381f1d594ebb4c69c44c0b84a26df2f3e712eaf81fa",
+        "workloadDigest": "0e866add2b8eab984c5efce8aa1a84cefb857c722f0689844454dcd757019ae9",
+        "measurementDigest": "e9f6e1803678cfad1bcf2d159cb2fbf180e62be7129c161b4746baf8815ffd96",
         "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
         "role": "admin",
         "browser": "chromium",
@@ -460,23 +460,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 182.300048828125,
+      "referenceMs": 182.2998046875,
       "samples": [
-        180.800048828125,
-        182.300048828125,
-        190.599853515625
+        177.099853515625,
+        182.2998046875,
+        185.900146484375
       ],
       "source": {
-        "runKey": "2026-09-24T140909099Z-b16417",
+        "runKey": "2026-09-25T025755457Z-2a9fab",
         "runKeys": [
-          "2026-09-24T140909099Z-b16417"
+          "2026-09-25T025755457Z-2a9fab"
         ],
-        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
-        "recordedAt": "2026-09-24T14:10:53.270Z"
+        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
+        "recordedAt": "2026-09-25T03:53:14.418Z"
       },
       "review": {
-        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
-        "reviewedAt": "2026-09-24T14:27:15.238Z"
+        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
+        "reviewedAt": "2026-09-25T04:30:55.687Z"
       }
     },
     {
@@ -485,8 +485,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "94dfc7db42cd19fd22c57004be1c0088a99ad5cfd10ef930e0db1897597df5bb",
-        "measurementDigest": "671c197860f5a76d01f81e2d29a0fcae752a143287adb9fb139daf9d34993128",
+        "workloadDigest": "0e866add2b8eab984c5efce8aa1a84cefb857c722f0689844454dcd757019ae9",
+        "measurementDigest": "e7cce09c40d7c736ef408573131532c3c10308500870e25fc325d88fe67b69a3",
         "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
         "role": "admin",
         "browser": "chromium",
@@ -503,23 +503,109 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 82.199951171875,
+      "referenceMs": 92.199951171875,
       "samples": [
-        76.10009765625,
-        82.199951171875,
-        94.5
+        84.5,
+        92.199951171875,
+        98.5
       ],
       "source": {
-        "runKey": "2026-09-24T140909099Z-b16417",
+        "runKey": "2026-09-25T025755457Z-2a9fab",
         "runKeys": [
-          "2026-09-24T140909099Z-b16417"
+          "2026-09-25T025755457Z-2a9fab"
         ],
-        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
-        "recordedAt": "2026-09-24T14:10:53.466Z"
+        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
+        "recordedAt": "2026-09-25T03:53:14.633Z"
       },
       "review": {
-        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
-        "reviewedAt": "2026-09-24T14:27:15.238Z"
+        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
+        "reviewedAt": "2026-09-25T04:30:55.687Z"
+      }
+    },
+    {
+      "scenarioId": "customers.list.open",
+      "scenarioVersion": 1,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "0e866add2b8eab984c5efce8aa1a84cefb857c722f0689844454dcd757019ae9",
+        "measurementDigest": "6ef310b05564b5c8b4ea56db3c5494d2c4d3bc02fd52c2af553add977a53b3c1",
+        "protocol": "fixed-workload-fresh-context-customer-then-job-navigation-browser-raf-v3",
+        "role": "admin",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 844,
+      "samples": [
+        807.699951171875,
+        844,
+        991.199951171875
+      ],
+      "source": {
+        "runKey": "2026-09-25T025755457Z-5ee091",
+        "runKeys": [
+          "2026-09-25T025755457Z-5ee091"
+        ],
+        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
+        "recordedAt": "2026-09-25T03:54:40.210Z"
+      },
+      "review": {
+        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
+        "reviewedAt": "2026-09-25T04:30:55.687Z"
+      }
+    },
+    {
+      "scenarioId": "jobs.list.open",
+      "scenarioVersion": 1,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "0e866add2b8eab984c5efce8aa1a84cefb857c722f0689844454dcd757019ae9",
+        "measurementDigest": "db87dd3cd979637828956cefe23accfba1bba49be228d0e275f9c4845bfcc22c",
+        "protocol": "fixed-workload-fresh-context-customer-then-job-navigation-browser-raf-v3",
+        "role": "admin",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 707,
+      "samples": [
+        682,
+        707,
+        736.900146484375
+      ],
+      "source": {
+        "runKey": "2026-09-25T025755457Z-5ee091",
+        "runKeys": [
+          "2026-09-25T025755457Z-5ee091"
+        ],
+        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
+        "recordedAt": "2026-09-25T03:54:41.326Z"
+      },
+      "review": {
+        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
+        "reviewedAt": "2026-09-25T04:30:55.687Z"
       }
     },
     {
@@ -528,8 +614,8 @@
       "profile": "golden-world",
       "backend": "local",
       "context": {
-        "workloadDigest": "bedde7fe5685d40c13aa36c96c32bbbdb4d4ed2aef8a36981c9a6397398f1925",
-        "measurementDigest": "ba54ec620b28ecd4fe82febbd4cbfd9b2e1e8dbd845da556def3c50f43f80823",
+        "workloadDigest": "dac0d39b028a80b77f56e61648dee4e50d2bcac90d8960566feca8f0421b850a",
+        "measurementDigest": "2a640ee5bcbc49de911f5d2d2a3bac32869d3a4aa0c36a799770c9e89593ad60",
         "protocol": "independent-fixed-month-three-distinct-overlap-confirmations-browser-raf-v3",
         "role": "buero",
         "browser": "chromium",
@@ -546,23 +632,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 1009.60009765625,
+      "referenceMs": 1077.5,
       "samples": [
-        943.699951171875,
-        1009.60009765625,
-        1214.89990234375
+        1003.599853515625,
+        1077.5,
+        1341.199951171875
       ],
       "source": {
-        "runKey": "2026-09-24T141423521Z-d9fa39",
+        "runKey": "2026-09-25T025755457Z-26897b",
         "runKeys": [
-          "2026-09-24T141423521Z-d9fa39"
+          "2026-09-25T025755457Z-26897b"
         ],
-        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
-        "recordedAt": "2026-09-24T14:15:17.248Z"
+        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
+        "recordedAt": "2026-09-25T03:56:46.174Z"
       },
       "review": {
-        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
-        "reviewedAt": "2026-09-24T14:27:15.238Z"
+        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
+        "reviewedAt": "2026-09-25T04:30:55.687Z"
       }
     },
     {
@@ -571,8 +657,8 @@
       "profile": "golden-world",
       "backend": "local",
       "context": {
-        "workloadDigest": "bedde7fe5685d40c13aa36c96c32bbbdb4d4ed2aef8a36981c9a6397398f1925",
-        "measurementDigest": "f1e999d469ef792ed6946e9708ef5f61fd40b17d02ce9e31e68df265cdf1c7f0",
+        "workloadDigest": "dac0d39b028a80b77f56e61648dee4e50d2bcac90d8960566feca8f0421b850a",
+        "measurementDigest": "2477592d539b51c9d4fb62655d2cd3e3392f6c8374728d2a2a70e09989587676",
         "protocol": "independent-fixed-month-fresh-employee-after-three-saves-browser-raf-v3",
         "role": "employee",
         "browser": "chromium",
@@ -589,23 +675,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 432.2998046875,
+      "referenceMs": 1070.699951171875,
       "samples": [
-        416,
-        432.2998046875,
-        434
+        420.5,
+        1070.699951171875,
+        1084.400146484375
       ],
       "source": {
-        "runKey": "2026-09-24T141423521Z-d9fa39",
+        "runKey": "2026-09-25T025755457Z-26897b",
         "runKeys": [
-          "2026-09-24T141423521Z-d9fa39"
+          "2026-09-25T025755457Z-26897b"
         ],
-        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
-        "recordedAt": "2026-09-24T14:15:21.215Z"
+        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
+        "recordedAt": "2026-09-25T03:56:50.817Z"
       },
       "review": {
-        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
-        "reviewedAt": "2026-09-24T14:27:15.238Z"
+        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
+        "reviewedAt": "2026-09-25T04:30:55.687Z"
       }
     },
     {
@@ -614,8 +700,8 @@
       "profile": "golden-world",
       "backend": "local",
       "context": {
-        "workloadDigest": "bedde7fe5685d40c13aa36c96c32bbbdb4d4ed2aef8a36981c9a6397398f1925",
-        "measurementDigest": "79dd6727798b0f49af0e6589899f4f6b731f19c5ec63f7e46bf4efc45eb6748b",
+        "workloadDigest": "dac0d39b028a80b77f56e61648dee4e50d2bcac90d8960566feca8f0421b850a",
+        "measurementDigest": "d421442b06ca56d520a8403eb210132a53908b7f918e2415bdb6c50491238218",
         "protocol": "independent-fixed-month-fresh-admin-after-legacy-save-browser-raf-v3",
         "role": "admin",
         "browser": "chromium",
@@ -632,109 +718,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 453.699951171875,
+      "referenceMs": 1099.300048828125,
       "samples": [
-        434,
-        453.699951171875,
-        1021.900146484375
+        773.099853515625,
+        1099.300048828125,
+        1118.5
       ],
       "source": {
-        "runKey": "2026-09-24T141423521Z-d9fa39",
+        "runKey": "2026-09-25T025755457Z-26897b",
         "runKeys": [
-          "2026-09-24T141423521Z-d9fa39"
+          "2026-09-25T025755457Z-26897b"
         ],
-        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
-        "recordedAt": "2026-09-24T14:15:27.927Z"
+        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
+        "recordedAt": "2026-09-25T03:56:58.531Z"
       },
       "review": {
-        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
-        "reviewedAt": "2026-09-24T14:27:15.238Z"
-      }
-    },
-    {
-      "scenarioId": "customers.list.open",
-      "scenarioVersion": 1,
-      "profile": "typical",
-      "backend": "local",
-      "context": {
-        "workloadDigest": "94dfc7db42cd19fd22c57004be1c0088a99ad5cfd10ef930e0db1897597df5bb",
-        "measurementDigest": "7617df45a89b06f4752a7e4469be79923472bd5fc0565f6cec6d48c87c202f39",
-        "protocol": "fixed-workload-fresh-context-customer-then-job-navigation-browser-raf-v3",
-        "role": "admin",
-        "browser": "chromium",
-        "browserVersion": "151.0.7922.34",
-        "viewport": {
-          "width": 1440,
-          "height": 900
-        },
-        "deviceScaleFactor": 1,
-        "platform": "win32",
-        "architecture": "x64",
-        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
-        "logicalProcessors": 14,
-        "memoryGiB": 31,
-        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
-      },
-      "referenceMs": 770,
-      "samples": [
-        707.5,
-        770,
-        951.599853515625
-      ],
-      "source": {
-        "runKey": "2026-09-24T141150452Z-5fa7d9",
-        "runKeys": [
-          "2026-09-24T141150452Z-5fa7d9"
-        ],
-        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
-        "recordedAt": "2026-09-24T14:12:21.944Z"
-      },
-      "review": {
-        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
-        "reviewedAt": "2026-09-24T14:27:15.238Z"
-      }
-    },
-    {
-      "scenarioId": "jobs.list.open",
-      "scenarioVersion": 1,
-      "profile": "typical",
-      "backend": "local",
-      "context": {
-        "workloadDigest": "94dfc7db42cd19fd22c57004be1c0088a99ad5cfd10ef930e0db1897597df5bb",
-        "measurementDigest": "de280fbf42ba151eed46375648584d35e552a6a91512e2960a8dbc56b7645769",
-        "protocol": "fixed-workload-fresh-context-customer-then-job-navigation-browser-raf-v3",
-        "role": "admin",
-        "browser": "chromium",
-        "browserVersion": "151.0.7922.34",
-        "viewport": {
-          "width": 1440,
-          "height": 900
-        },
-        "deviceScaleFactor": 1,
-        "platform": "win32",
-        "architecture": "x64",
-        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
-        "logicalProcessors": 14,
-        "memoryGiB": 31,
-        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
-      },
-      "referenceMs": 597.60009765625,
-      "samples": [
-        593.800048828125,
-        597.60009765625,
-        606.099853515625
-      ],
-      "source": {
-        "runKey": "2026-09-24T141150452Z-5fa7d9",
-        "runKeys": [
-          "2026-09-24T141150452Z-5fa7d9"
-        ],
-        "buildId": "33b56e85-db87-4e6e-a625-97d2a3d8f71a",
-        "recordedAt": "2026-09-24T14:12:22.825Z"
-      },
-      "review": {
-        "reason": "P1-24a closure: calendar rewrite recalibration on build 33b56e85 (report 2026-09-24T142058930Z-51c3482f)",
-        "reviewedAt": "2026-09-24T14:27:15.238Z"
+        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
+        "reviewedAt": "2026-09-25T04:30:55.687Z"
       }
     }
   ]

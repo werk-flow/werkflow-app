@@ -20,6 +20,9 @@ describe("browser candidate identity", () => {
         write(path, 'changed verification contract');
         expect(calculateCandidateFingerprint(root, environment)).not.toBe(before);
       }
+      const beforeComment = calculateCandidateFingerprint(root, environment);
+      write("tests/audit/example.spec.ts", "assert real state // a comment only");
+      expect(calculateCandidateFingerprint(root, environment)).toBe(beforeComment);
       write("tests/audit/example.spec.ts", "changed assertion");
       const assertions = calculateCandidateFingerprint(root, environment);
       expect(assertions).not.toBe(initial);

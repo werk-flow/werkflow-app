@@ -5,7 +5,7 @@ import { formatMinutesOfDay, indexAtOffset, snapMinutes } from '@/lib/calendar/d
 import { DAY_NAME_COLUMN_PX, DEFAULT_VISIT_MINUTES, MIN_ITEM_MINUTES, resizedBlockUpdates, shiftedBlockUpdates, jobStartMinutes } from '@/lib/calendar/day-layout';
 import type { CalendarBoardDay, CalendarBoardRow } from '@/lib/calendar/board';
 import { reassignmentChanges } from '@/lib/calendar/board-model';
-import { checkNotAlreadyAssigned, checkOccurrenceMovable, checkPersonDay, checkReadOnly, checkTimeBlockTarget, dayFor } from '@/lib/calendar/refusal-checks';
+import { checkParkedContext, checkNotAlreadyAssigned, checkOccurrenceMovable, checkPersonDay, checkReadOnly, checkTimeBlockTarget, dayFor } from '@/lib/calendar/refusal-checks';
 import { calendarRefusalMessage, formatRefusalDate } from '@/lib/calendar/messages';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { JobParkingContext } from '@/lib/parking/types';
@@ -127,9 +127,13 @@ export function useDaySurface(input: DaySurfaceInput): DragSurface {
   }, []);
 
   const checkTarget = useCallback((target: CalendarDragTarget, payload: CalendarDragPayload, modifiers: DragModifiers): DragVerdict => {
-    const { readOnly, days, rows, dayStart, nowMs, dateIso } = inputRef.current;
+    const { readOnly, days, rows, dayStart, nowMs, dateIso, parkingContexts } = inputRef.current;
     const readOnlyCheck = checkReadOnly(readOnly);
     if (!readOnlyCheck.ok) return { ok: false, message: readOnlyCheck.message };
+    if (payload.kind === 'parked' && target.kind !== 'zone') {
+      const parked = checkParkedContext(parkingContexts, payload.job);
+      if (!parked.ok) return { ok: false, message: parked.message };
+    }
     if (target.kind === 'zone') {
       if (payload.kind === 'occurrence' || payload.kind === 'untimed') return { ok: true, label: 'Parken' };
       return { ok: false, message: 'Nur Termine lassen sich parken.' };

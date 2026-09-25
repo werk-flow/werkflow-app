@@ -11,7 +11,7 @@ import { testSupabaseClientOptions } from "../../golden/support/client-options";
 import type { TestWorld } from "../../golden/support/world";
 import { currentRunKey, runDirectory } from "../../golden/support/run-state";
 import { insertFinalFixtureTimeEntry } from "./seed-publication";
-import { giveEmployeesWorkSchedules } from "../../golden/support/db";
+import { giveEmployeesWorkSchedules } from "../../golden/support/db/personnel";
 
 /**
  * The "typical beta example" workload from the Step 2 plan, generated inside
@@ -64,8 +64,6 @@ export type TypicalProfileCounts = {
   workdays: number;
   /** The world employee assigned to the newest job (renders first on /auftraege). */
   assignedJobNumber: string;
-  /** The person row the measured reassign drops on: the personnel row below the measured visit, four visits, never the doubled one. */
-  reassignTargetRecordId: string;
 };
 
 type Tables = Database["public"]["Tables"];
@@ -239,9 +237,6 @@ export async function seedTypicalProfile(world: TestWorld): Promise<TypicalProfi
   // no row on the historical business date.
   const measuredRecord = records.find((record) => record.user_id === null);
   if (!measuredRecord) throw new Error("The profile has no personnel record for the measured visit.");
-  // The next personnel record: the board sorts the personnel rows by name, so it is the row below.
-  const reassignTarget = records.find((record) => record.user_id === null && record.id !== measuredRecord.id);
-  if (!reassignTarget) throw new Error("The profile needs a second personnel record as the reassign target.");
   const measuredOccurrenceId = crypto.randomUUID();
   occurrences.push({
     id: measuredOccurrenceId,
@@ -288,7 +283,6 @@ export async function seedTypicalProfile(world: TestWorld): Promise<TypicalProfi
     window,
     workdays,
     assignedJobNumber: jobNumber(assignedJobIndex),
-    reassignTargetRecordId: reassignTarget.id,
   };
   writeFileSync(resolve(runDirectory(currentRunKey()), "performance-workload.json"), JSON.stringify({
     profile: "typical", businessDate, definition: TYPICAL_PROFILE,

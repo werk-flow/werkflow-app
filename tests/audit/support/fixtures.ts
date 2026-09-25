@@ -2,6 +2,7 @@ import { appendFileSync, rmSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { replaceOwnedWorld } from "../../../lib/testing/owned-world-lifecycle";
 import { test as sharedTest, expect } from "../../golden/support/fixtures";
+import { resetPersistedPreferences } from "../../golden/support/preferences-reset";
 import {
   archiveActiveState,
   attachWorldToRun,
@@ -31,7 +32,7 @@ const roles: readonly SessionRole[] = [
 ];
 
 // Automatic setup runs before the shared world and role-page fixtures. Files
-// remain serial internally, but cannot inherit another file's mutations.
+// run in order internally, but cannot inherit another file's mutations.
 export const test = sharedTest.extend<{ auditWorldReady: void }>({
   auditWorldReady: [
     async ({ browser, baseURL }, provide, testInfo) => {
@@ -145,6 +146,14 @@ export const test = sharedTest.extend<{ auditWorldReady: void }>({
     },
     { auto: true },
   ],
+  // The reset runs after the audit world is settled, so it clears the world the test will use; the
+  // inherited fixture stays automatic.
+  freshPreferences: async ({ auditWorldReady }, provide) => {
+    void auditWorldReady;
+    const world = loadWorld();
+    await resetPersistedPreferences([world.orgId, world.outsider.orgId]);
+    await provide();
+  },
 });
 
 export { expect };

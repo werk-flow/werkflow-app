@@ -1,23 +1,15 @@
 import { resolve } from 'node:path';
 
 import { expect, test } from '../golden/support/fixtures';
-import {
-  getDocumentStoragePathByName,
-  getPendingInviteCode,
-  getTimeCaptureState,
-} from '../golden/support/db';
-import {
-  clockInOnJob,
-  clockOut,
-  createCustomer,
-  createJob,
-  inviteMember,
-  joinOrganizationViaInviteLink,
-  loginViaUi,
-  uploadDocumentOnJobPage,
-  visibleText,
-  textInDom,
-} from '../golden/support/steps';
+import { getDocumentStoragePathByName } from '../golden/support/db/documents';
+import { getPendingInviteCode } from '../golden/support/db/shared';
+import { getTimeCaptureState } from '../golden/support/db/time-tracking';
+import { createCustomer } from '../golden/support/steps/customers';
+import { uploadDocumentOnJobPage } from '../golden/support/steps/documents';
+import { inviteMember, joinOrganizationViaInviteLink, loginViaUi } from '../golden/support/steps/organization';
+import { visibleText, textInDom } from '../golden/support/steps/shared';
+import { clockInOnJob, clockOut } from '../golden/support/steps/time-tracking';
+import { createJob } from '../golden/support/steps/work';
 import { createSignedDownloadUrl } from '../../lib/storage/r2';
 import { goldenTestEmail } from '../golden/support/seed';
 import { artifactsDirectory } from '../golden/support/world';
@@ -35,8 +27,6 @@ import { waitForDatabaseSubscription } from './support/realtime-readiness';
 // leaked-password rejection, and migration-history parity. Keep it short —
 // the growth rule lives in docs/technical/testing.md. It only runs with
 // target cloud (enforced by run-policy) against DEV Supabase and real R2.
-
-test.describe.configure({ mode: 'serial' });
 
 test.describe('Cloud-Canary @CANARY', () => {
   test('C1: Login und Session-Refresh über geschützte Navigationen', async ({

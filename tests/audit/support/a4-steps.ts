@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
-import { retryDialogTransaction } from '../../golden/support/steps';
+import { retryDialogTransaction } from '../../golden/support/steps/shared';
 
 export async function deleteWorkScheduleViaDetail(
   page: Page,

@@ -1,24 +1,12 @@
 import { expect, test } from './support/fixtures';
-import {
-  getOrganizationTimeEntryCount,
-  getPlanningState,
-  getVisiblePlanningStateAs,
-} from './support/db';
-import {
-  addTeamMemberViaManagement,
-  createJob,
-  createPlannedCalendarEntry,
-  createTeamViaManagement,
-  editPlannedCalendarOccurrence,
-  plannedCalendarEvent,
-  setPlannedCalendarOccurrenceStatus,
-  showPlanningMonth,
-} from './support/steps';
+import { getPlanningState, getVisiblePlanningStateAs } from './support/db/calendar';
+import { getOrganizationTimeEntryCount } from './support/db/time-tracking';
+import { createPlannedCalendarEntry, editPlannedCalendarOccurrence, plannedCalendarEvent, setPlannedCalendarOccurrenceStatus, showPlanningMonth } from './support/steps/calendar';
+import { addTeamMemberViaManagement, createTeamViaManagement } from './support/steps/qualifications';
+import { createJob } from './support/steps/work';
 import { expectLiveWithin, expectReadyWithin } from './support/live';
 import { createMeasurementPage } from './support/scenario-measurement';
 import { formatBerlinLocalDateTime } from '../../lib/planning/date-time';
-
-test.describe.configure({ mode: 'serial' });
 
 const TODAY_ISO = new Intl.DateTimeFormat('sv-SE', {
   timeZone: 'Europe/Berlin',

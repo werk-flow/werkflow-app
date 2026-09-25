@@ -1,21 +1,10 @@
 import { expect, test } from './support/fixtures';
 import { getHolidayName } from '../../lib/personnel/holidays';
 import { resolveDailyTarget } from '../../lib/personnel/targets';
-import {
-  getEmployeeRecordStateByUser,
-  getTargetContextForRecord,
-  getVisibleWorkScheduleRecordIdsAs,
-} from './support/db';
-import {
-  addClosureDayViaSettings,
-  addWorkScheduleViaDialog,
-  expectVisibleAfterSave,
-  openMemberDetailFromList,
-  removeClosureDayViaSettings,
-  setHolidayRegionViaSettings,
-  visibleText,
-  textInDom,
-} from './support/steps';
+import { getEmployeeRecordStateByUser, getVisibleWorkScheduleRecordIdsAs } from './support/db/personnel';
+import { getTargetContextForRecord } from './support/db/vacation';
+import { addClosureDayViaSettings, addWorkScheduleViaDialog, openMemberDetailFromList, removeClosureDayViaSettings, setHolidayRegionViaSettings } from './support/steps/personnel';
+import { expectVisibleAfterSave, visibleText, textInDom } from './support/steps/shared';
 
 // P1-04 — Date-effective work schedules and regional holiday/closure context
 // (@P1-04). Bounded outcome: authorized users define schedules and the
@@ -24,8 +13,6 @@ import {
 // version effective then; missing configuration is a visible exception, never
 // a silent 8h day. Pure target math (incl. historical/holiday cases) is
 // additionally covered by `bun run test:unit`.
-
-test.describe.configure({ mode: 'serial' });
 
 // Business dates are Europe/Berlin dates (sv-SE formats as YYYY-MM-DD).
 function berlinTodayIso(): string {

@@ -167,7 +167,7 @@ export function CalendarHeader({
             withRouteRefresh={false}
             className="ml-2"
           />
-          <span className="ml-2 text-sm font-medium text-muted-foreground sm:text-base whitespace-nowrap">
+          <span className="ml-2 min-w-0 text-sm font-medium text-muted-foreground sm:whitespace-nowrap sm:text-base">
             {formatDateDisplay(currentDate, view, horizonWeeks)}
           </span>
           {!isCurrentPeriod && (

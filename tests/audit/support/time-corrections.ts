@@ -1,10 +1,6 @@
 import { expectReadyWithin, TIME_CORRECTION_READY_MS } from "../../golden/support/live";
 import { expect, type Page } from "@playwright/test";
-import {
-  retryDialogTransaction,
-  selectFromSearchable,
-  typeIntoDateTimeField,
-} from "../../golden/support/steps";
+import { retryDialogTransaction, selectFromSearchable, typeIntoDateTimeField } from "../../golden/support/steps/shared";
 
 export async function submitMissedTime(
   page: Page,

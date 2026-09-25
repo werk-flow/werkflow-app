@@ -1,15 +1,20 @@
-/** Each batch shares only an immutable application build. Database/configuration gates stay exclusive. */
+/**
+ * Independent browser groups share only the immutable application build and
+ * run side by side on `jobs` workers; a group whose timing or database gate is
+ * exclusive waits for the batch to drain and runs alone.
+ */
 export async function runGroupSchedule<T>(input: {
   entries: readonly T[];
-  jobs: 1 | 2;
+  jobs: number;
   canOverlap: (entry: T) => boolean;
   run: (entry: T) => Promise<void>;
 }): Promise<void> {
+  const jobs = Math.max(1, Math.floor(input.jobs));
   let batch: T[] = [];
   const flush = async (): Promise<void> => {
     // One shared iterator: each worker takes the next entry whenever it is free.
     const queue = batch.values();
-    const workers = Array.from({ length: Math.min(input.jobs, batch.length) }, async () => {
+    const workers = Array.from({ length: Math.min(jobs, batch.length) }, async () => {
       for (const entry of queue) await input.run(entry);
     });
     const outcomes = await Promise.allSettled(workers);

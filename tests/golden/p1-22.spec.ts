@@ -1,17 +1,9 @@
 import { expectReadyWithin, TIME_CORRECTION_READY_MS } from "./support/live";
 import { expect, test } from "./support/fixtures";
-import { getTimeCorrectionState } from "./support/db";
+import { getTimeCorrectionState } from "./support/db/time-tracking";
 import { berlinDateAtOffset } from "./support/date-ownership";
-import {
-  confirmResponsibilityPreview,
-  previewResponsibilityChange,
-  retryDialogTransaction,
-  textInDom,
-  typeIntoDateTimeField,
-  visibleText,
-} from "./support/steps";
-
-test.describe.configure({ mode: "serial" });
+import { confirmResponsibilityPreview, previewResponsibilityChange } from "./support/steps/personnel";
+import { retryDialogTransaction, textInDom, typeIntoDateTimeField, visibleText } from "./support/steps/shared";
 
 function tomorrowLocalDate(): string {
   return berlinDateAtOffset(1);

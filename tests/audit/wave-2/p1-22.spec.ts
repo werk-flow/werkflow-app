@@ -2,15 +2,9 @@ import { submitMissedTime } from "../support/time-corrections";
 import { prepareSubmittedCorrections } from "../support/time-correction-fixtures";
 
 import { expect, test } from "../support/fixtures";
-import {
-  getTimeCorrectionCountsAs,
-  getTimeCorrectionState,
-} from "../../golden/support/db";
+import { getTimeCorrectionCountsAs, getTimeCorrectionState } from "../../golden/support/db/time-tracking";
 import { ownedBerlinDateAtOffset } from "../../golden/support/date-ownership";
-import { visibleText,
-} from "../../golden/support/steps";
-
-test.describe.configure({ mode: "serial" });
+import { visibleText } from "../../golden/support/steps/shared";
 
 const DATES = [115, 116, 117, 118, 119].map((offset) =>
   ownedBerlinDateAtOffset("p1-22", offset),

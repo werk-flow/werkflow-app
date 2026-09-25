@@ -141,7 +141,7 @@ export const CalendarCard = forwardRef<HTMLButtonElement, CalendarCardProps>(fun
       {!oneLine && chips.length > 0 && (
         <span className="flex min-w-0 flex-wrap gap-1 pt-0.5">
           {chips.map((chip) => (
-            <span key={chip.label} className={cn('rounded-sm px-1 text-[11px] leading-4', CHIP_CLASS[chip.tone])}>{chip.label}</span>
+            <span key={chip.label} className={cn('max-w-full truncate whitespace-nowrap rounded-sm px-1 text-[11px] leading-4', CHIP_CLASS[chip.tone])}>{chip.label}</span>
           ))}
         </span>
       )}

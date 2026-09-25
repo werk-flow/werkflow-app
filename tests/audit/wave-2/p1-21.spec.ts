@@ -1,14 +1,10 @@
 import type { Locator, Page } from "@playwright/test";
 
 import { expect, test } from "../support/fixtures";
-import {
-  getTimeCaptureCountsAs,
-  getTimeCaptureState,
-  getWorkLifecycleState,
-} from "../../golden/support/db";
-import { clockOut, createJob } from "../../golden/support/steps";
-
-test.describe.configure({ mode: "serial" });
+import { getTimeCaptureCountsAs, getTimeCaptureState } from "../../golden/support/db/time-tracking";
+import { getWorkLifecycleState } from "../../golden/support/db/work";
+import { clockOut } from "../../golden/support/steps/time-tracking";
+import { createJob } from "../../golden/support/steps/work";
 
 import { auditCheckpoint, saveAuditCheckpoint } from "../support/checkpoints";
 

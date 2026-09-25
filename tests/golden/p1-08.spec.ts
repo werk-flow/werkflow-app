@@ -2,32 +2,15 @@ import { expect, test } from './support/fixtures';
 import { resolveDailyTargets } from '../../lib/personnel/targets';
 import { getBusinessWeekDates } from '../../lib/personnel/schedule';
 import { formatDuration } from '../../lib/time-tracking/helpers';
-import {
-  getAbsenceSpansForRecord,
-  getAttentionPatternStateForUser,
-  getEmployeeRecordStateByUser,
-  getLatestSicknessReportState,
-  getTargetContextForRecord,
-  getVisibleSicknessRecordIdsAs,
-  hasApprovedVacationIntersecting,
-} from './support/db';
-import {
-  attentionNotificationRow,
-  cancelSicknessReportViaMenuWithReason,
-  clockOut,
-  expectClockInNoticeForSickness,
-  expectSicknessOverlapRejectedViaDialog,
-  markAttentionNotificationReadViaButton,
-  openAufgaben,
-  openMemberDetailFromList,
-  openOwnSicknessSection,
-  recordSicknessForMemberViaSection,
-  reportOwnSicknessViaDialog,
-  setOwnSicknessEndDateViaDialog,
-  setSicknessEvidenceViaMenu,
-  visibleText,
-  textInDom,
-} from './support/steps';
+import { getAttentionPatternStateForUser } from './support/db/attention';
+import { getEmployeeRecordStateByUser } from './support/db/personnel';
+import { getAbsenceSpansForRecord, getLatestSicknessReportState, getVisibleSicknessRecordIdsAs } from './support/db/sickness';
+import { getTargetContextForRecord, hasApprovedVacationIntersecting } from './support/db/vacation';
+import { attentionNotificationRow, markAttentionNotificationReadViaButton, openAufgaben } from './support/steps/attention';
+import { openMemberDetailFromList } from './support/steps/personnel';
+import { visibleText, textInDom } from './support/steps/shared';
+import { cancelSicknessReportViaMenuWithReason, expectClockInNoticeForSickness, expectSicknessOverlapRejectedViaDialog, openOwnSicknessSection, recordSicknessForMemberViaSection, reportOwnSicknessViaDialog, setOwnSicknessEndDateViaDialog, setSicknessEvidenceViaMenu } from './support/steps/sickness';
+import { clockOut } from './support/steps/time-tracking';
 
 // P1-08 — Sickness / privacy-sensitive absence (@P1-08). A report is a FACT
 // (reported → corrected/ended → possibly cancelled), never an approval
@@ -57,8 +40,6 @@ import {
 // the employee report) and the employee (the cancellation), plus matching
 // attention_events. The employee's cancelled report no longer affects any
 // target.
-
-test.describe.configure({ mode: 'serial' });
 
 function berlinTodayIso(): string {
   return new Intl.DateTimeFormat('sv-SE', {
