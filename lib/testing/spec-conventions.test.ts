@@ -18,9 +18,9 @@ const REPO_ROOT = join(import.meta.dir, '..', '..');
 const GOLDEN_DIR = join(REPO_ROOT, 'tests', 'golden');
 const AUDIT_DIR = join(REPO_ROOT, 'tests', 'audit');
 
-// Golden slice specs ship stage-split since P1-16 (testing.md conventions:
-// "Every new Golden slice spec ships stage-split — one monolithic slice test
-// is a review flag"). Earlier specs predate the convention and stay exempt.
+// Golden slice specs ship stage-split since P1-16 (testing.md, "Specs": one
+// business journey per file, tests in file order, chained preconditions).
+// Earlier specs predate the convention and stay exempt.
 const FIRST_STAGED_SLICE = 16;
 
 function listSpecFiles(directory: string): string[] {
@@ -158,5 +158,18 @@ describe('browser spec conventions (testing.md)', () => {
       // Cross-wave audits name their purpose instead of claiming a wave.
       expect(source).toMatch(/@AUDIT-(W\d|LAYOUT|SECURITY|PERFORMANCE)(?:-|\b)/);
     });
+  }
+});
+
+describe('support domain modules', () => {
+  // A re-export widens the importer's inputs to the re-exported module's area, so a helper edit would
+  // rerun groups of another area (testing.md, "Groups and ownership").
+  for (const directory of ['steps', 'db']) {
+    const root = join(REPO_ROOT, 'tests', 'golden', 'support', directory);
+    for (const file of readdirSync(root).filter((name) => name.endsWith('.ts'))) {
+      test(`${directory}/${file} re-exports nothing`, () => {
+        expect(readFileSync(join(root, file), 'utf8')).not.toMatch(/^export\s+(\*|\{[^}]*\})\s+from\s/m);
+      });
+    }
   }
 });

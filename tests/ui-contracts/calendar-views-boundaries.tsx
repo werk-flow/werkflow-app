@@ -6,6 +6,7 @@ import { MonthView } from '@/components/kalender/month-view/month-view';
 import { CalendarDragProvider } from '@/components/kalender/drag-engine/drag-engine';
 import { useCalendarMutations } from '@/components/kalender/mutations/use-calendar-mutations';
 import { CalendarLiveRegion } from '@/components/kalender/surface/live-region';
+import { CalendarClockContext } from '@/components/kalender/surface/use-now-tick';
 import { useCalendarRangeData } from '@/components/kalender/use-calendar-range-data';
 import { RealtimeProvider } from '@/components/realtime/realtime-provider';
 import { BannerProvider, useBanner } from '@/components/ui/banner';
@@ -20,7 +21,7 @@ import { contractJob, CalendarOrganizationContext } from './calendar-service-bou
  * The three calendar views against the real range owner, the real drag
  * engine and the real optimistic owner; only the writes are held (see
  * calendar-views-service-boundaries.tsx). Each fixture renders one view the
- * way the container does, with a read-only switch and a commit counter.
+ * way the container does, under a fixed clock (2026-09-08 08:00 Berlin) and with a commit counter.
  */
 declare global {
   interface Window { calendarViewContract: { commits: number; opened: string[] }; }
@@ -55,7 +56,6 @@ function ViewHarness({ children, jobs, board, needed }: { children: (input: { jo
   const jobsRef = useRef(owner.jobs);
   useLayoutEffect(() => { jobsRef.current = owner.jobs; });
   const [parked, setParked] = useState<CalendarJob[]>([]);
-  const [readOnly, setReadOnly] = useState(false);
   const mutations = useCalendarMutations({
     beginMutation: owner.beginMutation,
     updateJobs: owner.updateJobs,
@@ -71,7 +71,6 @@ function ViewHarness({ children, jobs, board, needed }: { children: (input: { jo
   const scrollerRef = useRef<HTMLDivElement>(null);
   const scroller = useCallback(() => scrollerRef.current, []);
   const actions: CalendarSurfaceActions = {
-    readOnly,
     isManager: true,
     onOpenCard: (job) => { window.calendarViewContract.opened.push(job.title); },
     onAddEntry: () => {},
@@ -80,7 +79,6 @@ function ViewHarness({ children, jobs, board, needed }: { children: (input: { jo
   return <section aria-label="Kalenderansicht">
     <output aria-label="Laufende Speicherung">{owner.isMutating ? 'aktiv' : 'frei'}</output>
     <output aria-label="Geparkt">{parked.length}</output>
-    <button onClick={() => setReadOnly((value) => !value)}>Nur ansehen</button>
     <div ref={scrollerRef} data-calendar-scroll-container="" style={{ height: 600, width: 1100, overflow: 'auto', position: 'relative' }}>
       <Profiler id="view" onRender={() => { window.calendarViewContract.commits += 1; }}>
         {children({ jobs: owner.jobs, board: owner.board, mutations, actions, scroller })}
@@ -90,12 +88,14 @@ function ViewHarness({ children, jobs, board, needed }: { children: (input: { jo
 }
 
 function Providers({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return <CalendarOrganizationContext.Provider value="org-a"><RealtimeProvider><BannerProvider><CalendarLiveRegion><CalendarDragProvider>{children}</CalendarDragProvider></CalendarLiveRegion></BannerProvider></RealtimeProvider></CalendarOrganizationContext.Provider>;
+  return <CalendarClockContext.Provider value={FIXED_NOW}><CalendarOrganizationContext.Provider value="org-a"><RealtimeProvider><BannerProvider><CalendarLiveRegion><CalendarDragProvider>{children}</CalendarDragProvider></CalendarLiveRegion></BannerProvider></RealtimeProvider></CalendarOrganizationContext.Provider></CalendarClockContext.Provider>;
 }
 
+/** 2026-09-08 08:00 in Berlin: the fixture's cards at 09:00 are still ahead, the 07:00 one has started. */
+const FIXED_NOW = Date.parse('2026-09-08T06:00:00.000Z');
 const weekAnchor = new Date(2026, 8, 8, 12);
 const weekDates = ['2026-09-07', '2026-09-08', '2026-09-09', '2026-09-10', '2026-09-11', '2026-09-12', '2026-09-13'];
-const boardJobs = [visit('Prüfauftrag ziehen', 'o1', '2026-09-08', '09:00', ['r1'], ['worker'])];
+const boardJobs = [visit('Prüfauftrag ziehen', 'o1', '2026-09-08', '09:00', ['r1'], ['worker']), visit('Begonnener Termin', 'o0', '2026-09-08', '07:00', ['r2'], ['worker-2'])];
 
 export function CalendarBoardContractFixture(): React.JSX.Element {
   return <Providers>

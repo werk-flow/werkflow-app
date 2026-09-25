@@ -1,6 +1,6 @@
 'use client';
 
-import { CircleHelp, Eye, Filter, Rows3, Search } from 'lucide-react';
+import { CircleHelp, Filter, Rows3, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -20,8 +20,8 @@ export type BoardToolbarProps = {
 };
 
 /**
- * The board's own controls (P1-24a): horizon, density, „Nur ansehen", the
- * search, and a filter popover for teams, dispatch states, conflicts,
+ * The board's own controls (P1-24a): horizon, density, the search, and a
+ * filter popover for teams, dispatch states, conflicts,
  * weekends and actual time. Every value is a per-user preference.
  */
 export function BoardToolbar({ preferences, onChange, teams, showActualTime, onHelp }: BoardToolbarProps): React.JSX.Element {
@@ -109,17 +109,6 @@ export function BoardToolbar({ preferences, onChange, teams, showActualTime, onH
       >
         <Rows3 className="size-4" aria-hidden="true" />
         <span className="hidden lg:inline">{preferences.density === 'compact' ? 'Kompakt' : 'Komfortabel'}</span>
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        className={cn('h-9 gap-2', preferences.readOnly && 'bg-accent')}
-        aria-pressed={preferences.readOnly}
-        onClick={() => onChange({ readOnly: !preferences.readOnly })}
-        title="Nur ansehen: kein Ziehen bis der Schalter wieder ausgeht"
-      >
-        <Eye className="size-4" aria-hidden="true" />
-        <span className="hidden lg:inline">Nur ansehen</span>
       </Button>
       <Button variant="ghost" size="icon-sm" className="h-9" aria-label="Tastenkürzel anzeigen" onClick={onHelp}>
         <CircleHelp className="size-4" aria-hidden="true" />

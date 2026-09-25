@@ -29,17 +29,16 @@ interface ParkplatzPanelProps {
   onDispatchJob: (job: CalendarJob) => void;
   /** Keyboard alternative to the drag: the schedule dialog for this parked job. */
   onScheduleJob: (job: CalendarJob) => void;
-  readOnly: boolean;
 }
 
 /**
- * The Parkplatz on the shared engine (P1-24a, criterion 24): every card is
- * a focusable drag source, the panel is a drop zone, and „Einplanen am …"
+ * The Parkplatz on the shared engine (P1-24a): every card is a drag source
+ * whose buttons carry the keyboard path, the panel is a drop zone, and „Einplanen am …"
  * is the keyboard route back onto the calendar. On a desktop the panel sits
  * beside the calendar and narrows it, so every column stays a drop target;
  * on a phone it covers the list.
  */
-export function ParkplatzPanel({ jobs, onClose, memberNames, parkingContexts, onEditContext, onDispatchJob, onScheduleJob, readOnly }: ParkplatzPanelProps) {
+export function ParkplatzPanel({ jobs, onClose, memberNames, parkingContexts, onEditContext, onDispatchJob, onScheduleJob }: ParkplatzPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const { registerDropZone, startDrag } = useCalendarDrag();
 
@@ -91,7 +90,7 @@ export function ParkplatzPanel({ jobs, onClose, memberNames, parkingContexts, on
                 key={job.id}
                 data-parkplatz-card=""
                 data-job-id={job.id}
-                className={cn('group relative rounded-lg border bg-card p-3 shadow-xs transition-colors hover:border-brand-purple/40', !readOnly && 'cursor-grab active:cursor-grabbing')}
+                className={cn('group relative rounded-lg border bg-card p-3 shadow-xs transition-colors hover:border-brand-purple/40', 'cursor-grab active:cursor-grabbing')}
                 onPointerDown={(event) => {
                   // In read-only mode the engine's lock notice answers the press; the card stays put.
                   if ((event.target as HTMLElement).closest('a, button')) return;
@@ -155,7 +154,7 @@ export function ParkplatzPanel({ jobs, onClose, memberNames, parkingContexts, on
                     </div>
                   )}
                   <div className="mt-1 flex flex-wrap gap-1">
-                    {!readOnly && context && (
+                    {context && (
                       <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-[11px]" aria-label={`${job.title} einplanen`} onClick={() => onScheduleJob(job)}>
                         <CalendarPlus className="size-3" aria-hidden="true" />
                         Einplanen am …

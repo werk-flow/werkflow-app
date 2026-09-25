@@ -27,9 +27,9 @@ describe('calendar preferences', () => {
   });
 
   test('writes beside other preference keys without touching them', () => {
-    const json = writeCalendarPreferencesJson({ auftraege: { visibleColumns: ['title'] } }, { ...DEFAULT_CALENDAR_PREFERENCES, readOnly: true });
-    expect(json).toEqual({ auftraege: { visibleColumns: ['title'] }, calendar: { ...DEFAULT_CALENDAR_PREFERENCES, readOnly: true } });
-    expect(readCalendarPreferences(json).readOnly).toBe(true);
+    const json = writeCalendarPreferencesJson({ auftraege: { visibleColumns: ['title'] } }, { ...DEFAULT_CALENDAR_PREFERENCES, hideWeekends: true });
+    expect(json).toEqual({ auftraege: { visibleColumns: ['title'] }, calendar: { ...DEFAULT_CALENDAR_PREFERENCES, hideWeekends: true } });
+    expect(readCalendarPreferences(json).hideWeekends).toBe(true);
   });
 
   test('actual time follows the horizon until the user chooses', () => {

@@ -124,7 +124,8 @@ export function getTestGroups(repositoryRoot: string): TestGroup[] {
   const goldenFiles = listTestFiles(repositoryRoot, "tests/golden", /\.spec\.ts$/);
   for (const file of goldenFiles) {
     const basename = file.split("/").at(-1)!.replace(".spec.ts", "");
-    const sliceScopes = auditDefinitions.find(([id]) => id === `wave-2:${basename}`)?.[2];
+    // A golden slice shares the scopes of its audit definition, whichever wave registered it.
+    const sliceScopes = auditDefinitions.find(([id]) => id.endsWith(`:${basename}`))?.[2];
     const earlyScopes: Readonly<Record<string, readonly string[]>> = {
       "p1-01": ["customers", "work"], "p1-03": ["personnel"], "p1-04": ["personnel", "time"],
       "p1-05": ["personnel", "attention"], "p1-06": ["personnel", "time", "planning"],

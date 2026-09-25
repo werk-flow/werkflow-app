@@ -36,6 +36,14 @@ describe("independent group registry", () => {
     expect(validateTestGroupInventory([group("one", ["same.spec.ts"]), group("two", ["same.spec.ts"])], [])).toContain("Test file has two owners: same.spec.ts (one, two)");
   });
 
+  test("a golden slice takes the scopes of its audit definition in any wave", () => {
+    const groups = getTestGroups(resolve(import.meta.dir, "../.."));
+    const scopesOf = (id: string): readonly string[] | undefined => groups.find((candidate) => candidate.id === id)?.scopes;
+    expect(scopesOf("golden:p1-24a")).toEqual(scopesOf("audit:wave-3:p1-24a"));
+    expect(scopesOf("golden:p1-16")).toEqual(scopesOf("audit:wave-2:p1-16"));
+    expect(scopesOf("golden:p1-24a")).not.toEqual(["*"]);
+  });
+
   test("current audit groups are independent and the recorded Golden dependency is preserved", () => {
     const groups = getTestGroups(resolve(import.meta.dir, "../.."));
     const auditFiles = groups.filter((entry) => entry.kind === "audit").flatMap((entry) => entry.files).sort();

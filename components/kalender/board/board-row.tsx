@@ -11,7 +11,7 @@ import type { VacationCalendarEntry } from '@/lib/vacation/actions';
 import type { DispatchRecipientDerivedState } from '@/lib/dispatch/types';
 import { getRoleLabel } from '@/lib/roles';
 import { BarSegment } from '../surface/bar-segment';
-import { isNoteEntry } from '@/lib/calendar/board';
+import { isNoteEntry, isStartedOccurrence } from '@/lib/calendar/board';
 import { CalendarCard, dispatchChip, readinessChips } from '../surface/calendar-card';
 import { CALENDAR_LAYER_CLASS } from '../surface/layers';
 import type { DragSession } from '../drag-engine/drag-engine';
@@ -34,6 +34,8 @@ export type BoardRowProps = {
   materialDemandJobIds: ReadonlySet<string>;
   compact: boolean;
   scrollable: boolean;
+  /** The wall clock for the started-occurrence lock; a minute tick from the board. */
+  nowMs: number;
   actions: CalendarSurfaceActions;
   startDrag: (event: React.PointerEvent, session: DragSession) => void;
   hoveredOccurrenceId: string | null;
@@ -48,7 +50,7 @@ export type BoardRowProps = {
  * content and a multi-day occurrence is one element.
  */
 export const BoardRow = memo(function BoardRow(props: BoardRowProps) {
-  const { model, rowIndex, columns, jobs, vacation, sickness, days, planned, actual, dispatch, materialDemandJobIds, compact, scrollable, actions, startDrag, hoveredOccurrenceId, onHoverLink, isolate } = props;
+  const { model, rowIndex, columns, jobs, vacation, sickness, days, planned, actual, dispatch, materialDemandJobIds, compact, scrollable, nowMs, actions, startDrag, hoveredOccurrenceId, onHoverLink, isolate } = props;
   const row = model.kind === 'person' ? model.row : null;
   const laneHeight = compact ? BOARD_LANE_HEIGHT.compact : BOARD_LANE_HEIGHT.comfortable;
 
@@ -134,8 +136,9 @@ export const BoardRow = memo(function BoardRow(props: BoardRowProps) {
         const note = isNoteEntry(job);
         const chips = note || job.entryKind === 'internal' ? [] : [dispatchChip(state), ...readinessChips(materialDemandJobIds.has(job.jobId ?? ''))];
         const linked = hoveredOccurrenceId !== null && hoveredOccurrenceId === job.occurrenceId && (job.assignedEmployeeRecordIds?.length ?? 0) > 1;
-        // The engine refuses a locked drag and shows the reason, so the card stays a drag source in read-only mode.
-        const draggable = actions.isManager;
+        // A started or past occurrence is history (P1-11): no drag source, no edge handles.
+        const locked = isStartedOccurrence(job, nowMs);
+        const draggable = actions.isManager && !locked;
         const allDay = !job.plannedTime;
         return (
           <div key={item.key} data-board-item-date={item.startDate} className="relative min-w-0 p-0.5" style={style}>
@@ -146,6 +149,7 @@ export const BoardRow = memo(function BoardRow(props: BoardRowProps) {
               chips={chips}
               linked={linked}
               draggable={draggable}
+              locked={locked}
               className="h-full w-full"
               {...(row ? { 'data-employee-record-id': row.employeeRecordId } : {})}
               onHoverLink={onHoverLink}

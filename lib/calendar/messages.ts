@@ -112,8 +112,7 @@ type CalendarActionErrorCode =
   | 'working_in_other_org';
 
 /** Refusals the client decides before a drop, with the same wording rules. */
-export type CalendarClientRefusalCode =
-  | 'read_only_mode'
+type CalendarClientRefusalCode =
   | 'internal_not_parkable'
   | 'future_timestamp'
   | 'overlapping_time_block'
@@ -124,7 +123,12 @@ export type CalendarClientRefusalCode =
   | 'inactive_occurrence'
   | 'parked_without_context'
   | 'outside_day'
-  | 'no_drop_target';
+  | 'no_drop_target'
+  | 'only_occurrences_park'
+  | 'time_block_moves_in_day_view'
+  | 'time_block_needs_person'
+  | 'all_day_extends_on_board'
+  | 'parkplatz_changed';
 
 export type CalendarRefusalCode = CalendarActionErrorCode | CalendarClientRefusalCode;
 
@@ -201,7 +205,7 @@ const CALENDAR_MESSAGES = {
   invalid_recurrence: 'Die Wiederholung ist so nicht möglich. Öffne den Termin und prüfe die Serie.',
   validation_failed: SHAPE,
   invalid_time_range: 'Das Ende liegt vor dem Anfang. Ziehe den Block so, dass er nach dem Anfang endet.',
-  overlapping_session: withName('Diese Person') && ((context) => `${context.name ?? 'Diese Person'} hat in diesem Zeitraum bereits Arbeitszeit. Wähle eine freie Zeit oder eine andere Person.`),
+  overlapping_session: (context) => `${withName('Diese Person')(context)} hat in diesem Zeitraum bereits Arbeitszeit. Wähle eine freie Zeit oder eine andere Person.`,
   mixed_organizations: 'Diese Einträge gehören zu verschiedenen Organisationen und können nicht zusammen verschoben werden.',
   break_mode_automatic: 'Pausen werden in dieser Organisation automatisch berechnet und lassen sich nicht einzeln ändern.',
   clock_out_incomplete: 'Die Person ist noch eingestempelt. Beende zuerst die laufende Arbeitszeit.',
@@ -258,7 +262,6 @@ const CALENDAR_MESSAGES = {
   team_load_failed: READ_FAILED,
   work_options_load_failed: READ_FAILED,
   // Client pre-checks
-  read_only_mode: '„Nur ansehen“ ist aktiv. Schalte es in der Kopfzeile aus, um zu planen.',
   internal_not_parkable: 'Interne Termine werden abgesagt oder verschoben, nicht geparkt.',
   future_timestamp: 'Arbeitszeit kann nicht in der Zukunft liegen. Plane die Arbeit als Termin statt als Ist-Zeit.',
   overlapping_time_block: (context) => `${context.name ?? 'Diese Person'} hat in diesem Zeitraum bereits Arbeitszeit. Wähle eine freie Zeit.`,
@@ -270,6 +273,11 @@ const CALENDAR_MESSAGES = {
   parked_without_context: 'Der Auftrag hat noch keinen Parkplatz-Kontext. Ergänze ihn im Parkplatz über „Kontext ergänzen“, dann lässt er sich einplanen.',
   outside_day: 'Der Termin würde über Mitternacht hinausgehen. Wähle eine frühere Uhrzeit oder kürze die Dauer.',
   no_drop_target: 'Hier kann nichts abgelegt werden. Lege die Karte auf einer Person und einem Tag ab.',
+  only_occurrences_park: 'Nur Termine lassen sich parken.',
+  time_block_moves_in_day_view: 'Ist-Zeiten werden in der Tagesansicht verschoben.',
+  time_block_needs_person: 'Arbeitszeit braucht eine Person.',
+  all_day_extends_on_board: (context) => `Ganztägige Termine werden auf der Plantafel verlängert (${withDate(context)}).`,
+  parkplatz_changed: 'Der Parkplatz wurde inzwischen geändert. Bitte lade die Ansicht neu.',
 } satisfies Record<CalendarRefusalCode, Sentence | null>;
 
 export const CALENDAR_REFUSAL_CODES = Object.keys(CALENDAR_MESSAGES) as CalendarRefusalCode[];

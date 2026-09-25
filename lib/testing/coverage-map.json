@@ -972,7 +972,7 @@
     "P1-24-F65": "bddf459288e9d43746cd91a57dac7062d543c3f9babf8faa9dc49d71a9c18a7e",
     "P1-24-F66": "42f4567498bff2b8aa8e5ace7c4f64d4ed6c2d35cbcf1f84623bdf0e08695794",
     "P1-24a-F01": "0009abb721b2c294e627dcb15298110ebb4df5708d8d95e21226bda62b3fe92e",
-    "P1-24a-F02": "6d436129a02e6d20a4ac1a73dacae01b214d11e3fadb9328f77217e25754cf22",
+    "P1-24a-F02": "bc0e6628c725146f5e5e69905ca7ba066f57a4b17d4e6224cc6de65039a40b59",
     "P1-24a-F03": "fb8cd555cf4e198e807f125e1a7107a2be012d02cf5f5c5ccb0e64827de61e13",
     "P1-24a-F04": "bcdef498ea1b74644c863459866b247e4b10abac9341c065609e7e8fe398fcfc",
     "P1-24a-F05": "f516d103d7cb649b58abc38e2b1e0a6d93e48c8db6c27509e97c327b03ac81c7",
@@ -980,18 +980,18 @@
     "P1-24a-F07": "bc384a1083791e2b9349d4972a4d00c94a826f17269cabf3094becf40b72afbe",
     "P1-24a-F08": "c392e7648fba8893eb33ee86f10095d85d70f36206ae9237c4605d2045c394c9",
     "P1-24a-F09": "d2d8d60dcbb9c1e2bdb1840be99701a3a7c6332b76f661041d27d8bfce97528d",
-    "P1-24a-F10": "3a2f9f2ed6c05a9904dfec62f587da4d5b440c63135f1fb134c63710e27685b2",
+    "P1-24a-F10": "3446449d9d7a889ae8b493907e797813b840d29f28aa11ab817dcbc52b7add8e",
     "P1-24a-F11": "bebcddd7be55004f03da94a0a69462d89001d48112bbe3e075704711dc65e7d7",
     "P1-24a-F12": "7bf7ed4fc847ddb9191f7e3c85259c1babcea6e68c88a6f581950d19ca4a850f",
-    "P1-24a-F13": "071a3a3f501b3daeda7f122e189ff37cf3331a98137f5d431df432fd9369eb1d",
+    "P1-24a-F13": "25c8d8f3463543d737994285261c7b7f62e233f5f68cf91d61da540f3509509d",
     "P1-24a-F14": "03b4a8c76992e293b0d77b90f1fb0e7fd25b5a7bc2caff90bdc9eb647881e64a",
     "P1-24a-F15": "77849abb2099354224ca79119aa00ead278009541528b7c6e8cb977d0b7e4986",
     "P1-24a-F16": "3f1eb7061cea3cf765619a3e9c8210b6ff440d98e22ef565c2f4c902e553ca7b",
     "P1-24a-F17": "b07422de3799af22e836ac184251122c986829bd99a12b5d0a351e6a7426e77d",
-    "P1-24a-F18": "bc2caadb77a861fe51a98662eb2bdd1175b1e96a3490e0030a6cdb82e90421b7",
+    "P1-24a-F18": "7a8227109d499d6a3bd56237b3dc7d78b221a811ddb915ee856395335935ae49",
     "P1-24a-F19": "87458a54b37a9ec79e79e89b00d1c52bf2c67049a82373531b07e6ddb2906c73",
-    "P1-24a-F20": "76af7a00122d8cc100453a391c3c7f5c842db1afcd42f6452e743e9712f24fd8",
-    "P1-24a-F21": "e799f56d3566d48eb4f86170bda117816f419251a4bcc610e2f00e9bb00bebf9",
+    "P1-24a-F20": "0646470abf7b7147bf7a1503facd12fd10349d488ccf83cca50a23613b824980",
+    "P1-24a-F21": "eda23b4c16c333fbbff5ec236b4e5a0db4b73ca7dbe4d8587513f5ec8d31fdf5",
     "P1-24a-F22": "717c618e4a3c912bab1ae1f7065be7a773bd998991456de9fb7a879f67002e27",
     "P1-24a-F23": "860561c9a835119b424b855e6d5de7090bd6c19982c1952a0ba9eedd1817f0a1",
     "P1-24a-F24": "1a23579678512aa8585de0bc975f307012ca3a35c91afcfea7dd4e7a418cd32a",
@@ -6257,7 +6257,7 @@
         {
           "file": "lib/calendar/refusal-checks.test.ts",
           "kind": "unit",
-          "description": "read-only, inactive occurrence, parkable, person-day, already assigned and time-block pre-checks"
+          "description": "started and inactive occurrence, parkable, person-day, already assigned and time-block pre-checks"
         },
         {
           "file": "lib/calendar/messages.test.ts",
@@ -6291,17 +6291,17 @@
         {
           "file": "tests/audit/wave-3/p1-24a.spec.ts",
           "kind": "browser",
-          "description": "AUDIT-03: Enter opens the popover, „Verschieben …“ form, search, conflict filter, density and read-only persistence, shortcuts j/k/d/w and the ? overlay; AUDIT-02 the note in two clicks"
+          "description": "AUDIT-03: Enter opens the popover, „Verschieben …“ form, search, conflict filter, density persistence, shortcuts j/k/d/w and the ? overlay; AUDIT-02 the note in two clicks"
         },
         {
           "file": "tests/golden/p1-24a.spec.ts",
           "kind": "browser",
-          "description": "read-only refusal with its sentence, horizon persistence, „Einplanen am …“ from the Parkplatz card"
+          "description": "horizon persistence, „Einplanen am …“ from the Parkplatz card"
         },
         {
           "file": "tests/ui-contracts/calendar-board.spec.ts",
           "kind": "browser",
-          "description": "Enter opens a focused card, arrow keys move between cells, read-only refuses before any write"
+          "description": "Enter opens a focused card, arrow keys move between cells, a started occurrence is locked before any write"
         },
         {
           "file": "lib/calendar/preferences.test.ts",
@@ -6309,7 +6309,7 @@
           "description": "lenient field-by-field preference read and the horizon-dependent actual-time default"
         }
       ],
-      "clauses": "Keyboard and form paths, notes, read-only mode, filters, search and per-user persistence are proven in the browser; the lenient preference read by unit test.",
+      "clauses": "Keyboard and form paths, notes, the started-occurrence lock, filters, search and per-user persistence are proven in the browser and the component contract; the lenient preference read and the lock rule by unit test.",
       "review": {
         "kind": "assertions-reviewed",
         "rationale": "P1-24a closure 2026-09-18: every clause of the bullet read against the assertion bodies of the listed files; the rendered review of both themes at five viewports is recorded in the slice record."
@@ -6388,7 +6388,7 @@
         {
           "file": "lib/calendar/refusal-checks.test.ts",
           "kind": "unit",
-          "description": "read-only, inactive occurrence, parkable, person-day, already assigned and time-block pre-checks"
+          "description": "started and inactive occurrence, parkable, person-day, already assigned and time-block pre-checks"
         },
         {
           "file": "lib/calendar/drag-math.test.ts",

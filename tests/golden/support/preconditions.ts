@@ -3,7 +3,7 @@ import type { Locator, Page } from '@playwright/test';
 // Chained-precondition guards (enforcement ladder, Stage C 2026-08-29; reworded 2026-09-25).
 //
 // A test may depend on state an earlier test of the same file created
-// (testing.md: "Chained tests"). Tests run in file order and continue after
+// (testing.md, "Specs"). Tests run in file order and continue after
 // a failure, so a dependent test whose producer failed, or that runs without
 // its producers in a partial grep or a diagnostic replay, must fail in seconds
 // with the exact grep chain to run, never after minutes on a misleading

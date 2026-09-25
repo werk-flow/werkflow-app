@@ -1,6 +1,6 @@
 # Environments
 
-Status: living — last reviewed 2026-09-18
+Status: living — last reviewed 2026-09-25
 
 WerkFlow runs on two fully separated cloud backend environments since 2026-08-18 (decision [0003](../decisions/0003-dev-prod-environment-split.md)), plus a local Supabase stack for the browser-test harness since 2026-08-28 (decision [0006](../decisions/0006-testing-architecture.md)). This document is the operational reference: which backend is which, who owns which env file, how tools reach each project, and how a new machine gets onboarded.
 
@@ -48,7 +48,7 @@ The [platform-hardening phase](../plans/phase-1/consolidation-2026-08/platform-h
 
 Operational facts for this workstation:
 
-- Windows reaches the stack via the WSL VM's NAT address, not `localhost`: the Windows→WSL localhost relay drops connections under sustained traffic (observed 2026-08-28; mirrored networking is blocked by the corporate IPv6 policy). `bun run env:local` resolves the current WSL address and rewrites `.env.local` — rerun it after every WSL restart, and rebuild before certification because `NEXT_PUBLIC_*` values are baked into the build. The preflight fails with a clear remedy when the address is stale. A restart no longer invalidates recorded group proofs: the proof identity in `lib/testing/proof-environment.ts` replaces the address with a token, and only the build receipt is tied to the exact address (pre-Wave-3 step 1, 2026-09-14).
+- Windows reaches the stack via the WSL VM's NAT address, not `localhost`: the Windows→WSL localhost relay drops connections under sustained traffic (observed 2026-08-28; mirrored networking is blocked by the corporate IPv6 policy). `bun run env:local` resolves the current WSL address and rewrites `.env.local` — rerun it after every WSL restart, and rebuild before the next browser run because `NEXT_PUBLIC_*` values are baked into the build. The preflight fails with a clear remedy when the address is stale. A restart no longer invalidates recorded group proofs: the proof identity in `lib/testing/proof-environment.ts` replaces the address with a token, and only the build receipt is tied to the exact address (pre-Wave-3 step 1, 2026-09-14).
 - `supabase db reset` leaves the edge-runtime container stopped (CLI 2.116.0). The preflight detects it; the remedy is `wsl docker start supabase_edge_runtime_werkflow-app`.
 - Starting an existing edge-runtime container restores its previous configuration. After changing `[edge_runtime.secrets]`, reload the runtime through the local Supabase CLI and verify the capture endpoint before an email browser group. Coordinate this operation with the test workspace lock; a successful container start alone does not prove that new secrets loaded.
 - WSL shuts down completely between agent commands when nothing holds it: every `wsl` call then boots the VM and restarts all containers, the address changes, and Kong answers 503 for about ten seconds, so a `bun run test:server local` started right after such a call fails its preflight (release run of 2026-09-18). Hold the VM with a background WSL process and probe the gateway before starting the server; the repository-side probe is a backlog row. Since 2026-09-18 `.wslconfig` caps the VM at 12 GB with gradual memory reclaim, because the VM had held 13 GB of the 32 GB host during the release run.

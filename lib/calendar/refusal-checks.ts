@@ -1,5 +1,5 @@
-import { boardDayKey, type CalendarBoardDay, type CalendarBoardRow } from './board';
-import { calendarRefusalMessage, formatRefusalDate, type CalendarClientRefusalCode } from './messages';
+import { boardDayKey, isStartedOccurrence, type CalendarBoardDay, type CalendarBoardRow } from './board';
+import { calendarRefusalMessage, formatRefusalDate, type CalendarRefusalCode } from './messages';
 import type { CalendarJob } from '@/lib/jobs/types';
 
 /**
@@ -11,18 +11,16 @@ import type { CalendarJob } from '@/lib/jobs/types';
  */
 export type RefusalCheckResult =
   | { ok: true }
-  | { ok: false; code: CalendarClientRefusalCode; message: string };
+  | { ok: false; code: CalendarRefusalCode; message: string };
 
-function refuse(code: CalendarClientRefusalCode, context: { name?: string; date?: string } = {}): RefusalCheckResult {
+function refuse(code: CalendarRefusalCode, context: { name?: string; date?: string } = {}): RefusalCheckResult {
   return { ok: false, code, message: calendarRefusalMessage(code, context) ?? '' };
 }
 
-export function checkReadOnly(readOnly: boolean): RefusalCheckResult {
-  return readOnly ? refuse('read_only_mode') : { ok: true };
-}
-
-export function checkOccurrenceMovable(job: Pick<CalendarJob, 'occurrenceStatus'>): RefusalCheckResult {
-  return job.occurrenceStatus === 'skipped' || job.occurrenceStatus === 'cancelled' ? refuse('inactive_occurrence') : { ok: true };
+/** Skipped and cancelled occurrences stay where they are; a started or past one is history (P1-11, the rule the database enforces). */
+export function checkOccurrenceMovable(job: Pick<CalendarJob, 'occurrenceId' | 'occurrenceStatus' | 'timeKind' | 'startAt' | 'plannedDate' | 'plannedTime'>, nowMs: number): RefusalCheckResult {
+  if (job.occurrenceStatus === 'skipped' || job.occurrenceStatus === 'cancelled') return refuse('inactive_occurrence');
+  return isStartedOccurrence(job, nowMs) ? refuse('started_occurrence') : { ok: true };
 }
 
 /** A parked job plans only with its Parkplatz context (P1-12); a job parked before that context existed is a labelled exception until a manager adds one. */

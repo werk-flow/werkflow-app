@@ -136,7 +136,7 @@ function ScopedCalendarContainer({
   const { requestApproval: requestPlanningApproval, warningDialog: planningWarningDialog } = usePlanningWarningConfirmation();
   const phone = useSyncExternalStore(subscribeToPhoneQuery, () => window.matchMedia(PHONE_QUERY).matches, () => false);
 
-  // Preferences: local state first, one debounced save per burst of changes.
+  // Preferences: local state first; every change saves at once except the search text, which saves after the burst.
   const [preferences, setPreferences] = useState<CalendarPreferences>(initialPreferences);
   const preferencesRef = useRef(initialPreferences);
   const saveTimerRef = useRef<number | null>(null);
@@ -175,7 +175,7 @@ function ScopedCalendarContainer({
   const [helpOpen, setHelpOpen] = useState(false);
   const [selectedSession, setSelectedSession] = useState<InteractiveCalendarSession | null>(null);
   const [openCard, setOpenCard] = useState<OpenCard | null>(null);
-  const [addEntry, setAddEntry] = useState<{ date: string; time: string | undefined; endTime: string | undefined; userId: string | undefined; kind: 'job_visit' | 'note' } | null>(null);
+  const [addEntry, setAddEntry] = useState<{ date: string; time?: string | undefined; endTime?: string | undefined; userId?: string | undefined } | null>(null);
   const [parkedJobs, setParkedJobs] = useState<CalendarJob[]>([]);
   const [parkplatzOpen, setParkplatzOpen] = useState(false);
   const [dispatchPanelOpen, setDispatchPanelOpen] = useState(false);
@@ -358,6 +358,7 @@ function ScopedCalendarContainer({
         case 'd': setView('day'); break;
         case 'w': setView('week'); break;
         case 'm': setView('month'); break;
+        case 'c': if (isAdminOrManager) setAddEntry({ date: toLocalDateString(currentDate) }); break;
         case 'z': if (mutations.undoLast()) event.preventDefault(); break;
         case '?': setHelpOpen(true); break;
         case '+': if (view === 'day') setDayZoom((zoom) => Math.min(3, zoom * 1.25)); break;
@@ -367,7 +368,7 @@ function ScopedCalendarContainer({
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [handleNext, handlePrevious, handleToday, mutations, setView, view]);
+  }, [currentDate, handleNext, handlePrevious, handleToday, isAdminOrManager, mutations, setView, view]);
 
   // Member scope: null in the preferences means everyone.
   const selectedMemberIds = preferences.memberUserIds;
@@ -396,10 +397,9 @@ function ScopedCalendarContainer({
     return [...teams].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, 'de'));
   }, [board.rows]);
   const showActualTime = resolveShowActualTime(preferences);
-  const readOnly = preferences.readOnly;
 
   const handleParkedContextMissing = useCallback(() => {
-    showBanner({ variant: 'error', message: 'Der Parkplatz wurde inzwischen geändert. Bitte lade die Ansicht neu.' });
+    showBanner({ variant: 'error', message: calendarRefusalMessage('parkplatz_changed') ?? '' });
     void fetchParkingContexts();
     void fetchParkedJobs();
   }, [fetchParkedJobs, fetchParkingContexts, showBanner]);
@@ -449,12 +449,11 @@ function ScopedCalendarContainer({
   }, [handleParkedContextMissing, mutations]);
 
   const surfaceActions = useMemo<CalendarSurfaceActions>(() => ({
-    readOnly,
     isManager: isAdminOrManager,
     onOpenCard: (job, element, row) => setOpenCard({ job, anchor: element, row }),
-    onAddEntry: ({ date, time, endTime, userId, kind }) => setAddEntry({ date, time, endTime, userId, kind: kind === 'notiz' ? 'note' : 'job_visit' }),
+    onAddEntry: (input) => setAddEntry(input),
     onPark: handlePark,
-  }), [handlePark, isAdminOrManager, readOnly]);
+  }), [handlePark, isAdminOrManager]);
 
   const handleSessionClick = useCallback((session: WorkSession) => {
     const sessionUserId = session.clockIn?.userId || session.clockOut?.userId;
@@ -630,7 +629,6 @@ function ScopedCalendarContainer({
           onEditContext={(job) => { parkFlowRef.current = null; setParkingContextJob(job); }}
           onDispatchJob={(job) => setParkedDispatchJob(job)}
           onScheduleJob={(job) => setScheduleParkedJob(job)}
-          readOnly={readOnly}
         />
       )}
       </div>
@@ -688,7 +686,6 @@ function ScopedCalendarContainer({
           preselectedUserId={addEntry.userId}
           preselectedClockInTime={addEntry.time}
           preselectedClockOutTime={addEntry.endTime}
-          preselectedEntryKind={addEntry.kind}
           onManualEntrySuccess={handleManualEntrySuccess}
           onJobSuccess={() => { setAddEntry(null); announce('Eintrag wurde angelegt.'); handleSilentRefresh(); }}
         />
@@ -698,10 +695,10 @@ function ScopedCalendarContainer({
         card={openCard}
         onClose={() => setOpenCard(null)}
         memberNames={memberNameMap}
-        canEditPlanning={isAdminOrManager && !readOnly}
+        canEditPlanning={isAdminOrManager}
         rows={boardRowsForForms}
-        mutations={isAdminOrManager && !readOnly ? mutations : null}
-        onPark={isAdminOrManager && !readOnly ? handlePark : null}
+        mutations={isAdminOrManager ? mutations : null}
+        onPark={isAdminOrManager ? handlePark : null}
       />
 
       {selectedSession && (

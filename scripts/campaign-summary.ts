@@ -14,13 +14,16 @@ const archive = resolve(repository, ".agent-logs/verification");
 const reportSchema = z.object({
   id: z.string(), startedAt: z.string(), completedAt: z.string().nullable(), status: z.enum(["running", "passed", "failed"]),
   results: z.array(z.object({ groupId: z.string(), status: z.enum(["passed", "failed", "blocked"]), startedAt: z.string(), runKey: z.string().nullable(), reason: z.string().nullable().default(null) })),
+  snapshot: z.object({ files: z.record(z.string(), z.string()) }).default({ files: {} }),
 });
 
 export function readCampaignReports(): CampaignReport[] {
   if (!existsSync(archive)) return [];
   return readdirSync(archive).sort().flatMap((directory) => {
     const file = resolve(archive, directory, "report.json");
-    return existsSync(file) ? [reportSchema.parse(JSON.parse(readFileSync(file, "utf8")))] : [];
+    if (!existsSync(file)) return [];
+    const { snapshot, ...report } = reportSchema.parse(JSON.parse(readFileSync(file, "utf8")));
+    return [{ ...report, files: snapshot.files }];
   });
 }
 

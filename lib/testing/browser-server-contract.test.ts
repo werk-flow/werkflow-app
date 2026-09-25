@@ -55,6 +55,25 @@ test('provider-only bootstrap cannot be selected as a business browser lane', ()
   expect(bootstrap).not.toContain("'test:preflight', 'iteration'");
 });
 
+test('the Playwright configs keep one worker, no retries, no failure caps and the measured timeouts', () => {
+  // File order on one worker is the execution model (decision 0007, amendment 2026-09-25); a cap or a
+  // retry would hide failures or repeat them without diagnosis.
+  const expected = [
+    ['playwright.config.ts', "WERKFLOW_TEST_TARGET === 'cloud' ? 300_000 : 180_000"],
+    ['playwright.audit.config.ts', "WERKFLOW_TEST_TARGET === 'cloud' ? 300_000 : 240_000"],
+    ['playwright.canary.config.ts', 'timeout: 300_000'],
+  ] as const;
+  for (const [path, timeout] of expected) {
+    const config = sourceAt(path).text;
+    expect(config).toContain('workers: 1');
+    expect(config).toContain('retries: 0');
+    expect(config).not.toMatch(/maxFailures|fullyParallel/);
+    expect(config).toContain(timeout);
+    expect(config).toContain('actionTimeout: 30_000');
+    expect(config).toContain('navigationTimeout: 60_000');
+  }
+});
+
 test('standalone local cleanup keeps WSL alive and cancels the owned child before lease release', () => {
   const cleanup = sourceAt('scripts/manage-playwright-runs.ts').text;
   for (const command of ['cleanup', 'cleanup-all', 'cleanup-local-relocated']) expect(cleanup).toContain(`'${command}'`);

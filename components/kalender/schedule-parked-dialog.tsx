@@ -19,7 +19,7 @@ interface ScheduleParkedDialogProps {
   onSchedule: (input: { date: string; time: string | undefined; row: CalendarBoardRow | null }) => void;
 }
 
-/** „Einplanen am …": the keyboard route from the Parkplatz onto the calendar (P1-24a, criterion 24). */
+/** „Einplanen am …": the keyboard route from the Parkplatz onto the calendar (P1-24a, criterion 33). */
 export function ScheduleParkedDialog({ job, rows, onClose, onSchedule }: ScheduleParkedDialogProps) {
   const [date, setDate] = useState<Date | undefined>(undefined);
   const [time, setTime] = useState('');

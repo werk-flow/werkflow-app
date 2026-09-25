@@ -6,8 +6,8 @@ import type { CalendarBoardDay, CalendarBoardRow } from '@/lib/calendar/board';
 import { addLocalDays } from '@/lib/planning/date-time';
 import type { BoardColumn } from '@/lib/calendar/board-layout';
 import { reassignmentChanges, type BoardRowModel } from '@/lib/calendar/board-model';
-import { checkParkedContext, checkNotAlreadyAssigned, checkOccurrenceMovable, checkParkable, checkPersonDay, checkReadOnly, dayFor } from '@/lib/calendar/refusal-checks';
-import { formatRefusalDate } from '@/lib/calendar/messages';
+import { checkParkedContext, checkNotAlreadyAssigned, checkOccurrenceMovable, checkParkable, checkPersonDay, dayFor } from '@/lib/calendar/refusal-checks';
+import { calendarRefusalMessage, formatRefusalDate } from '@/lib/calendar/messages';
 import type { CalendarJob } from '@/lib/jobs/types';
 import { useCalendarAnnounce } from '../surface/live-region';
 import type { DragSurface } from '../drag-engine/drag-engine';
@@ -42,9 +42,9 @@ export type BoardSurfaceInput = {
   columns: BoardColumn[];
   rowModels: BoardRowModel[];
   days: ReadonlyMap<string, CalendarBoardDay>;
-  readOnly: boolean;
   mutations: CalendarMutations;
   parkingContexts: ReadonlyMap<string, JobParkingContext> | null;
+  nowMs: () => number;
   onPark: (job: CalendarJob) => void;
   onParkedContextMissing: () => void;
   /** Focus the moved card after the drop settles in the DOM. */
@@ -116,16 +116,13 @@ export function useBoardSurface(input: BoardSurfaceInput): DragSurface {
   }, []);
 
   const checkTarget = useCallback((target: CalendarDragTarget, payload: CalendarDragPayload, modifiers: DragModifiers): DragVerdict => {
-    const { readOnly, days, rowModels, parkingContexts } = inputRef.current;
-    const readOnlyCheck = checkReadOnly(readOnly);
-    if (!readOnlyCheck.ok) return { ok: false, message: readOnlyCheck.message };
+    const { days, rowModels, parkingContexts, nowMs } = inputRef.current;
     if (payload.kind === 'parked' && target.kind !== 'zone') {
       const parked = checkParkedContext(parkingContexts, payload.job);
       if (!parked.ok) return { ok: false, message: parked.message };
     }
     if (target.kind === 'zone') {
-      if (payload.kind === 'parked') return { ok: false, message: 'Die Karte ist schon geparkt.' };
-      if (payload.kind !== 'occurrence') return { ok: false, message: 'Nur Termine lassen sich parken.' };
+      if (payload.kind !== 'occurrence') return { ok: false, message: calendarRefusalMessage('only_occurrences_park') ?? '' };
       const parkable = checkParkable(payload.job);
       return parkable.ok ? { ok: true, label: 'Parken' } : { ok: false, message: parkable.message };
     }
@@ -133,14 +130,14 @@ export function useBoardSurface(input: BoardSurfaceInput): DragSurface {
     const boardRow: CalendarBoardRow | null = row?.kind === 'person' ? row.row : null;
     const day = dayFor(days, target.employeeRecordId, target.date);
     if (payload.kind === 'occurrence' || payload.kind === 'barEdge') {
-      const movable = checkOccurrenceMovable(payload.job);
+      const movable = checkOccurrenceMovable(payload.job, nowMs());
       if (!movable.ok) return { ok: false, message: movable.message };
     }
     if (payload.kind === 'occurrence' && target.employeeRecordId !== payload.sourceEmployeeRecordId) {
       const assigned = checkNotAlreadyAssigned(payload.job, target.employeeRecordId, payload.sourceEmployeeRecordId, boardRow?.displayName ?? null);
       if (!assigned.ok) return { ok: false, message: assigned.message };
     }
-    if (payload.kind === 'timeBlock') return { ok: false, message: 'Ist-Zeiten werden in der Tagesansicht verschoben.' };
+    if (payload.kind === 'timeBlock') return { ok: false, message: calendarRefusalMessage('time_block_moves_in_day_view') ?? '' };
     const person = checkPersonDay({ row: boardRow, day, date: target.date, allowWarnings: modifiers.fine });
     if (!person.ok) return { ok: false, message: person.message };
     const label = payload.kind === 'occurrence' && modifiers.copy ? `Kopie: ${rowName(row ?? { key: 'unassigned', kind: 'unassigned', row: null })}, ${formatRefusalDate(target.date)}` : `${rowName(row ?? { key: 'unassigned', kind: 'unassigned', row: null })}, ${formatRefusalDate(target.date)}`;

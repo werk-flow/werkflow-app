@@ -1,9 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { Plus } from 'lucide-react';
 import { cn, toLocalDateString } from '@/lib/utils';
-import { boardDayKey, indexBoardDays, type CalendarBoardContext, type CalendarBoardDay, type CalendarBoardRow } from '@/lib/calendar/board';
+import { boardDayKey, indexBoardDays, isStartedOccurrence, type CalendarBoardContext, type CalendarBoardDay, type CalendarBoardRow } from '@/lib/calendar/board';
 import { groupBoardRows } from '@/lib/calendar/board-model';
 import { DAY_LANE_HEIGHT, DAY_NAME_COLUMN_PX, DAY_TRAY_HEIGHT, DEFAULT_VISIT_MINUTES, MIN_ITEM_MINUTES, minutesIntoDay, packTimeLanes, travelGaps, type TimedItem, jobStartMinutes } from '@/lib/calendar/day-layout';
 import { formatMinutesOfDay, snapMinutes } from '@/lib/calendar/drag-math';
@@ -22,7 +22,7 @@ import type { CalendarMutations } from '../mutations/use-calendar-mutations';
 import { CalendarCard } from '../surface/calendar-card';
 import { CALENDAR_LAYER_CLASS } from '../surface/layers';
 import { NowIndicator } from '../surface/now-indicator';
-import { useNowTick } from '../surface/use-now-tick';
+import { useClock, useNowTick } from '../surface/use-now-tick';
 import { TimeBlock, type TimeBlockSegment } from './time-block';
 import { TimelineHeader } from './timeline-header';
 import { useDaySurface, type DayRowModel } from './use-day-surface';
@@ -75,18 +75,15 @@ export function DayView(props: DayViewProps): React.JSX.Element {
   const { date, todayIso, zoom, onZoomChange, entries, jobs, members, board, holidays, organizationSettings, currentUserId, currentUserRole, changeRequestMap, mutations, actions, parkingContexts, onParkedContextMissing, onSessionClick, highlightMemberId, verticalScroller } = props;
   const rootRef = useRef<HTMLDivElement>(null);
   const highlightRef = useRef<HTMLDivElement>(null);
-  const { startDrag, setLocked } = useCalendarDrag();
+  const { startDrag } = useCalendarDrag();
   const dateIso = toLocalDateString(date);
   const dayStart = useMemo(() => new Date(date.getFullYear(), date.getMonth(), date.getDate()), [date]);
   const isToday = dateIso === todayIso;
   const nowTick = useNowTick(isToday);
+  const clock = useClock();
   const hourWidth = useTimelineZoom({ zoom, onZoomChange, dateKey: dateIso, scroller: verticalScroller });
   const timelineWidth = 24 * hourWidth;
 
-  useEffect(() => {
-    setLocked(actions.readOnly, '„Nur ansehen" ist aktiv. Schalte es in der Kopfzeile aus, um zu planen.');
-    return () => setLocked(false, '');
-  }, [actions.readOnly, setLocked]);
 
   const days = useMemo(() => indexBoardDays(board.days), [board.days]);
   const boardRowByUser = useMemo(() => new Map(board.rows.flatMap((row) => (row.userId ? [[row.userId, row] as const] : []))), [board.rows]);
@@ -155,12 +152,11 @@ export function DayView(props: DayViewProps): React.JSX.Element {
     dayStart,
     rows: rowModels,
     days,
-    readOnly: actions.readOnly,
     mutations,
     parkingContexts,
     onParkedContextMissing,
     onPark: actions.onPark,
-    nowMs: () => Date.now(),
+    nowMs: clock,
   });
   useDragSurface(surface);
 
@@ -173,7 +169,7 @@ export function DayView(props: DayViewProps): React.JSX.Element {
 
   // Drag-to-create on empty time: DOM-only tracking, the dialog opens on release.
   const createRef = useRef<{ userId: string; startMinutes: number; endMinutes: number; overlay: HTMLElement; pointerId: number } | null>(null);
-  const canCreate = actions.isManager && !actions.readOnly;
+  const canCreate = actions.isManager;
   const handleCreatePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>, userId: string) => {
     if (!canCreate || event.button !== 0 || event.pointerType === 'touch') return;
     if ((event.target as HTMLElement).closest('[data-calendar-card], [data-time-block], button')) return;
@@ -209,7 +205,7 @@ export function DayView(props: DayViewProps): React.JSX.Element {
     const start = Math.min(create.startMinutes, create.endMinutes);
     const end = Math.max(create.startMinutes, create.endMinutes);
     if (end - start < MIN_ITEM_MINUTES) return;
-    actions.onAddEntry({ date: dateIso, time: formatMinutesOfDay(start), endTime: formatMinutesOfDay(end), userId: create.userId === UNASSIGNED_USER ? undefined : create.userId, kind: 'termin' });
+    actions.onAddEntry({ date: dateIso, time: formatMinutesOfDay(start), endTime: formatMinutesOfDay(end), userId: create.userId === UNASSIGNED_USER ? undefined : create.userId });
   }, [actions, dateIso]);
 
   const nowMinutes = isToday ? minutesIntoDay(new Date(nowTick), dayStart) : null;
@@ -223,7 +219,7 @@ export function DayView(props: DayViewProps): React.JSX.Element {
   };
 
   return (
-    <div ref={rootRef} role="grid" aria-label="Tageskalender" aria-readonly={actions.readOnly || undefined} data-day-view={dateIso} className="relative" style={{ width: DAY_NAME_COLUMN_PX + timelineWidth }}>
+    <div ref={rootRef} role="grid" aria-label="Tageskalender" data-day-view={dateIso} className="relative" style={{ width: DAY_NAME_COLUMN_PX + timelineWidth }}>
       <TimelineHeader hourWidth={hourWidth} label={headerLabel} />
       <div role="rowgroup" className="relative">
         {rows.map(({ model, boardDay, role, lanes, laneCount, untimed }) => {
@@ -239,7 +235,7 @@ export function DayView(props: DayViewProps): React.JSX.Element {
                 <span className="flex min-w-0 items-center gap-1">
                   <span className="min-w-0 truncate text-sm font-medium">{model.name}</span>
                   {canCreate && model.userId !== UNASSIGNED_USER && (
-                    <button type="button" className="ml-auto rounded-md p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/row:opacity-100" aria-label={`Termin am ${formatRefusalDate(dateIso)} für ${model.name} planen`} onClick={() => actions.onAddEntry({ date: dateIso, userId: model.userId, kind: 'termin' })}>
+                    <button type="button" className="ml-auto rounded-md p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/row:opacity-100" aria-label={`Termin am ${formatRefusalDate(dateIso)} für ${model.name} planen`} onClick={() => actions.onAddEntry({ date: dateIso, userId: model.userId })}>
                       <Plus className="size-3.5" aria-hidden="true" />
                     </button>
                   )}
@@ -267,6 +263,7 @@ export function DayView(props: DayViewProps): React.JSX.Element {
                         size="day"
                         compact
                         draggable={draggable}
+                        locked={isStartedOccurrence(job, nowTick)}
                         className="h-6 max-w-56 shrink-0"
                         onOpen={(element) => actions.onOpenCard(job, element, model.row)}
                         onPointerDown={(event) => {
@@ -285,7 +282,7 @@ export function DayView(props: DayViewProps): React.JSX.Element {
                 {lanes.map(({ item, lane }) => {
                   const laneTop = trayHeight + lane * DAY_LANE_HEIGHT;
                   if (item.kind === 'block') {
-                    const manage = draggable !== undefined && canManageBlock(item.block, currentUserRole, currentUserId, role) && !actions.readOnly;
+                    const manage = draggable !== undefined && canManageBlock(item.block, currentUserRole, currentUserId, role);
                     return (
                       <TimeBlock
                         key={item.key}
@@ -314,6 +311,7 @@ export function DayView(props: DayViewProps): React.JSX.Element {
                     );
                   }
                   const { job } = item;
+                  const locked = isStartedOccurrence(job, nowTick);
                   const width = Math.max(24, ((item.endMinutes - item.startMinutes) / 60) * hourWidth);
                   return (
                     <div key={item.key} className="absolute" style={{ left: (item.startMinutes / 60) * hourWidth, width, top: laneTop + 3, height: DAY_LANE_HEIGHT - 6 }}>
@@ -322,6 +320,7 @@ export function DayView(props: DayViewProps): React.JSX.Element {
                         size="day"
                         compact={width < 110}
                         draggable={draggable}
+                        locked={locked}
                         className="h-full w-full"
                         {...(model.row ? { 'data-employee-record-id': model.row.employeeRecordId } : {})}
                         onOpen={(element) => actions.onOpenCard(job, element, model.row)}
@@ -330,7 +329,7 @@ export function DayView(props: DayViewProps): React.JSX.Element {
                           startDrag(event, { payload: { kind: 'occurrence', job, sourceEmployeeRecordId: model.row?.employeeRecordId ?? null, sourceUserId: model.userId === UNASSIGNED_USER ? null : model.userId, sourceDate: dateIso }, ghost: { label: job.title, secondary: `${formatMinutesOfDay(item.startMinutes)} · ${job.clientName ?? ''}`.trim(), width: Math.min(rect.width, 240), height: rect.height }, pointerOffset: { x: Math.min(event.clientX - rect.left, 240), y: event.clientY - rect.top } });
                         }}
                       >
-                        {draggable && (
+                        {draggable && !locked && (
                           <>
                             <span role="presentation" className="absolute inset-y-0 -left-2 w-6 cursor-ew-resize" onPointerDown={(event) => { event.stopPropagation(); startDrag(event, { payload: { kind: 'resizeJob', job, edge: 'start', sourceUserId: model.userId === UNASSIGNED_USER ? null : model.userId }, ghost: { label: 'Beginn ändern', width: 120, height: 24 }, pointerOffset: { x: 60, y: 12 } }); }}>
                               <span className="absolute inset-y-0 left-2 w-2 bg-calendar-planning-strong opacity-0 transition-opacity group-hover/card:opacity-60" />

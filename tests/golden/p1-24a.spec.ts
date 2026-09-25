@@ -24,7 +24,7 @@ import { createJob } from "./support/steps/work";
 // to another person by drag (optimistic, then confirmed with Undo), a second
 // session sees a date move live, the dispatch state reaches the card, a park
 // by drag opens the context dialog and the card returns through „Einplanen
-// am …“, read-only mode refuses a drag with its sentence, the horizon is
+// am …“, the horizon is
 // remembered per user, and the employee sees only the own row.
 
 const TODAY_ISO = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -170,42 +170,20 @@ test.describe("P1-24a Plantafel journey @P1-24a", () => {
     await expect(boardCard(adminPage, "unassigned", title)).toBeVisible({ timeout: 20_000 });
   });
 
-  test("read-only mode refuses a drag with its sentence and the horizon is remembered per user", async ({ adminPage, world }) => {
-    const title = jobTitle(world.runId);
-    const bueroRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.buero.id);
+  test("the horizon is remembered per user", async ({ adminPage, world }) => {
     await openPlantafel(adminPage, VISIT_DATE);
-    await adminPage.getByRole("button", { name: "Nur ansehen" }).click();
-    await expect(adminPage.getByRole("button", { name: "Nur ansehen" })).toHaveAttribute("aria-pressed", "true");
-    // The engine refuses at the press and shows the sentence for four seconds; the gesture then goes nowhere.
-    const lockedCard = await boardCard(adminPage, "unassigned", title).boundingBox();
-    if (!lockedCard) throw new Error("The card has no layout.");
-    await adminPage.mouse.move(lockedCard.x + 20, lockedCard.y + lockedCard.height / 2);
-    await adminPage.mouse.down();
-    await expect(adminPage.getByRole("status").filter({ hasText: "Nur ansehen" })).toBeVisible();
-    const target = await boardCell(adminPage, bueroRecord.id, VISIT_DATE).boundingBox();
-    if (!target) throw new Error("The target cell has no layout.");
-    await adminPage.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 8 });
-    await adminPage.mouse.up();
-    await expect(boardCard(adminPage, "unassigned", title)).toBeVisible();
-    await expect(boardCard(adminPage, bueroRecord.id, title)).toHaveCount(0);
     await adminPage.getByLabel("Horizont").click();
     await adminPage.getByRole("option", { name: "2 Wochen" }).click();
     await expect(calendarViewReady(adminPage, "week")).toHaveAttribute("data-calendar-horizon", "2", { timeout: 20_000 });
-    // The save is debounced; the stored row is the proof of persistence before the reload.
+    // The stored row is the proof of persistence before the reload.
     await expect.poll(async () => (await getCalendarPreferencesFor(world.orgId, world.users.admin.id))?.horizonWeeks, { timeout: 10_000 }).toBe(2);
 
     await openPlantafel(adminPage, VISIT_DATE);
     await expect(calendarViewReady(adminPage, "week")).toHaveAttribute("data-calendar-horizon", "2");
-    await expect(adminPage.getByRole("button", { name: "Nur ansehen" })).toHaveAttribute("aria-pressed", "true");
-    await adminPage.getByRole("button", { name: "Nur ansehen" }).click();
     await adminPage.getByLabel("Horizont").click();
     await adminPage.getByRole("option", { name: "1 Woche" }).click();
     await expect(calendarViewReady(adminPage, "week")).toHaveAttribute("data-calendar-horizon", "1", { timeout: 20_000 });
-    // The last burst lands before the next test navigates away from the debounced save.
-    await expect.poll(async () => {
-      const stored = await getCalendarPreferencesFor(world.orgId, world.users.admin.id);
-      return `${stored?.readOnly}/${stored?.horizonWeeks}`;
-    }, { timeout: 10_000 }).toBe("false/1");
+    await expect.poll(async () => (await getCalendarPreferencesFor(world.orgId, world.users.admin.id))?.horizonWeeks, { timeout: 10_000 }).toBe(1);
   });
 
   test("the employee sees the week as their own row only", async ({ adminPage, employeePage, world }) => {
@@ -225,7 +203,6 @@ test.describe("P1-24a Plantafel journey @P1-24a", () => {
     await expect(boardRows(employeePage)).toHaveCount(1);
     // The cancelled original of the park stays as a dimmed „Abgesagt“ card (F05); the re-planned visit is the active one.
     await expect(boardRows(employeePage).locator("[data-calendar-card]").filter({ hasText: title }).filter({ hasNotText: "Abgesagt" })).toBeVisible();
-    await expect(employeePage.getByRole("button", { name: "Nur ansehen" })).toHaveCount(0);
     await expect(textInDom(employeePage, `${world.users.buero.firstName} ${world.users.buero.lastName}`)).toHaveCount(0);
   });
 });

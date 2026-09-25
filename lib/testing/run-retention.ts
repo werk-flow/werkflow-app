@@ -99,5 +99,5 @@ export function prunableArchiveBytes(archiveRoot: string, runKeys?: readonly str
 
 export function archiveSizeProblem(bytes: number, limit = RUN_ARCHIVE_SIZE_LIMIT_BYTES): string | undefined {
   if (bytes <= limit) return undefined;
-  return `The browser run archive holds ${(bytes / 1024 ** 3).toFixed(1)} GB of traces and reports, above the ${(limit / 1024 ** 3).toFixed(0)} GB limit. Run bun run test:runs prune before starting another browser run (docs/technical/testing.md, "Retain run evidence").`;
+  return `The browser run archive holds ${(bytes / 1024 ** 3).toFixed(1)} GB of traces and reports, above the ${(limit / 1024 ** 3).toFixed(0)} GB limit. Run bun run test:runs prune before starting another browser run (docs/technical/testing.md, "Retention").`;
 }

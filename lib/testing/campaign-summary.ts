@@ -13,6 +13,8 @@ export type CampaignReport = {
   completedAt: string | null;
   status: "running" | "passed" | "failed";
   results: ReadonlyArray<{ groupId: string; status: "passed" | "failed" | "blocked"; startedAt: string; runKey: string | null; reason: string | null }>;
+  /** The input snapshot the report ran on: path to content digest. */
+  files: Readonly<Record<string, string>>;
 };
 
 export type CampaignRun = { runKey: string; classification: string | null };
@@ -67,6 +69,37 @@ export function summarizeCampaign(input: { reports: readonly CampaignReport[]; r
   if (wallClockMinutes > budget.wallClockMinutes) overBudget.push(`${wallClockMinutes} minutes of verification against a budget of ${budget.wallClockMinutes}`);
   if (harnessFailures > budget.harnessFailures) overBudget.push(`${harnessFailures} harness failures against a budget of ${budget.harnessFailures}`);
   return { since: input.since, reports: reports.length, wallClockMinutes, groupsRun, groupsReused, failed, blocked, failuresByClassification, overBudget };
+}
+
+/** Files whose change counts as a harness change: the runner, the support modules, the configs and the conventions. */
+const HARNESS_INPUT = /^(lib\/testing\/|scripts\/|tests\/[^/]+\/support\/|tests\/[^/]+\/global-|playwright\.[^/]*config\.ts$|eslint-rules\/|bunfig\.toml$)/;
+
+function isDriftVoided(reason: string | null): boolean {
+  return reason !== null && (reason.startsWith(INPUT_DRIFT_REASON) || reason.startsWith(BROWSER_INPUT_DRIFT_MESSAGE));
+}
+
+/**
+ * Owner rule of 2026-09-25 (protocol, "Campaign Budget"): the second time a run fails for a reason that
+ * is not the product, the harness changes before the next run. Since the last commit, two or more
+ * browser failures classified harness or environment refuse the next verification until a harness
+ * input differs from the snapshot of the report that holds the latest such failure.
+ */
+export function campaignGateProblem(input: { reports: readonly CampaignReport[]; runs: readonly CampaignRun[]; since: string; currentFiles: Readonly<Record<string, string>> }): string | undefined {
+  const classificationOf = new Map(input.runs.map((run) => [run.runKey, run.classification]));
+  const failures: Array<{ report: CampaignReport; groupId: string; classification: string }> = [];
+  for (const report of [...input.reports].filter((report) => report.startedAt >= input.since).sort((left, right) => left.startedAt.localeCompare(right.startedAt))) {
+    for (const result of report.results) {
+      if (result.status !== "failed" || result.startedAt < report.startedAt || isDriftVoided(result.reason) || !result.runKey) continue;
+      const classification = classificationOf.get(result.runKey);
+      if (classification === "harness" || classification === "environment") failures.push({ report, groupId: result.groupId, classification });
+    }
+  }
+  const latest = failures.at(-1);
+  if (failures.length < 2 || !latest) return undefined;
+  const paths = new Set([...Object.keys(latest.report.files), ...Object.keys(input.currentFiles)].filter((path) => HARNESS_INPUT.test(path)));
+  for (const path of paths) if (latest.report.files[path] !== input.currentFiles[path]) return undefined;
+  const named = failures.map((failure) => `${failure.groupId} (${failure.classification}, report ${failure.report.id})`).join(", ");
+  return `${failures.length} non-product failures since the last commit: ${named}. No harness input changed since report ${latest.report.id}. Change the harness (a fixture, a runner rule, a convention test, a split of ownership) before the next run; a repeat is not a repair (docs/plans/phase-1/protocol.md, "Campaign Budget").`;
 }
 
 export function formatCampaignSummary(summary: CampaignSummary): string {

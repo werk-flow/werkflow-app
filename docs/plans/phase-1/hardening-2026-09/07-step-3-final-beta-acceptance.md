@@ -225,6 +225,8 @@ No retained world is open (`bun run test:runs list`: 0). Every retained failure 
 
 ### Limitations and the testing-system review agenda
 
+Answered since: retention became `bun run test:runs prune` (pre-Wave-3 step 1) and the runner runs 1 to 8 workers with an exclusive lane for measured groups (2026-09-25, [decision 0007 amendment](../../../decisions/0007-independent-test-groups.md#amendment-2026-09-25-the-execution-model)). The list below is the agenda as written on 2026-09-14.
+
 - The measured cross-session refreshes of the later Golden stages sit between 1.0 s and 1.7 s on this workstation with the two idle preconditions in place. The trace of run 10 attributes the earlier excursions to one client's Server Actions running one after another: a burst of live-view reads (attention counts, clock state, time entries, targets, lifecycle) delays the next read or submit by seconds. The reads-through-route-handler item in the enforcement backlog is the product-side fix.
 - The freshness tolerance (CL-22) records rather than fails a single sample up to 2500 ms. It does not replace measurement with reviewed references and medians the way the performance scenarios work; that conversion is review work.
 - Why the browser closed two action responses early in run 8, and one in run 8's P1-20, is not identified from the traces; the host was at 1.9 GB free at the time. Server logs show broken response streams at the same rate in every run of the day.

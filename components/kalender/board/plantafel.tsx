@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { boardDayKey, indexBoardDays, indexBoardDispatch, plannedMinutesByEmployeeDate, deriveCapacityState, type CalendarBoardContext } from '@/lib/calendar/board';
@@ -19,8 +19,7 @@ import type { CalendarMutations } from '../mutations/use-calendar-mutations';
 import { isNoteEntry } from '@/lib/calendar/board';
 import { CalendarCard, dispatchChip, readinessChips } from '../surface/calendar-card';
 import { CALENDAR_LAYER_CLASS } from '../surface/layers';
-import { NowIndicator } from '../surface/now-indicator';
-import { useNowTick } from '../surface/use-now-tick';
+import { useClock, useNowTick } from '../surface/use-now-tick';
 import { BoardRow } from './board-row';
 import { BOARD_COLUMN_MIN_PX, BOARD_NAME_COLUMN_PX, type CalendarSurfaceActions } from './types';
 import { useBoardSurface } from './use-board-surface';
@@ -42,7 +41,7 @@ export type PlantafelProps = {
   actions: CalendarSurfaceActions;
   verticalScroller: () => HTMLElement | null;
   onIsolateRow: (employeeRecordId: string) => void;
-  /** Phone width: the employee's own row renders as a list, never a cropped grid. */
+  /** Phone width: every visible row renders as one day list (names per card when there is more than one row), never a cropped grid. */
   phone: boolean;
 };
 
@@ -56,16 +55,13 @@ export function Plantafel(props: PlantafelProps): React.JSX.Element {
   const { anchorIso, todayIso, preferences, showActualTime, board, jobs, entries, vacation, sickness, holidays, mutations, parkingContexts, onParkedContextMissing, actions, verticalScroller, onIsolateRow, phone } = props;
   const rootRef = useRef<HTMLDivElement>(null);
   const highlightRef = useRef<HTMLDivElement>(null);
-  const { startDrag, setLocked } = useCalendarDrag();
+  const { startDrag } = useCalendarDrag();
   const [collapsedTeams, setCollapsedTeams] = useState<ReadonlySet<string>>(() => new Set());
   const [hoveredOccurrenceId, setHoveredOccurrenceId] = useState<string | null>(null);
   const nowTick = useNowTick();
+  const clock = useClock();
 
   // Before paint: the lock must hold the moment the toggle shows as pressed, not a frame later.
-  useLayoutEffect(() => {
-    setLocked(actions.readOnly, '„Nur ansehen" ist aktiv. Schalte es in der Kopfzeile aus, um zu planen.');
-    return () => setLocked(false, '');
-  }, [actions.readOnly, setLocked]);
 
   const columns = useMemo(
     () => boardColumns({ anchorIso, horizonWeeks: preferences.horizonWeeks, hideWeekends: preferences.hideWeekends, todayIso }),
@@ -128,7 +124,7 @@ export function Plantafel(props: PlantafelProps): React.JSX.Element {
     });
   }, []);
 
-  const surface = useBoardSurface({ rootRef, highlightRef, verticalScroller, columns, rowModels, days, readOnly: actions.readOnly, mutations, parkingContexts, onPark: actions.onPark, onParkedContextMissing, focusCard });
+  const surface = useBoardSurface({ rootRef, highlightRef, verticalScroller, columns, rowModels, days, nowMs: clock, mutations, parkingContexts, onPark: actions.onPark, onParkedContextMissing, focusCard });
   useDragSurface(surface);
 
   const scrollable = preferences.horizonWeeks > 1;
@@ -153,12 +149,6 @@ export function Plantafel(props: PlantafelProps): React.JSX.Element {
     if (element) { event.preventDefault(); element.focus(); }
   }, []);
 
-  const todayIndex = columns.findIndex((column) => column.isToday);
-  const nowOffset = useMemo(() => {
-    if (todayIndex < 0) return null;
-    const now = new Date(nowTick);
-    return (now.getHours() * 60 + now.getMinutes()) / (24 * 60);
-  }, [nowTick, todayIndex]);
 
   if (phone) {
     return <PhoneBoard columns={columns} rowModels={rowModels} jobsByRow={jobsByRow} dispatch={dispatch} materialDemandJobIds={materialDemandJobIds} actions={actions} headerLabels={headerLabels} />;
@@ -170,7 +160,6 @@ export function Plantafel(props: PlantafelProps): React.JSX.Element {
       ref={rootRef}
       role="grid"
       aria-label="Plantafel"
-      aria-readonly={actions.readOnly || undefined}
       data-plantafel=""
       data-density={preferences.density}
       className="relative min-w-0"
@@ -178,7 +167,7 @@ export function Plantafel(props: PlantafelProps): React.JSX.Element {
     >
       <div className="min-w-0">
         <div className="relative" style={{ minWidth: scrollable ? BOARD_NAME_COLUMN_PX + columns.length * BOARD_COLUMN_MIN_PX : undefined }}>
-          <BoardHeader columns={columns} scrollable={scrollable} labels={headerLabels} nowOffset={nowOffset} todayIndex={todayIndex} />
+          <BoardHeader columns={columns} scrollable={scrollable} labels={headerLabels} />
           <div role="rowgroup">
             {groups.map((group) => {
               const collapsed = collapsedTeams.has(group.key);
@@ -208,6 +197,7 @@ export function Plantafel(props: PlantafelProps): React.JSX.Element {
                       <BoardRow
                         key={model.key}
                         model={model}
+                        nowMs={nowTick}
                         rowIndex={rowIndex}
                         columns={columns}
                         jobs={jobsByRow.get(model.key) ?? []}
@@ -249,7 +239,7 @@ export function Plantafel(props: PlantafelProps): React.JSX.Element {
   );
 }
 
-function BoardHeader({ columns, scrollable, labels, nowOffset, todayIndex }: { columns: BoardColumn[]; scrollable: boolean; labels: ReadonlyMap<string, string>; nowOffset: number | null; todayIndex: number }): React.JSX.Element {
+function BoardHeader({ columns, scrollable, labels }: { columns: BoardColumn[]; scrollable: boolean; labels: ReadonlyMap<string, string> }): React.JSX.Element {
   return (
     <div
       role="row"
@@ -259,7 +249,7 @@ function BoardHeader({ columns, scrollable, labels, nowOffset, todayIndex }: { c
       <div role="columnheader" className={cn('sticky left-0 flex items-end border-b border-r border-calendar-grid-strong bg-calendar-gutter px-3 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground', CALENDAR_LAYER_CLASS.sticky)}>
         Mitarbeiter
       </div>
-      {columns.map((column, index) => {
+      {columns.map((column) => {
         const label = labels.get(column.date);
         return (
           <div
@@ -274,9 +264,6 @@ function BoardHeader({ columns, scrollable, labels, nowOffset, todayIndex }: { c
               {Number(column.date.slice(8, 10))}
             </span>
             {label && <span className="max-w-full truncate text-[11px] text-calendar-holiday-foreground" aria-label={`${formatRefusalDate(column.date)}: ${label}`}>{label}</span>}
-            {column.isToday && nowOffset !== null && index === todayIndex && (
-              <NowIndicator orientation="vertical" offset={nowOffset * 100} unit="%" className="top-auto bottom-0 h-2" />
-            )}
           </div>
         );
       })}

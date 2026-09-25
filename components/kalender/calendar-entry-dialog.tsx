@@ -31,7 +31,6 @@ interface CalendarEntryDialogProps {
   preselectedUserId?: string | undefined;
   preselectedClockInTime?: string | undefined;
   preselectedClockOutTime?: string | undefined;
-  preselectedEntryKind?: 'job_visit' | 'note' | undefined;
   lockEntryMode?: boolean;
   onManualEntrySuccess?: ((entries: TimeEntry[]) => void | Promise<void>) | undefined;
   onJobSuccess?: (() => void | Promise<void>) | undefined;
@@ -45,7 +44,6 @@ export function CalendarEntryDialog({
   preselectedUserId,
   preselectedClockInTime,
   preselectedClockOutTime,
-  preselectedEntryKind,
   lockEntryMode,
   onManualEntrySuccess,
   onJobSuccess,
@@ -182,7 +180,6 @@ export function CalendarEntryDialog({
                 defaultDate={preselectedDate}
                 defaultTime={preselectedClockInTime}
                 defaultUserId={preselectedUserId}
-                defaultEntryKind={preselectedEntryKind}
                 onSuccess={async () => {
                   onOpenChange(false);
                   await onJobSuccess?.();

@@ -1,12 +1,12 @@
 # Step 2: Whole-app performance hardening
 
-Status: living — last reviewed 2026-09-13; handoff diagnosis complete; Step 2 closure evidence recorded below, independent review pending
+Status: living — last reviewed 2026-09-25; handoff diagnosis complete; Step 2 closure evidence recorded below; Step 3 (closed 2026-09-14) supplied the review and the acceptance
 
 ## Current repair checkpoint
 
 The 2026-09-12 handoff (next section) is complete. The C3 blocker has a specific, measured cause, one application repair and one harness repair (see [Handoff diagnosis and closure](#handoff-diagnosis-and-closure-2026-09-13)). Fresh DEV report `2026-09-12T221143617Z-7d344e34` passes `canary:providers` (run `2026-09-12T221202829Z-b07619`, nine checks, C3 at 1,238 ms against the unchanged 2,000 ms deadline) and `canary:security` (run `2026-09-12T221405390Z-348672`, three checks) on the uninstrumented recorded cloud build `37eea70c-90e0-4897-b422-32bef67f465c`. After the owner's 2026-09-13 decisions, the current local selected verification is report `2026-09-13T012945543Z-e299eb62`: all 29 groups pass on build `45e96c03-9cc6-453e-9d4a-db4c5cd7a055`, all eleven median comparisons within and every hard deadline met, and DEV report `2026-09-13T021955406Z-63bbf0fc` passes both canaries on the same source with C3 at 1,058 ms. Three further defects found on the way are repaired: lost keystrokes in the typed customer search, a route refresh closing an open actions menu, and two harness races with the readiness catch-up. The closure section records the diagnosis, the decisions and the evidence.
 
-Local `main` is at `d51988e`. Eight committed migrations are applied DEV/local and held from PROD. Application, test and documentation changes remain local and uncommitted. No push or production change occurred. Preview still uses PROD. The complete release battery and coordinated publication remain Step 3 work. The owner intends a brief independent review of this closure before deciding on Step 3.
+Checkpoint of 2026-09-13, historical: local `main` was at `d51988e`. Eight committed migrations are applied DEV/local and held from PROD. Application, test and documentation changes remain local and uncommitted. No push or production change occurred. Preview still uses PROD. The complete release battery and coordinated publication remain Step 3 work. The owner intends a brief independent review of this closure before deciding on Step 3.
 
 ## Handoff at the owner-requested stop (2026-09-12)
 
@@ -491,7 +491,7 @@ Add these existing groups when their actual boundary changes: `audit:wave-1:a1` 
 
 Run `canary:providers` on a recorded DEV build for the existing C3 freshness boundary. Run `canary:security` for the planned shared Realtime/auth changes. A failed provider freshness check remains open even if all local checks pass. Schema changes also require migration/type/Realtime parity and the specific SQL assertions. Local-to-cloud switching requires a new recorded build; do not compare timings from mismatched environments.
 
-The full integrated Golden plus every release-required audit group and complete cloud canary run at final acceptance after Step 3. Do not perform that full battery repeatedly during Step 2. Reuse qualifying unrelated results; timing-sensitive groups remain exclusive. Classify and investigate a failure before retrying, preserve its artifacts and cleanup state, and obey [the repair manual](../../../technical/testing.md#repair-an-existing-test-under-the-current-workflow). Never widen a deadline, delete a slow sample, remove a scenario, or reset the failure history to obtain green.
+The full integrated Golden plus every release-required audit group and complete cloud canary run at final acceptance after Step 3. Do not perform that full battery repeatedly during Step 2. Reuse qualifying unrelated results; timing-sensitive groups remain exclusive. Classify and investigate a failure before retrying, preserve its artifacts and cleanup state, and obey [the failure procedure](../../../technical/testing.md#failures) (Step 2 rule; since 2026-09-25 the campaign budget and the campaign gate own repetition). Never widen a deadline, delete a slow sample, remove a scenario, or reset the failure history to obtain green.
 
 ## Transcript consideration and disposition
 

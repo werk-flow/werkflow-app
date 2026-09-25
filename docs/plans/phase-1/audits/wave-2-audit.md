@@ -19,7 +19,7 @@ Golden groups prove connected business outcomes. Detailed audit groups prove the
 - Browser audit specs live in `tests/audit/wave-2/`, with stable slice tags retained for diagnosis.
 - Use `bun run test:plan` and `bun run test:verify` for the complete selected change scope. Use `--group audit:wave-2:p1-13` for a deliberately bounded implementation check.
 - Every independently invoked audit group owns its world, role sessions, checkpoints, and output files. It cannot inherit a previous audit file's records.
-- Historical `test:audit` commands remain available. Their old full-battery acceptance ladder does not govern new work.
+- The historical `test:audit` commands were retired on 2026-09-14; `bun run test:audit:focused` remains. Their old full-battery acceptance ladder does not govern new work.
 - The [testing guide](../../../technical/testing.md) owns concurrency limits, production builds, retained diagnosis, cleanup, and coverage evidence.
 
 ### Fixture-date ownership

@@ -196,7 +196,7 @@ Use `--committed --base-commit <commit before the slice>` for committed work, or
 
 ### Verify findings before fixing
 
-Verify each finding against the code before fixing it. Skip invalid findings with a stated reason. After fixes, run the selected checks and affected groups from `bun run test:plan`. Apply [decision 0005](../decisions/0005-enforcement-ladder.md) to each retained finding and record the prevention tier. Qualify evidence through [testing.md](testing.md), including current-input result reuse and failure stopping rules.
+Verify each finding against the code before fixing it. Skip invalid findings with a stated reason. After fixes, run `bun run test:verify`; `bun run test:plan` shows which checks and groups it will select. Apply [decision 0005](../decisions/0005-enforcement-ladder.md) to each retained finding and record the prevention tier. Qualify evidence through [testing.md](testing.md), including current-input result reuse and failure stopping rules.
 
 ### Review before final acceptance
 
@@ -206,7 +206,7 @@ Complete the intended review and investigate its findings before final acceptanc
 
 Review a coherent set of corrections together. After a browser failure, establish the cause and verify its repair at the smallest relevant boundary. Collect related corrections before requesting another review of the changed files. An authorization or data-integrity concern can justify an immediate focused review.
 
-Every retained finding needs a disposition and an appropriate check. This requirement does not mandate repeated CodeRabbit passes until one reports no findings. Reject an incorrect finding with evidence, preserve unresolved concerns, and stop an unproductive review loop. Do not alternate one-fix reviews with full rebuilds and complete-battery reruns.
+Every retained finding needs a disposition and an appropriate check. This requirement does not mandate repeated CodeRabbit passes until one reports no findings. Reject an incorrect finding with evidence, preserve unresolved concerns, and stop an unproductive review loop. Do not alternate one-fix reviews with full rebuilds and complete plan reruns.
 
 ## WerkFlow-Specific Review Priorities
 

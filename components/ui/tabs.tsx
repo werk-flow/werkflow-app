@@ -29,7 +29,7 @@ function TabsList({
         // max-w-full + overflow-x-auto: a strip with many tabs scrolls within itself on
         // phones instead of widening the page (design canon: no page-level
         // horizontal scroll). justify-start keeps the first tab reachable.
-        'bg-muted/50 inline-flex h-9 w-fit max-w-full items-center justify-start overflow-x-auto rounded-md p-0.5 gap-1 [scrollbar-width:none]',
+        'bg-muted/50 inline-flex h-9 w-fit max-w-full shrink-0 items-center justify-start overflow-x-auto rounded-md p-0.5 gap-1 [scrollbar-width:none]',
         className
       )}
       {...props}

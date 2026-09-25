@@ -5,7 +5,7 @@ import { formatMinutesOfDay, indexAtOffset, snapMinutes } from '@/lib/calendar/d
 import { DAY_NAME_COLUMN_PX, DEFAULT_VISIT_MINUTES, MIN_ITEM_MINUTES, resizedBlockUpdates, shiftedBlockUpdates, jobStartMinutes } from '@/lib/calendar/day-layout';
 import type { CalendarBoardDay, CalendarBoardRow } from '@/lib/calendar/board';
 import { reassignmentChanges } from '@/lib/calendar/board-model';
-import { checkParkedContext, checkNotAlreadyAssigned, checkOccurrenceMovable, checkPersonDay, checkReadOnly, checkTimeBlockTarget, dayFor } from '@/lib/calendar/refusal-checks';
+import { checkParkedContext, checkNotAlreadyAssigned, checkOccurrenceMovable, checkPersonDay, checkTimeBlockTarget, dayFor } from '@/lib/calendar/refusal-checks';
 import { calendarRefusalMessage, formatRefusalDate } from '@/lib/calendar/messages';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { JobParkingContext } from '@/lib/parking/types';
@@ -50,7 +50,6 @@ export type DaySurfaceInput = {
   dayStart: Date;
   rows: DayRowModel[];
   days: ReadonlyMap<string, CalendarBoardDay>;
-  readOnly: boolean;
   mutations: CalendarMutations;
   parkingContexts: ReadonlyMap<string, JobParkingContext> | null;
   onParkedContextMissing: () => void;
@@ -127,16 +126,14 @@ export function useDaySurface(input: DaySurfaceInput): DragSurface {
   }, []);
 
   const checkTarget = useCallback((target: CalendarDragTarget, payload: CalendarDragPayload, modifiers: DragModifiers): DragVerdict => {
-    const { readOnly, days, rows, dayStart, nowMs, dateIso, parkingContexts } = inputRef.current;
-    const readOnlyCheck = checkReadOnly(readOnly);
-    if (!readOnlyCheck.ok) return { ok: false, message: readOnlyCheck.message };
+    const { days, rows, dayStart, nowMs, dateIso, parkingContexts } = inputRef.current;
     if (payload.kind === 'parked' && target.kind !== 'zone') {
       const parked = checkParkedContext(parkingContexts, payload.job);
       if (!parked.ok) return { ok: false, message: parked.message };
     }
     if (target.kind === 'zone') {
       if (payload.kind === 'occurrence' || payload.kind === 'untimed') return { ok: true, label: 'Parken' };
-      return { ok: false, message: 'Nur Termine lassen sich parken.' };
+      return { ok: false, message: calendarRefusalMessage('only_occurrences_park') ?? '' };
     }
     const minutes = target.minutes ?? 0;
     const row = rowFor(rows, target.userId);
@@ -149,7 +146,7 @@ export function useDaySurface(input: DaySurfaceInput): DragSurface {
       case 'parked': {
         const duration = payloadDuration(payload);
         if (payload.kind !== 'parked') {
-          const movable = checkOccurrenceMovable(payload.job);
+          const movable = checkOccurrenceMovable(payload.job, nowMs());
           if (!movable.ok) return { ok: false, message: movable.message };
         }
         if (payload.kind === 'occurrence' && target.employeeRecordId !== payload.sourceEmployeeRecordId) {
@@ -162,6 +159,8 @@ export function useDaySurface(input: DaySurfaceInput): DragSurface {
         return { ok: true, label: timeLabel(minutes, minutes + duration) };
       }
       case 'resizeJob': {
+        const movable = checkOccurrenceMovable(payload.job, nowMs());
+        if (!movable.ok) return { ok: false, message: movable.message };
         const start = jobStartMinutes(payload.job);
         const end = start + (payload.job.estimatedDurationMinutes ?? DEFAULT_VISIT_MINUTES);
         const nextStart = payload.edge === 'start' ? Math.min(minutes, end - MIN_ITEM_MINUTES) : start;
@@ -184,14 +183,14 @@ export function useDaySurface(input: DaySurfaceInput): DragSurface {
           startMs = payload.edge === 'start' ? Math.min(edgeMs, clockOutMs - MIN_ITEM_MINUTES * 60_000) : clockInMs;
           endMs = payload.edge === 'end' ? Math.max(edgeMs, clockInMs + MIN_ITEM_MINUTES * 60_000) : clockOutMs;
         }
-        if (!row || target.userId === null) return { ok: false, message: 'Arbeitszeit braucht eine Person.' };
+        if (!row || target.userId === null) return { ok: false, message: calendarRefusalMessage('time_block_needs_person') ?? '' };
         const blockId = session.calendarBlockId ?? null;
         const check = checkTimeBlockTarget({ startMs, endMs, nowMs: nowMs(), targetName: name, otherBlocks: row.blocks.filter((block) => block.id !== blockId) });
         if (!check.ok) return { ok: false, message: check.message };
         return { ok: true, label: timeLabel((startMs - dayStart.getTime()) / 60_000, (endMs - dayStart.getTime()) / 60_000) };
       }
       case 'barEdge':
-        return { ok: false, message: `Ganztägige Termine werden auf der Plantafel verlängert (${formatRefusalDate(dateIso)}).` };
+        return { ok: false, message: calendarRefusalMessage('all_day_extends_on_board', { date: formatRefusalDate(dateIso) }) ?? '' };
       default: {
         const exhaustive: never = payload;
         return exhaustive;

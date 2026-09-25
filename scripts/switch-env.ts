@@ -9,8 +9,8 @@
 // stack runs in WSL, Windows' localhost relay to WSL drops connections under
 // sustained traffic (observed 2026-08-28), so the harness addresses the WSL
 // VM's NAT IP directly — and that IP changes whenever WSL restarts. Rerun
-// `bun run env:local` after a WSL restart (plus a rebuild before
-// certification, because NEXT_PUBLIC_* values are baked into the build).
+// `bun run env:local` after a WSL restart (plus a rebuild before the next
+// browser run, because NEXT_PUBLIC_* values are baked into the build).
 // See docs/technical/environments.md.
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";

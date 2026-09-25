@@ -1,6 +1,6 @@
 # Pre-Wave-3 step 3: clock button (FAB) flows and the calendar toward a Plantafel
 
-Status: living — last reviewed 2026-09-17; implemented, polished after owner testing, CodeRabbit-reviewed and verified with the minimal groups, `audit:performance:calendar-live` hands its fresh pass to step 5
+Status: living — last reviewed 2026-09-17; implemented, polished after owner testing, CodeRabbit-reviewed and verified with the minimal groups, `audit:performance:calendar-live` handed its fresh pass to step 5 (closed 2026-09-18)
 
 ## Read this first
 

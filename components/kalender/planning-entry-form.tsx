@@ -56,7 +56,6 @@ interface PlanningEntryFormProps {
   defaultTime?: string | undefined;
   defaultUserId?: string | undefined;
   /** `note` opens the form as an all-day internal „Sonstiges" entry (the board's note button). */
-  defaultEntryKind?: 'job_visit' | 'note' | undefined;
   onSuccess: () => void | Promise<void>;
 }
 
@@ -76,11 +75,9 @@ export function PlanningEntryForm({
   defaultDate,
   defaultTime,
   defaultUserId,
-  defaultEntryKind,
   onSuccess,
 }: PlanningEntryFormProps) {
   const initialDate = toLocalDateString(defaultDate ?? new Date());
-  const isNote = defaultEntryKind === 'note';
   const { showBanner } = useBanner();
   const [options, setOptions] = useState<Options | null>(null);
   const idempotencyKeyRef = useRef(crypto.randomUUID());
@@ -94,15 +91,15 @@ export function PlanningEntryForm({
     date?: string;
     override?: string;
   }>({});
-  const [entryKind, setEntryKind] = useState<'job_visit' | 'internal'>(isNote ? 'internal' : 'job_visit');
+  const [entryKind, setEntryKind] = useState<'job_visit' | 'internal'>('job_visit');
   const [jobId, setJobId] = useState('');
-  const [internalType, setInternalType] = useState(isNote ? 'other' : 'meeting');
+  const [internalType, setInternalType] = useState('meeting');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
   const [date, setDate] = useState(initialDate);
   const [time, setTime] = useState(defaultTime?.slice(0, 5) ?? '09:00');
-  const [timeKind, setTimeKind] = useState<'timed' | 'all_day'>(isNote ? 'all_day' : 'timed');
+  const [timeKind, setTimeKind] = useState<'timed' | 'all_day'>('timed');
   const [durationHours, setDurationHours] = useState('1');
   const [durationDays, setDurationDays] = useState('1');
   const [employeeRecordIds, setEmployeeRecordIds] = useState<string[]>([]);

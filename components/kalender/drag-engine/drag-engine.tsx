@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { autoScrollVelocity, exceedsDragThreshold } from '@/lib/calendar/drag-math';
+import { autoScrollDue, autoScrollVelocity, exceedsDragThreshold } from '@/lib/calendar/drag-math';
 import { CALENDAR_LAYER_CLASS } from '../surface/layers';
 import { targetKey, type CalendarDragPayload, type CalendarDragTarget, type DragModifiers, type DragVerdict } from './payload';
 
@@ -47,7 +47,6 @@ type EngineContextValue = {
   /** True while a drag is in progress; a ref so reading it never renders. */
   isDragging: () => boolean;
   /** Read-only mode refuses every start; the surface shows the reason. */
-  setLocked: (locked: boolean, message: string) => void;
 };
 
 const DragEngineContext = createContext<EngineContextValue | null>(null);
@@ -69,15 +68,12 @@ type ActiveDrag = {
 };
 
 const LONG_PRESS_MS = 250;
-const AUTO_SCROLL_DWELL_MS = 150;
 
 export function CalendarDragProvider({ children }: { children: ReactNode }): React.JSX.Element {
   const ghostRef = useRef<HTMLDivElement>(null);
   const surfaceRef = useRef<DragSurface | null>(null);
   const zonesRef = useRef<ZoneRegistration[]>([]);
   const activeRef = useRef<ActiveDrag | null>(null);
-  const lockRef = useRef<{ locked: boolean; message: string }>({ locked: false, message: '' });
-  const lockNoticeRef = useRef<HTMLDivElement>(null);
 
   const paintGhost = useCallback((drag: ActiveDrag) => {
     const ghost = ghostRef.current;
@@ -140,10 +136,8 @@ export function CalendarDragProvider({ children }: { children: ReactNode }): Rea
       const dx = autoScrollVelocity(point.x, rect.left, rect.right);
       const dy = autoScrollVelocity(point.y, rect.top, rect.bottom);
       if (dx !== 0 || dy !== 0) {
-        // The pointer stays in the edge zone for a moment before the container scrolls, so a card
-        // carried across the edge from a side panel lands where the planner sees it.
         drag.edgeSince ??= performance.now();
-        if (performance.now() - drag.edgeSince >= AUTO_SCROLL_DWELL_MS) container.scrollBy(dx, dy);
+        if (autoScrollDue(drag.edgeSince, performance.now())) container.scrollBy(dx, dy);
         drag.frame = requestAnimationFrame(() => stepRef.current());
       } else {
         drag.edgeSince = null;
@@ -250,15 +244,6 @@ export function CalendarDragProvider({ children }: { children: ReactNode }): Rea
 
   const startDrag = useCallback((event: React.PointerEvent, session: DragSession) => {
     if (activeRef.current || event.button !== 0) return;
-    if (lockRef.current.locked) {
-      const notice = lockNoticeRef.current;
-      if (notice) {
-        notice.textContent = lockRef.current.message;
-        notice.hidden = false;
-        window.setTimeout(() => { if (notice.textContent === lockRef.current.message) notice.hidden = true; }, 4_000);
-      }
-      return;
-    }
     const element = event.currentTarget;
     const isTouch = event.pointerType === 'touch';
     const drag: ActiveDrag = {
@@ -302,11 +287,6 @@ export function CalendarDragProvider({ children }: { children: ReactNode }): Rea
       return () => { zonesRef.current = zonesRef.current.filter((entry) => entry !== registration); };
     },
     isDragging: () => activeRef.current?.moved === true,
-    setLocked: (locked, message) => {
-      lockRef.current = { locked, message };
-      const notice = lockNoticeRef.current;
-      if (notice && !locked) notice.hidden = true;
-    },
   }), [startDrag]);
 
   return (
@@ -324,13 +304,6 @@ export function CalendarDragProvider({ children }: { children: ReactNode }): Rea
         <span data-ghost-secondary="" className="truncate text-[11px] opacity-80" hidden />
         <span data-ghost-message="" className="whitespace-normal text-[11px] leading-tight" hidden />
       </div>
-      <div
-        ref={lockNoticeRef}
-        hidden
-        role="status"
-        className="pointer-events-none fixed bottom-4 left-1/2 z-40 -translate-x-1/2 rounded-md border bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md"
-        onAnimationEnd={() => { if (lockNoticeRef.current) lockNoticeRef.current.hidden = true; }}
-      />
     </DragEngineContext.Provider>
   );
 }

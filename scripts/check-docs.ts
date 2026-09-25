@@ -4,7 +4,8 @@
 // Checks:
 //  1. Index coverage — every docs/**/*.md appears as a link target in docs/README.md
 //     (files under docs/plans/phase-1/slices/ are covered by the folder row instead).
-//  2. Link resolution — every relative markdown link in docs/**/*.md resolves to an existing file.
+//  2. Link resolution — every relative markdown link in docs/**/*.md resolves to an existing file,
+//     and a #fragment on a Markdown target resolves to one of its headings (GitHub slug rules).
 //  3. Status header — every doc declares a Status line within its first 6 lines.
 //  4. Skill mirror sync — every skill present in both .claude/skills/ and .agents/skills/
 //     is byte-identical in the two locations (the mirror is maintained by hand).
@@ -60,17 +61,42 @@ for (const file of docFiles) {
   }
 }
 
-// 2. Relative link resolution
+// 2. Relative link resolution, including heading anchors: a renamed heading used to break every
+//    inbound "#fragment" silently (five such links after the testing guide rewrite of 2026-09-25).
 const linkPattern = /\]\(([^)\s]+)\)/g;
+const anchorCache = new Map<string, Set<string>>();
+function headingAnchors(path: string): Set<string> {
+  const cached = anchorCache.get(path);
+  if (cached) return cached;
+  const anchors = new Set<string>();
+  const seen = new Map<string, number>();
+  for (const line of readFileSync(path, "utf8").split(/\r?\n/)) {
+    for (const explicit of line.matchAll(/<a\s+(?:id|name)="([^"]+)"/g)) anchors.add(explicit[1] ?? "");
+    const heading = line.match(/^#{1,6}\s+(.+?)\s*#*\s*$/);
+    if (!heading?.[1]) continue;
+    const text = heading[1].replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/[`*_~]/g, "");
+    const slug = text.trim().toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, "").replace(/\s/g, "-");
+    const count = seen.get(slug) ?? 0;
+    seen.set(slug, count + 1);
+    anchors.add(count === 0 ? slug : `${slug}-${count}`);
+  }
+  anchorCache.set(path, anchors);
+  return anchors;
+}
 for (const file of docFiles) {
   const content = readFileSync(file, "utf8");
+  const relFile = relative(repoRoot, file).split(sep).join("/");
   for (const match of content.matchAll(linkPattern)) {
     const [, target] = match;
-    if (target === undefined || /^(https?:|mailto:|#)/.test(target)) continue;
-    const targetPath = resolve(dirname(file), target.replace(/#.*$/, ""));
+    if (target === undefined || /^(https?:|mailto:)/.test(target)) continue;
+    const [pathPart = "", fragment] = target.split("#");
+    const targetPath = pathPart === "" ? file : resolve(dirname(file), pathPart);
     if (!existsSync(targetPath)) {
-      const relFile = relative(repoRoot, file).split(sep).join("/");
       problems.push(`link: ${relFile} → ${target} does not resolve`);
+      continue;
+    }
+    if (fragment !== undefined && targetPath.endsWith(".md") && !headingAnchors(targetPath).has(decodeURIComponent(fragment))) {
+      problems.push(`anchor: ${relFile} → ${target} names no heading of the target; use the heading's slug or drop the fragment`);
     }
   }
 }

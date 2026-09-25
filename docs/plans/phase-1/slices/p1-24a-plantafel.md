@@ -4,7 +4,7 @@ Status: closed (2026-09-24) — accepted P1-24a acceptance record; canonical hom
 
 ## Read This First
 
-This record is the plan of the next slice. It grew in two steps: on 2026-09-15 pre-Wave-3 step 3 placed the `Plantafel` here as the week view's successor; on 2026-09-18, after the production release, the owner extended the slice to every calendar view, because the calendar is the office's main hub and its current state ("cropped corners, a stray scrollbar, an off-centre now dot, thick low-contrast lines, sluggish non-optimistic drags, generic error messages") is not acceptable for the product's most-used surface. The [2026-09-18 audit](#audit-of-2026-09-18) below is the verified evidence for that judgement.
+This record was the plan of the slice and is its closed acceptance record (2026-09-24); the [corrections of 2026-09-25](#corrections-of-2026-09-25) at the end name where the criteria as written and the accepted product differ. It grew in two steps: on 2026-09-15 pre-Wave-3 step 3 placed the `Plantafel` here as the week view's successor; on 2026-09-18, after the production release, the owner extended the slice to every calendar view, because the calendar is the office's main hub and its current state ("cropped corners, a stray scrollbar, an off-centre now dot, thick low-contrast lines, sluggish non-optimistic drags, generic error messages") is not acceptable for the product's most-used surface. The [2026-09-18 audit](#audit-of-2026-09-18) below is the verified evidence for that judgement.
 
 Two rules for the agent that takes this slice:
 
@@ -229,11 +229,11 @@ The sentences live in `lib/calendar/messages.ts`; the table is the review copy. 
 | `invalid_time_range` | End before start | „Das Ende liegt vor dem Anfang. Ziehe den Block so, dass er nach dem Anfang endet." |
 | `overlapping_session` | Target person has time there | „{name} hat in diesem Zeitraum bereits Arbeitszeit. Wähle eine freie Zeit oder eine andere Person." |
 | `future_timestamp` (client pre-check) | Time block into the future | „Arbeitszeit kann nicht in der Zukunft liegen. Plane die Arbeit als Termin statt als Ist-Zeit." |
-| `read_only_mode` (client) | Switch on | „„Nur ansehen" ist aktiv. Schalte es in der Kopfzeile aus, um zu planen." |
+| `read_only_mode` (client) | Switch on | „„Nur ansehen“ ist aktiv. Schalte es in der Kopfzeile aus, um zu planen.“ |
 | `internal_not_parkable` (client) | Note or internal entry to Parkplatz | „Interne Termine werden abgesagt oder verschoben, nicht geparkt." |
 | `person_absent` (client) | Drop on an absence | „{name} ist am {date} abwesend. Wähle einen anderen Tag oder eine andere Person." (the drop still opens the capacity dialog if forced with Shift) |
 | `person_off_day` (client) | Drop on a non-working day | „{name} arbeitet am {date} laut Arbeitszeitmodell nicht. Wähle einen Arbeitstag oder bestätige die Ausnahme im Dialog." |
-| `person_without_login_dispatch` (information) | Card of a person without login | „Ohne App-Zugang; das Büro informiert diese Person selbst." |
+| (row label, no code) | Row of a person without login | „Ohne App-Zugang“ as the row's label; the dispatch state reads „nicht möglich“ (P1-12) |
 | `partial_update` | Assignment write failed after the job write | „Der Termin wurde gespeichert, die Zuweisung nicht. Öffne den Termin und weise die Personen erneut zu." |
 | `update_failed`, `create_failed`, `work_action_failed`, `unexpected_error`, `load_failed`, `assessment_failed`, `calendar_transport_failed`, `calendar_read_failed`, `background_read_failed` | Server or transport | „Die Änderung konnte nicht gespeichert werden. Prüfe die Verbindung und versuche es noch einmal; die Ansicht zeigt wieder den gespeicherten Stand." |
 | `calendar_scope_changed` | Organization or role changed mid-flight | „Die Organisation wurde gewechselt. Die Änderung wurde verworfen." |
@@ -272,7 +272,7 @@ Every operation calls `beginMutation` before the optimistic write and releases i
 
 ### Test design (decision 0007)
 
-- `unit:all`: `lib/calendar/messages.test.ts` (exhaustiveness scan over the action modules, no raw code in `components/kalender`), `lib/calendar/board-layout.test.ts` (lane packing, spans, Berlin dates, horizon columns), `lib/calendar/capacity.test.ts` (state derivation), `lib/calendar/preferences.test.ts` (parse and defaults), `lib/calendar/board-http.test.ts` (route, denial of outsiders, employee sees only own row), `lib/calendar/drag-math.test.ts` (slot resolution, snapping, auto-scroll thresholds), the lint contract for the colour-literal selector, the module cap on every calendar file.
+- `unit:all`: `lib/calendar/messages.test.ts` (exhaustiveness scan over the action modules, no raw code in `components/kalender`), `lib/calendar/board-layout.test.ts` (lane packing, spans, Berlin dates, horizon columns), `lib/calendar/board.test.ts` (capacity state derivation), `lib/calendar/preferences.test.ts` (parse and defaults), `lib/calendar/board-http.test.ts` (route, denial of outsiders, employee sees only own row), `lib/calendar/drag-math.test.ts` (slot resolution, snapping, auto-scroll thresholds), the lint contract for the colour-literal selector, the module cap on every calendar file.
 - `ui:contracts`: `calendar-board.spec.ts` (Profiler commit count zero during a synthetic drag; optimistic drop and rollback with the sentence; keyboard path through the popover; read-only mode; focus return; live region), `calendar-day.spec.ts` (successor of `day-view.spec.ts`: resize through the range owner, transport rejection, Undo failure, pre-check refusal sentences), `calendar-month.spec.ts` (successor of `month-view.spec.ts`: readiness date reported, no hidden overflow mounts, „+n mehr" popover, drag move without snap-back), `calendar.spec.ts` extended for the sixth dataset.
 - Application groups: `golden:p1-24a` (`tests/golden/p1-24a.spec.ts`, `@FRESHNESS` stage for a cross-session move), `audit:wave-3:p1-24a` (`tests/audit/wave-3/p1-24a.spec.ts`, exhaustive over F01 to F35 with scope `planning, personnel, work, time`), the A1 calendar tests repointed to the new DOM, `audit:performance:calendar` rewritten around the board landing with the scenarios below.
 - Measured scenarios (`lib/testing/measured-scenarios.ts`): two new boundaries `interaction-to-visible-change` and `interaction-to-settled`; scenarios `calendar.board.cold-open` (navigation), `calendar.board.six-weeks` (navigation), `calendar.board-to-day.covered`, `calendar.day-to-board.covered`, `calendar.board-to-month.uncovered`, `calendar.month-next.uncovered` v3, `calendar.month-to-board.covered`, `calendar.board.reassign.visible` and `.settled`, `calendar.day.resize.visible` and `.settled`, `calendar.month.move.visible` and `.settled`. Budgets are set after the first measured run on the candidate build and reviewed here; the interaction budgets start from the 100 ms first-frame rule (visible) and the two-second freshness rule (settled).
@@ -540,6 +540,29 @@ Independent review: the fresh-session reviewer of 2026-09-18 failed on a rate li
 - `tests/audit/wave-3/p1-24a.spec.ts` (minor): a self-referential count became the month's length.
 
 Not kept: none. The review's stored findings are in the CodeRabbit CLI (`bun run review findings`).
+
+## Corrections Of 2026-09-25
+
+The sanity audit after the harness overhaul compared this record with the accepted product. The catalog section `P1-24a-F01` to `F35` and the [feature spec](../../../features/calendar-and-resource-planning.md) are the truth; where the criteria and the pre-implementation flows above differ from them, the product as accepted is:
+
+- Navigation (criterion 3, F02): „Zurück“ and „Weiter“ move by the horizon, not by one week; the reset reads „Diese Woche“ for one week and „Aktueller Zeitraum“ for longer horizons and returns to the current period without scrolling.
+- Capacity (criterion 6, F09): every person-day cell shows „geplant / Soll“ as numbers; the full sentence is the cell's title and read-aloud text, not a hover-only tooltip.
+- Filters (criterion 10, F19): team, dispatch state, „Nur Konflikte“, weekend and actual time; the calendar's member filter applies; the search also matches location and project.
+- Readiness chips (criterion 13, D16): the material chip only; a tools chip waits for a tool assessment fact.
+- Day view (criterion 30, F26): overlapping blocks lie in lanes below each other; non-working days and absences are shaded, shift hours are not (D17); the day scrolls sideways inside the calendar at 1280 px (criterion 32, F34 as accepted).
+- Parkplatz cards (criterion 33, F33): the cards are drag sources; the keyboard path is the „Einplanen am …“ button and the context dialog, not a focusable card.
+- Phone board (discovery item 10, F34): every role sees every visible row as one day list with the person's name per card, without the toolbar and without drag.
+- Message layer (criterion 27): the inline surface sentences („Nur Termine lassen sich parken.“, „Ist-Zeiten werden in der Tagesansicht verschoben.“, „Arbeitszeit braucht eine Person.“, „Ganztägige Termine werden auf der Plantafel verlängert (…).“, „Der Parkplatz wurde inzwischen geändert. …“) moved into `lib/calendar/messages.ts` on 2026-09-25; the read-only sentence has one home there.
+- Design skill: the „Calendar canon (P1-24a)“ section named under Durable Homes was written on 2026-09-25, mirrored under `.agents/skills`.
+
+Owner review of the evening of 2026-09-25, six defects repaired the same day:
+
+- Criterion 17 and F18 (read-only mode): removed. The switch changed nothing visible and had no use; F18 now names the lock of started and past occurrences.
+- Empty cells: two hover buttons opened the same dialog with the same tooltip; one „Eintrag am … anlegen“ remains and the note preset is gone.
+- Criterion 27: past and started occurrences could be dragged and edited and were refused by the server with a banner afterwards; the views now apply the P1-11 rule before any attempt (no drag source, lock icon, no edit or move in the popover, the rule named there).
+- Criterion 24: the board header's now tick was a clipped pin; the board marks today with its date bubble, the now indicator stays in the day view.
+- Criterion 18 and F20: the `?` list promised keys that held in one view only without saying so; every line now holds everywhere or names its view, `c` opens the create dialog, and the board grid is reachable by Tab.
+- The create dialog's tab strip collapsed when the job form filled the dialog; tab strips no longer shrink (`components/ui/tabs.tsx`).
 
 ## Completion Evidence
 

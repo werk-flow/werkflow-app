@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -8,6 +8,7 @@ import { cn, toLocalDateString } from '@/lib/utils';
 import { WEEKDAY_SHORT, packLanes, type BoardColumn, type BoardSpanItem } from '@/lib/calendar/board-layout';
 import { absenceItems } from '@/lib/calendar/board-model';
 import { MONTH_MAX_VISIBLE_ITEMS, monthGridRange, monthRowTemplate, monthWeeks, type MonthCell } from '@/lib/calendar/month-layout';
+import { isStartedOccurrence } from '@/lib/calendar/board';
 import { formatRefusalDate } from '@/lib/calendar/messages';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { JobParkingContext } from '@/lib/parking/types';
@@ -25,7 +26,7 @@ import type { CalendarMutations } from '../mutations/use-calendar-mutations';
 import { BarSegment } from '../surface/bar-segment';
 import { CalendarCard } from '../surface/calendar-card';
 import { CALENDAR_LAYER_CLASS } from '../surface/layers';
-import { useNowTick } from '../surface/use-now-tick';
+import { useClock, useNowTick } from '../surface/use-now-tick';
 import { minutesIntoDay } from '@/lib/calendar/day-layout';
 import { formatMinutesOfDay } from '@/lib/calendar/drag-math';
 import { useMonthSurface } from './use-month-surface';
@@ -67,17 +68,14 @@ export function MonthView(props: MonthViewProps): React.JSX.Element {
   const { date, todayIso, jobs, entries, members, vacation, sickness, holidays, organizationSettings, isAdminOrManager, mutations, actions, parkingContexts, onParkedContextMissing, onOpenDay, onSessionClick, verticalScroller } = props;
   const rootRef = useRef<HTMLDivElement>(null);
   const highlightRef = useRef<HTMLDivElement>(null);
-  const { startDrag, setLocked } = useCalendarDrag();
+  const { startDrag } = useCalendarDrag();
   const [openMore, setOpenMore] = useState<string | null>(null);
   const nowTick = useNowTick();
+  const clock = useClock();
   const anchorIso = toLocalDateString(date);
   const weeks = useMemo(() => monthWeeks(anchorIso, todayIso), [anchorIso, todayIso]);
   const range = useMemo(() => monthGridRange(weeks), [weeks]);
 
-  useEffect(() => {
-    setLocked(actions.readOnly, '„Nur ansehen" ist aktiv. Schalte es in der Kopfzeile aus, um zu planen.');
-    return () => setLocked(false, '');
-  }, [actions.readOnly, setLocked]);
 
   const labels = useMemo(() => {
     const map = new Map<string, string>();
@@ -124,7 +122,7 @@ export function MonthView(props: MonthViewProps): React.JSX.Element {
     return { itemsByDate: byDate, blocksByUserDate: byUserDate };
   }, [blocksByUser, jobs, nameByUser, nowTick, range.from, range.to]);
 
-  const surface = useMonthSurface({ rootRef, highlightRef, verticalScroller, readOnly: actions.readOnly, mutations, parkingContexts, onParkedContextMissing, onPark: actions.onPark, blocksByUserDate, nowMs: () => Date.now() });
+  const surface = useMonthSurface({ rootRef, highlightRef, verticalScroller, mutations, parkingContexts, onParkedContextMissing, onPark: actions.onPark, blocksByUserDate, nowMs: clock });
   useDragSurface(surface);
 
   const draggable = isAdminOrManager;
@@ -138,6 +136,7 @@ export function MonthView(props: MonthViewProps): React.JSX.Element {
           job={job}
           size="month"
           draggable={draggable}
+          locked={isStartedOccurrence(job, nowTick)}
           className={cn('w-full', full ? 'h-7' : 'h-6')}
           onOpen={(element) => actions.onOpenCard(job, element, null)}
           onPointerDown={(event) => {
@@ -170,7 +169,7 @@ export function MonthView(props: MonthViewProps): React.JSX.Element {
   };
 
   return (
-    <div ref={rootRef} role="grid" aria-label="Monatskalender" aria-readonly={actions.readOnly || undefined} data-month-view={anchorIso.slice(0, 7)} className="relative min-w-[640px]">
+    <div ref={rootRef} role="grid" aria-label="Monatskalender" data-month-view={anchorIso.slice(0, 7)} className="relative min-w-[640px]">
       <div role="row" className={cn('sticky top-0 grid grid-cols-7 border-b border-calendar-grid-strong bg-background', CALENDAR_LAYER_CLASS.sticky)}>
         {WEEKDAY_SHORT.map((weekday, index) => (
           <div key={weekday} role="columnheader" className={cn('px-2 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground', index >= 5 && 'bg-calendar-cell-off')}>{weekday}</div>
@@ -190,8 +189,8 @@ export function MonthView(props: MonthViewProps): React.JSX.Element {
             openMore={openMore}
             onOpenMore={setOpenMore}
             onOpenDay={onOpenDay}
-            canAdd={isAdminOrManager && !actions.readOnly}
-            onAdd={(dateIso) => actions.onAddEntry({ date: dateIso, kind: 'termin' })}
+            canAdd={isAdminOrManager}
+            onAdd={(dateIso) => actions.onAddEntry({ date: dateIso })}
             onOpenCard={(job, element) => actions.onOpenCard(job, element, null)}
           />
         ))}

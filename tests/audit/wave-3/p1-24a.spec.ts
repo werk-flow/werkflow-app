@@ -206,7 +206,7 @@ test.describe("P1-24a Plantafel, day and month audit @AUDIT-W3-P1-24A @AUDIT-W3"
     expect((await getVisibleDispatchStateAs(world.users.employee, world.orgId)).planning_dispatches).toBe(0);
   });
 
-  test("AUDIT-03 keyboard and form paths, filters, search, read-only and persistence @P1-24A-03", async ({ adminPage, world }) => {
+  test("AUDIT-03 keyboard and form paths, filters, search and persistence @P1-24A-03", async ({ adminPage, world }) => {
     const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
     const bueroName = `${world.users.buero.firstName} ${world.users.buero.lastName}`;
     const titleSeries = `P1-24a Serie ${world.runId}`;
@@ -235,21 +235,18 @@ test.describe("P1-24a Plantafel, day and month audit @AUDIT-W3-P1-24A @AUDIT-W3"
     await adminPage.getByRole("checkbox", { name: "Nur Konflikte" }).uncheck();
     await adminPage.keyboard.press("Escape");
 
-    // Density and read-only persist across a reload; keyboard shortcuts move the window and switch views.
+    // Density persists across a reload; keyboard shortcuts move the window and switch views.
     await adminPage.getByRole("button", { name: /Kompakt anzeigen/ }).click();
-    await adminPage.getByRole("button", { name: "Nur ansehen" }).click();
     await adminPage.getByRole("button", { name: "Tastenkürzel anzeigen" }).click();
     await expect(adminPage.getByRole("dialog", { name: "Tastenkürzel" })).toBeVisible();
     await adminPage.keyboard.press("Escape");
     // The save is debounced; the stored row is the proof of persistence before the reload.
     await expect.poll(async () => {
       const stored = await getCalendarPreferencesFor(world.orgId, world.users.admin.id);
-      return `${stored?.density}/${stored?.readOnly}`;
-    }, { timeout: 10_000 }).toBe("compact/true");
+      return stored?.density;
+    }, { timeout: 10_000 }).toBe("compact");
     await openPlantafel(adminPage, DAY_A);
     await expect(plantafel(adminPage)).toHaveAttribute("data-density", "compact");
-    await expect(adminPage.getByRole("button", { name: "Nur ansehen" })).toHaveAttribute("aria-pressed", "true");
-    await adminPage.getByRole("button", { name: "Nur ansehen" }).click();
     await adminPage.getByRole("button", { name: /Komfortabel anzeigen/ }).click();
     // The shortcuts move by the horizon; the persisted two weeks become one for a one-week step.
     await adminPage.getByLabel("Horizont").click();
@@ -263,7 +260,7 @@ test.describe("P1-24a Plantafel, day and month audit @AUDIT-W3-P1-24A @AUDIT-W3"
     await expect(calendarViewReady(adminPage, "day")).toBeVisible({ timeout: 20_000 });
     await adminPage.keyboard.press("w");
     await expect(calendarViewReady(adminPage, "week")).toBeVisible({ timeout: 20_000 });
-    // The last preference burst (read-only off, comfortable, one week, week view) must land before the next test navigates.
+    // The last preference burst (comfortable, one week, week view) must land before the next test navigates.
     await expect.poll(async () => { const stored = await getCalendarPreferencesFor(world.orgId, world.users.admin.id); return `${stored?.readOnly}/${stored?.view}`; }, { timeout: 10_000 }).toBe("false/week");
   });
 
@@ -338,7 +335,6 @@ test.describe("P1-24a Plantafel, day and month audit @AUDIT-W3-P1-24A @AUDIT-W3"
     await employeePage.getByRole("tab", { name: "Woche", exact: true }).click();
     await expect(calendarViewReady(employeePage, "week")).toBeVisible({ timeout: 30_000 });
     await expect(boardRows(employeePage)).toHaveCount(1);
-    await expect(employeePage.getByRole("button", { name: "Nur ansehen" })).toHaveCount(0);
     await expect(textInDom(employeePage, `${world.users.buero.firstName} ${world.users.buero.lastName}`)).toHaveCount(0);
     const own = await employeePage.request.get(`/api/calendar-board?organizationId=${world.orgId}&fromDate=${DAY_A}&toDate=${SATURDAY}`);
     expect(own.status()).toBe(200);

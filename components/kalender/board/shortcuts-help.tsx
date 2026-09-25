@@ -2,18 +2,24 @@
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
+/**
+ * Every line holds in every view unless it names one; the container owns the
+ * key handler and the board its grid navigation, so this list is the contract
+ * the audit checks against.
+ */
 const SHORTCUTS: ReadonlyArray<[string, string]> = [
   ['t', 'Heute'],
   ['j / k', 'Nächster / vorheriger Zeitraum'],
   ['d / w / m', 'Tag / Plantafel / Monat'],
+  ['c', 'Neuen Kalendereintrag anlegen'],
   ['z', 'Letzte Ablage rückgängig machen, solange der Hinweis sichtbar ist'],
-  ['+ / -', 'Tagesansicht vergrößern / verkleinern'],
-  ['Tab / Enter', 'Karte auswählen / Terminübersicht öffnen'],
-  ['Pfeiltasten', 'Zwischen Zellen der Plantafel bewegen'],
-  ['Alt + Ziehen', 'Termin kopieren statt verschieben'],
-  ['Shift + Ziehen', 'Feines Raster im Tag; Ablage trotz Hinweis auf der Plantafel'],
-  ['Esc', 'Ziehen abbrechen'],
+  ['Tab, Enter', 'Zur nächsten Karte, Terminübersicht öffnen'],
+  ['Esc', 'Ziehen abbrechen; Übersicht, Dialog oder Parkplatz schließen'],
   ['?', 'Diese Übersicht'],
+  ['+ / -', 'Nur Tag: vergrößern / verkleinern'],
+  ['Pfeiltasten', 'Nur Plantafel: zwischen Zellen bewegen (Tab erreicht die erste Zelle)'],
+  ['Alt + Ziehen', 'Nur Plantafel: Termin kopieren statt verschieben'],
+  ['Shift + Ziehen', 'Ablage trotz Hinweis; im Tag feines 5-Minuten-Raster'],
 ];
 
 /** The `?` overlay (P1-24a, criterion 18). */

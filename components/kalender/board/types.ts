@@ -3,12 +3,11 @@ import type { CalendarJob } from '@/lib/jobs/types';
 
 /** What a view needs from the container to open, create and park things. */
 export type CalendarSurfaceActions = {
-  readOnly: boolean;
   isManager: boolean;
   /** Opens the card popover anchored to the element that was activated. */
   onOpenCard: (job: CalendarJob, element: HTMLElement, row: CalendarBoardRow | null) => void;
-  /** Opens the create dialog preset to a person and a date, as a visit or as a note. */
-  onAddEntry: (input: { date: string; time?: string | undefined; endTime?: string | undefined; userId?: string | undefined; kind: 'termin' | 'notiz' }) => void;
+  /** Opens the create dialog preset to a person, a date and, from the day view, a time span. */
+  onAddEntry: (input: { date: string; time?: string | undefined; endTime?: string | undefined; userId?: string | undefined }) => void;
   /** Starts the park flow (the card leaves the grid, the context dialog opens). */
   onPark: (job: CalendarJob) => void;
 };

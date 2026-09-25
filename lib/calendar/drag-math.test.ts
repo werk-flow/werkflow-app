@@ -8,8 +8,7 @@ import {
   minutesToPixels,
   pixelsToMinutes,
   snapMinutes,
-  uniformTrackStarts,
-} from './drag-math';
+  uniformTrackStarts, autoScrollDue } from './drag-math';
 
 describe('drag math', () => {
   test('resolves track indices from cumulative starts and reports outside positions as null', () => {
@@ -46,6 +45,12 @@ describe('drag math', () => {
     // Outside the container, on either side, nothing scrolls.
     expect(autoScrollVelocity(-1, 0, 1000)).toBe(0);
     expect(autoScrollVelocity(1001, 0, 1000)).toBe(0);
+  });
+
+  test('auto-scroll waits 150 ms in the edge zone before it moves the container', () => {
+    expect(autoScrollDue(null, 1000)).toBe(false);
+    expect(autoScrollDue(1000, 1100)).toBe(false);
+    expect(autoScrollDue(1000, 1150)).toBe(true);
   });
 
   test('applies the five pixel threshold on the distance, not per axis', () => {

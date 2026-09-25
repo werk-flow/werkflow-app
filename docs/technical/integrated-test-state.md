@@ -1,6 +1,6 @@
 # Integrated test state
 
-Status: living — last reviewed 2026-09-17
+Status: living — last reviewed 2026-09-25
 
 This reference owns the fixture state and date constraints within connected Golden journeys. Use [testing.md](testing.md) for execution and acceptance policy.
 
@@ -25,8 +25,10 @@ Read this reference when changing the integrated Golden journey or its declared 
   | A7 | +55 to +64 |
   | P1-13 to P1-24 | five days per slice from +70: P1-13 +70 to +74, P1-14 +75 to +79, P1-15 +80 to +84, P1-16 +85 to +89, P1-17 +90 to +94, P1-18 +95 to +99, P1-19 +100 to +104, P1-20 +105 to +109, P1-21 +110 to +114, P1-22 +115 to +119, P1-23 +120 to +124, P1-24 +125 to +129 |
   | `audit:performance:calendar-live` | -7 (worked time) and +130 (a closure day) |
+  | P1-24a | +131 to +140 (ten days: the Plantafel week, the month and the Parkplatz) |
+  | `audit:performance:calendar` | +141 to +147 (the typical profile's live week) |
 
-  The Wave 2 audit record reserved "+130 onward" for Wave 3 before the calendar-live group claimed +130; the next free offset is therefore +131, and Wave 3 slices continue five days per slice from there (`P1-24a` +131 to +135, then `P1-25` +136 to +140, and so on), registered in `AUDIT_DATE_WINDOWS` when the slice starts.
+  The Wave 2 audit record reserved "+130 onward" for Wave 3 before the calendar-live group claimed +130. `P1-24a` took +131 to +140 and the calendar performance group +141 to +147, so the next free offset is +148: Wave 3 slices continue five days per slice from there (`P1-25` +148 to +152, `P1-26` +153 to +157, and so on), registered in `AUDIT_DATE_WINDOWS` when the slice starts.
 - **Stale-UI action proofs need a frozen page.** The app deliberately self-heals stale views (Realtime events plus a synthetic all-table refresh on `visibilitychange`), so a "click the stale card" test races the app's own freshness machinery and loses intermittently. `@P1-06` freezes the page first — `page.routeWebSocket` swallows the Realtime socket and an init script suppresses `visibilitychange` — which is also the honest simulation of the woken-up-laptop scenario the action-time enforcement exists for. This investigation surfaced a real defect: action-time authorization compared the app clock against database-stamped configuration timestamps, so a machine with a trailing clock briefly kept honoring a just-replaced configuration (fixed with a skew guard in `lib/responsibilities/server.ts`).
 
 - **State `@P1-08` leaves behind** (P1-09 now inherits it): the employee carries one CANCELLED sickness report (yesterday–run-day, `krankheit`, evidence received; events `reported`→`ended`→`evidence_updated`×2→`cancelled` — it no longer affects any target), Büro carries one ACTIVE half-day `kind_krank` report for run-day−1 with evidence required/`pending` recorded by the admin (it halves Büro's yesterday target), and sickness read markers/`attention_events` exist for Büro (two versions of the employee report) and the employee (the cancellation). The spec pins NO responsibility state (sickness authority is the manager role); its mode-dependent expectations (vacation-overlap hint, weekly Soll, notification rows) are all derived from the database at runtime.

@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useLayoutEffect, useMemo, useRef } from 'react';
-import { checkParkedContext, checkOccurrenceMovable, checkParkable, checkReadOnly, checkTimeBlockTarget } from '@/lib/calendar/refusal-checks';
-import { formatRefusalDate } from '@/lib/calendar/messages';
+import { checkParkedContext, checkOccurrenceMovable, checkParkable, checkTimeBlockTarget } from '@/lib/calendar/refusal-checks';
+import { calendarRefusalMessage, formatRefusalDate } from '@/lib/calendar/messages';
 import { shiftedBlockUpdates } from '@/lib/calendar/day-layout';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { JobParkingContext } from '@/lib/parking/types';
@@ -18,7 +18,6 @@ export type MonthSurfaceInput = {
   rootRef: React.RefObject<HTMLDivElement | null>;
   highlightRef: React.RefObject<HTMLDivElement | null>;
   verticalScroller: () => HTMLElement | null;
-  readOnly: boolean;
   mutations: CalendarMutations;
   parkingContexts: ReadonlyMap<string, JobParkingContext> | null;
   onParkedContextMissing: () => void;
@@ -74,22 +73,20 @@ export function useMonthSurface(input: MonthSurfaceInput): DragSurface {
   }, []);
 
   const checkTarget = useCallback((target: CalendarDragTarget, payload: CalendarDragPayload): DragVerdict => {
-    const { readOnly, blocksByUserDate, nowMs, parkingContexts } = inputRef.current;
-    const readOnlyCheck = checkReadOnly(readOnly);
-    if (!readOnlyCheck.ok) return { ok: false, message: readOnlyCheck.message };
+    const { blocksByUserDate, nowMs, parkingContexts } = inputRef.current;
     if (payload.kind === 'parked' && target.kind !== 'zone') {
       const parked = checkParkedContext(parkingContexts, payload.job);
       if (!parked.ok) return { ok: false, message: parked.message };
     }
     if (target.kind === 'zone') {
-      if (payload.kind !== 'occurrence') return { ok: false, message: 'Nur Termine lassen sich parken.' };
+      if (payload.kind !== 'occurrence') return { ok: false, message: calendarRefusalMessage('only_occurrences_park') ?? '' };
       const parkable = checkParkable(payload.job);
       return parkable.ok ? { ok: true, label: 'Parken' } : { ok: false, message: parkable.message };
     }
     const dateLabel = formatRefusalDate(target.date);
     switch (payload.kind) {
       case 'occurrence': {
-        const movable = checkOccurrenceMovable(payload.job);
+        const movable = checkOccurrenceMovable(payload.job, nowMs());
         return movable.ok ? { ok: true, label: dateLabel } : { ok: false, message: movable.message };
       }
       case 'parked':

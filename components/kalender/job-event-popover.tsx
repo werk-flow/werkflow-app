@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Briefcase, Building2, CalendarDays, Clock, ExternalLink, MapPin, MoveRight, ParkingSquare, Repeat2, Users, X } from 'lucide-react';
+import { Briefcase, Building2, CalendarDays, Clock, ExternalLink, Lock, MapPin, MoveRight, ParkingSquare, Repeat2, Users, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Field } from '@/components/ui/field';
@@ -10,9 +10,10 @@ import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { cn, toLocalDateString } from '@/lib/utils';
 import type { CalendarJob } from '@/lib/jobs/types';
-import type { CalendarBoardRow } from '@/lib/calendar/board';
+import { isStartedOccurrence, type CalendarBoardRow } from '@/lib/calendar/board';
 import { reassignmentChanges } from '@/lib/calendar/board-model';
-import { formatRefusalDate } from '@/lib/calendar/messages';
+import { calendarRefusalMessage, formatRefusalDate } from '@/lib/calendar/messages';
+import { useClock } from './surface/use-now-tick';
 import { checkOccurrenceMovable, checkParkable } from '@/lib/calendar/refusal-checks';
 import { PLANNING_OCCURRENCE_STATUS_LABELS } from '@/lib/planning/types';
 import { PlanningOccurrenceEditDialog } from './planning-occurrence-edit-dialog';
@@ -64,6 +65,7 @@ export function JobEventPopover({ card, ...rest }: JobEventPopoverProps) {
 
 function CardPopover({ card, onClose, memberNames, canEditPlanning, rows, mutations, onPark }: JobEventPopoverProps & { card: OpenCard }) {
   const router = useRouter();
+  const clock = useClock();
   const { job, row } = card;
   const [editOpen, setEditOpen] = useState(false);
   const [moving, setMoving] = useState(false);
@@ -72,7 +74,8 @@ function CardPopover({ card, onClose, memberNames, canEditPlanning, rows, mutati
   const priorityInfo = PRIORITY_LABELS[job.priority] ?? PRIORITY_LABELS.mittel;
   const inactiveStatusLabel = job.occurrenceStatus ? PLANNING_OCCURRENCE_STATUS_LABELS[job.occurrenceStatus] : undefined;
   const jobUrl = job.jobNumber ? (job.projectNumber ? `/auftraege/projekt/${job.projectNumber}/${job.jobNumber}` : `/auftraege/${job.jobNumber}`) : null;
-  const movable = canEditPlanning && mutations !== null && checkOccurrenceMovable(job).ok;
+  const locked = isStartedOccurrence(job, clock());
+  const movable = canEditPlanning && mutations !== null && checkOccurrenceMovable(job, clock()).ok;
   const parkable = canEditPlanning && onPark !== null && checkParkable(job).ok;
 
   const close = () => {
@@ -134,7 +137,10 @@ function CardPopover({ card, onClose, memberNames, canEditPlanning, rows, mutati
           <MoveForm job={job} row={row} rows={rows} mutations={mutations} onDone={onClose} onCancel={() => setMoving(false)} />
         ) : (
           <div className="mt-3 grid gap-2">
-            {canEditPlanning && job.occurrenceId && !inactiveStatusLabel && (
+            {locked && (
+              <p className="flex items-start gap-2 text-xs text-muted-foreground" data-card-locked=""><Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />{calendarRefusalMessage('started_occurrence')}</p>
+            )}
+            {canEditPlanning && job.occurrenceId && !inactiveStatusLabel && !locked && (
               <Button variant="default" size="sm" onClick={() => setEditOpen(true)}>Termin bearbeiten</Button>
             )}
             {movable && (

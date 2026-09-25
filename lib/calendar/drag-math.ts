@@ -69,6 +69,16 @@ export function autoScrollVelocity(position: number, start: number, end: number)
 }
 
 /** True once the pointer left the threshold circle around its start. */
+const AUTO_SCROLL_DWELL_MS = 150;
+
+/**
+ * The container scrolls only after the pointer has stayed in the edge zone for a moment, so a card
+ * carried across the edge from a side panel lands where the planner sees it.
+ */
+export function autoScrollDue(edgeSince: number | null, now: number): boolean {
+  return edgeSince !== null && now - edgeSince >= AUTO_SCROLL_DWELL_MS;
+}
+
 export function exceedsDragThreshold(start: { x: number; y: number }, current: { x: number; y: number }): boolean {
   const dx = current.x - start.x;
   const dy = current.y - start.y;

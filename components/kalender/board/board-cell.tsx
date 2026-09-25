@@ -1,7 +1,7 @@
 'use client';
 
 import { memo } from 'react';
-import { CalendarPlus, StickyNote } from 'lucide-react';
+import { CalendarPlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { deriveCapacityState, describeCapacity, formatShortHours, type CalendarBoardDay, type CalendarBoardRow, type CapacityState } from '@/lib/calendar/board';
 import type { BoardColumn } from '@/lib/calendar/board-layout';
@@ -34,18 +34,18 @@ export type BoardCellProps = {
  * One person-day (P1-24a, criterion 6): the background tells the day's
  * nature (weekend, holiday, closure, absence, today), the corner tells the
  * capacity, the strip at the bottom tells recorded time when the toggle is
- * on, and two quiet buttons create a visit or a note in two clicks.
+ * on, and one quiet button opens the create dialog for this person and day.
  */
 export const BoardCell = memo(function BoardCell({ column, columnIndex, rowIndex, row, day, plannedMinutes, actual, compact, actions, employed }: BoardCellProps) {
   const state: CapacityState = day ? deriveCapacityState(day, plannedMinutes) : plannedMinutes > 0 ? 'partial' : 'free';
   const off = !employed || (day ? day.targetMinutes === 0 && plannedMinutes === 0 : column.isWeekend);
   const description = !employed ? 'Nicht beschäftigt' : day ? describeCapacity(day, plannedMinutes) : column.isWeekend ? 'Wochenende' : '';
   const dateLabel = `${WEEKDAY_SHORT[column.weekday]} ${formatRefusalDate(column.date)}`;
-  const canAdd = actions.isManager && !actions.readOnly && employed;
+  const canAdd = actions.isManager && employed;
   return (
     <div
       role="gridcell"
-      tabIndex={-1}
+      tabIndex={rowIndex === 0 && columnIndex === 0 ? 0 : -1}
       data-board-cell=""
       data-row-index={rowIndex}
       data-column-index={columnIndex}
@@ -80,24 +80,14 @@ export const BoardCell = memo(function BoardCell({ column, columnIndex, rowIndex
         </span>
       )}
       {canAdd && (
-        <span className="absolute right-0.5 top-0.5 z-[1] flex gap-0.5 opacity-0 transition-opacity group-hover/cell:opacity-100 group-focus-within/cell:opacity-100 has-[:focus-visible]:opacity-100">
-          <button
-            type="button"
-            className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            aria-label={`Termin am ${dateLabel}${row ? ` für ${row.displayName}` : ''} planen`}
-            onClick={() => actions.onAddEntry({ date: column.date, userId: row?.userId ?? undefined, kind: 'termin' })}
-          >
-            <CalendarPlus className="size-3.5" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            aria-label={`Notiz am ${dateLabel}${row ? ` für ${row.displayName}` : ''} anlegen`}
-            onClick={() => actions.onAddEntry({ date: column.date, userId: row?.userId ?? undefined, kind: 'notiz' })}
-          >
-            <StickyNote className="size-3.5" aria-hidden="true" />
-          </button>
-        </span>
+        <button
+          type="button"
+          className="absolute right-0.5 top-0.5 z-[1] rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/cell:opacity-100"
+          aria-label={`Eintrag am ${dateLabel}${row ? ` für ${row.displayName}` : ''} anlegen`}
+          onClick={() => actions.onAddEntry({ date: column.date, userId: row?.userId ?? undefined })}
+        >
+          <CalendarPlus className="size-3.5" aria-hidden="true" />
+        </button>
       )}
     </div>
   );

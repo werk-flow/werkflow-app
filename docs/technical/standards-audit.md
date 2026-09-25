@@ -1,6 +1,6 @@
 # Standards audit
 
-Status: living — last reviewed 2026-09-17; the per-aspect map of rules, automated proof and review judgment, written so a wave-end audit is a checklist, not a research task
+Status: living — last reviewed 2026-09-25; the per-aspect map of rules, automated proof and review judgment, written so a wave-end audit is a checklist, not a research task
 
 WerkFlow holds itself to five standards: the UI and UX canon, performance and freshness, security, the testing system, and code quality. Each has one rules home, a set of automated gates that prove part of it, and a bounded list of judgments a reviewer still makes by hand. This page maps the three for each aspect and gives the procedure for auditing a wave. It states facts about where things live; it does not restate the rules.
 
@@ -8,7 +8,7 @@ The honest boundary: the gates prove what is registered. A new component that re
 
 ## The map
 
-| Aspect | Rules home | Automated proof (runs in `bun run test:plan` and `bun run test:verify`) | Review judgment |
+| Aspect | Rules home | Automated proof (listed by `bun run test:plan`, run by `bun run test:verify`) | Review judgment |
 | --- | --- | --- | --- |
 | UI and UX | The `werkflow-design` skill (color, shape, density, component registry, interaction canon, feedback policy matrix, pending feedback in the first frame, checklist before shipping UI); `AGENTS.md` "Styling And Brand Color Rules" | `static:lint`: hex literals, numbered palette classes, radius, ring offsets, Lucide `strokeWidth`, native inputs and selects, `useTransition`, hover literals, label stacks, page columns, `h-screen`; `ui:contracts` and the `lib/ui/*.test` contracts: field rendering, row interaction parity, skeleton pairing, dialog forms, contrast in both themes, select registry, settlement, popper dependency, the styled clock contracts (44 px targets, no clipping); `audit:layout` mobile viewport at 375 px over the route inventory | Shadows, spacing rhythm, copy tone, German wording, whether a new screen belongs in the registry, dark-mode rendering of a new surface; the skill's checklist is the review list |
 | Performance and freshness | [realtime-and-caching.md](realtime-and-caching.md) (the freshness contract rules 1 to 6, background reads, batched readers, the scheduler, `LIVE_TARGET_MS`, server-paginated lists); [testing.md](testing.md) "measured scenarios" and the performance references | `audit:performance:*` groups against `lib/testing/performance-baselines.json` with the reviewed tolerance; the `@FRESHNESS` stages in the Golden and audit groups; `ui:contracts` for the range owner, the catch-up threshold, mutation ownership and pending feedback; `sql:list-pagination`; the read-request scope and scheduler unit tests | Whether a new flow is a registered measured scenario, whether a new list is paginated at the source, whether a new reader belongs in the background-read registry, whether a new mutation shows first-frame feedback; a slower reference is a finding to explain, never a number to accept |

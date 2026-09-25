@@ -56,12 +56,14 @@ test('a transport rejection restores the card and names the connection', async (
   await expect(saving(page)).toHaveText('frei');
 });
 
-test('read-only mode refuses the drag before any write and says so', async ({ page }) => {
-  await page.getByRole('button', { name: 'Nur ansehen' }).click();
-  await dragPointer(page, card(page, TITLE), boardCell(page, 'r2', '2026-09-09'));
-  await expect(page.getByRole('status').filter({ hasText: 'Nur ansehen' })).toBeVisible();
+test('a started occurrence is history: not a drag source, no handles, no write', async ({ page }) => {
+  const started = card(page, 'Begonnener Termin');
+  await expect(started).toHaveAttribute('data-locked', '');
+  await expect(started).toHaveAccessibleName(/begonnen oder vergangen/);
+  await dragPointer(page, started, boardCell(page, 'r1', '2026-09-10'));
   expect(await writeCount(page)).toBe(0);
-  await expect(boardRowCard(page, 'r1', TITLE)).toBeVisible();
+  await expect(boardRowCard(page, 'r2', 'Begonnener Termin')).toBeVisible();
+  await expect(card(page, TITLE)).not.toHaveAttribute('data-locked', '');
 });
 
 test('pointer moves during a drag commit nothing in React and Escape cancels without a write', async ({ page }) => {

@@ -19,7 +19,6 @@ export const calendarPreferencesSchema = z.object({
   horizonWeeks: z.union([z.literal(1), z.literal(2), z.literal(4), z.literal(6)]),
   density: z.enum(['compact', 'comfortable']),
   hideWeekends: z.boolean(),
-  readOnly: z.boolean(),
   /** null follows the horizon: on for one week, off for longer horizons. */
   showActualTime: z.boolean().nullable(),
   showJobs: z.boolean(),
@@ -38,7 +37,6 @@ export const DEFAULT_CALENDAR_PREFERENCES: CalendarPreferences = {
   horizonWeeks: 1,
   density: 'comfortable',
   hideWeekends: false,
-  readOnly: false,
   showActualTime: null,
   showJobs: true,
   memberUserIds: null,

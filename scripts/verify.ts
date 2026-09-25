@@ -24,7 +24,7 @@ import { discoverPlaywrightSelection, type DiscoveredPlaywrightTest } from "../l
 import { PREPARED_PLAN_ENV, writePreparedPlan, type PreparedPlan } from "../lib/testing/prepared-plan";
 import type { PlaywrightSuite } from "../lib/testing/run-policy";
 import { ensureRealtimeHealthy } from "../lib/testing/realtime-health";
-import { formatCampaignSummary, summarizeCampaign } from "../lib/testing/campaign-summary";
+import { campaignGateProblem, formatCampaignSummary, summarizeCampaign } from "../lib/testing/campaign-summary";
 import { runPlaywrightPreflight } from "./playwright-preflight";
 import { lastCommitTime, readCampaignReports } from "./campaign-summary";
 import { probeRealtimeReadiness, restartLocalRealtimeContainer } from "./realtime-probe";
@@ -140,9 +140,11 @@ async function main(): Promise<void> {
   const planning = options.groupIds || options.target === "cloud" ? preliminaryPlan : preliminaryPlan.filter((entry) => required.includes(entry.group.id));
   const freshBrowserEntries = planning.filter((entry) => !entry.reusable && BROWSER_KINDS.has(entry.group.kind));
   console.log(`Verification ${options.mode}/${options.target}: ${changed.length} changed inputs; ${planning.length} required groups; ${freshBrowserEntries.length} browser groups to run on up to ${options.jobs} workers. Performance, freshness, SQL and setup gates run alone.`);
+  if (changed.length > 0 && changed.length <= 12) console.log(`[verify] changed: ${changed.join(", ")}`);
   for (const entry of planning) console.log(`${entry.reusable ? "REUSE" : "RUN  "} ${entry.group.id} | ${entry.inputs.length} qualifying inputs | ${entry.reusable ? `passed ${entry.reusable.completedAt}` : "missing or changed proof"}`);
-  // The breaker and the archive guard refuse in run mode and only warn in plan mode, so the plan still lists what a focused run must prove.
+  // The breaker, the archive guard and the campaign gate refuse in run mode and only warn in plan mode, so the plan still lists what a focused run must prove.
   const refusals = [
+    freshBrowserEntries.length ? campaignGateProblem({ reports: readCampaignReports(), runs: listRunManifests().map((run) => ({ runKey: run.runKey, classification: run.classification })), since: lastCommitTime(), currentFiles: snapshot.files }) : undefined,
     options.mode === "release" ? releaseAttemptProblem({ history, current: new Map(preliminaryPlan.map((entry) => [entry.group.id, { fingerprint: entry.fingerprint, inputs: entry.inputs }])), snapshot, incidentLog: readFileSync(resolve(repository, INCIDENT_LOG_PATH), "utf8") }) : undefined,
     freshBrowserEntries.length ? archiveSizeProblem(prunableArchiveBytes(resolve(repository, ".agent-logs/playwright-runs"))) : undefined,
   ].filter((refusal): refusal is string => Boolean(refusal));
