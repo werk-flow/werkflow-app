@@ -1,9 +1,12 @@
 'use server';
 
-import { updateTag } from 'next/cache';
-import { CACHE_TAGS } from '@/lib/data/cached';
+import { loggedRead, logReadErrors } from '@/lib/data/read-request-cache';
+import type { ActionFailure, ActionResult } from '@/lib/action-result';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { rpcArgs } from '@/lib/supabase/rpc-args';
+import { normalizeOptionalText } from '@/lib/validation/text';
+import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { getBusinessTodayIso } from '@/lib/personnel/types';
 import {
   CAPABILITY_KINDS,
@@ -18,89 +21,107 @@ import {
   type JobQualificationDetail,
   type PersonnelQualificationSummary,
 } from './types';
-import {
-  loadAssignmentEvaluation,
-  toCapabilityDefinition,
-  toEmployeeCapability,
-} from './server';
+import { loadAssignmentEvaluation, toCapabilityDefinition, toEmployeeCapability } from './server';
+import { logError } from '@/lib/logging';
+import { z } from '@/lib/zod';
+import { uuidSchema } from '@/lib/validation/uuid';
+
+// Boundary schemas: types, ids and bounds. The date and name rules below keep
+// their own error codes for the forms.
+const qualificationDate = z.string().max(10);
+const qualificationNote = z.string().max(2000).nullable().optional();
+const capabilityRequirementsSchema = z
+  .array(z.object({ capabilityId: uuidSchema, requireConfirmation: z.boolean() }))
+  .max(200);
+const createTeamSchema = z.object({ name: z.string().max(200), description: qualificationNote });
+const updateTeamSchema = createTeamSchema.extend({ teamId: uuidSchema });
+const dissolveTeamSchema = z.object({ teamId: uuidSchema, reason: qualificationNote });
+const addTeamMembershipSchema = z.object({
+  teamId: uuidSchema,
+  employeeRecordId: uuidSchema,
+  validFrom: qualificationDate,
+  validUntil: qualificationDate.nullable().optional(),
+});
+const endTeamMembershipSchema = z.object({ membershipId: uuidSchema, validUntil: qualificationDate });
+const createCapabilitySchema = z.object({
+  kind: z.enum(CAPABILITY_KINDS),
+  name: z.string().max(200),
+  description: qualificationNote,
+  expiryWarningDays: z.number().int().min(0).max(3650).optional(),
+});
+const capabilityRecordFields = {
+  validFrom: qualificationDate,
+  validUntil: qualificationDate.nullable().optional(),
+  issuer: z.string().max(300).nullable().optional(),
+  renewalDueDate: qualificationDate.nullable().optional(),
+  operationalNote: qualificationNote,
+};
+const addEmployeeCapabilitySchema = z.object({
+  ...capabilityRecordFields,
+  employeeRecordId: uuidSchema,
+  capabilityId: uuidSchema,
+  confirmationStatus: z.enum(CONFIRMATION_STATUSES).optional(),
+  evidenceState: z.enum(EVIDENCE_STATES).optional(),
+  supersedesId: uuidSchema.nullable().optional(),
+});
+const updateEmployeeCapabilitySchema = z.object({
+  ...capabilityRecordFields,
+  recordId: uuidSchema,
+  confirmationStatus: z.enum(CONFIRMATION_STATUSES),
+  evidenceState: z.enum(EVIDENCE_STATES),
+});
+const jobRequirementsSchema = z.object({ jobId: uuidSchema, requirements: capabilityRequirementsSchema });
+const projectRequirementsSchema = z.object({
+  projectId: uuidSchema,
+  requirements: capabilityRequirementsSchema,
+  expectedRequirements: capabilityRequirementsSchema,
+});
+const expandTeamSchema = z.object({
+  teamId: uuidSchema,
+  assessedForDate: qualificationDate.nullable().optional(),
+});
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-
-function normalizeOptionalText(value: string | null | undefined): string | null {
-  if (value === undefined || value === null) return null;
-  const normalized = value.trim();
-  return normalized.length > 0 ? normalized : null;
-}
 
 function isIsoDate(value: string | null | undefined): value is string {
   return Boolean(value && ISO_DATE_PATTERN.test(value));
 }
 
-function isOrderedRange(
-  validFrom: string,
-  validUntil: string | null | undefined
-): boolean {
+function isOrderedRange(validFrom: string, validUntil: string | null | undefined): boolean {
   return !validUntil || validUntil >= validFrom;
 }
 
-async function recordTeamEvent(input: {
-  orgId: string;
-  teamId: string;
-  eventType: string;
-  payload?: Record<string, unknown>;
-  actorId: string;
-}): Promise<void> {
-  const { error } = await createSupabaseAdminClient().from('team_events').insert({
-    organization_id: input.orgId,
-    team_id: input.teamId,
-    event_type: input.eventType,
-    event_payload: input.payload ?? {},
-    created_by: input.actorId,
-  });
-  if (error) console.error('Failed to record team event:', error);
-}
+// The refusals of the qualification write functions (migrations
+// 20261004180000_write_qualification_history_with_its_change.sql and
+// 20261004190000_write_employee_capability_history_with_its_change.sql), each
+// an action failure code. Each function writes the change and its history row
+// together or refuses and changes nothing.
+const QUALIFICATION_WRITE_REFUSALS: ReadonlySet<string> = new Set([
+  'invalid_input',
+  'not_authorized',
+  'duplicate_name',
+  'team_not_found',
+  'employee_not_found',
+  'overlap',
+  'record_not_found',
+  'definition_not_found',
+]);
 
-async function recordQualificationEvent(input: {
-  orgId: string;
-  capabilityId?: string | null;
-  eventType: string;
-  payload?: Record<string, unknown>;
-  actorId: string;
-}): Promise<void> {
-  const { error } = await createSupabaseAdminClient()
-    .from('qualification_events')
-    .insert({
-      organization_id: input.orgId,
-      capability_id: input.capabilityId ?? null,
-      event_type: input.eventType,
-      event_payload: input.payload ?? {},
-      created_by: input.actorId,
-    });
-  if (error) console.error('Failed to record qualification event:', error);
-}
-
-async function recordEmployeeQualificationEvent(input: {
-  orgId: string;
-  employeeRecordId: string;
-  eventType: string;
-  payload?: Record<string, unknown>;
-  actorId: string;
-}): Promise<void> {
-  const { error } = await createSupabaseAdminClient()
-    .from('employee_record_events')
-    .insert({
-      organization_id: input.orgId,
-      employee_record_id: input.employeeRecordId,
-      event_type: input.eventType,
-      event_payload: input.payload ?? {},
-      created_by: input.actorId,
-    });
-  if (error) console.error('Failed to record employee qualification event:', error);
+// The refusal raised under the lock, or the action's own failure code for
+// anything else.
+function qualificationWriteFailure(
+  error: { message: string } | null,
+  failureCode: string,
+  logLabel: string,
+): ActionFailure {
+  if (error && QUALIFICATION_WRITE_REFUSALS.has(error.message))
+    return { success: false, error: error.message };
+  logError(logLabel, error);
+  return { success: false, error: failureCode };
 }
 
 export async function getQualificationWorkspace(): Promise<
-  | { success: true; data: QualificationWorkspace }
-  | { success: false; error: string }
+  { success: true; data: QualificationWorkspace } | ActionFailure
 > {
   try {
     const auth = await authenticateAndAuthorize();
@@ -118,39 +139,66 @@ export async function getQualificationWorkspace(): Promise<
       employeesResult,
       settingsResult,
     ] = await Promise.all([
-      admin
-        .from('teams')
-        .select('*')
-        .eq('organization_id', orgId)
-        .order('dissolved_at', { ascending: true, nullsFirst: true })
-        .order('name', { ascending: true })
-        .limit(501),
-      admin
-        .from('team_memberships')
-        .select('*')
-        .eq('organization_id', orgId)
-        .order('valid_from', { ascending: false })
-        .limit(1001),
-      admin
-        .from('organization_capabilities')
-        .select('*')
-        .eq('organization_id', orgId)
-        .order('retired_at', { ascending: true, nullsFirst: true })
-        .order('kind', { ascending: true })
-        .order('name', { ascending: true })
-        .limit(501),
-      admin
-        .from('employee_capabilities')
-        .select('*')
-        .eq('organization_id', orgId)
-        .order('valid_from', { ascending: false })
-        .limit(2001),
-      admin
-        .from('employee_records')
-        .select('id, user_id, first_name, last_name')
-        .eq('organization_id', orgId)
-        .order('last_name', { ascending: true, nullsFirst: false })
-        .limit(501),
+      // Complete paged reads: a company with 600 employees holds more rows
+      // than one response returns, and an overflow fails like a query error.
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('teams')
+            .select('*')
+            .eq('organization_id', orgId)
+            .order('dissolved_at', { ascending: true, nullsFirst: true })
+            .order('name', { ascending: true })
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('team_memberships')
+            .select('*')
+            .eq('organization_id', orgId)
+            .order('valid_from', { ascending: false })
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('organization_capabilities')
+            .select('*')
+            .eq('organization_id', orgId)
+            .order('retired_at', { ascending: true, nullsFirst: true })
+            .order('kind', { ascending: true })
+            .order('name', { ascending: true })
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('employee_capabilities')
+            .select('*')
+            .eq('organization_id', orgId)
+            .order('valid_from', { ascending: false })
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('employee_records')
+            .select('id, user_id, first_name, last_name')
+            .eq('organization_id', orgId)
+            .order('last_name', { ascending: true, nullsFirst: false })
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
       admin
         .from('organization_qualification_settings')
         .select('apprentice_warning_enabled')
@@ -165,51 +213,31 @@ export async function getQualificationWorkspace(): Promise<
       employeesResult.error ??
       settingsResult.error;
     if (firstError) {
-      console.error('Failed to load qualification workspace:', firstError);
+      logError('Failed to load qualification workspace:', firstError);
       return { success: false, error: 'load_failed' };
     }
-    if (
-      (teamsResult.data?.length ?? 0) > 500 ||
-      (membershipsResult.data?.length ?? 0) > 1000 ||
-      (definitionsResult.data?.length ?? 0) > 500 ||
-      (employeeCapabilitiesResult.data?.length ?? 0) > 2000 ||
-      (employeesResult.data?.length ?? 0) > 500
-    ) {
-      console.error('Qualification workspace size limit exceeded.');
-      return { success: false, error: 'load_failed' };
-    }
-
-    const userIds = (employeesResult.data ?? [])
-      .map((row) => row.user_id)
-      .filter((id): id is string => Boolean(id));
-    const { data: profiles, error: profilesError } =
-      userIds.length > 0
-        ? await admin
-            .from('profiles')
-            .select('id, first_name, last_name')
-            .in('id', userIds)
-            .order('id', { ascending: true })
-            .limit(501)
-        : { data: [], error: null };
+    const userIds = employeesResult.data.map((row) => row.user_id).filter((id): id is string => Boolean(id));
+    const { data: profiles, error: profilesError } = await readInBatches(userIds, (batch) =>
+      admin
+        .from('profiles')
+        .select('id, first_name, last_name')
+        .in('id', [...batch]),
+    );
     if (profilesError) {
-      console.error('Failed to load qualification profile names:', profilesError);
-      return { success: false, error: 'load_failed' };
-    }
-    if ((profiles?.length ?? 0) > 500) {
-      console.error('Qualification profile name limit exceeded.');
+      logError('Failed to load qualification profile names:', profilesError);
       return { success: false, error: 'load_failed' };
     }
     const profileNames = new Map(
-      (profiles ?? []).map((profile) => [
+      profiles.map((profile) => [
         profile.id,
         [profile.first_name, profile.last_name].filter(Boolean).join(' '),
-      ])
+      ]),
     );
 
     return {
       success: true,
       data: {
-        teams: (teamsResult.data ?? []).map((row) => ({
+        teams: teamsResult.data.map((row) => ({
           id: row.id,
           organizationId: row.organization_id,
           name: row.name,
@@ -218,7 +246,7 @@ export async function getQualificationWorkspace(): Promise<
           createdAt: row.created_at,
           updatedAt: row.updated_at,
         })),
-        teamMemberships: (membershipsResult.data ?? []).map((row) => ({
+        teamMemberships: membershipsResult.data.map((row) => ({
           id: row.id,
           organizationId: row.organization_id,
           teamId: row.team_id,
@@ -228,11 +256,9 @@ export async function getQualificationWorkspace(): Promise<
           createdAt: row.created_at,
           updatedAt: row.updated_at,
         })),
-        capabilities: (definitionsResult.data ?? []).map(toCapabilityDefinition),
-        employeeCapabilities: (employeeCapabilitiesResult.data ?? []).map(
-          toEmployeeCapability
-        ),
-        employees: (employeesResult.data ?? []).map((row) => ({
+        capabilities: definitionsResult.data.map(toCapabilityDefinition),
+        employeeCapabilities: employeeCapabilitiesResult.data.map(toEmployeeCapability),
+        employees: employeesResult.data.map((row) => ({
           employeeRecordId: row.id,
           userId: row.user_id,
           displayName:
@@ -240,23 +266,22 @@ export async function getQualificationWorkspace(): Promise<
             [row.first_name, row.last_name].filter(Boolean).join(' ') ||
             'Unbenannt',
         })),
-        apprenticeWarningEnabled:
-          settingsResult.data?.apprentice_warning_enabled ?? false,
+        apprenticeWarningEnabled: settingsResult.data?.apprentice_warning_enabled ?? false,
         isAdmin: role === 'admin',
       },
     };
   } catch (error) {
-    console.error('Unexpected error in getQualificationWorkspace:', error);
+    logError('Unexpected error in getQualificationWorkspace:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
 export async function getPersonnelQualificationSummary(
-  employeeRecordIdOrUserId: string
-): Promise<
-  | { success: true; data: PersonnelQualificationSummary | null }
-  | { success: false; error: string }
-> {
+  employeeRecordIdOrUserIdInput: string,
+): Promise<{ success: true; data: PersonnelQualificationSummary | null } | ActionFailure> {
+  const parsedEmployeeRecordIdOrUserId = uuidSchema.safeParse(employeeRecordIdOrUserIdInput);
+  if (!parsedEmployeeRecordIdOrUserId.success) return { success: false, error: 'invalid_input' };
+  const employeeRecordIdOrUserId = parsedEmployeeRecordIdOrUserId.data;
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
@@ -273,7 +298,7 @@ export async function getPersonnelQualificationSummary(
       .eq('user_id', employeeRecordIdOrUserId)
       .maybeSingle();
     if (byUserResult.error) {
-      console.error('Failed to resolve qualification employee:', byUserResult.error);
+      logError('Failed to resolve qualification employee:', byUserResult.error);
       return { success: false, error: 'load_failed' };
     }
 
@@ -286,10 +311,7 @@ export async function getPersonnelQualificationSummary(
         .eq('id', employeeRecordIdOrUserId)
         .maybeSingle();
       if (byRecordResult.error) {
-        console.error(
-          'Failed to resolve qualification employee record:',
-          byRecordResult.error
-        );
+        logError('Failed to resolve qualification employee record:', byRecordResult.error);
         return { success: false, error: 'load_failed' };
       }
       employeeRecord = byRecordResult.data;
@@ -316,91 +338,67 @@ export async function getPersonnelQualificationSummary(
         .limit(501),
     ]);
     if (membershipsResult.error || capabilityRowsResult.error) {
-      console.error(
+      logError(
         'Failed to load personnel qualification summary:',
-        membershipsResult.error ?? capabilityRowsResult.error
+        membershipsResult.error ?? capabilityRowsResult.error,
       );
       return { success: false, error: 'load_failed' };
     }
-    if (
-      (membershipsResult.data?.length ?? 0) > 500 ||
-      (capabilityRowsResult.data?.length ?? 0) > 500
-    ) {
-      console.error('Personnel qualification summary size limit exceeded.');
+    if ((membershipsResult.data?.length ?? 0) > 500 || (capabilityRowsResult.data?.length ?? 0) > 500) {
+      logError('Personnel qualification summary size limit exceeded.');
       return { success: false, error: 'load_failed' };
     }
 
-    const teamIds = [
-      ...new Set((membershipsResult.data ?? []).map((row) => row.team_id)),
-    ];
-    const capabilityIds = [
-      ...new Set(
-        (capabilityRowsResult.data ?? []).map((row) => row.capability_id)
-      ),
-    ];
+    const teamIds = [...new Set((membershipsResult.data ?? []).map((row) => row.team_id))];
+    const capabilityIds = [...new Set((capabilityRowsResult.data ?? []).map((row) => row.capability_id))];
     const [teamsResult, definitionsResult] = await Promise.all([
-      teamIds.length > 0
-        ? admin
-            .from('teams')
-            .select('id, name')
-            .eq('organization_id', orgId)
-            .is('dissolved_at', null)
-            .in('id', teamIds)
-            .limit(501)
-        : Promise.resolve({ data: [], error: null }),
-      capabilityIds.length > 0
-        ? admin
-            .from('organization_capabilities')
-            .select('*')
-            .eq('organization_id', orgId)
-            .in('id', capabilityIds)
-            .limit(501)
-        : Promise.resolve({ data: [], error: null }),
+      readInBatches(teamIds, (batch) =>
+        admin
+          .from('teams')
+          .select('id, name')
+          .eq('organization_id', orgId)
+          .is('dissolved_at', null)
+          .in('id', [...batch]),
+      ),
+      readInBatches(capabilityIds, (batch) =>
+        admin
+          .from('organization_capabilities')
+          .select('*')
+          .eq('organization_id', orgId)
+          .in('id', [...batch]),
+      ),
     ]);
     if (teamsResult.error || definitionsResult.error) {
-      console.error(
+      logError(
         'Failed to load personnel qualification references:',
-        teamsResult.error ?? definitionsResult.error
+        teamsResult.error ?? definitionsResult.error,
       );
-      return { success: false, error: 'load_failed' };
-    }
-    if (
-      (teamsResult.data?.length ?? 0) > 500 ||
-      (definitionsResult.data?.length ?? 0) > 500
-    ) {
-      console.error('Personnel qualification reference limit exceeded.');
       return { success: false, error: 'load_failed' };
     }
 
     const definitionById = new Map(
-      (definitionsResult.data ?? []).map((row) => [
-        row.id,
-        toCapabilityDefinition(row),
-      ])
+      definitionsResult.data.map((row) => [row.id, toCapabilityDefinition(row)]),
     );
     return {
       success: true,
       data: {
-        teamNames: (teamsResult.data ?? [])
+        teamNames: teamsResult.data
           .map((team) => team.name)
           .sort((left, right) => left.localeCompare(right, 'de-DE')),
         entries: (capabilityRowsResult.data ?? []).flatMap((row) => {
           const definition = definitionById.get(row.capability_id);
-          return definition
-            ? [{ definition, record: toEmployeeCapability(row) }]
-            : [];
+          return definition ? [{ definition, record: toEmployeeCapability(row) }] : [];
         }),
       },
     };
   } catch (error) {
-    console.error('Unexpected error in getPersonnelQualificationSummary:', error);
+    logError('Unexpected error in getPersonnelQualificationSummary:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
 export async function getOwnQualificationProfile(): Promise<
-  | { success: true; data: OwnQualificationProfile | null }
-  | { success: false; error: string }
+  { success: true; data: OwnQualificationProfile | null } | ActionFailure
 > {
   try {
     const auth = await authenticateAndAuthorize();
@@ -413,93 +411,71 @@ export async function getOwnQualificationProfile(): Promise<
       .eq('organization_id', orgId)
       .eq('user_id', userId)
       .maybeSingle();
-    if (error) return { success: false, error: 'load_failed' };
+    if (error) {
+      logError('Failed to resolve own qualification employee record:', error);
+      return { success: false, error: 'load_failed' };
+    }
     if (!employee) return { success: true, data: null };
 
-    const [membershipsResult, capabilityRowsResult, profileResult] =
-      await Promise.all([
-        admin
-          .from('team_memberships')
-          .select('team_id')
-          .eq('organization_id', orgId)
-          .eq('employee_record_id', employee.id)
-          .lte('valid_from', getBusinessTodayIso())
-          .or(
-            `valid_until.gte.${getBusinessTodayIso()},valid_until.is.null`
-          )
-          .limit(501),
-        admin
-          .from('employee_capabilities')
-          .select('*')
-          .eq('organization_id', orgId)
-          .eq('employee_record_id', employee.id)
-          .is('superseded_at', null)
-          .order('valid_from', { ascending: false })
-          .limit(500),
-        admin
-          .from('profiles')
-          .select('first_name, last_name')
-          .eq('id', userId)
-          .maybeSingle(),
-      ]);
-    if (
-      membershipsResult.error ||
-      capabilityRowsResult.error ||
-      profileResult.error
-    ) {
-      console.error(
+    const today = getBusinessTodayIso();
+    const [membershipsResult, capabilityRowsResult, profileResult] = await Promise.all([
+      admin
+        .from('team_memberships')
+        .select('team_id')
+        .eq('organization_id', orgId)
+        .eq('employee_record_id', employee.id)
+        .lte('valid_from', today)
+        .or(`valid_until.gte.${today},valid_until.is.null`)
+        .limit(501),
+      admin
+        .from('employee_capabilities')
+        .select('*')
+        .eq('organization_id', orgId)
+        .eq('employee_record_id', employee.id)
+        .is('superseded_at', null)
+        .order('valid_from', { ascending: false })
+        .limit(501),
+      admin.from('profiles').select('first_name, last_name').eq('id', userId).maybeSingle(),
+    ]);
+    if (membershipsResult.error || capabilityRowsResult.error || profileResult.error) {
+      logError(
         'Failed to load own qualification profile:',
-        membershipsResult.error ?? capabilityRowsResult.error ?? profileResult.error
+        membershipsResult.error ?? capabilityRowsResult.error ?? profileResult.error,
       );
       return { success: false, error: 'load_failed' };
     }
-    if ((membershipsResult.data?.length ?? 0) > 500) {
-      console.error('Own qualification membership limit exceeded.');
+    if ((membershipsResult.data?.length ?? 0) > 500 || (capabilityRowsResult.data?.length ?? 0) > 500) {
+      logError('Own qualification profile size limit exceeded.');
       return { success: false, error: 'load_failed' };
     }
 
     const teamIds = (membershipsResult.data ?? []).map((row) => row.team_id);
     const capabilityRows = capabilityRowsResult.data ?? [];
-    const definitionIds = [
-      ...new Set(capabilityRows.map((row) => row.capability_id)),
-    ];
+    const definitionIds = [...new Set(capabilityRows.map((row) => row.capability_id))];
     const [teamsResult, definitionsResult] = await Promise.all([
-      teamIds.length > 0
-        ? admin
-            .from('teams')
-            .select('id, name')
-            .eq('organization_id', orgId)
-            .is('dissolved_at', null)
-            .in('id', teamIds)
-            .order('id', { ascending: true })
-            .limit(500)
-        : Promise.resolve({ data: [], error: null }),
-      definitionIds.length > 0
-        ? admin
-            .from('organization_capabilities')
-            .select('*')
-            .eq('organization_id', orgId)
-            .in('id', definitionIds)
-            .order('id', { ascending: true })
-            .limit(500)
-        : Promise.resolve({ data: [], error: null }),
+      readInBatches(teamIds, (batch) =>
+        admin
+          .from('teams')
+          .select('id, name')
+          .eq('organization_id', orgId)
+          .is('dissolved_at', null)
+          .in('id', [...batch]),
+      ),
+      readInBatches(definitionIds, (batch) =>
+        admin
+          .from('organization_capabilities')
+          .select('*')
+          .eq('organization_id', orgId)
+          .in('id', [...batch]),
+      ),
     ]);
     if (teamsResult.error || definitionsResult.error) {
+      logError('Failed to load own qualification references:', teamsResult.error ?? definitionsResult.error);
       return { success: false, error: 'load_failed' };
     }
-    const definitions = new Map(
-      (definitionsResult.data ?? []).map((row) => [
-        row.id,
-        toCapabilityDefinition(row),
-      ])
-    );
+    const definitions = new Map(definitionsResult.data.map((row) => [row.id, toCapabilityDefinition(row)]));
     const displayName =
-      [
-        profileResult.data?.first_name,
-        profileResult.data?.last_name,
-      ]
-        .filter(Boolean)
-        .join(' ') ||
+      [profileResult.data?.first_name, profileResult.data?.last_name].filter(Boolean).join(' ') ||
       [employee.first_name, employee.last_name].filter(Boolean).join(' ') ||
       'Unbenannt';
 
@@ -511,25 +487,26 @@ export async function getOwnQualificationProfile(): Promise<
           userId,
           displayName,
         },
-        teamNames: (teamsResult.data ?? []).map((team) => team.name).sort(),
+        teamNames: teamsResult.data.map((team) => team.name).sort(),
         capabilities: capabilityRows.flatMap((row) => {
           const definition = definitions.get(row.capability_id);
-          return definition
-            ? [{ definition, record: toEmployeeCapability(row) }]
-            : [];
+          return definition ? [{ definition, record: toEmployeeCapability(row) }] : [];
         }),
       },
     };
   } catch (error) {
-    console.error('Unexpected error in getOwnQualificationProfile:', error);
+    logError('Unexpected error in getOwnQualificationProfile:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
-export async function createTeam(input: {
+export async function createTeam(rawInput: {
   name: string;
   description?: string | null;
-}): Promise<{ success: boolean; error?: string; teamId?: string }> {
+}): Promise<ActionResult<{ teamId: string }>> {
+  const parsedInput = createTeamSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
@@ -538,132 +515,90 @@ export async function createTeam(input: {
     }
     const name = input.name.trim();
     if (!name) return { success: false, error: 'invalid_input' };
-    const admin = createSupabaseAdminClient();
-    const { data, error } = await admin
-      .from('teams')
-      .insert({
-        organization_id: auth.context.orgId,
-        name,
-        description: normalizeOptionalText(input.description),
-        created_by: auth.context.userId,
-        updated_by: auth.context.userId,
-      })
-      .select('id')
-      .single();
-    if (error || !data) {
-      return {
-        success: false,
-        error: error?.code === '23505' ? 'duplicate_name' : 'create_failed',
-      };
-    }
-    await recordTeamEvent({
-      orgId: auth.context.orgId,
-      teamId: data.id,
-      eventType: 'created',
-      payload: { name },
-      actorId: auth.context.userId,
-    });
-    updateTag(CACHE_TAGS.teams(auth.context.orgId));
-    return { success: true, teamId: data.id };
+    // One call creates the team and records its 'created' history row.
+    const { data, error } = await createSupabaseAdminClient().rpc(
+      'create_team',
+      rpcArgs('create_team', {
+        p_actor_id: auth.context.userId,
+        p_organization_id: auth.context.orgId,
+        p_name: name,
+        p_description: normalizeOptionalText(input.description),
+      }),
+    );
+    if (error || !data) return qualificationWriteFailure(error, 'create_failed', 'Failed to create team:');
+    return { success: true, teamId: data };
   } catch (error) {
-    console.error('Unexpected error in createTeam:', error);
+    logError('Unexpected error in createTeam:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
-export async function updateTeam(input: {
+export async function updateTeam(rawInput: {
   teamId: string;
   name: string;
   description?: string | null;
-}): Promise<{ success: boolean; error?: string }> {
+}): Promise<ActionResult> {
+  const parsedInput = updateTeamSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
   if (!auth.context.isManagerOrAbove) {
     return { success: false, error: 'not_authorized' };
   }
-  const admin = createSupabaseAdminClient();
-  const { data: current } = await admin
-    .from('teams')
-    .select('name, description')
-    .eq('id', input.teamId)
-    .eq('organization_id', auth.context.orgId)
-    .is('dissolved_at', null)
-    .maybeSingle();
-  if (!current) return { success: false, error: 'team_not_found' };
   const name = input.name.trim();
   if (!name) return { success: false, error: 'invalid_input' };
-  const description = normalizeOptionalText(input.description);
-  const { error } = await admin
-    .from('teams')
-    .update({
-      name,
-      description,
-      updated_by: auth.context.userId,
-    })
-    .eq('id', input.teamId)
-    .eq('organization_id', auth.context.orgId);
-  if (error) {
-    return {
-      success: false,
-      error: error.code === '23505' ? 'duplicate_name' : 'update_failed',
-    };
-  }
-  await recordTeamEvent({
-    orgId: auth.context.orgId,
-    teamId: input.teamId,
-    eventType: 'updated',
-    payload: {
-      changes: {
-        name: { from: current.name, to: name },
-        description: { from: current.description, to: description },
-      },
-    },
-    actorId: auth.context.userId,
-  });
-  updateTag(CACHE_TAGS.teams(auth.context.orgId));
+  // One call saves the team and records 'updated' with the name and
+  // description it replaced, read under the lock.
+  const { error } = await createSupabaseAdminClient().rpc(
+    'update_team',
+    rpcArgs('update_team', {
+      p_actor_id: auth.context.userId,
+      p_organization_id: auth.context.orgId,
+      p_team_id: input.teamId,
+      p_name: name,
+      p_description: normalizeOptionalText(input.description),
+    }),
+  );
+  if (error) return qualificationWriteFailure(error, 'update_failed', 'Failed to update team:');
   return { success: true };
 }
 
-export async function dissolveTeam(input: {
+export async function dissolveTeam(rawInput: {
   teamId: string;
   reason?: string | null;
-}): Promise<{ success: boolean; error?: string }> {
+}): Promise<ActionResult> {
+  const parsedInput = dissolveTeamSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
   if (!auth.context.isManagerOrAbove) {
     return { success: false, error: 'not_authorized' };
   }
-  const now = new Date().toISOString();
-  const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
-    .from('teams')
-    .update({
-      dissolved_at: now,
-      updated_by: auth.context.userId,
-    })
-    .eq('id', input.teamId)
-    .eq('organization_id', auth.context.orgId)
-    .is('dissolved_at', null)
-    .select('id')
-    .maybeSingle();
-  if (error || !data) return { success: false, error: 'team_not_found' };
-  await recordTeamEvent({
-    orgId: auth.context.orgId,
-    teamId: input.teamId,
-    eventType: 'dissolved',
-    payload: { reason: normalizeOptionalText(input.reason) },
-    actorId: auth.context.userId,
-  });
-  updateTag(CACHE_TAGS.teams(auth.context.orgId));
+  // One call dissolves the team and records its 'dissolved' history row.
+  const { error } = await createSupabaseAdminClient().rpc(
+    'dissolve_team',
+    rpcArgs('dissolve_team', {
+      p_actor_id: auth.context.userId,
+      p_organization_id: auth.context.orgId,
+      p_team_id: input.teamId,
+      p_reason: normalizeOptionalText(input.reason),
+    }),
+  );
+  if (error) return qualificationWriteFailure(error, 'update_failed', 'Failed to dissolve team:');
   return { success: true };
 }
 
-export async function addTeamMembership(input: {
+export async function addTeamMembership(rawInput: {
   teamId: string;
   employeeRecordId: string;
   validFrom: string;
   validUntil?: string | null;
-}): Promise<{ success: boolean; error?: string }> {
+}): Promise<ActionResult> {
+  const parsedInput = addTeamMembershipSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
   if (!auth.context.isManagerOrAbove) {
@@ -676,62 +611,30 @@ export async function addTeamMembership(input: {
   ) {
     return { success: false, error: 'invalid_input' };
   }
-  const admin = createSupabaseAdminClient();
-  const [teamResult, employeeResult] = await Promise.all([
-    admin
-      .from('teams')
-      .select('id')
-      .eq('id', input.teamId)
-      .eq('organization_id', auth.context.orgId)
-      .is('dissolved_at', null)
-      .maybeSingle(),
-    admin
-      .from('employee_records')
-      .select('id')
-      .eq('id', input.employeeRecordId)
-      .eq('organization_id', auth.context.orgId)
-      .maybeSingle(),
-  ]);
-  if (!teamResult.data) return { success: false, error: 'team_not_found' };
-  if (!employeeResult.data) return { success: false, error: 'employee_not_found' };
-  const { data, error } = await admin
-    .from('team_memberships')
-    .insert({
-      organization_id: auth.context.orgId,
-      team_id: input.teamId,
-      employee_record_id: input.employeeRecordId,
-      valid_from: input.validFrom,
-      valid_until: input.validUntil || null,
-      created_by: auth.context.userId,
-    })
-    .select('id')
-    .single();
-  if (error || !data) {
-    return {
-      success: false,
-      error: error?.code === '23P01' ? 'overlap' : 'create_failed',
-    };
-  }
-  await recordTeamEvent({
-    orgId: auth.context.orgId,
-    teamId: input.teamId,
-    eventType: 'member_added',
-    payload: {
-      membership_id: data.id,
-      employee_record_id: input.employeeRecordId,
-      valid_from: input.validFrom,
-      valid_until: input.validUntil || null,
-    },
-    actorId: auth.context.userId,
-  });
-  updateTag(CACHE_TAGS.teams(auth.context.orgId));
+  // One call checks the team and the employee under lock, adds the
+  // membership and records its 'member_added' history row.
+  const { error } = await createSupabaseAdminClient().rpc(
+    'add_team_membership',
+    rpcArgs('add_team_membership', {
+      p_actor_id: auth.context.userId,
+      p_organization_id: auth.context.orgId,
+      p_team_id: input.teamId,
+      p_employee_record_id: input.employeeRecordId,
+      p_valid_from: input.validFrom,
+      p_valid_until: input.validUntil || null,
+    }),
+  );
+  if (error) return qualificationWriteFailure(error, 'create_failed', 'Failed to add team membership:');
   return { success: true };
 }
 
-export async function endTeamMembership(input: {
+export async function endTeamMembership(rawInput: {
   membershipId: string;
   validUntil: string;
-}): Promise<{ success: boolean; error?: string }> {
+}): Promise<ActionResult> {
+  const parsedInput = endTeamMembershipSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
   if (!auth.context.isManagerOrAbove) {
@@ -740,49 +643,30 @@ export async function endTeamMembership(input: {
   if (!isIsoDate(input.validUntil)) {
     return { success: false, error: 'invalid_input' };
   }
-  const admin = createSupabaseAdminClient();
-  const { data: membership } = await admin
-    .from('team_memberships')
-    .select('valid_from')
-    .eq('id', input.membershipId)
-    .eq('organization_id', auth.context.orgId)
-    .maybeSingle();
-  if (!membership) return { success: false, error: 'record_not_found' };
-  if (!isOrderedRange(membership.valid_from, input.validUntil)) {
-    return { success: false, error: 'invalid_input' };
-  }
-  const { data, error } = await admin
-    .from('team_memberships')
-    .update({
-      valid_until: input.validUntil,
-      ended_by: auth.context.userId,
-    })
-    .eq('id', input.membershipId)
-    .eq('organization_id', auth.context.orgId)
-    .select('team_id, employee_record_id')
-    .maybeSingle();
-  if (error || !data) return { success: false, error: 'update_failed' };
-  await recordTeamEvent({
-    orgId: auth.context.orgId,
-    teamId: data.team_id,
-    eventType: 'member_ended',
-    payload: {
-      membership_id: input.membershipId,
-      employee_record_id: data.employee_record_id,
-      valid_until: input.validUntil,
-    },
-    actorId: auth.context.userId,
-  });
-  updateTag(CACHE_TAGS.teams(auth.context.orgId));
+  // One call checks the end against the start under lock, ends the
+  // membership and records its 'member_ended' history row.
+  const { error } = await createSupabaseAdminClient().rpc(
+    'end_team_membership',
+    rpcArgs('end_team_membership', {
+      p_actor_id: auth.context.userId,
+      p_organization_id: auth.context.orgId,
+      p_membership_id: input.membershipId,
+      p_valid_until: input.validUntil,
+    }),
+  );
+  if (error) return qualificationWriteFailure(error, 'update_failed', 'Failed to end team membership:');
   return { success: true };
 }
 
-export async function createCapability(input: {
+export async function createCapability(rawInput: {
   kind: CapabilityKind;
   name: string;
   description?: string | null;
   expiryWarningDays?: number;
-}): Promise<{ success: boolean; error?: string; capabilityId?: string }> {
+}): Promise<ActionResult<{ capabilityId: string }>> {
+  const parsedInput = createCapabilitySchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
   if (!auth.context.isManagerOrAbove) {
@@ -792,77 +676,54 @@ export async function createCapability(input: {
     return { success: false, error: 'invalid_input' };
   }
   const name = input.name.trim();
-  const warningDays =
-    input.kind === 'certification' ? input.expiryWarningDays ?? 30 : 0;
-  if (
-    !name ||
-    !Number.isInteger(warningDays) ||
-    warningDays < 0 ||
-    warningDays > 365
-  ) {
+  const warningDays = input.kind === 'certification' ? (input.expiryWarningDays ?? 30) : 0;
+  if (!name || !Number.isInteger(warningDays) || warningDays < 0 || warningDays > 365) {
     return { success: false, error: 'invalid_input' };
   }
-  const { data, error } = await createSupabaseAdminClient()
-    .from('organization_capabilities')
-    .insert({
-      organization_id: auth.context.orgId,
-      kind: input.kind,
-      name,
-      description: normalizeOptionalText(input.description),
-      default_expiry_warning_days: warningDays,
-      created_by: auth.context.userId,
-      updated_by: auth.context.userId,
-    })
-    .select('id')
-    .single();
+  // One call creates the definition and records its 'definition_created'
+  // history row.
+  const { data, error } = await createSupabaseAdminClient().rpc(
+    'create_capability_definition',
+    rpcArgs('create_capability_definition', {
+      p_actor_id: auth.context.userId,
+      p_organization_id: auth.context.orgId,
+      p_kind: input.kind,
+      p_name: name,
+      p_description: normalizeOptionalText(input.description),
+      p_warning_days: warningDays,
+    }),
+  );
   if (error || !data) {
-    return {
-      success: false,
-      error: error?.code === '23505' ? 'duplicate_name' : 'create_failed',
-    };
+    return qualificationWriteFailure(error, 'create_failed', 'Failed to create capability definition:');
   }
-  await recordQualificationEvent({
-    orgId: auth.context.orgId,
-    capabilityId: data.id,
-    eventType: 'definition_created',
-    payload: { kind: input.kind, name, warning_days: warningDays },
-    actorId: auth.context.userId,
-  });
-  updateTag(CACHE_TAGS.qualifications(auth.context.orgId));
-  return { success: true, capabilityId: data.id };
+  return { success: true, capabilityId: data };
 }
 
-export async function retireCapabilityDefinition(
-  capabilityId: string
-): Promise<{ success: boolean; error?: string }> {
+export async function retireCapabilityDefinition(capabilityIdInput: string): Promise<ActionResult> {
+  const parsedCapabilityId = uuidSchema.safeParse(capabilityIdInput);
+  if (!parsedCapabilityId.success) return { success: false, error: 'invalid_input' };
+  const capabilityId = parsedCapabilityId.data;
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
   if (!auth.context.isManagerOrAbove) {
     return { success: false, error: 'not_authorized' };
   }
-  const { data, error } = await createSupabaseAdminClient()
-    .from('organization_capabilities')
-    .update({
-      retired_at: new Date().toISOString(),
-      updated_by: auth.context.userId,
-    })
-    .eq('id', capabilityId)
-    .eq('organization_id', auth.context.orgId)
-    .is('retired_at', null)
-    .select('id')
-    .maybeSingle();
-  if (error || !data) return { success: false, error: 'definition_not_found' };
-  await recordQualificationEvent({
-    orgId: auth.context.orgId,
-    capabilityId,
-    eventType: 'definition_retired',
-    actorId: auth.context.userId,
-  });
-  updateTag(CACHE_TAGS.qualifications(auth.context.orgId));
+  // One call retires the definition and records its 'definition_retired'
+  // history row.
+  const { error } = await createSupabaseAdminClient().rpc(
+    'retire_capability_definition',
+    rpcArgs('retire_capability_definition', {
+      p_actor_id: auth.context.userId,
+      p_organization_id: auth.context.orgId,
+      p_capability_id: capabilityId,
+    }),
+  );
+  if (error)
+    return qualificationWriteFailure(error, 'update_failed', 'Failed to retire capability definition:');
   return { success: true };
 }
 
-export async function addEmployeeCapability(input: {
+export async function addEmployeeCapability(rawInput: {
   employeeRecordId: string;
   capabilityId: string;
   validFrom: string;
@@ -873,7 +734,10 @@ export async function addEmployeeCapability(input: {
   evidenceState?: EvidenceState;
   operationalNote?: string | null;
   supersedesId?: string | null;
-}): Promise<{ success: boolean; error?: string; recordId?: string }> {
+}): Promise<ActionResult<{ recordId: string }>> {
+  const parsedInput = addEmployeeCapabilitySchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
   if (!auth.context.isManagerOrAbove) {
@@ -891,123 +755,32 @@ export async function addEmployeeCapability(input: {
   if (!isOrderedRange(input.validFrom, input.validUntil)) {
     return { success: false, error: 'invalid_input' };
   }
-  const admin = createSupabaseAdminClient();
-  const [definitionResult, employeeResult] = await Promise.all([
-    admin
-      .from('organization_capabilities')
-      .select('kind')
-      .eq('id', input.capabilityId)
-      .eq('organization_id', auth.context.orgId)
-      .is('retired_at', null)
-      .maybeSingle(),
-    admin
-      .from('employee_records')
-      .select('id')
-      .eq('id', input.employeeRecordId)
-      .eq('organization_id', auth.context.orgId)
-      .maybeSingle(),
-  ]);
-  const definition = definitionResult.data;
-  if (!definition) return { success: false, error: 'definition_not_found' };
-  if (!employeeResult.data) return { success: false, error: 'employee_not_found' };
-  const confirmationStatus =
-    definition.kind === 'certification'
-      ? input.confirmationStatus ?? 'unconfirmed'
-      : 'unconfirmed';
-  const evidenceState =
-    definition.kind === 'certification'
-      ? input.evidenceState ?? 'not_required'
-      : 'not_required';
-  if (
-    !CONFIRMATION_STATUSES.includes(confirmationStatus) ||
-    !EVIDENCE_STATES.includes(evidenceState)
-  ) {
-    return { success: false, error: 'invalid_input' };
-  }
-  const now = new Date().toISOString();
-  const insertPayload = {
-      organization_id: auth.context.orgId,
-      employee_record_id: input.employeeRecordId,
-      capability_id: input.capabilityId,
-      capability_kind: definition.kind,
-      valid_from: input.validFrom,
-      valid_until: input.validUntil || null,
-      issuer:
-        definition.kind === 'certification'
-          ? normalizeOptionalText(input.issuer)
-          : null,
-      renewal_due_date:
-        definition.kind === 'certification'
-          ? input.renewalDueDate || null
-          : null,
-      confirmation_status: confirmationStatus,
-      confirmed_by:
-        confirmationStatus === 'confirmed' ? auth.context.userId : null,
-      confirmed_at: confirmationStatus === 'confirmed' ? now : null,
-      evidence_state: evidenceState,
-      operational_note: normalizeOptionalText(input.operationalNote),
-      supersedes_id: input.supersedesId || null,
-      created_by: auth.context.userId,
-      updated_by: auth.context.userId,
-    };
-  let recordId: string | null = null;
-  let writeError: { code?: string; message?: string } | null = null;
-  if (input.supersedesId) {
-    const { data, error } = await admin.rpc('renew_employee_capability', {
+  // One call checks the definition, the employee and a renewed record under
+  // lock, stores the record (a renewal supersedes the current one) and records
+  // its 'qualification_added' or 'qualification_renewed' history row.
+  const { data: recordId, error } = await createSupabaseAdminClient().rpc(
+    'add_employee_capability',
+    rpcArgs('add_employee_capability', {
+      p_actor_id: auth.context.userId,
       p_organization_id: auth.context.orgId,
       p_employee_record_id: input.employeeRecordId,
       p_capability_id: input.capabilityId,
       p_valid_from: input.validFrom,
       p_valid_until: input.validUntil || null,
-      p_issuer: insertPayload.issuer,
+      p_issuer: normalizeOptionalText(input.issuer),
       p_renewal_due_date: input.renewalDueDate || null,
-      p_confirmation_status: confirmationStatus,
-      p_evidence_state: evidenceState,
-      p_operational_note: insertPayload.operational_note,
-      p_supersedes_id: input.supersedesId,
-      p_actor_id: auth.context.userId,
-    });
-    recordId = data;
-    writeError = error;
-  } else {
-    const { data, error } = await admin
-      .from('employee_capabilities')
-      .insert(insertPayload)
-      .select('id')
-      .single();
-    recordId = data?.id ?? null;
-    writeError = error;
-  }
-  if (writeError || !recordId) {
-    return {
-      success: false,
-      error:
-        writeError?.code === '23P01' || writeError?.code === '23505'
-          ? 'overlap'
-          : 'create_failed',
-    };
-  }
-  await recordEmployeeQualificationEvent({
-    orgId: auth.context.orgId,
-    employeeRecordId: input.employeeRecordId,
-    eventType: input.supersedesId
-      ? 'qualification_renewed'
-      : 'qualification_added',
-    payload: {
-      employee_capability_id: recordId,
-      capability_id: input.capabilityId,
-      kind: definition.kind,
-      valid_from: input.validFrom,
-      valid_until: input.validUntil || null,
-      supersedes_id: input.supersedesId || null,
-    },
-    actorId: auth.context.userId,
-  });
-  updateTag(CACHE_TAGS.qualifications(auth.context.orgId));
+      p_confirmation_status: input.confirmationStatus ?? null,
+      p_evidence_state: input.evidenceState ?? null,
+      p_operational_note: normalizeOptionalText(input.operationalNote),
+      p_supersedes_id: input.supersedesId || null,
+    }),
+  );
+  if (error || !recordId)
+    return qualificationWriteFailure(error, 'create_failed', 'Failed to add employee capability:');
   return { success: true, recordId };
 }
 
-export async function updateEmployeeCapability(input: {
+export async function updateEmployeeCapability(rawInput: {
   recordId: string;
   validFrom: string;
   validUntil?: string | null;
@@ -1016,7 +789,10 @@ export async function updateEmployeeCapability(input: {
   confirmationStatus: ConfirmationStatus;
   evidenceState: EvidenceState;
   operationalNote?: string | null;
-}): Promise<{ success: boolean; error?: string }> {
+}): Promise<ActionResult> {
+  const parsedInput = updateEmployeeCapabilitySchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
   if (!auth.context.isManagerOrAbove) {
@@ -1032,135 +808,79 @@ export async function updateEmployeeCapability(input: {
   ) {
     return { success: false, error: 'invalid_input' };
   }
-  const admin = createSupabaseAdminClient();
-  const { data: current } = await admin
-    .from('employee_capabilities')
-    .select('*')
-    .eq('id', input.recordId)
-    .eq('organization_id', auth.context.orgId)
-    .maybeSingle();
-  if (!current) return { success: false, error: 'record_not_found' };
-  const now = new Date().toISOString();
-  const isCertification = current.capability_kind === 'certification';
-  const update = {
-    valid_from: input.validFrom,
-    valid_until: input.validUntil || null,
-    issuer: isCertification ? normalizeOptionalText(input.issuer) : null,
-    renewal_due_date: isCertification ? input.renewalDueDate || null : null,
-    confirmation_status: isCertification
-      ? input.confirmationStatus
-      : ('unconfirmed' as const),
-    confirmed_by:
-      isCertification && input.confirmationStatus === 'confirmed'
-        ? auth.context.userId
-        : null,
-    confirmed_at:
-      isCertification && input.confirmationStatus === 'confirmed' ? now : null,
-    evidence_state: isCertification ? input.evidenceState : ('not_required' as const),
-    operational_note: normalizeOptionalText(input.operationalNote),
-    updated_by: auth.context.userId,
-  };
-  const { error } = await admin
-    .from('employee_capabilities')
-    .update(update)
-    .eq('id', input.recordId)
-    .eq('organization_id', auth.context.orgId);
-  if (error) {
-    return {
-      success: false,
-      error: error.code === '23P01' ? 'overlap' : 'update_failed',
-    };
-  }
-  await recordEmployeeQualificationEvent({
-    orgId: auth.context.orgId,
-    employeeRecordId: current.employee_record_id,
-    eventType: 'qualification_corrected',
-    payload: {
-      employee_capability_id: input.recordId,
-      before: {
-        valid_from: current.valid_from,
-        valid_until: current.valid_until,
-        issuer: current.issuer,
-        renewal_due_date: current.renewal_due_date,
-        confirmation_status: current.confirmation_status,
-        evidence_state: current.evidence_state,
-        operational_note: current.operational_note,
-      },
-      after: update,
-    },
-    actorId: auth.context.userId,
-  });
-  updateTag(CACHE_TAGS.qualifications(auth.context.orgId));
+  // One call corrects the record under lock and records its
+  // 'qualification_corrected' history row with the values before and after.
+  const { error } = await createSupabaseAdminClient().rpc(
+    'update_employee_capability',
+    rpcArgs('update_employee_capability', {
+      p_actor_id: auth.context.userId,
+      p_organization_id: auth.context.orgId,
+      p_record_id: input.recordId,
+      p_valid_from: input.validFrom,
+      p_valid_until: input.validUntil || null,
+      p_issuer: normalizeOptionalText(input.issuer),
+      p_renewal_due_date: input.renewalDueDate || null,
+      p_confirmation_status: input.confirmationStatus,
+      p_evidence_state: input.evidenceState,
+      p_operational_note: normalizeOptionalText(input.operationalNote),
+    }),
+  );
+  if (error)
+    return qualificationWriteFailure(error, 'update_failed', 'Failed to update employee capability:');
   return { success: true };
 }
 
-export async function setApprenticeWarningEnabled(
-  enabled: boolean
-): Promise<{ success: boolean; error?: string }> {
+export async function setApprenticeWarningEnabled(enabledInput: boolean): Promise<ActionResult> {
+  const parsedEnabled = z.boolean().safeParse(enabledInput);
+  if (!parsedEnabled.success) return { success: false, error: 'invalid_input' };
+  const enabled = parsedEnabled.data;
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
   if (auth.context.role !== 'admin') {
     return { success: false, error: 'not_authorized' };
   }
-  const admin = createSupabaseAdminClient();
-  const { data: current, error: loadError } = await admin
-    .from('organization_qualification_settings')
-    .select('organization_id')
-    .eq('organization_id', auth.context.orgId)
-    .maybeSingle();
-  if (loadError) return { success: false, error: 'update_failed' };
-  const { error } = current
-    ? await admin
-        .from('organization_qualification_settings')
-        .update({
-          apprentice_warning_enabled: enabled,
-          updated_by: auth.context.userId,
-        })
-        .eq('organization_id', auth.context.orgId)
-    : await admin.from('organization_qualification_settings').insert({
-        organization_id: auth.context.orgId,
-        apprentice_warning_enabled: enabled,
-        created_by: auth.context.userId,
-        updated_by: auth.context.userId,
-      });
-  if (error) return { success: false, error: 'update_failed' };
-  await recordQualificationEvent({
-    orgId: auth.context.orgId,
-    eventType: 'apprentice_warning_changed',
-    payload: { enabled },
-    actorId: auth.context.userId,
-  });
-  updateTag(CACHE_TAGS.qualifications(auth.context.orgId));
+  // One call saves the setting, creating the row on first use, and records
+  // its 'apprentice_warning_changed' history row.
+  const { error } = await createSupabaseAdminClient().rpc(
+    'set_apprentice_warning_enabled',
+    rpcArgs('set_apprentice_warning_enabled', {
+      p_actor_id: auth.context.userId,
+      p_organization_id: auth.context.orgId,
+      p_enabled: enabled,
+    }),
+  );
+  if (error) return qualificationWriteFailure(error, 'update_failed', 'Failed to save apprentice warning:');
   return { success: true };
 }
 
-export async function setJobCapabilityRequirements(input: {
+export async function setJobCapabilityRequirements(rawInput: {
   jobId: string;
   requirements: Array<{
     capabilityId: string;
     requireConfirmation: boolean;
   }>;
-}): Promise<{ success: boolean; error?: string }> {
+}): Promise<ActionResult> {
+  const parsedInput = jobRequirementsSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
   if (!auth.context.isManagerOrAbove) {
     return { success: false, error: 'not_authorized' };
   }
   const admin = createSupabaseAdminClient();
-  const { data: job } = await admin
-    .from('jobs')
-    .select('id')
-    .eq('id', input.jobId)
-    .eq('organization_id', auth.context.orgId)
-    .maybeSingle();
+  const { data: job } = await loggedRead(
+    'setJobCapabilityRequirements: jobs read failed',
+    admin
+      .from('jobs')
+      .select('id')
+      .eq('id', input.jobId)
+      .eq('organization_id', auth.context.orgId)
+      .maybeSingle(),
+  );
   if (!job) return { success: false, error: 'job_not_found' };
   const normalized = [
-    ...new Map(
-      input.requirements.map((requirement) => [
-        requirement.capabilityId,
-        requirement,
-      ])
-    ).values(),
+    ...new Map(input.requirements.map((requirement) => [requirement.capabilityId, requirement])).values(),
   ];
   if (normalized.length > 100) {
     return { success: false, error: 'invalid_input' };
@@ -1169,26 +889,22 @@ export async function setJobCapabilityRequirements(input: {
     p_organization_id: auth.context.orgId,
     p_job_id: input.jobId,
     p_capability_ids: normalized.map((requirement) => requirement.capabilityId),
-    p_require_confirmations: normalized.map(
-      (requirement) => requirement.requireConfirmation
-    ),
+    p_require_confirmations: normalized.map((requirement) => requirement.requireConfirmation),
     p_actor_id: auth.context.userId,
   });
   if (error) {
-    console.error('Failed to replace job capability requirements:', error);
+    logError('Failed to replace job capability requirements:', error);
     return { success: false, error: 'update_failed' };
   }
-  updateTag(CACHE_TAGS.qualifications(auth.context.orgId));
-  updateTag(CACHE_TAGS.jobs(auth.context.orgId));
   return { success: true };
 }
 
 export async function getJobQualificationDetail(
-  jobId: string
-): Promise<
-  | { success: true; data: JobQualificationDetail }
-  | { success: false; error: string }
-> {
+  jobIdInput: string,
+): Promise<{ success: true; data: JobQualificationDetail } | ActionFailure> {
+  const parsedJobId = uuidSchema.safeParse(jobIdInput);
+  if (!parsedJobId.success) return { success: false, error: 'invalid_input' };
+  const jobId = parsedJobId.data;
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
   if (!auth.context.isManagerOrAbove) {
@@ -1201,44 +917,49 @@ export async function getJobQualificationDetail(
     .eq('id', jobId)
     .eq('organization_id', auth.context.orgId)
     .maybeSingle();
-  if (jobError || !job) return { success: false, error: 'job_not_found' };
-  const [definitionsResult, requirementsResult, assignmentsResult, latestResult] =
-    await Promise.all([
-      admin
-        .from('organization_capabilities')
-        .select('*')
-        .eq('organization_id', auth.context.orgId)
-        .is('retired_at', null)
-        .order('name', { ascending: true })
-        .limit(500),
-      admin
-        .from('job_capability_requirements')
-        .select('id, capability_id, require_confirmation')
-        .eq('organization_id', auth.context.orgId)
-        .eq('job_id', jobId)
-        .order('created_at', { ascending: true })
-        .limit(100),
-      admin
-        .from('job_assignments')
-        .select('user_id')
-        .eq('job_id', jobId)
-        .limit(201),
-      admin
-        .from('job_qualification_assessments')
-        .select('created_at, override_reason, coverage_fingerprint')
-        .eq('organization_id', auth.context.orgId)
-        .eq('job_id', jobId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-    ]);
+  if (jobError || !job) {
+    logReadErrors('getJobQualificationDetail: read failed', jobError);
+    return { success: false, error: 'job_not_found' };
+  }
+  const [definitionsResult, requirementsResult, assignmentsResult, latestResult] = await Promise.all([
+    readCompleteRows(
+      (from, to) =>
+        admin
+          .from('organization_capabilities')
+          .select('*')
+          .eq('organization_id', auth.context.orgId)
+          .is('retired_at', null)
+          .order('name', { ascending: true })
+          .order('id')
+          .range(from, to),
+      LIST_ROW_CAP,
+    ),
+    admin
+      .from('job_capability_requirements')
+      .select('id, capability_id, require_confirmation')
+      .eq('organization_id', auth.context.orgId)
+      .eq('job_id', jobId)
+      .order('created_at', { ascending: true })
+      .limit(100),
+    admin
+      .from('job_assignments')
+      .select('user_id')
+      .eq('organization_id', auth.context.orgId)
+      .eq('job_id', jobId)
+      .limit(201),
+    admin
+      .from('job_qualification_assessments')
+      .select('created_at, override_reason, coverage_fingerprint')
+      .eq('organization_id', auth.context.orgId)
+      .eq('job_id', jobId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
   const error =
-    definitionsResult.error ??
-    requirementsResult.error ??
-    assignmentsResult.error ??
-    latestResult.error;
+    definitionsResult.error ?? requirementsResult.error ?? assignmentsResult.error ?? latestResult.error;
   if (error) {
-    console.error('Failed to load job qualification detail:', error);
+    logError('Failed to load job qualification detail:', error);
     return { success: false, error: 'load_failed' };
   }
   const evaluationResult = await loadAssignmentEvaluation({
@@ -1248,12 +969,8 @@ export async function getJobQualificationDetail(
     selectedUserIds: (assignmentsResult.data ?? []).map((row) => row.user_id),
   });
   if (!evaluationResult.success) return evaluationResult;
-  const definitions = (definitionsResult.data ?? []).map(
-    toCapabilityDefinition
-  );
-  const definitionById = new Map(
-    definitions.map((definition) => [definition.id, definition])
-  );
+  const definitions = definitionsResult.data.map(toCapabilityDefinition);
+  const definitionById = new Map(definitions.map((definition) => [definition.id, definition]));
   return {
     success: true,
     data: {
@@ -1298,47 +1015,87 @@ type ProjectCapabilityRequirementsResult =
         requirements: ProjectCapabilityRequirement[];
       };
     }
-  | { success: false; error: string };
+  | ActionFailure;
 
-type SetProjectCapabilityRequirementsResult =
-  | { success: true }
-  | { success: false; error: string };
+type SetProjectCapabilityRequirementsResult = ActionResult;
 
 export async function getProjectCapabilityRequirements(
-  projectId: string
+  projectIdInput: string,
 ): Promise<ProjectCapabilityRequirementsResult> {
+  const parsedProjectId = uuidSchema.safeParse(projectIdInput);
+  if (!parsedProjectId.success) return { success: false, error: 'invalid_input' };
+  const projectId = parsedProjectId.data;
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
   if (!auth.context.isManagerOrAbove) return { success: false as const, error: 'not_authorized' };
   const admin = createSupabaseAdminClient();
-  const { data: project } = await admin.from('projects').select('id').eq('id', projectId).eq('organization_id', auth.context.orgId).maybeSingle();
+  const { data: project } = await loggedRead(
+    'getProjectCapabilityRequirements: projects read failed',
+    admin
+      .from('projects')
+      .select('id')
+      .eq('id', projectId)
+      .eq('organization_id', auth.context.orgId)
+      .maybeSingle(),
+  );
   if (!project) return { success: false as const, error: 'project_not_found' };
   const [definitionsResult, requirementsResult] = await Promise.all([
-    admin.from('organization_capabilities').select('*').eq('organization_id', auth.context.orgId).is('retired_at', null).order('name').limit(501),
-    admin.from('job_capability_requirements').select('id, capability_id, require_confirmation').eq('organization_id', auth.context.orgId).eq('project_id', projectId).order('created_at').limit(201),
+    readCompleteRows(
+      (from, to) =>
+        admin
+          .from('organization_capabilities')
+          .select('*')
+          .eq('organization_id', auth.context.orgId)
+          .is('retired_at', null)
+          .order('name')
+          .order('id')
+          .range(from, to),
+      LIST_ROW_CAP,
+    ),
+    admin
+      .from('job_capability_requirements')
+      .select('id, capability_id, require_confirmation')
+      .eq('organization_id', auth.context.orgId)
+      .eq('project_id', projectId)
+      .order('created_at')
+      .limit(201),
   ]);
-  if (definitionsResult.error || requirementsResult.error || (definitionsResult.data?.length ?? 0) > 500 || (requirementsResult.data?.length ?? 0) > 200) return { success: false as const, error: 'load_failed' };
+  // A project holds at most 200 requirements (the write path refuses more).
+  if (definitionsResult.error || requirementsResult.error || (requirementsResult.data?.length ?? 0) > 200) {
+    logError(
+      'Failed to load project capability requirements:',
+      definitionsResult.error ?? requirementsResult.error ?? { code: 'requirement_overflow' },
+    );
+    return { success: false as const, error: 'load_failed' };
+  }
   return {
     success: true as const,
     data: {
-      capabilities: (definitionsResult.data ?? []).map(toCapabilityDefinition),
+      capabilities: definitionsResult.data.map(toCapabilityDefinition),
       requirements: requirementsResult.data ?? [],
     },
   };
 }
 
-export async function setProjectCapabilityRequirements(input: {
+export async function setProjectCapabilityRequirements(rawInput: {
   projectId: string;
   requirements: Array<{ capabilityId: string; requireConfirmation: boolean }>;
   expectedRequirements: Array<{ capabilityId: string; requireConfirmation: boolean }>;
 }): Promise<SetProjectCapabilityRequirementsResult> {
+  const parsedInput = projectRequirementsSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
   if (!auth.context.isManagerOrAbove) return { success: false as const, error: 'not_authorized' };
-  const normalized = [...new Map(input.requirements.map((requirement) => [requirement.capabilityId, requirement])).values()]
-    .sort((left, right) => left.capabilityId.localeCompare(right.capabilityId));
-  const expected = [...new Map(input.expectedRequirements.map((requirement) => [requirement.capabilityId, requirement])).values()]
-    .sort((left, right) => left.capabilityId.localeCompare(right.capabilityId));
+  const normalized = [
+    ...new Map(input.requirements.map((requirement) => [requirement.capabilityId, requirement])).values(),
+  ].sort((left, right) => left.capabilityId.localeCompare(right.capabilityId));
+  const expected = [
+    ...new Map(
+      input.expectedRequirements.map((requirement) => [requirement.capabilityId, requirement]),
+    ).values(),
+  ].sort((left, right) => left.capabilityId.localeCompare(right.capabilityId));
   if (normalized.length > 200) return { success: false as const, error: 'invalid_input' };
   const { error } = await createSupabaseAdminClient().rpc('replace_project_capability_requirements_checked', {
     p_organization_id: auth.context.orgId,
@@ -1357,12 +1114,10 @@ export async function setProjectCapabilityRequirements(input: {
         : 'update_failed',
     };
   }
-  updateTag(CACHE_TAGS.qualifications(auth.context.orgId));
-  updateTag(CACHE_TAGS.projects(auth.context.orgId));
   return { success: true as const };
 }
 
-export async function expandTeamForAssignment(input: {
+export async function expandTeamForAssignment(rawInput: {
   teamId: string;
   assessedForDate?: string | null;
 }): Promise<
@@ -1372,8 +1127,11 @@ export async function expandTeamForAssignment(input: {
       skippedNames: string[];
       teamSourceId: string;
     }
-  | { success: false; error: string }
+  | ActionFailure
 > {
+  const parsedInput = expandTeamSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
   if (!auth.context.isManagerOrAbove) {
@@ -1384,96 +1142,92 @@ export async function expandTeamForAssignment(input: {
   }
   const date = input.assessedForDate || getBusinessTodayIso();
   const admin = createSupabaseAdminClient();
-  const { data: team } = await admin
-    .from('teams')
-    .select('id')
-    .eq('id', input.teamId)
-    .eq('organization_id', auth.context.orgId)
-    .is('dissolved_at', null)
-    .maybeSingle();
+  const { data: team } = await loggedRead(
+    'expandTeamForAssignment: teams read failed',
+    admin
+      .from('teams')
+      .select('id')
+      .eq('id', input.teamId)
+      .eq('organization_id', auth.context.orgId)
+      .is('dissolved_at', null)
+      .maybeSingle(),
+  );
   if (!team) return { success: false, error: 'team_not_found' };
-  const { data: memberships, error } = await admin
-    .from('team_memberships')
-    .select('employee_record_id')
-    .eq('organization_id', auth.context.orgId)
-    .eq('team_id', input.teamId)
-    .lte('valid_from', date)
-    .or(`valid_until.gte.${date},valid_until.is.null`)
-    .limit(501);
-  if (error) return { success: false, error: 'load_failed' };
-  if ((memberships?.length ?? 0) > 500) {
+  const teamExpansionFailed = (read: string, readError: unknown): ActionFailure => {
+    logError(`Failed to expand team for assignment (${read}):`, readError);
     return { success: false, error: 'load_failed' };
-  }
-  const recordIds = (memberships ?? []).map((row) => row.employee_record_id);
-  const { data: records, error: recordsError } =
-    recordIds.length > 0
-      ? await admin
-          .from('employee_records')
-          .select('id, user_id, first_name, last_name')
-          .eq('organization_id', auth.context.orgId)
-          .in('id', recordIds)
-          .order('id', { ascending: true })
-          .limit(501)
-      : { data: [], error: null };
-  if (recordsError) return { success: false, error: 'load_failed' };
-  if ((records?.length ?? 0) > 500) {
-    return { success: false, error: 'load_failed' };
-  }
-  const linkedUserIds = (records ?? [])
-    .map((row) => row.user_id)
-    .filter((id): id is string => Boolean(id));
-  const { data: memberRows, error: membersError } =
-    linkedUserIds.length > 0
-      ? await admin
-          .from('organization_members')
-          .select('user_id')
-          .eq('organization_id', auth.context.orgId)
-          .in('user_id', linkedUserIds)
-          .order('user_id', { ascending: true })
-          .limit(501)
-      : { data: [], error: null };
-  if (membersError) return { success: false, error: 'load_failed' };
-  if ((memberRows?.length ?? 0) > 500) {
-    return { success: false, error: 'load_failed' };
-  }
-  const activeMemberIds = new Set((memberRows ?? []).map((row) => row.user_id));
+  };
+  // A team may hold every employee of the company: complete pages, then id batches.
+  const { data: memberships, error } = await readCompleteRows(
+    (from, to) =>
+      admin
+        .from('team_memberships')
+        .select('employee_record_id')
+        .eq('organization_id', auth.context.orgId)
+        .eq('team_id', input.teamId)
+        .lte('valid_from', date)
+        .or(`valid_until.gte.${date},valid_until.is.null`)
+        .order('id')
+        .range(from, to),
+    LIST_ROW_CAP,
+  );
+  if (error) return teamExpansionFailed('memberships', error);
+  const recordIds = memberships.map((row) => row.employee_record_id);
+  const recordsResult = await readInBatches(recordIds, (batch) =>
+    admin
+      .from('employee_records')
+      .select('id, user_id, first_name, last_name')
+      .eq('organization_id', auth.context.orgId)
+      .in('id', [...batch]),
+  );
+  if (recordsResult.error) return teamExpansionFailed('employee records', recordsResult.error);
+  const records = recordsResult.data.sort((left, right) => left.id.localeCompare(right.id));
+  const linkedUserIds = records.map((row) => row.user_id).filter((id): id is string => Boolean(id));
+  const { data: memberRows, error: membersError } = await readInBatches(linkedUserIds, (batch) =>
+    admin
+      .from('organization_members')
+      .select('user_id')
+      .eq('organization_id', auth.context.orgId)
+      .in('user_id', [...batch]),
+  );
+  if (membersError) return teamExpansionFailed('organization members', membersError);
+  const activeMemberIds = new Set(memberRows.map((row) => row.user_id));
   return {
     success: true,
-    userIds: (records ?? [])
+    userIds: records
       .map((row) => row.user_id)
-      .filter(
-        (id): id is string => Boolean(id && activeMemberIds.has(id))
-      ),
-    skippedNames: (records ?? [])
+      .filter((id): id is string => Boolean(id && activeMemberIds.has(id))),
+    skippedNames: records
       .filter((row) => !row.user_id || !activeMemberIds.has(row.user_id))
-      .map(
-        (row) =>
-          [row.first_name, row.last_name].filter(Boolean).join(' ') ||
-          'Unbenannt'
-      ),
+      .map((row) => [row.first_name, row.last_name].filter(Boolean).join(' ') || 'Unbenannt'),
     teamSourceId: input.teamId,
   };
 }
 
 export async function getAssignmentTeamOptions(): Promise<
-  | { success: true; teams: Array<{ id: string; name: string }> }
-  | { success: false; error: string }
+  { success: true; teams: Array<{ id: string; name: string }> } | ActionFailure
 > {
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
   if (!auth.context.isManagerOrAbove) {
     return { success: false, error: 'not_authorized' };
   }
-  const { data, error } = await createSupabaseAdminClient()
-    .from('teams')
-    .select('id, name')
-    .eq('organization_id', auth.context.orgId)
-    .is('dissolved_at', null)
-    .order('name', { ascending: true })
-    .limit(101);
-  if (error) return { success: false, error: 'load_failed' };
-  if ((data?.length ?? 0) > 100) {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await readCompleteRows(
+    (from, to) =>
+      admin
+        .from('teams')
+        .select('id, name')
+        .eq('organization_id', auth.context.orgId)
+        .is('dissolved_at', null)
+        .order('name', { ascending: true })
+        .order('id')
+        .range(from, to),
+    LIST_ROW_CAP,
+  );
+  if (error) {
+    logError('Failed to load assignment team options:', error);
     return { success: false, error: 'load_failed' };
   }
-  return { success: true, teams: data ?? [] };
+  return { success: true, teams: data };
 }

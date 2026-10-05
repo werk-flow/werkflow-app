@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 
+import { OptionsLoadError } from '@/components/auftraege/shared/options-load-error';
 import { Button } from '@/components/ui/button';
 import { DatePicker } from '@/components/ui/date-picker';
 import {
@@ -22,6 +23,8 @@ import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Textarea } from '@/components/ui/textarea';
+import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
+import { calendarRefusalMessage } from '@/lib/calendar/messages';
 import {
   getParkingResponsibleOptions,
   setJobParkingContext,
@@ -33,17 +36,42 @@ import {
   type JobParkingContext,
   type JobParkingReason,
 } from '@/lib/parking/types';
+import { parseIsoLocalDate, toLocalDateString } from '@/lib/utils';
 import { parkWorkTarget } from '@/lib/work-lifecycle/actions';
 
-function toLocalIsoDate(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
+/** The responsible-person options, with the retry of a failed load. */
+function useParkingResponsibleOptions() {
+  const [options, setOptions] = useState<ParkingResponsibleOption[]>([]);
+  const [optionsError, setOptionsError] = useState(false);
+  const [optionsReloadCount, setOptionsReloadCount] = useState(0);
+  const [isLoadingOptions, setIsLoadingOptions] = useState(true);
 
-function fromIsoDate(value: string | null): Date | undefined {
-  if (!value) return undefined;
-  const [year, month, day] = value.split('-').map(Number);
-  if (year === undefined || month === undefined || day === undefined) return undefined;
-  return new Date(year, month - 1, day);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await getParkingResponsibleOptions();
+        if (cancelled) return;
+        if (result.success) setOptions(result.options);
+        else setOptionsError(true);
+      } catch {
+        if (!cancelled) setOptionsError(true);
+      } finally {
+        if (!cancelled) setIsLoadingOptions(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [optionsReloadCount]);
+
+  function retryOptions() {
+    setOptionsError(false);
+    setIsLoadingOptions(true);
+    setOptionsReloadCount((count) => count + 1);
+  }
+
+  return { options, optionsError, isLoadingOptions, retryOptions };
 }
 
 export function ParkingContextDialog({
@@ -63,22 +91,19 @@ export function ParkingContextDialog({
   expectedExecutionVersion: number;
   isAlreadyParked: boolean;
   onClose: () => void;
-  onSaveStart?: () => (() => void);
+  onSaveStart?: () => () => void;
   onSaveFailed?: () => void;
   onSaved: () => void;
 }) {
-  const [reason, setReason] = useState<JobParkingReason>(
-    existingContext?.reason ?? 'other'
-  );
+  const [reason, setReason] = useState<JobParkingReason>(existingContext?.reason ?? 'other');
   const [note, setNote] = useState(existingContext?.note ?? '');
   const [responsibleId, setResponsibleId] = useState<string>(
-    existingContext?.responsibleEmployeeRecordId ?? ''
+    existingContext?.responsibleEmployeeRecordId ?? '',
   );
-  const [reviewDate, setReviewDate] = useState<Date | undefined>(
-    fromIsoDate(existingContext?.nextReviewDate ?? null)
+  const [reviewDate, setReviewDate] = useState<Date | undefined>(() =>
+    existingContext?.nextReviewDate ? parseIsoLocalDate(existingContext.nextReviewDate) : undefined,
   );
-  const [options, setOptions] = useState<ParkingResponsibleOption[]>([]);
-  const [optionsError, setOptionsError] = useState(false);
+  const { options, optionsError, isLoadingOptions, retryOptions } = useParkingResponsibleOptions();
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{
     responsible?: string;
@@ -86,28 +111,10 @@ export function ParkingContextDialog({
   }>({});
   const [isSaving, setIsSaving] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const result = await getParkingResponsibleOptions();
-        if (cancelled) return;
-        if (result.success) setOptions(result.options);
-        else setOptionsError(true);
-      } catch {
-        if (!cancelled) setOptionsError(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   // A stored responsible person must remain selectable even when the option
   // list fails to load or no longer contains them.
   const selectableOptions =
-    responsibleId !== '' &&
-    !options.some((option) => option.employeeRecordId === responsibleId)
+    responsibleId !== '' && !options.some((option) => option.employeeRecordId === responsibleId)
       ? [
           {
             employeeRecordId: responsibleId,
@@ -140,7 +147,7 @@ export function ParkingContextDialog({
             reason,
             note: note.trim() || null,
             responsibleEmployeeRecordId: responsibleId,
-            nextReviewDate: reviewDate ? toLocalIsoDate(reviewDate) : '',
+            nextReviewDate: reviewDate ? toLocalDateString(reviewDate) : '',
           })
         : await parkWorkTarget({
             targetType: 'job',
@@ -149,21 +156,27 @@ export function ParkingContextDialog({
             reason,
             ...(note.trim() ? { details: note.trim() } : {}),
             responsibleEmployeeRecordId: responsibleId,
-            nextReviewDate: reviewDate ? toLocalIsoDate(reviewDate) : '',
+            nextReviewDate: reviewDate ? toLocalDateString(reviewDate) : '',
           });
       if (!result.success) {
         onSaveFailed?.();
+        // Parking codes first, then the shared sentences; a work-lifecycle code
+        // from parkWorkTarget takes the calendar's sentence.
         setError(
-          PARKING_ERROR_MESSAGES[result.error] ??
-            PARKING_ERROR_MESSAGES.unexpected_error ??
-            null
+          describeFailure(
+            result.error,
+            PARKING_ERROR_MESSAGES,
+            calendarRefusalMessage(result.error) ?? SHARED_FAILURE_MESSAGES.unexpected_error,
+          ),
         );
         return;
       }
       onSaved();
     } catch {
       onSaveFailed?.();
-      setError(PARKING_ERROR_MESSAGES.unexpected_error ?? null);
+      setError(
+        describeFailure('unexpected_error', PARKING_ERROR_MESSAGES, SHARED_FAILURE_MESSAGES.unexpected_error),
+      );
     } finally {
       releaseOperation?.();
       setIsSaving(false);
@@ -171,8 +184,8 @@ export function ParkingContextDialog({
   };
 
   return (
-    <Dialog open onOpenChange={(open) => !open && !isSaving && onClose()}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog open onOpenChange={(open) => !open && onClose()} pending={isSaving}>
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Parkplatz-Kontext</DialogTitle>
           <DialogDescription>
@@ -209,11 +222,7 @@ export function ParkingContextDialog({
             label="Verantwortlich (Büro)"
             htmlFor="parking-responsible"
             required
-            error={
-              optionsError
-                ? 'Die Personenliste konnte nicht geladen werden.'
-                : fieldErrors.responsible
-            }
+            error={fieldErrors.responsible}
           >
             <SearchableSelect
               options={selectableOptions.map((option) => ({
@@ -230,13 +239,13 @@ export function ParkingContextDialog({
               emptyMessage="Keine Person gefunden"
             />
           </Field>
+          <OptionsLoadError
+            error={optionsError ? 'Die Personenliste konnte nicht geladen werden.' : null}
+            onRetry={retryOptions}
+            retrying={isLoadingOptions}
+          />
 
-          <Field
-            label="Wiedervorlage"
-            htmlFor="parking-review-date"
-            required
-            error={fieldErrors.reviewDate}
-          >
+          <Field label="Wiedervorlage" htmlFor="parking-review-date" required error={fieldErrors.reviewDate}>
             <DatePicker
               ariaLabel="Wiedervorlagedatum"
               value={reviewDate}
@@ -251,12 +260,7 @@ export function ParkingContextDialog({
           <ErrorText>{error}</ErrorText>
 
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              disabled={isSaving}
-            >
+            <Button type="button" variant="outline" onClick={onClose} disabled={isSaving}>
               {isAlreadyParked ? 'Ohne Kontext lassen' : 'Abbrechen'}
             </Button>
             <Button type="submit" disabled={isSaving}>

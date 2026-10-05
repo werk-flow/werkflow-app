@@ -17,13 +17,8 @@ import { ErrorText } from '@/components/ui/error-text';
 import { useBanner } from '@/components/ui/banner';
 import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { describeFailure } from '@/lib/action-messages';
 import { closeClientRequest } from '@/lib/requests/actions';
 import {
   REQUEST_CLOSE_REASON_LABELS,
@@ -36,9 +31,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   request_not_found: 'Die Anfrage wurde nicht gefunden.',
   request_not_editable:
     'Diese Anfrage kann nicht mehr geschlossen werden (bereits umgewandelt oder geschlossen).',
-  close_failed:
-    'Die Anfrage konnte nicht geschlossen werden. Möglicherweise wurde sie bereits umgewandelt.',
-  unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.',
+  close_failed: 'Die Anfrage konnte nicht geschlossen werden. Möglicherweise wurde sie bereits umgewandelt.',
 };
 
 interface CloseRequestDialogProps {
@@ -51,12 +44,7 @@ interface CloseRequestDialogProps {
 
 // Closing without work keeps the request and its history; only the reason is
 // mandatory so the decision stays explainable later.
-export function CloseRequestDialog({
-  requestId,
-  open,
-  onOpenChange,
-  onSaved,
-}: CloseRequestDialogProps) {
+export function CloseRequestDialog({ requestId, open, onOpenChange, onSaved }: CloseRequestDialogProps) {
   const router = useRouter();
   const { showBanner } = useBanner();
   const [reason, setReason] = useState<RequestCloseReason>('kein_bedarf');
@@ -83,7 +71,7 @@ export function CloseRequestDialog({
         ...(note.trim() ? { note: note.trim() } : {}),
       });
       if (!result.success) {
-        setError(ERROR_MESSAGES[result.error] || 'Unbekannter Fehler');
+        setError(describeFailure(result.error, ERROR_MESSAGES, 'Unbekannter Fehler'));
         return;
       }
       handleOpenChange(false);
@@ -98,13 +86,12 @@ export function CloseRequestDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+    <Dialog open={open} onOpenChange={handleOpenChange} pending={isLoading}>
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Anfrage ohne Auftrag schließen</DialogTitle>
           <DialogDescription>
-            Die Anfrage bleibt mit ihrer Historie erhalten und kann bei Bedarf
-            wieder geöffnet werden.
+            Die Anfrage bleibt mit ihrer Historie erhalten und kann bei Bedarf wieder geöffnet werden.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} noValidate>
@@ -129,7 +116,7 @@ export function CloseRequestDialog({
             </Field>
             <Field label="Notiz" htmlFor="close-note">
               <Textarea
-                placeholder="Optionale Ergänzung, z. B. was stattdessen vereinbart wurde..."
+                placeholder="Optionale Ergänzung, z. B. was stattdessen vereinbart wurde…"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 disabled={isLoading}

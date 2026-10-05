@@ -1,16 +1,16 @@
 'use server';
 
-// P1-12 customer commitments: recording and withdrawing an explicitly agreed
+// Customer commitments: recording and withdrawing an explicitly agreed
 // customer window for one planned visit. Recording is a manual office fact —
 // nothing here sends, schedules, or implies any message (P1-46 owns delivery).
 
-import { updateTag } from 'next/cache';
-import { z } from 'zod';
+import type { ActionResult } from '@/lib/action-result';
+import { z } from '@/lib/zod';
 import { uuidSchema } from '@/lib/validation/uuid';
 
-import { CACHE_TAGS } from '@/lib/data/cached';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { logError } from '@/lib/logging';
 
 const recordCommitmentSchema = z
   .object({
@@ -49,10 +49,8 @@ const recordCommitmentSchema = z
   });
 
 export async function recordCustomerCommitment(
-  rawInput: unknown
-): Promise<
-  { success: true; commitmentId: string } | { success: false; error: string }
-> {
+  rawInput: unknown,
+): Promise<ActionResult<{ commitmentId: string }>> {
   const parsed = recordCommitmentSchema.safeParse(rawInput);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const auth = await authenticateAndAuthorize();
@@ -66,15 +64,13 @@ export async function recordCustomerCommitment(
     p_actor_id: auth.context.userId,
     p_occurrence_id: parsed.data.occurrenceId,
     p_committed_date: parsed.data.committedDate,
-    p_window_start_time: parsed.data.windowStartTime ?? undefined,
-    p_window_end_time: parsed.data.windowEndTime ?? undefined,
+    ...(parsed.data.windowStartTime ? { p_window_start_time: parsed.data.windowStartTime } : {}),
+    ...(parsed.data.windowEndTime ? { p_window_end_time: parsed.data.windowEndTime } : {}),
     p_source: parsed.data.source,
-    p_contact_id: parsed.data.contactId ?? undefined,
+    ...(parsed.data.contactId ? { p_contact_id: parsed.data.contactId } : {}),
   });
   if (error) {
-    console.error('Failed to record customer commitment:', {
-      code: error.code ?? 'unknown',
-    });
+    logError('Failed to record customer commitment:', error);
     return {
       success: false,
       error: error.message.includes('commitment_occurrence_not_scheduled')
@@ -84,19 +80,18 @@ export async function recordCustomerCommitment(
           : 'update_failed',
     };
   }
-  updateTag(CACHE_TAGS.jobs(auth.context.orgId));
   return { success: true, commitmentId: data as string };
 }
 
 export async function withdrawCustomerCommitment(
   commitmentId: string,
-  reason: string
-): Promise<{ success: true } | { success: false; error: string }> {
+  reason: string,
+): Promise<ActionResult> {
   if (!uuidSchema.safeParse(commitmentId).success) {
     return { success: false, error: 'invalid_input' };
   }
-  const trimmedReason = reason.trim();
-  if (trimmedReason.length < 3 || trimmedReason.length > 1000) {
+  const parsedReason = z.string().trim().min(3).max(1000).safeParse(reason);
+  if (!parsedReason.success) {
     return { success: false, error: 'withdrawal_reason_invalid' };
   }
   const auth = await authenticateAndAuthorize();
@@ -109,19 +104,14 @@ export async function withdrawCustomerCommitment(
     p_organization_id: auth.context.orgId,
     p_actor_id: auth.context.userId,
     p_commitment_id: commitmentId,
-    p_reason: trimmedReason,
+    p_reason: parsedReason.data,
   });
   if (error) {
-    console.error('Failed to withdraw customer commitment:', {
-      code: error.code ?? 'unknown',
-    });
+    logError('Failed to withdraw customer commitment:', error);
     return {
       success: false,
-      error: error.message.includes('commitment_not_found')
-        ? 'commitment_not_found'
-        : 'update_failed',
+      error: error.message.includes('commitment_not_found') ? 'commitment_not_found' : 'update_failed',
     };
   }
-  updateTag(CACHE_TAGS.jobs(auth.context.orgId));
   return { success: true };
 }

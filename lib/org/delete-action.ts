@@ -3,12 +3,10 @@
 import { cookies } from 'next/headers';
 import { updateTag } from 'next/cache';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import {
-  CURRENT_ORG_COOKIE,
-  CURRENT_ORG_MAX_AGE,
-  resolveActiveOrgId,
-} from '@/lib/org/cookies';
+import { CURRENT_ORG_COOKIE, CURRENT_ORG_MAX_AGE, resolveActiveOrgId } from '@/lib/org/cookies';
 import { getAuthenticatedUser, CACHE_TAGS } from '@/lib/data/cached';
+import { logError } from '@/lib/logging';
+import { z } from '@/lib/zod';
 
 export type DeleteOrgResult = {
   success: boolean;
@@ -16,20 +14,20 @@ export type DeleteOrgResult = {
   nextOrgId?: string | null; // The next org to switch to (null if no remaining orgs)
 };
 
+const confirmationNameSchema = z.string();
+
 /**
  * Delete an organization and all its associated data.
- * 
+ *
  * Rules:
  * - Only the admin can delete the organization
  * - The confirmation name must match the organization name exactly
- * - Deletes all organization_members for this org
- * - Deletes all organization_invites for this org
- * - Deletes the organization itself
+ * - Deletes the organization row; the foreign key cascade removes its
+ *   memberships, invites and all other organization data in the same statement
  * - Users who lose their only org will be redirected to onboarding on next login
  */
-export async function deleteOrganization(
-  confirmationName: string
-): Promise<DeleteOrgResult> {
+export async function deleteOrganization(confirmationName: string): Promise<DeleteOrgResult> {
+  const parsedConfirmation = confirmationNameSchema.safeParse(confirmationName);
   try {
     const user = await getAuthenticatedUser();
     if (!user) {
@@ -60,59 +58,30 @@ export async function deleteOrganization(
     }
 
     // Verify the confirmation name matches exactly
-    if (confirmationName.trim() !== org.name) {
+    if (!parsedConfirmation.success || parsedConfirmation.data.trim() !== org.name) {
       return { success: false, error: 'name_mismatch' };
     }
 
-    // Fetch all member user IDs before deletion so we can invalidate their caches
-    const { data: allMembers } = await admin
-      .from('organization_members')
-      .select('user_id')
-      .eq('organization_id', activeOrgId);
-    const memberUserIds = (allMembers ?? []).map((m) => m.user_id);
-
-    // Delete all organization members first (due to foreign key constraints)
-    const { error: membersDeleteError } = await admin
-      .from('organization_members')
-      .delete()
-      .eq('organization_id', activeOrgId);
-
-    if (membersDeleteError) {
-      console.error('Error deleting organization members:', membersDeleteError);
-      return { success: false, error: 'delete_members_failed' };
-    }
-
-    // Delete all organization invites
-    const { error: invitesDeleteError } = await admin
-      .from('organization_invites')
-      .delete()
-      .eq('organization_id', activeOrgId);
-
-    if (invitesDeleteError) {
-      console.error('Error deleting organization invites:', invitesDeleteError);
-      return { success: false, error: 'delete_invites_failed' };
-    }
-
-    // Finally, delete the organization itself
-    const { error: orgDeleteError } = await admin
-      .from('organizations')
-      .delete()
-      .eq('id', activeOrgId);
+    // One statement: the cascade removes the memberships, invites and every
+    // other organization row with it, or nothing. Deleting the memberships
+    // first was refused by the owner-membership guard.
+    const { error: orgDeleteError } = await admin.from('organizations').delete().eq('id', activeOrgId);
 
     if (orgDeleteError) {
-      console.error('Error deleting organization:', orgDeleteError);
+      logError('deleteOrganization: organization delete failed', orgDeleteError);
       return { success: false, error: 'delete_org_failed' };
     }
 
     // Get the user's remaining organizations using admin client
     // (to bypass RLS - the org we just deleted might affect RLS queries)
     const { data: remainingMemberships, error: remainingError } = await admin
+      // tenant-scope: cross-organization-by-design — the signed-in user's remaining memberships pick the next active organization
       .from('organization_members')
       .select('organization_id')
       .eq('user_id', user.id);
 
     if (remainingError) {
-      console.error('Error fetching remaining memberships:', remainingError);
+      logError('deleteOrganization: remaining memberships read failed', remainingError);
     }
 
     const remainingOrgs = remainingMemberships ?? [];
@@ -137,15 +106,11 @@ export async function deleteOrganization(
       });
     }
 
-    for (const uid of memberUserIds) {
-      updateTag(CACHE_TAGS.memberships(uid));
-    }
     updateTag(CACHE_TAGS.memberCount(activeOrgId));
 
     return { success: true, nextOrgId };
   } catch (error) {
-    console.error('Unexpected error in deleteOrganization:', error);
+    logError('deleteOrganization: unexpected failure', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
-

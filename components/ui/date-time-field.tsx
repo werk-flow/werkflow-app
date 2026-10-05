@@ -33,11 +33,7 @@ export function DateTimeField({
   const timePart = value.length >= 16 ? value.slice(11, 16) : '';
 
   const dateValue = datePart
-    ? new Date(
-        Number(datePart.slice(0, 4)),
-        Number(datePart.slice(5, 7)) - 1,
-        Number(datePart.slice(8, 10))
-      )
+    ? new Date(Number(datePart.slice(0, 4)), Number(datePart.slice(5, 7)) - 1, Number(datePart.slice(8, 10)))
     : undefined;
 
   function handleDateChange(nextDate: Date | undefined) {
@@ -59,10 +55,14 @@ export function DateTimeField({
   return (
     <div
       className="@container"
+      data-testid="date-time-field"
       aria-invalid={invalid || undefined}
       aria-describedby={describedById}
     >
-      <div className="grid grid-cols-1 gap-2 @[20rem]:grid-cols-[1fr_auto]">
+      <div
+        className="grid grid-cols-1 gap-2 @[20rem]:grid-cols-[1fr_auto]"
+        data-testid="date-time-field-grid"
+      >
         <DatePicker
           id={`${idPrefix}-date`}
           value={dateValue}

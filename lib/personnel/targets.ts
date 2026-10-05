@@ -5,16 +5,12 @@
 // are traceable through their own histories, and historical days always
 // resolve against what was effective then.
 
-import { z } from 'zod';
+import { z } from '@/lib/zod';
 
 import type { EmploymentCondition } from '@/lib/personnel/types';
 import { toBusinessIsoDate } from '@/lib/personnel/types';
 import { getEffectiveCondition } from '@/lib/personnel/types';
-import {
-  getEffectiveSchedule,
-  getWeekdayIndex,
-  type WorkSchedule,
-} from '@/lib/personnel/schedule';
+import { getEffectiveSchedule, getWeekdayIndex, type WorkSchedule } from '@/lib/personnel/schedule';
 import {
   getHolidayName,
   getPublicHolidaysForYear,
@@ -85,22 +81,15 @@ export const holidayRegionHistoryEntrySchema = z.object({
   effectiveFrom: z.string().datetime(),
 });
 
-export type HolidayRegionHistoryEntry = z.infer<
-  typeof holidayRegionHistoryEntrySchema
->;
+export type HolidayRegionHistoryEntry = z.infer<typeof holidayRegionHistoryEntrySchema>;
 
-export function parseHolidayRegionHistory(
-  value: unknown
-): HolidayRegionHistoryEntry[] {
+export function parseHolidayRegionHistory(value: unknown): HolidayRegionHistoryEntry[] {
   if (!Array.isArray(value)) return [];
   return value
     .map((entry) => holidayRegionHistoryEntrySchema.safeParse(entry))
     .filter((result) => result.success)
     .map((result) => result.data)
-    .sort(
-      (a, b) =>
-        new Date(a.effectiveFrom).getTime() - new Date(b.effectiveFrom).getTime()
-    );
+    .sort((a, b) => new Date(a.effectiveFrom).getTime() - new Date(b.effectiveFrom).getTime());
 }
 
 export type ClosureDay = {
@@ -127,11 +116,8 @@ export const EMPTY_HOLIDAY_CALENDAR: OrganizationHolidayCalendar = {
  * whose effectiveFrom (as a Berlin date) is on or before the date; none → null.
  */
 export function resolveHolidayRegionOnDate(
-  calendar: Pick<
-    OrganizationHolidayCalendar,
-    'holidayRegion' | 'holidayRegionHistory'
-  >,
-  dateIso: string
+  calendar: Pick<OrganizationHolidayCalendar, 'holidayRegion' | 'holidayRegionHistory'>,
+  dateIso: string,
 ): string | null {
   if (calendar.holidayRegionHistory.length === 0) {
     // No recorded history: the current selection (if any) applies from now on;
@@ -142,8 +128,7 @@ export function resolveHolidayRegionOnDate(
   // parseHolidayRegionHistory sorts ascending, but calendars can be assembled
   // elsewhere (tests, future callers) — order defensively, non-mutating.
   const history = [...calendar.holidayRegionHistory].sort(
-    (a, b) =>
-      new Date(a.effectiveFrom).getTime() - new Date(b.effectiveFrom).getTime()
+    (a, b) => new Date(a.effectiveFrom).getTime() - new Date(b.effectiveFrom).getTime(),
   );
 
   for (const entry of history.reverse()) {
@@ -183,15 +168,11 @@ export function resolveDailyTarget({
   } else {
     // Noon UTC always maps onto the same Berlin calendar date, in CET and
     // CEST alike — no fixed-offset assumption around DST changes.
-    const condition = getEffectiveCondition(
-      conditions,
-      new Date(`${dateIso}T12:00:00Z`)
-    );
+    const condition = getEffectiveCondition(conditions, new Date(`${dateIso}T12:00:00Z`));
     if (condition?.weeklyHours != null && condition.weeklyHours > 0) {
       source = 'derived';
       // Spread across Montag–Freitag; weekends carry no derived target.
-      baseTargetMinutes =
-        weekday <= 4 ? Math.round((condition.weeklyHours * 60) / 5) : 0;
+      baseTargetMinutes = weekday <= 4 ? Math.round((condition.weeklyHours * 60) / 5) : 0;
     } else {
       // Legacy behavior, visibly labeled: 480 on every day exactly matches the
       // pre-P1-04 overtime math, so nothing shifts for unconfigured members.
@@ -201,12 +182,9 @@ export function resolveDailyTarget({
   }
 
   const region = resolveHolidayRegionOnDate(calendar, dateIso);
-  const holidayName =
-    region && isHolidayRegion(region) ? getHolidayName(region, dateIso) : null;
+  const holidayName = region && isHolidayRegion(region) ? getHolidayName(region, dateIso) : null;
 
-  const closure = calendar.closureDays.find(
-    (day) => day.closureDate === dateIso
-  );
+  const closure = calendar.closureDays.find((day) => day.closureDate === dateIso);
 
   const isHoliday = holidayName !== null;
   const isClosureDay = closure !== undefined;
@@ -218,15 +196,11 @@ export function resolveDailyTarget({
   // vacation keeps the attribution, so days with a single span (all pre-P1-08
   // data) behave bit-identically.
   const coveringSpans = (absences ?? []).filter(
-    (span) => span.startDate <= dateIso && dateIso <= span.endDate
+    (span) => span.startDate <= dateIso && dateIso <= span.endDate,
   );
-  const fullSpans = coveringSpans.filter(
-    (span) => span.dayPortion === 'full'
-  );
+  const fullSpans = coveringSpans.filter((span) => span.dayPortion === 'full');
   const strongestSpans = fullSpans.length > 0 ? fullSpans : coveringSpans;
-  const absenceSpan =
-    strongestSpans.find((span) => span.type === 'vacation') ??
-    strongestSpans[0];
+  const absenceSpan = strongestSpans.find((span) => span.type === 'vacation') ?? strongestSpans[0];
   const absence: DailyTargetAbsence | null = absenceSpan
     ? { type: absenceSpan.type, portion: absenceSpan.dayPortion }
     : null;
@@ -262,7 +236,7 @@ export function resolveDailyTarget({
 
 export function resolveDailyTargets(
   dates: string[],
-  input: Omit<ResolveDailyTargetInput, 'dateIso'>
+  input: Omit<ResolveDailyTargetInput, 'dateIso'>,
 ): DailyTarget[] {
   return dates.map((dateIso) => resolveDailyTarget({ dateIso, ...input }));
 }
@@ -278,12 +252,9 @@ export function sumTargetMinutes(targets: DailyTarget[]): number {
  * planning surfaces). Dates before the first region selection yield nothing.
  */
 export function getHolidayContextDays(
-  calendar: Pick<
-    OrganizationHolidayCalendar,
-    'holidayRegion' | 'holidayRegionHistory'
-  >,
+  calendar: Pick<OrganizationHolidayCalendar, 'holidayRegion' | 'holidayRegionHistory'>,
   fromYear: number,
-  toYear: number
+  toYear: number,
 ): PublicHoliday[] {
   const candidateRegions = new Set<string>();
   if (calendar.holidayRegion) candidateRegions.add(calendar.holidayRegion);

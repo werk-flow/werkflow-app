@@ -1,5 +1,4 @@
 'use client';
-import { ErrorText } from '@/components/ui/error-text';
 
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
@@ -7,124 +6,82 @@ import { Loader2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogDescription,
   DialogHeader,
-  DialogTitle
+  DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Field } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
-import { joinOrganization } from '@/lib/org/actions';
-
-const ERROR_MESSAGES = {
-  code_required: 'Bitte gib einen Organisationscode ein.',
-  invalid_code: 'Ungültiger Organisationscode.',
-  admin_mismatch:
-    'Du kannst keiner Organisation beitreten, die nicht vom gleichen Admin stammt wie deine bestehenden Organisationen.',
-  already_member: 'Du bist bereits Mitglied dieser Organisation.',
-  not_authenticated: 'Du musst angemeldet sein.',
-  join_failed: 'Beitritt fehlgeschlagen. Bitte versuche es erneut.',
-  unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.'
-} satisfies Record<string, string>;
-const ERROR_MESSAGE_BY_CODE: Record<string, string> = ERROR_MESSAGES;
+import type { OwnJoinRequest } from '@/lib/org/types';
+import { JoinOrgCodeForm } from './join-org-code-form';
+import { PendingJoinRequest } from './pending-join-request';
 
 interface JoinOrgDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
+/**
+ * A member asks to join a further organization of the same owner. The
+ * request waits for that organization's Admin or Büro; after the approval
+ * the organization appears in the switcher with the next membership refresh.
+ */
 export function JoinOrgDialog({ open, onOpenChange }: JoinOrgDialogProps) {
-  const [code, setCode] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [request, setRequest] = useState<OwnJoinRequest | null>(null);
+  const [isRequesting, setIsRequesting] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const result = await joinOrganization(code);
-
-      if (result.success && result.organizationId) {
-        // Use hard navigation to ensure cookies are properly read on the new page
-        // This is critical for production environments where cookie timing can be an issue
-        window.location.href = `/dashboard?joined=${result.organizationId}`;
-      } else {
-        setError(
-          ERROR_MESSAGE_BY_CODE[result.error ?? 'unexpected_error'] ??
-            ERROR_MESSAGES.unexpected_error
-        );
-      }
-    } catch (submitError) {
-      console.error('Unexpected error joining an organization:', submitError);
-      setError(ERROR_MESSAGES.unexpected_error);
-    } finally {
-      setIsLoading(false);
-    }
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) setRequest(null);
+    onOpenChange(nextOpen);
   };
-
-  const handleOpenChange = (newOpen: boolean) => {
-    if (isLoading && !newOpen) return;
-    if (!newOpen) {
-      // Reset form when closing
-      setCode('');
-      setError(null);
-      setIsLoading(false);
-    }
-    onOpenChange(newOpen);
-  };
-
-  const isValid = code.trim().length > 0;
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange} pending={isRequesting}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Organisation beitreten</DialogTitle>
           <DialogDescription>
-            Gib den Organisationscode ein, den du von deinem Admin erhalten hast.
+            Gib den Organisationscode ein, den du von deinem Admin erhalten hast. Die Organisation gibt deine
+            Anfrage frei.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Field label="Organisationscode" htmlFor="dialog-org-code" required>
-            <Input
-              id="dialog-org-code"
-              type="text"
-              placeholder="z. B. ABC123"
-              value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase())}
-              disabled={isLoading}
-              autoFocus
-              autoComplete="off"
-              className="uppercase"
+        {request ? (
+          <>
+            <PendingJoinRequest
+              request={request}
+              hint="Sobald ein Admin oder das Büro sie freigibt, erscheint die Organisation in deiner Auswahl."
+              onWithdrawn={() => setRequest(null)}
             />
-          </Field>
-
-          <ErrorText>{error}</ErrorText>
-
-          <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => handleOpenChange(false)}
-              disabled={isLoading}
-            >
-              Abbrechen
-            </Button>
-            <Button type="submit" disabled={!isValid || isLoading}>
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 size-4 animate-spin" />
-                  Wird beigetreten...
-                </>
-              ) : (
-                'Beitreten'
-              )}
-            </Button>
-          </div>
-        </form>
+            <DialogFooter>
+              <Button type="button" onClick={() => handleOpenChange(false)}>
+                Fertig
+              </Button>
+            </DialogFooter>
+          </>
+        ) : (
+          <JoinOrgCodeForm
+            inputId="dialog-org-code"
+            onRequest={setRequest}
+            onPendingChange={setIsRequesting}
+            renderActions={(isPending) => (
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleOpenChange(false)}
+                  disabled={isPending}
+                >
+                  Abbrechen
+                </Button>
+                <Button type="submit" disabled={isPending}>
+                  {isPending && <Loader2 className="size-4 animate-spin" />}
+                  Beitritt anfragen
+                </Button>
+              </DialogFooter>
+            )}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );

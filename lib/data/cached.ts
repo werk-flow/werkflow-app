@@ -1,51 +1,36 @@
 import { readOrganizationCalendar } from '@/lib/personnel/calendar-reader';
-import { cache } from "react";
-import { z } from "zod";
+import { cache } from 'react';
+import { z } from '@/lib/zod';
 import { memoizeRequestRead } from './read-request-cache';
-import { unstable_cache } from "next/cache";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { getProfileAvatarUrl } from "@/lib/profile-avatar";
-import type { User } from "@supabase/supabase-js";
-import type { UserOrg } from "@/components/organization/organization-context";
-import { Constants, type Database, type Json } from "@/lib/supabase/database.types";
-import {
-  getAuftraegePreferencesFromJson,
-  type AuftraegeColumnId,
-} from "@/lib/jobs/auftraege-table-columns";
+import { unstable_cache } from 'next/cache';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { getProfileAvatarUrl } from '@/lib/profile-avatar';
+import { isAuthError, type User } from '@supabase/supabase-js';
+import { AuthUnavailableError, isRejectedIdentity } from '@/lib/auth/identity-errors';
+import { logReadFailure } from './read-request-cache';
+import { CachedReadError, failCachedRead } from './cached-read-failure';
+import type { UserOrg } from '@/lib/org/types';
+import { Constants, type Database, type Json } from '@/lib/supabase/database.types';
+import { getAuftraegePreferencesFromJson, type AuftraegeColumnId } from '@/lib/jobs/auftraege-table-columns';
 import {
   getDefaultTimeTrackingSettings,
   normalizeTimeTrackingSettings,
   parseBreakPolicyHistory,
   type OrganizationTimeTrackingSettings,
-} from "@/lib/time-tracking/settings";
-import {
-  type OrganizationHolidayCalendar,
-} from "@/lib/personnel/targets";
-import { getMembershipAccessMode } from "@/lib/personnel/lifecycle";
+} from '@/lib/time-tracking/settings';
+import { type OrganizationHolidayCalendar } from '@/lib/personnel/targets';
+import { getMembershipAccessMode } from '@/lib/personnel/lifecycle';
 
 // Tag helpers for cache invalidation in server actions
 export const CACHE_TAGS = {
-  memberships: (userId: string) => `memberships-${userId}`,
   subscription: (userId: string) => `subscription-${userId}`,
   profile: (userId: string) => `profile-${userId}`,
   memberCount: (orgId: string) => `member-count-${orgId}`,
   organizationSettings: (orgId: string) => `organization-settings-${orgId}`,
   organizationUserPreferences: (orgId: string, userId: string) =>
     `organization-user-preferences-${orgId}-${userId}`,
-  requests: (orgId: string) => `requests-${orgId}`,
-  personnel: (orgId: string) => `personnel-${orgId}`,
-  vacation: (orgId: string): string => `vacation-${orgId}`,
-  sickness: (orgId: string): string => `sickness-${orgId}`,
-  teams: (orgId: string): string => `teams-${orgId}`,
-  qualifications: (orgId: string): string => `qualifications-${orgId}`,
-  responsibilities: (orgId: string) => `responsibilities-${orgId}`,
   organizationCalendar: (orgId: string) => `organization-calendar-${orgId}`,
-  jobs: (orgId: string) => `jobs-${orgId}`,
-  projects: (orgId: string) => `projects-${orgId}`,
-  documents: (orgId: string) => `documents-${orgId}`,
-  equipment: (orgId: string) => `equipment-${orgId}`,
-  inventory: (orgId: string) => `inventory-${orgId}`,
   workTemplates: (orgId: string) => `work-templates-${orgId}`,
 } as const;
 
@@ -53,7 +38,10 @@ const REVALIDATE_SECONDS = 300; // 5 minutes safety net
 
 /**
  * Validates the JWT against Supabase Auth servers and returns the
- * authenticated User, or null when Auth rejects the identity.
+ * authenticated User, null when Auth rejects the identity, and throws
+ * `AuthUnavailableError` when the check could not be completed. An
+ * unreachable, rate-limited or misconfigured Auth service must surface as a
+ * failure, never as a login redirect for a valid user and never as access.
  *
  * This MUST use getUser() (network roundtrip) rather than getSession()
  * because server actions use the returned user ID with the admin client
@@ -65,11 +53,30 @@ const REVALIDATE_SECONDS = 300; // 5 minutes safety net
  */
 export const getAuthenticatedUser = memoizeRequestRead(async (): Promise<User | null> => {
   const supabase = await createSupabaseServerClient();
+  let response: Awaited<ReturnType<typeof supabase.auth.getUser>>;
+  try {
+    response = await supabase.auth.getUser();
+  } catch (error) {
+    // Only name and status leave this scope: a thrown failure can carry the request.
+    logReadFailure('Auth identity check threw', {
+      name: error instanceof Error ? error.name : typeof error,
+      status: isAuthError(error) ? error.status : undefined,
+    });
+    throw new AuthUnavailableError();
+  }
   const {
     data: { user },
     error,
-  } = await supabase.auth.getUser();
-  if (error || !user) return null;
+  } = response;
+  if (error) {
+    if (isRejectedIdentity(error)) return null;
+    logReadFailure('Auth identity check failed', {
+      name: error.name,
+      status: error.status,
+      code: error.code,
+    });
+    throw new AuthUnavailableError();
+  }
   return user;
 });
 
@@ -90,38 +97,55 @@ export async function getCachedUser(): Promise<{ data: { user: User | null } }> 
 type MembershipCandidate = UserOrg & {
   hasAccessBlocker: boolean;
   accessLifecycle: {
-    state: Database["public"]["Enums"]["personnel_access_state"];
-    scheduledState:
-      | Database["public"]["Enums"]["personnel_access_state"]
-      | null;
+    state: Database['public']['Enums']['personnel_access_state'];
+    scheduledState: Database['public']['Enums']['personnel_access_state'] | null;
     scheduledFor: string | null;
   } | null;
 };
 
-const membershipRowsSchema = z.array(z.object({
-  organization_id: z.string(),
-  role: z.enum(Constants.public.Enums.org_role),
-  joined_at: z.string(),
-  organizations: z.object({
-    id: z.string(), name: z.string(), unique_code: z.string(),
-    employee_records: z.array(z.object({
-      id: z.string(), user_id: z.string(),
-      personnel_access_lifecycles: z.array(z.object({
-        state: z.enum(Constants.public.Enums.personnel_access_state),
-        scheduled_state: z.enum(Constants.public.Enums.personnel_access_state).nullable(),
-        scheduled_for: z.string().nullable(),
-      })).max(1),
-      personnel_onboarding_requirements: z.array(z.object({ id: z.string() })),
-    })).max(1),
-  }).nullable(),
-}));
+const membershipRowsSchema = z.array(
+  z.object({
+    organization_id: z.string(),
+    role: z.enum(Constants.public.Enums.org_role),
+    joined_at: z.string(),
+    organizations: z
+      .object({
+        id: z.string(),
+        name: z.string(),
+        unique_code: z.string(),
+        employee_records: z
+          .array(
+            z.object({
+              id: z.string(),
+              user_id: z.string(),
+              personnel_access_lifecycles: z
+                .array(
+                  z.object({
+                    state: z.enum(Constants.public.Enums.personnel_access_state),
+                    scheduled_state: z.enum(Constants.public.Enums.personnel_access_state).nullable(),
+                    scheduled_for: z.string().nullable(),
+                  }),
+                )
+                .max(1),
+              personnel_onboarding_requirements: z.array(z.object({ id: z.string() })),
+            }),
+          )
+          .max(1),
+      })
+      .nullable(),
+  }),
+);
 
 const loadMembershipCandidates = memoizeRequestRead(
   async (userId: string): Promise<MembershipCandidate[]> => {
     const admin = createSupabaseAdminClient();
     // One current database snapshot, with composite foreign keys keeping each
     // lifecycle/blocker attached to the employee in this organization.
-    const { data, error } = await admin.from("organization_members").select(`
+    const { data, error } = await admin
+      // tenant-scope: cross-organization-by-design — the signed-in user's own memberships in every organization, checked against the requested scope below
+      .from('organization_members')
+      .select(
+        `
       organization_id, role, joined_at,
       organizations (id, name, unique_code,
         employee_records (id, user_id,
@@ -129,13 +153,18 @@ const loadMembershipCandidates = memoizeRequestRead(
           personnel_onboarding_requirements!personnel_onboarding_requirements_employee_org_fkey (id)
         )
       )
-    `)
-      .eq("user_id", userId)
-      .eq("organizations.employee_records.user_id", userId)
-      .eq("organizations.employee_records.personnel_onboarding_requirements.blocks_access", true)
-      .not("organizations.employee_records.personnel_onboarding_requirements.state", "in", "(fulfilled,waived,cancelled)")
+    `,
+      )
+      .eq('user_id', userId)
+      .eq('organizations.employee_records.user_id', userId)
+      .eq('organizations.employee_records.personnel_onboarding_requirements.blocks_access', true)
+      .not(
+        'organizations.employee_records.personnel_onboarding_requirements.state',
+        'in',
+        '(fulfilled,waived,cancelled)',
+      )
       // Only blocker existence matters; fetching its full history is unnecessary.
-      .limit(1, { referencedTable: "organizations.employee_records.personnel_onboarding_requirements" });
+      .limit(1, { referencedTable: 'organizations.employee_records.personnel_onboarding_requirements' });
     if (error) throw error;
     const memberships = membershipRowsSchema.parse(data);
     return memberships.flatMap((membership) => {
@@ -143,17 +172,26 @@ const loadMembershipCandidates = memoizeRequestRead(
       if (!organization) return [];
       const employee = organization.employee_records[0];
       if (organization.id !== membership.organization_id || (employee && employee.user_id !== userId)) {
-        throw new Error("Membership response crossed its requested scope");
+        throw new Error('Membership response crossed its requested scope');
       }
       const lifecycle = employee?.personnel_access_lifecycles[0];
-      return [{
-        orgId: organization.id, name: organization.name, uniqueCode: organization.unique_code,
-        role: membership.role, joinedAt: membership.joined_at,
-        hasAccessBlocker: (employee?.personnel_onboarding_requirements.length ?? 0) > 0,
-        accessLifecycle: lifecycle ? {
-          state: lifecycle.state, scheduledState: lifecycle.scheduled_state, scheduledFor: lifecycle.scheduled_for,
-        } : null,
-      }];
+      return [
+        {
+          orgId: organization.id,
+          name: organization.name,
+          uniqueCode: organization.unique_code,
+          role: membership.role,
+          joinedAt: membership.joined_at,
+          hasAccessBlocker: (employee?.personnel_onboarding_requirements.length ?? 0) > 0,
+          accessLifecycle: lifecycle
+            ? {
+                state: lifecycle.state,
+                scheduledState: lifecycle.scheduled_state,
+                scheduledFor: lifecycle.scheduled_for,
+              }
+            : null,
+        },
+      ];
     });
   },
 );
@@ -168,91 +206,81 @@ function toUserOrg(membership: MembershipCandidate): UserOrg {
   };
 }
 
-export const getCachedMemberships = memoizeRequestRead(
-  async (userId: string): Promise<UserOrg[]> => {
-    const candidates = await loadMembershipCandidates(userId);
-    const now = Date.now();
-    return candidates
-      .filter((membership) => getMembershipAccessMode(membership, now) === "operational")
-      .map(toUserOrg);
-  },
-);
+export const getCachedMemberships = memoizeRequestRead(async (userId: string): Promise<UserOrg[]> => {
+  const candidates = await loadMembershipCandidates(userId);
+  const now = Date.now();
+  return candidates
+    .filter((membership) => getMembershipAccessMode(membership, now) === 'operational')
+    .map(toUserOrg);
+});
 
-export const getCachedPrestartMemberships = memoizeRequestRead(
-  async (userId: string): Promise<UserOrg[]> => {
-    const candidates = await loadMembershipCandidates(userId);
-    const now = Date.now();
-    return candidates
-      .filter((membership) => getMembershipAccessMode(membership, now) === "prestart")
-      .map(toUserOrg);
-  },
-);
+export const getCachedPrestartMemberships = memoizeRequestRead(async (userId: string): Promise<UserOrg[]> => {
+  const candidates = await loadMembershipCandidates(userId);
+  const now = Date.now();
+  return candidates
+    .filter((membership) => getMembershipAccessMode(membership, now) === 'prestart')
+    .map(toUserOrg);
+});
 
 /**
- * Cross-request cached subscription status.
+ * Cross-request cached subscription status. A missing row is "not
+ * subscribed"; a failed read throws `CachedReadError`, never `false`.
  */
-export const getCachedSubscriptionStatus = cache(
-  async (userId: string): Promise<boolean> => {
-    const fetchSubscription = unstable_cache(
-      async (uid: string): Promise<boolean> => {
-        const admin = createSupabaseAdminClient();
+export const getCachedSubscriptionStatus = cache(async (userId: string): Promise<boolean> => {
+  const fetchSubscription = unstable_cache(
+    async (uid: string): Promise<boolean> => {
+      const admin = createSupabaseAdminClient();
 
-        const { data, error } = await admin
-          .from("subscriptions")
-          .select("status")
-          .eq("user_id", uid)
-          .single();
+      const { data, error } = await admin
+        .from('subscriptions')
+        .select('status')
+        .eq('user_id', uid)
+        .maybeSingle();
 
-        if (error) {
-          if (error.code === "PGRST116") {
-            return false;
-          }
-          console.error("Error fetching subscription:", error);
-          return false;
-        }
+      if (error) failCachedRead('subscription_read_failed', error);
 
-        return data?.status === "active";
-      },
-      [`subscription-${userId}`],
-      {
-        tags: [CACHE_TAGS.subscription(userId)],
-        revalidate: REVALIDATE_SECONDS,
-      },
-    );
+      return data?.status === 'active';
+    },
+    [`subscription-${userId}`],
+    {
+      tags: [CACHE_TAGS.subscription(userId)],
+      revalidate: REVALIDATE_SECONDS,
+    },
+  );
 
-    return fetchSubscription(userId);
-  },
-);
+  return fetchSubscription(userId);
+});
 
 /**
- * Cross-request cached member count.
+ * Cross-request cached member count. A failed read throws `CachedReadError`;
+ * a consumer that can render without the number catches it per request.
  */
-export const getCachedMemberCount = cache(
-  async (orgId: string): Promise<number | null> => {
-    const fetchMemberCount = unstable_cache(
-      async (oid: string): Promise<number | null> => {
-        const admin = createSupabaseAdminClient();
+export const getCachedMemberCount = cache(async (orgId: string): Promise<number> => {
+  const fetchMemberCount = unstable_cache(
+    async (oid: string): Promise<number> => {
+      const admin = createSupabaseAdminClient();
 
-        const { count, error } = await admin
-          .from("organization_members")
-          .select("*", { count: "exact", head: true })
-          .eq("organization_id", oid);
+      const { count, error } = await admin
+        .from('organization_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('organization_id', oid);
 
-        if (error) {
-          console.error("Error fetching member count:", error);
-          return null;
-        }
+      if (error || count === null) failCachedRead('member_count_read_failed', error);
 
-        return count;
-      },
-      [`member-count-${orgId}`],
-      { tags: [CACHE_TAGS.memberCount(orgId)], revalidate: REVALIDATE_SECONDS },
-    );
+      return count;
+    },
+    [`member-count-${orgId}`],
+    { tags: [CACHE_TAGS.memberCount(orgId)], revalidate: REVALIDATE_SECONDS },
+  );
 
-    return fetchMemberCount(orgId);
-  },
-);
+  return fetchMemberCount(orgId);
+});
 
+/**
+ * Break and payroll rules of the organization. Only a missing settings row
+ * means the defaults; a failed read throws `CachedReadError`, so no time
+ * computation runs on rules the organization may not have.
+ */
 export const getCachedOrganizationSettings = cache(
   async (orgId: string): Promise<OrganizationTimeTrackingSettings> => {
     const fetchOrganizationSettings = unstable_cache(
@@ -260,17 +288,14 @@ export const getCachedOrganizationSettings = cache(
         const admin = createSupabaseAdminClient();
 
         const { data, error } = await admin
-          .from("organization_settings")
+          .from('organization_settings')
           .select(
-            "organization_id, break_mode, auto_break_threshold_minutes, auto_break_duration_minutes, break_policy_history",
+            'organization_id, break_mode, auto_break_threshold_minutes, auto_break_duration_minutes, break_policy_history',
           )
-          .eq("organization_id", oid)
+          .eq('organization_id', oid)
           .maybeSingle();
 
-        if (error) {
-          console.error("Error fetching organization settings:", error);
-          return getDefaultTimeTrackingSettings(oid);
-        }
+        if (error) failCachedRead('organization_settings_read_failed', error);
 
         if (!data) {
           return getDefaultTimeTrackingSettings(oid);
@@ -281,9 +306,7 @@ export const getCachedOrganizationSettings = cache(
           breakMode: data.break_mode,
           autoBreakThresholdMinutes: data.auto_break_threshold_minutes,
           autoBreakDurationMinutes: data.auto_break_duration_minutes,
-          breakPolicyHistory: parseBreakPolicyHistory(
-            data.break_policy_history,
-          ),
+          breakPolicyHistory: parseBreakPolicyHistory(data.break_policy_history),
         });
       },
       [`organization-settings-${orgId}`],
@@ -301,18 +324,22 @@ export const getCachedOrganizationSettings = cache(
  * Cross-request cached holiday/closure context (P1-04): the selected holiday
  * region with its effective-from history plus the organization's closure days.
  * Tagged with both the settings tag (region lives on organization_settings)
- * and its own calendar tag (closure-day mutations).
+ * and its own calendar tag (closure-day mutations). A failed read throws
+ * `CachedReadError`; it never claims there are no closure days.
  */
 export const getCachedOrganizationCalendar = cache(
   async (orgId: string): Promise<OrganizationHolidayCalendar> => {
     const fetchCalendar = unstable_cache(
-      (oid: string) => readOrganizationCalendar(oid),
+      async (oid: string): Promise<OrganizationHolidayCalendar> => {
+        try {
+          return await readOrganizationCalendar(oid);
+        } catch (error) {
+          return failCachedRead('organization_calendar_read_failed', error);
+        }
+      },
       [`organization-calendar-${orgId}`],
       {
-        tags: [
-          CACHE_TAGS.organizationSettings(orgId),
-          CACHE_TAGS.organizationCalendar(orgId),
-        ],
+        tags: [CACHE_TAGS.organizationSettings(orgId), CACHE_TAGS.organizationCalendar(orgId)],
         revalidate: REVALIDATE_SECONDS,
       },
     );
@@ -321,43 +348,33 @@ export const getCachedOrganizationCalendar = cache(
   },
 );
 
+type OrganizationUserPreferences = {
+  visibleColumns: AuftraegeColumnId[];
+  preferences: Json | null;
+};
+
+/**
+ * The caller's column and view preferences. A missing row means the defaults;
+ * a failed read throws `CachedReadError`, so an editor never offers the
+ * defaults as the saved choice.
+ */
 export const getCachedOrganizationUserPreferences = cache(
-  async (
-    orgId: string,
-    userId: string,
-  ): Promise<{
-    visibleColumns: AuftraegeColumnId[];
-    preferences: Json | null;
-  }> => {
+  async (orgId: string, userId: string): Promise<OrganizationUserPreferences> => {
     const fetchPreferences = unstable_cache(
-      async (
-        oid: string,
-        uid: string,
-      ): Promise<{
-        visibleColumns: AuftraegeColumnId[];
-        preferences: Json | null;
-      }> => {
+      async (oid: string, uid: string): Promise<OrganizationUserPreferences> => {
         const admin = createSupabaseAdminClient();
 
         const { data, error } = await admin
-          .from("organization_user_preferences")
-          .select("preferences")
-          .eq("organization_id", oid)
-          .eq("user_id", uid)
+          .from('organization_user_preferences')
+          .select('preferences')
+          .eq('organization_id', oid)
+          .eq('user_id', uid)
           .maybeSingle();
 
-        if (error) {
-          console.error("Error fetching organization user preferences:", error);
-          return {
-            visibleColumns: getAuftraegePreferencesFromJson(null),
-            preferences: null,
-          };
-        }
+        if (error) failCachedRead('organization_user_preferences_read_failed', error);
 
         return {
-          visibleColumns: getAuftraegePreferencesFromJson(
-            data?.preferences ?? null,
-          ),
+          visibleColumns: getAuftraegePreferencesFromJson(data?.preferences ?? null),
           preferences: data?.preferences ?? null,
         };
       },
@@ -372,6 +389,24 @@ export const getCachedOrganizationUserPreferences = cache(
   },
 );
 
+/**
+ * Read-only views show the default columns for this one request when the
+ * preference read failed: the column choice changes no data, and nothing is
+ * cached, so the next render reads the saved choice again. The editor uses
+ * `getCachedOrganizationUserPreferences` and shows the failure instead.
+ */
+export async function getOrganizationUserPreferencesForView(
+  orgId: string,
+  userId: string,
+): Promise<OrganizationUserPreferences> {
+  try {
+    return await getCachedOrganizationUserPreferences(orgId, userId);
+  } catch (error) {
+    if (!(error instanceof CachedReadError)) throw error;
+    return { visibleColumns: getAuftraegePreferencesFromJson(null), preferences: null };
+  }
+}
+
 export type UserProfile = {
   id: string;
   firstName: string;
@@ -382,8 +417,8 @@ export type UserProfile = {
 };
 
 /**
- * Cross-request cached user profile.
- * Email is passed in since it comes from auth.users.
+ * Cross-request cached user profile. Email is passed in since it comes from
+ * auth.users. A missing row is `null`; a failed read throws `CachedReadError`.
  */
 export const getCachedUserProfile = cache(
   async (userId: string, email: string): Promise<UserProfile | null> => {
@@ -392,20 +427,18 @@ export const getCachedUserProfile = cache(
         const admin = createSupabaseAdminClient();
 
         const { data, error } = await admin
-          .from("profiles")
-          .select("id, first_name, last_name, avatar_path")
-          .eq("id", uid)
-          .single();
+          .from('profiles')
+          .select('id, first_name, last_name, avatar_path')
+          .eq('id', uid)
+          .maybeSingle();
 
-        if (error) {
-          console.error("Error fetching user profile:", error);
-          return null;
-        }
+        if (error) failCachedRead('profile_read_failed', error);
+        if (!data) return null;
 
         return {
           id: data.id,
-          firstName: data.first_name,
-          lastName: data.last_name,
+          firstName: data.first_name ?? '',
+          lastName: data.last_name ?? '',
           email: em,
           avatarPath: data.avatar_path,
           avatarUrl: getProfileAvatarUrl(data.avatar_path),

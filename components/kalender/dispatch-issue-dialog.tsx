@@ -8,7 +8,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CircleCheck, CircleHelp, Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
+import { SearchableMultiSelect } from '@/components/ui/searchable-select';
+import { usePlanningOptions } from '@/hooks/use-planning-options';
 import {
   Dialog,
   DialogContent,
@@ -18,24 +19,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
+import { SectionError } from '@/components/ui/section-error';
 import { Field } from '@/components/ui/field';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
-import { getPlanningOptions } from '@/lib/planning/actions';
-import {
-  issueDispatch,
-  previewDispatchReadiness,
-} from '@/lib/dispatch/actions';
-import {
-  dispatchErrorMessage,
-  type ReadinessResult,
-} from '@/lib/dispatch/types';
-
-type EmployeeOption = {
-  employeeRecordId: string;
-  userId: string | null;
-  label: string;
-};
+import { issueDispatch, previewDispatchReadiness } from '@/lib/dispatch/actions';
+import { dispatchErrorMessage, type ReadinessResult } from '@/lib/dispatch/types';
 
 export function DispatchIssueDialog({
   target,
@@ -54,10 +43,18 @@ export function DispatchIssueDialog({
   const isJobTarget = jobId !== null;
   const [readiness, setReadiness] = useState<ReadinessResult | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [readinessReloadCount, setReadinessReloadCount] = useState(0);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [note, setNote] = useState('');
-  const [options, setOptions] = useState<EmployeeOption[]>([]);
-  const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
+  // Null until the user changes the recipients; before that the resolved defaults apply.
+  const [chosenRecordIds, setSelectedRecordIds] = useState<string[] | null>(null);
+  const employeeSearch = usePlanningOptions(
+    'employees',
+    chosenRecordIds,
+    defaultRecipientUserIds ?? [],
+    isJobTarget,
+  );
+  const selectedRecordIds = employeeSearch.selectedIds;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [requestId] = useState(() => crypto.randomUUID());
 
@@ -66,7 +63,7 @@ export function DispatchIssueDialog({
     void (async () => {
       try {
         const readinessResult = await previewDispatchReadiness(
-          jobId !== null ? { jobId } : { occurrenceId: occurrenceId! }
+          'jobId' in target ? { jobId: target.jobId } : { occurrenceId: target.occurrenceId },
         );
         if (cancelled) return;
         if (!readinessResult.success) {
@@ -74,32 +71,6 @@ export function DispatchIssueDialog({
           return;
         }
         setReadiness(readinessResult.readiness);
-        if (isJobTarget) {
-          const optionsResult = await getPlanningOptions();
-          if (cancelled) return;
-          if (!optionsResult.success) {
-            setLoadError(dispatchErrorMessage(optionsResult.error));
-            return;
-          }
-          const employeeOptions = optionsResult.employees.map((employee) => ({
-            employeeRecordId: employee.employeeRecordId,
-            userId: employee.userId,
-            label:
-              [employee.firstName, employee.lastName]
-                .filter(Boolean)
-                .join(' ') || 'Unbenannt',
-          }));
-          setOptions(employeeOptions);
-          const preselectedUserIds = new Set(defaultRecipientUserIds ?? []);
-          setSelectedRecordIds(
-            employeeOptions
-              .filter(
-                (option) =>
-                  option.userId && preselectedUserIds.has(option.userId)
-              )
-              .map((option) => option.employeeRecordId)
-          );
-        }
       } catch {
         if (!cancelled) setLoadError(dispatchErrorMessage('load_failed'));
       }
@@ -107,23 +78,21 @@ export function DispatchIssueDialog({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one readiness load when the dialog mounts; later changes go through its own actions
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one readiness load when the dialog mounts and one per retry; later changes go through its own actions
+  }, [readinessReloadCount]);
 
   // Disabled only while the readiness check or the send is in flight; a
   // missing recipient is reported on submit, not by greying the button.
   const canSubmit = useMemo(
-    () => readiness !== null && !isSubmitting,
-    [readiness, isSubmitting]
+    () => readiness !== null && !isSubmitting && !employeeSearch.resolvingDefaults,
+    [readiness, isSubmitting, employeeSearch.resolvingDefaults],
   );
 
   const handleSubmit = async () => {
     setSubmitError(null);
     if (isJobTarget && selectedRecordIds.length === 0) {
       setSubmitError('Bitte wähle mindestens eine Person als Empfänger aus.');
-      document
-        .querySelector<HTMLElement>('#dispatch-recipients [role="checkbox"]')
-        ?.focus();
+      document.querySelector<HTMLElement>('#dispatch-recipients')?.focus();
       return;
     }
     setIsSubmitting(true);
@@ -148,18 +117,25 @@ export function DispatchIssueDialog({
   };
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+    <Dialog open onOpenChange={(open) => !open && onClose()} pending={isSubmitting}>
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Einsatz senden</DialogTitle>
           <DialogDescription>
-            Die zugewiesenen Personen sehen den Einsatz und bestätigen ihn.
-            Es wird keine Nachricht an Kunden versendet.
+            Die zugewiesenen Personen sehen den Einsatz und bestätigen ihn. Es wird keine Nachricht an Kunden
+            versendet.
           </DialogDescription>
         </DialogHeader>
 
         {loadError ? (
-          <ErrorText>{loadError}</ErrorText>
+          <SectionError
+            onRetry={() => {
+              setLoadError(null);
+              setReadinessReloadCount((count) => count + 1);
+            }}
+          >
+            {loadError}
+          </SectionError>
         ) : !readiness ? (
           <div className="space-y-2" role="status" aria-busy="true">
             <span className="sr-only">Bereitschaft wird geprüft.</span>
@@ -202,9 +178,7 @@ export function DispatchIssueDialog({
                     )}
                     {dimension.label}
                     {dimension.state === 'unknown' && (
-                      <span className="text-xs font-normal text-muted-foreground">
-                        (nicht bewertet)
-                      </span>
+                      <span className="text-xs font-normal text-muted-foreground">(nicht bewertet)</span>
                     )}
                   </p>
                   {dimension.details.length > 0 && (
@@ -219,47 +193,16 @@ export function DispatchIssueDialog({
             </ul>
 
             {isJobTarget && (
-              <fieldset id="dispatch-recipients" className="space-y-2">
-                <legend className="text-sm font-medium">Empfänger</legend>
-                <div className="max-h-40 space-y-1.5 overflow-y-auto rounded-md border p-2">
-                  {options.length === 0 && (
-                    <p className="text-sm text-muted-foreground">
-                      Keine Personen verfügbar.
-                    </p>
-                  )}
-                  {options.map((option) => (
-                    <label
-                      key={option.employeeRecordId}
-                      className="flex items-center gap-2 text-sm"
-                    >
-                      <Checkbox
-                        checked={selectedRecordIds.includes(
-                          option.employeeRecordId
-                        )}
-                        onCheckedChange={(checked) =>
-                          setSelectedRecordIds((previous) =>
-                            checked
-                              ? [...previous, option.employeeRecordId]
-                              : previous.filter(
-                                  (id) => id !== option.employeeRecordId
-                                )
-                          )
-                        }
-                        aria-label={`${option.label} als Empfänger auswählen`}
-                      />
-                      <span>
-                        {option.label}
-                        {!option.userId && (
-                          <span className="text-xs text-muted-foreground">
-                            {' '}
-                            (ohne Zugang)
-                          </span>
-                        )}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
+              <Field label="Empfänger" htmlFor="dispatch-recipients" error={employeeSearch.select.loadError}>
+                <SearchableMultiSelect
+                  {...employeeSearch.select}
+                  selectedIds={selectedRecordIds}
+                  onSelectionChange={setSelectedRecordIds}
+                  placeholder="Empfänger auswählen"
+                  searchPlaceholder="Mitarbeiter suchen …"
+                  emptyMessage="Keine Personen verfügbar"
+                />
+              </Field>
             )}
 
             <Field label="Hinweis (optional)" htmlFor="dispatch-note">
@@ -276,7 +219,7 @@ export function DispatchIssueDialog({
         <ErrorText>{submitError}</ErrorText>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
             Abbrechen
           </Button>
           <Button disabled={!canSubmit} onClick={() => void handleSubmit()}>

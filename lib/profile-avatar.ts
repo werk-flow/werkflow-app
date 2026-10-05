@@ -10,12 +10,9 @@ export const PROFILE_AVATAR_ALLOWED_MIME_TYPES = [
   'image/bmp',
   'image/avif',
 ] as const;
-export const PROFILE_AVATAR_INPUT_ACCEPT =
-  PROFILE_AVATAR_ALLOWED_MIME_TYPES.join(',');
+export const PROFILE_AVATAR_INPUT_ACCEPT = PROFILE_AVATAR_ALLOWED_MIME_TYPES.join(',');
 
-export function getProfileAvatarUrl(
-  avatarPath: string | null | undefined
-): string | null {
+export function getProfileAvatarUrl(avatarPath: string | null | undefined): string | null {
   if (!avatarPath) {
     return null;
   }

@@ -1,8 +1,7 @@
 import type { Database } from '@/lib/supabase/database.types';
 import { toBusinessIsoDate } from '@/lib/personnel/types';
 
-export type WorkScheduleRow =
-  Database['public']['Tables']['work_schedules']['Row'];
+export type WorkScheduleRow = Database['public']['Tables']['work_schedules']['Row'];
 
 // Weekday index convention across the schedule domain: 0 = Montag … 6 = Sonntag
 // (matches the weekly time chart's Monday-first layout).
@@ -16,15 +15,7 @@ export const WEEKDAY_LABELS = [
   'Sonntag',
 ] as const;
 
-export const WEEKDAY_SHORT_LABELS = [
-  'Mo',
-  'Di',
-  'Mi',
-  'Do',
-  'Fr',
-  'Sa',
-  'So',
-] as const;
+export const WEEKDAY_SHORT_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'] as const;
 
 export type WorkSchedule = {
   id: string;
@@ -61,16 +52,6 @@ export function toWorkSchedule(row: WorkScheduleRow): WorkSchedule {
   };
 }
 
-export const WORK_SCHEDULE_DAY_COLUMNS = [
-  'monday_minutes',
-  'tuesday_minutes',
-  'wednesday_minutes',
-  'thursday_minutes',
-  'friday_minutes',
-  'saturday_minutes',
-  'sunday_minutes',
-] as const;
-
 /** Total contracted minutes per week for one schedule version. */
 export function getWeeklyScheduleMinutes(schedule: WorkSchedule): number {
   return schedule.dayMinutes.reduce((total, minutes) => total + minutes, 0);
@@ -81,10 +62,7 @@ export function getWeeklyScheduleMinutes(schedule: WorkSchedule): number {
  * `valid_from <= date` (same rule as `getEffectiveCondition`). Historical days
  * therefore keep the version that was effective then.
  */
-export function getEffectiveSchedule(
-  schedules: WorkSchedule[],
-  onDateIso: string
-): WorkSchedule | null {
+export function getEffectiveSchedule(schedules: WorkSchedule[], onDateIso: string): WorkSchedule | null {
   const applicable = schedules
     .filter((schedule) => schedule.validFrom <= onDateIso)
     .sort((a, b) => b.validFrom.localeCompare(a.validFrom));
@@ -98,7 +76,13 @@ export function getEffectiveSchedule(
 export function getWeekdayIndex(dateIso: string): number {
   const [year, month, day] = dateIso.split('-').map(Number);
   const invalid = new Error(`Invalid ISO date: ${dateIso}`);
-  if (year === undefined || month === undefined || day === undefined || ![year, month, day].every(Number.isInteger)) throw invalid;
+  if (
+    year === undefined ||
+    month === undefined ||
+    day === undefined ||
+    ![year, month, day].every(Number.isInteger)
+  )
+    throw invalid;
   const date = new Date(Date.UTC(year, month - 1, day));
   // A rolled-over date (2026-02-30) is not the date that was written.
   if (date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) throw invalid;

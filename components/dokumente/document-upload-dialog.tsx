@@ -1,18 +1,11 @@
-"use client";
+'use client';
 
 import { formatFileSize } from '@/lib/documents/format';
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactElement,
-} from "react";
-import { CheckCircle, FileText, Loader2, XCircle } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import { CheckCircle, FileText, Loader2, XCircle } from 'lucide-react';
 
-import { Button } from "@/components/ui/button";
-import { ErrorText } from "@/components/ui/error-text";
+import { Button } from '@/components/ui/button';
+import { ErrorText } from '@/components/ui/error-text';
 import {
   Dialog,
   DialogContent,
@@ -20,17 +13,17 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { createDocumentFolder } from "@/lib/documents/actions";
-import { usePendingTask } from "@/hooks/use-server-action";
-import { uploadDocumentDirect } from "@/lib/documents/upload-client";
+} from '@/components/ui/dialog';
+import { createDocumentFolder } from '@/lib/documents/actions';
+import { usePendingTask } from '@/hooks/use-server-action';
+import { uploadDocumentDirect } from '@/lib/documents/upload-client';
 import {
   DOCUMENT_CATEGORY_LABELS,
   DOCUMENT_MAX_FILE_SIZE_BYTES,
   type DocumentCategory,
   type DocumentUploadTarget,
   type OrganizationDocument,
-} from "@/lib/documents/types";
+} from '@/lib/documents/types';
 
 export type DocumentUploadItem = {
   id: string;
@@ -39,7 +32,7 @@ export type DocumentUploadItem = {
   category?: DocumentCategory;
 };
 
-type UploadStatus = "queued" | "uploading" | "done" | "error";
+type UploadStatus = 'queued' | 'uploading' | 'done' | 'error';
 
 type UploadRow = DocumentUploadItem & {
   status: UploadStatus;
@@ -55,23 +48,132 @@ type DocumentUploadDialogProps = {
   items: DocumentUploadItem[];
   target: DocumentUploadTarget;
   allowFolderCreation?: boolean;
-  onComplete: (
-    failedCount: number,
-    uploadedDocuments: OrganizationDocument[],
-  ) => void;
+  onComplete: (failedCount: number, uploadedDocuments: OrganizationDocument[]) => void;
 };
 
 function getFolderSegments(relativePath?: string): string[] {
   if (!relativePath) return [];
-  const parts = relativePath.split("/").filter(Boolean);
+  const parts = relativePath.split('/').filter(Boolean);
   return parts.length > 1 ? parts.slice(0, -1) : [];
 }
 
+async function ensureUploadTargetFolder(
+  allowFolderCreation: boolean,
+  target: DocumentUploadTarget,
+  folderCache: Map<string, string | null>,
+  relativePath?: string,
+): Promise<string | null> {
+  if (!allowFolderCreation) return target.folderId ?? null;
+
+  const segments = getFolderSegments(relativePath);
+  if (segments.length === 0) return target.folderId ?? null;
+
+  let parentFolderId = target.folderId ?? null;
+  let currentKey = '';
+
+  for (const segment of segments) {
+    currentKey = currentKey ? `${currentKey}/${segment}` : segment;
+    if (folderCache.has(currentKey)) {
+      parentFolderId = folderCache.get(currentKey) ?? null;
+      continue;
+    }
+
+    const result = await createDocumentFolder({
+      name: segment,
+      parentFolderId,
+    });
+
+    if (!result.success) {
+      throw new Error('folder_failed');
+    }
+
+    parentFolderId = result.folder.id;
+    folderCache.set(currentKey, parentFolderId);
+  }
+
+  return parentFolderId;
+}
+
+function DocumentUploadProgress({
+  completedCount,
+  totalCount,
+  progressPercentage,
+}: {
+  completedCount: number;
+  totalCount: number;
+  progressPercentage: number;
+}): ReactElement {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span aria-live="polite">
+          {completedCount} von {totalCount} abgeschlossen
+        </span>
+        <span>{progressPercentage}%</span>
+      </div>
+      <div
+        className="h-2 overflow-hidden rounded-full bg-muted"
+        role="progressbar"
+        aria-label="Gesamtfortschritt des Uploads"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={progressPercentage}
+      >
+        <div
+          className="h-full rounded-full bg-primary transition-all"
+          style={{ width: `${progressPercentage}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+function DocumentUploadRowList({ rows }: { rows: UploadRow[] }): ReactElement {
+  return (
+    <div className="max-h-80 overflow-auto rounded-md border">
+      {rows.length === 0 ? (
+        <div className="px-4 py-8 text-center text-sm text-muted-foreground">Keine Dateien ausgewählt.</div>
+      ) : (
+        <div className="divide-y">
+          {rows.map((row) => {
+            const StatusIcon =
+              row.status === 'done'
+                ? CheckCircle
+                : row.status === 'error'
+                  ? XCircle
+                  : row.status === 'uploading'
+                    ? Loader2
+                    : FileText;
+
+            return (
+              <div key={row.id} className="flex items-center gap-3 px-3 py-2.5">
+                <StatusIcon
+                  className={`size-4 shrink-0 ${row.status === 'uploading' ? 'animate-spin' : ''}`}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{row.file.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {row.relativePath ? `${row.relativePath} · ` : ''}
+                    {formatFileSize(row.file.size)}
+                    {row.category ? ` · ${DOCUMENT_CATEGORY_LABELS[row.category]}` : ''}
+                    {row.status === 'uploading' && row.progress !== undefined
+                      ? ` · ${Math.round(row.progress * 100)} %`
+                      : ''}
+                  </p>
+                  <ErrorText className="mt-0.5 text-xs">{row.error}</ErrorText>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 export function DocumentUploadDialog({
   open,
   onOpenChange,
-  title = "Dateien hochladen",
-  description = "Die Dateien werden automatisch hochgeladen.",
+  title = 'Dateien hochladen',
+  description = 'Die Dateien werden automatisch hochgeladen.',
   items,
   target,
   allowFolderCreation = false,
@@ -85,11 +187,8 @@ export function DocumentUploadDialog({
   const itemsKey = useMemo(
     () =>
       items
-        .map(
-          (item) =>
-            `${item.id}:${item.file.name}:${item.file.size}:${item.file.lastModified}`,
-        )
-        .join("|"),
+        .map((item) => `${item.id}:${item.file.name}:${item.file.size}:${item.file.lastModified}`)
+        .join('|'),
     [items],
   );
 
@@ -98,72 +197,29 @@ export function DocumentUploadDialog({
       ? rows
       : items.map((item) => ({
           ...item,
-          status: "queued" as const,
+          status: 'queued' as const,
         }));
-  const completedCount = activeRows.filter(
-    (row) => row.status === "done" || row.status === "error",
-  ).length;
+  const completedCount = activeRows.filter((row) => row.status === 'done' || row.status === 'error').length;
   const totalProgress = activeRows.reduce(
     (sum, row) =>
       sum +
-      (row.status === "done" || row.status === "error"
+      (row.status === 'done' || row.status === 'error'
         ? 1
-        : row.status === "uploading"
+        : row.status === 'uploading'
           ? (row.progress ?? 0)
           : 0),
     0,
   );
-  const progressPercentage = activeRows.length
-    ? Math.round((totalProgress / activeRows.length) * 100)
-    : 0;
+  const progressPercentage = activeRows.length ? Math.round((totalProgress / activeRows.length) * 100) : 0;
   const isComplete = hasStarted && completedCount === activeRows.length;
 
   const oversizedCount = useMemo(
-    () =>
-      items.filter((item) => item.file.size > DOCUMENT_MAX_FILE_SIZE_BYTES)
-        .length,
+    () => items.filter((item) => item.file.size > DOCUMENT_MAX_FILE_SIZE_BYTES).length,
     [items],
   );
 
-  async function ensureRelativeFolder(
-    folderCache: Map<string, string | null>,
-    relativePath?: string,
-  ): Promise<string | null> {
-    if (!allowFolderCreation) return target.folderId ?? null;
-
-    const segments = getFolderSegments(relativePath);
-    if (segments.length === 0) return target.folderId ?? null;
-
-    let parentFolderId = target.folderId ?? null;
-    let currentKey = "";
-
-    for (const segment of segments) {
-      currentKey = currentKey ? `${currentKey}/${segment}` : segment;
-      if (folderCache.has(currentKey)) {
-        parentFolderId = folderCache.get(currentKey) ?? null;
-        continue;
-      }
-
-      const result = await createDocumentFolder({
-        name: segment,
-        parentFolderId,
-      });
-
-      if (!result.success) {
-        throw new Error("folder_failed");
-      }
-
-      parentFolderId = result.folder.id;
-      folderCache.set(currentKey, parentFolderId);
-    }
-
-    return parentFolderId;
-  }
-
   function updateRow(id: string, update: Partial<UploadRow>) {
-    setRows((current) =>
-      current.map((row) => (row.id === id ? { ...row, ...update } : row)),
-    );
+    setRows((current) => current.map((row) => (row.id === id ? { ...row, ...update } : row)));
   }
 
   const clearCloseTimeout = useCallback(() => {
@@ -176,12 +232,8 @@ export function DocumentUploadDialog({
   function handleStartUpload() {
     const initialRows: UploadRow[] = items.map((item) => ({
       ...item,
-      status:
-        item.file.size > DOCUMENT_MAX_FILE_SIZE_BYTES ? "error" : "queued",
-      error:
-        item.file.size > DOCUMENT_MAX_FILE_SIZE_BYTES
-          ? "Datei ist größer als 50 MB."
-          : undefined,
+      status: item.file.size > DOCUMENT_MAX_FILE_SIZE_BYTES ? 'error' : 'queued',
+      error: item.file.size > DOCUMENT_MAX_FILE_SIZE_BYTES ? 'Datei ist größer als 50 MB.' : undefined,
     }));
 
     setRows(initialRows);
@@ -190,17 +242,19 @@ export function DocumentUploadDialog({
     clearCloseTimeout();
 
     void runUploadTask(async () => {
-      let failures = initialRows.filter((row) => row.status === "error").length;
+      let failures = initialRows.filter((row) => row.status === 'error').length;
       const uploadedDocuments: OrganizationDocument[] = [];
       const folderCache = new Map<string, string | null>();
 
       for (const row of initialRows) {
-        if (row.status === "error") continue;
+        if (row.status === 'error') continue;
 
-        updateRow(row.id, { status: "uploading", progress: 0 });
+        updateRow(row.id, { status: 'uploading', progress: 0 });
 
         try {
-          const folderId = await ensureRelativeFolder(
+          const folderId = await ensureUploadTargetFolder(
+            allowFolderCreation,
+            target,
             folderCache,
             row.relativePath,
           );
@@ -213,22 +267,22 @@ export function DocumentUploadDialog({
           if (!result.success) {
             failures++;
             updateRow(row.id, {
-              status: "error",
-              error: "Upload fehlgeschlagen.",
+              status: 'error',
+              error: 'Upload fehlgeschlagen.',
             });
             continue;
           }
 
           uploadedDocuments.push(result.document);
-          updateRow(row.id, { status: "done" });
+          updateRow(row.id, { status: 'done' });
         } catch (error) {
           failures++;
           updateRow(row.id, {
-            status: "error",
+            status: 'error',
             error:
-              error instanceof Error && error.message === "folder_failed"
-                ? "Der Zielordner konnte nicht angelegt werden."
-                : "Upload fehlgeschlagen.",
+              error instanceof Error && error.message === 'folder_failed'
+                ? 'Der Zielordner konnte nicht angelegt werden.'
+                : 'Upload fehlgeschlagen.',
           });
         }
       }
@@ -263,7 +317,6 @@ export function DocumentUploadDialog({
   useEffect(() => () => clearCloseTimeout(), [clearCloseTimeout]);
 
   function handleOpenChange(nextOpen: boolean) {
-    if (isPending && !isComplete) return;
     if (!nextOpen) {
       clearCloseTimeout();
       setRows([]);
@@ -274,95 +327,27 @@ export function DocumentUploadDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+    <Dialog open={open} onOpenChange={handleOpenChange} pending={isPending && !isComplete}>
+      <DialogContent size="2xl">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
-          <div className="space-y-1">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span aria-live="polite">
-                {completedCount} von {activeRows.length} abgeschlossen
-              </span>
-              <span>{progressPercentage}%</span>
-            </div>
-            <div
-              className="h-2 overflow-hidden rounded-full bg-muted"
-              role="progressbar"
-              aria-label="Gesamtfortschritt des Uploads"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={progressPercentage}
-            >
-              <div
-                className="h-full rounded-full bg-primary transition-all"
-                style={{ width: `${progressPercentage}%` }}
-              />
-            </div>
-          </div>
+          <DocumentUploadProgress
+            completedCount={completedCount}
+            totalCount={activeRows.length}
+            progressPercentage={progressPercentage}
+          />
 
           {oversizedCount > 0 && !hasStarted && (
             <ErrorText className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2">
-              {oversizedCount} Datei(en) sind größer als 50 MB und werden nicht
-              hochgeladen.
+              {oversizedCount} Datei(en) sind größer als 50 MB und werden nicht hochgeladen.
             </ErrorText>
           )}
 
-          <div className="max-h-80 overflow-auto rounded-md border">
-            {activeRows.length === 0 ? (
-              <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-                Keine Dateien ausgewählt.
-              </div>
-            ) : (
-              <div className="divide-y">
-                {activeRows.map((row) => {
-                  const StatusIcon =
-                    row.status === "done"
-                      ? CheckCircle
-                      : row.status === "error"
-                        ? XCircle
-                        : row.status === "uploading"
-                          ? Loader2
-                          : FileText;
-
-                  return (
-                    <div
-                      key={row.id}
-                      className="flex items-center gap-3 px-3 py-2.5"
-                    >
-                      <StatusIcon
-                        className={`size-4 shrink-0 ${
-                          row.status === "uploading" ? "animate-spin" : ""
-                        }`}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">
-                          {row.file.name}
-                        </p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {row.relativePath ? `${row.relativePath} · ` : ""}
-                          {formatFileSize(row.file.size)}
-                          {row.category
-                            ? ` · ${DOCUMENT_CATEGORY_LABELS[row.category]}`
-                            : ""}
-                          {row.status === "uploading" &&
-                          row.progress !== undefined
-                            ? ` · ${Math.round(row.progress * 100)} %`
-                            : ""}
-                        </p>
-                        <ErrorText className="mt-0.5 text-xs">
-                          {row.error}
-                        </ErrorText>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <DocumentUploadRowList rows={activeRows} />
         </div>
 
         <DialogFooter>
@@ -372,7 +357,7 @@ export function DocumentUploadDialog({
             onClick={() => handleOpenChange(false)}
             disabled={isPending && !isComplete}
           >
-            {isComplete ? "Schließen" : "Abbrechen"}
+            {isComplete ? 'Schließen' : 'Abbrechen'}
           </Button>
         </DialogFooter>
       </DialogContent>

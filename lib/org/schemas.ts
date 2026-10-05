@@ -1,10 +1,8 @@
-import { z } from 'zod';
+import { z } from '@/lib/zod';
 
 export const ORGANIZATION_CODE_CHARSET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 export const ORGANIZATION_CODE_LENGTH = 6;
-const ORGANIZATION_CODE_REGEX = new RegExp(
-  `^[${ORGANIZATION_CODE_CHARSET}]{${ORGANIZATION_CODE_LENGTH}}$`
-);
+const ORGANIZATION_CODE_REGEX = new RegExp(`^[${ORGANIZATION_CODE_CHARSET}]{${ORGANIZATION_CODE_LENGTH}}$`);
 
 export function normalizeOrganizationName(name: string): string {
   return name.trim();
@@ -15,7 +13,7 @@ export function normalizeOrganizationCode(code: string): string {
 }
 
 export function getOrganizationNameValidationError(
-  name: string
+  name: string,
 ): 'name_required' | 'name_too_short' | 'name_too_long' | null {
   const normalizedName = normalizeOrganizationName(name);
 
@@ -34,9 +32,7 @@ export function getOrganizationNameValidationError(
   return null;
 }
 
-export function getOrganizationCodeValidationError(
-  code: string
-): 'code_required' | 'code_invalid' | null {
+export function getOrganizationCodeValidationError(code: string): 'code_required' | 'code_invalid' | null {
   const normalizedCode = normalizeOrganizationCode(code);
 
   if (!normalizedCode) {
@@ -51,15 +47,22 @@ export function getOrganizationCodeValidationError(
 }
 
 export const organizationSettingsSchema = z.object({
-  name: z.string().trim().min(2, 'Bitte gib einen Namen mit mindestens 2 Zeichen ein.').max(100, 'Der Name darf maximal 100 Zeichen lang sein.'),
+  name: z
+    .string()
+    .trim()
+    .min(2, 'Bitte gib einen Namen mit mindestens 2 Zeichen ein.')
+    .max(100, 'Der Name darf maximal 100 Zeichen lang sein.'),
   uniqueCode: z
     .string()
     .transform(normalizeOrganizationCode)
     .refine((value) => value.length > 0, 'Bitte gib einen Organisationscode ein.')
     .refine(
       (value) => ORGANIZATION_CODE_REGEX.test(value),
-      `Der Organisationscode muss genau ${ORGANIZATION_CODE_LENGTH} Zeichen lang sein und darf nur Großbuchstaben sowie Zahlen enthalten.`
+      `Der Organisationscode muss genau ${ORGANIZATION_CODE_LENGTH} Zeichen lang sein und darf nur Großbuchstaben sowie Zahlen enthalten.`,
     ),
 });
 
 export type OrganizationSettingsValues = z.infer<typeof organizationSettingsSchema>;
+
+/** The stored states of a join request (`organization_join_requests.status`). */
+export const joinRequestStatusSchema = z.enum(['pending', 'approved', 'declined', 'withdrawn']);

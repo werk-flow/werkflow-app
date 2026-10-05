@@ -1,1324 +1,196 @@
-"use server";
+'use server';
 
-import { uuidSchema } from '@/lib/validation/uuid';
+import { randomUUID } from 'crypto';
+import type { ActionResult } from '@/lib/action-result';
+import { loggedRead, logReadErrors } from '@/lib/data/read-request-cache';
 import { entityIdPageSchema } from '@/lib/jobs/list-page';
-import { LIST_PAGE_SIZE, parseListPage } from '@/lib/ui/list-pagination';
-import { readAllRows, readCompleteRows, readInBatches, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
-import { newestDocumentsFirst } from '@/lib/documents/ordering';
-import { UUID_PATTERN } from '@/lib/validation/uuid';
-import { randomUUID } from "crypto";
-import { revalidatePath, updateTag } from "next/cache";
-
-import { CACHE_TAGS } from "@/lib/data/cached";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { authenticateAndAuthorize } from "@/lib/jobs/auth";
+import type { Job } from '@/lib/jobs/types';
+import { logError } from '@/lib/logging';
+import { getOrgMembersForUser } from '@/lib/members/queries';
 import {
-  copyStorageObject as copyR2Object,
+  copyStorageObject,
   createSignedDownloadUrl,
   createSignedUploadUrl,
   deleteStorageObjects,
-  headStorageObject,
-} from "@/lib/storage/r2";
+  discardStorageObjects,
+} from '@/lib/storage/r2';
+import { readAllRows, readCompleteRows, readInBatches, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
+import { rpcArgs } from '@/lib/supabase/rpc-args';
+import { LIST_PAGE_SIZE, parseListPage } from '@/lib/ui/list-pagination';
+import { uuidSchema } from '@/lib/validation/uuid';
+import {
+  authorizeDocumentUploadTarget,
+  ensureClientManagerAccess,
+  ensureEmployeeManagerAccess,
+  ensureEquipmentManagerAccess,
+  ensureFolder,
+  ensureJobAccess,
+  ensureMaintenanceCoverageManagerAccess,
+  ensureProjectManagerAccess,
+  ensureProjectWorkAccess,
+  ensureRequestManagerAccess,
+  ensureServiceCaseManagerAccess,
+  getAuthorizedDocument,
+  getAuthorizedDocumentContext,
+  getDeletedDocumentForManager,
+  getFolderById,
+  getVersionableDocument,
+  normalizeUploadTarget,
+  requireManager,
+  type NormalizedUploadTarget,
+} from './access';
+import {
+  attachableDocumentsInputSchema,
+  copyDocumentInputSchema,
+  copyFolderInputSchema,
+  createDocumentUploadTicketInputSchema,
+  createDocumentVersionUploadTicketInputSchema,
+  createFolderInputSchema,
+  documentLibraryInputSchema,
+  finalizeDocumentUploadInputSchema,
+  finalizeDocumentVersionUploadInputSchema,
+  INVALID_INPUT,
+  linkDocumentsToTargetInputSchema,
+  moveDocumentInputSchema,
+  moveFolderInputSchema,
+  parseActionInput,
+  projectOverviewJobsSchema,
+  renameDocumentInputSchema,
+  renameFolderInputSchema,
+  signedUrlOptionsSchema,
+  unlinkDocumentInputSchema,
+  updateDocumentCategoryInputSchema,
+  updateDocumentLinksInputSchema,
+  type AttachableDocumentsInput,
+  type CopyDocumentInput,
+  type CopyFolderInput,
+  type CreateDocumentUploadTicketInput,
+  type CreateDocumentVersionUploadTicketInput,
+  type CreateFolderInput,
+  type DocumentLibraryInput,
+  type FinalizeDocumentUploadInput,
+  type FinalizeDocumentVersionUploadInput,
+  type MoveDocumentInput,
+  type MoveFolderInput,
+  type RenameDocumentInput,
+  type RenameFolderInput,
+  type UnlinkDocumentInput,
+  type UpdateDocumentCategoryInput,
+} from './action-schemas';
+import { inferDocumentCategory } from './category-inference';
+import { copyFolderTree, orderCopiedFolderTree } from './folder-copy';
+import { getDescendantFolderIds } from './folder-tree';
+import {
+  documentRowsFromOrdinaryView,
+  hydrateDocumentAuditEvents,
+  hydrateDocuments,
+  hydrateDocumentsOrNull,
+  hydrateDocumentVersions,
+  hydrateFolders,
+  hydrateWrittenDocument,
+} from './hydration';
+import { linkDocumentToTarget, singleLinkTarget, writeDocumentLinks, type DocumentLinkTarget } from './links';
+import { getCopyDisplayName } from './names';
+import {
+  applyDocumentSearch,
+  getFolderBreadcrumbs,
+  readDocumentStoragePath,
+  readLinkedDocuments,
+  type DocumentLinkColumn,
+} from './reads';
+import { buildDocumentStoragePath, buildDocumentVersionStoragePath } from './storage-path';
 import {
   DOCUMENT_CATEGORIES,
   DOCUMENT_MAX_FILE_SIZE_BYTES,
   DOCUMENT_STORAGE_BUCKET,
-  toDocumentFolder,
-  toDocumentLink,
-  toDocumentAuditEvent,
-  toDocumentVersion,
-  toOrganizationDocument,
   toDocumentCategory,
-  type DocumentCategory,
-  type DocumentAuditEvent,
+  toDocumentFolder,
   type DocumentAuditEventRow,
-  type DocumentEmployee,
-  type DocumentEquipment,
-  type DocumentLibraryCategoryFilter,
-  type DocumentLibraryLinkFilter,
+  type DocumentCategory,
   type DocumentDetailsResult,
+  type DocumentEmployee,
   type DocumentFolder,
   type DocumentFolderRow,
-  type DocumentLibrarySort,
   type DocumentLibraryResult,
-  type DocumentLibraryView,
-  type DocumentLink,
   type DocumentLinkRow,
   type DocumentListResult,
-  type DocumentUploadTicketResult,
-  type DocumentVersionUploadTicketResult,
   type DocumentMutationResult,
   type DocumentResult,
   type DocumentRow,
-  type DocumentUploadTarget,
-  type DocumentUploader,
+  type DocumentUploadTicketResult,
   type DocumentVersion,
   type DocumentVersionRow,
+  type DocumentVersionUploadTicketResult,
   type FolderResult,
   type LinkDocumentsToTargetInput,
   type LinkDocumentsToTargetResult,
-  type OrganizationDocument,
   type ProjectDocumentsOverviewResult,
   type SignedDocumentUrlResult,
   type UpdateDocumentLinksInput,
   type UpdateDocumentLinksResult,
   type VersionResult,
-} from "./types";
-import { getOrgClients } from "@/lib/clients/actions";
-import { getOrgJobs } from "@/lib/jobs/actions";
-import { getOrgProjects } from "@/lib/projects/actions";
-import { getOrgMembersForUser } from "@/lib/members/queries";
-import type { Client, Job, ProjectWithDetails } from "@/lib/jobs/types";
+} from './types';
 import {
-  buildDocumentStoragePath,
-  buildDocumentVersionStoragePath,
-} from "./storage-path";
+  documentWriteFailure,
+  getAvailableDisplayName,
+  revalidateDocuments,
+  verifyUploadedObject,
+} from './write-support';
 
-type SupabaseAdmin = ReturnType<typeof createSupabaseAdminClient>;
-
-type AuthorizedDocumentContext = {
-  admin: SupabaseAdmin;
-  orgId: string;
-  userId: string;
-  role: "admin" | "buero" | "employee";
-  isManagerOrAbove: boolean;
-};
-
-type ProtectedDocumentAccess = {
-  personnelDocumentId: string;
-  releasedVersionNumbers: number[] | null;
-  canInspectHistory: boolean;
-};
-
-type ProfileRow = {
-  id: string;
-  first_name: string | null;
-  last_name: string | null;
-  email: string | null;
-  avatar_path: string | null;
-};
-
-type CreateFolderInput = {
-  name: string;
-  parentFolderId?: string | null;
-};
-
-type RenameFolderInput = {
-  folderId: string;
-  name: string;
-};
-
-type MoveFolderInput = {
-  folderId: string;
-  parentFolderId?: string | null;
-};
-
-type CopyFolderInput = {
-  folderId: string;
-  targetParentFolderId?: string | null;
-};
-
-type RenameDocumentInput = {
-  documentId: string;
-  displayName: string;
-};
-
-type UpdateDocumentCategoryInput = {
-  documentId: string;
-  category: DocumentCategory;
-};
-
-type MoveDocumentInput = {
-  documentId: string;
-  folderId?: string | null;
-};
-
-type CopyDocumentInput = {
-  documentId: string;
-  targetFolderId?: string | null;
-};
-
-type LinkDocumentToJobInput = {
-  documentId: string;
-  jobId: string;
-};
-
-type LinkDocumentToProjectInput = {
-  documentId: string;
-  projectId: string;
-};
-
-type LinkDocumentToClientInput = {
-  documentId: string;
-  clientId: string;
-};
-
-type LinkDocumentToEmployeeInput = {
-  documentId: string;
-  employeeId: string;
-};
-
-type LinkDocumentToEquipmentInput = {
-  documentId: string;
-  equipmentId: string;
-};
-
-type LinkDocumentToServiceCaseInput = {
-  documentId: string;
-  serviceCaseId: string;
-};
-
-type LinkDocumentToMaintenanceCoverageInput = {
-  documentId: string;
-  maintenanceCoverageId: string;
-};
-
-type UnlinkDocumentInput = {
-  linkId: string;
-};
-
-type RecordDocumentAuditEventInput = {
-  documentId?: string | null;
-  folderId?: string | null;
-  eventType:
-    | "uploaded"
-    | "renamed"
-    | "moved"
-    | "copied"
-    | "category_changed"
-    | "linked"
-    | "unlinked"
-    | "deleted"
-    | "restored"
-    | "version_uploaded"
-    | "permanently_deleted"
-    | "storage_cleanup";
-  eventPayload?: Record<string, unknown>;
-};
-
-type DocumentLibraryInput = {
-  page?: number;
-  folderPage?: number;
-  folderId?: string | null;
-  view?: DocumentLibraryView;
-  searchQuery?: string | null;
-  sort?: DocumentLibrarySort;
-  category?: DocumentLibraryCategoryFilter | null;
-  linkFilter?: DocumentLibraryLinkFilter | null;
-};
-
-type AttachableDocumentsInput =
-  | {
-      targetType: "job";
-      targetId: string;
-      searchQuery?: string | null;
-      category?: DocumentCategory | "all" | null;
-    }
-  | {
-      targetType: "project";
-      targetId: string;
-      searchQuery?: string | null;
-      category?: DocumentCategory | "all" | null;
-    }
-  | {
-      targetType: "client";
-      targetId: string;
-      searchQuery?: string | null;
-      category?: DocumentCategory | "all" | null;
-    }
-  | {
-      targetType: "employee";
-      targetId: string;
-      searchQuery?: string | null;
-      category?: DocumentCategory | "all" | null;
-    }
-  | {
-      targetType: "equipment";
-      targetId: string;
-      searchQuery?: string | null;
-      category?: DocumentCategory | "all" | null;
-    }
-  | {
-      targetType: "service_case";
-      targetId: string;
-      searchQuery?: string | null;
-      category?: DocumentCategory | "all" | null;
-    }
-  | {
-      targetType: "maintenance_coverage";
-      targetId: string;
-      searchQuery?: string | null;
-      category?: DocumentCategory | "all" | null;
-    };
-
-function mapProfileToUploader(
-  profile?: ProfileRow | null,
-): DocumentUploader | null {
-  if (!profile) return null;
-
-  return {
-    userId: profile.id,
-    firstName: profile.first_name,
-    lastName: profile.last_name,
-    email: profile.email,
-    avatarPath: profile.avatar_path,
-  };
-}
-
-function trimName(name: string): string {
-  return name.trim();
-}
-
-function splitFileName(fileName: string): {
-  baseName: string;
-  extension: string;
-} {
-  const trimmed = trimName(fileName);
-  const lastDotIndex = trimmed.lastIndexOf(".");
-
-  if (lastDotIndex <= 0 || lastDotIndex === trimmed.length - 1) {
-    return { baseName: trimmed || "Dokument", extension: "" };
-  }
-
-  return {
-    baseName: trimmed.slice(0, lastDotIndex),
-    extension: trimmed.slice(lastDotIndex),
-  };
-}
-
-function getCopyDisplayName(fileName: string): string {
-  return `Kopie von ${trimName(fileName) || "Dokument"}`;
-}
-
-function inferDocumentCategory({
-  fileName,
-  mimeType,
-}: {
-  fileName: string;
-  mimeType: string;
-}): DocumentCategory {
-  const lowerName = fileName.toLowerCase();
-  const lowerMimeType = mimeType.toLowerCase();
-
-  if (lowerMimeType.startsWith("image/")) return "photo";
-  if (
-    lowerName.includes("rechnung") ||
-    lowerName.includes("invoice") ||
-    lowerName.includes("quittung")
-  ) {
-    return "invoice";
-  }
-  if (
-    lowerName.includes("vertrag") ||
-    lowerName.includes("contract") ||
-    lowerName.includes("vereinbarung")
-  ) {
-    return "contract";
-  }
-  if (
-    lowerName.includes("angebot") ||
-    lowerName.includes("offer") ||
-    lowerName.includes("kostenvoranschlag")
-  ) {
-    return "offer";
-  }
-  if (
-    lowerName.includes("bericht") ||
-    lowerName.includes("protokoll") ||
-    lowerName.includes("report")
-  ) {
-    return "report";
-  }
-
-  return "other";
-}
-
-function parseDocumentCategory(
-  value: FormDataEntryValue | null,
-): DocumentCategory | null {
-  if (typeof value !== "string") return null;
+function parseDocumentCategory(value: FormDataEntryValue | null): DocumentCategory | null {
+  if (typeof value !== 'string') return null;
   const category = toDocumentCategory(value);
   return DOCUMENT_CATEGORIES.includes(category) ? category : null;
-}
-
-function buildStoragePath({
-  orgId,
-  documentId,
-  fileName,
-}: {
-  orgId: string;
-  documentId: string;
-  fileName: string;
-}): string {
-  return buildDocumentStoragePath({
-    organizationId: orgId,
-    documentId,
-    fileName,
-  });
-}
-
-async function copyStorageObject({
-  sourcePath,
-  targetPath,
-  contentType,
-}: {
-  sourcePath: string;
-  targetPath: string;
-  contentType: string | null;
-}): Promise<{ success: true } | { success: false; error: unknown }> {
-  try {
-    await copyR2Object({ sourcePath, targetPath, contentType });
-    return { success: true };
-  } catch (error) {
-    return { success: false, error };
-  }
-}
-
-function buildVersionStoragePath({
-  orgId,
-  documentId,
-  versionNumber,
-  fileName,
-}: {
-  orgId: string;
-  documentId: string;
-  versionNumber: number;
-  fileName: string;
-}): string {
-  return buildDocumentVersionStoragePath({
-    organizationId: orgId,
-    documentId,
-    versionNumber,
-    fileName,
-  });
 }
 
 // Types the in-app viewer actually previews. Everything else is delivered as a
 // download so uploader-controlled active content (HTML, SVG) can never render
 // inline from the storage origin.
 const SAFE_INLINE_MIME_TYPES = new Set([
-  "application/pdf",
-  "image/png",
-  "image/jpeg",
-  "image/gif",
-  "image/webp",
-  "image/avif",
-  "text/plain",
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+  'image/avif',
+  'text/plain',
 ]);
 
-function inlineSafeDisposition(
-  mimeType: string | null,
-): "inline" | "attachment" {
-  return mimeType && SAFE_INLINE_MIME_TYPES.has(mimeType.toLowerCase())
-    ? "inline"
-    : "attachment";
+function inlineSafeDisposition(mimeType: string | null): 'inline' | 'attachment' {
+  return mimeType && SAFE_INLINE_MIME_TYPES.has(mimeType.toLowerCase()) ? 'inline' : 'attachment';
 }
 
-function revalidateDocuments(orgId: string): void {
-  updateTag(CACHE_TAGS.documents(orgId));
-  updateTag(CACHE_TAGS.equipment(orgId));
-  revalidatePath("/dokumente");
-  revalidatePath("/auftraege", "layout");
-  revalidatePath("/mitarbeiter", "layout");
-  revalidatePath("/kunden", "layout");
-  revalidatePath("/service", "layout");
-}
+const UPLOAD_LINK_KINDS = [
+  ['job', 'jobId'],
+  ['project', 'projectId'],
+  ['client', 'clientId'],
+  ['employee', 'employeeId'],
+  ['request', 'requestId'],
+  ['equipment', 'equipmentId'],
+  ['service_case', 'serviceCaseId'],
+  ['maintenance_coverage', 'maintenanceCoverageId'],
+] as const;
 
-async function getAuthorizedDocumentContext(): Promise<
-  | { success: true; context: AuthorizedDocumentContext }
-  | { success: false; error: string }
-> {
-  const auth = await authenticateAndAuthorize();
-  if (!auth.success) return auth;
-
-  return {
-    success: true,
-    context: {
-      admin: createSupabaseAdminClient(),
-      orgId: auth.context.orgId,
-      userId: auth.context.userId,
-      role: auth.context.role,
-      isManagerOrAbove: auth.context.isManagerOrAbove,
-    },
-  };
-}
-
-function requireManager(
-  context: AuthorizedDocumentContext,
-): DocumentMutationResult {
-  if (!context.isManagerOrAbove) {
-    return { success: false, error: "not_authorized" };
+/** The one record an upload links to, or null for a library upload. */
+function uploadLinkTarget(target: NormalizedUploadTarget): { kind: string; id: string } | null {
+  for (const [kind, key] of UPLOAD_LINK_KINDS) {
+    const id = target[key];
+    if (id) return { kind, id };
   }
-
-  return { success: true };
+  return null;
 }
 
-async function getFolderById(
-  admin: SupabaseAdmin,
-  orgId: string,
-  folderId: string,
-): Promise<DocumentFolderRow | null> {
-  const { data } = await admin
-    .from("document_folders")
-    .select("*")
-    .eq("id", folderId)
-    .eq("organization_id", orgId)
-    .is("deleted_at", null)
-    .maybeSingle();
-
-  return (data as DocumentFolderRow | null) ?? null;
-}
-
-async function ensureFolder(
-  admin: SupabaseAdmin,
-  orgId: string,
-  folderId: string | null | undefined,
-): Promise<{ success: true } | { success: false; error: string }> {
-  if (!folderId) return { success: true };
-
-  const folder = await getFolderById(admin, orgId, folderId);
-  if (!folder) {
-    return { success: false, error: "folder_not_found" };
-  }
-
-  return { success: true };
-}
-
-async function ensureJobAccess(
-  context: AuthorizedDocumentContext,
-  jobId: string,
-): Promise<{ success: true } | { success: false; error: string }> {
-  const { data: job } = await context.admin
-    .from("jobs")
-    .select("id")
-    .eq("id", jobId)
-    .eq("organization_id", context.orgId)
-    .maybeSingle();
-
-  if (!job) {
-    return { success: false, error: "job_not_found" };
-  }
-
-  if (context.isManagerOrAbove) {
-    return { success: true };
-  }
-
-  const { data: assignment } = await context.admin
-    .from("job_assignments")
-    .select("id")
-    .eq("job_id", jobId)
-    .eq("user_id", context.userId)
-    .maybeSingle();
-
-  if (!assignment) {
-    return { success: false, error: "not_authorized" };
-  }
-
-  return { success: true };
-}
-
-async function ensureProjectManagerAccess(
-  context: AuthorizedDocumentContext,
-  projectId: string,
-): Promise<{ success: true } | { success: false; error: string }> {
-  const manager = requireManager(context);
-  if (!manager.success) return manager;
-
-  const { data: project } = await context.admin
-    .from("projects")
-    .select("id")
-    .eq("id", projectId)
-    .eq("organization_id", context.orgId)
-    .maybeSingle();
-
-  if (!project) {
-    return { success: false, error: "project_not_found" };
-  }
-
-  return { success: true };
-}
-
-async function ensureProjectWorkAccess(
-  context: AuthorizedDocumentContext,
-  projectId: string,
-): Promise<{ success: true } | { success: false; error: string }> {
-  if (context.isManagerOrAbove) {
-    return ensureProjectManagerAccess(context, projectId);
-  }
-  const { data: assignedJob } = await context.admin
-    .from("jobs")
-    .select("job_assignments!inner(id)")
-    .eq("organization_id", context.orgId)
-    .eq("project_id", projectId)
-    .eq("job_assignments.user_id", context.userId)
-    .limit(1)
-    .maybeSingle();
-  return assignedJob
-    ? { success: true }
-    : { success: false, error: "not_authorized" };
-}
-
-async function ensureClientManagerAccess(
-  context: AuthorizedDocumentContext,
-  clientId: string,
-): Promise<{ success: true } | { success: false; error: string }> {
-  const manager = requireManager(context);
-  if (!manager.success) return manager;
-
-  const { data: client } = await context.admin
-    .from("clients")
-    .select("id")
-    .eq("id", clientId)
-    .eq("organization_id", context.orgId)
-    .maybeSingle();
-
-  if (!client) {
-    return { success: false, error: "client_not_found" };
-  }
-
-  return { success: true };
-}
-
-async function ensureEquipmentManagerAccess(
-  context: AuthorizedDocumentContext,
-  equipmentId: string,
-): Promise<{ success: true } | { success: false; error: string }> {
-  const manager = requireManager(context);
-  if (!manager.success) return manager;
-
-  const { data: equipment } = await context.admin
-    .from("installed_equipment")
-    .select("id")
-    .eq("id", equipmentId)
-    .eq("organization_id", context.orgId)
-    .is("voided_at", null)
-    .maybeSingle();
-
-  return equipment
-    ? { success: true }
-    : { success: false, error: "installed_equipment_not_found" };
-}
-
-async function ensureServiceCaseManagerAccess(
-  context: AuthorizedDocumentContext,
-  serviceCaseId: string,
-): Promise<{ success: true } | { success: false; error: string }> {
-  const manager = requireManager(context);
-  if (!manager.success) return manager;
-  const { data: serviceCase } = await context.admin
-    .from("service_cases")
-    .select("id")
-    .eq("id", serviceCaseId)
-    .eq("organization_id", context.orgId)
-    .maybeSingle();
-  return serviceCase
-    ? { success: true }
-    : { success: false, error: "service_case_not_found" };
-}
-
-async function ensureMaintenanceCoverageManagerAccess(
-  context: AuthorizedDocumentContext,
-  maintenanceCoverageId: string,
-): Promise<{ success: true } | { success: false; error: string }> {
-  const manager = requireManager(context);
-  if (!manager.success) return manager;
-  const { data: coverage } = await context.admin
-    .from("maintenance_coverages")
-    .select("id")
-    .eq("id", maintenanceCoverageId)
-    .eq("organization_id", context.orgId)
-    .maybeSingle();
-  return coverage
-    ? { success: true }
-    : { success: false, error: "maintenance_coverage_not_found" };
-}
-
-// Requests (Anfragen) are a manager-only surface; attachments follow suit.
-async function ensureRequestManagerAccess(
-  context: AuthorizedDocumentContext,
-  requestId: string,
-): Promise<{ success: true } | { success: false; error: string }> {
-  const manager = requireManager(context);
-  if (!manager.success) return manager;
-
-  const { data: request } = await context.admin
-    .from("client_requests")
-    .select("id")
-    .eq("id", requestId)
-    .eq("organization_id", context.orgId)
-    .maybeSingle();
-
-  if (!request) {
-    return { success: false, error: "request_not_found" };
-  }
-
-  return { success: true };
-}
-
-async function ensureEmployeeManagerAccess(
-  context: AuthorizedDocumentContext,
-  employeeId: string,
-): Promise<{ success: true } | { success: false; error: string }> {
-  const manager = requireManager(context);
-  if (!manager.success) return manager;
-
-  const { data: membership } = await context.admin
-    .from("organization_members")
-    .select("user_id")
-    .eq("organization_id", context.orgId)
-    .eq("user_id", employeeId)
-    .maybeSingle();
-
-  if (!membership) {
-    return { success: false, error: "employee_not_found" };
-  }
-
-  return { success: true };
-}
-
-async function getAvailableDisplayName({
-  admin,
-  orgId,
-  folderId,
-  preferredName,
-}: {
-  admin: SupabaseAdmin;
-  orgId: string;
-  folderId?: string | null | undefined;
-  preferredName: string;
-}): Promise<string> {
-  const trimmed = trimName(preferredName) || "Dokument";
-  let query = admin
-    .from("documents")
-    .select("display_name")
-    .eq("organization_id", orgId)
-    .is("deleted_at", null);
-
-  query = folderId
-    ? query.eq("folder_id", folderId)
-    : query.is("folder_id", null);
-  const { data } = await query;
-  const existingNames = new Set(
-    ((data ?? []) as Pick<DocumentRow, "display_name">[]).map((row) =>
-      row.display_name.toLowerCase(),
-    ),
-  );
-
-  if (!existingNames.has(trimmed.toLowerCase())) {
-    return trimmed;
-  }
-
-  const { baseName, extension } = splitFileName(trimmed);
-  let counter = 1;
-  let candidate = `${baseName} (${counter})${extension}`;
-
-  while (existingNames.has(candidate.toLowerCase())) {
-    counter++;
-    candidate = `${baseName} (${counter})${extension}`;
-  }
-
-  return candidate;
-}
-
-async function getAvailableFolderName({
-  admin,
-  orgId,
-  parentFolderId,
-  preferredName,
-}: {
-  admin: SupabaseAdmin;
-  orgId: string;
-  parentFolderId?: string | null | undefined;
-  preferredName: string;
-}): Promise<string> {
-  const trimmed = trimName(preferredName) || "Ordner";
-  let query = admin
-    .from("document_folders")
-    .select("name")
-    .eq("organization_id", orgId)
-    .is("deleted_at", null);
-
-  query = parentFolderId
-    ? query.eq("parent_folder_id", parentFolderId)
-    : query.is("parent_folder_id", null);
-
-  const { data } = await query;
-  const existingNames = new Set(
-    ((data ?? []) as Pick<DocumentFolderRow, "name">[]).map((row) =>
-      row.name.toLowerCase(),
-    ),
-  );
-
-  if (!existingNames.has(trimmed.toLowerCase())) {
-    return trimmed;
-  }
-
-  let counter = 1;
-  let candidate = `${trimmed} (${counter})`;
-
-  while (existingNames.has(candidate.toLowerCase())) {
-    counter++;
-    candidate = `${trimmed} (${counter})`;
-  }
-
-  return candidate;
-}
-
-async function hydrateDocuments(
-  admin: SupabaseAdmin,
-  rows: DocumentRow[],
-): Promise<OrganizationDocument[]> {
-  if (rows.length === 0) return [];
-
-  const documentIds = rows.map((row) => row.id);
-  const uploaderIds = Array.from(new Set(rows.map((row) => row.uploaded_by)));
-  // Every related read stays inside the documents' organizations; the admin client bypasses RLS.
-  const organizationIds = [...new Set(rows.map((row) => row.organization_id))];
-
-  const [linksResult, profilesResult] = await Promise.all([
-    readInBatches(documentIds, (ids) => readCompleteRows((from, to) => admin.from("document_links").select("*").in("document_id", [...ids]).in("organization_id", organizationIds).order("id").range(from, to), LIST_ROW_CAP)),
-    readInBatches(uploaderIds, (ids) => admin.from("profiles").select("id, first_name, last_name, email, avatar_path").in("id", [...ids])),
-  ]);
-
-  if (linksResult.error || profilesResult.error) throw new Error("Dokumentverknüpfungen konnten nicht vollständig geladen werden.");
-  const linkRows = (linksResult.data ?? []) as DocumentLinkRow[];
-  const jobIds = Array.from(
-    new Set(
-      linkRows
-        .map((link) => link.job_id)
-        .filter((id): id is string => Boolean(id)),
-    ),
-  );
-  const projectIds = Array.from(
-    new Set(
-      linkRows
-        .map((link) => link.project_id)
-        .filter((id): id is string => Boolean(id)),
-    ),
-  );
-  const clientIds = Array.from(
-    new Set(
-      linkRows
-        .map((link) => link.client_id)
-        .filter((id): id is string => Boolean(id)),
-    ),
-  );
-  const employeeIds = Array.from(
-    new Set(
-      linkRows
-        .map((link) => link.employee_id)
-        .filter((id): id is string => Boolean(id)),
-    ),
-  );
-  const requestIds = Array.from(
-    new Set(
-      linkRows
-        .map((link) => link.request_id)
-        .filter((id): id is string => Boolean(id)),
-    ),
-  );
-  const equipmentIds = Array.from(
-    new Set(
-      linkRows
-        .map((link) => link.equipment_id)
-        .filter((id): id is string => Boolean(id)),
-    ),
-  );
-  const serviceCaseIds = Array.from(
-    new Set(
-      linkRows
-        .map((link) => link.service_case_id)
-        .filter((id): id is string => Boolean(id)),
-    ),
-  );
-  const maintenanceCoverageIds = Array.from(
-    new Set(
-      linkRows
-        .map((link) => link.maintenance_coverage_id)
-        .filter((id): id is string => Boolean(id)),
-    ),
-  );
-
-  const [
-    jobsResult,
-    projectsResult,
-    clientsResult,
-    employeesResult,
-    requestsResult,
-    equipmentResult,
-    serviceCasesResult,
-    maintenanceCoveragesResult,
-  ] = await Promise.all([
-    jobIds.length > 0
-      ? readInBatches(jobIds, (ids) => admin.from("jobs").select("id, title, job_number").in("organization_id", organizationIds).in("id", [...ids]))
-      : Promise.resolve({ data: [], error: null }),
-    projectIds.length > 0
-      ? readInBatches(projectIds, (ids) => admin.from("projects").select("id, name, project_number").in("organization_id", organizationIds).in("id", [...ids]))
-      : Promise.resolve({ data: [], error: null }),
-    clientIds.length > 0
-      ? readInBatches(clientIds, (ids) => admin.from("clients").select("id, name").in("organization_id", organizationIds).in("id", [...ids]))
-      : Promise.resolve({ data: [], error: null }),
-    employeeIds.length > 0
-      ? readInBatches(employeeIds, (ids) => admin.from("profiles").select("id, first_name, last_name, email").in("id", [...ids]))
-      : Promise.resolve({ data: [], error: null }),
-    requestIds.length > 0
-      ? readInBatches(requestIds, (ids) => admin.from("client_requests").select("id, request_number, summary").in("organization_id", organizationIds).in("id", [...ids]))
-      : Promise.resolve({ data: [], error: null }),
-    equipmentIds.length > 0
-      ? readInBatches(equipmentIds, (ids) => admin.from("installed_equipment").select("id, equipment_number, name").in("organization_id", organizationIds).in("id", [...ids]))
-      : Promise.resolve({ data: [], error: null }),
-    serviceCaseIds.length > 0
-      ? readInBatches(serviceCaseIds, (ids) => admin.from("service_cases").select("id, case_number, summary").in("organization_id", organizationIds).in("id", [...ids]))
-      : Promise.resolve({ data: [], error: null }),
-    maintenanceCoverageIds.length > 0
-      ? readInBatches(maintenanceCoverageIds, (ids) => admin.from("maintenance_coverages").select("id, coverage_number").in("organization_id", organizationIds).in("id", [...ids]))
-      : Promise.resolve({ data: [], error: null }),
-  ]);
-
-  if ([jobsResult, projectsResult, clientsResult, employeesResult, requestsResult, equipmentResult, serviceCasesResult, maintenanceCoveragesResult].some((result) => result.error)) throw new Error("Dokumentverknüpfungen konnten nicht geladen werden.");
-  const jobsById = new Map(
-    (
-      (jobsResult.data ?? []) as Array<{
-        id: string;
-        title: string;
-        job_number: string | null;
-      }>
-    ).map((job) => [job.id, job]),
-  );
-  const projectsById = new Map(
-    (
-      (projectsResult.data ?? []) as Array<{
-        id: string;
-        name: string;
-        project_number: string | null;
-      }>
-    ).map((project) => [project.id, project]),
-  );
-  const clientsById = new Map(
-    (
-      (clientsResult.data ?? []) as Array<{
-        id: string;
-        name: string;
-      }>
-    ).map((client) => [client.id, client]),
-  );
-  const employeesById = new Map(
-    (
-      (employeesResult.data ?? []) as Array<{
-        id: string;
-        first_name: string | null;
-        last_name: string | null;
-        email: string | null;
-      }>
-    ).map((employee) => [employee.id, employee]),
-  );
-  const requestsById = new Map(
-    (
-      (requestsResult.data ?? []) as Array<{
-        id: string;
-        request_number: string | null;
-        summary: string;
-      }>
-    ).map((request) => [request.id, request]),
-  );
-  const equipmentById = new Map(
-    (
-      (equipmentResult.data ?? []) as Array<{
-        id: string;
-        equipment_number: string;
-        name: string;
-      }>
-    ).map((equipment) => [equipment.id, equipment]),
-  );
-  const serviceCasesById = new Map(
-    (
-      (serviceCasesResult.data ?? []) as Array<{
-        id: string;
-        case_number: string;
-        summary: string;
-      }>
-    ).map((serviceCase) => [serviceCase.id, serviceCase]),
-  );
-  const maintenanceCoveragesById = new Map(
-    (
-      (maintenanceCoveragesResult.data ?? []) as Array<{
-        id: string;
-        coverage_number: string;
-      }>
-    ).map((coverage) => [coverage.id, coverage]),
-  );
-
-  const linksByDocumentId = new Map<string, DocumentLink[]>();
-  for (const linkRow of linkRows) {
-    const job = linkRow.job_id ? jobsById.get(linkRow.job_id) : null;
-    const project = linkRow.project_id
-      ? projectsById.get(linkRow.project_id)
-      : null;
-    const client = linkRow.client_id
-      ? clientsById.get(linkRow.client_id)
-      : null;
-    const employee = linkRow.employee_id
-      ? employeesById.get(linkRow.employee_id)
-      : null;
-    const request = linkRow.request_id
-      ? requestsById.get(linkRow.request_id)
-      : null;
-    const equipment = linkRow.equipment_id
-      ? equipmentById.get(linkRow.equipment_id)
-      : null;
-    const serviceCase = linkRow.service_case_id
-      ? serviceCasesById.get(linkRow.service_case_id)
-      : null;
-    const maintenanceCoverage = linkRow.maintenance_coverage_id
-      ? maintenanceCoveragesById.get(linkRow.maintenance_coverage_id)
-      : null;
-    const employeeName = employee
-      ? [employee.first_name, employee.last_name].filter(Boolean).join(" ") ||
-        employee.email
-      : null;
-    const links = linksByDocumentId.get(linkRow.document_id) ?? [];
-    links.push(
-      toDocumentLink(linkRow, {
-        jobTitle: job?.title ?? null,
-        jobNumber: job?.job_number ?? null,
-        projectName: project?.name ?? null,
-        projectNumber: project?.project_number ?? null,
-        clientName: client?.name ?? null,
-        employeeName: employeeName ?? null,
-        employeeEmail: employee?.email ?? null,
-        requestNumber: request?.request_number ?? null,
-        requestSummary: request?.summary ?? null,
-        equipmentNumber: equipment?.equipment_number ?? null,
-        equipmentName: equipment?.name ?? null,
-        serviceCaseNumber: serviceCase?.case_number ?? null,
-        serviceCaseSummary: serviceCase?.summary ?? null,
-        maintenanceCoverageNumber: maintenanceCoverage?.coverage_number ?? null,
-      }),
-    );
-    linksByDocumentId.set(linkRow.document_id, links);
-  }
-
-  const profilesById = new Map(
-    ((profilesResult.data ?? []) as ProfileRow[]).map((profile) => [
-      profile.id,
-      profile,
-    ]),
-  );
-
-  return rows.map((row) =>
-    toOrganizationDocument({
-      row,
-      uploader: mapProfileToUploader(profilesById.get(row.uploaded_by)),
-      links: linksByDocumentId.get(row.id) ?? [],
-    }),
-  );
-}
-
-async function hydrateFolders(
-  admin: SupabaseAdmin,
-  rows: DocumentFolderRow[],
-): Promise<DocumentFolder[]> {
-  if (rows.length === 0) return [];
-
-  const creatorIds = Array.from(new Set(rows.map((row) => row.created_by)));
-  const { data: profiles, error } = await readInBatches(creatorIds, (ids) => admin
-        .from("profiles")
-        .select("id, first_name, last_name, email, avatar_path")
-        .in("id", [...ids]));
-  if (error) throw new Error("Ordnerinformationen konnten nicht vollständig geladen werden.");
-
-  const profilesById = new Map(
-    ((profiles ?? []) as ProfileRow[]).map((profile) => [profile.id, profile]),
-  );
-
-  return rows.map((row) =>
-    toDocumentFolder(
-      row,
-      mapProfileToUploader(profilesById.get(row.created_by)),
-    ),
-  );
-}
-
-async function getFolderBreadcrumbs({ admin, orgId, folderId }: { admin: SupabaseAdmin; orgId: string; folderId?: string | null }): Promise<DocumentFolder[]> {
-  const breadcrumbs: DocumentFolder[] = [];
-  const visited = new Set<string>();
-  let currentId = folderId ?? null;
-  while (currentId) {
-    if (visited.has(currentId) || visited.size >= 100) throw new Error('Der Ordnerpfad konnte nicht geladen werden.');
-    visited.add(currentId);
-    const result = await admin.from('document_folders').select('*').eq('organization_id', orgId).eq('id', currentId).is('deleted_at', null).maybeSingle();
-    if (result.error || !result.data) throw new Error('Der Ordnerpfad konnte nicht geladen werden.');
-    breadcrumbs.unshift(toDocumentFolder(result.data));
-    currentId = result.data.parent_folder_id;
-  }
-  return breadcrumbs;
-}
-async function getAuthorizedDocument(
-  context: AuthorizedDocumentContext,
-  documentId: string,
-  options: { protectedVersionNumber?: number } = {},
-): Promise<
-  | {
-      success: true;
-      document: DocumentRow;
-      protectedAccess: ProtectedDocumentAccess | null;
-    }
-  | { success: false; error: string }
-> {
-  const { data: document } = await context.admin
-    .from("documents")
-    .select("*")
-    .eq("id", documentId)
-    .eq("organization_id", context.orgId)
-    .is("deleted_at", null)
-    .maybeSingle();
-
-  if (!document) {
-    return { success: false, error: "document_not_found" };
-  }
-
-  const row = document as DocumentRow;
-  const { data: protectedDocument } = await context.admin
-    .from("personnel_documents")
-    .select(
-      "id, access_class, employee_record_id, personnel_document_releases(document_version_number, revoked_at)",
-    )
-    .eq("document_id", row.id)
-    .maybeSingle();
-  if (protectedDocument) {
-    if (context.role === "admin") {
-      return {
-        success: true,
-        document: row,
-        protectedAccess: {
-          personnelDocumentId: protectedDocument.id,
-          releasedVersionNumbers: null,
-          canInspectHistory: true,
-        },
-      };
-    }
-    if (
-      context.role === "buero" &&
-      protectedDocument.access_class === "personnel_standard"
-    ) {
-      return {
-        success: true,
-        document: row,
-        protectedAccess: {
-          personnelDocumentId: protectedDocument.id,
-          releasedVersionNumbers: null,
-          canInspectHistory: true,
-        },
-      };
-    }
-    const { data: employee } = await context.admin
-      .from("employee_records")
-      .select("user_id")
-      .eq("id", protectedDocument.employee_record_id)
-      .eq("organization_id", context.orgId)
-      .maybeSingle();
-    const releases = (protectedDocument.personnel_document_releases ?? []) as Array<{
-      document_version_number: number;
-      revoked_at: string | null;
-    }>;
-    const releasedVersionNumbers = releases
-      .filter((release) => release.revoked_at === null)
-      .map((release) => release.document_version_number);
-    if (
-      employee?.user_id !== context.userId ||
-      !releasedVersionNumbers.includes(
-        options.protectedVersionNumber ?? row.current_version_number,
-      )
-    ) {
-      return { success: false, error: "not_authorized" };
-    }
-    return {
-      success: true,
-      document: row,
-      protectedAccess: {
-        personnelDocumentId: protectedDocument.id,
-        releasedVersionNumbers,
-        canInspectHistory: false,
-      },
-    };
-  }
-  if (context.isManagerOrAbove) {
-    return { success: true, document: row, protectedAccess: null };
-  }
-
-  const { data: links } = await context.admin
-    .from("document_links")
-    .select("job_id, project_id")
-    .eq("document_id", row.id)
-    .eq("organization_id", context.orgId);
-
-  const linkedRows = (links ?? []) as Pick<
-    DocumentLinkRow,
-    "job_id" | "project_id"
-  >[];
-  const jobIds = linkedRows
-    .map((link) => link.job_id)
-    .filter((jobId): jobId is string => Boolean(jobId));
-  const projectIds = linkedRows
-    .map((link) => link.project_id)
-    .filter((projectId): projectId is string => Boolean(projectId));
-
-  if (projectIds.length > 0) {
-    const { data: projectJobs } = await context.admin
-      .from("jobs")
-      .select("id")
-      .eq("organization_id", context.orgId)
-      .in("project_id", projectIds);
-    jobIds.push(...(projectJobs ?? []).map((job) => job.id));
-  }
-
-  if (jobIds.length === 0) {
-    return { success: false, error: "not_authorized" };
-  }
-
-  const { data: assignment } = await context.admin
-    .from("job_assignments")
-    .select("id")
-    .in("job_id", jobIds)
-    .eq("user_id", context.userId)
-    .limit(1)
-    .maybeSingle();
-
-  if (!assignment) {
-    return { success: false, error: "not_authorized" };
-  }
-
-  return { success: true, document: row, protectedAccess: null };
-}
-
-async function getDeletedDocumentForManager(
-  context: AuthorizedDocumentContext,
-  documentId: string,
-): Promise<
-  { success: true; document: DocumentRow } | { success: false; error: string }
-> {
-  const manager = requireManager(context);
-  if (!manager.success) return manager;
-
-  const { data: document } = await context.admin
-    .from("documents")
-    .select("*")
-    .eq("id", documentId)
-    .eq("organization_id", context.orgId)
-    .not("deleted_at", "is", null)
-    .maybeSingle();
-
-  if (!document) {
-    return { success: false, error: "document_not_found" };
-  }
-
-  return { success: true, document: document as DocumentRow };
-}
-
-async function recordDocumentAuditEvent(
-  context: AuthorizedDocumentContext,
-  input: RecordDocumentAuditEventInput,
-): Promise<void> {
-  const { error } = await context.admin.from("document_audit_events").insert({
-    organization_id: context.orgId,
-    document_id: input.documentId ?? null,
-    folder_id: input.folderId ?? null,
-    actor_id: context.userId,
-    event_type: input.eventType,
-    event_payload: input.eventPayload ?? {},
-  });
-
-  if (error) {
-    console.error("Failed to record document audit event", error);
-  }
-}
-
-async function hydrateDocumentVersions(
-  admin: SupabaseAdmin,
-  rows: DocumentVersionRow[],
-): Promise<DocumentVersion[]> {
-  if (rows.length === 0) return [];
-
-  const uploaderIds = Array.from(new Set(rows.map((row) => row.uploaded_by)));
-  const { data: profiles } = await admin
-    .from("profiles")
-    .select("id, first_name, last_name, email, avatar_path")
-    .in("id", uploaderIds);
-
-  const profilesById = new Map(
-    ((profiles ?? []) as ProfileRow[]).map((profile) => [profile.id, profile]),
-  );
-
-  return rows.map((row) =>
-    toDocumentVersion({
-      row,
-      uploader: mapProfileToUploader(profilesById.get(row.uploaded_by)),
-    }),
-  );
-}
-
-async function hydrateDocumentAuditEvents(
-  admin: SupabaseAdmin,
-  rows: DocumentAuditEventRow[],
-): Promise<DocumentAuditEvent[]> {
-  if (rows.length === 0) return [];
-
-  const actorIds = Array.from(
-    new Set(
-      rows
-        .map((row) => row.actor_id)
-        .filter((actorId): actorId is string => Boolean(actorId)),
-    ),
-  );
-  const { data: profiles } = actorIds.length
-    ? await admin
-        .from("profiles")
-        .select("id, first_name, last_name, email, avatar_path")
-        .in("id", actorIds)
-    : { data: [] };
-
-  const profilesById = new Map(
-    ((profiles ?? []) as ProfileRow[]).map((profile) => [profile.id, profile]),
-  );
-
-  return rows.map((row) =>
-    toDocumentAuditEvent({
-      row,
-      actor: row.actor_id
-        ? mapProfileToUploader(profilesById.get(row.actor_id))
-        : null,
-    }),
-  );
-}
-
-function applyDocumentSearch<
-  T extends {
-    ilike: (column: string, pattern: string) => T;
-    or: (filters: string) => T;
-  },
->(query: T, searchQuery?: string | null): T {
-  const search = searchQuery?.trim();
-  if (!search) return query;
-
-  const escapedSearch = search
-    .replace(/\\/g, "\\\\")
-    .replace(/"/g, '\\"')
-    .replace(/[%_]/g, "\\$&");
-  const pattern = `"%${escapedSearch}%"`;
-
-  return query.or(
-    `display_name.ilike.${pattern},original_file_name.ilike.${pattern}`,
-  );
-}
-
-export async function getDocumentLibrary(input: DocumentLibraryInput = {}): Promise<DocumentLibraryResult> {
+export async function getDocumentLibrary(
+  rawInput: DocumentLibraryInput = {},
+): Promise<DocumentLibraryResult> {
+  const input = parseActionInput(documentLibraryInputSchema, rawInput);
+  if (!input) return INVALID_INPUT;
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
   const { context } = auth;
   const manager = requireManager(context);
   if (!manager.success) return manager;
   const folderId = input.folderId ?? null;
-  if (folderId && !uuidSchema.safeParse(folderId).success) return { success: false, error: 'invalid_folder' };
   const view = input.view ?? 'folders';
   const sort = input.sort ?? 'name';
   const page = parseListPage(input.page);
@@ -1328,295 +200,246 @@ export async function getDocumentLibrary(input: DocumentLibraryInput = {}): Prom
     if (!folderCheck.success) return folderCheck;
   }
   const isFolderView = view === 'folders' || Boolean(folderId);
-  let foldersQuery = context.admin.from('document_folders').select('*', { count: 'exact' }).eq('organization_id', context.orgId).is('deleted_at', null).order('name').order('id');
-  foldersQuery = folderId ? foldersQuery.eq('parent_folder_id', folderId) : foldersQuery.is('parent_folder_id', null);
+  let foldersQuery = context.admin
+    .from('document_folders')
+    .select('*', { count: 'exact' })
+    .eq('organization_id', context.orgId)
+    .is('deleted_at', null)
+    .order('name')
+    .order('id');
+  foldersQuery = folderId
+    ? foldersQuery.eq('parent_folder_id', folderId)
+    : foldersQuery.is('parent_folder_id', null);
   const [selection, foldersResult] = await Promise.all([
-    context.admin.rpc('list_document_page', { p_organization_id: context.orgId, p_filters: { folderId, view, sort, searchQuery: (input.searchQuery ?? '').trim().slice(0, 250), category: input.category ?? 'all', linkFilter: input.linkFilter ?? 'all', page, pageSize: LIST_PAGE_SIZE } }),
-    isFolderView && view !== 'trash' ? foldersQuery.range((folderPage - 1) * LIST_PAGE_SIZE, folderPage * LIST_PAGE_SIZE - 1) : Promise.resolve({ data: [], error: null, count: 0 }),
+    context.admin.rpc('list_document_page', {
+      p_organization_id: context.orgId,
+      p_filters: {
+        folderId,
+        view,
+        sort,
+        searchQuery: (input.searchQuery ?? '').trim().slice(0, 250),
+        category: input.category ?? 'all',
+        linkFilter: input.linkFilter ?? 'all',
+        page,
+        pageSize: LIST_PAGE_SIZE,
+      },
+    }),
+    isFolderView && view !== 'trash'
+      ? foldersQuery.range((folderPage - 1) * LIST_PAGE_SIZE, folderPage * LIST_PAGE_SIZE - 1)
+      : Promise.resolve({ data: [], error: null, count: 0 }),
   ]);
   const selected = entityIdPageSchema.safeParse(selection.data);
-  if (selection.error || !selected.success || foldersResult.error) return { success: false, error: 'documents_failed' };
-  const documentsResult = selected.data.ids.length ? await context.admin.from('ordinary_documents').select('*').eq('organization_id', context.orgId).in('id', selected.data.ids) : { data: [], error: null };
-  if (documentsResult.error) return { success: false, error: 'documents_failed' };
-  const rows = selected.data.ids.flatMap((id) => { const row = documentsResult.data.find((row) => row.id === id); return row ? [row] : []; });
+  if (selection.error || !selected.success || foldersResult.error)
+    return { success: false, error: 'documents_failed' };
+  const documentsResult = await readInBatches(selected.data.ids, (ids) =>
+    context.admin
+      .from('ordinary_documents')
+      .select('*')
+      .eq('organization_id', context.orgId)
+      .in('id', [...ids]),
+  );
+  if (documentsResult.error) {
+    logReadErrors('getDocumentLibrary: read failed', documentsResult.error);
+    return { success: false, error: 'documents_failed' };
+  }
+  const rows = selected.data.ids.flatMap((id) => {
+    const row = documentsResult.data.find((row) => row.id === id);
+    return row ? [row] : [];
+  });
   try {
     const [breadcrumbs, folders, documents] = await Promise.all([
       view === 'trash' ? [] : getFolderBreadcrumbs({ admin: context.admin, orgId: context.orgId, folderId }),
       hydrateFolders(context.admin, foldersResult.data),
-      hydrateDocuments(context.admin, rows),
+      hydrateDocuments(context.admin, documentRowsFromOrdinaryView(rows)),
     ]);
-    return { success: true, page, total: selected.data.total, folderPage, folderTotal: foldersResult.count ?? 0, breadcrumbs, folders, documents };
+    return {
+      success: true,
+      page,
+      total: selected.data.total,
+      folderPage,
+      folderTotal: foldersResult.count ?? 0,
+      breadcrumbs,
+      folders,
+      documents,
+    };
   } catch (error) {
-    console.error('Error hydrating the document library:', error);
+    logError('Error hydrating the document library', error);
     return { success: false, error: 'documents_failed' };
   }
 }
-export async function getDocumentFolderOptions(): Promise<
-  | { success: true; folders: DocumentFolder[] }
-  | { success: false; error: string }
-> {
+export async function getDocumentFolderOptions(): Promise<ActionResult<{ folders: DocumentFolder[] }>> {
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
   const manager = requireManager(auth.context);
   if (!manager.success) return manager;
 
-  const { data, error, overflow } = await readAllRows((from, to) => auth.context.admin
-    .from('document_folders').select('*').eq('organization_id', auth.context.orgId).is('deleted_at', null)
-    .order('name').order('id').range(from, to), { cap: LIST_ROW_CAP });
+  const { data, error, overflow } = await readAllRows(
+    (from, to) =>
+      auth.context.admin
+        .from('document_folders')
+        .select('*')
+        .eq('organization_id', auth.context.orgId)
+        .is('deleted_at', null)
+        .order('name')
+        .order('id')
+        .range(from, to),
+    { cap: LIST_ROW_CAP },
+  );
   if (error || overflow) {
-    console.error("Failed to load document folder options:", error);
-    return { success: false, error: "folders_failed" };
+    logError('Failed to load document folder options', error);
+    return { success: false, error: 'folders_failed' };
   }
 
-  return {
-    success: true,
-    folders: await hydrateFolders(
-      auth.context.admin,
-      (data ?? []) as DocumentFolderRow[],
-    ),
-  };
+  try {
+    return {
+      success: true,
+      folders: await hydrateFolders(auth.context.admin, (data ?? []) as DocumentFolderRow[]),
+    };
+  } catch (hydrationError) {
+    logError('Failed to hydrate document folder options', hydrationError);
+    return { success: false, error: 'folders_failed' };
+  }
 }
 
+const ATTACHABLE_DOCUMENT_PAGE_SIZE = 50;
+
 export async function getAttachableDocuments(
-  input: AttachableDocumentsInput,
-): Promise<DocumentListResult> {
+  rawInput: AttachableDocumentsInput,
+): Promise<DocumentListResult & { hasMore?: boolean }> {
+  const input = parseActionInput(attachableDocumentsInputSchema, rawInput);
+  if (!input) return INVALID_INPUT;
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
   const manager = requireManager(auth.context);
   if (!manager.success) return manager;
 
-  let access: { success: true } | { success: false; error: string };
-  let linkColumn:
-    | "job_id"
-    | "project_id"
-    | "client_id"
-    | "employee_id"
-    | "equipment_id"
-    | "service_case_id"
-    | "maintenance_coverage_id";
+  let access: ActionResult;
+  let linkColumn: Exclude<DocumentLinkColumn, 'request_id'>;
   switch (input.targetType) {
-    case "job":
+    case 'job':
       access = await ensureJobAccess(auth.context, input.targetId);
-      linkColumn = "job_id";
+      linkColumn = 'job_id';
       break;
-    case "project":
+    case 'project':
       access = await ensureProjectManagerAccess(auth.context, input.targetId);
-      linkColumn = "project_id";
+      linkColumn = 'project_id';
       break;
-    case "client":
+    case 'client':
       access = await ensureClientManagerAccess(auth.context, input.targetId);
-      linkColumn = "client_id";
+      linkColumn = 'client_id';
       break;
-    case "employee":
+    case 'employee':
       access = await ensureEmployeeManagerAccess(auth.context, input.targetId);
-      linkColumn = "employee_id";
+      linkColumn = 'employee_id';
       break;
-    case "equipment":
+    case 'equipment':
       access = await ensureEquipmentManagerAccess(auth.context, input.targetId);
-      linkColumn = "equipment_id";
+      linkColumn = 'equipment_id';
       break;
-    case "service_case":
-      access = await ensureServiceCaseManagerAccess(
-        auth.context,
-        input.targetId,
-      );
-      linkColumn = "service_case_id";
+    case 'service_case':
+      access = await ensureServiceCaseManagerAccess(auth.context, input.targetId);
+      linkColumn = 'service_case_id';
       break;
-    case "maintenance_coverage":
-      access = await ensureMaintenanceCoverageManagerAccess(
-        auth.context,
-        input.targetId,
-      );
-      linkColumn = "maintenance_coverage_id";
+    case 'maintenance_coverage':
+      access = await ensureMaintenanceCoverageManagerAccess(auth.context, input.targetId);
+      linkColumn = 'maintenance_coverage_id';
       break;
     default:
-      return { success: false, error: "invalid_target" };
+      return { success: false, error: 'invalid_target' };
   }
   if (!access.success) return access;
   let query = auth.context.admin
-    .from("ordinary_documents")
-    .select("*, existing:document_links()")
-    .eq("organization_id", auth.context.orgId)
-    .is("deleted_at", null)
-    .eq("existing.organization_id", auth.context.orgId)
+    .from('ordinary_documents')
+    .select('*, existing:document_links()')
+    .eq('organization_id', auth.context.orgId)
+    .is('deleted_at', null)
+    .eq('existing.organization_id', auth.context.orgId)
     .eq(`existing.${linkColumn}`, input.targetId)
-    .is("existing", null);
+    .is('existing', null);
 
   query = applyDocumentSearch(query, input.searchQuery);
 
-  if (input.category && input.category !== "all") {
-    query = query.eq("category", input.category);
+  if (input.category && input.category !== 'all') {
+    query = query.eq('category', input.category);
   }
 
   const { data, error } = await query
-    .order("created_at", { ascending: false })
-    .limit(50);
+    .order('created_at', { ascending: false })
+    .limit(ATTACHABLE_DOCUMENT_PAGE_SIZE + 1);
 
   if (error) {
-    console.error("Failed to load attachable documents:", error);
-    return { success: false, error: "documents_failed" };
+    logError('Failed to load attachable documents', error);
+    return { success: false, error: 'documents_failed' };
   }
 
-  return {
-    success: true,
-    documents: await hydrateDocuments(
-      auth.context.admin,
-      (data ?? []) as DocumentRow[],
-    ),
-  };
+  // One row beyond the page tells the dialog that a search can find more.
+  const rows = (data ?? []) as DocumentRow[];
+  const documents = await hydrateDocumentsOrNull(
+    auth.context.admin,
+    rows.slice(0, ATTACHABLE_DOCUMENT_PAGE_SIZE),
+    'Failed to hydrate attachable documents',
+  );
+  if (!documents) return { success: false, error: 'documents_failed' };
+  return { success: true, documents, hasMore: rows.length > ATTACHABLE_DOCUMENT_PAGE_SIZE };
 }
 
-export async function getJobDocuments(
-  jobId: string,
-): Promise<DocumentListResult> {
+export async function getJobDocuments(rawJobId: string): Promise<DocumentListResult> {
+  const jobId = parseActionInput(uuidSchema, rawJobId);
+  if (!jobId) return INVALID_INPUT;
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
   const access = await ensureJobAccess(auth.context, jobId);
   if (!access.success) return access;
 
-  const { data: links, error: linksError } = await readCompleteRows((from, to) => auth.context.admin.from("document_links").select("document_id")
-    .eq("organization_id", auth.context.orgId)
-    .eq("job_id", jobId).order("id").range(from, to), LIST_ROW_CAP);
-
-  if (linksError) {
-    console.error("Failed to load job document links:", linksError);
-    return { success: false, error: "documents_failed" };
-  }
-
-  const documentIds = (
-    (links ?? []) as Pick<DocumentLinkRow, "document_id">[]
-  ).map((link) => link.document_id);
-
-  if (documentIds.length === 0) {
-    return { success: true, documents: [] };
-  }
-
-  const { data: documents, error: documentsError } = await readInBatches(documentIds, (ids) => auth.context.admin.from("ordinary_documents").select("*")
-    .in("id", [...ids])
-    .eq("organization_id", auth.context.orgId)
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false }).order("id"));
-
-  if (documentsError) {
-    console.error("Failed to load job documents:", documentsError);
-    return { success: false, error: "documents_failed" };
-  }
-
-  return {
-    success: true,
-    documents: await hydrateDocuments(
-      auth.context.admin,
-      newestDocumentsFirst(documents ?? []),
-    ),
-  };
+  return readLinkedDocuments(auth.context, 'job_id', jobId);
 }
 
 // Attachments of one request (Anfrage); manager-only like the request surface.
-export async function getRequestDocuments(
-  requestId: string,
-): Promise<DocumentListResult> {
+export async function getRequestDocuments(rawRequestId: string): Promise<DocumentListResult> {
+  const requestId = parseActionInput(uuidSchema, rawRequestId);
+  if (!requestId) return INVALID_INPUT;
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
   const access = await ensureRequestManagerAccess(auth.context, requestId);
   if (!access.success) return access;
 
-  const { data: links, error: linksError } = await readCompleteRows((from, to) => auth.context.admin.from("document_links").select("document_id")
-    .eq("organization_id", auth.context.orgId)
-    .eq("request_id", requestId).order("id").range(from, to), LIST_ROW_CAP);
-
-  if (linksError) {
-    console.error("Failed to load request document links:", linksError);
-    return { success: false, error: "documents_failed" };
-  }
-
-  const documentIds = (
-    (links ?? []) as Pick<DocumentLinkRow, "document_id">[]
-  ).map((link) => link.document_id);
-
-  if (documentIds.length === 0) {
-    return { success: true, documents: [] };
-  }
-
-  const { data: documents, error: documentsError } = await readInBatches(documentIds, (ids) => auth.context.admin.from("ordinary_documents").select("*")
-    .in("id", [...ids])
-    .eq("organization_id", auth.context.orgId)
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false }).order("id"));
-
-  if (documentsError) {
-    console.error("Failed to load request documents:", documentsError);
-    return { success: false, error: "documents_failed" };
-  }
-
-  return {
-    success: true,
-    documents: await hydrateDocuments(
-      auth.context.admin,
-      newestDocumentsFirst(documents ?? []),
-    ),
-  };
+  return readLinkedDocuments(auth.context, 'request_id', requestId);
 }
 
-async function getProjectDocuments(
-  projectId: string,
-): Promise<DocumentListResult> {
+// An assigned employee reads the project's own documents; each job group below keeps its own job check.
+async function getProjectDocuments(projectId: string): Promise<DocumentListResult> {
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
-  const access = await ensureProjectManagerAccess(auth.context, projectId);
+  const access = await ensureProjectWorkAccess(auth.context, projectId);
   if (!access.success) return access;
 
-  const { data: links, error: linksError } = await readCompleteRows((from, to) => auth.context.admin.from("document_links").select("document_id")
-    .eq("organization_id", auth.context.orgId)
-    .eq("project_id", projectId).order("id").range(from, to), LIST_ROW_CAP);
-
-  if (linksError) {
-    console.error("Failed to load project document links:", linksError);
-    return { success: false, error: "documents_failed" };
-  }
-
-  const documentIds = (
-    (links ?? []) as Pick<DocumentLinkRow, "document_id">[]
-  ).map((link) => link.document_id);
-
-  if (documentIds.length === 0) {
-    return { success: true, documents: [] };
-  }
-
-  const { data: documents, error: documentsError } = await readInBatches(documentIds, (ids) => auth.context.admin.from("ordinary_documents").select("*")
-    .in("id", [...ids])
-    .eq("organization_id", auth.context.orgId)
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false }).order("id"));
-
-  if (documentsError) {
-    console.error("Failed to load project documents:", documentsError);
-    return { success: false, error: "documents_failed" };
-  }
-
-  return {
-    success: true,
-    documents: await hydrateDocuments(
-      auth.context.admin,
-      newestDocumentsFirst(documents ?? []),
-    ),
-  };
+  return readLinkedDocuments(auth.context, 'project_id', projectId);
 }
 
+const JOB_DOCUMENT_READ_CONCURRENCY = 8;
+
 export async function getProjectDocumentsOverview(
-  projectId: string,
-  jobs: Array<Pick<Job, "id" | "jobNumber" | "title">>,
+  rawProjectId: string,
+  rawJobs: Array<Pick<Job, 'id' | 'jobNumber' | 'title'>>,
 ): Promise<ProjectDocumentsOverviewResult> {
+  const projectId = parseActionInput(uuidSchema, rawProjectId);
+  if (!projectId) return INVALID_INPUT;
+  const jobs = parseActionInput(projectOverviewJobsSchema, rawJobs);
+  if (!jobs) return INVALID_INPUT;
   const projectResult = await getProjectDocuments(projectId);
   if (!projectResult.success) return projectResult;
 
-  const jobDocumentResults = await Promise.all(
-    jobs.map((job) => getJobDocuments(job.id)),
-  );
+  // Bounded fan-out: each job read checks its own access and runs several queries.
+  const jobDocumentResults: DocumentListResult[] = [];
+  for (let start = 0; start < jobs.length; start += JOB_DOCUMENT_READ_CONCURRENCY) {
+    const chunk = jobs.slice(start, start + JOB_DOCUMENT_READ_CONCURRENCY);
+    jobDocumentResults.push(...(await Promise.all(chunk.map((job) => getJobDocuments(job.id)))));
+  }
 
   const jobDocumentGroups = jobs
     .map((job, index) => {
@@ -1637,330 +460,158 @@ export async function getProjectDocumentsOverview(
   };
 }
 
-export async function getDocumentLinkCatalog(): Promise<
-  | {
-      success: true;
-      jobs: Job[];
-      projects: ProjectWithDetails[];
-      clients: Client[];
-      employees: DocumentEmployee[];
-      equipment: DocumentEquipment[];
-    }
-  | { success: false; error: string }
-> {
+/** The staff choices of the link dialog. Its other choices are searched in bounded pages. */
+export async function getDocumentLinkEmployees(): Promise<ActionResult<{ employees: DocumentEmployee[] }>> {
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
   const manager = requireManager(auth.context);
   if (!manager.success) return manager;
 
-  const [
-    jobsResult,
-    projectsResult,
-    clientsResult,
-    membersResult,
-    equipmentResult,
-  ] = await Promise.all([
-    getOrgJobs(),
-    getOrgProjects(),
-    getOrgClients(),
-    getOrgMembersForUser(auth.context.orgId, auth.context.userId),
-    readCompleteRows((from, to) => auth.context.admin
-      .from("installed_equipment")
-      .select("id, equipment_number, name")
-      .eq("organization_id", auth.context.orgId)
-      .is("voided_at", null)
-      .order("equipment_number").order("id").range(from, to), LIST_ROW_CAP),
-  ]);
-
-  if (!jobsResult.success) {
-    return { success: false, error: jobsResult.error };
-  }
-  if (!projectsResult.success) {
-    return { success: false, error: projectsResult.error };
-  }
-  if (!clientsResult.success) {
-    return { success: false, error: clientsResult.error };
-  }
-  if (equipmentResult.error) {
-    console.error("Failed to load installed equipment for document links:", {
-      code: equipmentResult.error.code,
-    });
-    return { success: false, error: "link_catalog_load_failed" };
-  }
-
+  const membersRead = await getOrgMembersForUser(auth.context.orgId, auth.context.userId);
+  if (!membersRead.success) return membersRead;
   return {
     success: true,
-    jobs: jobsResult.jobs,
-    projects: projectsResult.projects,
-    clients: clientsResult.clients,
-    employees: membersResult.map((member) => ({
+    employees: membersRead.members.map((member) => ({
       userId: member.user_id,
-      name: [member.first_name, member.last_name].filter(Boolean).join(" "),
+      name: [member.first_name, member.last_name].filter(Boolean).join(' '),
       email: member.email,
-    })),
-    equipment: (equipmentResult.data ?? []).map((item) => ({
-      id: item.id,
-      equipmentNumber: item.equipment_number,
-      name: item.name,
     })),
   };
 }
 
-export async function getClientDocuments(
-  clientId: string,
-): Promise<DocumentListResult> {
+export async function getClientDocuments(rawClientId: string): Promise<DocumentListResult> {
+  const clientId = parseActionInput(uuidSchema, rawClientId);
+  if (!clientId) return INVALID_INPUT;
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
   const access = await ensureClientManagerAccess(auth.context, clientId);
   if (!access.success) return access;
 
-  const { data: links, error: linksError } = await readCompleteRows((from, to) => auth.context.admin.from("document_links").select("document_id")
-    .eq("organization_id", auth.context.orgId)
-    .eq("client_id", clientId).order("id").range(from, to), LIST_ROW_CAP);
-
-  if (linksError) {
-    console.error("Failed to load client document links:", linksError);
-    return { success: false, error: "documents_failed" };
-  }
-
-  const documentIds = (
-    (links ?? []) as Pick<DocumentLinkRow, "document_id">[]
-  ).map((link) => link.document_id);
-
-  if (documentIds.length === 0) {
-    return { success: true, documents: [] };
-  }
-
-  const { data: documents, error: documentsError } = await readInBatches(documentIds, (ids) => auth.context.admin.from("ordinary_documents").select("*")
-    .in("id", [...ids])
-    .eq("organization_id", auth.context.orgId)
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false }).order("id"));
-
-  if (documentsError) {
-    console.error("Failed to load client documents:", documentsError);
-    return { success: false, error: "documents_failed" };
-  }
-
-  return {
-    success: true,
-    documents: await hydrateDocuments(
-      auth.context.admin,
-      newestDocumentsFirst(documents ?? []),
-    ),
-  };
+  return readLinkedDocuments(auth.context, 'client_id', clientId);
 }
 
-export async function getEquipmentDocuments(
-  equipmentId: string,
-): Promise<DocumentListResult> {
+export async function getEquipmentDocuments(rawEquipmentId: string): Promise<DocumentListResult> {
+  const equipmentId = parseActionInput(uuidSchema, rawEquipmentId);
+  if (!equipmentId) return INVALID_INPUT;
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
   const access = await ensureEquipmentManagerAccess(auth.context, equipmentId);
   if (!access.success) return access;
 
-  const { data: links, error: linksError } = await readCompleteRows((from, to) => auth.context.admin.from("document_links").select("document_id")
-    .eq("organization_id", auth.context.orgId)
-    .eq("equipment_id", equipmentId).order("id").range(from, to), LIST_ROW_CAP);
-
-  if (linksError) return { success: false, error: "documents_failed" };
-  const documentIds = (links ?? []).map((link) => link.document_id);
-  if (documentIds.length === 0) return { success: true, documents: [] };
-
-  const { data: documents, error } = await readInBatches(documentIds, (ids) => auth.context.admin.from("ordinary_documents").select("*")
-    .eq("organization_id", auth.context.orgId)
-    .in("id", [...ids])
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false }).order("id"));
-  if (error) return { success: false, error: "documents_failed" };
-
-  return {
-    success: true,
-    documents: await hydrateDocuments(auth.context.admin, newestDocumentsFirst(documents ?? [])),
-  };
+  return readLinkedDocuments(auth.context, 'equipment_id', equipmentId);
 }
 
-export async function getServiceCaseDocuments(
-  serviceCaseId: string,
-): Promise<DocumentListResult> {
+export async function getServiceCaseDocuments(rawServiceCaseId: string): Promise<DocumentListResult> {
+  const serviceCaseId = parseActionInput(uuidSchema, rawServiceCaseId);
+  if (!serviceCaseId) return INVALID_INPUT;
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
-  const access = await ensureServiceCaseManagerAccess(
-    auth.context,
-    serviceCaseId,
-  );
+  const access = await ensureServiceCaseManagerAccess(auth.context, serviceCaseId);
   if (!access.success) return access;
-  const { data: links, error: linksError } = await readCompleteRows((from, to) => auth.context.admin.from("document_links").select("document_id")
-    .eq("organization_id", auth.context.orgId)
-    .eq("service_case_id", serviceCaseId).order("id").range(from, to), LIST_ROW_CAP);
-  if (linksError) return { success: false, error: "documents_failed" };
-  const documentIds = (links ?? []).map((link) => link.document_id);
-  if (documentIds.length === 0) return { success: true, documents: [] };
-  const { data: documents, error } = await readInBatches(documentIds, (ids) => auth.context.admin.from("ordinary_documents").select("*")
-    .eq("organization_id", auth.context.orgId)
-    .in("id", [...ids])
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false }).order("id"));
-  if (error) return { success: false, error: "documents_failed" };
-  return {
-    success: true,
-    documents: await hydrateDocuments(auth.context.admin, newestDocumentsFirst(documents ?? [])),
-  };
+
+  return readLinkedDocuments(auth.context, 'service_case_id', serviceCaseId);
 }
 
 export async function getMaintenanceCoverageDocuments(
-  maintenanceCoverageId: string,
+  rawMaintenanceCoverageId: string,
 ): Promise<DocumentListResult> {
+  const maintenanceCoverageId = parseActionInput(uuidSchema, rawMaintenanceCoverageId);
+  if (!maintenanceCoverageId) return INVALID_INPUT;
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
-  const access = await ensureMaintenanceCoverageManagerAccess(
-    auth.context,
-    maintenanceCoverageId,
-  );
+  const access = await ensureMaintenanceCoverageManagerAccess(auth.context, maintenanceCoverageId);
   if (!access.success) return access;
-  const { data: links, error: linksError } = await readCompleteRows((from, to) => auth.context.admin.from("document_links").select("document_id")
-    .eq("organization_id", auth.context.orgId)
-    .eq("maintenance_coverage_id", maintenanceCoverageId).order("id").range(from, to), LIST_ROW_CAP);
-  if (linksError) return { success: false, error: "documents_failed" };
-  const documentIds = (links ?? []).map((link) => link.document_id);
-  if (documentIds.length === 0) return { success: true, documents: [] };
-  const { data: documents, error } = await readInBatches(documentIds, (ids) => auth.context.admin.from("ordinary_documents").select("*")
-    .eq("organization_id", auth.context.orgId)
-    .in("id", [...ids])
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false }).order("id"));
-  if (error) return { success: false, error: "documents_failed" };
-  return {
-    success: true,
-    documents: await hydrateDocuments(auth.context.admin, newestDocumentsFirst(documents ?? [])),
-  };
+
+  return readLinkedDocuments(auth.context, 'maintenance_coverage_id', maintenanceCoverageId);
 }
 
-export async function getEmployeeDocuments(
-  employeeId: string,
-): Promise<DocumentListResult> {
+export async function getEmployeeDocuments(rawEmployeeId: string): Promise<DocumentListResult> {
+  const employeeId = parseActionInput(uuidSchema, rawEmployeeId);
+  if (!employeeId) return INVALID_INPUT;
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
   const access = await ensureEmployeeManagerAccess(auth.context, employeeId);
   if (!access.success) return access;
 
-  const { data: links, error: linksError } = await readCompleteRows((from, to) => auth.context.admin.from("document_links").select("document_id")
-    .eq("organization_id", auth.context.orgId)
-    .eq("employee_id", employeeId).order("id").range(from, to), LIST_ROW_CAP);
-
-  if (linksError) {
-    console.error("Failed to load employee document links:", linksError);
-    return { success: false, error: "documents_failed" };
-  }
-
-  const documentIds = (
-    (links ?? []) as Pick<DocumentLinkRow, "document_id">[]
-  ).map((link) => link.document_id);
-
-  if (documentIds.length === 0) {
-    return { success: true, documents: [] };
-  }
-
-  const { data: documents, error: documentsError } = await readInBatches(documentIds, (ids) => auth.context.admin.from("ordinary_documents").select("*")
-    .in("id", [...ids])
-    .eq("organization_id", auth.context.orgId)
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false }).order("id"));
-
-  if (documentsError) {
-    console.error("Failed to load employee documents:", documentsError);
-    return { success: false, error: "documents_failed" };
-  }
-
-  return {
-    success: true,
-    documents: await hydrateDocuments(
-      auth.context.admin,
-      newestDocumentsFirst(documents ?? []),
-    ),
-  };
+  return readLinkedDocuments(auth.context, 'employee_id', employeeId);
 }
 
-export async function createDocumentFolder(
-  input: CreateFolderInput,
-): Promise<FolderResult> {
+export async function createDocumentFolder(rawInput: CreateFolderInput): Promise<FolderResult> {
+  const input = parseActionInput(createFolderInputSchema, rawInput);
+  if (!input) return INVALID_INPUT;
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
   const manager = requireManager(auth.context);
   if (!manager.success) return manager;
 
-  const name = trimName(input.name);
+  const name = input.name.trim();
   if (!name) {
-    return { success: false, error: "name_required" };
+    return { success: false, error: 'name_required' };
   }
 
-  const folderCheck = await ensureFolder(
-    auth.context.admin,
-    auth.context.orgId,
-    input.parentFolderId,
-  );
+  const folderCheck = await ensureFolder(auth.context.admin, auth.context.orgId, input.parentFolderId);
   if (!folderCheck.success) return folderCheck;
 
   const { data, error } = await auth.context.admin
-    .from("document_folders")
+    .from('document_folders')
     .insert({
       organization_id: auth.context.orgId,
       parent_folder_id: input.parentFolderId || null,
       name,
       created_by: auth.context.userId,
     })
-    .select("*")
+    .select('*')
     .single();
 
   if (error || !data) {
-    console.error("Failed to create document folder:", error);
-    return { success: false, error: "create_failed" };
+    logError('Failed to create document folder', error);
+    return { success: false, error: 'create_failed' };
   }
 
-  revalidateDocuments(auth.context.orgId);
+  revalidateDocuments();
   return { success: true, folder: toDocumentFolder(data as DocumentFolderRow) };
 }
 
-export async function renameDocumentFolder(
-  input: RenameFolderInput,
-): Promise<FolderResult> {
+export async function renameDocumentFolder(rawInput: RenameFolderInput): Promise<FolderResult> {
+  const input = parseActionInput(renameFolderInputSchema, rawInput);
+  if (!input) return INVALID_INPUT;
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
   const manager = requireManager(auth.context);
   if (!manager.success) return manager;
 
-  const name = trimName(input.name);
+  const name = input.name.trim();
   if (!name) {
-    return { success: false, error: "name_required" };
+    return { success: false, error: 'name_required' };
   }
 
   const { data, error } = await auth.context.admin
-    .from("document_folders")
+    .from('document_folders')
     .update({ name })
-    .eq("id", input.folderId)
-    .eq("organization_id", auth.context.orgId)
-    .is("deleted_at", null)
-    .select("*")
+    .eq('id', input.folderId)
+    .eq('organization_id', auth.context.orgId)
+    .is('deleted_at', null)
+    .select('*')
     .single();
 
   if (error || !data) {
-    console.error("Failed to rename document folder:", error);
-    return { success: false, error: "update_failed" };
+    logError('Failed to rename document folder', error);
+    return { success: false, error: 'update_failed' };
   }
 
-  revalidateDocuments(auth.context.orgId);
+  revalidateDocuments();
   return { success: true, folder: toDocumentFolder(data as DocumentFolderRow) };
 }
 
-export async function moveDocumentFolder(
-  input: MoveFolderInput,
-): Promise<FolderResult> {
+export async function moveDocumentFolder(rawInput: MoveFolderInput): Promise<FolderResult> {
+  const input = parseActionInput(moveFolderInputSchema, rawInput);
+  if (!input) return INVALID_INPUT;
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
@@ -1968,694 +619,217 @@ export async function moveDocumentFolder(
   if (!manager.success) return manager;
 
   if (input.parentFolderId === input.folderId) {
-    return { success: false, error: "invalid_target" };
+    return { success: false, error: 'invalid_target' };
   }
 
-  const folder = await getFolderById(
-    auth.context.admin,
-    auth.context.orgId,
-    input.folderId,
-  );
-  if (!folder) return { success: false, error: "folder_not_found" };
+  const folder = await getFolderById(auth.context.admin, auth.context.orgId, input.folderId);
+  if (!folder) return { success: false, error: 'folder_not_found' };
 
   if ((folder.parent_folder_id ?? null) === (input.parentFolderId ?? null)) {
-    return { success: false, error: "invalid_target" };
+    return { success: false, error: 'invalid_target' };
   }
 
-  const targetCheck = await ensureFolder(
-    auth.context.admin,
-    auth.context.orgId,
-    input.parentFolderId,
-  );
+  const targetCheck = await ensureFolder(auth.context.admin, auth.context.orgId, input.parentFolderId);
   if (!targetCheck.success) return targetCheck;
 
-  const { data: allFolders } = await auth.context.admin
-    .from("document_folders")
-    .select("id, parent_folder_id")
-    .eq("organization_id", auth.context.orgId)
-    .is("deleted_at", null);
-
-  const childIdsByParent = new Map<string, string[]>();
-  for (const row of (allFolders ?? []) as Pick<
-    DocumentFolderRow,
-    "id" | "parent_folder_id"
-  >[]) {
-    if (!row.parent_folder_id) continue;
-    const ids = childIdsByParent.get(row.parent_folder_id) ?? [];
-    ids.push(row.id);
-    childIdsByParent.set(row.parent_folder_id, ids);
+  const { data: allFolders, error: allFoldersError } = await readCompleteRows(
+    (from, to) =>
+      auth.context.admin
+        .from('document_folders')
+        .select('id, parent_folder_id')
+        .eq('organization_id', auth.context.orgId)
+        .is('deleted_at', null)
+        .order('id')
+        .range(from, to),
+    LIST_ROW_CAP,
+  );
+  if (allFoldersError) {
+    logError('Failed to load the folder tree', allFoldersError);
+    return { success: false, error: 'update_failed' };
   }
 
-  const descendantIds = new Set<string>();
-  const stack = [...(childIdsByParent.get(input.folderId) ?? [])];
-  while (stack.length > 0) {
-    const nextId = stack.pop()!;
-    descendantIds.add(nextId);
-    stack.push(...(childIdsByParent.get(nextId) ?? []));
-  }
+  const descendantIds = getDescendantFolderIds(
+    (allFolders ?? []).map((row) => ({ id: row.id, parentFolderId: row.parent_folder_id })),
+    new Set([input.folderId]),
+  );
 
   if (input.parentFolderId && descendantIds.has(input.parentFolderId)) {
-    return { success: false, error: "invalid_target" };
+    return { success: false, error: 'invalid_target' };
   }
 
   const { data, error } = await auth.context.admin
-    .from("document_folders")
+    .from('document_folders')
     .update({ parent_folder_id: input.parentFolderId || null })
-    .eq("id", input.folderId)
-    .eq("organization_id", auth.context.orgId)
-    .select("*")
+    .eq('id', input.folderId)
+    .eq('organization_id', auth.context.orgId)
+    .select('*')
     .single();
 
   if (error || !data) {
-    console.error("Failed to move document folder:", error);
-    return { success: false, error: "update_failed" };
+    logError('Failed to move document folder', error);
+    return { success: false, error: 'update_failed' };
   }
 
-  revalidateDocuments(auth.context.orgId);
+  revalidateDocuments();
   return { success: true, folder: toDocumentFolder(data as DocumentFolderRow) };
 }
 
-export async function copyDocumentFolder(
-  input: CopyFolderInput,
-): Promise<FolderResult> {
+export async function copyDocumentFolder(rawInput: CopyFolderInput): Promise<FolderResult> {
+  const input = parseActionInput(copyFolderInputSchema, rawInput);
+  if (!input) return INVALID_INPUT;
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
   const manager = requireManager(auth.context);
   if (!manager.success) return manager;
-  const { context } = auth;
 
-  const sourceFolder = await getFolderById(
-    auth.context.admin,
-    auth.context.orgId,
-    input.folderId,
-  );
-  if (!sourceFolder) return { success: false, error: "folder_not_found" };
+  const sourceFolder = await getFolderById(auth.context.admin, auth.context.orgId, input.folderId);
+  if (!sourceFolder) return { success: false, error: 'folder_not_found' };
 
-  const targetCheck = await ensureFolder(
-    auth.context.admin,
-    auth.context.orgId,
-    input.targetParentFolderId,
-  );
+  const targetCheck = await ensureFolder(auth.context.admin, auth.context.orgId, input.targetParentFolderId);
   if (!targetCheck.success) return targetCheck;
 
-  const { data: allFolders } = await auth.context.admin
-    .from("document_folders")
-    .select("*")
-    .eq("organization_id", auth.context.orgId)
-    .is("deleted_at", null);
-
-  const childFoldersByParent = new Map<string, DocumentFolderRow[]>();
-  for (const folder of (allFolders ?? []) as DocumentFolderRow[]) {
-    if (!folder.parent_folder_id) continue;
-    const siblings = childFoldersByParent.get(folder.parent_folder_id) ?? [];
-    siblings.push(folder);
-    childFoldersByParent.set(folder.parent_folder_id, siblings);
+  const { data: allFolders, error: allFoldersError } = await readCompleteRows(
+    (from, to) =>
+      auth.context.admin
+        .from('document_folders')
+        .select('*')
+        .eq('organization_id', auth.context.orgId)
+        .is('deleted_at', null)
+        .order('id')
+        .range(from, to),
+    LIST_ROW_CAP,
+  );
+  if (allFoldersError) {
+    logError('Failed to load the folder tree', allFoldersError);
+    return { success: false, error: 'copy_failed' };
   }
 
-  const sourceFolderIds = new Set<string>([input.folderId]);
-  const stack = [...(childFoldersByParent.get(input.folderId) ?? [])];
-  const orderedSourceFolders: DocumentFolderRow[] = [];
-  while (stack.length > 0) {
-    const folder = stack.shift()!;
-    sourceFolderIds.add(folder.id);
-    orderedSourceFolders.push(folder);
-    stack.push(...(childFoldersByParent.get(folder.id) ?? []));
+  const { sourceFolderIds, orderedSourceFolders } = orderCopiedFolderTree(
+    (allFolders ?? []) as DocumentFolderRow[],
+    input.folderId,
+  );
+
+  if (input.targetParentFolderId && sourceFolderIds.has(input.targetParentFolderId)) {
+    return { success: false, error: 'invalid_target' };
   }
 
-  if (
-    input.targetParentFolderId &&
-    sourceFolderIds.has(input.targetParentFolderId)
-  ) {
-    return { success: false, error: "invalid_target" };
-  }
-
-  const createdFolderIds: string[] = [];
-  const createdDocumentIds: string[] = [];
-  const createdStoragePaths: string[] = [];
-
-  async function cleanupPartialCopy() {
-    if (createdStoragePaths.length > 0) {
-      await deleteStorageObjects(createdStoragePaths).catch((error) => {
-        console.error("Failed to clean up copied storage objects:", error);
-      });
-    }
-    if (createdDocumentIds.length > 0) {
-      await context.admin
-        .from("documents")
-        .delete()
-        .eq("organization_id", context.orgId)
-        .in("id", createdDocumentIds);
-    }
-    if (createdFolderIds.length > 0) {
-      await context.admin
-        .from("document_folders")
-        .delete()
-        .eq("organization_id", context.orgId)
-        .in("id", createdFolderIds);
-    }
-  }
-
-  const folderIdMap = new Map<string, string>();
-  const rootFolderName = await getAvailableFolderName({
-    admin: auth.context.admin,
-    orgId: auth.context.orgId,
-    parentFolderId: input.targetParentFolderId,
-    preferredName: getCopyDisplayName(sourceFolder.name),
+  const copy = await copyFolderTree({
+    context: auth.context,
+    sourceFolder,
+    targetParentFolderId: input.targetParentFolderId,
+    sourceFolderIds,
+    orderedSourceFolders,
   });
+  if (!copy.success) return copy;
 
-  const rootFolderId = randomUUID();
-  const { data: copiedRootFolder, error: copiedRootFolderError } =
-    await auth.context.admin
-      .from("document_folders")
-      .insert({
-        id: rootFolderId,
-        organization_id: auth.context.orgId,
-        parent_folder_id: input.targetParentFolderId || null,
-        name: rootFolderName,
-        created_by: auth.context.userId,
-      })
-      .select("*")
-      .single();
-
-  if (copiedRootFolderError || !copiedRootFolder) {
-    console.error(
-      "Failed to copy root document folder:",
-      copiedRootFolderError,
-    );
-    return { success: false, error: "copy_failed" };
-  }
-
-  createdFolderIds.push(rootFolderId);
-  folderIdMap.set(input.folderId, rootFolderId);
-
-  for (const sourceChildFolder of orderedSourceFolders) {
-    const parentFolderId = sourceChildFolder.parent_folder_id
-      ? folderIdMap.get(sourceChildFolder.parent_folder_id)
-      : rootFolderId;
-
-    if (!parentFolderId) {
-      await cleanupPartialCopy();
-      return { success: false, error: "copy_failed" };
-    }
-
-    const folderName = await getAvailableFolderName({
-      admin: auth.context.admin,
-      orgId: auth.context.orgId,
-      parentFolderId,
-      preferredName: getCopyDisplayName(sourceChildFolder.name),
-    });
-    const folderId = randomUUID();
-    const { error } = await auth.context.admin.from("document_folders").insert({
-      id: folderId,
-      organization_id: auth.context.orgId,
-      parent_folder_id: parentFolderId,
-      name: folderName,
-      created_by: auth.context.userId,
-    });
-
-    if (error) {
-      console.error("Failed to copy child document folder:", error);
-      await cleanupPartialCopy();
-      return { success: false, error: "copy_failed" };
-    }
-
-    createdFolderIds.push(folderId);
-    folderIdMap.set(sourceChildFolder.id, folderId);
-  }
-
-  const { data: sourceDocuments, error: sourceDocumentsError } =
-    await auth.context.admin
-      .from("documents")
-      .select("*")
-      .eq("organization_id", auth.context.orgId)
-      .in("folder_id", Array.from(sourceFolderIds))
-      .is("deleted_at", null);
-
-  if (sourceDocumentsError) {
-    console.error(
-      "Failed to load documents for folder copy:",
-      sourceDocumentsError,
-    );
-    await cleanupPartialCopy();
-    return { success: false, error: "copy_failed" };
-  }
-
-  for (const sourceDocument of (sourceDocuments ?? []) as DocumentRow[]) {
-    const targetFolderId = sourceDocument.folder_id
-      ? folderIdMap.get(sourceDocument.folder_id)
-      : rootFolderId;
-
-    if (!targetFolderId) {
-      await cleanupPartialCopy();
-      return { success: false, error: "copy_failed" };
-    }
-
-    const documentId = randomUUID();
-    const storagePath = buildStoragePath({
-      orgId: auth.context.orgId,
-      documentId,
-      fileName: sourceDocument.original_file_name,
-    });
-    const storageCopyResult = await copyStorageObject({
-      sourcePath: sourceDocument.storage_path,
-      targetPath: storagePath,
-      contentType: sourceDocument.mime_type,
-    });
-
-    if (!storageCopyResult.success) {
-      console.error(
-        "Failed to copy document storage object in folder:",
-        storageCopyResult.error,
-      );
-      await cleanupPartialCopy();
-      return { success: false, error: "copy_failed" };
-    }
-
-    createdStoragePaths.push(storagePath);
-    const displayName = await getAvailableDisplayName({
-      admin: auth.context.admin,
-      orgId: auth.context.orgId,
-      folderId: targetFolderId,
-      preferredName: getCopyDisplayName(sourceDocument.display_name),
-    });
-
-    const { error: documentCopyError } = await auth.context.admin
-      .from("documents")
-      .insert({
-        id: documentId,
-        organization_id: auth.context.orgId,
-        folder_id: targetFolderId,
-        storage_bucket: DOCUMENT_STORAGE_BUCKET,
-        storage_path: storagePath,
-        original_file_name: sourceDocument.original_file_name,
-        display_name: displayName,
-        category: toDocumentCategory(sourceDocument.category),
-        mime_type: sourceDocument.mime_type,
-        size_bytes: sourceDocument.size_bytes,
-        uploaded_by: auth.context.userId,
-        copied_from_document_id: sourceDocument.id,
-        metadata: sourceDocument.metadata,
-      });
-
-    if (documentCopyError) {
-      console.error(
-        "Failed to create copied folder document metadata:",
-        documentCopyError,
-      );
-      await cleanupPartialCopy();
-      return { success: false, error: "copy_failed" };
-    }
-
-    createdDocumentIds.push(documentId);
-    await recordDocumentAuditEvent(auth.context, {
-      documentId,
-      folderId: targetFolderId,
-      eventType: "copied",
-      eventPayload: {
-        copiedFromDocumentId: sourceDocument.id,
-        copiedFromFolderId: input.folderId,
-        sourceStoragePath: sourceDocument.storage_path,
-        storagePath,
-      },
-    });
-  }
-
-  await recordDocumentAuditEvent(auth.context, {
-    folderId: rootFolderId,
-    eventType: "copied",
-    eventPayload: {
-      copiedFromFolderId: input.folderId,
-      toParentFolderId: input.targetParentFolderId ?? null,
-      copiedFolderCount: createdFolderIds.length,
-      copiedDocumentCount: createdDocumentIds.length,
-    },
-  });
-
-  revalidateDocuments(auth.context.orgId);
-  return {
-    success: true,
-    folder: toDocumentFolder(copiedRootFolder as DocumentFolderRow),
-  };
+  revalidateDocuments();
+  return { success: true, folder: toDocumentFolder(copy.rootFolder) };
 }
 
-export async function deleteDocumentFolder(
-  folderId: string,
-): Promise<DocumentMutationResult> {
+export async function deleteDocumentFolder(rawFolderId: string): Promise<DocumentMutationResult> {
+  const folderId = parseActionInput(uuidSchema, rawFolderId);
+  if (!folderId) return INVALID_INPUT;
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
   const manager = requireManager(auth.context);
   if (!manager.success) return manager;
 
-  const folder = await getFolderById(
-    auth.context.admin,
-    auth.context.orgId,
-    folderId,
-  );
-  if (!folder) return { success: false, error: "folder_not_found" };
-
-  const { data: allFolders } = await auth.context.admin
-    .from("document_folders")
-    .select("id, parent_folder_id")
-    .eq("organization_id", auth.context.orgId)
-    .is("deleted_at", null);
-
-  const childIdsByParent = new Map<string, string[]>();
-  for (const row of (allFolders ?? []) as Pick<
-    DocumentFolderRow,
-    "id" | "parent_folder_id"
-  >[]) {
-    if (!row.parent_folder_id) continue;
-    const ids = childIdsByParent.get(row.parent_folder_id) ?? [];
-    ids.push(row.id);
-    childIdsByParent.set(row.parent_folder_id, ids);
-  }
-
-  const folderIds = new Set<string>([folderId]);
-  const stack = [...(childIdsByParent.get(folderId) ?? [])];
-  while (stack.length > 0) {
-    const nextId = stack.pop()!;
-    folderIds.add(nextId);
-    stack.push(...(childIdsByParent.get(nextId) ?? []));
-  }
-
-  const { data: documents } = await auth.context.admin
-    .from("documents")
-    .select("id, storage_path")
-    .eq("organization_id", auth.context.orgId)
-    .in("folder_id", Array.from(folderIds))
-    .is("deleted_at", null);
-
-  const now = new Date().toISOString();
-  const { error: documentsError } = await auth.context.admin
-    .from("documents")
-    .update({
-      deleted_at: now,
-      deleted_by: auth.context.userId,
-      delete_reason: "folder_deleted",
-    })
-    .eq("organization_id", auth.context.orgId)
-    .in("folder_id", Array.from(folderIds))
-    .is("deleted_at", null);
-
-  if (documentsError) {
-    console.error("Failed to delete documents in folder:", documentsError);
-    return { success: false, error: "delete_failed" };
-  }
-
-  const { error: foldersError } = await auth.context.admin
-    .from("document_folders")
-    .update({ deleted_at: now })
-    .eq("organization_id", auth.context.orgId)
-    .in("id", Array.from(folderIds));
-
-  if (foldersError) {
-    console.error("Failed to delete document folder:", foldersError);
-    return { success: false, error: "delete_failed" };
-  }
-
-  for (const document of (documents ?? []) as Pick<
-    DocumentRow,
-    "id" | "storage_path"
-  >[]) {
-    await recordDocumentAuditEvent(auth.context, {
-      documentId: document.id,
-      folderId,
-      eventType: "deleted",
-      eventPayload: {
-        reason: "folder_deleted",
-        storagePath: document.storage_path,
-      },
-    });
-  }
-
-  revalidateDocuments(auth.context.orgId);
-  return { success: true };
-}
-
-type NormalizedUploadTarget = {
-  folderId: string | null;
-  jobId: string | null;
-  projectId: string | null;
-  clientId: string | null;
-  employeeId: string | null;
-  requestId: string | null;
-  equipmentId: string | null;
-  serviceCaseId: string | null;
-  maintenanceCoverageId: string | null;
-};
-
-type CreateDocumentUploadTicketInput = DocumentUploadTarget & {
-  fileName: string;
-  fileSizeBytes: number;
-  mimeType?: string | null;
-};
-
-type FinalizeDocumentUploadInput = DocumentUploadTarget & {
-  documentId: string;
-  fileName: string;
-  category?: string | null;
-};
-
-function normalizeUploadTarget(
-  input: DocumentUploadTarget,
-): NormalizedUploadTarget {
-  const normalized: NormalizedUploadTarget = {
-    folderId: (input.folderId ?? "").trim() || null,
-    jobId: null,
-    projectId: null,
-    clientId: null,
-    employeeId: null,
-    requestId: null,
-    equipmentId: null,
-    serviceCaseId: null,
-    maintenanceCoverageId: null,
-  };
-
-  switch (input.kind) {
-    case "library":
-      return normalized;
-    case "job":
-      return { ...normalized, jobId: input.jobId.trim() || null };
-    case "project":
-      return { ...normalized, projectId: input.projectId.trim() || null };
-    case "client":
-      return { ...normalized, clientId: input.clientId.trim() || null };
-    case "employee":
-      return { ...normalized, employeeId: input.employeeId.trim() || null };
-    case "request":
-      return { ...normalized, requestId: input.requestId.trim() || null };
-    case "equipment":
-      return { ...normalized, equipmentId: input.equipmentId.trim() || null };
-    case "service_case":
-      return {
-        ...normalized,
-        serviceCaseId: input.serviceCaseId.trim() || null,
-      };
-    case "maintenance_coverage":
-      return {
-        ...normalized,
-        maintenanceCoverageId: input.maintenanceCoverageId.trim() || null,
-      };
-    default: {
-      const exhaustiveTarget: never = input;
-      return exhaustiveTarget;
-    }
-  }
-}
-
-// Deny-by-default authorization for both the ticket and finalize steps. The
-// same checks run twice on purpose: the signed upload URL and the metadata
-// insert are separate requests, and each must independently prove access.
-async function authorizeDocumentUploadTarget(
-  context: AuthorizedDocumentContext,
-  target: NormalizedUploadTarget,
-): Promise<{ success: true } | { success: false; error: string }> {
-  const {
-    folderId,
-    jobId,
-    projectId,
-    clientId,
-    employeeId,
-    requestId,
-    equipmentId,
-    serviceCaseId,
-    maintenanceCoverageId,
-  } = target;
-
-  if (
-    [
-      jobId,
-      projectId,
-      clientId,
-      employeeId,
-      requestId,
-      equipmentId,
-      serviceCaseId,
-      maintenanceCoverageId,
-    ].filter(Boolean).length > 1
-  ) {
-    return { success: false, error: "invalid_target" };
-  }
-
-  if (jobId) {
-    const access = await ensureJobAccess(context, jobId);
-    if (!access.success) return access;
-  } else if (projectId) {
-    const access = await ensureProjectWorkAccess(context, projectId);
-    if (!access.success) return access;
-  } else if (clientId) {
-    const access = await ensureClientManagerAccess(context, clientId);
-    if (!access.success) return access;
-  } else if (employeeId) {
-    const access = await ensureEmployeeManagerAccess(context, employeeId);
-    if (!access.success) return access;
-  } else if (requestId) {
-    const access = await ensureRequestManagerAccess(context, requestId);
-    if (!access.success) return access;
-  } else if (equipmentId) {
-    const access = await ensureEquipmentManagerAccess(context, equipmentId);
-    if (!access.success) return access;
-  } else if (serviceCaseId) {
-    const access = await ensureServiceCaseManagerAccess(context, serviceCaseId);
-    if (!access.success) return access;
-  } else if (maintenanceCoverageId) {
-    const access = await ensureMaintenanceCoverageManagerAccess(
-      context,
-      maintenanceCoverageId,
+  // One transaction trashes the folder, its subfolders and their documents with the audit events.
+  const { error } = await auth.context.admin.rpc('delete_document_folder', {
+    p_actor_id: auth.context.userId,
+    p_organization_id: auth.context.orgId,
+    p_folder_id: folderId,
+  });
+  if (error) {
+    return documentWriteFailure(
+      'Failed to delete document folder',
+      error,
+      ['folder_not_found'],
+      'delete_failed',
     );
-    if (!access.success) return access;
-  } else {
-    const manager = requireManager(context);
-    if (!manager.success) return manager;
   }
 
-  if (folderId && !context.isManagerOrAbove) {
-    return { success: false, error: "not_authorized" };
-  }
-
-  const folderCheck = await ensureFolder(
-    context.admin,
-    context.orgId,
-    folderId,
-  );
-  if (!folderCheck.success) return folderCheck;
-
+  revalidateDocuments();
   return { success: true };
 }
 
 export async function createDocumentUploadTicket(
-  input: CreateDocumentUploadTicketInput,
+  rawInput: CreateDocumentUploadTicketInput,
 ): Promise<DocumentUploadTicketResult> {
+  const input = parseActionInput(createDocumentUploadTicketInputSchema, rawInput);
+  if (!input) return INVALID_INPUT;
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
   if (input.fileSizeBytes <= 0) {
-    return { success: false, error: "file_empty" };
+    return { success: false, error: 'file_empty' };
   }
 
   if (input.fileSizeBytes > DOCUMENT_MAX_FILE_SIZE_BYTES) {
-    return { success: false, error: "file_too_large" };
+    return { success: false, error: 'file_too_large' };
   }
 
   const target = normalizeUploadTarget(input);
   const access = await authorizeDocumentUploadTarget(auth.context, target);
   if (!access.success) return access;
 
-  const originalFileName = trimName(input.fileName) || "Dokument";
+  const originalFileName = input.fileName.trim() || 'Dokument';
   const documentId = randomUUID();
-  const storagePath = buildStoragePath({
-    orgId: auth.context.orgId,
+  const storagePath = buildDocumentStoragePath({
+    organizationId: auth.context.orgId,
     documentId,
     fileName: originalFileName,
   });
 
   try {
     const uploadUrl = await createSignedUploadUrl({
-      path: storagePath, organizationId: auth.context.orgId,
-      contentType: input.mimeType || "application/octet-stream",
+      path: storagePath,
+      organizationId: auth.context.orgId,
+      contentType: input.mimeType || 'application/octet-stream',
     });
 
     return { success: true, ticket: { documentId, storagePath, uploadUrl } };
   } catch (error) {
-    console.error("Failed to create document upload ticket:", error);
-    return { success: false, error: "ticket_failed" };
+    logError('Failed to create document upload ticket', error);
+    return { success: false, error: 'ticket_failed' };
   }
 }
 
-export async function finalizeDocumentUpload(
-  input: FinalizeDocumentUploadInput,
-): Promise<DocumentResult> {
+export async function finalizeDocumentUpload(rawInput: FinalizeDocumentUploadInput): Promise<DocumentResult> {
+  const input = parseActionInput(finalizeDocumentUploadInputSchema, rawInput);
+  if (!input) return INVALID_INPUT;
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
-  if (!UUID_PATTERN.test(input.documentId)) {
-    return { success: false, error: "invalid_document_id" };
-  }
-
-  const originalFileName = trimName(input.fileName) || "Dokument";
+  const originalFileName = input.fileName.trim() || 'Dokument';
   // The storage path is recomputed server-side from the authenticated org and
   // the document id, so a client can never register a foreign object key.
-  const storagePath = buildStoragePath({
-    orgId: auth.context.orgId,
+  const storagePath = buildDocumentStoragePath({
+    organizationId: auth.context.orgId,
     documentId: input.documentId,
     fileName: originalFileName,
   });
 
-  const { data: existingRow } = await auth.context.admin
-    .from("documents")
-    .select("id")
-    .eq("id", input.documentId)
-    .eq("organization_id", auth.context.orgId)
-    .maybeSingle();
-
-  if (existingRow) {
-    return { success: false, error: "already_finalized" };
+  if (await readDocumentStoragePath(auth.context, input.documentId)) {
+    return { success: false, error: 'already_finalized' };
   }
 
   const target = normalizeUploadTarget(input);
   const access = await authorizeDocumentUploadTarget(auth.context, target);
   if (!access.success) {
-    await deleteStorageObjects([storagePath]).catch(() => undefined);
+    await discardStorageObjects({ organizationId: auth.context.orgId, paths: [storagePath] });
     return access;
   }
 
-  const {
-    folderId,
-    jobId,
-    projectId,
-    clientId,
-    employeeId,
-    requestId,
-    equipmentId,
-    serviceCaseId,
-    maintenanceCoverageId,
-  } = target;
-
-  let head;
-  try {
-    head = await headStorageObject(storagePath);
-  } catch (error) {
-    console.error("Failed to verify uploaded document object:", error);
-    return { success: false, error: "upload_failed" };
-  }
-
-  if (!head.exists) {
-    return { success: false, error: "file_missing" };
-  }
-
-  if (!head.sizeBytes || head.sizeBytes <= 0) {
-    await deleteStorageObjects([storagePath]).catch(() => undefined);
-    return { success: false, error: "file_empty" };
-  }
-
-  if (head.sizeBytes > DOCUMENT_MAX_FILE_SIZE_BYTES) {
-    await deleteStorageObjects([storagePath]).catch(() => undefined);
-    return { success: false, error: "file_too_large" };
-  }
-
-  const contentType = head.contentType || "application/octet-stream";
+  const head = await verifyUploadedObject({
+    organizationId: auth.context.orgId,
+    storagePath,
+    failureLabel: 'Failed to verify uploaded document object',
+  });
+  if (!head.success) return head;
+  const { contentType } = head;
   const category =
     parseDocumentCategory(input.category ?? null) ??
     inferDocumentCategory({
@@ -2665,250 +839,127 @@ export async function finalizeDocumentUpload(
   const displayName = await getAvailableDisplayName({
     admin: auth.context.admin,
     orgId: auth.context.orgId,
-    folderId,
+    folderId: target.folderId,
     preferredName: originalFileName,
   });
 
-  const { data: documentRow, error: insertError } = await auth.context.admin
-    .from("documents")
-    .insert({
-      id: input.documentId,
-      organization_id: auth.context.orgId,
-      folder_id: folderId,
-      storage_bucket: DOCUMENT_STORAGE_BUCKET,
-      storage_path: storagePath,
-      original_file_name: originalFileName,
-      display_name: displayName,
-      category,
-      mime_type: contentType,
-      size_bytes: head.sizeBytes,
-      uploaded_by: auth.context.userId,
-    })
-    .select("*")
-    .single();
-
-  if (insertError || !documentRow) {
-    await deleteStorageObjects([storagePath]).catch(() => undefined);
-    console.error("Failed to create document metadata:", insertError);
-    return { success: false, error: "create_failed" };
-  }
-
-  if (
-    jobId ||
-    projectId ||
-    clientId ||
-    employeeId ||
-    requestId ||
-    equipmentId ||
-    serviceCaseId ||
-    maintenanceCoverageId
-  ) {
-    const { error: linkError } = await auth.context.admin
-      .from("document_links")
-      .insert({
-        organization_id: auth.context.orgId,
-        document_id: input.documentId,
-        job_id: jobId,
-        project_id: projectId,
-        client_id: clientId,
-        employee_id: employeeId,
-        request_id: requestId,
-        equipment_id: equipmentId,
-        service_case_id: serviceCaseId,
-        maintenance_coverage_id: maintenanceCoverageId,
-        created_by: auth.context.userId,
-      });
-
-    if (linkError) {
-      await auth.context.admin
-        .from("documents")
-        .delete()
-        .eq("id", input.documentId)
-        .eq("organization_id", auth.context.orgId);
-      await deleteStorageObjects([storagePath]).catch(() => undefined);
-      console.error("Failed to create document link:", linkError);
-      return { success: false, error: "link_failed" };
-    }
-  }
-
-  await recordDocumentAuditEvent(auth.context, {
-    documentId: input.documentId,
-    folderId,
-    eventType: "uploaded",
-    eventPayload: {
-      displayName,
-      originalFileName,
-      category,
-      sizeBytes: head.sizeBytes,
-      mimeType: contentType,
-      jobId,
-      projectId,
-      clientId,
-      employeeId,
-      requestId,
-      equipmentId,
-      serviceCaseId,
-      maintenanceCoverageId,
-    },
-  });
-
-  if (
-    jobId ||
-    projectId ||
-    clientId ||
-    employeeId ||
-    requestId ||
-    equipmentId ||
-    serviceCaseId ||
-    maintenanceCoverageId
-  ) {
-    await recordDocumentAuditEvent(auth.context, {
-      documentId: input.documentId,
-      eventType: "linked",
-      eventPayload: {
-        jobId,
-        projectId,
-        clientId,
-        employeeId,
-        requestId,
-        equipmentId,
-        serviceCaseId,
-        maintenanceCoverageId,
-      },
-    });
-  }
-
-  revalidateDocuments(auth.context.orgId);
-  const [document] = await hydrateDocuments(auth.context.admin, [documentRow as DocumentRow]);
-  if (!document) return { success: false, error: "documents_failed" };
-
-  return { success: true, document };
-}
-
-export async function renameDocument(
-  input: RenameDocumentInput,
-): Promise<DocumentResult> {
-  const auth = await getAuthorizedDocumentContext();
-  if (!auth.success) return auth;
-
-  const manager = requireManager(auth.context);
-  if (!manager.success) return manager;
-
-  const existing = await getAuthorizedDocument(auth.context, input.documentId);
-  if (!existing.success) return existing;
-
-  const displayName = trimName(input.displayName);
-  if (!displayName) {
-    return { success: false, error: "name_required" };
-  }
-
-  const { data, error } = await auth.context.admin
-    .from("documents")
-    .update({ display_name: displayName })
-    .eq("id", existing.document.id)
-    .eq("organization_id", auth.context.orgId)
-    .is("deleted_at", null)
-    .select("*")
-    .single();
-
-  if (error || !data) {
-    console.error("Failed to rename document:", error);
-    return { success: false, error: "update_failed" };
-  }
-
-  await recordDocumentAuditEvent(auth.context, {
-    documentId: existing.document.id,
-    folderId: existing.document.folder_id,
-    eventType: "renamed",
-    eventPayload: {
-      from: existing.document.display_name,
-      to: displayName,
-    },
-  });
-
-  revalidateDocuments(auth.context.orgId);
-  const [document] = await hydrateDocuments(auth.context.admin, [data as DocumentRow]);
-  if (!document) return { success: false, error: "documents_failed" };
-  return { success: true, document };
-}
-
-export async function updateDocumentCategory(
-  input: UpdateDocumentCategoryInput,
-): Promise<DocumentResult> {
-  const auth = await getAuthorizedDocumentContext();
-  if (!auth.success) return auth;
-
-  const manager = requireManager(auth.context);
-  if (!manager.success) return manager;
-
-  const existing = await getAuthorizedDocument(auth.context, input.documentId);
-  if (!existing.success) return existing;
-
-  if (!DOCUMENT_CATEGORIES.includes(input.category)) {
-    return { success: false, error: "invalid_category" };
-  }
-
-  const { data, error } = await auth.context.admin
-    .from("documents")
-    .update({ category: input.category })
-    .eq("id", existing.document.id)
-    .eq("organization_id", auth.context.orgId)
-    .is("deleted_at", null)
-    .select("*")
-    .single();
-
-  if (error || !data) {
-    console.error("Failed to update document category:", error);
-    return { success: false, error: "update_failed" };
-  }
-
-  await recordDocumentAuditEvent(auth.context, {
-    documentId: existing.document.id,
-    folderId: existing.document.folder_id,
-    eventType: "category_changed",
-    eventPayload: {
-      from: existing.document.category,
-      to: input.category,
-    },
-  });
-
-  revalidateDocuments(auth.context.orgId);
-  const [document] = await hydrateDocuments(auth.context.admin, [data as DocumentRow]);
-  if (!document) return { success: false, error: "documents_failed" };
-  return { success: true, document };
-}
-
-export async function moveDocument(
-  input: MoveDocumentInput,
-): Promise<DocumentResult> {
-  const auth = await getAuthorizedDocumentContext();
-  if (!auth.success) return auth;
-
-  const manager = requireManager(auth.context);
-  if (!manager.success) return manager;
-
-  const existing = await getAuthorizedDocument(auth.context, input.documentId);
-  if (!existing.success) return existing;
-
-  const { data: protectedDocument } = await auth.context.admin
-    .from("personnel_documents")
-    .select("id")
-    .eq("document_id", existing.document.id)
-    .maybeSingle();
-  if (protectedDocument) {
-    return { success: false, error: "protected_document_boundary" };
-  }
-
-  if ((existing.document.folder_id ?? null) === (input.folderId ?? null)) {
-    return { success: false, error: "invalid_target" };
-  }
-
-  const folderCheck = await ensureFolder(
-    auth.context.admin,
-    auth.context.orgId,
-    input.folderId,
+  // One transaction writes the document, its link and their audit events.
+  const linkTarget = uploadLinkTarget(target);
+  const { data: documentRow, error } = await auth.context.admin.rpc(
+    'finalize_document_upload',
+    rpcArgs('finalize_document_upload', {
+      p_actor_id: auth.context.userId,
+      p_organization_id: auth.context.orgId,
+      p_document_id: input.documentId,
+      p_folder_id: target.folderId,
+      p_storage_path: storagePath,
+      p_original_file_name: originalFileName,
+      p_display_name: displayName,
+      p_category: category,
+      p_mime_type: contentType,
+      p_size_bytes: head.sizeBytes,
+      p_link_kind: linkTarget?.kind ?? null,
+      p_link_target_id: linkTarget?.id ?? null,
+    }),
   );
-  if (!folderCheck.success) return folderCheck;
+  if (error || !documentRow) {
+    const failure = documentWriteFailure(
+      'Failed to finalize document upload',
+      error,
+      [
+        'already_finalized',
+        'link_failed',
+        'folder_not_found',
+        'invalid_target',
+        'not_a_member',
+        'not_authorized',
+      ],
+      'create_failed',
+    );
+    // A concurrent finalize of the same upload committed first and owns the object.
+    if (failure.error !== 'already_finalized') {
+      await discardStorageObjects({ organizationId: auth.context.orgId, paths: [storagePath] });
+    }
+    return failure;
+  }
+
+  revalidateDocuments();
+  return hydrateWrittenDocument(auth.context.admin, documentRow);
+}
+
+export async function renameDocument(rawInput: RenameDocumentInput): Promise<DocumentResult> {
+  const input = parseActionInput(renameDocumentInputSchema, rawInput);
+  if (!input) return INVALID_INPUT;
+  const auth = await getAuthorizedDocumentContext();
+  if (!auth.success) return auth;
+
+  const manager = requireManager(auth.context);
+  if (!manager.success) return manager;
+
+  const existing = await getAuthorizedDocument(auth.context, input.documentId);
+  if (!existing.success) return existing;
+
+  const displayName = input.displayName.trim();
+  if (!displayName) {
+    return { success: false, error: 'name_required' };
+  }
+
+  const { data, error } = await auth.context.admin.rpc('rename_document', {
+    p_actor_id: auth.context.userId,
+    p_organization_id: auth.context.orgId,
+    p_document_id: existing.document.id,
+    p_display_name: displayName,
+  });
+  if (error || !data) {
+    return documentWriteFailure('Failed to rename document', error, ['document_not_found'], 'update_failed');
+  }
+
+  revalidateDocuments();
+  return hydrateWrittenDocument(auth.context.admin, data);
+}
+
+export async function updateDocumentCategory(rawInput: UpdateDocumentCategoryInput): Promise<DocumentResult> {
+  const input = parseActionInput(updateDocumentCategoryInputSchema, rawInput);
+  if (!input) return INVALID_INPUT;
+  const auth = await getAuthorizedDocumentContext();
+  if (!auth.success) return auth;
+
+  const manager = requireManager(auth.context);
+  if (!manager.success) return manager;
+
+  const existing = await getAuthorizedDocument(auth.context, input.documentId);
+  if (!existing.success) return existing;
+
+  const { data, error } = await auth.context.admin.rpc('update_document_category', {
+    p_actor_id: auth.context.userId,
+    p_organization_id: auth.context.orgId,
+    p_document_id: existing.document.id,
+    p_category: input.category,
+  });
+  if (error || !data) {
+    return documentWriteFailure(
+      'Failed to update document category',
+      error,
+      ['document_not_found'],
+      'update_failed',
+    );
+  }
+
+  revalidateDocuments();
+  return hydrateWrittenDocument(auth.context.admin, data);
+}
+
+export async function moveDocument(rawInput: MoveDocumentInput): Promise<DocumentResult> {
+  const input = parseActionInput(moveDocumentInputSchema, rawInput);
+  if (!input) return INVALID_INPUT;
+  const auth = await getAuthorizedDocumentContext();
+  if (!auth.success) return auth;
+
+  const manager = requireManager(auth.context);
+  if (!manager.success) return manager;
+
+  const existing = await getAuthorizedDocument(auth.context, input.documentId);
+  if (!existing.success) return existing;
 
   const displayName = await getAvailableDisplayName({
     admin: auth.context.admin,
@@ -2917,43 +968,33 @@ export async function moveDocument(
     preferredName: existing.document.display_name,
   });
 
-  const { data, error } = await auth.context.admin
-    .from("documents")
-    .update({
-      folder_id: input.folderId || null,
-      display_name: displayName,
-    })
-    .eq("id", existing.document.id)
-    .eq("organization_id", auth.context.orgId)
-    .is("deleted_at", null)
-    .select("*")
-    .single();
-
+  // The function refuses a protected personnel document, the same folder and a missing target folder.
+  const { data, error } = await auth.context.admin.rpc(
+    'move_document',
+    rpcArgs('move_document', {
+      p_actor_id: auth.context.userId,
+      p_organization_id: auth.context.orgId,
+      p_document_id: existing.document.id,
+      p_folder_id: input.folderId || null,
+      p_display_name: displayName,
+    }),
+  );
   if (error || !data) {
-    console.error("Failed to move document:", error);
-    return { success: false, error: "update_failed" };
+    return documentWriteFailure(
+      'Failed to move document',
+      error,
+      ['document_not_found', 'protected_document_boundary', 'invalid_target', 'folder_not_found'],
+      'update_failed',
+    );
   }
 
-  await recordDocumentAuditEvent(auth.context, {
-    documentId: existing.document.id,
-    folderId: input.folderId ?? null,
-    eventType: "moved",
-    eventPayload: {
-      fromFolderId: existing.document.folder_id,
-      toFolderId: input.folderId ?? null,
-      displayNameChanged: existing.document.display_name !== displayName,
-    },
-  });
-
-  revalidateDocuments(auth.context.orgId);
-  const [document] = await hydrateDocuments(auth.context.admin, [data as DocumentRow]);
-  if (!document) return { success: false, error: "documents_failed" };
-  return { success: true, document };
+  revalidateDocuments();
+  return hydrateWrittenDocument(auth.context.admin, data);
 }
 
-export async function copyDocument(
-  input: CopyDocumentInput,
-): Promise<DocumentResult> {
+export async function copyDocument(rawInput: CopyDocumentInput): Promise<DocumentResult> {
+  const input = parseActionInput(copyDocumentInputSchema, rawInput);
+  if (!input) return INVALID_INPUT;
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
@@ -2963,20 +1004,20 @@ export async function copyDocument(
   const existing = await getAuthorizedDocument(auth.context, input.documentId);
   if (!existing.success) return existing;
 
-  const { data: protectedDocument } = await auth.context.admin
-    .from("personnel_documents")
-    .select("id")
-    .eq("document_id", existing.document.id)
-    .maybeSingle();
+  const { data: protectedDocument } = await loggedRead(
+    'copyDocument: personnel_documents read failed',
+    auth.context.admin
+      .from('personnel_documents')
+      .select('id')
+      .eq('organization_id', auth.context.orgId)
+      .eq('document_id', existing.document.id)
+      .maybeSingle(),
+  );
   if (protectedDocument) {
-    return { success: false, error: "protected_document_boundary" };
+    return { success: false, error: 'protected_document_boundary' };
   }
 
-  const folderCheck = await ensureFolder(
-    auth.context.admin,
-    auth.context.orgId,
-    input.targetFolderId,
-  );
+  const folderCheck = await ensureFolder(auth.context.admin, auth.context.orgId, input.targetFolderId);
   if (!folderCheck.success) return folderCheck;
 
   const documentId = randomUUID();
@@ -2986,72 +1027,54 @@ export async function copyDocument(
     folderId: input.targetFolderId,
     preferredName: getCopyDisplayName(existing.document.display_name),
   });
-  const storagePath = buildStoragePath({
-    orgId: auth.context.orgId,
+  const storagePath = buildDocumentStoragePath({
+    organizationId: auth.context.orgId,
     documentId,
     fileName: existing.document.original_file_name,
   });
 
-  const storageCopyResult = await copyStorageObject({
-    sourcePath: existing.document.storage_path,
-    targetPath: storagePath,
-    contentType: existing.document.mime_type,
-  });
-
-  if (!storageCopyResult.success) {
-    console.error(
-      "Failed to copy document storage object:",
-      storageCopyResult.error,
-    );
-    return { success: false, error: "copy_failed" };
+  try {
+    await copyStorageObject({
+      organizationId: auth.context.orgId,
+      sourcePath: existing.document.storage_path,
+      targetPath: storagePath,
+      contentType: existing.document.mime_type,
+    });
+  } catch (storageCopyError) {
+    logError('Failed to copy document storage object', storageCopyError);
+    return { success: false, error: 'copy_failed' };
   }
 
-  const { data, error } = await auth.context.admin
-    .from("documents")
-    .insert({
-      id: documentId,
-      organization_id: auth.context.orgId,
-      folder_id: input.targetFolderId || null,
-      storage_bucket: DOCUMENT_STORAGE_BUCKET,
-      storage_path: storagePath,
-      original_file_name: existing.document.original_file_name,
-      display_name: displayName,
-      category: toDocumentCategory(existing.document.category),
-      mime_type: existing.document.mime_type,
-      size_bytes: existing.document.size_bytes,
-      uploaded_by: auth.context.userId,
-      copied_from_document_id: existing.document.id,
-      metadata: existing.document.metadata,
-    })
-    .select("*")
-    .single();
-
+  // The object exists first; a refused registration discards it.
+  const { data, error } = await auth.context.admin.rpc(
+    'copy_document',
+    rpcArgs('copy_document', {
+      p_actor_id: auth.context.userId,
+      p_organization_id: auth.context.orgId,
+      p_source_document_id: existing.document.id,
+      p_document_id: documentId,
+      p_folder_id: input.targetFolderId || null,
+      p_storage_path: storagePath,
+      p_display_name: displayName,
+    }),
+  );
   if (error || !data) {
-    await deleteStorageObjects([storagePath]).catch(() => undefined);
-    console.error("Failed to create copied document metadata:", error);
-    return { success: false, error: "copy_failed" };
+    await discardStorageObjects({ organizationId: auth.context.orgId, paths: [storagePath] });
+    return documentWriteFailure(
+      'Failed to create copied document metadata',
+      error,
+      ['document_not_found', 'protected_document_boundary', 'folder_not_found'],
+      'copy_failed',
+    );
   }
 
-  await recordDocumentAuditEvent(auth.context, {
-    documentId,
-    folderId: input.targetFolderId ?? null,
-    eventType: "copied",
-    eventPayload: {
-      copiedFromDocumentId: existing.document.id,
-      sourceStoragePath: existing.document.storage_path,
-      storagePath,
-    },
-  });
-
-  revalidateDocuments(auth.context.orgId);
-  const [document] = await hydrateDocuments(auth.context.admin, [data as DocumentRow]);
-  if (!document) return { success: false, error: "documents_failed" };
-  return { success: true, document };
+  revalidateDocuments();
+  return hydrateWrittenDocument(auth.context.admin, data);
 }
 
-export async function deleteDocument(
-  documentId: string,
-): Promise<DocumentMutationResult> {
+export async function deleteDocument(rawDocumentId: string): Promise<DocumentMutationResult> {
+  const documentId = parseActionInput(uuidSchema, rawDocumentId);
+  if (!documentId) return INVALID_INPUT;
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
@@ -3061,299 +1084,27 @@ export async function deleteDocument(
   const existing = await getAuthorizedDocument(auth.context, documentId);
   if (!existing.success) return existing;
 
-  const { error } = await auth.context.admin
-    .from("documents")
-    .update({
-      deleted_at: new Date().toISOString(),
-      deleted_by: auth.context.userId,
-      delete_reason: "user_deleted",
-    })
-    .eq("id", existing.document.id)
-    .eq("organization_id", auth.context.orgId);
-
+  const { error } = await auth.context.admin.rpc('trash_document', {
+    p_actor_id: auth.context.userId,
+    p_organization_id: auth.context.orgId,
+    p_document_id: existing.document.id,
+  });
   if (error) {
-    console.error("Failed to delete document metadata:", error);
-    return { success: false, error: "delete_failed" };
+    return documentWriteFailure(
+      'Failed to delete document metadata',
+      error,
+      ['document_not_found'],
+      'delete_failed',
+    );
   }
 
-  await recordDocumentAuditEvent(auth.context, {
-    documentId: existing.document.id,
-    folderId: existing.document.folder_id,
-    eventType: "deleted",
-    eventPayload: {
-      reason: "user_deleted",
-      storagePath: existing.document.storage_path,
-    },
-  });
-
-  revalidateDocuments(auth.context.orgId);
+  revalidateDocuments();
   return { success: true };
 }
 
-async function linkDocumentToJob(
-  input: LinkDocumentToJobInput,
-): Promise<DocumentMutationResult> {
-  const auth = await getAuthorizedDocumentContext();
-  if (!auth.success) return auth;
-
-  const manager = requireManager(auth.context);
-  if (!manager.success) return manager;
-
-  const document = await getAuthorizedDocument(auth.context, input.documentId);
-  if (!document.success) return document;
-
-  const jobAccess = await ensureJobAccess(auth.context, input.jobId);
-  if (!jobAccess.success) return jobAccess;
-
-  const { error } = await auth.context.admin.from("document_links").insert({
-    organization_id: auth.context.orgId,
-    document_id: input.documentId,
-    job_id: input.jobId,
-    created_by: auth.context.userId,
-  });
-
-  if (error) {
-    if (error.code === "23505") {
-      return { success: true };
-    }
-    console.error("Failed to link document to job:", error);
-    return { success: false, error: "link_failed" };
-  }
-
-  await recordDocumentAuditEvent(auth.context, {
-    documentId: input.documentId,
-    eventType: "linked",
-    eventPayload: { jobId: input.jobId },
-  });
-
-  revalidateDocuments(auth.context.orgId);
-  return { success: true };
-}
-
-async function linkDocumentToProject(
-  input: LinkDocumentToProjectInput,
-): Promise<DocumentMutationResult> {
-  const auth = await getAuthorizedDocumentContext();
-  if (!auth.success) return auth;
-
-  const document = await getAuthorizedDocument(auth.context, input.documentId);
-  if (!document.success) return document;
-
-  const projectAccess = await ensureProjectManagerAccess(
-    auth.context,
-    input.projectId,
-  );
-  if (!projectAccess.success) return projectAccess;
-
-  const { error } = await auth.context.admin.from("document_links").insert({
-    organization_id: auth.context.orgId,
-    document_id: input.documentId,
-    project_id: input.projectId,
-    created_by: auth.context.userId,
-  });
-
-  if (error) {
-    if (error.code === "23505") {
-      return { success: true };
-    }
-    console.error("Failed to link document to project:", error);
-    return { success: false, error: "link_failed" };
-  }
-
-  await recordDocumentAuditEvent(auth.context, {
-    documentId: input.documentId,
-    eventType: "linked",
-    eventPayload: { projectId: input.projectId },
-  });
-
-  revalidateDocuments(auth.context.orgId);
-  return { success: true };
-}
-
-async function linkDocumentToClient(
-  input: LinkDocumentToClientInput,
-): Promise<DocumentMutationResult> {
-  const auth = await getAuthorizedDocumentContext();
-  if (!auth.success) return auth;
-
-  const document = await getAuthorizedDocument(auth.context, input.documentId);
-  if (!document.success) return document;
-
-  const clientAccess = await ensureClientManagerAccess(
-    auth.context,
-    input.clientId,
-  );
-  if (!clientAccess.success) return clientAccess;
-
-  const { error } = await auth.context.admin.from("document_links").insert({
-    organization_id: auth.context.orgId,
-    document_id: input.documentId,
-    client_id: input.clientId,
-    created_by: auth.context.userId,
-  });
-
-  if (error) {
-    if (error.code === "23505") {
-      return { success: true };
-    }
-    console.error("Failed to link document to client:", error);
-    return { success: false, error: "link_failed" };
-  }
-
-  await recordDocumentAuditEvent(auth.context, {
-    documentId: input.documentId,
-    eventType: "linked",
-    eventPayload: { clientId: input.clientId },
-  });
-
-  revalidateDocuments(auth.context.orgId);
-  return { success: true };
-}
-
-async function linkDocumentToEmployee(
-  input: LinkDocumentToEmployeeInput,
-): Promise<DocumentMutationResult> {
-  const auth = await getAuthorizedDocumentContext();
-  if (!auth.success) return auth;
-
-  const document = await getAuthorizedDocument(auth.context, input.documentId);
-  if (!document.success) return document;
-
-  const employeeAccess = await ensureEmployeeManagerAccess(
-    auth.context,
-    input.employeeId,
-  );
-  if (!employeeAccess.success) return employeeAccess;
-
-  const { error } = await auth.context.admin.from("document_links").insert({
-    organization_id: auth.context.orgId,
-    document_id: input.documentId,
-    employee_id: input.employeeId,
-    created_by: auth.context.userId,
-  });
-
-  if (error) {
-    if (error.code === "23505") {
-      return { success: true };
-    }
-    console.error("Failed to link document to employee:", error);
-    return { success: false, error: "link_failed" };
-  }
-
-  await recordDocumentAuditEvent(auth.context, {
-    documentId: input.documentId,
-    eventType: "linked",
-    eventPayload: { employeeId: input.employeeId },
-  });
-
-  revalidateDocuments(auth.context.orgId);
-  return { success: true };
-}
-
-async function linkDocumentToEquipment(
-  input: LinkDocumentToEquipmentInput,
-): Promise<DocumentMutationResult> {
-  const auth = await getAuthorizedDocumentContext();
-  if (!auth.success) return auth;
-
-  const document = await getAuthorizedDocument(auth.context, input.documentId);
-  if (!document.success) return document;
-  const equipmentAccess = await ensureEquipmentManagerAccess(
-    auth.context,
-    input.equipmentId,
-  );
-  if (!equipmentAccess.success) return equipmentAccess;
-
-  const { error } = await auth.context.admin.from("document_links").insert({
-    organization_id: auth.context.orgId,
-    document_id: input.documentId,
-    equipment_id: input.equipmentId,
-    created_by: auth.context.userId,
-  });
-  if (error && error.code !== "23505") {
-    console.error("Failed to link document to installed equipment:", error);
-    return { success: false, error: "link_failed" };
-  }
-  if (!error) {
-    await recordDocumentAuditEvent(auth.context, {
-      documentId: input.documentId,
-      eventType: "linked",
-      eventPayload: { equipmentId: input.equipmentId },
-    });
-    revalidateDocuments(auth.context.orgId);
-  }
-  return { success: true };
-}
-
-async function linkDocumentToServiceCase(
-  input: LinkDocumentToServiceCaseInput,
-): Promise<DocumentMutationResult> {
-  const auth = await getAuthorizedDocumentContext();
-  if (!auth.success) return auth;
-  const document = await getAuthorizedDocument(auth.context, input.documentId);
-  if (!document.success) return document;
-  const access = await ensureServiceCaseManagerAccess(
-    auth.context,
-    input.serviceCaseId,
-  );
-  if (!access.success) return access;
-  const { error } = await auth.context.admin.from("document_links").insert({
-    organization_id: auth.context.orgId,
-    document_id: input.documentId,
-    service_case_id: input.serviceCaseId,
-    created_by: auth.context.userId,
-  });
-  if (error && error.code !== "23505") {
-    console.error("Failed to link document to service case:", error);
-    return { success: false, error: "link_failed" };
-  }
-  if (!error) {
-    await recordDocumentAuditEvent(auth.context, {
-      documentId: input.documentId,
-      eventType: "linked",
-      eventPayload: { serviceCaseId: input.serviceCaseId },
-    });
-    revalidateDocuments(auth.context.orgId);
-  }
-  return { success: true };
-}
-
-async function linkDocumentToMaintenanceCoverage(
-  input: LinkDocumentToMaintenanceCoverageInput,
-): Promise<DocumentMutationResult> {
-  const auth = await getAuthorizedDocumentContext();
-  if (!auth.success) return auth;
-  const document = await getAuthorizedDocument(auth.context, input.documentId);
-  if (!document.success) return document;
-  const access = await ensureMaintenanceCoverageManagerAccess(
-    auth.context,
-    input.maintenanceCoverageId,
-  );
-  if (!access.success) return access;
-  const { error } = await auth.context.admin.from("document_links").insert({
-    organization_id: auth.context.orgId,
-    document_id: input.documentId,
-    maintenance_coverage_id: input.maintenanceCoverageId,
-    created_by: auth.context.userId,
-  });
-  if (error && error.code !== "23505") {
-    console.error("Failed to link document to maintenance coverage:", error);
-    return { success: false, error: "link_failed" };
-  }
-  if (!error) {
-    await recordDocumentAuditEvent(auth.context, {
-      documentId: input.documentId,
-      eventType: "linked",
-      eventPayload: { maintenanceCoverageId: input.maintenanceCoverageId },
-    });
-    revalidateDocuments(auth.context.orgId);
-  }
-  return { success: true };
-}
-
-export async function unlinkDocument(
-  input: UnlinkDocumentInput,
-): Promise<DocumentMutationResult> {
+export async function unlinkDocument(rawInput: UnlinkDocumentInput): Promise<DocumentMutationResult> {
+  const input = parseActionInput(unlinkDocumentInputSchema, rawInput);
+  if (!input) return INVALID_INPUT;
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
@@ -3361,224 +1112,67 @@ export async function unlinkDocument(
   if (!manager.success) return manager;
 
   const { data: link, error: linkLoadError } = await auth.context.admin
-    .from("document_links")
-    .select("*")
-    .eq("id", input.linkId)
-    .eq("organization_id", auth.context.orgId)
+    .from('document_links')
+    .select('*')
+    .eq('id', input.linkId)
+    .eq('organization_id', auth.context.orgId)
     .maybeSingle();
 
   if (linkLoadError || !link) {
-    console.error("Failed to load document link for unlink:", linkLoadError);
-    return { success: false, error: "link_not_found" };
+    logError('Failed to load document link for unlink', linkLoadError);
+    return { success: false, error: 'link_not_found' };
   }
 
-  const linkRow = link as DocumentLinkRow;
-
-  const { error } = linkRow.equipment_id
-    ? await auth.context.admin.rpc("unlink_installed_equipment_document", {
-        p_organization_id: auth.context.orgId,
-        p_link_id: input.linkId,
-        p_actor_id: auth.context.userId,
-        p_idempotency_key: input.linkId,
-      })
-    : linkRow.service_case_id
-      ? await (async () => {
-          const { data: serviceCase } = await auth.context.admin
-            .from("service_cases")
-            .select("version")
-            .eq("id", linkRow.service_case_id!)
-            .eq("organization_id", auth.context.orgId)
-            .single();
-          if (!serviceCase)
-            return { error: new Error("service_case_not_found") };
-          return auth.context.admin.rpc("unlink_service_case_document", {
-            p_organization_id: auth.context.orgId,
-            p_link_id: input.linkId,
-            p_expected_version: serviceCase.version,
-            p_reason: "Dokumentverknüpfung entfernt",
-            p_actor_id: auth.context.userId,
-            p_idempotency_key: input.linkId,
-          });
-        })()
-      : linkRow.maintenance_coverage_id
-        ? await (async () => {
-            const { data: coverage } = await auth.context.admin
-              .from("maintenance_coverages")
-              .select("version")
-              .eq("id", linkRow.maintenance_coverage_id!)
-              .eq("organization_id", auth.context.orgId)
-              .single();
-            if (!coverage) {
-              return { error: new Error("maintenance_coverage_not_found") };
-            }
-            return auth.context.admin.rpc(
-              "unlink_maintenance_coverage_document",
-              {
-                p_organization_id: auth.context.orgId,
-                p_link_id: input.linkId,
-                p_expected_version: coverage.version,
-                p_reason: "Dokumentverknüpfung entfernt",
-                p_actor_id: auth.context.userId,
-                p_idempotency_key: input.linkId,
-              },
-            );
-          })()
-        : await auth.context.admin
-            .from("document_links")
-            .delete()
-            .eq("id", input.linkId)
-            .eq("organization_id", auth.context.orgId);
-
-  if (error) {
-    console.error("Failed to unlink document:", error);
-    return { success: false, error: "unlink_failed" };
-  }
-
-  await recordDocumentAuditEvent(auth.context, {
-    documentId: linkRow.document_id,
-    eventType: "unlinked",
-    eventPayload: {
-      jobId: linkRow.job_id,
-      projectId: linkRow.project_id,
-      clientId: linkRow.client_id,
-      employeeId: linkRow.employee_id,
-      requestId: linkRow.request_id,
-      equipmentId: linkRow.equipment_id,
-      serviceCaseId: linkRow.service_case_id,
-      maintenanceCoverageId: linkRow.maintenance_coverage_id,
-    },
+  const result = await writeDocumentLinks(auth.context, (link as DocumentLinkRow).document_id, {
+    removeLinkIds: [input.linkId],
+    additions: [],
+    fallback: 'unlink_failed',
   });
-
-  revalidateDocuments(auth.context.orgId);
-  return { success: true };
+  return result.success ? { success: true } : result;
 }
 
 export async function updateDocumentLinks(
-  input: UpdateDocumentLinksInput,
+  rawInput: UpdateDocumentLinksInput,
 ): Promise<UpdateDocumentLinksResult> {
+  const input = parseActionInput(updateDocumentLinksInputSchema, rawInput);
+  if (!input) return INVALID_INPUT;
   const auth = await getAuthorizedDocumentContext();
-  if (!auth.success) {
-    return {
-      success: false,
-      error: auth.error,
-      addedCount: 0,
-      removedCount: 0,
-      failedCount: 0,
-    };
-  }
+  if (!auth.success) return auth;
 
   const manager = requireManager(auth.context);
-  if (!manager.success) {
-    return {
-      success: false,
-      error: manager.error,
-      addedCount: 0,
-      removedCount: 0,
-      failedCount: 0,
-    };
-  }
+  if (!manager.success) return manager;
 
   const document = await getAuthorizedDocument(auth.context, input.documentId);
-  if (!document.success) {
-    return {
-      success: false,
-      error: document.error,
-      addedCount: 0,
-      removedCount: 0,
-      failedCount: 0,
-    };
-  }
+  if (!document.success) return document;
 
-  let addedCount = 0;
-  let removedCount = 0;
-  let failedCount = 0;
-
-  for (const linkId of input.removeLinkIds ?? []) {
-    const result = await unlinkDocument({ linkId });
-    if (result.success) removedCount++;
-    else failedCount++;
-  }
-
-  for (const jobId of input.addJobIds ?? []) {
-    const result = await linkDocumentToJob({
-      documentId: input.documentId,
-      jobId,
-    });
-    if (result.success) addedCount++;
-    else failedCount++;
-  }
-
-  for (const projectId of input.addProjectIds ?? []) {
-    const result = await linkDocumentToProject({
-      documentId: input.documentId,
-      projectId,
-    });
-    if (result.success) addedCount++;
-    else failedCount++;
-  }
-
-  for (const clientId of input.addClientIds ?? []) {
-    const result = await linkDocumentToClient({
-      documentId: input.documentId,
-      clientId,
-    });
-    if (result.success) addedCount++;
-    else failedCount++;
-  }
-
-  for (const employeeId of input.addEmployeeIds ?? []) {
-    const result = await linkDocumentToEmployee({
-      documentId: input.documentId,
-      employeeId,
-    });
-    if (result.success) addedCount++;
-    else failedCount++;
-  }
-
-  for (const serviceCaseId of input.addServiceCaseIds ?? []) {
-    const result = await linkDocumentToServiceCase({
-      documentId: input.documentId,
+  const additions: DocumentLinkTarget[] = [
+    ...(input.addJobIds ?? []).map((jobId) => ({ kind: 'job' as const, jobId })),
+    ...(input.addProjectIds ?? []).map((projectId) => ({ kind: 'project' as const, projectId })),
+    ...(input.addClientIds ?? []).map((clientId) => ({ kind: 'client' as const, clientId })),
+    ...(input.addEmployeeIds ?? []).map((employeeId) => ({ kind: 'employee' as const, employeeId })),
+    ...(input.addServiceCaseIds ?? []).map((serviceCaseId) => ({
+      kind: 'service_case' as const,
       serviceCaseId,
-    });
-    if (result.success) addedCount++;
-    else failedCount++;
-  }
-
-  for (const maintenanceCoverageId of input.addMaintenanceCoverageIds ?? []) {
-    const result = await linkDocumentToMaintenanceCoverage({
-      documentId: input.documentId,
+    })),
+    ...(input.addMaintenanceCoverageIds ?? []).map((maintenanceCoverageId) => ({
+      kind: 'maintenance_coverage' as const,
       maintenanceCoverageId,
-    });
-    if (result.success) addedCount++;
-    else failedCount++;
-  }
-
-  for (const equipmentId of input.addEquipmentIds ?? []) {
-    const result = await linkDocumentToEquipment({
-      documentId: input.documentId,
-      equipmentId,
-    });
-    if (result.success) addedCount++;
-    else failedCount++;
-  }
-
-  if (failedCount > 0) {
-    return {
-      success: false,
-      error:
-        addedCount > 0 || removedCount > 0 ? "partial_update" : "update_failed",
-      addedCount,
-      removedCount,
-      failedCount,
-    };
-  }
-
-  return { success: true, addedCount, removedCount };
+    })),
+    ...(input.addEquipmentIds ?? []).map((equipmentId) => ({ kind: 'equipment' as const, equipmentId })),
+  ];
+  // All or nothing: one refused target or link leaves every link as it was.
+  return writeDocumentLinks(auth.context, input.documentId, {
+    removeLinkIds: input.removeLinkIds ?? [],
+    additions,
+    fallback: 'update_failed',
+  });
 }
 
 export async function linkDocumentsToTarget(
-  input: LinkDocumentsToTargetInput,
+  rawInput: LinkDocumentsToTargetInput,
 ): Promise<LinkDocumentsToTargetResult> {
+  const input = parseActionInput(linkDocumentsToTargetInputSchema, rawInput);
+  if (!input) return { ...INVALID_INPUT, linkedCount: 0, failedCount: 0 };
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) {
     return {
@@ -3589,63 +1183,21 @@ export async function linkDocumentsToTarget(
     };
   }
 
-  const targetCount = [
-    input.jobId,
-    input.projectId,
-    input.clientId,
-    input.employeeId,
-    input.equipmentId,
-    input.serviceCaseId,
-    input.maintenanceCoverageId,
-  ].filter(Boolean).length;
-  if (targetCount !== 1) {
+  const target = singleLinkTarget(input);
+  if (!target) {
     return {
       success: false,
-      error: "invalid_target",
+      error: 'invalid_target',
       linkedCount: 0,
       failedCount: input.documentIds.length,
     };
-  }
-
-  if (input.documentIds.length === 0) {
-    return { success: true, linkedCount: 0 };
   }
 
   let linkedCount = 0;
   let failedCount = 0;
 
   for (const documentId of input.documentIds) {
-    const result = input.jobId
-      ? await linkDocumentToJob({ documentId, jobId: input.jobId })
-      : input.projectId
-        ? await linkDocumentToProject({
-            documentId,
-            projectId: input.projectId,
-          })
-        : input.clientId
-          ? await linkDocumentToClient({ documentId, clientId: input.clientId })
-          : input.employeeId
-            ? await linkDocumentToEmployee({
-                documentId,
-                employeeId: input.employeeId,
-              })
-            : input.equipmentId
-              ? await linkDocumentToEquipment({
-                  documentId,
-                  equipmentId: input.equipmentId,
-                })
-              : input.serviceCaseId
-                ? await linkDocumentToServiceCase({
-                    documentId,
-                    serviceCaseId: input.serviceCaseId,
-                  })
-                : input.maintenanceCoverageId
-                  ? await linkDocumentToMaintenanceCoverage({
-                      documentId,
-                      maintenanceCoverageId: input.maintenanceCoverageId,
-                    })
-                  : ({ success: false, error: "invalid_target" } as const);
-
+    const result = await linkDocumentToTarget(auth.context, documentId, target);
     if (result.success) linkedCount++;
     else failedCount++;
   }
@@ -3653,7 +1205,7 @@ export async function linkDocumentsToTarget(
   if (failedCount > 0) {
     return {
       success: false,
-      error: linkedCount > 0 ? "partial_update" : "link_failed",
+      error: linkedCount > 0 ? 'partial_update' : 'link_failed',
       linkedCount,
       failedCount,
     };
@@ -3662,9 +1214,9 @@ export async function linkDocumentsToTarget(
   return { success: true, linkedCount };
 }
 
-export async function getDocumentSignedUrl(
-  documentId: string,
-): Promise<SignedDocumentUrlResult> {
+export async function getDocumentSignedUrl(rawDocumentId: string): Promise<SignedDocumentUrlResult> {
+  const documentId = parseActionInput(uuidSchema, rawDocumentId);
+  if (!documentId) return INVALID_INPUT;
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
@@ -3673,20 +1225,21 @@ export async function getDocumentSignedUrl(
 
   try {
     const signedUrl = await createSignedDownloadUrl({
-      path: existing.document.storage_path, organizationId: auth.context.orgId,
-      disposition: "attachment",
+      path: existing.document.storage_path,
+      organizationId: auth.context.orgId,
+      disposition: 'attachment',
       downloadFileName: existing.document.display_name,
     });
     return { success: true, signedUrl };
   } catch (error) {
-    console.error("Failed to create document signed URL:", error);
-    return { success: false, error: "signed_url_failed" };
+    logError('Failed to create document signed URL', error);
+    return { success: false, error: 'signed_url_failed' };
   }
 }
 
-export async function getDocumentViewSignedUrl(
-  documentId: string,
-): Promise<SignedDocumentUrlResult> {
+export async function getDocumentViewSignedUrl(rawDocumentId: string): Promise<SignedDocumentUrlResult> {
+  const documentId = parseActionInput(uuidSchema, rawDocumentId);
+  if (!documentId) return INVALID_INPUT;
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
@@ -3695,144 +1248,134 @@ export async function getDocumentViewSignedUrl(
 
   try {
     const signedUrl = await createSignedDownloadUrl({
-      path: existing.document.storage_path, organizationId: auth.context.orgId,
+      path: existing.document.storage_path,
+      organizationId: auth.context.orgId,
       disposition: inlineSafeDisposition(existing.document.mime_type),
       downloadFileName:
-        inlineSafeDisposition(existing.document.mime_type) === "attachment"
+        inlineSafeDisposition(existing.document.mime_type) === 'attachment'
           ? existing.document.display_name
           : undefined,
     });
     return { success: true, signedUrl };
   } catch (error) {
-    console.error("Failed to create document view signed URL:", error);
-    return { success: false, error: "signed_url_failed" };
+    logError('Failed to create document view signed URL', error);
+    return { success: false, error: 'signed_url_failed' };
   }
 }
 
 export async function getDocumentVersionSignedUrl(
-  versionId: string,
-  options: { download?: boolean } = {},
+  rawVersionId: string,
+  rawOptions: { download?: boolean } = {},
 ): Promise<SignedDocumentUrlResult> {
+  const versionId = parseActionInput(uuidSchema, rawVersionId);
+  if (!versionId) return INVALID_INPUT;
+  const options = parseActionInput(signedUrlOptionsSchema, rawOptions);
+  if (!options) return INVALID_INPUT;
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
   const { data: version, error } = await auth.context.admin
-    .from("document_versions")
-    .select("*")
-    .eq("id", versionId)
-    .eq("organization_id", auth.context.orgId)
+    .from('document_versions')
+    .select('*')
+    .eq('id', versionId)
+    .eq('organization_id', auth.context.orgId)
     .maybeSingle();
 
   if (error || !version) {
-    console.error("Failed to load document version:", error);
-    return { success: false, error: "version_not_found" };
+    logError('Failed to load document version', error);
+    return { success: false, error: 'version_not_found' };
   }
 
   const versionRow = version as DocumentVersionRow;
-  const existing = await getAuthorizedDocument(
-    auth.context,
-    versionRow.document_id,
-    { protectedVersionNumber: versionRow.version_number },
-  );
+  const existing = await getAuthorizedDocument(auth.context, versionRow.document_id, {
+    protectedVersionNumber: versionRow.version_number,
+  });
   if (!existing.success) return existing;
   if (
     existing.protectedAccess?.releasedVersionNumbers &&
-    !existing.protectedAccess.releasedVersionNumbers.includes(
-      versionRow.version_number,
-    )
+    !existing.protectedAccess.releasedVersionNumbers.includes(versionRow.version_number)
   ) {
-    return { success: false, error: "not_authorized" };
+    return { success: false, error: 'not_authorized' };
   }
 
   try {
-    const disposition = options.download
-      ? "attachment"
-      : inlineSafeDisposition(versionRow.mime_type);
+    const disposition = options.download ? 'attachment' : inlineSafeDisposition(versionRow.mime_type);
     const signedUrl = await createSignedDownloadUrl({
-      path: versionRow.storage_path, organizationId: auth.context.orgId,
+      path: versionRow.storage_path,
+      organizationId: auth.context.orgId,
       disposition,
-      downloadFileName:
-        disposition === "attachment"
-          ? versionRow.original_file_name
-          : undefined,
+      downloadFileName: disposition === 'attachment' ? versionRow.original_file_name : undefined,
     });
     return { success: true, signedUrl };
   } catch (signedUrlError) {
-    console.error("Failed to create version signed URL:", signedUrlError);
-    return { success: false, error: "signed_url_failed" };
+    logError('Failed to create version signed URL', signedUrlError);
+    return { success: false, error: 'signed_url_failed' };
   }
 }
 
-export async function getDocumentDetails(
-  documentId: string,
-): Promise<DocumentDetailsResult> {
+export async function getDocumentDetails(rawDocumentId: string): Promise<DocumentDetailsResult> {
+  const documentId = parseActionInput(uuidSchema, rawDocumentId);
+  if (!documentId) return INVALID_INPUT;
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
   const existing = await getAuthorizedDocument(auth.context, documentId);
   if (!existing.success) return existing;
 
-  const releasedVersionNumbers =
-    existing.protectedAccess?.releasedVersionNumbers ?? null;
+  const releasedVersionNumbers = existing.protectedAccess?.releasedVersionNumbers ?? null;
 
   const baseVersionsQuery = auth.context.admin
-      .from("document_versions")
-      .select("*")
-      .eq("document_id", existing.document.id)
-      .eq("organization_id", auth.context.orgId);
+    .from('document_versions')
+    .select('*')
+    .eq('document_id', existing.document.id)
+    .eq('organization_id', auth.context.orgId);
   const scopedVersionsQuery = releasedVersionNumbers
-    ? baseVersionsQuery.in("version_number", releasedVersionNumbers)
+    ? baseVersionsQuery.in('version_number', releasedVersionNumbers)
     : baseVersionsQuery;
-  const versionsPromise = releasedVersionNumbers?.length === 0
-    ? Promise.resolve({ data: [], error: null })
-    : scopedVersionsQuery.order("version_number", { ascending: false });
+  const versionsPromise =
+    releasedVersionNumbers?.length === 0
+      ? Promise.resolve({ data: [], error: null })
+      : scopedVersionsQuery.order('version_number', { ascending: false });
   const [versionsResult, auditResult] = await Promise.all([
     versionsPromise,
     existing.protectedAccess && !existing.protectedAccess.canInspectHistory
       ? Promise.resolve({ data: [], error: null })
       : auth.context.admin
-          .from("document_audit_events")
-          .select("*")
-          .eq("document_id", existing.document.id)
-          .eq("organization_id", auth.context.orgId)
-          .order("created_at", { ascending: false })
+          .from('document_audit_events')
+          .select('*')
+          .eq('document_id', existing.document.id)
+          .eq('organization_id', auth.context.orgId)
+          .order('created_at', { ascending: false })
           .limit(50),
   ]);
 
-  const [document] = await hydrateDocuments(auth.context.admin, [
-    existing.document,
-  ]);
+  const [document] = await hydrateDocuments(auth.context.admin, [existing.document]);
   if (!document) {
-    return { success: false, error: "document_not_found" };
+    return { success: false, error: 'document_not_found' };
   }
 
   if (versionsResult.error) {
-    console.error("Failed to load document versions:", versionsResult.error);
-    return { success: false, error: "versions_failed", document };
+    logError('Failed to load document versions', versionsResult.error);
+    return { success: false, error: 'versions_failed', document };
   }
 
   if (auditResult.error) {
-    console.error("Failed to load document audit events:", auditResult.error);
-    return { success: false, error: "audit_failed", document };
+    logError('Failed to load document audit events', auditResult.error);
+    return { success: false, error: 'audit_failed', document };
   }
 
-  return {
-    success: true,
-    document,
-    versions: await hydrateDocumentVersions(
-      auth.context.admin,
-      (versionsResult.data ?? []) as DocumentVersionRow[],
-    ),
-    auditEvents: await hydrateDocumentAuditEvents(
-      auth.context.admin,
-      (auditResult.data ?? []) as DocumentAuditEventRow[],
-    ),
-  };
+  const [versions, auditEvents] = await Promise.all([
+    hydrateDocumentVersions(auth.context.admin, versionsResult.data as DocumentVersionRow[]),
+    hydrateDocumentAuditEvents(auth.context.admin, auditResult.data as DocumentAuditEventRow[]),
+  ]);
+  if (!versions) return { success: false, error: 'versions_failed', document };
+  if (!auditEvents) return { success: false, error: 'audit_failed', document };
+  return { success: true, document, versions, auditEvents };
 }
 
-export async function restoreDocument(
-  documentId: string,
-): Promise<DocumentMutationResult> {
+export async function restoreDocument(rawDocumentId: string): Promise<DocumentMutationResult> {
+  const documentId = parseActionInput(uuidSchema, rawDocumentId);
+  if (!documentId) return INVALID_INPUT;
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
@@ -3841,11 +1384,7 @@ export async function restoreDocument(
 
   let restoreFolderId = existing.document.folder_id;
   if (restoreFolderId) {
-    const folder = await getFolderById(
-      auth.context.admin,
-      auth.context.orgId,
-      restoreFolderId,
-    );
+    const folder = await getFolderById(auth.context.admin, auth.context.orgId, restoreFolderId);
     restoreFolderId = folder ? restoreFolderId : null;
   }
 
@@ -3855,158 +1394,69 @@ export async function restoreDocument(
     folderId: restoreFolderId,
     preferredName: existing.document.display_name,
   });
-  const restoredToRoot = Boolean(
-    existing.document.folder_id && !restoreFolderId,
-  );
 
-  const { error } = await auth.context.admin
-    .from("documents")
-    .update({
-      folder_id: restoreFolderId,
-      display_name: displayName,
-      deleted_at: null,
-      deleted_by: null,
-      delete_reason: null,
-    })
-    .eq("id", existing.document.id)
-    .eq("organization_id", auth.context.orgId);
-
+  const { error } = await auth.context.admin.rpc('restore_document', {
+    p_actor_id: auth.context.userId,
+    p_organization_id: auth.context.orgId,
+    p_document_id: existing.document.id,
+    p_display_name: displayName,
+  });
   if (error) {
-    console.error("Failed to restore document:", error);
-    return { success: false, error: "restore_failed" };
+    return documentWriteFailure(
+      'Failed to restore document',
+      error,
+      ['document_not_found'],
+      'restore_failed',
+    );
   }
 
-  await recordDocumentAuditEvent(auth.context, {
-    documentId: existing.document.id,
-    folderId: restoreFolderId,
-    eventType: "restored",
-    eventPayload: {
-      deletedAt: existing.document.deleted_at,
-      deletedBy: existing.document.deleted_by,
-      deleteReason: existing.document.delete_reason,
-      originalFolderId: existing.document.folder_id,
-      restoredToRoot,
-      displayNameChanged: displayName !== existing.document.display_name,
-    },
-  });
-
-  revalidateDocuments(auth.context.orgId);
+  revalidateDocuments();
   return { success: true };
 }
 
-export async function permanentlyDeleteDocument(
-  documentId: string,
-): Promise<DocumentMutationResult> {
+export async function permanentlyDeleteDocument(rawDocumentId: string): Promise<DocumentMutationResult> {
+  const documentId = parseActionInput(uuidSchema, rawDocumentId);
+  if (!documentId) return INVALID_INPUT;
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
   const existing = await getDeletedDocumentForManager(auth.context, documentId);
   if (!existing.success) return existing;
 
-  const { data: equipmentLink, error: equipmentLinkError } =
-    await auth.context.admin
-      .from("document_links")
-      .select("id")
-      .eq("document_id", existing.document.id)
-      .eq("organization_id", auth.context.orgId)
-      .not("equipment_id", "is", null)
-      .limit(1)
-      .maybeSingle();
-  if (equipmentLinkError) {
-    console.error("Failed to check installed-equipment document history:", {
-      code: equipmentLinkError.code,
-    });
-    return { success: false, error: "delete_failed" };
+  // The row goes first, in one transaction with its version rows, links and
+  // audit event: a refused delete (a protected personnel document, a released
+  // handover or another `on delete restrict` reference) leaves the files in
+  // place, while storage that fails after the row is gone only leaves an
+  // orphaned object.
+  const { data: storagePaths, error } = await auth.context.admin.rpc('permanently_delete_document', {
+    p_actor_id: auth.context.userId,
+    p_organization_id: auth.context.orgId,
+    p_document_id: existing.document.id,
+  });
+  if (error || !storagePaths) {
+    return documentWriteFailure(
+      'Failed to permanently delete document metadata',
+      error,
+      ['document_not_found', 'document_has_equipment_history'],
+      'delete_failed',
+    );
   }
-  if (equipmentLink) {
-    return { success: false, error: "document_has_equipment_history" };
-  }
-
-  const { data: versions } = await auth.context.admin
-    .from("document_versions")
-    .select("storage_path")
-    .eq("document_id", existing.document.id)
-    .eq("organization_id", auth.context.orgId);
-
-  const storagePaths = [
-    existing.document.storage_path,
-    ...((versions ?? []) as Pick<DocumentVersionRow, "storage_path">[]).map(
-      (version) => version.storage_path,
-    ),
-  ];
 
   try {
-    await deleteStorageObjects(storagePaths);
+    await deleteStorageObjects({ organizationId: auth.context.orgId, paths: storagePaths });
   } catch (storageError) {
-    console.error(
-      "Failed to permanently remove document storage:",
-      storageError,
-    );
-    return { success: false, error: "storage_delete_failed" };
+    logError('Failed to remove the storage of a permanently deleted document', storageError);
   }
 
-  await recordDocumentAuditEvent(auth.context, {
-    documentId: existing.document.id,
-    folderId: existing.document.folder_id,
-    eventType: "permanently_deleted",
-    eventPayload: {
-      documentId: existing.document.id,
-      displayName: existing.document.display_name,
-      storagePaths,
-    },
-  });
-
-  const { error } = await auth.context.admin
-    .from("documents")
-    .delete()
-    .eq("id", existing.document.id)
-    .eq("organization_id", auth.context.orgId);
-
-  if (error) {
-    console.error("Failed to permanently delete document metadata:", error);
-    return { success: false, error: "delete_failed" };
-  }
-
-  revalidateDocuments(auth.context.orgId);
+  revalidateDocuments();
   return { success: true };
 }
 
-type CreateDocumentVersionUploadTicketInput = {
-  documentId: string;
-  fileName: string;
-  fileSizeBytes: number;
-  mimeType?: string | null;
-};
-
-type FinalizeDocumentVersionUploadInput = {
-  documentId: string;
-  versionNumber: number;
-  fileName: string;
-};
-
-async function getVersionableDocument(
-  context: AuthorizedDocumentContext,
-  documentId: string,
-): Promise<
-  { success: true; document: DocumentRow } | { success: false; error: string }
-> {
-  const manager = requireManager(context);
-  if (!manager.success) return manager;
-
-  const existing = await getAuthorizedDocument(context, documentId);
-  if (!existing.success) return existing;
-
-  const category = toDocumentCategory(existing.document.category);
-  if (!["contract", "invoice", "offer", "report"].includes(category)) {
-    return { success: false, error: "versioning_not_supported" };
-  }
-
-  return existing;
-}
-
 export async function createDocumentVersionUploadTicket(
-  input: CreateDocumentVersionUploadTicketInput,
+  rawInput: CreateDocumentVersionUploadTicketInput,
 ): Promise<DocumentVersionUploadTicketResult> {
+  const input = parseActionInput(createDocumentVersionUploadTicketInputSchema, rawInput);
+  if (!input) return INVALID_INPUT;
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
@@ -4014,25 +1464,26 @@ export async function createDocumentVersionUploadTicket(
   if (!existing.success) return existing;
 
   if (input.fileSizeBytes <= 0) {
-    return { success: false, error: "file_empty" };
+    return { success: false, error: 'file_empty' };
   }
 
   if (input.fileSizeBytes > DOCUMENT_MAX_FILE_SIZE_BYTES) {
-    return { success: false, error: "file_too_large" };
+    return { success: false, error: 'file_too_large' };
   }
 
   const nextVersionNumber = existing.document.current_version_number + 1;
-  const storagePath = buildVersionStoragePath({
-    orgId: auth.context.orgId,
+  const storagePath = buildDocumentVersionStoragePath({
+    organizationId: auth.context.orgId,
     documentId: existing.document.id,
     versionNumber: nextVersionNumber,
-    fileName: trimName(input.fileName) || "Dokument",
+    fileName: input.fileName.trim() || 'Dokument',
   });
 
   try {
     const uploadUrl = await createSignedUploadUrl({
-      path: storagePath, organizationId: auth.context.orgId,
-      contentType: input.mimeType || "application/octet-stream",
+      path: storagePath,
+      organizationId: auth.context.orgId,
+      contentType: input.mimeType || 'application/octet-stream',
     });
 
     return {
@@ -4045,14 +1496,16 @@ export async function createDocumentVersionUploadTicket(
       },
     };
   } catch (error) {
-    console.error("Failed to create version upload ticket:", error);
-    return { success: false, error: "ticket_failed" };
+    logError('Failed to create version upload ticket', error);
+    return { success: false, error: 'ticket_failed' };
   }
 }
 
 export async function finalizeDocumentVersionUpload(
-  input: FinalizeDocumentVersionUploadInput,
+  rawInput: FinalizeDocumentVersionUploadInput,
 ): Promise<VersionResult> {
+  const input = parseActionInput(finalizeDocumentVersionUploadInputSchema, rawInput);
+  if (!input) return INVALID_INPUT;
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
@@ -4066,120 +1519,61 @@ export async function finalizeDocumentVersionUpload(
     // Only clean up paths above the current version number — lower numbers
     // could collide with legitimately archived version objects.
     if (input.versionNumber > existing.document.current_version_number) {
-      const staleStoragePath = buildVersionStoragePath({
-        orgId: auth.context.orgId,
+      const staleStoragePath = buildDocumentVersionStoragePath({
+        organizationId: auth.context.orgId,
         documentId: existing.document.id,
         versionNumber: input.versionNumber,
-        fileName: trimName(input.fileName) || "Dokument",
+        fileName: input.fileName.trim() || 'Dokument',
       });
-      await deleteStorageObjects([staleStoragePath]).catch(() => undefined);
+      await discardStorageObjects({ organizationId: auth.context.orgId, paths: [staleStoragePath] });
     }
-    return { success: false, error: "version_conflict" };
+    return { success: false, error: 'version_conflict' };
   }
 
-  const originalFileName = trimName(input.fileName) || "Dokument";
-  const storagePath = buildVersionStoragePath({
-    orgId: auth.context.orgId,
+  const originalFileName = input.fileName.trim() || 'Dokument';
+  const storagePath = buildDocumentVersionStoragePath({
+    organizationId: auth.context.orgId,
     documentId: existing.document.id,
     versionNumber: nextVersionNumber,
     fileName: originalFileName,
   });
 
-  let head;
-  try {
-    head = await headStorageObject(storagePath);
-  } catch (error) {
-    console.error("Failed to verify uploaded version object:", error);
-    return { success: false, error: "upload_failed" };
-  }
-
-  if (!head.exists) {
-    return { success: false, error: "file_missing" };
-  }
-
-  if (!head.sizeBytes || head.sizeBytes <= 0) {
-    await deleteStorageObjects([storagePath]).catch(() => undefined);
-    return { success: false, error: "file_empty" };
-  }
-
-  if (head.sizeBytes > DOCUMENT_MAX_FILE_SIZE_BYTES) {
-    await deleteStorageObjects([storagePath]).catch(() => undefined);
-    return { success: false, error: "file_too_large" };
-  }
-
-  const contentType = head.contentType || "application/octet-stream";
-
-  const { data: archivedVersion, error: versionInsertError } =
-    await auth.context.admin
-      .from("document_versions")
-      .insert({
-        organization_id: auth.context.orgId,
-        document_id: existing.document.id,
-        version_number: existing.document.current_version_number,
-        storage_bucket: DOCUMENT_STORAGE_BUCKET,
-        storage_path: existing.document.storage_path,
-        original_file_name: existing.document.original_file_name,
-        mime_type: existing.document.mime_type,
-        size_bytes: existing.document.size_bytes,
-        uploaded_by: existing.document.uploaded_by,
-      })
-      .select("id")
-      .single();
-
-  if (versionInsertError) {
-    await deleteStorageObjects([storagePath]).catch(() => undefined);
-    console.error(
-      "Failed to store previous document version:",
-      versionInsertError,
-    );
-    return { success: false, error: "version_failed" };
-  }
-
-  const { data: updatedDocument, error: updateError } = await auth.context.admin
-    .from("documents")
-    .update({
-      current_version_number: nextVersionNumber,
-      storage_path: storagePath,
-      original_file_name: originalFileName,
-      mime_type: contentType,
-      size_bytes: head.sizeBytes,
-      uploaded_by: auth.context.userId,
-    })
-    .eq("id", existing.document.id)
-    .eq("organization_id", auth.context.orgId)
-    .is("deleted_at", null)
-    .select("*")
-    .single();
-
-  if (updateError || !updatedDocument) {
-    await deleteStorageObjects([storagePath]).catch(() => undefined);
-    if (archivedVersion?.id) {
-      await auth.context.admin
-        .from("document_versions")
-        .delete()
-        .eq("id", archivedVersion.id)
-        .eq("organization_id", auth.context.orgId);
-    }
-    console.error("Failed to update document latest version:", updateError);
-    return { success: false, error: "version_failed" };
-  }
-
-  await recordDocumentAuditEvent(auth.context, {
-    documentId: existing.document.id,
-    folderId: existing.document.folder_id,
-    eventType: "version_uploaded",
-    eventPayload: {
-      previousVersionNumber: existing.document.current_version_number,
-      currentVersionNumber: nextVersionNumber,
-      storagePath,
-      originalFileName,
-      mimeType: contentType,
-      sizeBytes: head.sizeBytes,
-    },
+  const head = await verifyUploadedObject({
+    organizationId: auth.context.orgId,
+    storagePath,
+    failureLabel: 'Failed to verify uploaded version object',
   });
+  if (!head.success) return head;
+  const { contentType } = head;
+
+  // One transaction archives the current file, makes the upload current and records it.
+  const { data: updatedDocument, error } = await auth.context.admin.rpc('finalize_document_version_upload', {
+    p_actor_id: auth.context.userId,
+    p_organization_id: auth.context.orgId,
+    p_document_id: existing.document.id,
+    p_expected_version_number: existing.document.current_version_number,
+    p_storage_path: storagePath,
+    p_original_file_name: originalFileName,
+    p_mime_type: contentType,
+    p_size_bytes: head.sizeBytes,
+  });
+  if (error || !updatedDocument) {
+    const failure = documentWriteFailure(
+      'Failed to store the new document version',
+      error,
+      ['version_conflict', 'document_not_found', 'versioning_not_supported'],
+      'version_failed',
+    );
+    // A concurrent finalize may have made an object of this same path current:
+    // on a conflict the object is kept, as an orphan is safer than a lost file.
+    if (failure.error !== 'version_conflict') {
+      await discardStorageObjects({ organizationId: auth.context.orgId, paths: [storagePath] });
+    }
+    return failure;
+  }
 
   const version: DocumentVersion = {
-    id: "latest",
+    id: 'latest',
     organizationId: auth.context.orgId,
     documentId: existing.document.id,
     versionNumber: nextVersionNumber,
@@ -4189,10 +1583,10 @@ export async function finalizeDocumentVersionUpload(
     mimeType: contentType,
     sizeBytes: head.sizeBytes,
     uploadedBy: auth.context.userId,
-    createdAt: (updatedDocument as DocumentRow).updated_at,
+    createdAt: updatedDocument.updated_at,
     uploader: null,
   };
 
-  revalidateDocuments(auth.context.orgId);
+  revalidateDocuments();
   return { success: true, version };
 }

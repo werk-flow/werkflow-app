@@ -20,9 +20,5 @@ export function ActiveJobsProvider({
     initialOrganizationId,
   });
 
-  return (
-    <ActiveJobsContext.Provider value={value}>
-      {children}
-    </ActiveJobsContext.Provider>
-  );
+  return <ActiveJobsContext.Provider value={value}>{children}</ActiveJobsContext.Provider>;
 }

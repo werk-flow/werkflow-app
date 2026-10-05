@@ -1,15 +1,10 @@
 'use client';
 
-import { Fragment, useState, useEffect, useMemo, useRef } from 'react';
-import {
-  Play,
-  ArrowLeftRight,
-  Loader2,
-  Briefcase,
-  Search,
-  Check,
-} from 'lucide-react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { Play, ArrowLeftRight, Loader2, Briefcase } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Field } from '@/components/ui/field';
+import { SearchInput } from '@/components/ui/search-input';
 import {
   Dialog,
   DialogBody,
@@ -19,21 +14,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Skeleton } from '@/components/ui/skeleton';
-import { cn } from '@/lib/utils';
 import { filterByQuery } from '@/lib/ui/search';
-import { getJobsForPicker } from '@/lib/time-tracking/picker-actions';
+import { readInBackground } from '@/lib/data/background-read-client';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
-
-type PickerJob = {
-  id: string;
-  title: string;
-  jobNumber: string | null;
-  status: string;
-  projectName: string | null;
-  clientName: string | null;
-  plannedToday: boolean;
-};
+import {
+  JobPickerLoadingRows,
+  JobPickerOptionList,
+  type PickerJob,
+} from '@/components/job-picker-modal-options';
 
 const NO_JOBS: PickerJob[] = [];
 
@@ -44,7 +32,10 @@ interface JobPickerModalProps {
   organizationId: string;
   mode: 'clock_in' | 'switch' | 'resume';
   currentJobId: string | null;
+  /** A clock write runs: the picker cannot be dismissed and cannot confirm until it answers. */
   isPending: boolean;
+  /** The clock status is not loaded yet: confirming waits, closing does not. */
+  isStatusLoading?: boolean;
 }
 
 /**
@@ -64,6 +55,7 @@ export function JobPickerModal({
   mode,
   currentJobId,
   isPending,
+  isStatusLoading = false,
 }: JobPickerModalProps) {
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -71,9 +63,10 @@ export function JobPickerModal({
 
   const view = useLiveView<PickerJob[]>({
     tables: ['jobs', 'projects', 'job_assignments'],
-    read: async (): Promise<LiveViewResult<PickerJob[]>> => {
+    // Reads over GET, so opening the picker never waits behind a clock transition.
+    read: async ({ signal }): Promise<LiveViewResult<PickerJob[]>> => {
       if (!organizationId) return { ok: true, data: [] };
-      const result = await getJobsForPicker(organizationId);
+      const result = await readInBackground('job-picker-jobs', { organizationId }, signal);
       return result.success ? { ok: true, data: result.jobs } : { ok: false };
     },
     // Only read while the modal is open; each open triggers a fresh read.
@@ -97,24 +90,18 @@ export function JobPickerModal({
   const filteredJobs = useMemo(
     () =>
       filterByQuery(jobs, searchQuery, (job) =>
-        [job.title, job.jobNumber, job.projectName, job.clientName]
-          .filter(Boolean)
-          .join(' ')
+        [job.title, job.jobNumber, job.projectName, job.clientName].filter(Boolean).join(' '),
       ).sort((left, right) => Number(right.plannedToday) - Number(left.plannedToday)),
-    [jobs, searchQuery]
+    [jobs, searchQuery],
   );
   const plannedTodayCount = filteredJobs.filter((job) => job.plannedToday).length;
 
   const title =
-    mode === 'clock_in'
-      ? 'Einstempeln'
-      : mode === 'resume'
-        ? 'Arbeit fortsetzen'
-        : 'Auftrag wechseln';
+    mode === 'clock_in' ? 'Einstempeln' : mode === 'resume' ? 'Arbeit fortsetzen' : 'Auftrag wechseln';
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()} pending={isPending}>
+      <DialogContent size="md">
         <DialogHeader>
           <div className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
@@ -141,114 +128,30 @@ export function JobPickerModal({
           noValidate
           className="flex min-h-0 flex-1 flex-col gap-3"
         >
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input
+          <Field label="Auftrag suchen" hideLabel>
+            <SearchInput
               ref={searchInputRef}
-              type="text"
-              placeholder="Auftrag suchen..."
+              placeholder="Auftrag suchen…"
+              aria-label="Auftrag suchen"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-9 w-full rounded-lg border bg-muted/50 pl-9 pr-3 text-sm placeholder:text-muted-foreground/70 transition-colors focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+              onValueChange={setSearchQuery}
             />
-          </div>
+          </Field>
 
           <DialogBody className="min-h-40">
             {isLoading && jobs.length === 0 ? (
-              <div className="space-y-0.5" role="status" aria-busy="true">
-                <span className="sr-only">Aufträge werden geladen.</span>
-                {Array.from({ length: 5 }, (_, index) => (
-                  <div key={index} className="flex items-center gap-3 rounded-lg px-3 py-2.5">
-                    <Skeleton className="size-5 shrink-0 rounded-full" />
-                    <Skeleton className="h-4 w-48 max-w-full" />
-                  </div>
-                ))}
-              </div>
+              <JobPickerLoadingRows />
             ) : (
-              <div className="space-y-0.5" role="radiogroup" aria-label="Auftrag">
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={selectedJobId === null}
-                  onClick={() => setSelectedJobId(null)}
-                  className={cn(
-                    'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors',
-                    selectedJobId === null
-                      ? 'bg-primary/10 ring-1 ring-primary/20'
-                      : 'hover:bg-accent'
-                  )}
-                >
-                  <div
-                    className={cn(
-                      'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
-                      selectedJobId === null
-                        ? 'border-primary bg-primary text-primary-foreground'
-                        : 'border-muted-foreground/30'
-                    )}
-                  >
-                    {selectedJobId === null && <Check className="h-3 w-3" />}
-                  </div>
-                  <span className="text-muted-foreground">Ohne Auftrag</span>
-                </button>
-
-                {filteredJobs.map((job, index) => (
-                  <Fragment key={job.id}>
-                  {plannedTodayCount > 0 && plannedTodayCount < filteredJobs.length && (index === 0 || index === plannedTodayCount) && (
-                    <p className="px-3 pb-1 pt-3 text-xs font-medium text-muted-foreground">
-                      {index === 0 ? 'Heute geplant' : 'Weitere Aufträge'}
-                    </p>
-                  )}
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={selectedJobId === job.id}
-                    onClick={() => setSelectedJobId(job.id)}
-                    className={cn(
-                      'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors',
-                      selectedJobId === job.id
-                        ? 'bg-primary/10 ring-1 ring-primary/20'
-                        : 'hover:bg-accent'
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
-                        selectedJobId === job.id
-                          ? 'border-primary bg-primary text-primary-foreground'
-                          : 'border-muted-foreground/30'
-                      )}
-                    >
-                      {selectedJobId === job.id && <Check className="h-3 w-3" />}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p
-                        className="line-clamp-2 break-words font-medium"
-                        title={job.title}
-                      >
-                        {job.title}
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {[job.jobNumber, job.clientName, job.projectName]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </p>
-                    </div>
-                  </button>
-                  </Fragment>
-                ))}
-
-                {filteredJobs.length === 0 && !isLoading && (
-                  <div className="py-8 text-center">
-                    <p className="text-sm text-muted-foreground">
-                      {view.data === undefined
-                        ? 'Aufträge konnten nicht geladen werden. Bitte erneut öffnen.'
-                        : searchQuery
-                          ? 'Keine Aufträge gefunden'
-                          : 'Keine Aufträge verfügbar'}
-                    </p>
-                  </div>
-                )}
-              </div>
+              <JobPickerOptionList
+                filteredJobs={filteredJobs}
+                plannedTodayCount={plannedTodayCount}
+                selectedJobId={selectedJobId}
+                setSelectedJobId={setSelectedJobId}
+                isLoading={isLoading}
+                loadFailed={view.data === undefined}
+                onRetry={() => void view.refresh()}
+                searchQuery={searchQuery}
+              />
             )}
           </DialogBody>
 
@@ -265,8 +168,10 @@ export function JobPickerModal({
             <Button
               type="submit"
               className="flex-1 select-none sm:flex-initial"
+              // eslint-disable-next-line ui/submit-disabled-only-while-pending -- no field to fill: switching to the job that is already running is not an action
               disabled={
                 isPending ||
+                isStatusLoading ||
                 (mode === 'switch' && (selectedJobId ?? '') === (currentJobId ?? ''))
               }
             >
@@ -277,11 +182,7 @@ export function JobPickerModal({
               ) : (
                 <Play className="mr-2 h-4 w-4" />
               )}
-              {mode === 'clock_in'
-                ? 'Einstempeln'
-                : mode === 'resume'
-                  ? 'Fortsetzen'
-                  : 'Wechseln'}
+              {mode === 'clock_in' ? 'Einstempeln' : mode === 'resume' ? 'Fortsetzen' : 'Wechseln'}
             </Button>
           </DialogFooter>
         </form>

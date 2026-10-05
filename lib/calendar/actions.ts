@@ -1,5 +1,6 @@
 'use server';
 
+import type { ActionResult } from '@/lib/action-result';
 import { readOrganizationCalendar } from '@/lib/personnel/calendar-reader';
 import type { OrganizationHolidayCalendar } from '@/lib/personnel/targets';
 import { parseIsoDateRange } from '@/lib/calendar/date-range';
@@ -8,17 +9,13 @@ import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import type { CalendarJob } from '@/lib/jobs/types';
 import { getPlanningEntries } from '@/lib/planning/actions';
 import { toCalendarJob } from '@/lib/planning/view-model';
-import {
-  getSicknessCalendarEntries,
-  type SicknessCalendarEntry,
-} from '@/lib/sickness/actions';
+import { getSicknessCalendarEntries, type SicknessCalendarEntry } from '@/lib/sickness/actions';
 import { getTimeEntries, getChangeRequestsForEntries } from '@/lib/time-tracking/actions';
 import { completeCalendarEntryRead } from './entry-read';
 import type { TimeEntry, EntryChangeRequestMap } from '@/lib/time-tracking/types';
-import {
-  getVacationCalendarEntries,
-  type VacationCalendarEntry,
-} from '@/lib/vacation/actions';
+import { getVacationCalendarEntries, type VacationCalendarEntry } from '@/lib/vacation/actions';
+import { uuidSchema } from '@/lib/validation/uuid';
+import { z } from '@/lib/zod';
 
 /**
  * One authorized aggregate reader for the complete calendar window. The client
@@ -36,17 +33,14 @@ export type CalendarWindowInput = {
   toDate: string;
 };
 
-export type CalendarWindowResult =
-  | {
-      success: true;
-      entries: TimeEntry[];
-      changeRequestMap: EntryChangeRequestMap;
-      jobs: CalendarJob[];
-      vacation: VacationCalendarEntry[];
-      sickness: SicknessCalendarEntry[];
-      holidays: OrganizationHolidayCalendar;
-    }
-  | { success: false; error: string };
+export type CalendarWindowResult = ActionResult<{
+  entries: TimeEntry[];
+  changeRequestMap: EntryChangeRequestMap;
+  jobs: CalendarJob[];
+  vacation: VacationCalendarEntry[];
+  sickness: SicknessCalendarEntry[];
+  holidays: OrganizationHolidayCalendar;
+}>;
 
 const DAY_MS = 86_400_000;
 
@@ -59,25 +53,32 @@ const DAY_MS = 86_400_000;
 function instantsInsideDateWindow(
   dates: { from: string; to: string },
   fromInstant: number,
-  toInstant: number
+  toInstant: number,
 ): boolean {
   const floor = Date.parse(`${dates.from}T00:00:00Z`) - DAY_MS;
   const ceiling = Date.parse(`${dates.to}T00:00:00Z`) + 2 * DAY_MS;
   return fromInstant >= floor && toInstant <= ceiling;
 }
 
-export async function getCalendarWindow(
-  input: CalendarWindowInput
-): Promise<CalendarWindowResult> {
+const calendarWindowInputSchema = z.object({
+  organizationId: uuidSchema,
+  from: z.string().max(64),
+  to: z.string().max(64),
+  fromDate: z.string().max(10),
+  toDate: z.string().max(10),
+});
+
+export async function getCalendarWindow(rawInput: CalendarWindowInput): Promise<CalendarWindowResult> {
   const user = await getAuthenticatedUser();
   if (!user) return { success: false, error: 'not_authenticated' };
-  if (!input || typeof input !== 'object') return { success: false, error: 'invalid_input' };
+  const parsed = calendarWindowInputSchema.safeParse(rawInput);
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  const input = parsed.data;
   const dates = parseIsoDateRange({ from: input.fromDate, to: input.toDate });
   const fromInstant = Date.parse(input.from);
   const toInstant = Date.parse(input.to);
   if (
     !dates ||
-    typeof input.organizationId !== 'string' ||
     !Number.isFinite(fromInstant) ||
     !Number.isFinite(toInstant) ||
     fromInstant > toInstant ||
@@ -110,7 +111,7 @@ export async function getCalendarWindow(
 
   return {
     success: true,
-    // Official plus provisional projection, the same shape as the server prefetch (PF-06).
+    // Official plus provisional projection, the same shape as the server prefetch.
     entries: entries.entries,
     changeRequestMap: entries.changeRequestMap,
     jobs: planning.entries.map(toCalendarJob),

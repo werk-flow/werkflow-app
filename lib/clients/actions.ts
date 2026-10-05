@@ -1,10 +1,11 @@
 'use server';
 
-import { updateTag } from 'next/cache';
+import type { ActionResult } from '@/lib/action-result';
 import { readCompleteRows, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { logReadFailure } from '@/lib/data/read-request-cache';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
-import { CACHE_TAGS } from '@/lib/data/cached';
+import { requireManagerAndClient } from '@/lib/clients/manager-access';
 import {
   type Client,
   type ClientType,
@@ -20,6 +21,10 @@ import {
   toClientContact,
   toClientSite,
 } from '@/lib/clients/types';
+import { logError } from '@/lib/logging';
+import { Constants } from '@/lib/supabase/database.types';
+import { uuidSchema } from '@/lib/validation/uuid';
+import { z } from '@/lib/zod';
 
 // ============================================
 // Input Types
@@ -37,13 +42,65 @@ export type CreateClientInput = {
 
 export type UpdateClientInput = Partial<CreateClientInput>;
 
+// Arguments arrive from the network unchecked; these schemas bound every field
+// before use. Blank names still reach the `name_required` checks below.
+const nullableClientText = (maximum: number) => z.string().max(maximum).nullish();
+
+const clientFieldsSchema = z.object({
+  name: z.string().max(300),
+  clientType: z.enum(Constants.public.Enums.client_type),
+  customerNumber: nullableClientText(100),
+  email: nullableClientText(320),
+  phone: nullableClientText(100),
+  address: nullableClientText(1000),
+  notes: nullableClientText(10000),
+});
+
+const updateClientArgumentsSchema = z.object({ clientId: uuidSchema, input: clientFieldsSchema.partial() });
+
+const contactFieldsSchema = z.object({
+  name: z.string().max(300),
+  role: nullableClientText(200),
+  email: nullableClientText(320),
+  phone: nullableClientText(100),
+  notes: nullableClientText(10000),
+  isPrimary: z.boolean().optional(),
+});
+
+const siteFieldsSchema = z.object({
+  name: z.string().max(300),
+  street: nullableClientText(300),
+  postalCode: nullableClientText(20),
+  city: nullableClientText(200),
+  accessNotes: nullableClientText(10000),
+  notes: nullableClientText(10000),
+  primaryContactId: uuidSchema.or(z.literal('')).nullish(),
+  isPrimary: z.boolean().optional(),
+});
+
+const createContactArgumentsSchema = z.object({ clientId: uuidSchema, input: contactFieldsSchema });
+const updateContactArgumentsSchema = z.object({
+  contactId: uuidSchema,
+  input: contactFieldsSchema.partial().extend({ isActive: z.boolean().optional() }),
+});
+const createSiteArgumentsSchema = z.object({ clientId: uuidSchema, input: siteFieldsSchema });
+const updateSiteArgumentsSchema = z.object({
+  siteId: uuidSchema,
+  input: siteFieldsSchema.partial().extend({ isActive: z.boolean().optional() }),
+});
+const clientRelationsArgumentsSchema = z.object({
+  clientId: uuidSchema,
+  options: z.object({ includeInactive: z.boolean().optional() }).optional(),
+});
+
 // ============================================
 // Actions
 // ============================================
 
-export async function createClient(
-  input: CreateClientInput
-): Promise<CreateClientResult> {
+export async function createClient(rawInput: CreateClientInput): Promise<CreateClientResult> {
+  const parsed = clientFieldsSchema.safeParse(rawInput);
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  const input = parsed.data;
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
@@ -75,25 +132,27 @@ export async function createClient(
       .single();
 
     if (error || !data) {
-      console.error('Error creating client:', error);
+      logError('Error creating client:', error);
       if (error?.code === '23505') {
         return { success: false, error: 'customer_number_taken' };
       }
       return { success: false, error: 'create_failed' };
     }
 
-
     return { success: true, client: toClient(data) };
   } catch (error) {
-    console.error('Unexpected error in createClient:', error);
+    logError('Unexpected error in createClient:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
 export async function updateClient(
-  clientId: string,
-  input: UpdateClientInput
+  rawClientId: string,
+  rawInput: UpdateClientInput,
 ): Promise<UpdateClientResult> {
+  const parsed = updateClientArgumentsSchema.safeParse({ clientId: rawClientId, input: rawInput });
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  const { clientId, input } = parsed.data;
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
@@ -112,6 +171,8 @@ export async function updateClient(
       .eq('organization_id', orgId)
       .single();
 
+    if (fetchError && fetchError.code !== 'PGRST116')
+      logReadFailure('updateClient: client read failed', fetchError);
     if (fetchError || !existing) {
       return { success: false, error: 'client_not_found' };
     }
@@ -119,8 +180,7 @@ export async function updateClient(
     const updateData: Record<string, unknown> = {};
     if (input.name !== undefined) updateData.name = input.name.trim();
     if (input.clientType !== undefined) updateData.client_type = input.clientType;
-    if (input.customerNumber !== undefined)
-      updateData.customer_number = input.customerNumber?.trim() || null;
+    if (input.customerNumber !== undefined) updateData.customer_number = input.customerNumber?.trim() || null;
     if (input.email !== undefined) updateData.email = input.email?.trim() || null;
     if (input.phone !== undefined) updateData.phone = input.phone?.trim() || null;
     if (input.address !== undefined) updateData.address = input.address?.trim() || null;
@@ -139,24 +199,24 @@ export async function updateClient(
       .single();
 
     if (error || !data) {
-      console.error('Error updating client:', error);
+      logError('Error updating client:', error);
       if (error?.code === '23505') {
         return { success: false, error: 'customer_number_taken' };
       }
       return { success: false, error: 'update_failed' };
     }
 
-
     return { success: true, client: toClient(data) };
   } catch (error) {
-    console.error('Unexpected error in updateClient:', error);
+    logError('Unexpected error in updateClient:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
-export async function deleteClient(
-  clientId: string
-): Promise<DeleteClientResult> {
+export async function deleteClient(rawClientId: string): Promise<DeleteClientResult> {
+  const parsedClientId = uuidSchema.safeParse(rawClientId);
+  if (!parsedClientId.success) return { success: false, error: 'invalid_input' };
+  const clientId = parsedClientId.data;
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
@@ -175,36 +235,30 @@ export async function deleteClient(
       .eq('organization_id', orgId)
       .single();
 
+    if (fetchError && fetchError.code !== 'PGRST116')
+      logReadFailure('deleteClient: client read failed', fetchError);
     if (fetchError || !existing) {
       return { success: false, error: 'client_not_found' };
     }
 
-    const { error } = await admin
-      .from('clients')
-      .delete()
-      .eq('id', clientId)
-      .eq('organization_id', orgId);
+    const { error } = await admin.from('clients').delete().eq('id', clientId).eq('organization_id', orgId);
 
     if (error) {
-      console.error('Error deleting client:', error);
+      logError('Error deleting client:', error);
       return { success: false, error: 'delete_failed' };
     }
 
-    updateTag(CACHE_TAGS.jobs(orgId));
-    updateTag(CACHE_TAGS.projects(orgId));
-
     return { success: true };
   } catch (error) {
-    console.error('Unexpected error in deleteClient:', error);
+    logError('Unexpected error in deleteClient:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
-export async function getClientDetail(
-  clientId: string
-): Promise<
-  { success: true; client: Client } | { success: false; error: string }
-> {
+export async function getClientDetail(rawClientId: string): Promise<ActionResult<{ client: Client }>> {
+  const parsedClientId = uuidSchema.safeParse(rawClientId);
+  if (!parsedClientId.success) return { success: false, error: 'not_found' };
+  const clientId = parsedClientId.data;
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
@@ -223,19 +277,20 @@ export async function getClientDetail(
       .eq('organization_id', orgId)
       .single();
 
+    if (error && error.code !== 'PGRST116') logReadFailure('getClientDetail: client read failed', error);
     if (error || !data) {
       return { success: false, error: 'not_found' };
     }
 
     return { success: true, client: toClient(data) };
   } catch (error) {
-    console.error('Unexpected error in getClientDetail:', error);
+    logError('Unexpected error in getClientDetail:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
 // ============================================
-// Contacts And Work Sites (P1-01)
+// Contacts And Work Sites
 // ============================================
 
 export type SaveClientContactInput = {
@@ -258,66 +313,15 @@ export type SaveClientSiteInput = {
   isPrimary?: boolean;
 };
 
-type ManagerContext = { orgId: string; userId: string };
-
-async function requireManagerAndClient(
-  clientId: string
-): Promise<
-  | { success: true; context: ManagerContext }
-  | { success: false; error: string }
-> {
-  const auth = await authenticateAndAuthorize();
-  if (!auth.success) return auth;
-  const { orgId, userId, isManagerOrAbove } = auth.context;
-
-  if (!isManagerOrAbove) {
-    return { success: false, error: 'not_authorized' };
-  }
-
-  const admin = createSupabaseAdminClient();
-  const { data: client, error } = await admin
-    .from('clients')
-    .select('id')
-    .eq('id', clientId)
-    .eq('organization_id', orgId)
-    .single();
-
-  if (error || !client) {
-    return { success: false, error: 'client_not_found' };
-  }
-
-  return { success: true, context: { orgId, userId } };
-}
-
-// Only one contact/site per customer carries the primary marker. Runs after
-// the row itself was written, so a failed write never leaves the customer
-// without any primary; a failed clear is surfaced to the caller.
-async function clearOtherPrimaryFlags(
-  table: 'client_contacts' | 'client_sites',
-  orgId: string,
-  clientId: string,
-  keepId: string
-): Promise<boolean> {
-  const admin = createSupabaseAdminClient();
-  const { error } = await admin
-    .from(table)
-    .update({ is_primary: false })
-    .eq('organization_id', orgId)
-    .eq('client_id', clientId)
-    .eq('is_primary', true)
-    .neq('id', keepId);
-
-  if (error) {
-    console.error(`Error clearing primary flag on ${table}:`, error);
-    return false;
-  }
-  return true;
-}
-
+// A row saved as primary replaces the customer's previous primary contact or
+// site inside the same statement: the keep_one_primary triggers clear it.
 export async function createClientContact(
-  clientId: string,
-  input: SaveClientContactInput
+  rawClientId: string,
+  rawInput: SaveClientContactInput,
 ): Promise<ClientContactResult> {
+  const parsed = createContactArgumentsSchema.safeParse({ clientId: rawClientId, input: rawInput });
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  const { clientId, input } = parsed.data;
   try {
     const auth = await requireManagerAndClient(clientId);
     if (!auth.success) return auth;
@@ -345,33 +349,24 @@ export async function createClientContact(
       .single();
 
     if (error || !data) {
-      console.error('Error creating client contact:', error);
+      logError('Error creating client contact:', error);
       return { success: false, error: 'create_failed' };
-    }
-
-    if (input.isPrimary) {
-      const cleared = await clearOtherPrimaryFlags(
-        'client_contacts',
-        orgId,
-        clientId,
-        data.id
-      );
-      if (!cleared) {
-        return { success: false, error: 'primary_flag_failed' };
-      }
     }
 
     return { success: true, contact: toClientContact(data) };
   } catch (error) {
-    console.error('Unexpected error in createClientContact:', error);
+    logError('Unexpected error in createClientContact:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
 export async function updateClientContact(
-  contactId: string,
-  input: Partial<SaveClientContactInput> & { isActive?: boolean }
+  rawContactId: string,
+  rawInput: Partial<SaveClientContactInput> & { isActive?: boolean },
 ): Promise<ClientContactResult> {
+  const parsed = updateContactArgumentsSchema.safeParse({ contactId: rawContactId, input: rawInput });
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  const { contactId, input } = parsed.data;
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
@@ -389,6 +384,8 @@ export async function updateClientContact(
       .eq('organization_id', orgId)
       .single();
 
+    if (fetchError && fetchError.code !== 'PGRST116')
+      logReadFailure('updateClientContact: contact read failed', fetchError);
     if (fetchError || !existing) {
       return { success: false, error: 'contact_not_found' };
     }
@@ -418,33 +415,24 @@ export async function updateClientContact(
       .single();
 
     if (error || !data) {
-      console.error('Error updating client contact:', error);
+      logError('Error updating client contact:', error);
       return { success: false, error: 'update_failed' };
-    }
-
-    if (input.isPrimary) {
-      const cleared = await clearOtherPrimaryFlags(
-        'client_contacts',
-        orgId,
-        existing.client_id,
-        contactId
-      );
-      if (!cleared) {
-        return { success: false, error: 'primary_flag_failed' };
-      }
     }
 
     return { success: true, contact: toClientContact(data) };
   } catch (error) {
-    console.error('Unexpected error in updateClientContact:', error);
+    logError('Unexpected error in updateClientContact:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
 export async function createClientSite(
-  clientId: string,
-  input: SaveClientSiteInput
+  rawClientId: string,
+  rawInput: SaveClientSiteInput,
 ): Promise<ClientSiteResult> {
+  const parsed = createSiteArgumentsSchema.safeParse({ clientId: rawClientId, input: rawInput });
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  const { clientId, input } = parsed.data;
   try {
     const auth = await requireManagerAndClient(clientId);
     if (!auth.success) return auth;
@@ -474,33 +462,24 @@ export async function createClientSite(
       .single();
 
     if (error || !data) {
-      console.error('Error creating client site:', error);
+      logError('Error creating client site:', error);
       return { success: false, error: 'create_failed' };
-    }
-
-    if (input.isPrimary) {
-      const cleared = await clearOtherPrimaryFlags(
-        'client_sites',
-        orgId,
-        clientId,
-        data.id
-      );
-      if (!cleared) {
-        return { success: false, error: 'primary_flag_failed' };
-      }
     }
 
     return { success: true, site: toClientSite(data) };
   } catch (error) {
-    console.error('Unexpected error in createClientSite:', error);
+    logError('Unexpected error in createClientSite:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
 export async function updateClientSite(
-  siteId: string,
-  input: Partial<SaveClientSiteInput> & { isActive?: boolean }
+  rawSiteId: string,
+  rawInput: Partial<SaveClientSiteInput> & { isActive?: boolean },
 ): Promise<ClientSiteResult> {
+  const parsed = updateSiteArgumentsSchema.safeParse({ siteId: rawSiteId, input: rawInput });
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  const { siteId, input } = parsed.data;
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
@@ -518,6 +497,8 @@ export async function updateClientSite(
       .eq('organization_id', orgId)
       .single();
 
+    if (fetchError && fetchError.code !== 'PGRST116')
+      logReadFailure('updateClientSite: site read failed', fetchError);
     if (fetchError || !existing) {
       return { success: false, error: 'site_not_found' };
     }
@@ -528,14 +509,11 @@ export async function updateClientSite(
       updateData.name = input.name.trim();
     }
     if (input.street !== undefined) updateData.street = input.street?.trim() || null;
-    if (input.postalCode !== undefined)
-      updateData.postal_code = input.postalCode?.trim() || null;
+    if (input.postalCode !== undefined) updateData.postal_code = input.postalCode?.trim() || null;
     if (input.city !== undefined) updateData.city = input.city?.trim() || null;
-    if (input.accessNotes !== undefined)
-      updateData.access_notes = input.accessNotes?.trim() || null;
+    if (input.accessNotes !== undefined) updateData.access_notes = input.accessNotes?.trim() || null;
     if (input.notes !== undefined) updateData.notes = input.notes?.trim() || null;
-    if (input.primaryContactId !== undefined)
-      updateData.primary_contact_id = input.primaryContactId || null;
+    if (input.primaryContactId !== undefined) updateData.primary_contact_id = input.primaryContactId || null;
     if (input.isPrimary !== undefined) updateData.is_primary = input.isPrimary;
     if (input.isActive !== undefined) updateData.is_active = input.isActive;
 
@@ -552,25 +530,13 @@ export async function updateClientSite(
       .single();
 
     if (error || !data) {
-      console.error('Error updating client site:', error);
+      logError('Error updating client site:', error);
       return { success: false, error: 'update_failed' };
-    }
-
-    if (input.isPrimary) {
-      const cleared = await clearOtherPrimaryFlags(
-        'client_sites',
-        orgId,
-        existing.client_id,
-        siteId
-      );
-      if (!cleared) {
-        return { success: false, error: 'primary_flag_failed' };
-      }
     }
 
     return { success: true, site: toClientSite(data) };
   } catch (error) {
-    console.error('Unexpected error in updateClientSite:', error);
+    logError('Unexpected error in updateClientSite:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
@@ -579,9 +545,12 @@ export async function updateClientSite(
 // Managers see everything; employees may load relations only for customers
 // of jobs they are assigned to (the job page needs site/contact context).
 export async function getClientRelations(
-  clientId: string,
-  options?: { includeInactive?: boolean }
+  rawClientId: string,
+  rawOptions?: { includeInactive?: boolean },
 ): Promise<ClientRelationsResult> {
+  const parsed = clientRelationsArgumentsSchema.safeParse({ clientId: rawClientId, options: rawOptions });
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  const { clientId, options } = parsed.data;
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
@@ -590,7 +559,7 @@ export async function getClientRelations(
     const admin = createSupabaseAdminClient();
 
     if (!isManagerOrAbove) {
-      const { data: assignedJob } = await admin
+      const { data: assignedJob, error: assignedJobError } = await admin
         .from('jobs')
         .select('id, job_assignments!inner(user_id)')
         .eq('organization_id', orgId)
@@ -599,6 +568,7 @@ export async function getClientRelations(
         .limit(1)
         .maybeSingle();
 
+      if (assignedJobError) logReadFailure('getClientRelations: assigned job read failed', assignedJobError);
       if (!assignedJob) {
         return { success: false, error: 'not_authorized' };
       }
@@ -630,10 +600,7 @@ export async function getClientRelations(
     ]);
 
     if (contactsResult.error || sitesResult.error) {
-      console.error(
-        'Error fetching client relations:',
-        contactsResult.error ?? sitesResult.error
-      );
+      logError('Error fetching client relations:', contactsResult.error ?? sitesResult.error);
       return { success: false, error: 'fetch_failed' };
     }
 
@@ -643,39 +610,7 @@ export async function getClientRelations(
       sites: (sitesResult.data ?? []).map(toClientSite),
     };
   } catch (error) {
-    console.error('Unexpected error in getClientRelations:', error);
-    return { success: false, error: 'unexpected_error' };
-  }
-}
-
-export async function getOrgClients(): Promise<
-  { success: true; clients: Client[] } | { success: false; error: string }
-> {
-  try {
-    const auth = await authenticateAndAuthorize();
-    if (!auth.success) return auth;
-    const { orgId, isManagerOrAbove } = auth.context;
-
-    if (!isManagerOrAbove) {
-      return { success: false, error: 'not_authorized' };
-    }
-
-    const admin = createSupabaseAdminClient();
-
-    const { data, error } = await readCompleteRows((from, to) => admin
-      .from('clients')
-      .select('*')
-      .eq('organization_id', orgId)
-      .order('name', { ascending: true }).order('id').range(from, to), LIST_ROW_CAP);
-
-    if (error) {
-      console.error('Error fetching clients:', error);
-      return { success: false, error: 'fetch_failed' };
-    }
-
-    return { success: true, clients: (data ?? []).map(toClient) };
-  } catch (error) {
-    console.error('Unexpected error in getOrgClients:', error);
+    logError('Unexpected error in getClientRelations:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }

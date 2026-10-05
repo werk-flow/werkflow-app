@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from '@/lib/zod';
 
 const MIN_PASSWORD_LENGTH = 8;
 const UPPERCASE_REGEX = /[A-Z]/;
@@ -7,18 +7,9 @@ const NUMBER_REGEX = /[0-9]/;
 
 export const passwordSchema = z
   .string()
-  .min(
-    MIN_PASSWORD_LENGTH,
-    `Das Passwort muss mindestens ${MIN_PASSWORD_LENGTH} Zeichen lang sein.`
-  )
-  .regex(
-    UPPERCASE_REGEX,
-    'Das Passwort braucht mindestens einen Großbuchstaben.'
-  )
-  .regex(
-    LOWERCASE_REGEX,
-    'Das Passwort braucht mindestens einen Kleinbuchstaben.'
-  )
+  .min(MIN_PASSWORD_LENGTH, `Das Passwort muss mindestens ${MIN_PASSWORD_LENGTH} Zeichen lang sein.`)
+  .regex(UPPERCASE_REGEX, 'Das Passwort braucht mindestens einen Großbuchstaben.')
+  .regex(LOWERCASE_REGEX, 'Das Passwort braucht mindestens einen Kleinbuchstaben.')
   .regex(NUMBER_REGEX, 'Das Passwort braucht mindestens eine Zahl.');
 
 export const passwordWithConfirmationSchema = z.object({
@@ -26,9 +17,7 @@ export const passwordWithConfirmationSchema = z.object({
   confirmPassword: z.string().min(1, 'Bitte bestätige dein neues Passwort.'),
 });
 
-export type PasswordWithConfirmationValues = z.infer<
-  typeof passwordWithConfirmationSchema
->;
+export type PasswordWithConfirmationValues = z.infer<typeof passwordWithConfirmationSchema>;
 
 export type PasswordRequirementFlags = {
   length: boolean;
@@ -38,9 +27,7 @@ export type PasswordRequirementFlags = {
   allMet: boolean;
 };
 
-export function getPasswordRequirements(
-  password: string
-): PasswordRequirementFlags {
+export function getPasswordRequirements(password: string): PasswordRequirementFlags {
   const length = password.length >= MIN_PASSWORD_LENGTH;
   const uppercase = UPPERCASE_REGEX.test(password);
   const lowercase = LOWERCASE_REGEX.test(password);
@@ -51,7 +38,7 @@ export function getPasswordRequirements(
     uppercase,
     lowercase,
     number,
-    allMet: length && uppercase && lowercase && number
+    allMet: length && uppercase && lowercase && number,
   };
 }
 
@@ -60,10 +47,8 @@ export function getPasswordStrengthLevel(password: string): number {
     return 0;
   }
 
-  const { length, uppercase, lowercase, number } =
-    getPasswordRequirements(password);
-  const baseScore =
-    Number(length) + Number(uppercase) + Number(lowercase) + Number(number);
+  const { length, uppercase, lowercase, number } = getPasswordRequirements(password);
+  const baseScore = Number(length) + Number(uppercase) + Number(lowercase) + Number(number);
 
   const bonus = password.length >= 16 ? 1 : password.length >= 12 ? 0.5 : 0;
   const score = Math.min(4, Math.round(baseScore + bonus));
@@ -71,9 +56,7 @@ export function getPasswordStrengthLevel(password: string): number {
   return Math.max(0, score);
 }
 
-export function getPasswordConfirmationError(
-  values: PasswordWithConfirmationValues
-): string | null {
+export function getPasswordConfirmationError(values: PasswordWithConfirmationValues): string | null {
   if (!values.confirmPassword) {
     return 'Bitte bestätige dein neues Passwort.';
   }
@@ -90,8 +73,8 @@ export function translateSupabasePasswordError(error: unknown): string {
     typeof error === 'string'
       ? error
       : typeof error === 'object' && error && 'message' in error
-      ? String((error as { message?: unknown }).message ?? '')
-      : '';
+        ? String((error as { message?: unknown }).message ?? '')
+        : '';
 
   if (!message) {
     return 'Das Passwort erfüllt nicht die Anforderungen. Bitte prüfe die Kriterien und versuche es erneut.';

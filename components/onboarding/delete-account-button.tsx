@@ -12,21 +12,18 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger
+  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
+import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import { deleteAccount } from '@/lib/auth/actions';
+import { loadDocument } from '@/lib/navigation/document-load';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
-const ERROR_MESSAGES: Record<string, string> = {
-  not_authenticated: 'Du bist nicht angemeldet.',
-  has_memberships:
-    'Du kannst dein Konto nicht löschen, da du Mitglied einer Organisation bist.',
-  database_error:
-    'Ein Datenbankfehler ist aufgetreten. Bitte versuche es erneut.',
-  delete_failed:
-    'Das Löschen des Kontos ist fehlgeschlagen. Bitte versuche es erneut.'
+const ERROR_MESSAGES: Readonly<Record<string, string>> = {
+  has_memberships: 'Du kannst dein Konto nicht löschen, da du Mitglied einer Organisation bist.',
+  delete_failed: 'Das Löschen des Kontos ist fehlgeschlagen. Bitte versuche es erneut.',
 };
 
 export function DeleteAccountButton() {
@@ -43,30 +40,25 @@ export function DeleteAccountButton() {
       const result = await deleteAccount();
 
       if (!result.success) {
-        setError(ERROR_MESSAGES[result.error] || 'Ein Fehler ist aufgetreten.');
+        setError(describeFailure(result.error, ERROR_MESSAGES, SHARED_FAILURE_MESSAGES.unexpected_error));
         setIsDeleting(false);
         return;
       }
 
-      // Sign out locally and redirect to login — the deleted account's other
-      // sessions are already gone server-side.
+      // Sign out locally and load the login page fresh — the deleted account's
+      // other sessions are already gone server-side.
       await supabase.auth.signOut({ scope: 'local' });
-      window.location.href = '/login?message=account_deleted';
-    } catch (err) {
-      console.error('Error deleting account:', err);
-      setError('Ein unerwarteter Fehler ist aufgetreten.');
+      loadDocument('/login?message=account_deleted');
+    } catch {
+      setError(SHARED_FAILURE_MESSAGES.unexpected_error);
       setIsDeleting(false);
     }
   };
 
   return (
-    <AlertDialog open={isOpen} onOpenChange={setIsOpen}>
+    <AlertDialog open={isOpen} onOpenChange={setIsOpen} pending={isDeleting}>
       <AlertDialogTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-muted-foreground hover:text-destructive"
-        >
+        <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive">
           <Trash2 className="mr-2 size-4" />
           Konto löschen
         </Button>
@@ -80,9 +72,8 @@ export function DeleteAccountButton() {
             <AlertDialogTitle>Konto löschen?</AlertDialogTitle>
           </div>
           <AlertDialogDescription className="pt-2">
-            Bist du sicher, dass du dein Konto löschen möchtest? Diese Aktion
-            kann nicht rückgängig gemacht werden. Alle deine Daten werden
-            unwiderruflich gelöscht.
+            Bist du sicher, dass du dein Konto löschen möchtest? Diese Aktion kann nicht rückgängig gemacht
+            werden. Alle deine Daten werden unwiderruflich gelöscht.
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -98,7 +89,7 @@ export function DeleteAccountButton() {
             disabled={isDeleting}
             variant="destructive"
           >
-            {isDeleting ? 'Wird gelöscht...' : 'Konto löschen'}
+            {isDeleting ? 'Wird gelöscht…' : 'Konto löschen'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

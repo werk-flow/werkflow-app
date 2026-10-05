@@ -35,10 +35,10 @@ export function QuantityStepper({
 }: QuantityStepperProps) {
   const numericValue = parseDecimalInput(value);
 
+  // Three fractional digits, the precision of every stored quantity
+  // (`numeric(12,3)`), so stepping 0,125 by one gives 1,125 rather than 1,13.
   function update(nextValue: number) {
-    onChange(
-      formatDecimalDe(Math.max(min, Math.round(nextValue * 100) / 100))
-    );
+    onChange(formatDecimalDe(Math.max(min, Math.round(nextValue * 1000) / 1000), 3));
   }
 
   return (

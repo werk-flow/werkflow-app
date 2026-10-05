@@ -12,37 +12,33 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger
+  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ErrorText } from '@/components/ui/error-text';
 import { useBanner } from '@/components/ui/banner';
 import { createOptimisticChannel } from '@/hooks/use-optimistic-channel';
+import { describeFailure } from '@/lib/action-messages';
 import { createClient, type CreateClientInput } from '@/lib/clients/actions';
 import { CLIENT_TYPE_LABELS, type Client, type ClientType } from '@/lib/jobs/types';
 
 const CLIENT_TYPE_OPTIONS: { value: ClientType; label: string }[] = [
   { value: 'privat', label: CLIENT_TYPE_LABELS.privat },
-  { value: 'gewerblich', label: CLIENT_TYPE_LABELS.gewerblich }
+  { value: 'gewerblich', label: CLIENT_TYPE_LABELS.gewerblich },
 ];
 
 const ERROR_MESSAGES: Record<string, string> = {
-  not_authenticated: 'Du bist nicht angemeldet.',
-  no_active_org: 'Keine Organisation ausgewählt.',
   not_authorized: 'Du bist nicht berechtigt, Kunden zu verwalten.',
   name_required: 'Bitte gib einen Namen ein.',
   create_failed: 'Fehler beim Erstellen des Kunden.',
-  unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.'
 };
+
+function describeCreateFailure(error: string): string {
+  return describeFailure(error, ERROR_MESSAGES, 'Unbekannter Fehler');
+}
 
 /**
  * The customer list (`KundenContent`) subscribes here: the page header mounts
@@ -64,7 +60,7 @@ function draftClient(tempId: string, input: CreateClientInput): Client {
     address: input.address ?? null,
     notes: input.notes ?? null,
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
   };
 }
 
@@ -116,7 +112,7 @@ export function CreateClientDialog({
       ...(email.trim() ? { email: email.trim() } : {}),
       ...(phone.trim() ? { phone: phone.trim() } : {}),
       ...(address.trim() ? { address: address.trim() } : {}),
-      ...(notes.trim() ? { notes: notes.trim() } : {})
+      ...(notes.trim() ? { notes: notes.trim() } : {}),
     };
 
     if (onClientCreated) {
@@ -126,7 +122,7 @@ export function CreateClientDialog({
       try {
         const result = await createClient(input);
         if (!result.success) {
-          setError(ERROR_MESSAGES[result.error] || result.error || 'Unbekannter Fehler');
+          setError(describeCreateFailure(result.error));
           return;
         }
         onClientCreated(result.client);
@@ -152,19 +148,19 @@ export function CreateClientDialog({
     const result = await createClient(input).catch(() => null);
     if (!result || !result.success) {
       clientCreations.publish({ kind: 'rollback', tempId });
-      const reason = result ? ERROR_MESSAGES[result.error] || result.error : ERROR_MESSAGES.unexpected_error;
+      const reason = describeCreateFailure(result?.error ?? 'unexpected_error');
       showBanner({
         variant: 'error',
-        message: `Kunde „${input.name}" konnte nicht angelegt werden: ${reason}`
+        message: `Kunde „${input.name}“ konnte nicht angelegt werden: ${reason}`,
       });
       return;
     }
     clientCreations.publish({ kind: 'commit', tempId, confirmed: result.client });
     showBanner({ variant: 'success', message: 'Kunde erfolgreich erstellt!' });
-    // The action's tag update already re-renders this route in its response;
-    // a second router.refresh() rendered the same page again 10 ms later
-    // (Step 2 handoff diagnostic, 2026-09-12). The list's post-save read and
-    // the route snapshot effect reconcile the confirmed row.
+    // No router.refresh(): the action's tag update already re-renders this
+    // route in its response, and a second refresh renders the same page again.
+    // The list's post-save read and the route snapshot effect reconcile the
+    // confirmed row.
   };
 
   const resetForm = () => {
@@ -189,27 +185,30 @@ export function CreateClientDialog({
   const showNameError = hasAttemptedSubmit && nameError;
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange} pending={isLoading}>
       {!isControlled && (
         <DialogTrigger asChild>
           <Button size="default" className="gap-2">
             <Plus className="size-4" />
-            <span className="hidden sm:inline">Kunde hinzufügen</span>
-            <span className="sm:hidden">Hinzufügen</span>
+            <span className="sr-only sm:not-sr-only">Kunde hinzufügen</span>
+            <span className="sm:hidden" aria-hidden="true">
+              Hinzufügen
+            </span>
           </Button>
         </DialogTrigger>
       )}
-      <DialogContent
-        className="sm:max-w-[425px]"
-        onOpenAutoFocus={(e) => e.preventDefault()}
-      >
+      <DialogContent size="md" onOpenAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>Neuen Kunden anlegen</DialogTitle>
-          <DialogDescription>
-            Erstelle einen neuen Kunden für deine Organisation.
-          </DialogDescription>
+          <DialogDescription>Erstelle einen neuen Kunden für deine Organisation.</DialogDescription>
         </DialogHeader>
-        <form onSubmit={(e) => { e.stopPropagation(); handleSubmit(e); }} noValidate>
+        <form
+          onSubmit={(e) => {
+            e.stopPropagation();
+            handleSubmit(e);
+          }}
+          noValidate
+        >
           <div className="grid gap-4 py-4">
             <Field label="Name" htmlFor="client-name" required error={showNameError || undefined}>
               <Input
@@ -270,7 +269,7 @@ export function CreateClientDialog({
             </Field>
             <Field label="Notizen" htmlFor="client-notes">
               <Textarea
-                placeholder="Optionale Notizen zum Kunden..."
+                placeholder="Optionale Notizen zum Kunden…"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 disabled={isLoading}
@@ -281,7 +280,7 @@ export function CreateClientDialog({
           <DialogFooter>
             <Button type="submit" disabled={isLoading}>
               {isLoading && <Loader2 className="size-4 animate-spin" />}
-              {isLoading ? 'Wird erstellt...' : 'Kunde erstellen'}
+              {isLoading ? 'Wird erstellt…' : 'Kunde erstellen'}
             </Button>
           </DialogFooter>
         </form>

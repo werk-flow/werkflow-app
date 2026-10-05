@@ -1,150 +1,32 @@
-"use client";
+'use client';
 
-import { useState, useEffect, createContext, useContext, useMemo } from "react";
-import { SidebarLink as Link } from "./sidebar-link";
-import Image from "next/image";
-import { usePathname } from "next/navigation";
-import dynamic from "next/dynamic";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  LayoutDashboard,
-  Users,
-  Menu,
-  X,
-  Calendar,
-  Clock,
-  Building2,
-  Briefcase,
-  FileText,
-  Boxes,
-  Inbox,
-  ListTodo,
-  Award,
-  ClipboardList,
-  Wrench,
-} from "lucide-react";
+import { useState, useEffect, createContext, useContext, useMemo } from 'react';
+import { SidebarLink as Link } from './sidebar-link';
+import Image from 'next/image';
+import { usePathname } from 'next/navigation';
+import dynamic from 'next/dynamic';
+// The drawer needs enter and exit animations only: `m` with the DOM animation
+// features keeps the full `motion` component out of every route's bundle.
+import { AnimatePresence, LazyMotion, domAnimation, m } from 'framer-motion';
+import { Menu, X } from 'lucide-react';
 
-import { Separator } from "@/components/ui/separator";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { useOrganization } from "@/components/organization/organization-context";
-import { DashboardPageSkeleton } from "@/components/loading-states/dashboard-page-skeleton";
-import { MitarbeiterPageSkeleton } from "@/components/loading-states/mitarbeiter-page-skeleton";
-import { KalenderPageSkeleton } from "@/components/loading-states/kalender-page-skeleton";
-import { ZeiterfassungPageSkeleton } from "@/components/loading-states/zeiterfassung-page-skeleton";
-import { KundenPageSkeleton } from "@/components/loading-states/kunden-page-skeleton";
-import { AuftraegePageSkeleton } from "@/components/loading-states/auftraege-page-skeleton";
-import { DokumentePageSkeleton } from "@/components/loading-states/dokumente-page-skeleton";
-import { InventarPageSkeleton } from "@/components/loading-states/inventar-page-skeleton";
-import { AufgabenPageSkeleton } from "@/components/loading-states/aufgaben-page-skeleton";
-import { AnfragenPageSkeleton } from "@/components/loading-states/anfragen-page-skeleton";
-import { QualifikationenPageSkeleton } from "@/components/loading-states/qualifikationen-page-skeleton";
-import { EinstellungenPageSkeleton } from "@/components/loading-states/einstellungen-page-skeleton";
-import { WorkTemplatesPageSkeleton } from "@/components/loading-states/work-templates-page-skeleton";
-import { EquipmentPageSkeleton } from "@/components/loading-states/equipment-page-skeleton";
-import { ServiceCasesPageSkeleton } from "@/components/loading-states/service-cases-page-skeleton";
-import { SidebarProfileCard } from "@/components/sidebar/sidebar-profile-card";
-import {
-  AttentionCountProvider,
-  useAttentionCounts,
-} from "@/components/realtime/attention-count-provider";
-import type { AttentionCounts } from "@/lib/attention/types";
+import { Separator } from '@/components/ui/separator';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import { useOrganization } from '@/components/organization/organization-context';
+import { SidebarProfileCard } from '@/components/sidebar/sidebar-profile-card';
+import { AttentionCountProvider, useAttentionCounts } from '@/components/realtime/attention-count-provider';
+import type { AttentionCounts } from '@/lib/attention/types';
+import { OrgSwitchOverlay } from './org-switch-overlay';
+import { isNavItemActive, navItems } from './sidebar-nav-items';
 
 const OrganizationSwitcher = dynamic(
-  () =>
-    import("@/components/organization/organization-switcher").then(
-      (mod) => mod.OrganizationSwitcher,
-    ),
+  () => import('@/components/organization/organization-switcher').then((mod) => mod.OrganizationSwitcher),
   {
     ssr: false,
-    loading: () => (
-      <div className="h-9 w-full rounded-md border border-input bg-muted animate-pulse" />
-    ),
+    loading: () => <div className="h-9 w-full rounded-md border border-input bg-muted animate-pulse" />,
   },
 );
-
-type NavItem = {
-  href: string;
-  label: string;
-  icon: typeof LayoutDashboard;
-  /** If true, only admins and managers can see this item */
-  managerOrAbove?: boolean;
-};
-
-const navItems: NavItem[] = [
-  {
-    href: "/dashboard",
-    label: "Dashboard",
-    icon: LayoutDashboard,
-  },
-  {
-    href: "/aufgaben",
-    label: "Aufgaben",
-    icon: ListTodo,
-  },
-  {
-    href: "/kalender",
-    label: "Kalender",
-    icon: Calendar,
-  },
-  {
-    href: "/zeiterfassung",
-    label: "Zeiterfassung",
-    icon: Clock,
-  },
-  {
-    href: "/qualifikationen",
-    label: "Qualifikationen",
-    icon: Award,
-  },
-  {
-    href: "/anfragen",
-    label: "Anfragen",
-    icon: Inbox,
-    managerOrAbove: true,
-  },
-  {
-    href: "/auftraege",
-    label: "Aufträge",
-    icon: Briefcase,
-  },
-  {
-    href: "/dokumente",
-    label: "Dokumente",
-    icon: FileText,
-    managerOrAbove: true,
-  },
-  {
-    href: "/inventar",
-    label: "Inventar",
-    icon: Boxes,
-    managerOrAbove: true,
-  },
-  {
-    href: "/service/faelle",
-    label: "Service",
-    icon: Wrench,
-    managerOrAbove: true,
-  },
-  {
-    href: "/arbeitsvorlagen",
-    label: "Arbeitsvorlagen",
-    icon: ClipboardList,
-    managerOrAbove: true,
-  },
-  {
-    href: "/mitarbeiter",
-    label: "Mitarbeiter",
-    icon: Users,
-    managerOrAbove: true,
-  },
-  {
-    href: "/kunden",
-    label: "Kunden",
-    icon: Building2,
-    managerOrAbove: true,
-  },
-];
 
 // Context for sidebar state
 type SidebarContextType = {
@@ -157,7 +39,7 @@ const SidebarContext = createContext<SidebarContextType | null>(null);
 export function useSidebar() {
   const context = useContext(SidebarContext);
   if (!context) {
-    throw new Error("useSidebar must be used within AppShell");
+    throw new Error('useSidebar must be used within AppShell');
   }
   return context;
 }
@@ -218,15 +100,11 @@ function SidebarSkeleton() {
 function SidebarContent({ onNavigate }: { onNavigate?: (() => void) | undefined }) {
   const pathname = usePathname();
   const { activeOrg } = useOrganization();
-  const { actionableCount, approvalsCount, unreadNotificationCount } =
-    useAttentionCounts();
+  const { actionableCount, approvalsCount, unreadNotificationCount } = useAttentionCounts();
 
-  const isAdminOrManager =
-    activeOrg?.role === "admin" || activeOrg?.role === "buero";
+  const isAdminOrManager = activeOrg?.role === 'admin' || activeOrg?.role === 'buero';
 
-  const visibleNavItems = navItems.filter(
-    (item) => !item.managerOrAbove || isAdminOrManager,
-  );
+  const visibleNavItems = navItems.filter((item) => !item.managerOrAbove || isAdminOrManager);
 
   const activePath = pathname;
 
@@ -238,11 +116,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: (() => void) | undefined 
     <>
       {/* Logo */}
       <div className="flex items-center justify-center px-4 py-5">
-        <Link
-          href="/dashboard"
-          className="flex items-center"
-          onClick={handleNavClick}
-        >
+        <Link href="/dashboard" className="flex items-center" onClick={handleNavClick}>
           <Image
             src="/logo-text-light.svg"
             alt="WerkFlow"
@@ -275,21 +149,19 @@ function SidebarContent({ onNavigate }: { onNavigate?: (() => void) | undefined 
       <nav className="flex-1 p-4">
         <ul className="space-y-1">
           {visibleNavItems.map((item) => {
-            const isActive =
-              activePath === item.href ||
-              activePath.startsWith(item.href + "/");
+            const isActive = isNavItemActive(item, activePath);
             const Icon = item.icon;
             // Badges are viewer-scoped: the counts already exclude everything
             // the viewer cannot act on, so no extra role gate is needed.
             const badgeCount =
-              item.href === "/aufgaben"
+              item.href === '/aufgaben'
                 ? actionableCount + unreadNotificationCount
-                : item.href === "/zeiterfassung"
+                : item.href === '/zeiterfassung'
                   ? approvalsCount
                   : 0;
             const showBadge = badgeCount > 0;
             const badgeLabel =
-              item.href === "/aufgaben"
+              item.href === '/aufgaben'
                 ? `${badgeCount} offene Aufgaben und Benachrichtigungen`
                 : `${badgeCount} ausstehende Freigaben`;
 
@@ -299,10 +171,10 @@ function SidebarContent({ onNavigate }: { onNavigate?: (() => void) | undefined 
                   href={item.href}
                   onClick={handleNavClick}
                   className={cn(
-                    "flex items-center gap-3 rounded-md px-3 py-1.5 text-sm transition-colors",
+                    'flex items-center gap-3 rounded-md px-3 py-1.5 text-sm transition-colors',
                     isActive
-                      ? "bg-accent font-medium text-foreground"
-                      : "font-normal text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                      ? 'bg-accent font-medium text-foreground'
+                      : 'font-normal text-muted-foreground hover:bg-accent/60 hover:text-foreground',
                   )}
                 >
                   <Icon className="size-4" />
@@ -355,71 +227,63 @@ function DesktopSidebar() {
 }
 
 // Mobile drawer overlay
-function MobileDrawer({
-  isOpen,
-  onClose,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-}) {
-  // Close on escape key
+function MobileDrawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  // Close on escape key, unless a menu inside the drawer (the profile card's)
+  // already consumed it to close itself.
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === 'Escape' && !e.defaultPrevented) onClose();
     };
 
     if (isOpen) {
-      document.addEventListener("keydown", handleEscape);
+      document.addEventListener('keydown', handleEscape);
       // Prevent body scroll when drawer is open
-      document.body.style.overflow = "hidden";
+      document.body.style.overflow = 'hidden';
     }
 
     return () => {
-      document.removeEventListener("keydown", handleEscape);
-      document.body.style.overflow = "";
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = '';
     };
   }, [isOpen, onClose]);
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <>
-          {/* Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-40 bg-black/50 md:hidden"
-            onClick={onClose}
-          />
+    <LazyMotion features={domAnimation} strict>
+      <AnimatePresence>
+        {isOpen && (
+          <>
+            {/* Backdrop */}
+            <m.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 z-40 bg-black/50 md:hidden"
+              onClick={onClose}
+            />
 
-          {/* Drawer */}
-          <motion.aside
-            initial={{ x: "-100%" }}
-            animate={{ x: 0 }}
-            exit={{ x: "-100%" }}
-            transition={{ type: "tween", duration: 0.25, ease: "easeOut" }}
-            className="fixed left-0 top-0 z-50 h-full w-72 flex-col border-r bg-card shadow-xl md:hidden flex"
-          >
-            {/* Close button */}
-            <div className="absolute right-2 top-2 z-10">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onClose}
-                className="h-8 w-8"
-              >
-                <X className="h-4 w-4" />
-                <span className="sr-only">Menü schließen</span>
-              </Button>
-            </div>
+            {/* Drawer */}
+            <m.aside
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'tween', duration: 0.25, ease: 'easeOut' }}
+              className="fixed left-0 top-0 z-50 h-full w-72 flex-col border-r bg-card shadow-xl md:hidden flex"
+            >
+              {/* Close button */}
+              <div className="absolute right-2 top-2 z-10">
+                <Button variant="ghost" size="icon" onClick={onClose} className="size-11">
+                  <X className="h-4 w-4" />
+                  <span className="sr-only">Menü schließen</span>
+                </Button>
+              </div>
 
-            <DynamicSidebarContent onNavigate={onClose} />
-          </motion.aside>
-        </>
-      )}
-    </AnimatePresence>
+              <DynamicSidebarContent onNavigate={onClose} />
+            </m.aside>
+          </>
+        )}
+      </AnimatePresence>
+    </LazyMotion>
   );
 }
 
@@ -428,13 +292,8 @@ function MobileHeader() {
   const { isOpen, setIsOpen } = useSidebar();
 
   return (
-    <header className="flex md:hidden items-center justify-between border-b bg-card px-4 py-3 sticky top-0 z-30">
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={() => setIsOpen(!isOpen)}
-        className="h-9 w-9"
-      >
+    <header className="flex md:hidden items-center justify-between border-b bg-card px-4 py-2 sticky top-0 z-30">
+      <Button variant="ghost" size="icon" onClick={() => setIsOpen(!isOpen)} className="-ml-1 size-11">
         <Menu className="h-5 w-5" />
         <span className="sr-only">Menü öffnen</span>
       </Button>
@@ -461,52 +320,8 @@ function MobileHeader() {
       </Link>
 
       {/* Spacer to center logo */}
-      <div className="w-9" />
+      <div className="size-11" />
     </header>
-  );
-}
-
-// Org-switching skeleton overlay (isolated so AppShell stays data-free)
-function OrgSwitchOverlay() {
-  const { isSwitchingOrg } = useOrganization();
-  const pathname = usePathname();
-
-  const currentSkeleton = useMemo(() => {
-    if (pathname.startsWith("/mitarbeiter")) return <MitarbeiterPageSkeleton />;
-    if (pathname.startsWith("/aufgaben")) return <AufgabenPageSkeleton />;
-    if (pathname.startsWith("/dashboard")) return <DashboardPageSkeleton />;
-    if (pathname.startsWith("/kalender")) return <KalenderPageSkeleton />;
-    if (pathname.startsWith("/zeiterfassung"))
-      return <ZeiterfassungPageSkeleton />;
-    if (pathname.startsWith("/kunden")) return <KundenPageSkeleton />;
-    if (pathname.startsWith("/auftraege")) return <AuftraegePageSkeleton />;
-    if (pathname.startsWith("/dokumente")) return <DokumentePageSkeleton />;
-    if (pathname.startsWith("/service/faelle")) {
-      return <ServiceCasesPageSkeleton />;
-    }
-    if (pathname.startsWith("/service")) return <EquipmentPageSkeleton />;
-    if (pathname.startsWith("/anfragen")) return <AnfragenPageSkeleton />;
-    if (pathname.startsWith("/qualifikationen")) {
-      return <QualifikationenPageSkeleton />;
-    }
-    if (pathname.startsWith("/arbeitsvorlagen")) {
-      return <WorkTemplatesPageSkeleton />;
-    }
-    if (pathname.startsWith("/einstellungen")) {
-      return <EinstellungenPageSkeleton />;
-    }
-    if (pathname === "/inventar" || pathname.startsWith("/inventar/")) {
-      return <InventarPageSkeleton />;
-    }
-    return null;
-  }, [pathname]);
-
-  if (!isSwitchingOrg || !currentSkeleton) return null;
-
-  return (
-    <div className="absolute inset-0 z-50 overflow-auto bg-background">
-      {currentSkeleton}
-    </div>
   );
 }
 
@@ -524,9 +339,7 @@ export function AppShell({
   const { isSwitchingOrg } = useOrganization();
 
   return (
-    <SidebarContext.Provider
-      value={useMemo(() => ({ isOpen, setIsOpen }), [isOpen])}
-    >
+    <SidebarContext.Provider value={useMemo(() => ({ isOpen, setIsOpen }), [isOpen])}>
       <AttentionCountProvider
         initialCounts={initialAttentionCounts}
         initialOrganizationId={initialOrganizationId}
@@ -538,10 +351,7 @@ export function AppShell({
           <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
             <main
               aria-hidden={isSwitchingOrg}
-              className={cn(
-                "h-full overflow-hidden",
-                isSwitchingOrg && "pointer-events-none opacity-0",
-              )}
+              className={cn('h-full overflow-hidden', isSwitchingOrg && 'pointer-events-none opacity-0')}
             >
               {children}
             </main>

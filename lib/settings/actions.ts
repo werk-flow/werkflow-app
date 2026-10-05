@@ -7,10 +7,18 @@ import { PROFILE_AVATAR_BUCKET } from '@/lib/profile-avatar';
 import type { ProfileSettingsValues } from '@/lib/settings/schemas';
 import { profileSettingsSchema } from '@/lib/settings/schemas';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { logError } from '@/lib/logging';
+import { z } from '@/lib/zod';
+import type { ActionFailure } from '@/lib/action-result';
+
+const profileAvatarInputSchema = z.object({
+  avatarPath: z.string().max(500),
+  previousAvatarPath: z.string().max(500).nullable().optional(),
+});
 
 export type UpdateProfileResult =
   | { success: true; firstName: string; lastName: string }
-  | { success: false; error: 'not_authenticated' | 'invalid_input' | 'update_failed' };
+  | ActionFailure<'not_authenticated' | 'invalid_input' | 'update_failed'>;
 
 type UpdateProfileAvatarInput = {
   avatarPath: string;
@@ -19,14 +27,11 @@ type UpdateProfileAvatarInput = {
 
 export type UpdateProfileAvatarResult =
   | { success: true; avatarPath: string }
-  | {
-      success: false;
-      error: 'not_authenticated' | 'invalid_input' | 'update_failed';
-    };
+  | ActionFailure<'not_authenticated' | 'invalid_input' | 'update_failed'>;
 
 export type RemoveProfileAvatarResult =
   | { success: true }
-  | { success: false; error: 'not_authenticated' | 'update_failed' };
+  | ActionFailure<'not_authenticated' | 'update_failed'>;
 
 function isValidAvatarPath(userId: string, avatarPath: string): boolean {
   const startsWithUserId = avatarPath.startsWith(`${userId}/`);
@@ -39,9 +44,7 @@ function isValidAvatarPath(userId: string, avatarPath: string): boolean {
   return startsWithUserId && hasValidLength && !hasInvalidSegments && !hasBackslash;
 }
 
-export async function updateProfileSettings(
-  input: ProfileSettingsValues
-): Promise<UpdateProfileResult> {
+export async function updateProfileSettings(input: ProfileSettingsValues): Promise<UpdateProfileResult> {
   const user = await getAuthenticatedUser();
 
   if (!user) {
@@ -69,7 +72,7 @@ export async function updateProfileSettings(
     .single();
 
   if (error) {
-    console.error('Error updating profile settings:', error);
+    logError('Error updating profile settings:', error);
     return { success: false, error: 'update_failed' };
   }
 
@@ -83,8 +86,11 @@ export async function updateProfileSettings(
 }
 
 export async function updateProfileAvatar(
-  input: UpdateProfileAvatarInput
+  rawInput: UpdateProfileAvatarInput,
 ): Promise<UpdateProfileAvatarResult> {
+  const parsedInput = profileAvatarInputSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   const user = await getAuthenticatedUser();
 
   if (!user) {
@@ -95,10 +101,7 @@ export async function updateProfileAvatar(
     return { success: false, error: 'invalid_input' };
   }
 
-  if (
-    input.previousAvatarPath &&
-    !isValidAvatarPath(user.id, input.previousAvatarPath)
-  ) {
+  if (input.previousAvatarPath && !isValidAvatarPath(user.id, input.previousAvatarPath)) {
     return { success: false, error: 'invalid_input' };
   }
 
@@ -115,7 +118,7 @@ export async function updateProfileAvatar(
     .single();
 
   if (error) {
-    console.error('Error updating profile avatar:', error);
+    logError('Error updating profile avatar:', error);
     return { success: false, error: 'update_failed' };
   }
 
@@ -125,7 +128,7 @@ export async function updateProfileAvatar(
       .remove([input.previousAvatarPath]);
 
     if (removeError) {
-      console.error('Error removing previous profile avatar:', removeError);
+      logError('Error removing previous profile avatar:', removeError);
     }
   }
 
@@ -152,7 +155,7 @@ export async function removeProfileAvatar(): Promise<RemoveProfileAvatarResult> 
     .single();
 
   if (readError) {
-    console.error('Error reading current profile avatar:', readError);
+    logError('Error reading current profile avatar:', readError);
     return { success: false, error: 'update_failed' };
   }
 
@@ -167,7 +170,7 @@ export async function removeProfileAvatar(): Promise<RemoveProfileAvatarResult> 
     .single();
 
   if (updateError) {
-    console.error('Error removing profile avatar:', updateError);
+    logError('Error removing profile avatar:', updateError);
     return { success: false, error: 'update_failed' };
   }
 
@@ -177,7 +180,7 @@ export async function removeProfileAvatar(): Promise<RemoveProfileAvatarResult> 
       .remove([profile.avatar_path]);
 
     if (removeError) {
-      console.error('Error deleting profile avatar from storage:', removeError);
+      logError('Error deleting profile avatar from storage:', removeError);
     }
   }
 

@@ -20,14 +20,9 @@ import {
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { describeFailure } from '@/lib/action-messages';
 import { createInventoryLocation } from '@/lib/inventory/actions';
 import type { InventoryLocation, InventoryLocationType } from '@/lib/inventory/types';
 import { INVENTORY_LOCATION_TYPE_LABELS } from '@/lib/inventory/types';
@@ -72,27 +67,30 @@ export function LocationSelectWithCreate({
       onValueChange={onValueChange}
       onCreated={onLocationCreated}
       placeholder={placeholder}
-      searchPlaceholder="Lager suchen..."
+      searchPlaceholder="Lager suchen…"
       emptyMessage="Kein Lager gefunden"
       disabled={disabled}
       allowNone={allowNone}
       noneLabel={noneLabel}
       createLabel="Neues Lager erstellen"
       renderCreateDialog={({ open, onOpenChange, onCreated }) => (
-        <CreateLocationDialog
-          open={open}
-          onOpenChange={onOpenChange}
-          onCreated={onCreated}
-        />
+        <CreateLocationDialog open={open} onOpenChange={onOpenChange} onCreated={onCreated} />
       )}
     />
   );
 }
 
+const CREATE_LOCATION_ERROR_MESSAGES = {
+  name_required: 'Bitte gib einen Namen ein.',
+  not_authorized: 'Du hast keine Berechtigung, Lager anzulegen.',
+} satisfies Record<string, string>;
+
 function getCreateLocationErrorMessage(error: string): string {
-  if (error === 'name_required') return 'Bitte gib einen Namen ein.';
-  if (error === 'not_authorized') return 'Du hast keine Berechtigung, Lager anzulegen.';
-  return 'Das Lager konnte nicht erstellt werden. Prüfe den Namen und versuche es erneut.';
+  return describeFailure(
+    error,
+    CREATE_LOCATION_ERROR_MESSAGES,
+    'Das Lager konnte nicht erstellt werden. Prüfe den Namen und versuche es erneut.',
+  );
 }
 
 function CreateLocationDialog({
@@ -108,20 +106,25 @@ function CreateLocationDialog({
   const [description, setDescription] = useState('');
   const [locationType, setLocationType] = useState<InventoryLocationType>('room');
   const [error, setError] = useState<string | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
   // The save completes after later renders; the parent's latest handler must
   // receive the location, or a handler from the submit-time render replays a
-  // stale snapshot of the parent's state (P1-13 material row, 2026-09-13).
+  // stale snapshot of the parent's state.
   const onCreatedRef = useRef(onCreated);
   useLayoutEffect(() => {
     onCreatedRef.current = onCreated;
   });
   // `isPending` is set before the first await, so the button spins in the
   // first frame; the parent select adopts the new location via onCreated.
-  const { run: runCreateLocation, isPending } = useServerAction(
-    createInventoryLocation
-  );
+  const { run: runCreateLocation, isPending } = useServerAction(createInventoryLocation);
 
   function handleSave() {
+    if (!name.trim()) {
+      setNameError('Bitte gib dem Lager einen Namen.');
+      document.getElementById('quick-location-name')?.focus();
+      return;
+    }
+    setNameError(null);
     setError(null);
     void (async () => {
       // A thrown call (network, aborted request) must surface like a failed one.
@@ -145,7 +148,7 @@ function CreateLocationDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange} pending={isPending}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Lager erstellen</DialogTitle>
@@ -164,52 +167,37 @@ function CreateLocationDialog({
         >
           <DialogBody>
             <div className="space-y-4">
-              <Field label="Name" htmlFor="quick-location-name" required>
-                <Input
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                />
+              <Field label="Name" htmlFor="quick-location-name" required error={nameError}>
+                <Input value={name} onChange={(event) => setName(event.target.value)} />
               </Field>
               <Field label="Typ" htmlFor="quick-location-type">
                 <Select
                   value={locationType}
-                  onValueChange={(value) =>
-                    setLocationType(value as InventoryLocationType)
-                  }
+                  onValueChange={(value) => setLocationType(value as InventoryLocationType)}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.entries(INVENTORY_LOCATION_TYPE_LABELS).map(
-                      ([value, label]) => (
-                        <SelectItem key={value} value={value}>
-                          {label}
-                        </SelectItem>
-                      ),
-                    )}
+                    {Object.entries(INVENTORY_LOCATION_TYPE_LABELS).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </Field>
               <Field label="Beschreibung" htmlFor="quick-location-description">
-                <Textarea
-                  value={description}
-                  onChange={(event) => setDescription(event.target.value)}
-                />
+                <Textarea value={description} onChange={(event) => setDescription(event.target.value)} />
               </Field>
             </div>
             <ErrorText>{error}</ErrorText>
           </DialogBody>
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={isPending}
-            >
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isPending || !name.trim()}>
+            <Button type="submit" disabled={isPending}>
               {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
               Speichern
             </Button>

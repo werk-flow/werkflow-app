@@ -13,22 +13,20 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger
+  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
+import { loadDocument } from '@/lib/navigation/document-load';
 import { deleteOrganization } from '@/lib/org/delete-action';
 
-const ERROR_MESSAGES: Record<string, string> = {
-  not_authenticated: 'Du bist nicht angemeldet.',
+const ERROR_MESSAGES: Readonly<Record<string, string>> = {
   org_not_found: 'Organisation nicht gefunden.',
   not_authorized: 'Nur der Admin kann die Organisation löschen.',
   name_mismatch: 'Der eingegebene Name stimmt nicht überein.',
-  delete_members_failed: 'Fehler beim Löschen der Mitglieder.',
-  delete_invites_failed: 'Fehler beim Löschen der Einladungen.',
   delete_org_failed: 'Fehler beim Löschen der Organisation.',
-  unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.'
 };
 
 interface DeleteOrgDialogProps {
@@ -36,10 +34,7 @@ interface DeleteOrgDialogProps {
   disabled?: boolean;
 }
 
-export function DeleteOrgDialog({
-  orgName,
-  disabled = false,
-}: DeleteOrgDialogProps) {
+export function DeleteOrgDialog({ orgName, disabled = false }: DeleteOrgDialogProps) {
   const [open, setOpen] = useState(false);
   const [confirmationName, setConfirmationName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -54,23 +49,20 @@ export function DeleteOrgDialog({
 
       if (result.success) {
         setOpen(false);
-        // Redirect based on whether user has remaining organizations
-        if (result.nextOrgId) {
-          // User has other orgs - go to dashboard with success banner
-          window.location.href = `/dashboard?org_deleted=true`;
-        } else {
-          // User has no orgs - go to onboarding with success banner
-          window.location.href = `/onboarding/start?org_deleted=true`;
-        }
+        // A full load so the next page reads the changed active-organization
+        // cookie; without a remaining organization the user starts onboarding.
+        loadDocument(result.nextOrgId ? '/dashboard?org_deleted=true' : '/onboarding/start?org_deleted=true');
       } else {
         setError(
-          ERROR_MESSAGES[result.error || 'unexpected_error'] ||
-            result.error ||
-            'Unbekannter Fehler'
+          describeFailure(
+            result.error ?? 'unexpected_error',
+            ERROR_MESSAGES,
+            SHARED_FAILURE_MESSAGES.unexpected_error,
+          ),
         );
       }
     } catch {
-      setError('Ein unerwarteter Fehler ist aufgetreten.');
+      setError(SHARED_FAILURE_MESSAGES.unexpected_error);
     } finally {
       setIsLoading(false);
     }
@@ -87,14 +79,9 @@ export function DeleteOrgDialog({
   const isNameMatch = confirmationName.trim() === orgName;
 
   return (
-    <AlertDialog open={open} onOpenChange={handleOpenChange}>
+    <AlertDialog open={open} onOpenChange={handleOpenChange} pending={isLoading}>
       <AlertDialogTrigger asChild>
-        <Button
-          variant="destructive"
-          size="sm"
-          className="w-full"
-          disabled={disabled}
-        >
+        <Button variant="destructive" size="sm" className="w-full" disabled={disabled}>
           <Trash2 className="size-4" />
           Organisation löschen
         </Button>
@@ -117,8 +104,7 @@ export function DeleteOrgDialog({
                 <li>Dem Organisationscode</li>
               </ul>
               <p className="mt-3">
-                Mitglieder, die nur dieser Organisation angehören, werden zur
-                Onboarding-Seite weitergeleitet.
+                Mitglieder, die nur dieser Organisation angehören, werden zur Onboarding-Seite weitergeleitet.
               </p>
             </div>
           </AlertDialogDescription>
@@ -129,9 +115,7 @@ export function DeleteOrgDialog({
             htmlFor="confirm-name"
             required
           >
-            <div className="rounded-md bg-muted px-3 py-2 text-sm font-medium">
-              {orgName}
-            </div>
+            <div className="rounded-md bg-muted px-3 py-2 text-sm font-medium">{orgName}</div>
             <Input
               value={confirmationName}
               onChange={(e) => setConfirmationName(e.target.value)}
@@ -154,7 +138,7 @@ export function DeleteOrgDialog({
             variant="destructive"
           >
             {isLoading && <Loader2 className="size-4 animate-spin" />}
-            {isLoading ? 'Wird gelöscht...' : 'Endgültig löschen'}
+            {isLoading ? 'Wird gelöscht…' : 'Endgültig löschen'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

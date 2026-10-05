@@ -1,15 +1,26 @@
 'use server';
-
+import type { ActionFailure } from '@/lib/action-result';
+import { logReadFailure, loggedRead, logReadErrors } from '@/lib/data/read-request-cache';
 import { revalidatePath } from 'next/cache';
+import { logError } from '@/lib/logging';
 import { cookies } from 'next/headers';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { readCompleteRows, readInBatches, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
+import { getAuthenticatedUser, getCachedMemberships } from '@/lib/data/cached';
+import { readOrganizationSettings } from './organization-settings-read';
 import {
-  getAuthenticatedUser,
-  getCachedMemberships,
-  getCachedOrganizationSettings,
-} from '@/lib/data/cached';
+  addManualEntryInputSchema,
+  calendarEntryIdListSchema,
+  deleteEntryInputSchema,
+  entryIdListSchema,
+  getTimeEntriesInputSchema,
+  optionalOrganizationIdSchema,
+  reviewChangeRequestInputSchema,
+  reviewEntriesInputSchema,
+  updateEntryInputSchema,
+} from './action-schemas';
 import {
   type TimeEntry,
   type TimeEntryRow,
@@ -26,9 +37,7 @@ import {
   type GetTimeEntriesParams,
   type GetTimeEntriesResult,
   type GetPendingSessionsResult,
-  type PendingSession,
   type ChangeRequest,
-  type ChangeRequestWithDetails,
   type RequestChangeResult,
   type ReviewChangeRequestResult,
   type GetChangeRequestsResult,
@@ -47,50 +56,42 @@ import {
   calculateWorkSessions,
   determineApprovalStatus,
   canManageEntries,
-  canApproveEntries,
   canViewEntries,
   canAddEntriesFor,
 } from './helpers';
 import { canViewChangeRequest } from './change-request-visibility';
 import { readPendingChangeRequestData } from './change-request-reader';
-import { groupPendingEntries } from './pending-sessions';
-import { isUuid } from '@/lib/validation/uuid';
+import { readPendingChangeRequestQueue, readPendingSessionQueue } from './approval-queue';
 import {
-  getLocalDayEnd,
-  getLocalDayKey,
-  getLocalDayStart,
-  isSameLocalDay
-} from './day-utils';
+  entriesTouchClosedTimePeriod,
+  timeEntryBatchFailure,
+  timeWriteFailure,
+  touchesClosedTimePeriod,
+} from './closed-periods';
+import { isUuid, uuidSchema } from '@/lib/validation/uuid';
+import { getLocalDayEnd, getLocalDayKey, getLocalDayStart, isSameLocalDay } from './day-utils';
 import {
   validateManualEntries,
   validateManualEntryJobOwnership,
   validateTimestampUpdate,
-  validateDayEntrySequence
+  validateDayEntrySequence,
 } from './validation';
 import { computeBreakdownForSettings } from './settings';
 import { getJobDisplayTitle } from '@/lib/jobs/types';
 import {
   authorizeResponsibilityForTarget,
   getEffectiveResponsibilityHolderForActor,
+  loadResponsibilityRuntimeState,
 } from '@/lib/responsibilities/server';
+import { getCanonicalTimeEntries } from './canonical-entries';
 import { getCanonicalClockState } from './segment-actions';
 import { hashTimeTransitionRequest } from './transition-hash';
-import {
-  createActivitySelection,
-  projectTimeSegmentsToLegacyTransitions,
-  splitSegmentAtLocalDayBoundaries,
-  toTimeSegmentFact,
-} from './segments';
-import {
-  getApprovedTimeCorrectionApplications,
-  getProvisionalTimeCorrectionProjection,
-} from '@/lib/time-corrections/actions';
+import { createActivitySelection } from './segments';
+import { getProvisionalTimeCorrectionProjection } from '@/lib/time-corrections/actions';
+import { loadApprovedCorrectionProjection } from '@/lib/time-corrections/approved-projection';
 import { applyApprovedTimeCorrections } from '@/lib/time-corrections/projection';
 import { collectActiveJobIds } from './active-jobs';
-
-function isAttendanceOpenEntryType(entryType: string): boolean {
-  return entryType !== 'clock_out';
-}
+import { getOpenSessionOrgsForUserOnDay } from './open-session-orgs';
 
 /**
  * Get the current organization ID from cookies (with membership fallback).
@@ -100,38 +101,48 @@ async function getCurrentOrgId(userId: string): Promise<string | null> {
   return resolveActiveOrgId(cookieStore, userId);
 }
 
-/**
- * Get user's entries for the current organization
- */
-async function getUserEntries(
+/** The user's complete entries on the timestamps' local days; null when a read fails or overflows. */
+async function getUserEntriesOnDays(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   userId: string,
-  orgId: string
-): Promise<TimeEntryRow[]> {
-  const { data, error } = await admin
-    .from('time_entries')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('organization_id', orgId)
-    .order('timestamp', { ascending: false });
-
-  if (error) {
-    console.error('Error fetching user entries:', error);
-    return [];
-  }
-
-  return data || [];
+  orgId: string,
+  timestamps: readonly Date[],
+): Promise<TimeEntryRow[] | null> {
+  const days = [...new Map(timestamps.map((timestamp) => [getLocalDayKey(timestamp), timestamp])).values()];
+  const results = await Promise.all(
+    days.map((day) => {
+      const { start, end } = getDayBounds(day);
+      return readCompleteRows(
+        (from, to) =>
+          admin
+            .from('time_entries')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('organization_id', orgId)
+            .gte('timestamp', start.toISOString())
+            .lte('timestamp', end.toISOString())
+            .order('timestamp', { ascending: false })
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      );
+    }),
+  );
+  const failed = results.find((result) => result.error)?.error;
+  if (failed) logReadFailure('Error fetching user entries:', { code: failed.code });
+  return failed ? null : results.flatMap((result) => result.data);
 }
 
 /**
- * Get entries for a specific local day for the user in an org.
+ * Get entries for a specific local day for the user in an org; null when the
+ * read fails, so a caller never validates against or reports a missing day.
  */
 async function getUserEntriesForDay(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   userId: string,
   orgId: string,
-  date: Date
-): Promise<TimeEntryRow[]> {
+  date: Date,
+): Promise<TimeEntryRow[] | null> {
   const { start, end } = getDayBounds(date);
 
   const { data, error } = await admin
@@ -147,11 +158,11 @@ async function getUserEntriesForDay(
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Error fetching user day entries:', error);
-    return [];
+    logReadFailure('Error fetching user day entries:', error);
+    return null;
   }
 
-  return data || [];
+  return data;
 }
 
 /**
@@ -161,8 +172,8 @@ async function getUserEntriesForDay(
 async function getUserTodayEntries(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   userId: string,
-  orgId: string
-): Promise<TimeEntryRow[]> {
+  orgId: string,
+): Promise<TimeEntryRow[] | null> {
   return getUserEntriesForDay(admin, userId, orgId, new Date());
 }
 
@@ -171,10 +182,7 @@ async function getUserTodayEntries(
  * per-request membership read (never a cross-request cache); null when the
  * caller is not a current operational member.
  */
-async function verifyCurrentMembership(
-  userId: string,
-  orgId: string
-): Promise<OrgRole | null> {
+async function verifyCurrentMembership(userId: string, orgId: string): Promise<OrgRole | null> {
   const memberships = await getCachedMemberships(userId);
   const membership = memberships.find((m) => m.orgId === orgId);
   return (membership?.role as OrgRole) ?? null;
@@ -182,54 +190,52 @@ async function verifyCurrentMembership(
 
 async function getClockJobInfo(
   admin: ReturnType<typeof createSupabaseAdminClient>,
+  organizationId: string,
   jobId: string,
-  options?: { includeRelations?: boolean; touchStatus?: boolean }
 ): Promise<ClockJobInfo | null> {
-  const includeRelations = options?.includeRelations ?? true;
-
-  const { data: job } = await admin
-    .from('jobs')
-    .select('id, title, description, job_number, status, project_id, client_id')
-    .eq('id', jobId)
-    .single();
+  const { data: job } = await loggedRead(
+    'getClockJobInfo: jobs read failed',
+    admin
+      .from('jobs')
+      .select('id, title, description, job_number, status, project_id, client_id')
+      .eq('id', jobId)
+      .eq('organization_id', organizationId)
+      .maybeSingle(),
+  );
 
   if (!job) {
     return null;
   }
 
-  if (!includeRelations) {
-    return {
-      id: job.id,
-      title: getJobDisplayTitle({
-        title: job.title,
-        description: job.description
-      }),
-      jobNumber: job.job_number,
-      status: job.status === 'nicht_bearbeitet' ? 'in_bearbeitung' : job.status,
-      projectName: null,
-      clientName: null
-    };
-  }
-
   const [projectData, clientData] = await Promise.all([
     job.project_id
-      ? admin.from('projects').select('name').eq('id', job.project_id).single()
+      ? admin
+          .from('projects')
+          .select('name')
+          .eq('id', job.project_id)
+          .eq('organization_id', organizationId)
+          .maybeSingle()
       : Promise.resolve({ data: null }),
     job.client_id
-      ? admin.from('clients').select('name').eq('id', job.client_id).single()
-      : Promise.resolve({ data: null })
+      ? admin
+          .from('clients')
+          .select('name')
+          .eq('id', job.client_id)
+          .eq('organization_id', organizationId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
 
   return {
     id: job.id,
     title: getJobDisplayTitle({
       title: job.title,
-      description: job.description
+      description: job.description,
     }),
     jobNumber: job.job_number,
     status: job.status === 'nicht_bearbeitet' ? 'in_bearbeitung' : job.status,
     projectName: (projectData.data as { name: string } | null)?.name ?? null,
-    clientName: (clientData.data as { name: string } | null)?.name ?? null
+    clientName: (clientData.data as { name: string } | null)?.name ?? null,
   };
 }
 
@@ -241,7 +247,7 @@ type TodayBounds = {
 function getDayBounds(date: Date): TodayBounds {
   return {
     start: getLocalDayStart(date),
-    end: getLocalDayEnd(date)
+    end: getLocalDayEnd(date),
   };
 }
 
@@ -249,84 +255,12 @@ function getTodayBounds(): TodayBounds {
   return getDayBounds(new Date());
 }
 
-function getManualEntryJobId(
-  entryType: TimeEntry['entryType'],
-  jobId?: string | null
-): string | null {
+function getManualEntryJobId(entryType: TimeEntry['entryType'], jobId?: string | null): string | null {
   if (entryType !== 'clock_in') {
     return null;
   }
 
   return jobId ?? null;
-}
-
-type OpenSessionOrg = { organizationId: string; organizationName: string };
-
-async function getOpenSessionOrgsForUserOnDay(
-  admin: ReturnType<typeof createSupabaseAdminClient>,
-  userId: string,
-  referenceDate: Date
-): Promise<OpenSessionOrg[]> {
-  const { start, end } = getDayBounds(referenceDate);
-  const effectiveEnd = new Date(
-    Math.min(end.getTime(), Date.now())
-  ).toISOString();
-
-  const { data: rows, error } = await admin
-    .from('time_entries')
-    .select('organization_id, entry_type, timestamp, status')
-    .eq('user_id', userId)
-    .gte('timestamp', start.toISOString())
-    .lte('timestamp', effectiveEnd)
-    .neq('status', 'rejected')
-    .neq('status', 'pending_delete')
-    .order('timestamp', { ascending: false });
-
-  if (error) {
-    console.error('Error fetching user entries for open-session check:', error);
-    return [];
-  }
-
-  const seenOrgs = new Set<string>();
-  const openOrgIds: string[] = [];
-
-  for (const row of rows || []) {
-    const orgId = row.organization_id as string;
-    if (!orgId || seenOrgs.has(orgId)) continue;
-    seenOrgs.add(orgId);
-
-    if (isAttendanceOpenEntryType(row.entry_type)) {
-      openOrgIds.push(orgId);
-    }
-  }
-
-  if (openOrgIds.length === 0) return [];
-
-  const { data: orgs, error: orgErr } = await admin
-    .from('organizations')
-    .select('id, name')
-    .in('id', openOrgIds);
-
-  if (orgErr) {
-    console.error('Error fetching org names for open-session check:', orgErr);
-  }
-
-  const nameById = new Map<string, string>();
-  for (const o of orgs || []) {
-    nameById.set(o.id, o.name);
-  }
-
-  return openOrgIds.map((id) => ({
-    organizationId: id,
-    organizationName: nameById.get(id) || 'Unbekannte Organisation'
-  }));
-}
-
-async function getOpenSessionOrgsForUserToday(
-  admin: ReturnType<typeof createSupabaseAdminClient>,
-  userId: string
-): Promise<OpenSessionOrg[]> {
-  return getOpenSessionOrgsForUserOnDay(admin, userId, new Date());
 }
 
 // ============================================
@@ -348,8 +282,7 @@ function getTransitionVersion(value: unknown): number | null {
  * Used before sign-out so users don't get "stuck clocked in".
  */
 export async function clockOutBeforeSignOut(): Promise<
-  | { success: true; clockedOutOrgIds: string[] }
-  | { success: false; error: string; failedOrgIds?: string[] }
+  { success: true; clockedOutOrgIds: string[] } | (ActionFailure & { failedOrgIds?: string[] })
 > {
   try {
     const user = await getAuthenticatedUser();
@@ -358,7 +291,9 @@ export async function clockOutBeforeSignOut(): Promise<
     }
 
     const admin = createSupabaseAdminClient();
-    const openOrgs = await getOpenSessionOrgsForUserToday(admin, user.id);
+    const openOrgs = await getOpenSessionOrgsForUserOnDay(admin, user.id, new Date());
+    if (!openOrgs) return { success: false, error: 'fetch_failed' };
+    // tenant-scope: cross-organization-by-design — sign-out ends the signed-in user's own open sessions in every organization they belong to.
     const { data: canonicalSessions, error: canonicalSessionsError } = await admin
       .from('time_sessions')
       .select('id, organization_id, version, status')
@@ -366,10 +301,7 @@ export async function clockOutBeforeSignOut(): Promise<
       .is('ended_at', null);
 
     if (canonicalSessionsError) {
-      console.error(
-        'Error fetching canonical sessions before sign-out:',
-        canonicalSessionsError
-      );
+      logError('Error fetching canonical sessions before sign-out:', canonicalSessionsError);
       return { success: false, error: 'fetch_failed' };
     }
 
@@ -393,7 +325,7 @@ export async function clockOutBeforeSignOut(): Promise<
         selection: null,
         acknowledgeLong: action === 'recover_end',
       });
-      const transitionArgs = {
+      const transitionArgs = rpcArgs('transition_time_activity', {
         p_organization_id: session.organization_id,
         p_actor_id: user.id,
         p_operation_id: operationId,
@@ -402,23 +334,16 @@ export async function clockOutBeforeSignOut(): Promise<
         p_expected_session_id: session.id,
         p_expected_version: session.version,
         p_acknowledge_long: action === 'recover_end',
-      };
-      let { data: transitionResult, error } = await admin.rpc(
-        'transition_time_activity',
-        transitionArgs
-      );
+      });
+      let { data: transitionResult, error } = await admin.rpc('transition_time_activity', transitionArgs);
       if (error) {
-        console.error('Error ending canonical session before sign-out:', error, {
-          organizationId: session.organization_id,
-          sessionId: session.id,
-        });
+        logError('Error ending canonical session before sign-out:', error);
         failedOrgIds.add(session.organization_id);
         continue;
       }
       if (getTransitionOutcome(transitionResult) === 'recovery_required') {
         const recoveryOperationId = crypto.randomUUID();
-        const recoveryExpectedVersion =
-          getTransitionVersion(transitionResult) ?? session.version;
+        const recoveryExpectedVersion = getTransitionVersion(transitionResult) ?? session.version;
         const recoveryRequestHash = hashTimeTransitionRequest({
           organizationId: session.organization_id,
           action: 'recover_end',
@@ -439,11 +364,10 @@ export async function clockOutBeforeSignOut(): Promise<
         error = recoveryResult.error;
       }
       if (error || getTransitionOutcome(transitionResult) !== 'ended') {
-        console.error('Canonical session remained open before sign-out:', error, {
-          organizationId: session.organization_id,
-          sessionId: session.id,
-          outcome: getTransitionOutcome(transitionResult),
-        });
+        logError(
+          'Canonical session remained open before sign-out:',
+          error ?? getTransitionOutcome(transitionResult),
+        );
         failedOrgIds.add(session.organization_id);
         continue;
       }
@@ -457,15 +381,11 @@ export async function clockOutBeforeSignOut(): Promise<
         entry_type: 'clock_out',
         timestamp: nowIso,
         is_manual: false,
-        status: 'approved'
+        status: 'approved',
       });
 
       if (insertError) {
-        console.error(
-          'Error inserting clock_out before sign-out:',
-          insertError,
-          { orgId: org.organizationId }
-        );
+        logError('Error inserting clock_out before sign-out:', insertError);
         failedOrgIds.add(org.organizationId);
         continue;
       }
@@ -483,12 +403,10 @@ export async function clockOutBeforeSignOut(): Promise<
 
     return {
       success: true,
-      clockedOutOrgIds: [
-        ...new Set([...canonicalClosedOrgIds, ...legacyClosedOrgIds]),
-      ],
+      clockedOutOrgIds: [...new Set([...canonicalClosedOrgIds, ...legacyClosedOrgIds])],
     };
   } catch (error) {
-    console.error('Unexpected error in clockOutBeforeSignOut:', error);
+    logError('Unexpected error in clockOutBeforeSignOut:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
@@ -500,10 +418,11 @@ export async function clockOutBeforeSignOut(): Promise<
 /**
  * Add manual time entries
  */
-export async function addManualEntry(
-  params: AddManualEntryParams
-): Promise<AddManualEntryResult> {
+export async function addManualEntry(rawParams: AddManualEntryParams): Promise<AddManualEntryResult> {
   try {
+    const parsed = addManualEntryInputSchema.safeParse(rawParams);
+    if (!parsed.success) return { success: false, error: 'invalid_input' };
+    const params = parsed.data;
     const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
@@ -516,14 +435,15 @@ export async function addManualEntry(
 
     const [callerRole, organizationSettings] = await Promise.all([
       verifyCurrentMembership(user.id, organizationId),
-      getCachedOrganizationSettings(organizationId)
+      readOrganizationSettings(organizationId),
     ]);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
+    if (!organizationSettings) return { success: false, error: 'fetch_failed' };
 
     const containsManualBreakEntries = entries.some(
-      (entry) => entry.entryType === 'break_start' || entry.entryType === 'break_end'
+      (entry) => entry.entryType === 'break_start' || entry.entryType === 'break_end',
     );
 
     if (organizationSettings.breakMode === 'automatic' && containsManualBreakEntries) {
@@ -533,12 +453,16 @@ export async function addManualEntry(
     const admin = createSupabaseAdminClient();
 
     // Get target user's role
-    const { data: targetMember } = await admin
-      .from('organization_members')
-      .select('role')
-      .eq('user_id', targetUserId)
-      .eq('organization_id', organizationId)
-      .single();
+    const { data: targetMember } = await loggedRead(
+      'addManualEntry: organization_members read failed',
+      admin
+        .from('organization_members')
+        .select('role')
+        .eq('user_id', targetUserId)
+        .eq('organization_id', organizationId)
+        .single(),
+      true,
+    );
 
     if (!targetMember) {
       return { success: false, error: 'target_not_a_member' };
@@ -550,36 +474,42 @@ export async function addManualEntry(
     if (!canAddEntriesFor(callerRole, targetRole, user.id, targetUserId)) {
       return { success: false, error: 'not_authorized' };
     }
+    // A closed month gains no entries; the database refuses them as well.
+    if (
+      await touchesClosedTimePeriod(
+        admin,
+        organizationId,
+        entries.map((entry) => entry.timestamp),
+      )
+    ) {
+      return { success: false, error: 'period_closed' };
+    }
 
     const targetDay = new Date(firstEntry.timestamp);
-    const existingEntries = await getUserEntriesForDay(
-      admin,
-      targetUserId,
-      organizationId,
-      targetDay
-    );
+    const existingEntries = await getUserEntriesForDay(admin, targetUserId, organizationId, targetDay);
+    if (!existingEntries) return { success: false, error: 'fetch_failed' };
     const timeEntries = toTimeEntries(existingEntries);
 
     // Validate the new entries
     const validationResult = validateManualEntries(timeEntries, entries, {
-      allowFutureTimestamps: callerRole === 'admin'
+      allowFutureTimestamps: callerRole === 'admin',
     });
     if (!validationResult.valid) {
       return {
         success: false,
-        error: validationResult.error || 'validation_failed'
+        error: validationResult.error || 'validation_failed',
       };
     }
 
     const normalizedEntries = entries.map((entry) => ({
       ...entry,
-      jobId: getManualEntryJobId(entry.entryType, params.jobId)
+      jobId: getManualEntryJobId(entry.entryType, params.jobId),
     }));
     const jobOwnershipResult = validateManualEntryJobOwnership(normalizedEntries);
     if (!jobOwnershipResult.valid) {
       return {
         success: false,
-        error: jobOwnershipResult.error || 'validation_failed'
+        error: jobOwnershipResult.error || 'validation_failed',
       };
     }
 
@@ -599,28 +529,20 @@ export async function addManualEntry(
       reviewedBy: null,
       reviewedAt: null,
       createdAt: e.timestamp,
-      updatedAt: e.timestamp
+      updatedAt: e.timestamp,
     }));
 
-    const wouldBeClockedIn = hasOpenSession(
-      [...timeEntries, ...simulatedEntries],
-      getLocalDayEnd(targetDay)
-    );
+    const wouldBeClockedIn = hasOpenSession([...timeEntries, ...simulatedEntries], getLocalDayEnd(targetDay));
     if (wouldBeClockedIn) {
-      const openOrgs = await getOpenSessionOrgsForUserOnDay(
-        admin,
-        targetUserId,
-        targetDay
-      );
-      const openOther = openOrgs.find(
-        (o) => o.organizationId !== organizationId
-      );
+      const openOrgs = await getOpenSessionOrgsForUserOnDay(admin, targetUserId, targetDay);
+      if (!openOrgs) return { success: false, error: 'fetch_failed' };
+      const openOther = openOrgs.find((o) => o.organizationId !== organizationId);
       if (openOther) {
         return {
           success: false,
           error: 'working_in_other_org',
           otherOrgId: openOther.organizationId,
-          otherOrgName: openOther.organizationName
+          otherOrgName: openOther.organizationName,
         };
       }
     }
@@ -634,7 +556,7 @@ export async function addManualEntry(
       status,
       reviewed_by: status === 'approved' ? user.id : null,
       reviewed_at: status === 'approved' ? new Date().toISOString() : null,
-      job_id: entry.jobId ?? null
+      job_id: entry.jobId ?? null,
     }));
 
     const { data: newEntries, error: insertError } = await admin
@@ -643,15 +565,17 @@ export async function addManualEntry(
       .select();
 
     if (insertError || !newEntries) {
-      console.error('Error inserting manual entries:', insertError);
-      return { success: false, error: 'insert_failed' };
+      return {
+        success: false,
+        error: timeWriteFailure('Error inserting manual entries:', insertError, 'insert_failed'),
+      };
     }
 
     revalidatePath('/zeiterfassung');
 
     return { success: true, entries: toTimeEntries(newEntries) };
   } catch (error) {
-    console.error('Unexpected error in addManualEntry:', error);
+    logError('Unexpected error in addManualEntry:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
@@ -667,31 +591,39 @@ const REVIEW_BATCH_LIMIT = 1000;
  * calendar day or the whole approval backlog. Every entry must be pending and
  * belong to one organization the caller is a member of; the time_approval
  * responsibility is resolved once per target person at action time, so a
- * stale view never preserves authority. Nothing is written unless every entry
- * passes. Rejected entries stay in history with status 'rejected'.
+ * stale view never preserves authority. The database function applies the
+ * decision to every entry or to none. Rejected entries stay in history with
+ * status 'rejected'.
  */
 export async function reviewEntries(
   entryIds: string[],
-  decision: 'approved' | 'rejected'
+  decision: 'approved' | 'rejected',
 ): Promise<ReviewEntryResult> {
   try {
+    const parsed = reviewEntriesInputSchema.safeParse({ entryIds, decision });
+    if (!parsed.success) return { success: false, error: 'invalid_input' };
     const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
-    const ids = [...new Set(entryIds)];
-    if (ids.length === 0 || ids.length > REVIEW_BATCH_LIMIT || !ids.every(isUuid)) {
+    const ids = [...new Set(parsed.data.entryIds)];
+    if (ids.length === 0 || ids.length > REVIEW_BATCH_LIMIT) {
       return { success: false, error: 'invalid_input' };
     }
 
     const admin = createSupabaseAdminClient();
-    const { data: entries, error: entriesError } = await admin
-      .from('time_entries')
-      .select('id, organization_id, user_id, status')
-      .in('id', ids);
-    if (entriesError || !entries || entries.length !== ids.length) {
-      return { success: false, error: 'entry_not_found' };
+    const { data: entries, error: entriesError } = await readInBatches(ids, (batch) =>
+      // tenant-scope: by-id-then-verified — every entry must share one organization, whose membership and time_approval responsibility are verified before the write.
+      admin
+        .from('time_entries')
+        .select('id, organization_id, user_id, status, timestamp')
+        .in('id', [...batch]),
+    );
+    if (entriesError) {
+      logReadFailure('reviewEntries: entries failed', entriesError);
+      return { success: false, error: 'fetch_failed' };
     }
+    if (entries.length !== ids.length) return { success: false, error: 'entry_not_found' };
     if (entries.some((entry) => entry.status !== 'pending')) {
       return { success: false, error: 'entry_not_pending' };
     }
@@ -706,14 +638,18 @@ export async function reviewEntries(
     }
 
     const targetUserIds = [...new Set(entries.map((entry) => entry.user_id))];
-    const { data: targetMembers } = await admin
-      .from('organization_members')
-      .select('user_id, role')
-      .eq('organization_id', organizationId)
-      .in('user_id', targetUserIds);
-    const roleByUser = new Map(
-      (targetMembers ?? []).map((member) => [member.user_id, member.role as OrgRole])
+    const { data: targetMembers, error: targetMembersError } = await readInBatches(targetUserIds, (batch) =>
+      admin
+        .from('organization_members')
+        .select('user_id, role')
+        .eq('organization_id', organizationId)
+        .in('user_id', [...batch]),
     );
+    if (targetMembersError) {
+      logReadFailure('reviewEntries: target memberships failed', targetMembersError);
+      return { success: false, error: 'fetch_failed' };
+    }
+    const roleByUser = new Map(targetMembers.map((member) => [member.user_id, member.role as OrgRole]));
     // Resolve current stored responsibility at action time. A stale UI can
     // never preserve authority after a delegation expires.
     const authorizations = await Promise.all(
@@ -727,30 +663,38 @@ export async function reviewEntries(
           targetUserId,
           targetRole,
         });
-      })
+      }),
     );
     const refusal = authorizations.find((authorization) => !authorization.success);
     if (refusal && !refusal.success) {
       return { success: false, error: refusal.error };
     }
-
-    const { data: updated, error: updateError } = await admin
-      .from('time_entries')
-      .update({
-        status: decision,
-        reviewed_by: user.id,
-        reviewed_at: new Date().toISOString()
-      })
-      .in('id', ids)
-      .eq('status', 'pending')
-      .select('id');
-    if (updateError || !updated) {
-      console.error('Error reviewing entries:', updateError);
-      return { success: false, error: 'update_failed' };
+    // An entry of a closed month keeps its review state until a reopen.
+    if (
+      await touchesClosedTimePeriod(
+        admin,
+        organizationId,
+        entries.map((entry) => entry.timestamp),
+      )
+    ) {
+      return { success: false, error: 'period_closed' };
     }
-    return { success: true, reviewed: updated.length };
+
+    // One transaction: the function re-checks every entry under lock and reviews all or none.
+    const { data: reviewed, error: reviewError } = await admin.rpc(
+      'review_time_entries',
+      rpcArgs('review_time_entries', {
+        p_actor_id: user.id,
+        p_organization_id: organizationId,
+        p_entry_ids: ids,
+        p_decision: parsed.data.decision,
+        p_authorized_user_ids: targetUserIds,
+      }),
+    );
+    if (reviewError) return timeEntryBatchFailure('Error reviewing entries:', reviewError, 'update_failed');
+    return { success: true, reviewed };
   } catch (error) {
-    console.error('Unexpected error in reviewEntries:', error);
+    logError('Unexpected error in reviewEntries:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
@@ -764,10 +708,13 @@ export async function reviewEntries(
  * For managers editing their own entries, creates a change request for admin approval
  */
 export async function updateEntry(
-  entryId: string,
-  fields: { timestamp?: string; entryType?: TimeEntryType; jobId?: string | null }
+  rawEntryId: string,
+  rawFields: { timestamp?: string; entryType?: TimeEntryType; jobId?: string | null },
 ): Promise<UpdateEntryResult | RequestChangeResult> {
   try {
+    const parsed = updateEntryInputSchema.safeParse({ entryId: rawEntryId, fields: rawFields });
+    if (!parsed.success) return { success: false, error: 'invalid_input' };
+    const { entryId, fields } = parsed.data;
     const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
@@ -775,7 +722,7 @@ export async function updateEntry(
 
     const admin = createSupabaseAdminClient();
 
-    // Get the entry
+    // tenant-scope: by-id-then-verified — the caller's membership in the entry's organization is verified next, and every write filters by that organization.
     const { data: entry, error: entryError } = await admin
       .from('time_entries')
       .select('*')
@@ -786,21 +733,22 @@ export async function updateEntry(
       return { success: false, error: 'entry_not_found' };
     }
 
-    const callerRole = await verifyCurrentMembership(
-      user.id,
-      entry.organization_id
-    );
+    const callerRole = await verifyCurrentMembership(user.id, entry.organization_id);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
 
     // Get target user's role
-    const { data: targetMember } = await admin
-      .from('organization_members')
-      .select('role')
-      .eq('user_id', entry.user_id)
-      .eq('organization_id', entry.organization_id)
-      .single();
+    const { data: targetMember } = await loggedRead(
+      'updateEntry: organization_members read failed',
+      admin
+        .from('organization_members')
+        .select('role')
+        .eq('user_id', entry.user_id)
+        .eq('organization_id', entry.organization_id)
+        .single(),
+      true,
+    );
 
     if (!targetMember) {
       return { success: false, error: 'target_not_found' };
@@ -814,80 +762,89 @@ export async function updateEntry(
       return { success: false, error: 'not_authorized' };
     }
 
-    const targetTimestamp = fields.timestamp
-      ? new Date(fields.timestamp)
-      : new Date(entry.timestamp);
+    const targetTimestamp = new Date(fields.timestamp ?? entry.timestamp);
+    // A closed month changes only after a reasoned reopen (P1-23). The
+    // recorded day and the new day both count.
+    if (
+      await touchesClosedTimePeriod(admin, entry.organization_id, [
+        entry.timestamp,
+        targetTimestamp.toISOString(),
+      ])
+    ) {
+      return { success: false, error: 'period_closed' };
+    }
 
     // Validate timestamp update if provided
+    const changesSequence = fields.entryType !== undefined || Object.hasOwn(fields, 'jobId');
+    const dayRows =
+      fields.timestamp || changesSequence
+        ? await getUserEntriesOnDays(admin, entry.user_id, entry.organization_id, [
+            new Date(entry.timestamp),
+            targetTimestamp,
+          ])
+        : [];
+    if (!dayRows) return { success: false, error: 'fetch_failed' };
     if (fields.timestamp) {
-      const existingEntries = await getUserEntries(
-        admin,
-        entry.user_id,
-        entry.organization_id
-      );
-      const timeEntries = toTimeEntries(existingEntries);
+      const timeEntries = toTimeEntries(dayRows);
 
-      const validationResult = validateTimestampUpdate(
-        timeEntries,
-        entryId,
-        new Date(fields.timestamp)
-      );
+      const validationResult = validateTimestampUpdate(timeEntries, entryId, new Date(fields.timestamp));
 
       if (!validationResult.valid) {
         return {
           success: false,
-          error: validationResult.error || 'validation_failed'
+          error: validationResult.error || 'validation_failed',
         };
       }
     }
 
-    if (
-      fields.entryType !== undefined ||
-      Object.prototype.hasOwnProperty.call(fields, 'jobId')
-    ) {
-      const existingEntries = await getUserEntries(
-        admin,
-        entry.user_id,
-        entry.organization_id
-      );
-      const timeEntries = toTimeEntries(existingEntries);
+    if (changesSequence) {
+      const timeEntries = toTimeEntries(dayRows);
 
       const simulatedEntries = timeEntries.map((existingEntry) =>
         existingEntry.id === entryId
           ? {
               ...existingEntry,
               entryType: fields.entryType ?? existingEntry.entryType,
-              jobId:
-                fields.jobId !== undefined ? fields.jobId : existingEntry.jobId,
-              timestamp: fields.timestamp ?? existingEntry.timestamp
+              jobId: fields.jobId !== undefined ? fields.jobId : existingEntry.jobId,
+              timestamp: fields.timestamp ?? existingEntry.timestamp,
             }
-          : existingEntry
+          : existingEntry,
       );
 
       const dayReference = new Date(targetTimestamp);
       const dayEntries = simulatedEntries.filter((timeEntry) =>
-        isSameLocalDay(new Date(timeEntry.timestamp), dayReference)
+        isSameLocalDay(new Date(timeEntry.timestamp), dayReference),
       );
       const sequenceResult = validateDayEntrySequence(dayEntries);
 
       if (!sequenceResult.valid) {
         return {
           success: false,
-          error: sequenceResult.error || 'validation_failed'
+          error: sequenceResult.error || 'validation_failed',
         };
       }
     }
 
-    // Check if this needs to be a change request (manager editing own entry)
+    // A caller-supplied job must belong to the entry's organization before it is written.
+    if (fields.jobId) {
+      const { data: job } = await loggedRead(
+        'updateEntry: jobs read failed',
+        admin
+          .from('jobs')
+          .select('id')
+          .eq('id', fields.jobId)
+          .eq('organization_id', entry.organization_id)
+          .maybeSingle(),
+      );
+      if (!job) {
+        return { success: false, error: 'job_not_found' };
+      }
+    }
 
     // Direct update (admin or manager editing managed role's entry)
     const updateData: Record<string, unknown> = {};
-    if (fields.timestamp) {
-      updateData.timestamp = fields.timestamp;
-    }
-    if (fields.entryType !== undefined) {
-      updateData.entry_type = fields.entryType;
-    }
+    if (fields.timestamp) updateData.timestamp = fields.timestamp;
+    if (fields.entryType !== undefined) updateData.entry_type = fields.entryType;
     if (fields.jobId !== undefined) {
       updateData.job_id = fields.jobId;
     }
@@ -896,17 +853,20 @@ export async function updateEntry(
       .from('time_entries')
       .update(updateData)
       .eq('id', entryId)
+      .eq('organization_id', entry.organization_id)
       .select()
       .single();
 
     if (updateError || !updatedEntry) {
-      console.error('Error updating entry:', updateError);
-      return { success: false, error: 'update_failed' };
+      return {
+        success: false,
+        error: timeWriteFailure('Error updating entry:', updateError, 'update_failed'),
+      };
     }
 
     return { success: true, entry: toTimeEntry(updatedEntry) };
   } catch (error) {
-    console.error('Unexpected error in updateEntry:', error);
+    logError('Unexpected error in updateEntry:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
@@ -918,10 +878,13 @@ export async function updateEntry(
  * @param pairedEntryId - Optional ID of paired entry (clock_out) for paired delete requests
  */
 export async function deleteEntry(
-  entryId: string,
-  pairedEntryId?: string
+  rawEntryId: string,
+  rawPairedEntryId?: string,
 ): Promise<DeleteEntryResult | RequestChangeResult> {
   try {
+    const parsed = deleteEntryInputSchema.safeParse({ entryId: rawEntryId, pairedEntryId: rawPairedEntryId });
+    if (!parsed.success) return { success: false, error: 'invalid_input' };
+    const { entryId, pairedEntryId } = parsed.data;
     const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
@@ -929,7 +892,7 @@ export async function deleteEntry(
 
     const admin = createSupabaseAdminClient();
 
-    // Get the entry
+    // tenant-scope: by-id-then-verified — the caller's membership in the entry's organization is verified next, and every delete filters by that organization.
     const { data: entry, error: entryError } = await admin
       .from('time_entries')
       .select('*')
@@ -940,21 +903,22 @@ export async function deleteEntry(
       return { success: false, error: 'entry_not_found' };
     }
 
-    const callerRole = await verifyCurrentMembership(
-      user.id,
-      entry.organization_id
-    );
+    const callerRole = await verifyCurrentMembership(user.id, entry.organization_id);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
 
     // Get target user's role
-    const { data: targetMember } = await admin
-      .from('organization_members')
-      .select('role')
-      .eq('user_id', entry.user_id)
-      .eq('organization_id', entry.organization_id)
-      .single();
+    const { data: targetMember } = await loggedRead(
+      'deleteEntry: organization_members read failed',
+      admin
+        .from('organization_members')
+        .select('role')
+        .eq('user_id', entry.user_id)
+        .eq('organization_id', entry.organization_id)
+        .single(),
+      true,
+    );
 
     if (!targetMember) {
       return { success: false, error: 'target_not_found' };
@@ -968,43 +932,56 @@ export async function deleteEntry(
       return { success: false, error: 'not_authorized' };
     }
 
-    // Check if this needs to be a change request (manager deleting own entry)
+    if (await entriesTouchClosedTimePeriod(admin, entry.organization_id, [entryId, pairedEntryId])) {
+      return { success: false, error: 'period_closed' };
+    }
 
-    // Direct delete (admin or manager deleting managed role's entry)
-    // Delete paired entry first if provided
+    // The paired entry is caller-supplied: it must be a row of the same
+    // person in the same organization as the authorized entry.
     if (pairedEntryId) {
-      const { error: pairedDeleteError } = await admin
-        .from('time_entries')
-        .delete()
-        .eq('id', pairedEntryId);
-
-      if (pairedDeleteError) {
-        console.error('Error deleting paired entry:', pairedDeleteError);
-        return { success: false, error: 'delete_failed' };
+      const { data: pairedEntry } = await loggedRead(
+        'deleteEntry: time_entries read failed',
+        admin
+          .from('time_entries')
+          .select('id')
+          .eq('id', pairedEntryId)
+          .eq('organization_id', entry.organization_id)
+          .eq('user_id', entry.user_id)
+          .maybeSingle(),
+      );
+      if (!pairedEntry) {
+        return { success: false, error: 'entry_not_found' };
       }
     }
 
+    // One statement deletes the entry and its verified pair together, so a
+    // refused delete (an entry a work artifact or correction still references)
+    // never leaves half of the pair behind.
     const { error: deleteError } = await admin
       .from('time_entries')
       .delete()
-      .eq('id', entryId);
+      .in('id', [entryId, pairedEntryId ?? entryId])
+      .eq('organization_id', entry.organization_id);
 
     if (deleteError) {
-      console.error('Error deleting entry:', deleteError);
-      return { success: false, error: 'delete_failed' };
+      return {
+        success: false,
+        error: timeWriteFailure('Error deleting entry:', deleteError, 'delete_failed'),
+      };
     }
 
     return { success: true };
   } catch (error) {
-    console.error('Unexpected error in deleteEntry:', error);
+    logError('Unexpected error in deleteEntry:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
-export async function deleteEntriesBatch(
-  entryIds: string[]
-): Promise<DeleteEntryResult> {
-  if (entryIds.length === 0) {
+/** Deletes entries of one organization that the caller may manage: all of them or none. */
+export async function deleteEntriesBatch(rawEntryIds: string[]): Promise<DeleteEntryResult> {
+  const parsed = entryIdListSchema.safeParse(rawEntryIds);
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  if (parsed.data.length === 0) {
     return { success: true };
   }
 
@@ -1015,11 +992,14 @@ export async function deleteEntriesBatch(
     }
 
     const admin = createSupabaseAdminClient();
-    const uniqueEntryIds = [...new Set(entryIds)];
-    const { data: entries, error: entriesError } = await admin
-      .from('time_entries')
-      .select('*')
-      .in('id', uniqueEntryIds);
+    const uniqueEntryIds = [...new Set(parsed.data)];
+    const { data: entries, error: entriesError } = await readInBatches(uniqueEntryIds, (batch) =>
+      // tenant-scope: by-id-then-verified — every entry must share one organization, whose membership and per-person rights are verified before the delete.
+      admin
+        .from('time_entries')
+        .select('*')
+        .in('id', [...batch]),
+    );
 
     if (entriesError || !entries || entries.length !== uniqueEntryIds.length) {
       return { success: false, error: 'entry_not_found' };
@@ -1036,19 +1016,19 @@ export async function deleteEntriesBatch(
     }
 
     const uniqueUserIds = [...new Set(entries.map((entry) => entry.user_id))];
-    const { data: memberRows, error: memberError } = await admin
-      .from('organization_members')
-      .select('user_id, role')
-      .eq('organization_id', organizationId)
-      .in('user_id', uniqueUserIds);
+    const { data: memberRows, error: memberError } = await readInBatches(uniqueUserIds, (batch) =>
+      admin
+        .from('organization_members')
+        .select('user_id, role')
+        .eq('organization_id', organizationId)
+        .in('user_id', [...batch]),
+    );
 
-    if (memberError || !memberRows) {
+    if (memberError) {
       return { success: false, error: 'target_not_found' };
     }
 
-    const roleMap = new Map(
-      memberRows.map((member) => [member.user_id, member.role as OrgRole])
-    );
+    const roleMap = new Map(memberRows.map((member) => [member.user_id, member.role as OrgRole]));
 
     for (const entry of entries) {
       const targetRole = roleMap.get(entry.user_id);
@@ -1060,22 +1040,32 @@ export async function deleteEntriesBatch(
       if (!canManageEntries(callerRole, targetRole, isOwnEntry)) {
         return { success: false, error: 'not_authorized' };
       }
-
+    }
+    if (
+      await touchesClosedTimePeriod(
+        admin,
+        organizationId,
+        entries.map((entry) => entry.timestamp),
+      )
+    ) {
+      return { success: false, error: 'period_closed' };
     }
 
-    const { error: deleteError } = await admin
-      .from('time_entries')
-      .delete()
-      .in('id', uniqueEntryIds);
-
-    if (deleteError) {
-      console.error('Error deleting entries batch:', deleteError);
-      return { success: false, error: 'delete_failed' };
-    }
+    // One transaction: the function re-checks every entry under lock and deletes all or none.
+    const { error: deleteError } = await admin.rpc(
+      'delete_time_entries',
+      rpcArgs('delete_time_entries', {
+        p_actor_id: user.id,
+        p_organization_id: organizationId,
+        p_entry_ids: uniqueEntryIds,
+        p_authorized_user_ids: uniqueUserIds,
+      }),
+    );
+    if (deleteError) return timeEntryBatchFailure('Error deleting entries:', deleteError, 'delete_failed');
 
     return { success: true };
   } catch (error) {
-    console.error('Unexpected error in deleteEntriesBatch:', error);
+    logError('Unexpected error in deleteEntriesBatch:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
@@ -1084,177 +1074,19 @@ export async function deleteEntriesBatch(
 // Query Actions
 // ============================================
 
-async function getCanonicalTimeEntries(params: {
-  organizationId: string;
-  from: string;
-  to: string;
-  userId?: string | undefined;
-  jobId?: string;
-  referenceTime?: string;
-}): Promise<
-  | { success: true; entries: TimeEntry[] }
-  | { success: false }
-> {
-  const admin = createSupabaseAdminClient();
-  let employeeQuery = admin
-    .from('employee_records')
-    .select('id, user_id')
-    .eq('organization_id', params.organizationId)
-    .not('user_id', 'is', null);
-  if (params.userId) employeeQuery = employeeQuery.eq('user_id', params.userId);
-  const { data: employees, error: employeeError } = await readCompleteRows(
-    (from, to) => employeeQuery.order('id').range(from, to), LIST_ROW_CAP,
-  );
-  if (employeeError) {
-    console.error('Error fetching employees for canonical time entries:', employeeError);
-    return { success: false };
-  }
-  if (!employees?.length) return { success: true, entries: [] };
-  const userByEmployee = new Map(
-    employees.map((employee) => [employee.id, employee.user_id as string])
-  );
-  const { data: rows, error } = await readInBatches([...userByEmployee.keys()], (employeeIds) => {
-    let segmentQuery = admin
-    .from('time_segments')
-    .select(
-      'id, session_id, organization_id, employee_record_id, kind, allocation_kind, job_id, internal_type, travel_route, travel_role, standby_context, started_at, ended_at, created_at, updated_at'
-    )
-    .eq('organization_id', params.organizationId)
-    .in('employee_record_id', [...employeeIds])
-    .lte('started_at', params.to)
-    .or(`ended_at.is.null,ended_at.gte.${params.from}`)
-    .order('started_at', { ascending: true }).order('id');
-    if (params.jobId) segmentQuery = segmentQuery.eq('job_id', params.jobId);
-    return readCompleteRows((from, to) => segmentQuery.range(from, to), LIST_ROW_CAP);
-  });
-  if (error) {
-    console.error('Error fetching canonical time segments:', error);
-    return { success: false };
-  }
-  if (rows.length > LIST_ROW_CAP) {
-    console.error('Canonical time segment window exceeds the row cap', {
-      organizationId: params.organizationId,
-      rows: rows.length,
-      cap: LIST_ROW_CAP,
-    });
-    return { success: false };
-  }
-
-  const rangeStart = new Date(params.from);
-  const rangeEnd = new Date(params.to);
-  const canonicalRows = rows.sort((left, right) =>
-    left.started_at.localeCompare(right.started_at) || left.id.localeCompare(right.id)
-  ).map((row) => ({
-    row,
-    segment: toTimeSegmentFact(row as never),
-  }));
-  const entryContextBySegmentId = new Map(
-    canonicalRows.map(({ row, segment }) => [segment.id, { row, segment }])
-  );
-  const entries: TimeEntry[] = [];
-
-  if (!params.jobId) {
-    const points = projectTimeSegmentsToLegacyTransitions(
-      canonicalRows.map(({ segment }) => segment),
-      rangeStart,
-      rangeEnd,
-      params.referenceTime ? new Date(params.referenceTime) : new Date()
-    );
-    for (const [pointIndex, point] of points.entries()) {
-      const context = entryContextBySegmentId.get(point.segmentId);
-      if (!context) continue;
-      const { row, segment } = context;
-      const userId = userByEmployee.get(segment.employeeRecordId);
-      if (!userId) continue;
-      entries.push({
-        id: `${segment.id}:${point.sliceIndex}:${pointIndex}:${point.entryType}`,
-        userId,
-        organizationId: segment.organizationId,
-        entryType: point.entryType,
-        timestamp: point.timestamp,
-        isManual: false,
-        jobId: segment.jobId ?? null,
-        status: 'approved',
-        reviewedBy: null,
-        reviewedAt: null,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-        activityKind: segment.kind,
-        canonicalSegmentId: segment.id,
-        sourceKind: 'canonical_segment',
-        sourceVersion: row.updated_at,
-      });
-    }
-    return { success: true, entries };
-  }
-
-  for (const { row, segment } of canonicalRows) {
-    const userId = userByEmployee.get(segment.employeeRecordId);
-    if (!userId) continue;
-    const slices = splitSegmentAtLocalDayBoundaries(
-      segment,
-      rangeStart,
-      rangeEnd,
-      params.referenceTime ? new Date(params.referenceTime) : new Date()
-    );
-    for (const [sliceIndex, slice] of slices.entries()) {
-      const startType = segment.kind === 'break' ? 'break_start' : 'clock_in';
-      const endType = segment.kind === 'break' ? 'break_end' : 'clock_out';
-      const common = {
-        userId,
-        organizationId: segment.organizationId,
-        isManual: false,
-        jobId: segment.jobId ?? null,
-        status: 'approved' as const,
-        reviewedBy: null,
-        reviewedAt: null,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-        activityKind: segment.kind,
-        canonicalSegmentId: segment.id,
-        sourceKind: 'canonical_segment' as const,
-        sourceVersion: row.updated_at,
-      };
-      entries.push({
-        ...common,
-        id: `${segment.id}:${sliceIndex}:start`,
-        entryType: startType,
-        timestamp: slice.startedAt,
-      });
-      if (slice.endedAt) {
-        entries.push({
-          ...common,
-          id: `${segment.id}:${sliceIndex}:end`,
-          entryType: endType,
-          timestamp: slice.endedAt,
-        });
-      }
-    }
-  }
-  return { success: true, entries };
-}
-
-/**
- * Get time entries with filters
- * RLS will automatically filter based on user's permissions
- */
-export async function getTimeEntries(
-  params: GetTimeEntriesParams
-): Promise<GetTimeEntriesResult> {
+export async function getTimeEntries(rawParams: GetTimeEntriesParams): Promise<GetTimeEntriesResult> {
   try {
+    const parsed = getTimeEntriesInputSchema.safeParse(rawParams);
+    if (!parsed.success) return { success: false, error: 'invalid_input' };
     const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
 
-    const { organizationId, from, to, userId, status } = params;
+    const { organizationId, from, to, userId, status } = parsed.data;
     const fromTimestamp = Date.parse(from);
     const toTimestamp = Date.parse(to);
-    if (
-      !Number.isFinite(fromTimestamp) ||
-      !Number.isFinite(toTimestamp) ||
-      fromTimestamp > toTimestamp
-    ) {
+    if (!Number.isFinite(fromTimestamp) || !Number.isFinite(toTimestamp) || fromTimestamp > toTimestamp) {
       return { success: false, error: 'invalid_input' };
     }
     const normalizedFrom = new Date(fromTimestamp).toISOString();
@@ -1267,10 +1099,7 @@ export async function getTimeEntries(
 
     const admin = createSupabaseAdminClient();
 
-    if (
-      userId &&
-      !canViewEntries(callerRole, userId, user.id)
-    ) {
+    if (userId && !canViewEntries(callerRole, userId, user.id)) {
       return { success: false, error: 'not_authorized' };
     }
 
@@ -1281,7 +1110,8 @@ export async function getTimeEntries(
       .gte('timestamp', normalizedFrom)
       .lte('timestamp', normalizedTo)
       .order('timestamp', { ascending: true })
-      .order('created_at', { ascending: true }).order('id');
+      .order('created_at', { ascending: true })
+      .order('id');
 
     const effectiveUserId = callerRole === 'employee' ? user.id : userId;
     if (effectiveUserId) query = query.eq('user_id', effectiveUserId);
@@ -1297,110 +1127,115 @@ export async function getTimeEntries(
       status && status !== 'approved'
         ? Promise.resolve({ success: true as const, entries: [] })
         : getCanonicalTimeEntries({
-            organizationId, from: normalizedFrom, to: normalizedTo,
+            organizationId,
+            from: normalizedFrom,
+            to: normalizedTo,
             userId: userId ?? (callerRole === 'employee' ? user.id : undefined),
           }),
       status && status !== 'approved'
         ? Promise.resolve([])
-        : getApprovedTimeCorrectionApplications({
+        : loadApprovedCorrectionProjection(admin, {
             organizationId,
-            userId: userId ?? (callerRole === 'employee' ? user.id : undefined),
+            from: normalizedFrom,
+            to: normalizedTo,
+            ...(effectiveUserId ? { userIds: [effectiveUserId] } : {}),
           }),
       status
         ? Promise.resolve({ entries: [], sources: [] })
         : getProvisionalTimeCorrectionProjection({
-            organizationId, from: normalizedFrom, to: normalizedTo,
+            organizationId,
+            from: normalizedFrom,
+            to: normalizedTo,
             userId: userId ?? (callerRole === 'employee' ? user.id : undefined),
           }),
     ]);
     if (legacyResult.error) {
-      console.error('Error fetching time entries:', legacyResult.error);
+      logError('Error fetching time entries:', legacyResult.error);
       return { success: false, error: 'fetch_failed' };
     }
     const visibleEntries = (legacyResult.data ?? []).filter((entry) =>
-      canViewEntries(callerRole, entry.user_id, user.id)
+      canViewEntries(callerRole, entry.user_id, user.id),
     );
     if (!canonicalResult.success) {
       return { success: false, error: 'fetch_failed' };
     }
     const canonicalEntries = canonicalResult.entries;
     const visibleCanonicalEntries = canonicalEntries.filter((entry) =>
-      canViewEntries(callerRole, entry.userId, user.id)
+      canViewEntries(callerRole, entry.userId, user.id),
     );
     const projectedEntries = applyApprovedTimeCorrections(
       [...toTimeEntries(visibleEntries), ...visibleCanonicalEntries],
       applications,
-      organizationId
+      organizationId,
     ).filter((entry) => {
       const timestamp = Date.parse(entry.timestamp);
-      return timestamp >= fromTimestamp && timestamp <= toTimestamp
-        && (!userId || entry.userId === userId)
-        && (!status || entry.status === status);
+      return (
+        canViewEntries(callerRole, entry.userId, user.id) &&
+        timestamp >= fromTimestamp &&
+        timestamp <= toTimestamp &&
+        (!userId || entry.userId === userId) &&
+        (!status || entry.status === status)
+      );
     });
     const pendingByLegacyId = new Map(
       provisionalProjection.sources
         .filter((source) => source.sourceKind === 'legacy_entry')
-        .map((source) => [source.sourceId, source])
+        .map((source) => [source.sourceId, source]),
     );
     const pendingBySegmentId = new Map(
       provisionalProjection.sources
         .filter((source) => source.sourceKind === 'canonical_segment')
-        .map((source) => [source.sourceId, source])
+        .map((source) => [source.sourceId, source]),
     );
     const pendingByApplicationId = new Map(
       provisionalProjection.sources
         .filter((source) => source.sourceKind === 'correction_application')
-        .map((source) => [source.sourceId, source])
+        .map((source) => [source.sourceId, source]),
     );
     const officialEntries = projectedEntries.map((entry) => {
-      const pending = pendingByLegacyId.get(entry.id)
-        ?? (entry.canonicalSegmentId
-          ? pendingBySegmentId.get(entry.canonicalSegmentId)
-          : undefined)
-        ?? (entry.correctionApplicationId
+      const pending =
+        pendingByLegacyId.get(entry.id) ??
+        (entry.canonicalSegmentId ? pendingBySegmentId.get(entry.canonicalSegmentId) : undefined) ??
+        (entry.correctionApplicationId
           ? pendingByApplicationId.get(entry.correctionApplicationId)
           : undefined);
-      return pending ? {
-        ...entry,
-        pendingCorrectionRequestId: pending.requestId,
-        pendingCorrectionKind: pending.kind,
-      } : entry;
+      return pending
+        ? {
+            ...entry,
+            pendingCorrectionRequestId: pending.requestId,
+            pendingCorrectionKind: pending.kind,
+          }
+        : entry;
     });
     return {
       success: true,
       entries: officialEntries.sort(
-        (left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime()
+        (left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime(),
       ),
       provisionalEntries: provisionalProjection.entries,
     };
   } catch (error) {
-    console.error('Unexpected error in getTimeEntries:', error);
+    logReadFailure('Unexpected error in getTimeEntries:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
-/**
- * Canonical pending approval badge count.
- * Uses the same grouped-session semantics as the approvals list so paired
- * clock-in/clock-out requests count as exactly one everywhere.
- */
-// getPendingApprovalCount was removed in P1-07: the unified attention counts
-// (lib/attention/actions.ts) are the single counting pipeline behind every
-// badge and derive the time share from getPendingSessions/getPendingChangeRequests.
+// The attention counts (lib/attention/actions.ts) are the one counting pipeline behind
+// every badge; they derive the time share from getPendingSessions/getPendingChangeRequests.
 
 /**
  * Get pending sessions (entries grouped as pairs with user profile info)
  */
-export async function getPendingSessions(
-  organizationId?: string
-): Promise<GetPendingSessionsResult> {
+export async function getPendingSessions(organizationId?: string): Promise<GetPendingSessionsResult> {
   try {
+    const parsed = optionalOrganizationIdSchema.safeParse(organizationId);
+    if (!parsed.success) return { success: false, error: 'invalid_input' };
     const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
 
-    const orgId = organizationId || (await getCurrentOrgId(user.id));
+    const orgId = parsed.data ?? (await getCurrentOrgId(user.id));
     if (!orgId) {
       return { success: false, error: 'no_active_org' };
     }
@@ -1410,145 +1245,28 @@ export async function getPendingSessions(
       return { success: false, error: 'not_a_member' };
     }
 
-    const responsibilityHolder =
-      await getEffectiveResponsibilityHolderForActor({
-        organizationId: orgId,
-        responsibility: 'time_approval',
-        actorUserId: user.id,
-      });
+    // The holder lookup answers null for "not responsible" and for a failed
+    // read alike; a failed read must not look like an empty queue.
+    if (!(await loadResponsibilityRuntimeState(orgId))) {
+      return { success: false, error: 'responsibility_load_failed' };
+    }
+    const responsibilityHolder = await getEffectiveResponsibilityHolderForActor({
+      organizationId: orgId,
+      responsibility: 'time_approval',
+      actorUserId: user.id,
+    });
     if (!responsibilityHolder) {
       return { success: true, sessions: [] };
     }
 
-    const admin = createSupabaseAdminClient();
-
-    // Get all pending entries in the org
-    const { data: pendingEntries, error: entriesError } = await admin
-      .from('time_entries')
-      .select('*')
-      .eq('organization_id', orgId)
-      .eq('status', 'pending')
-      .order('created_at', { ascending: false });
-
-    if (entriesError) {
-      console.error('Error fetching pending entries:', entriesError);
-      return { success: false, error: 'fetch_failed' };
-    }
-
-    // If no pending entries, return empty array
-    if (!pendingEntries || pendingEntries.length === 0) {
-      return { success: true, sessions: [] };
-    }
-
-    const uniqueUserIds = [...new Set(pendingEntries.map((e) => e.user_id))];
-    const { data: memberRows, error: memberRowsError } = await admin
-      .from('organization_members')
-      .select('user_id, role')
-      .eq('organization_id', orgId)
-      .in('user_id', uniqueUserIds);
-    if (memberRowsError) {
-      console.error('Error fetching pending-entry member roles:', memberRowsError);
-      return { success: false, error: 'fetch_failed' };
-    }
-    const roleMap = new Map<string, OrgRole>();
-    for (const member of memberRows || []) {
-      roleMap.set(member.user_id, member.role as OrgRole);
-    }
-    const filteredEntries: TimeEntryRow[] = pendingEntries.filter((entry) => {
-      const targetRole = roleMap.get(entry.user_id);
-      return Boolean(
-        targetRole &&
-          canApproveEntries(callerRole, targetRole, {
-            holder: responsibilityHolder,
-            targetUserId: entry.user_id,
-          })
-      );
+    return await readPendingSessionQueue({
+      admin: createSupabaseAdminClient(),
+      organizationId: orgId,
+      callerRole,
+      holder: responsibilityHolder,
     });
-
-    // Fetch personal display data only for targets this approver may actually
-    // see. Authorization is resolved before any profile lookup.
-    const visibleUserIds = [
-      ...new Set(filteredEntries.map((entry) => entry.user_id)),
-    ];
-    const profilesResult =
-      visibleUserIds.length > 0
-        ? await admin
-            .from('profiles')
-            .select('id, first_name, last_name')
-            .in('id', visibleUserIds)
-        : { data: [], error: null };
-    if (profilesResult.error) {
-      console.error(
-        'Error fetching pending-entry profiles:',
-        profilesResult.error
-      );
-      return { success: false, error: 'fetch_failed' };
-    }
-    const profileMap = new Map<
-      string,
-      { first_name: string | null; last_name: string | null }
-    >();
-    for (const profile of profilesResult.data ?? []) {
-      profileMap.set(profile.id, {
-        first_name: profile.first_name,
-        last_name: profile.last_name,
-      });
-    }
-
-    // One session per manual submission; the grouping rule lives in pending-sessions.ts.
-    const sessions: PendingSession[] = groupPendingEntries(filteredEntries).map((group) => {
-      const profile = profileMap.get(group.userId) || null;
-      return {
-        id: group.id,
-        userId: group.userId,
-        firstName: profile?.first_name || null,
-        lastName: profile?.last_name || null,
-        clockIn: group.clockIn ? toTimeEntry(group.clockIn) : null,
-        clockOut: group.clockOut ? toTimeEntry(group.clockOut) : null,
-        entryIds: group.entries.map((entry) => entry.id),
-        date: group.date,
-        createdAt: group.createdAt,
-        jobTitle: null
-      };
-    });
-
-    // Resolve job titles for sessions that have a linked job
-    const jobIds = [
-      ...new Set(
-        sessions
-          .map((s) => s.clockIn?.jobId ?? s.clockOut?.jobId)
-          .filter((id): id is string => !!id)
-      )
-    ];
-
-    if (jobIds.length > 0) {
-      const { data: jobs } = await admin
-        .from('jobs')
-        .select('id, title, description')
-        .in('id', jobIds);
-
-      if (jobs) {
-        const jobMap = new Map(
-          jobs.map((j) => [
-            j.id,
-            getJobDisplayTitle({
-              title: j.title,
-              description: j.description
-            })
-          ])
-        );
-        for (const session of sessions) {
-          const jid = session.clockIn?.jobId ?? session.clockOut?.jobId;
-          if (jid) {
-            session.jobTitle = jobMap.get(jid) ?? null;
-          }
-        }
-      }
-    }
-
-    return { success: true, sessions };
   } catch (error) {
-    console.error('Unexpected error in getPendingSessions:', error);
+    logError('Unexpected error in getPendingSessions:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
@@ -1560,16 +1278,16 @@ export async function getPendingSessions(
 /**
  * Get pending change requests for the organization (admin only)
  */
-export async function getPendingChangeRequests(
-  organizationId?: string
-): Promise<GetChangeRequestsResult> {
+export async function getPendingChangeRequests(organizationId?: string): Promise<GetChangeRequestsResult> {
   try {
+    const parsed = optionalOrganizationIdSchema.safeParse(organizationId);
+    if (!parsed.success) return { success: false, error: 'invalid_input' };
     const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
 
-    const orgId = organizationId || (await getCurrentOrgId(user.id));
+    const orgId = parsed.data ?? (await getCurrentOrgId(user.id));
     if (!orgId) {
       return { success: false, error: 'no_active_org' };
     }
@@ -1583,88 +1301,21 @@ export async function getPendingChangeRequests(
       return { success: false, error: 'not_authorized' };
     }
 
-    const admin = createSupabaseAdminClient();
-
-    // Get all pending change requests for this org
-    const { data: requests, error: requestsError } = await admin
-      .from('entry_change_requests')
-      .select('*')
-      .eq('organization_id', orgId)
-      .eq('status', 'pending')
-      .order('created_at', { ascending: false });
-
-    if (requestsError) {
-      console.error('Error fetching change requests:', requestsError);
-      return { success: false, error: 'fetch_failed' };
-    }
-
-    // Batch-enrich requests with entries and requester profiles
-    if (!requests || requests.length === 0) {
-      return { success: true, requests: [] };
-    }
-
-    // Collect all entry IDs and requester IDs for batch fetching
-    const allEntryIds = new Set<string>();
-    const requesterIds = new Set<string>();
-    for (const req of requests) {
-      allEntryIds.add(req.entry_id);
-      if (req.paired_entry_id) allEntryIds.add(req.paired_entry_id);
-      requesterIds.add(req.requested_by);
-    }
-
-    // Batch fetch entries and profiles in parallel
-    const [entriesResult, profilesResult] = await Promise.all([
-      admin
-        .from('time_entries')
-        .select('*')
-        .in('id', [...allEntryIds]),
-      admin
-        .from('profiles')
-        .select('id, first_name, last_name')
-        .in('id', [...requesterIds])
-    ]);
-
-    const entryMap = new Map<string, TimeEntryRow>();
-    for (const e of entriesResult.data || []) {
-      entryMap.set(e.id, e);
-    }
-
-    const profileMap = new Map<
-      string,
-      { first_name: string | null; last_name: string | null }
-    >();
-    for (const p of profilesResult.data || []) {
-      profileMap.set(p.id, {
-        first_name: p.first_name,
-        last_name: p.last_name
-      });
-    }
-
-    const enrichedRequests: ChangeRequestWithDetails[] = [];
-    for (const request of requests) {
-      const entry = entryMap.get(request.entry_id);
-      if (!entry) continue;
-
-      const pairedEntry = request.paired_entry_id
-        ? (entryMap.get(request.paired_entry_id) ?? null)
-        : null;
-      const profile = profileMap.get(request.requested_by) ?? null;
-
-      enrichedRequests.push({
-        ...toChangeRequest(request),
-        entry: toTimeEntry(entry),
-        pairedEntry: pairedEntry ? toTimeEntry(pairedEntry) : null,
-        requesterFirstName: profile?.first_name || null,
-        requesterLastName: profile?.last_name || null
-      });
-    }
-
-    return { success: true, requests: enrichedRequests };
+    return await readPendingChangeRequestQueue({ admin: createSupabaseAdminClient(), organizationId: orgId });
   } catch (error) {
-    console.error('Unexpected error in getPendingChangeRequests:', error);
+    logError('Unexpected error in getPendingChangeRequests:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
+
+/** The refusals of decide_entry_change_request (migration 20261004180400): each message is an action failure code. */
+const CHANGE_REQUEST_DECISION_REFUSALS: ReadonlySet<string> = new Set([
+  'invalid_input',
+  'request_not_found',
+  'not_a_member',
+  'not_authorized',
+  'request_already_reviewed',
+]);
 
 /**
  * Review a change request (edit or delete) from a manager.
@@ -1682,10 +1333,13 @@ export async function getPendingChangeRequests(
  * - Delete: Restore entries to 'approved' status
  */
 export async function reviewChangeRequest(
-  requestId: string,
-  action: 'approve' | 'reject'
+  rawRequestId: string,
+  rawAction: 'approve' | 'reject',
 ): Promise<ReviewChangeRequestResult> {
   try {
+    const parsed = reviewChangeRequestInputSchema.safeParse({ requestId: rawRequestId, action: rawAction });
+    if (!parsed.success) return { success: false, error: 'invalid_input' };
+    const { requestId, action } = parsed.data;
     const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
@@ -1693,21 +1347,22 @@ export async function reviewChangeRequest(
 
     const admin = createSupabaseAdminClient();
 
-    // Get the change request
+    // tenant-scope: by-id-then-verified — the caller must be an admin of the request's organization, and the decision function is scoped to that organization.
     const { data: request, error: requestError } = await admin
       .from('entry_change_requests')
       .select('*')
       .eq('id', requestId)
-      .single();
+      .maybeSingle();
 
-    if (requestError || !request) {
+    if (requestError) {
+      logReadFailure('reviewChangeRequest: request read failed', requestError);
+      return { success: false, error: 'fetch_failed' };
+    }
+    if (!request) {
       return { success: false, error: 'request_not_found' };
     }
 
-    const callerRole = await verifyCurrentMembership(
-      user.id,
-      request.organization_id
-    );
+    const callerRole = await verifyCurrentMembership(user.id, request.organization_id);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
@@ -1721,301 +1376,49 @@ export async function reviewChangeRequest(
       return { success: false, error: 'request_already_reviewed' };
     }
 
-    // Update the request status FIRST
-    const { data: updatedRequest, error: updateRequestError } = await admin
-      .from('entry_change_requests')
-      .update({
-        status: action === 'approve' ? 'approved' : 'rejected',
-        reviewed_by: user.id,
-        reviewed_at: new Date().toISOString()
-      })
-      .eq('id', requestId)
-      .select()
-      .single();
-
-    if (updateRequestError || !updatedRequest) {
-      console.error('Error updating request:', updateRequestError);
-      return { success: false, error: 'update_failed' };
+    // Every decision except approving an already applied edit writes the entries.
+    const writesEntries = action === 'reject' || request.change_type === 'delete';
+    if (
+      writesEntries &&
+      (await entriesTouchClosedTimePeriod(
+        admin,
+        request.organization_id,
+        [request.entry_id, request.paired_entry_id],
+        [request.original_timestamp],
+      ))
+    ) {
+      return { success: false, error: 'period_closed' };
     }
 
-    if (action === 'approve') {
-      // APPROVAL LOGIC
-      if (request.change_type === 'edit') {
-        // Edit is already applied - nothing to do
-        // The timestamp was updated when the request was created
-      } else if (request.change_type === 'delete') {
-        // Entries are marked as pending_delete - now actually delete them
-        // Delete paired entry first if exists
-        if (request.paired_entry_id) {
-          const { error: pairedDeleteError } = await admin
-            .from('time_entries')
-            .delete()
-            .eq('id', request.paired_entry_id);
-
-          if (pairedDeleteError) {
-            console.error('Error deleting paired entry:', pairedDeleteError);
-            await admin
-              .from('entry_change_requests')
-              .update({
-                status: 'pending',
-                reviewed_by: null,
-                reviewed_at: null
-              })
-              .eq('id', requestId);
-            return { success: false, error: 'apply_failed' };
-          }
-        }
-
-        // Delete the main entry
-        const { error: deleteError } = await admin
-          .from('time_entries')
-          .delete()
-          .eq('id', request.entry_id);
-
-        if (deleteError) {
-          console.error('Error applying delete:', deleteError);
-          await admin
-            .from('entry_change_requests')
-            .update({ status: 'pending', reviewed_by: null, reviewed_at: null })
-            .eq('id', requestId);
-          return { success: false, error: 'apply_failed' };
-        }
+    // One transaction: the function re-checks the request and the caller's
+    // role under lock, records the decision and applies it to the entries, or
+    // changes nothing.
+    const { data: updatedRequest, error: decisionError } = await admin.rpc(
+      'decide_entry_change_request',
+      rpcArgs('decide_entry_change_request', {
+        p_actor_id: user.id,
+        p_organization_id: request.organization_id,
+        p_request_id: requestId,
+        p_decision: action,
+      }),
+    );
+    if (decisionError) {
+      if (CHANGE_REQUEST_DECISION_REFUSALS.has(decisionError.message)) {
+        return { success: false, error: decisionError.message };
       }
-    } else {
-      // REJECTION LOGIC - revert the changes
-      if (request.change_type === 'edit') {
-        // Revert to original timestamp
-        if (request.original_timestamp) {
-          const { error: revertError } = await admin
-            .from('time_entries')
-            .update({ timestamp: request.original_timestamp })
-            .eq('id', request.entry_id);
-
-          if (revertError) {
-            console.error('Error reverting edit:', revertError);
-            // Revert the request status since we couldn't revert the edit
-            await admin
-              .from('entry_change_requests')
-              .update({
-                status: 'pending',
-                reviewed_by: null,
-                reviewed_at: null
-              })
-              .eq('id', requestId);
-            return { success: false, error: 'revert_failed' };
-          }
-        }
-      } else if (request.change_type === 'delete') {
-        // Restore entries from pending_delete to approved
-        const { error: restoreMainError } = await admin
-          .from('time_entries')
-          .update({ status: 'approved' })
-          .eq('id', request.entry_id);
-
-        if (restoreMainError) {
-          console.error('Error restoring main entry:', restoreMainError);
-          await admin
-            .from('entry_change_requests')
-            .update({ status: 'pending', reviewed_by: null, reviewed_at: null })
-            .eq('id', requestId);
-          return { success: false, error: 'restore_failed' };
-        }
-
-        // Restore paired entry if exists
-        if (request.paired_entry_id) {
-          const { error: restorePairedError } = await admin
-            .from('time_entries')
-            .update({ status: 'approved' })
-            .eq('id', request.paired_entry_id);
-
-          if (restorePairedError) {
-            console.error('Error restoring paired entry:', restorePairedError);
-            // Main entry is already restored, just log the error
-          }
-        }
-      }
+      return {
+        success: false,
+        error: timeWriteFailure(
+          'reviewChangeRequest: decide_entry_change_request failed',
+          decisionError,
+          'update_failed',
+        ),
+      };
     }
 
     return { success: true, request: toChangeRequest(updatedRequest) };
   } catch (error) {
-    console.error('Unexpected error in reviewChangeRequest:', error);
-    return { success: false, error: 'unexpected_error' };
-  }
-}
-
-export async function reassignEntryBatch(
-  updates: Array<{
-    entryId: string;
-    newUserId: string;
-    newTimestamp: string;
-  }>
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const user = await getAuthenticatedUser();
-    if (!user) return { success: false, error: 'not_authenticated' };
-    const [firstUpdate] = updates;
-    if (!firstUpdate) return { success: true };
-
-    const admin = createSupabaseAdminClient();
-    const entryIds = updates.map((update) => update.entryId);
-
-    const { data: fetchedEntries, error: entriesError } = await admin
-      .from('time_entries')
-      .select('*')
-      .in('id', entryIds);
-
-    if (entriesError || !fetchedEntries || fetchedEntries.length !== entryIds.length) {
-      return { success: false, error: 'entries_not_found' };
-    }
-
-    const firstEntry = fetchedEntries[0];
-    const orgId = firstEntry.organization_id;
-
-    if (fetchedEntries.some((entry) => entry.organization_id !== orgId)) {
-      return { success: false, error: 'mixed_organizations' };
-    }
-
-    const callerRole = await verifyCurrentMembership(user.id, orgId);
-    if (!callerRole) return { success: false, error: 'not_a_member' };
-
-    const sourceUserIds = [...new Set(fetchedEntries.map((entry) => entry.user_id))];
-    const targetUserIds = [...new Set(updates.map((update) => update.newUserId))];
-    const memberIds = [...new Set([...sourceUserIds, ...targetUserIds])];
-
-    const { data: memberRows } = await admin
-      .from('organization_members')
-      .select('user_id, role')
-      .eq('organization_id', orgId)
-      .in('user_id', memberIds);
-
-    const roleMap = new Map(
-      (memberRows ?? []).map((row) => [row.user_id, row.role as OrgRole])
-    );
-
-    for (const entry of fetchedEntries) {
-      const sourceRole = roleMap.get(entry.user_id);
-      if (!sourceRole) return { success: false, error: 'member_not_found' };
-      if (!canManageEntries(callerRole, sourceRole, entry.user_id === user.id)) {
-        return { success: false, error: 'not_authorized_source' };
-      }
-    }
-
-    for (const targetUserId of targetUserIds) {
-      const targetRole = roleMap.get(targetUserId);
-      if (!targetRole) return { success: false, error: 'member_not_found' };
-      if (!canManageEntries(callerRole, targetRole, targetUserId === user.id)) {
-        return { success: false, error: 'not_authorized_target' };
-      }
-    }
-
-    const minTimestamp = updates.reduce(
-      (min, update) =>
-        new Date(update.newTimestamp).getTime() < new Date(min).getTime()
-          ? update.newTimestamp
-          : min,
-      firstUpdate.newTimestamp
-    );
-    const maxTimestamp = updates.reduce(
-      (max, update) =>
-        new Date(update.newTimestamp).getTime() > new Date(max).getTime()
-          ? update.newTimestamp
-          : max,
-      firstUpdate.newTimestamp
-    );
-
-    const { data: targetEntries } = await admin
-      .from('time_entries')
-      .select('*')
-      .eq('organization_id', orgId)
-      .in('user_id', targetUserIds)
-      .gte('timestamp', getLocalDayStart(new Date(minTimestamp)).toISOString())
-      .lte('timestamp', getLocalDayEnd(new Date(maxTimestamp)).toISOString())
-      .neq('status', 'rejected')
-      .neq('status', 'pending_delete');
-
-    const updatesByEntryId = new Map(
-      updates.map((update) => [update.entryId, update])
-    );
-    const affectedCombos = new Set(
-      updates.map(
-        (update) =>
-          `${update.newUserId}:${getLocalDayKey(new Date(update.newTimestamp))}`
-      )
-    );
-
-    for (const combo of affectedCombos) {
-      const [targetUserId, dayKey] = combo.split(':');
-      const existingEntries = toTimeEntries(
-        (targetEntries ?? []).filter(
-          (entry) =>
-            entry.user_id === targetUserId &&
-            getLocalDayKey(new Date(entry.timestamp)) === dayKey &&
-            !updatesByEntryId.has(entry.id)
-        )
-      );
-
-      const simulatedEntries = [
-        ...existingEntries,
-        ...fetchedEntries
-          .filter((entry) => {
-            const update = updatesByEntryId.get(entry.id);
-            return (
-              update &&
-              update.newUserId === targetUserId &&
-              getLocalDayKey(new Date(update.newTimestamp)) === dayKey
-            );
-          })
-          .map((entry) => {
-            const update = updatesByEntryId.get(entry.id)!;
-            return toTimeEntry({
-              ...entry,
-              user_id: update.newUserId,
-              timestamp: update.newTimestamp
-            });
-          })
-      ];
-
-      const validationResult = validateDayEntrySequence(simulatedEntries);
-      if (!validationResult.valid) {
-        return {
-          success: false,
-          error: validationResult.error || 'validation_failed'
-        };
-      }
-    }
-
-    const originals = fetchedEntries.map((entry) => ({
-      id: entry.id,
-      user_id: entry.user_id,
-      timestamp: entry.timestamp
-    }));
-
-    for (const update of updates) {
-      const { error } = await admin
-        .from('time_entries')
-        .update({
-          user_id: update.newUserId,
-          timestamp: update.newTimestamp
-        })
-        .eq('id', update.entryId);
-
-      if (error) {
-        for (const original of originals) {
-          await admin
-            .from('time_entries')
-            .update({
-              user_id: original.user_id,
-              timestamp: original.timestamp
-            })
-            .eq('id', original.id);
-        }
-        return { success: false, error: 'update_failed' };
-      }
-    }
-
-    return { success: true };
-  } catch (error) {
-    console.error('Error in reassignEntryBatch:', error);
+    logError('Unexpected error in reviewChangeRequest:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
@@ -2029,14 +1432,11 @@ export async function reassignEntryBatch(
  * Used for calendar visualization to show edit/delete diffs
  */
 export async function getChangeRequestsForEntries(
-  entryIds: string[]
-): Promise<
-  | { success: true; requests: ChangeRequest[] }
-  | { success: false; error: string }
-> {
-  const persistedEntryIds = [...new Set(entryIds)].filter((entryId) =>
-    /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(entryId)
-  );
+  entryIds: string[],
+): Promise<{ success: true; requests: ChangeRequest[] } | ActionFailure> {
+  const parsed = calendarEntryIdListSchema.safeParse(entryIds);
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  const persistedEntryIds = [...new Set(parsed.data)].filter(isUuid);
   if (persistedEntryIds.length === 0) {
     return { success: true, requests: [] };
   }
@@ -2055,16 +1455,16 @@ export async function getChangeRequestsForEntries(
       return { success: true, requests: [] };
     }
     const roleByOrganization = new Map(
-      memberships.map((membership) => [membership.orgId, membership.role as OrgRole])
+      memberships.map((membership) => [membership.orgId, membership.role as OrgRole]),
     );
 
     const admin = createSupabaseAdminClient();
 
-    const { requests, entryOwnerById, error } = await readPendingChangeRequestData(
-      admin, persistedEntryIds, [...roleByOrganization.keys()],
-    );
+    const { requests, entryOwnerById, error } = await readPendingChangeRequestData(admin, persistedEntryIds, [
+      ...roleByOrganization.keys(),
+    ]);
     if (error) {
-      console.error('Error fetching change requests for entries:', error);
+      logError('Error fetching change requests for entries');
       return { success: false, error: 'fetch_failed' };
     }
 
@@ -2075,16 +1475,16 @@ export async function getChangeRequestsForEntries(
           requestedBy: request.requested_by,
           entryUserId: entryOwnerById.get(request.entry_id) ?? null,
         },
-        { userId: user.id, roleByOrganization }
-      )
+        { userId: user.id, roleByOrganization },
+      ),
     );
 
     return {
       success: true,
-      requests: visible.map(toChangeRequest)
+      requests: visible.map(toChangeRequest),
     };
   } catch (error) {
-    console.error('Unexpected error in getChangeRequestsForEntries:', error);
+    logError('Unexpected error in getChangeRequestsForEntries:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
@@ -2092,16 +1492,18 @@ export async function getChangeRequestsForEntries(
 /**
  * Get all time entries linked to a specific job.
  */
-export async function getTimeEntriesForJob(
-  jobId: string
-): Promise<GetTimeEntriesResult> {
+export async function getTimeEntriesForJob(rawJobId: string): Promise<GetTimeEntriesResult> {
   try {
+    const parsed = uuidSchema.safeParse(rawJobId);
+    if (!parsed.success) return { success: false, error: 'invalid_input' };
+    const jobId = parsed.data;
     const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
 
     const admin = createSupabaseAdminClient();
+    // tenant-scope: by-id-then-verified — the caller's membership in the job's organization is verified next, and every later read filters by it.
     const { data: job, error: jobError } = await admin
       .from('jobs')
       .select('id, organization_id')
@@ -2109,6 +1511,7 @@ export async function getTimeEntriesForJob(
       .single();
 
     if (jobError || !job) {
+      logReadErrors('getTimeEntriesForJob: read failed', jobError);
       return { success: false, error: 'fetch_failed' };
     }
 
@@ -2118,12 +1521,16 @@ export async function getTimeEntriesForJob(
     }
 
     if (callerRole !== 'admin' && callerRole !== 'buero') {
-      const { data: assignment } = await admin
-        .from('job_assignments')
-        .select('id')
-        .eq('job_id', jobId)
-        .eq('user_id', user.id)
-        .maybeSingle();
+      const { data: assignment } = await loggedRead(
+        'getTimeEntriesForJob: job_assignments read failed',
+        admin
+          .from('job_assignments')
+          .select('id')
+          .eq('organization_id', job.organization_id)
+          .eq('job_id', jobId)
+          .eq('user_id', user.id)
+          .maybeSingle(),
+      );
 
       if (!assignment) {
         return { success: false, error: 'not_authorized' };
@@ -2144,40 +1551,37 @@ export async function getTimeEntriesForJob(
       return { success: false, error: 'fetch_failed' };
     }
     const canonicalEntries = canonicalResult.entries;
-    const correctionApplications = await getApprovedTimeCorrectionApplications({
+    const correctionApplications = await loadApprovedCorrectionProjection(admin, {
       organizationId: job.organization_id,
-      userId: isManager ? undefined : user.id,
+      from: '1970-01-01T00:00:00.000Z',
+      to: projectionTime,
+      ...(!isManager ? { userIds: [user.id] } : {}),
     });
     const projectJobEntries = (entries: readonly TimeEntry[]): TimeEntry[] =>
-      applyApprovedTimeCorrections(
-        entries,
-        correctionApplications,
-        job.organization_id
-      ).filter((entry) => entry.jobId === jobId);
-    async function loadParticipants(
-      entries: readonly TimeEntry[]
-    ): Promise<JobTimeParticipant[]> {
+      applyApprovedTimeCorrections(entries, correctionApplications, job.organization_id).filter(
+        (entry) => entry.jobId === jobId && (isManager || entry.userId === user.id),
+      );
+    // Null when the names could not be read: the read fails instead of listing nobody.
+    async function loadParticipants(entries: readonly TimeEntry[]): Promise<JobTimeParticipant[] | null> {
       if (!isManager) return [];
-      const participantUserIds = [
-        ...new Set(entries.map((entry) => entry.userId)),
-      ];
+      const participantUserIds = [...new Set(entries.map((entry) => entry.userId))];
       if (participantUserIds.length === 0) return [];
 
-      const { data: participantProfiles, error: participantProfilesError } =
-        await admin
-          .from('profiles')
-          .select('id, first_name, last_name, email, avatar_path')
-          .in('id', participantUserIds);
+      const { data: participantProfiles, error: participantProfilesError } = await readInBatches(
+        participantUserIds,
+        (batch) =>
+          admin
+            .from('profiles')
+            .select('id, first_name, last_name, email, avatar_path')
+            .in('id', [...batch]),
+      );
 
       if (participantProfilesError) {
-        console.error(
-          'Error fetching participant profiles for job time entries:',
-          participantProfilesError
-        );
-        return [];
+        logError('Error fetching participant profiles for job time entries:', participantProfilesError);
+        return null;
       }
 
-      return (participantProfiles ?? []).map((profile) => ({
+      return participantProfiles.map((profile) => ({
         userId: profile.id,
         firstName: profile.first_name ?? null,
         lastName: profile.last_name ?? null,
@@ -2197,62 +1601,65 @@ export async function getTimeEntriesForJob(
       jobClockInsQuery = jobClockInsQuery.eq('user_id', user.id);
     }
 
-    const { data: jobClockIns, error: jobClockInsError } =
-      await jobClockInsQuery.order('timestamp', { ascending: true });
+    const orderedJobClockIns = jobClockInsQuery.order('timestamp', { ascending: true }).order('id');
+    const { data: jobClockIns, error: jobClockInsError } = await readCompleteRows(
+      (from, to) => orderedJobClockIns.range(from, to),
+      LIST_ROW_CAP,
+    );
 
     if (jobClockInsError) {
-      console.error('Error fetching clock-ins for job:', jobClockInsError);
+      logError('Error fetching clock-ins for job:', jobClockInsError);
       return { success: false, error: 'fetch_failed' };
     }
 
     const targetClockIns = toTimeEntries(jobClockIns || []);
     if (targetClockIns.length === 0) {
       const correctedCanonicalEntries = projectJobEntries(canonicalEntries);
-      return {
-        success: true,
-        entries: correctedCanonicalEntries,
-        participants: await loadParticipants(correctedCanonicalEntries),
-      };
+      const canonicalParticipants = await loadParticipants(correctedCanonicalEntries);
+      if (!canonicalParticipants) return { success: false, error: 'fetch_failed' };
+      return { success: true, entries: correctedCanonicalEntries, participants: canonicalParticipants };
     }
 
     const userIds = [...new Set(targetClockIns.map((entry) => entry.userId))];
-    const organizationIds = [
-      ...new Set(targetClockIns.map((entry) => entry.organizationId))
-    ];
     const targetDayKeys = new Set(
       targetClockIns.map(
-        (entry) =>
-          `${entry.userId}:${entry.organizationId}:${getLocalDayKey(new Date(entry.timestamp))}`
-      )
+        (entry) => `${entry.userId}:${entry.organizationId}:${getLocalDayKey(new Date(entry.timestamp))}`,
+      ),
     );
-    const timestamps = targetClockIns.map((entry) =>
-      new Date(entry.timestamp).getTime()
-    );
-    const rangeStart = getLocalDayStart(
-      new Date(Math.min(...timestamps))
-    ).toISOString();
+    const timestamps = targetClockIns.map((entry) => new Date(entry.timestamp).getTime());
+    const rangeStart = getLocalDayStart(new Date(Math.min(...timestamps))).toISOString();
     const rangeEnd = getLocalDayEnd(new Date(Math.max(...timestamps))).toISOString();
 
-    const { data, error } = await admin
-      .from('time_entries')
-      .select('*')
-      .in('user_id', userIds)
-      .in('organization_id', organizationIds)
-      .gte('timestamp', rangeStart)
-      .lte('timestamp', rangeEnd)
-      .neq('status', 'rejected')
-      .order('timestamp', { ascending: true })
-      .order('created_at', { ascending: true });
+    // Every clock-in above belongs to the job's organization. One user sits in
+    // one batch, so each user's days keep their timestamp order.
+    const { data, error } = await readInBatches(userIds, (batch) =>
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('time_entries')
+            .select('*')
+            .in('user_id', [...batch])
+            .eq('organization_id', job.organization_id)
+            .gte('timestamp', rangeStart)
+            .lte('timestamp', rangeEnd)
+            .neq('status', 'rejected')
+            .order('timestamp', { ascending: true })
+            .order('created_at', { ascending: true })
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+    );
 
     if (error) {
-      console.error('Error fetching session-aware time entries for job:', error);
+      logError('Error fetching session-aware time entries for job:', error);
       return { success: false, error: 'fetch_failed' };
     }
 
     const relevantEntries = toTimeEntries(data || []).filter((entry) =>
       targetDayKeys.has(
-        `${entry.userId}:${entry.organizationId}:${getLocalDayKey(new Date(entry.timestamp))}`
-      )
+        `${entry.userId}:${entry.organizationId}:${getLocalDayKey(new Date(entry.timestamp))}`,
+      ),
     );
     const entriesByUserDay = new Map<string, TimeEntry[]>();
 
@@ -2274,7 +1681,7 @@ export async function getTimeEntriesForJob(
 
     for (const entriesForDay of entriesByUserDay.values()) {
       const sessions = calculateWorkSessions(entriesForDay).filter(
-        (session) => session.clockIn?.jobId === jobId
+        (session) => session.clockIn?.jobId === jobId,
       );
 
       for (const session of sessions) {
@@ -2289,84 +1696,94 @@ export async function getTimeEntriesForJob(
 
     const correctedEntries = projectJobEntries([...dedupedEntries.values()]);
     const participants = await loadParticipants(correctedEntries);
+    if (!participants) return { success: false, error: 'fetch_failed' };
 
     return {
       success: true,
       entries: correctedEntries.sort((a, b) => {
-          const timestampDiff =
-            new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
-          if (timestampDiff !== 0) return timestampDiff;
-          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-        }),
+        const timestampDiff = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+        if (timestampDiff !== 0) return timestampDiff;
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      }),
       participants,
     };
   } catch (error) {
-    console.error('Unexpected error in getTimeEntriesForJob:', error);
+    logError('Unexpected error in getTimeEntriesForJob:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
 export async function getTimeEntriesForProjectJobs(
-  projectId: string
-): Promise<
-  | { success: true; jobs: Array<{ jobId: string; entries: TimeEntry[] }> }
-  | { success: false; error: string }
-> {
+  rawProjectId: string,
+): Promise<{ success: true; jobs: Array<{ jobId: string; entries: TimeEntry[] }> } | ActionFailure> {
   try {
+    const parsed = uuidSchema.safeParse(rawProjectId);
+    if (!parsed.success) return { success: false, error: 'invalid_input' };
     const user = await getAuthenticatedUser();
     if (!user) return { success: false, error: 'not_authenticated' };
 
-  const admin = createSupabaseAdminClient();
-  const { data: project, error: projectError } = await admin
-    .from('projects')
-    .select('id, organization_id')
-    .eq('id', projectId)
-    .maybeSingle();
-  if (projectError || !project) return { success: false, error: 'fetch_failed' };
+    const admin = createSupabaseAdminClient();
+    // tenant-scope: by-id-then-verified — the caller's membership in the project's organization is verified next, and every later read filters by it.
+    const { data: project, error: projectError } = await admin
+      .from('projects')
+      .select('id, organization_id')
+      .eq('id', parsed.data)
+      .maybeSingle();
+    if (projectError || !project) {
+      logReadErrors('getTimeEntriesForProjectJobs: read failed', projectError);
+      return { success: false, error: 'fetch_failed' };
+    }
 
-  const callerRole = await verifyCurrentMembership(
-    user.id,
-    project.organization_id
-  );
-  if (!callerRole) return { success: false, error: 'not_a_member' };
+    const callerRole = await verifyCurrentMembership(user.id, project.organization_id);
+    if (!callerRole) return { success: false, error: 'not_a_member' };
 
-  const { data: projectJobs, error: jobsError } = await admin
-    .from('jobs')
-    .select('id')
-    .eq('organization_id', project.organization_id)
-    .eq('project_id', project.id);
-  if (jobsError) return { success: false, error: 'fetch_failed' };
-
-  let visibleJobIds = (projectJobs ?? []).map((job) => job.id);
-  if (callerRole === 'employee' && visibleJobIds.length > 0) {
-    const { data: assignments, error: assignmentsError } = await admin
-      .from('job_assignments')
-      .select('job_id')
+    const { data: projectJobs, error: jobsError } = await admin
+      .from('jobs')
+      .select('id')
       .eq('organization_id', project.organization_id)
-      .eq('user_id', user.id)
-      .in('job_id', visibleJobIds);
-    if (assignmentsError) return { success: false, error: 'fetch_failed' };
-    visibleJobIds = (assignments ?? []).map((assignment) => assignment.job_id);
-  }
+      .eq('project_id', project.id);
+    if (jobsError) {
+      logReadErrors('getTimeEntriesForProjectJobs: read failed', jobsError);
+      return { success: false, error: 'fetch_failed' };
+    }
 
-  const results: Array<{
-    jobId: string;
-    result: Awaited<ReturnType<typeof getTimeEntriesForJob>>;
-  }> = [];
-  const jobReadConcurrency = 4;
-  for (let offset = 0; offset < visibleJobIds.length; offset += jobReadConcurrency) {
-    const batch = visibleJobIds.slice(offset, offset + jobReadConcurrency);
-    results.push(...await Promise.all(
-      batch.map(async (jobId) => ({
-        jobId,
-        result: await getTimeEntriesForJob(jobId),
-      }))
-    ));
-  }
-  const failedResult = results.find(({ result }) => !result.success);
-  if (failedResult && !failedResult.result.success) {
-    return { success: false, error: failedResult.result.error };
-  }
+    let visibleJobIds = (projectJobs ?? []).map((job) => job.id);
+    if (callerRole === 'employee' && visibleJobIds.length > 0) {
+      const { data: assignments, error: assignmentsError } = await readInBatches(visibleJobIds, (batch) =>
+        admin
+          .from('job_assignments')
+          .select('job_id')
+          .eq('organization_id', project.organization_id)
+          .eq('user_id', user.id)
+          .in('job_id', [...batch]),
+      );
+      if (assignmentsError) {
+        logReadErrors('getTimeEntriesForProjectJobs: read failed', assignmentsError);
+        return { success: false, error: 'fetch_failed' };
+      }
+      visibleJobIds = assignments.map((assignment) => assignment.job_id);
+    }
+
+    const results: Array<{
+      jobId: string;
+      result: Awaited<ReturnType<typeof getTimeEntriesForJob>>;
+    }> = [];
+    const jobReadConcurrency = 4;
+    for (let offset = 0; offset < visibleJobIds.length; offset += jobReadConcurrency) {
+      const batch = visibleJobIds.slice(offset, offset + jobReadConcurrency);
+      results.push(
+        ...(await Promise.all(
+          batch.map(async (jobId) => ({
+            jobId,
+            result: await getTimeEntriesForJob(jobId),
+          })),
+        )),
+      );
+    }
+    const failedResult = results.find(({ result }) => !result.success);
+    if (failedResult && !failedResult.result.success) {
+      return { success: false, error: failedResult.result.error };
+    }
     return {
       success: true,
       jobs: results.map(({ jobId, result }) => ({
@@ -2375,7 +1792,7 @@ export async function getTimeEntriesForProjectJobs(
       })),
     };
   } catch (error) {
-    console.error('Unexpected error in getTimeEntriesForProjectJobs:', error);
+    logError('Unexpected error in getTimeEntriesForProjectJobs:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
@@ -2385,11 +1802,12 @@ export async function getTimeEntriesForProjectJobs(
  * Used by the shared client clock state and Zeiterfassung overview prefetch.
  */
 export async function getCurrentClockState(
-  organizationId: string
-): Promise<
-  { success: true; state: LiveClockState } | { success: false; error: string }
-> {
+  rawOrganizationId: string,
+): Promise<{ success: true; state: LiveClockState } | ActionFailure> {
   try {
+    const parsed = uuidSchema.safeParse(rawOrganizationId);
+    if (!parsed.success) return { success: false, error: 'invalid_input' };
+    const organizationId = parsed.data;
     const canonical = await getCanonicalClockState(organizationId);
     if (!canonical.success) return canonical;
     if (canonical.state) return { success: true, state: canonical.state };
@@ -2403,12 +1821,13 @@ export async function getCurrentClockState(
     const [userRole, todayRows, organizationSettings] = await Promise.all([
       verifyCurrentMembership(user.id, organizationId),
       getUserTodayEntries(admin, user.id, organizationId),
-      getCachedOrganizationSettings(organizationId)
+      readOrganizationSettings(organizationId),
     ]);
 
     if (!userRole) {
       return { success: false, error: 'not_a_member' };
     }
+    if (!organizationSettings || !todayRows) return { success: false, error: 'fetch_failed' };
 
     const timeEntries = toTimeEntries(todayRows);
     const currentState = deriveCurrentClockState(timeEntries);
@@ -2416,18 +1835,14 @@ export async function getCurrentClockState(
     const breakSessions = calculateBreakSessions(timeEntries);
     const timelineSegments = buildClockTimelineSegments(timeEntries, new Date(), {
       sameLocalDayOnly: true,
-      includeOpenSegment: false
+      includeOpenSegment: false,
     });
     const trackedWorkMinutes = calculateTotalMinutes(workSessions);
     const trackedBreakMinutes = calculateBreakMinutes(breakSessions);
     const todayMinutes = trackedWorkMinutes + trackedBreakMinutes;
-    const breakdown = computeBreakdownForSettings(
-      todayMinutes,
-      trackedBreakMinutes,
-      organizationSettings
-    );
+    const breakdown = computeBreakdownForSettings(todayMinutes, trackedBreakMinutes, organizationSettings);
     const activeJobInfo = currentState.activeJobId
-      ? await getClockJobInfo(admin, currentState.activeJobId)
+      ? await getClockJobInfo(admin, organizationId, currentState.activeJobId)
       : null;
     // Legacy events know only work and breaks, so the resumable activity is
     // work on the job the break interrupted (or unallocated work).
@@ -2438,7 +1853,7 @@ export async function getCurrentClockState(
       ? null
       : currentState.resumeJobId === currentState.activeJobId
         ? activeJobInfo
-        : await getClockJobInfo(admin, currentState.resumeJobId);
+        : await getClockJobInfo(admin, organizationId, currentState.resumeJobId);
 
     return {
       success: true,
@@ -2489,11 +1904,11 @@ export async function getCurrentClockState(
         travelMinutes: 0,
         calloutMinutes: 0,
         internalMinutes: 0,
-        fetchedAt: new Date().toISOString()
-      }
+        fetchedAt: new Date().toISOString(),
+      },
     };
   } catch (error) {
-    console.error('Unexpected error in getCurrentClockState:', error);
+    logError('Unexpected error in getCurrentClockState:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
@@ -2503,11 +1918,12 @@ export async function getCurrentClockState(
  * Used for the "active work" pulsation indicator across all tables.
  */
 export async function getActiveJobIdsForOrg(
-  organizationId: string
-): Promise<
-  { success: true; activeJobIds: string[]; activeProjectIds: string[] } | { success: false; error: string }
-> {
+  rawOrganizationId: string,
+): Promise<{ success: true; activeJobIds: string[]; activeProjectIds: string[] } | ActionFailure> {
   try {
+    const parsed = uuidSchema.safeParse(rawOrganizationId);
+    if (!parsed.success) return { success: false, error: 'invalid_input' };
+    const organizationId = parsed.data;
     const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
@@ -2522,39 +1938,61 @@ export async function getActiveJobIdsForOrg(
     const { start } = getTodayBounds();
 
     const [legacyResult, canonicalResult] = await Promise.all([
-      readCompleteRows((from, to) => admin
-        .from('time_entries')
-        .select('user_id, entry_type, timestamp, job_id')
-        .eq('organization_id', organizationId)
-        .gte('timestamp', start.toISOString())
-        .lte('timestamp', new Date().toISOString())
-        .neq('status', 'rejected')
-        .neq('status', 'pending_delete')
-        .order('timestamp', { ascending: false }).order('id').range(from, to), LIST_ROW_CAP),
-      readCompleteRows((from, to) => admin
-        .from('time_segments')
-        .select('job_id, time_sessions!inner(status, ended_at)')
-        .eq('organization_id', organizationId)
-        .is('ended_at', null)
-        .is('time_sessions.ended_at', null)
-        .in('kind', ['work', 'callout'])
-        .not('job_id', 'is', null).order('id').range(from, to), LIST_ROW_CAP),
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('time_entries')
+            .select('user_id, entry_type, timestamp, job_id')
+            .eq('organization_id', organizationId)
+            .gte('timestamp', start.toISOString())
+            .lte('timestamp', new Date().toISOString())
+            .neq('status', 'rejected')
+            .neq('status', 'pending_delete')
+            .order('timestamp', { ascending: false })
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('time_segments')
+            .select('job_id, time_sessions!inner(status, ended_at)')
+            .eq('organization_id', organizationId)
+            .is('ended_at', null)
+            .is('time_sessions.ended_at', null)
+            .in('kind', ['work', 'callout'])
+            .not('job_id', 'is', null)
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
     ]);
 
     if (legacyResult.error || canonicalResult.error) {
-      console.error(
-        'Error fetching active job ids:',
-        legacyResult.error ?? canonicalResult.error
-      );
+      logReadFailure('Error fetching active job ids:', legacyResult.error ?? canonicalResult.error);
       return { success: false, error: 'fetch_failed' };
     }
 
     const activeJobIds = collectActiveJobIds(legacyResult.data, canonicalResult.data);
-    const jobs = await readInBatches(activeJobIds, (ids) => admin.from('jobs').select('id,project_id').eq('organization_id', organizationId).in('id', [...ids]));
-    if (jobs.error) return { success: false, error: 'fetch_failed' };
-    return { success: true, activeJobIds, activeProjectIds: [...new Set(jobs.data.flatMap((job) => job.project_id ? [job.project_id] : []))] };
+    const jobs = await readInBatches(activeJobIds, (ids) =>
+      admin
+        .from('jobs')
+        .select('id,project_id')
+        .eq('organization_id', organizationId)
+        .in('id', [...ids]),
+    );
+    if (jobs.error) {
+      logReadErrors('getActiveJobIdsForOrg: read failed', jobs.error);
+      return { success: false, error: 'fetch_failed' };
+    }
+    return {
+      success: true,
+      activeJobIds,
+      activeProjectIds: [...new Set(jobs.data.flatMap((job) => (job.project_id ? [job.project_id] : [])))],
+    };
   } catch (error) {
-    console.error('Unexpected error in getActiveJobIdsForOrg:', error);
+    logError('Unexpected error in getActiveJobIdsForOrg:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }

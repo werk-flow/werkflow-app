@@ -1,22 +1,23 @@
 'use server';
 
+import type { ActionFailure } from '@/lib/action-result';
+import { loggedRead, logReadErrors } from '@/lib/data/read-request-cache';
 import { revalidatePath } from 'next/cache';
-import { z } from 'zod';
+import { z } from '@/lib/zod';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { timeActivitySelectionSchema as selectionSchema } from './activity-selection-schema';
 
-import { getAuthenticatedUser, getCachedMemberships, getCachedOrganizationSettings } from '@/lib/data/cached';
+import { getAuthenticatedUser, getCachedMemberships } from '@/lib/data/cached';
+import { readOrganizationSettings } from './organization-settings-read';
 import { getBusinessTodayIso } from '@/lib/personnel/types';
 import { getJobDisplayTitle } from '@/lib/jobs/types';
 import { hasActiveSicknessOn } from '@/lib/sickness/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { hasApprovedFullDayVacationOn } from '@/lib/vacation/server';
 import { getLocalDayEnd, getLocalDayStart } from './day-utils';
-import {
-  calculateTimeActivityTotals,
-  toTimeActivitySelection,
-  toTimeSegmentFact,
-} from './segments';
+import { isPeriodClosedError } from './closed-periods';
+import { calculateTimeActivityTotals, toTimeActivitySelection, toTimeSegmentFact } from './segments';
 import { readResumeActivity } from './resume-activity';
 import { computeBreakdownForSettings } from './settings';
 import { hashTimeTransitionRequest } from './transition-hash';
@@ -68,18 +69,20 @@ type TransitionPayload = {
   legacyBridged?: boolean;
 };
 
-function mapTransitionError(message: string): TimeTransitionError {
+function mapTransitionError(error: { code?: string; message: string }): TimeTransitionError {
+  if (isPeriodClosedError(error)) return 'period_closed';
+  const { message } = error;
   if (message.includes('time_sessions_open_user_unique')) {
     return 'time_transition_working_other_org';
   }
-  return TIME_TRANSITION_ERROR_CODES.find(
-    (code) => code.startsWith('time_transition_') && message.includes(code)
-  ) ?? 'time_transition_failed';
+  return (
+    TIME_TRANSITION_ERROR_CODES.find(
+      (code) => code.startsWith('time_transition_') && message.includes(code),
+    ) ?? 'time_transition_failed'
+  );
 }
 
-export async function transitionTimeActivity(
-  rawInput: TimeTransitionInput
-): Promise<TimeTransitionResult> {
+export async function transitionTimeActivity(rawInput: TimeTransitionInput): Promise<TimeTransitionResult> {
   const parsed = transitionSchema.safeParse(rawInput);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const input = parsed.data;
@@ -105,25 +108,28 @@ export async function transitionTimeActivity(
   }
 
   const selection = input.selection;
-  const { data, error } = await admin.rpc('transition_time_activity', {
-    p_organization_id: input.organizationId,
-    p_actor_id: user.id,
-    p_operation_id: input.operationId,
-    p_request_hash: hashTimeTransitionRequest(input),
-    p_action: input.action,
-    p_expected_session_id: input.expectedSessionId,
-    p_expected_version: input.expectedVersion,
-    p_segment_kind: selection?.kind ?? null,
-    p_allocation_kind: selection?.allocationKind ?? null,
-    p_job_id: selection?.jobId ?? null,
-    p_internal_type: selection?.internalType ?? null,
-    p_travel_route: selection?.travelRoute ?? null,
-    p_travel_role: selection?.travelRole ?? null,
-    p_standby_context: selection?.standbyContext ?? null,
-    p_acknowledge_long: input.acknowledgeLong,
-  });
+  const { data, error } = await admin.rpc(
+    'transition_time_activity',
+    rpcArgs('transition_time_activity', {
+      p_organization_id: input.organizationId,
+      p_actor_id: user.id,
+      p_operation_id: input.operationId,
+      p_request_hash: hashTimeTransitionRequest(input),
+      p_action: input.action,
+      p_expected_session_id: input.expectedSessionId,
+      p_expected_version: input.expectedVersion,
+      p_segment_kind: selection?.kind ?? null,
+      p_allocation_kind: selection?.allocationKind ?? null,
+      p_job_id: selection?.jobId ?? null,
+      p_internal_type: selection?.internalType ?? null,
+      p_travel_route: selection?.travelRoute ?? null,
+      p_travel_role: selection?.travelRole ?? null,
+      p_standby_context: selection?.standbyContext ?? null,
+      p_acknowledge_long: input.acknowledgeLong,
+    }),
+  );
 
-  if (error) return { success: false, error: mapTransitionError(error.message) };
+  if (error) return { success: false, error: mapTransitionError(error) };
   if (!data || typeof data !== 'object') {
     return { success: false, error: 'time_transition_failed' };
   }
@@ -147,14 +153,17 @@ export async function transitionTimeActivity(
 async function readClockJobInfo(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   organizationId: string,
-  jobId: string
+  jobId: string,
 ): Promise<ClockJobInfo | null> {
-  const { data: job } = await admin
-    .from('jobs')
-    .select('id, title, description, job_number, status, projects(name), clients(name)')
-    .eq('organization_id', organizationId)
-    .eq('id', jobId)
-    .maybeSingle();
+  const { data: job } = await loggedRead(
+    'readClockJobInfo: jobs read failed',
+    admin
+      .from('jobs')
+      .select('id, title, description, job_number, status, projects(name), clients(name)')
+      .eq('organization_id', organizationId)
+      .eq('id', jobId)
+      .maybeSingle(),
+  );
   if (!job) return null;
   const project = Array.isArray(job.projects) ? job.projects[0] : job.projects;
   const client = Array.isArray(job.clients) ? job.clients[0] : job.clients;
@@ -169,15 +178,16 @@ async function readClockJobInfo(
 }
 
 export async function getCanonicalClockState(
-  organizationId: string
-): Promise<{ success: true; state: LiveClockState | null } | { success: false; error: string }> {
+  organizationId: string,
+): Promise<{ success: true; state: LiveClockState | null } | ActionFailure> {
   if (!uuidSchema.safeParse(organizationId).success) {
     return { success: false, error: 'invalid_input' };
   }
   const user = await getAuthenticatedUser();
   if (!user) return { success: false, error: 'not_authenticated' };
   const memberships = await getCachedMemberships(user.id);
-  if (!memberships.some((membership) => membership.orgId === organizationId)) return { success: false, error: 'not_a_member' };
+  if (!memberships.some((membership) => membership.orgId === organizationId))
+    return { success: false, error: 'not_a_member' };
   const admin = createSupabaseAdminClient();
   const [{ data: sessionData, error: sessionError }, settings] = await Promise.all([
     admin
@@ -187,9 +197,13 @@ export async function getCanonicalClockState(
       .eq('user_id', user.id)
       .is('ended_at', null)
       .maybeSingle(),
-    getCachedOrganizationSettings(organizationId),
+    readOrganizationSettings(organizationId),
   ]);
-  if (sessionError) return { success: false, error: 'fetch_failed' };
+  if (sessionError) {
+    logReadErrors('getCanonicalClockState: read failed', sessionError);
+    return { success: false, error: 'fetch_failed' };
+  }
+  if (!settings) return { success: false, error: 'fetch_failed' };
   if (!sessionData) return { success: true, state: null };
   const session = sessionData as CanonicalSessionRow;
   const now = new Date();
@@ -198,13 +212,17 @@ export async function getCanonicalClockState(
   const { data: segmentData, error: segmentError } = await admin
     .from('time_segments')
     .select(
-      'id, session_id, organization_id, employee_record_id, kind, allocation_kind, job_id, internal_type, travel_route, travel_role, standby_context, started_at, ended_at'
+      'id, session_id, organization_id, employee_record_id, kind, allocation_kind, job_id, internal_type, travel_route, travel_role, standby_context, started_at, ended_at',
     )
+    .eq('organization_id', organizationId)
     .eq('session_id', session.id)
     .lte('started_at', dayEnd.toISOString())
     .or(`ended_at.is.null,ended_at.gte.${dayStart.toISOString()}`)
     .order('started_at', { ascending: true });
-  if (segmentError) return { success: false, error: 'fetch_failed' };
+  if (segmentError) {
+    logReadErrors('getCanonicalClockState: read failed', segmentError);
+    return { success: false, error: 'fetch_failed' };
+  }
   const segments = (segmentData ?? []).map((row) => toTimeSegmentFact(row as never));
   const current = [...segments].reverse().find((segment) => segment.endedAt === null) ?? null;
   // Closed-block totals intentionally exclude the still-running segment.
@@ -212,24 +230,18 @@ export async function getCanonicalClockState(
     segments,
     dayStart,
     dayEnd,
-    current ? new Date(current.startedAt) : now
+    current ? new Date(current.startedAt) : now,
   );
-  const breakdown = computeBreakdownForSettings(
-    totals.presenceMinutes,
-    totals.breakMinutes,
-    settings
-  );
+  const breakdown = computeBreakdownForSettings(totals.presenceMinutes, totals.breakMinutes, settings);
   // The activity a break interrupted is read across the whole session, so a
   // break that crosses the Berlin midnight still resumes the right job.
   let resumeActivity: TimeActivitySelection | null = current ? toTimeActivitySelection(current) : null;
   if (current?.kind === 'break') {
-    const resume = await readResumeActivity(admin, session.id);
+    const resume = await readResumeActivity(admin, organizationId, session.id);
     if (!resume.success) return { success: false, error: 'fetch_failed' };
     resumeActivity = resume.activity;
   }
-  const activeJobInfo = current?.jobId
-    ? await readClockJobInfo(admin, organizationId, current.jobId)
-    : null;
+  const activeJobInfo = current?.jobId ? await readClockJobInfo(admin, organizationId, current.jobId) : null;
   const resumeJobInfo = !resumeActivity?.jobId
     ? null
     : resumeActivity.jobId === current?.jobId
@@ -258,15 +270,19 @@ export async function getCanonicalClockState(
       todayMinutes: totals.presenceMinutes,
       workMinutes: breakdown.workMinutes,
       breakMinutes: breakdown.breakMinutes,
-      timelineSegments: segments.filter((segment) => segment.endedAt !== null).map((segment) => ({
-        type: segment.kind === 'break' ? 'break' as const : 'work' as const,
-        minutes: Math.max(
-          0,
-          (new Date(segment.endedAt!).getTime() -
-            new Date(segment.startedAt).getTime()) /
-            60_000
-        ),
-      })),
+      timelineSegments: segments.flatMap((segment) =>
+        segment.endedAt === null
+          ? []
+          : [
+              {
+                type: segment.kind === 'break' ? ('break' as const) : ('work' as const),
+                minutes: Math.max(
+                  0,
+                  (new Date(segment.endedAt).getTime() - new Date(segment.startedAt).getTime()) / 60_000,
+                ),
+              },
+            ],
+      ),
       activeJobId: current?.jobId ?? null,
       activeJobInfo,
       captureModel: 'canonical',

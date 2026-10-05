@@ -1,9 +1,9 @@
 'use server';
 
 import { cookies } from 'next/headers';
-import { updateTag } from 'next/cache';
 
-import { CACHE_TAGS, getAuthenticatedUser } from '@/lib/data/cached';
+import type { ActionResult } from '@/lib/action-result';
+import { getAuthenticatedUser } from '@/lib/data/cached';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import {
   getOrganizationCodeValidationError,
@@ -13,34 +13,26 @@ import {
   type OrganizationSettingsValues,
 } from '@/lib/org/schemas';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { logError } from '@/lib/logging';
+import { z } from '@/lib/zod';
 
-export type UpdateOrganizationSettingsResult =
-  | { success: true; name: string; uniqueCode: string }
-  | {
-      success: false;
-      error:
-        | 'not_authenticated'
-        | 'org_not_found'
-        | 'not_authorized'
-        | 'name_required'
-        | 'name_too_short'
-        | 'name_too_long'
-        | 'name_taken'
-        | 'code_required'
-        | 'code_invalid'
-        | 'code_taken'
-        | 'no_changes'
-        | 'update_failed';
-    };
+export type UpdateOrganizationSettingsResult = ActionResult<
+  { name: string; uniqueCode: string },
+  | 'not_authenticated'
+  | 'org_not_found'
+  | 'not_authorized'
+  | 'name_required'
+  | 'name_too_short'
+  | 'name_too_long'
+  | 'name_taken'
+  | 'code_required'
+  | 'code_invalid'
+  | 'code_taken'
+  | 'no_changes'
+  | 'update_failed'
+>;
 
-type MemberRow = {
-  user_id: string;
-};
-
-function isDuplicateName(
-  existingName: string,
-  nextName: string
-): boolean {
+function isDuplicateName(existingName: string, nextName: string): boolean {
   return (
     normalizeOrganizationName(existingName).toLocaleLowerCase() ===
     normalizeOrganizationName(nextName).toLocaleLowerCase()
@@ -48,10 +40,7 @@ function isDuplicateName(
 }
 
 function mapUniqueViolation(errorMessage: string): 'name_taken' | 'code_taken' | null {
-  if (
-    errorMessage.includes('organizations_unique_code_key') ||
-    errorMessage.includes('unique_code')
-  ) {
+  if (errorMessage.includes('organizations_unique_code_key') || errorMessage.includes('unique_code')) {
     return 'code_taken';
   }
 
@@ -62,27 +51,35 @@ function mapUniqueViolation(errorMessage: string): 'name_taken' | 'code_taken' |
   return null;
 }
 
+// The raw shape only; the named validators below return the stable error codes.
+const settingsInputSchema = z.object({ name: z.string(), uniqueCode: z.string() });
+
 export async function updateOrganizationSettings(
-  input: OrganizationSettingsValues
+  input: OrganizationSettingsValues,
 ): Promise<UpdateOrganizationSettingsResult> {
+  const parsedInput = settingsInputSchema.safeParse(input);
   const user = await getAuthenticatedUser();
 
   if (!user) {
     return { success: false, error: 'not_authenticated' };
   }
+  if (!parsedInput.success) {
+    return { success: false, error: 'name_required' };
+  }
+  const { name, uniqueCode } = parsedInput.data;
 
-  const nameValidationError = getOrganizationNameValidationError(input.name);
+  const nameValidationError = getOrganizationNameValidationError(name);
   if (nameValidationError) {
     return { success: false, error: nameValidationError };
   }
 
-  const codeValidationError = getOrganizationCodeValidationError(input.uniqueCode);
+  const codeValidationError = getOrganizationCodeValidationError(uniqueCode);
   if (codeValidationError) {
     return { success: false, error: codeValidationError };
   }
 
-  const normalizedName = normalizeOrganizationName(input.name);
-  const normalizedCode = normalizeOrganizationCode(input.uniqueCode);
+  const normalizedName = normalizeOrganizationName(name);
+  const normalizedCode = normalizeOrganizationCode(uniqueCode);
   const admin = createSupabaseAdminClient();
   const cookieStore = await cookies();
   const activeOrgId = await resolveActiveOrgId(cookieStore, user.id);
@@ -112,23 +109,19 @@ export async function updateOrganizationSettings(
     return { success: false, error: 'no_changes' };
   }
 
-  const { data: siblingOrganizations, error: siblingOrganizationsError } =
-    await admin
-      .from('organizations')
-      .select('id, name')
-      .eq('admin_id', user.id)
-      .neq('id', activeOrgId);
+  const { data: siblingOrganizations, error: siblingOrganizationsError } = await admin
+    .from('organizations')
+    .select('id, name')
+    .eq('admin_id', user.id)
+    .neq('id', activeOrgId);
 
   if (siblingOrganizationsError) {
-    console.error(
-      'Error checking sibling organizations for duplicate names:',
-      siblingOrganizationsError
-    );
+    logError('updateOrganizationSettings: duplicate name check failed', siblingOrganizationsError);
     return { success: false, error: 'update_failed' };
   }
 
   const hasDuplicateName = (siblingOrganizations ?? []).some((sibling) =>
-    isDuplicateName(sibling.name, normalizedName)
+    isDuplicateName(sibling.name, normalizedName),
   );
 
   if (hasDuplicateName) {
@@ -143,7 +136,7 @@ export async function updateOrganizationSettings(
     .maybeSingle();
 
   if (existingCodeError) {
-    console.error('Error checking organization code uniqueness:', existingCodeError);
+    logError('updateOrganizationSettings: code uniqueness check failed', existingCodeError);
     return { success: false, error: 'update_failed' };
   }
 
@@ -171,28 +164,8 @@ export async function updateOrganizationSettings(
       }
     }
 
-    console.error('Error updating organization settings:', updateError);
+    logError('updateOrganizationSettings: organization write failed', updateError);
     return { success: false, error: 'update_failed' };
-  }
-
-  const { data: members, error: membersError } = await admin
-    .from('organization_members')
-    .select('user_id')
-    .eq('organization_id', activeOrgId);
-
-  if (membersError) {
-    console.error(
-      'Error fetching organization members for cache invalidation:',
-      membersError
-    );
-  }
-
-  const memberIds = Array.from(
-    new Set((members ?? []).map((member: MemberRow) => member.user_id))
-  );
-
-  for (const memberId of memberIds) {
-    updateTag(CACHE_TAGS.memberships(memberId));
   }
 
   return {

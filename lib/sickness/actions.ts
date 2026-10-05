@@ -1,22 +1,12 @@
 'use server';
-
-import { updateTag } from 'next/cache';
-import { cookies } from 'next/headers';
+import { logReadFailure } from '@/lib/data/read-request-cache';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { readCompleteRows, readInBatches, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
-import { resolveActiveOrgId } from '@/lib/org/cookies';
-import {
-  CACHE_TAGS,
-  getAuthenticatedUser,
-  getCachedMemberships,
-} from '@/lib/data/cached';
-import {
-  getBusinessTodayIso,
-  shiftIsoDateByDays,
-} from '@/lib/personnel/types';
-import type { OrgRole } from '@/lib/members/actions';
-import { parseIsoDateRange, type IsoDateRange } from '@/lib/calendar/date-range';
+import { resolveActionContext, type ActionContext } from '@/lib/org/action-context';
+import { getBusinessTodayIso, shiftIsoDateByDays } from '@/lib/personnel/types';
+import { defaultCalendarWindow, parseIsoDateRange, type IsoDateRange } from '@/lib/calendar/date-range';
 import { loadSicknessReportsForRecord } from './server';
 import {
   toSicknessReport,
@@ -26,6 +16,11 @@ import {
   type SicknessReportRow,
 } from './types';
 import type { VacationDayPortion } from '@/lib/vacation/types';
+import { logError } from '@/lib/logging';
+import { z } from '@/lib/zod';
+import { uuidSchema } from '@/lib/validation/uuid';
+import { isManagerRole } from '@/lib/roles';
+import type { ActionFailure } from '@/lib/action-result';
 
 // P1-08 sickness actions. A report is a FACT: effective the moment it is
 // recorded, no approval lifecycle. Privacy rule (confirmed owner decision):
@@ -42,46 +37,33 @@ const MAX_SICKNESS_RANGE_DAYS = 366;
 const MAX_PAST_START_DAYS = 730;
 const MAX_FUTURE_START_DAYS = 366;
 
-const ABSENCE_TYPES: SicknessAbsenceType[] = [
-  'krankheit',
-  'kind_krank',
-  'sonstige',
-];
+const ABSENCE_TYPES: SicknessAbsenceType[] = ['krankheit', 'kind_krank', 'sonstige'];
 
-type ActionContext = {
-  userId: string;
-  orgId: string;
-  role: OrgRole;
-};
-
-async function resolveActionContext(): Promise<
-  | { success: true; context: ActionContext }
-  | { success: false; error: string }
-> {
-  const user = await getAuthenticatedUser();
-  if (!user) return { success: false, error: 'not_authenticated' };
-
-  const cookieStore = await cookies();
-  const orgId = await resolveActiveOrgId(cookieStore, user.id);
-  if (!orgId) return { success: false, error: 'no_active_org' };
-
-  const memberships = await getCachedMemberships(user.id);
-  const membership = memberships.find((entry) => entry.orgId === orgId);
-  if (!membership) return { success: false, error: 'not_a_member' };
-
-  return {
-    success: true,
-    context: { userId: user.id, orgId, role: membership.role as OrgRole },
-  };
-}
-
-function isManagerRole(role: OrgRole): boolean {
-  return role === 'admin' || role === 'buero';
-}
-
-function invalidateSickness(orgId: string): void {
-  updateTag(CACHE_TAGS.sickness(orgId));
-}
+// Boundary schemas: structure, ids and bounds. The date and range rules below
+// keep their own error codes for the form.
+const dateTextSchema = z.string().max(10);
+const reasonSchema = z.string().max(2000).optional();
+const dayPortionSchema = z.enum(['full', 'half_day']);
+const absenceTypeSchema = z.enum(['krankheit', 'kind_krank', 'sonstige']);
+const createReportSchema = z.object({
+  absenceType: absenceTypeSchema,
+  startDate: dateTextSchema,
+  endDate: dateTextSchema.nullable(),
+  dayPortion: dayPortionSchema,
+});
+const recordForMemberSchema = createReportSchema.extend({
+  employeeRecordId: uuidSchema,
+  evidenceRequired: z.boolean(),
+});
+const endReportSchema = z.object({ reportId: uuidSchema, endDate: dateTextSchema });
+const correctReportSchema = createReportSchema.extend({ reportId: uuidSchema, reason: reasonSchema });
+const cancelReportSchema = z.object({ reportId: uuidSchema, reason: reasonSchema });
+const evidenceSchema = z.object({
+  reportId: uuidSchema,
+  evidenceRequired: z.boolean(),
+  evidenceStatus: z.enum(['not_required', 'pending', 'received']),
+});
+const calendarRangeSchema = z.object({ from: dateTextSchema, to: dateTextSchema }).optional();
 
 function validateReportRange(input: {
   startDate: string;
@@ -111,10 +93,7 @@ function validateReportRange(input: {
   if (input.dayPortion !== 'full' && input.dayPortion !== 'half_day') {
     return 'invalid_portion';
   }
-  if (
-    input.dayPortion === 'half_day' &&
-    (input.endDate === null || input.endDate !== input.startDate)
-  ) {
+  if (input.dayPortion === 'half_day' && (input.endDate === null || input.endDate !== input.startDate)) {
     return 'half_day_needs_single_day';
   }
   return null;
@@ -122,7 +101,7 @@ function validateReportRange(input: {
 
 async function loadOwnEmployeeRecordId(
   orgId: string,
-  userId: string
+  userId: string,
 ): Promise<{ recordId: string | null; failed: boolean }> {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
@@ -132,33 +111,46 @@ async function loadOwnEmployeeRecordId(
     .eq('user_id', userId)
     .maybeSingle();
   if (error) {
-    console.error('Failed to load own employee record:', error);
+    logError('Failed to load own employee record:', error);
     return { recordId: null, failed: true };
   }
   return { recordId: data?.id ?? null, failed: false };
 }
 
-async function appendReportEvent(input: {
-  orgId: string;
-  report: Pick<SicknessReport, 'id' | 'employeeRecordId'>;
-  eventType: string;
-  payload: Record<string, unknown>;
-  actorUserId: string;
-}): Promise<void> {
-  const admin = createSupabaseAdminClient();
-  const { error } = await admin.from('sickness_report_events').insert({
-    organization_id: input.orgId,
-    sickness_report_id: input.report.id,
-    employee_record_id: input.report.employeeRecordId,
-    event_type: input.eventType,
-    event_payload: input.payload,
-    created_by: input.actorUserId,
-  });
-  if (error) {
-    // The report row is the operational truth; a failed audit append is
-    // logged loudly but does not roll back the recorded fact.
-    console.error('Failed to append sickness report event:', error);
+// The refusals of create_sickness_report, end_sickness_report,
+// correct_sickness_report, cancel_sickness_report and set_sickness_evidence,
+// each an action failure code. Each function writes the report and its
+// sickness_report_events row together.
+const SICKNESS_WRITE_REFUSALS: ReadonlySet<string> = new Set([
+  'invalid_input',
+  'not_found',
+  'not_authorized',
+  'no_employee_record',
+  'record_not_found',
+  'report_not_active',
+  'reason_required',
+  'invalid_range',
+  'range_too_long',
+  'half_day_needs_single_day',
+  'invalid_evidence_state',
+  'overlap_conflict',
+]);
+
+// The result of one sickness write function: the saved report, the refusal
+// raised under the lock, or the action's own failure code for anything else.
+function sicknessWriteResult(
+  outcome: { data: SicknessReportRow | null; error: { message: string } | null },
+  failureCode: string,
+  logLabel: string,
+): MutateSicknessReportResult {
+  if (outcome.error && SICKNESS_WRITE_REFUSALS.has(outcome.error.message)) {
+    return { success: false, error: outcome.error.message };
   }
+  if (outcome.error || !outcome.data) {
+    logError(logLabel, outcome.error);
+    return { success: false, error: failureCode };
+  }
+  return { success: true, report: toSicknessReport(outcome.data) };
 }
 
 /**
@@ -171,7 +163,7 @@ async function hasApprovedVacationOverlap(
   orgId: string,
   employeeRecordId: string,
   startDate: string,
-  endDate: string | null
+  endDate: string | null,
 ): Promise<boolean> {
   const admin = createSupabaseAdminClient();
   let query = admin
@@ -187,7 +179,7 @@ async function hasApprovedVacationOverlap(
       : query.gte('end_date', startDate).lte('start_date', endDate);
   const { data, error } = await query;
   if (error) {
-    console.error('Failed vacation overlap check:', error);
+    logError('Failed vacation overlap check:', error);
     return false;
   }
   return (data ?? []).length > 0;
@@ -203,9 +195,7 @@ export type OwnSicknessOverview = {
   reports: SicknessReport[];
 };
 
-export type OwnSicknessOverviewResult =
-  | { success: true; overview: OwnSicknessOverview }
-  | { success: false; error: string };
+export type OwnSicknessOverviewResult = { success: true; overview: OwnSicknessOverview } | ActionFailure;
 
 export async function getOwnSicknessReports(): Promise<OwnSicknessOverviewResult> {
   try {
@@ -231,19 +221,20 @@ export async function getOwnSicknessReports(): Promise<OwnSicknessOverviewResult
       overview: { employeeRecordId: recordId, businessDate, reports },
     };
   } catch (error) {
-    console.error('Unexpected error in getOwnSicknessReports:', error);
+    logError('Unexpected error in getOwnSicknessReports:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
-export type MemberSicknessReportsResult =
-  | { success: true; reports: SicknessReport[] }
-  | { success: false; error: string };
+export type MemberSicknessReportsResult = { success: true; reports: SicknessReport[] } | ActionFailure;
 
 /** Manager read for the member-detail Krankmeldungen section. */
 export async function getSicknessReportsForRecord(
-  employeeRecordId: string
+  employeeRecordIdInput: string,
 ): Promise<MemberSicknessReportsResult> {
+  const parsed = uuidSchema.safeParse(employeeRecordIdInput);
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  const employeeRecordId = parsed.data;
   try {
     const auth = await resolveActionContext();
     if (!auth.success) return auth;
@@ -256,7 +247,7 @@ export async function getSicknessReportsForRecord(
     if (!reports) return { success: false, error: 'load_failed' };
     return { success: true, reports };
   } catch (error) {
-    console.error('Unexpected error in getSicknessReportsForRecord:', error);
+    logError('Unexpected error in getSicknessReportsForRecord:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
@@ -267,7 +258,7 @@ export async function getSicknessReportsForRecord(
 
 export type CreateSicknessReportResult =
   | { success: true; report: SicknessReport; vacationOverlap: boolean }
-  | { success: false; error: string };
+  | ActionFailure;
 
 type CreateReportInput = {
   absenceType: SicknessAbsenceType;
@@ -293,71 +284,47 @@ async function insertReport(input: {
   if (rangeError) return { success: false, error: rangeError };
 
   const admin = createSupabaseAdminClient();
-  const { data: inserted, error: insertError } = await admin
-    .from('sickness_reports')
-    .insert({
-      organization_id: context.orgId,
-      employee_record_id: employeeRecordId,
-      absence_type: report.absenceType,
-      start_date: report.startDate,
-      end_date: report.endDate,
-      day_portion: report.dayPortion,
-      status: 'reported',
-      evidence_required: evidenceRequired,
-      evidence_status: evidenceRequired ? 'pending' : 'not_required',
-      reported_by: context.userId,
-    })
-    .select()
-    .single();
-
-  if (insertError || !inserted) {
-    // 23P01 = exclusion violation: an own active sickness report overlaps.
-    if (insertError?.code === '23P01') {
-      return { success: false, error: 'overlap_conflict' };
-    }
-    console.error('Failed to insert sickness report:', insertError);
-    return { success: false, error: 'insert_failed' };
-  }
-
-  const created = toSicknessReport(inserted as SicknessReportRow);
-  await appendReportEvent({
-    orgId: context.orgId,
-    report: created,
-    eventType: 'reported',
-    payload: {
-      absence_type: created.absenceType,
-      start_date: created.startDate,
-      end_date: created.endDate,
-      day_portion: created.dayPortion,
-      evidence_required: created.evidenceRequired,
-      self_reported: input.selfReported,
-    },
-    actorUserId: context.userId,
-  });
+  const written = sicknessWriteResult(
+    await admin.rpc(
+      'create_sickness_report',
+      rpcArgs('create_sickness_report', {
+        p_actor_id: context.userId,
+        p_organization_id: context.orgId,
+        p_employee_record_id: employeeRecordId,
+        p_absence_type: report.absenceType,
+        p_start_date: report.startDate,
+        p_end_date: report.endDate,
+        p_day_portion: report.dayPortion,
+        p_evidence_required: evidenceRequired,
+        p_self_reported: input.selfReported,
+      }),
+    ),
+    'insert_failed',
+    'Failed to insert sickness report:',
+  );
+  if (!written.success) return written;
+  const created = written.report;
 
   const vacationOverlap = await hasApprovedVacationOverlap(
     context.orgId,
     employeeRecordId,
     created.startDate,
-    created.endDate
+    created.endDate,
   );
 
-  invalidateSickness(context.orgId);
   return { success: true, report: created, vacationOverlap };
 }
 
 /** Employee self-report — the 6:45-with-a-phone path. */
-export async function reportOwnSickness(
-  input: CreateReportInput
-): Promise<CreateSicknessReportResult> {
+export async function reportOwnSickness(rawInput: CreateReportInput): Promise<CreateSicknessReportResult> {
+  const parsed = createReportSchema.safeParse(rawInput);
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  const input = parsed.data;
   try {
     const auth = await resolveActionContext();
     if (!auth.success) return auth;
 
-    const { recordId, failed } = await loadOwnEmployeeRecordId(
-      auth.context.orgId,
-      auth.context.userId
-    );
+    const { recordId, failed } = await loadOwnEmployeeRecordId(auth.context.orgId, auth.context.userId);
     if (failed) return { success: false, error: 'load_failed' };
     if (!recordId) return { success: false, error: 'no_employee_record' };
 
@@ -369,18 +336,21 @@ export async function reportOwnSickness(
       selfReported: true,
     });
   } catch (error) {
-    console.error('Unexpected error in reportOwnSickness:', error);
+    logError('Unexpected error in reportOwnSickness:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
 /** Office entry — the 7:00 phone-call-in path (admin/Büro, any record). */
 export async function recordSicknessForMember(
-  input: CreateReportInput & {
+  rawInput: CreateReportInput & {
     employeeRecordId: string;
     evidenceRequired: boolean;
-  }
+  },
 ): Promise<CreateSicknessReportResult> {
+  const parsed = recordForMemberSchema.safeParse(rawInput);
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  const input = parsed.data;
   try {
     const auth = await resolveActionContext();
     if (!auth.success) return auth;
@@ -397,7 +367,7 @@ export async function recordSicknessForMember(
       .eq('id', input.employeeRecordId)
       .maybeSingle();
     if (recordError) {
-      console.error('Failed to load record for sickness entry:', recordError);
+      logError('Failed to load record for sickness entry:', recordError);
       return { success: false, error: 'load_failed' };
     }
     if (!record) return { success: false, error: 'record_not_found' };
@@ -410,7 +380,7 @@ export async function recordSicknessForMember(
       selfReported: false,
     });
   } catch (error) {
-    console.error('Unexpected error in recordSicknessForMember:', error);
+    logError('Unexpected error in recordSicknessForMember:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
@@ -419,18 +389,11 @@ export async function recordSicknessForMember(
 // Corrections (end, correct, cancel, evidence)
 // ============================================
 
-export type MutateSicknessReportResult =
-  | { success: true; report: SicknessReport }
-  | { success: false; error: string };
+export type MutateSicknessReportResult = { success: true; report: SicknessReport } | ActionFailure;
 
-type LoadedReport =
-  | { success: true; report: SicknessReport; isOwn: boolean }
-  | { success: false; error: string };
+type LoadedReport = { success: true; report: SicknessReport; isOwn: boolean } | ActionFailure;
 
-async function loadReportForMutation(
-  context: ActionContext,
-  reportId: string
-): Promise<LoadedReport> {
+async function loadReportForMutation(context: ActionContext, reportId: string): Promise<LoadedReport> {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from('sickness_reports')
@@ -439,16 +402,13 @@ async function loadReportForMutation(
     .eq('id', reportId)
     .maybeSingle();
   if (error) {
-    console.error('Failed to load sickness report:', error);
+    logError('Failed to load sickness report:', error);
     return { success: false, error: 'load_failed' };
   }
   if (!data) return { success: false, error: 'not_found' };
 
   const report = toSicknessReport(data as SicknessReportRow);
-  const { recordId, failed } = await loadOwnEmployeeRecordId(
-    context.orgId,
-    context.userId
-  );
+  const { recordId, failed } = await loadOwnEmployeeRecordId(context.orgId, context.userId);
   if (failed) return { success: false, error: 'load_failed' };
   const isOwn = recordId !== null && recordId === report.employeeRecordId;
 
@@ -461,10 +421,13 @@ async function loadReportForMutation(
 }
 
 /** Set/change the end date — the normal close-out („Ich bin wieder da"). */
-export async function endSicknessReport(input: {
+export async function endSicknessReport(rawInput: {
   reportId: string;
   endDate: string;
 }): Promise<MutateSicknessReportResult> {
+  const parsed = endReportSchema.safeParse(rawInput);
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  const input = parsed.data;
   try {
     const auth = await resolveActionContext();
     if (!auth.success) return auth;
@@ -482,10 +445,7 @@ export async function endSicknessReport(input: {
     if (input.endDate < report.startDate) {
       return { success: false, error: 'invalid_range' };
     }
-    if (
-      input.endDate >
-      shiftIsoDateByDays(report.startDate, MAX_SICKNESS_RANGE_DAYS)
-    ) {
+    if (input.endDate > shiftIsoDateByDays(report.startDate, MAX_SICKNESS_RANGE_DAYS)) {
       return { success: false, error: 'range_too_long' };
     }
     if (report.dayPortion === 'half_day' && input.endDate !== report.startDate) {
@@ -493,44 +453,28 @@ export async function endSicknessReport(input: {
     }
 
     const admin = createSupabaseAdminClient();
-    const { data: updated, error: updateError } = await admin
-      .from('sickness_reports')
-      .update({ end_date: input.endDate })
-      .eq('id', report.id)
-      .eq('organization_id', auth.context.orgId)
-      .eq('status', 'reported')
-      .select()
-      .single();
-    if (updateError || !updated) {
-      if (updateError?.code === '23P01') {
-        return { success: false, error: 'overlap_conflict' };
-      }
-      console.error('Failed to end sickness report:', updateError);
-      return { success: false, error: 'update_failed' };
-    }
-
-    const result = toSicknessReport(updated as SicknessReportRow);
-    await appendReportEvent({
-      orgId: auth.context.orgId,
-      report: result,
-      eventType: 'ended',
-      payload: {
-        before: { end_date: report.endDate },
-        after: { end_date: result.endDate },
-      },
-      actorUserId: auth.context.userId,
-    });
-    invalidateSickness(auth.context.orgId);
-    return { success: true, report: result };
+    return sicknessWriteResult(
+      await admin.rpc(
+        'end_sickness_report',
+        rpcArgs('end_sickness_report', {
+          p_actor_id: auth.context.userId,
+          p_organization_id: auth.context.orgId,
+          p_report_id: report.id,
+          p_end_date: input.endDate,
+        }),
+      ),
+      'update_failed',
+      'Failed to end sickness report:',
+    );
   } catch (error) {
-    console.error('Unexpected error in endSicknessReport:', error);
+    logError('Unexpected error in endSicknessReport:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
 /** Full correction of dates/portion/type. Managers correcting someone else's
  * report must give a reason; own corrections need none. */
-export async function correctSicknessReport(input: {
+export async function correctSicknessReport(rawInput: {
   reportId: string;
   absenceType: SicknessAbsenceType;
   startDate: string;
@@ -538,6 +482,9 @@ export async function correctSicknessReport(input: {
   dayPortion: VacationDayPortion;
   reason?: string;
 }): Promise<MutateSicknessReportResult> {
+  const parsed = correctReportSchema.safeParse(rawInput);
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  const input = parsed.data;
   try {
     const auth = await resolveActionContext();
     if (!auth.success) return auth;
@@ -561,62 +508,37 @@ export async function correctSicknessReport(input: {
     }
 
     const admin = createSupabaseAdminClient();
-    const { data: updated, error: updateError } = await admin
-      .from('sickness_reports')
-      .update({
-        absence_type: input.absenceType,
-        start_date: input.startDate,
-        end_date: input.endDate,
-        day_portion: input.dayPortion,
-      })
-      .eq('id', report.id)
-      .eq('organization_id', auth.context.orgId)
-      .eq('status', 'reported')
-      .select()
-      .single();
-    if (updateError || !updated) {
-      if (updateError?.code === '23P01') {
-        return { success: false, error: 'overlap_conflict' };
-      }
-      console.error('Failed to correct sickness report:', updateError);
-      return { success: false, error: 'update_failed' };
-    }
-
-    const result = toSicknessReport(updated as SicknessReportRow);
-    await appendReportEvent({
-      orgId: auth.context.orgId,
-      report: result,
-      eventType: 'corrected',
-      payload: {
-        before: {
-          absence_type: report.absenceType,
-          start_date: report.startDate,
-          end_date: report.endDate,
-          day_portion: report.dayPortion,
-        },
-        after: {
-          absence_type: result.absenceType,
-          start_date: result.startDate,
-          end_date: result.endDate,
-          day_portion: result.dayPortion,
-        },
-        reason,
-      },
-      actorUserId: auth.context.userId,
-    });
-    invalidateSickness(auth.context.orgId);
-    return { success: true, report: result };
+    return sicknessWriteResult(
+      await admin.rpc(
+        'correct_sickness_report',
+        rpcArgs('correct_sickness_report', {
+          p_actor_id: auth.context.userId,
+          p_organization_id: auth.context.orgId,
+          p_report_id: report.id,
+          p_absence_type: input.absenceType,
+          p_start_date: input.startDate,
+          p_end_date: input.endDate,
+          p_day_portion: input.dayPortion,
+          p_reason: reason,
+        }),
+      ),
+      'update_failed',
+      'Failed to correct sickness report:',
+    );
   } catch (error) {
-    console.error('Unexpected error in correctSicknessReport:', error);
+    logError('Unexpected error in correctSicknessReport:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
 /** Cancel = recorded in error. Others' reports require a reason. */
-export async function cancelSicknessReport(input: {
+export async function cancelSicknessReport(rawInput: {
   reportId: string;
   reason?: string;
 }): Promise<MutateSicknessReportResult> {
+  const parsed = cancelReportSchema.safeParse(rawInput);
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  const input = parsed.data;
   try {
     const auth = await resolveActionContext();
     if (!auth.success) return auth;
@@ -634,51 +556,35 @@ export async function cancelSicknessReport(input: {
     }
 
     const admin = createSupabaseAdminClient();
-    const { data: updated, error: updateError } = await admin
-      .from('sickness_reports')
-      .update({
-        status: 'cancelled',
-        cancelled_by: auth.context.userId,
-        cancelled_at: new Date().toISOString(),
-        cancellation_reason: reason,
-      })
-      .eq('id', report.id)
-      .eq('organization_id', auth.context.orgId)
-      .eq('status', 'reported')
-      .select()
-      .single();
-    if (updateError || !updated) {
-      console.error('Failed to cancel sickness report:', updateError);
-      return { success: false, error: 'update_failed' };
-    }
-
-    const result = toSicknessReport(updated as SicknessReportRow);
-    await appendReportEvent({
-      orgId: auth.context.orgId,
-      report: result,
-      eventType: 'cancelled',
-      payload: {
-        start_date: report.startDate,
-        end_date: report.endDate,
-        reason,
-      },
-      actorUserId: auth.context.userId,
-    });
-    invalidateSickness(auth.context.orgId);
-    return { success: true, report: result };
+    return sicknessWriteResult(
+      await admin.rpc(
+        'cancel_sickness_report',
+        rpcArgs('cancel_sickness_report', {
+          p_actor_id: auth.context.userId,
+          p_organization_id: auth.context.orgId,
+          p_report_id: report.id,
+          p_reason: reason,
+        }),
+      ),
+      'update_failed',
+      'Failed to cancel sickness report:',
+    );
   } catch (error) {
-    console.error('Unexpected error in cancelSicknessReport:', error);
+    logError('Unexpected error in cancelSicknessReport:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
 /** Evidence tracking (state only, no files — P1-24 owns document privacy).
  * Managers only; presented as the organization's own choice, never a rule. */
-export async function setSicknessEvidence(input: {
+export async function setSicknessEvidence(rawInput: {
   reportId: string;
   evidenceRequired: boolean;
   evidenceStatus: SicknessEvidenceStatus;
 }): Promise<MutateSicknessReportResult> {
+  const parsed = evidenceSchema.safeParse(rawInput);
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  const input = parsed.data;
   try {
     const auth = await resolveActionContext();
     if (!auth.success) return auth;
@@ -702,43 +608,22 @@ export async function setSicknessEvidence(input: {
     }
 
     const admin = createSupabaseAdminClient();
-    const { data: updated, error: updateError } = await admin
-      .from('sickness_reports')
-      .update({
-        evidence_required: input.evidenceRequired,
-        evidence_status: input.evidenceStatus,
-      })
-      .eq('id', report.id)
-      .eq('organization_id', auth.context.orgId)
-      .eq('status', 'reported')
-      .select()
-      .single();
-    if (updateError || !updated) {
-      console.error('Failed to update sickness evidence:', updateError);
-      return { success: false, error: 'update_failed' };
-    }
-
-    const result = toSicknessReport(updated as SicknessReportRow);
-    await appendReportEvent({
-      orgId: auth.context.orgId,
-      report: result,
-      eventType: 'evidence_updated',
-      payload: {
-        before: {
-          evidence_required: report.evidenceRequired,
-          evidence_status: report.evidenceStatus,
-        },
-        after: {
-          evidence_required: result.evidenceRequired,
-          evidence_status: result.evidenceStatus,
-        },
-      },
-      actorUserId: auth.context.userId,
-    });
-    invalidateSickness(auth.context.orgId);
-    return { success: true, report: result };
+    return sicknessWriteResult(
+      await admin.rpc(
+        'set_sickness_evidence',
+        rpcArgs('set_sickness_evidence', {
+          p_actor_id: auth.context.userId,
+          p_organization_id: auth.context.orgId,
+          p_report_id: report.id,
+          p_evidence_required: input.evidenceRequired,
+          p_evidence_status: input.evidenceStatus,
+        }),
+      ),
+      'update_failed',
+      'Failed to update sickness evidence:',
+    );
   } catch (error) {
-    console.error('Unexpected error in setSicknessEvidence:', error);
+    logError('Unexpected error in setSicknessEvidence:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
@@ -764,30 +649,24 @@ export type SicknessCalendarEntry = {
   dayPortion: VacationDayPortion;
 };
 
-function defaultCalendarWindow(): IsoDateRange {
-  const businessDate = getBusinessTodayIso();
-  return {
-    from: shiftIsoDateByDays(businessDate, -365),
-    to: shiftIsoDateByDays(businessDate, 730),
-  };
-}
-
 export type SicknessCalendarEntriesResult =
   | { success: true; entries: SicknessCalendarEntry[] }
-  | { success: false; error: string };
+  | ActionFailure;
 
 export async function getSicknessCalendarEntries(
-  range?: IsoDateRange
+  rangeInput?: IsoDateRange,
 ): Promise<SicknessCalendarEntriesResult> {
+  const parsedRange = calendarRangeSchema.safeParse(rangeInput);
+  if (!parsedRange.success) return { success: false, error: 'invalid_input' };
+  const range = parsedRange.data;
   try {
     const auth = await resolveActionContext();
     if (!auth.success) return auth;
     const { userId, orgId, role } = auth.context;
     const isManager = isManagerRole(role);
 
-    // Same window contract as the vacation calendar read (PF-05).
-    const window =
-      range === undefined ? defaultCalendarWindow() : parseIsoDateRange(range);
+    // Same window contract as the vacation calendar read.
+    const window = range === undefined ? defaultCalendarWindow() : parseIsoDateRange(range);
     if (!window) return { success: false, error: 'invalid_input' };
     const { from: windowStartIso, to: windowEndIso } = window;
 
@@ -799,7 +678,8 @@ export async function getSicknessCalendarEntries(
       .eq('status', 'reported')
       .lte('start_date', windowEndIso)
       .or(`end_date.gte.${windowStartIso},end_date.is.null`)
-      .order('start_date').order('id');
+      .order('start_date')
+      .order('id');
 
     if (!isManager) {
       const { recordId, failed } = await loadOwnEmployeeRecordId(orgId, userId);
@@ -808,58 +688,49 @@ export async function getSicknessCalendarEntries(
       query = query.eq('employee_record_id', recordId);
     }
 
-    const { data: rows, error } = await readCompleteRows(
-      (from, to) => query.range(from, to), LIST_ROW_CAP,
-    );
+    const { data: rows, error } = await readCompleteRows((from, to) => query.range(from, to), LIST_ROW_CAP);
     if (error) {
-      console.error('Failed to load sickness calendar entries:', error);
+      logReadFailure('Failed to load sickness calendar entries:', error);
       return { success: false, error: 'load_failed' };
     }
     if (!rows || rows.length === 0) return { success: true, entries: [] };
 
     const recordIds = [...new Set(rows.map((row) => row.employee_record_id))];
-    const { data: records, error: recordsError } = await readInBatches(recordIds, (ids) => admin
-      .from('employee_records')
-      .select('id, user_id, first_name, last_name')
-      .eq('organization_id', orgId)
-      .in('id', [...ids]));
+    const { data: records, error: recordsError } = await readInBatches(recordIds, (ids) =>
+      admin
+        .from('employee_records')
+        .select('id, user_id, first_name, last_name')
+        .eq('organization_id', orgId)
+        .in('id', [...ids]),
+    );
     if (recordsError) {
-      console.error('Failed to load sickness calendar records:', recordsError);
+      logReadFailure('Failed to load sickness calendar records:', recordsError);
       return { success: false, error: 'load_failed' };
     }
     const userIds = [
-      ...new Set(
-        (records ?? [])
-          .map((row) => row.user_id)
-          .filter((id): id is string => Boolean(id))
-      ),
+      ...new Set((records ?? []).map((row) => row.user_id).filter((id): id is string => Boolean(id))),
     ];
     const profilesResult =
       userIds.length > 0
-        ? await readInBatches(userIds, (ids) => admin
-            .from('profiles')
-            .select('id, first_name, last_name')
-            .in('id', [...ids]))
+        ? await readInBatches(userIds, (ids) =>
+            admin
+              .from('profiles')
+              .select('id, first_name, last_name')
+              .in('id', [...ids]),
+          )
         : { data: [], error: null };
     if (profilesResult.error) {
-      console.error(
-        'Failed to load sickness calendar profiles:',
-        profilesResult.error
-      );
+      logReadFailure('Failed to load sickness calendar profiles:', profilesResult.error);
       return { success: false, error: 'load_failed' };
     }
-    const profileByUserId = new Map(
-      (profilesResult.data ?? []).map((row) => [row.id, row])
-    );
+    const profileByUserId = new Map((profilesResult.data ?? []).map((row) => [row.id, row]));
     const nameByRecordId = new Map(
       (records ?? []).map((record) => {
-        const profile = record.user_id
-          ? profileByUserId.get(record.user_id)
-          : undefined;
+        const profile = record.user_id ? profileByUserId.get(record.user_id) : undefined;
         const firstName = profile?.first_name ?? record.first_name ?? '';
         const lastName = profile?.last_name ?? record.last_name ?? '';
         return [record.id, `${firstName} ${lastName}`.trim() || 'Unbekannt'];
-      })
+      }),
     );
 
     return {
@@ -875,7 +746,7 @@ export async function getSicknessCalendarEntries(
       })),
     };
   } catch (error) {
-    console.error('Unexpected error in getSicknessCalendarEntries:', error);
+    logError('Unexpected error in getSicknessCalendarEntries:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }

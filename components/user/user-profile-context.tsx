@@ -1,4 +1,4 @@
-'use client'
+'use client';
 
 import {
   createContext,
@@ -9,81 +9,81 @@ import {
   useRef,
   useState,
   type ReactNode,
-} from 'react'
-import { createSupabaseBrowserClient } from '@/lib/supabase/client'
-import { getProfileAvatarUrl } from '@/lib/profile-avatar'
+} from 'react';
+import { logError } from '@/lib/logging';
+import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { getProfileAvatarUrl } from '@/lib/profile-avatar';
 
 // Types
 export type UserProfile = {
-  id: string
-  firstName: string
-  lastName: string
-  email: string
-  avatarPath: string | null
-  avatarUrl: string | null
-}
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  avatarPath: string | null;
+  avatarUrl: string | null;
+};
 
 export type UserProfileContextValue = {
-  profile: UserProfile | null
-  isLoading: boolean
-  refreshProfile: () => Promise<void>
-}
+  profile: UserProfile | null;
+  isLoading: boolean;
+  refreshProfile: () => Promise<void>;
+};
 
 // Context
-const UserProfileContext = createContext<UserProfileContextValue | null>(null)
+const UserProfileContext = createContext<UserProfileContextValue | null>(null);
 
 // Provider props
 type UserProfileProviderProps = {
-  children: ReactNode
-  initialProfile?: UserProfile | null
-}
+  children: ReactNode;
+  initialProfile?: UserProfile | null;
+};
 
-export function UserProfileProvider({
-  children,
-  initialProfile = null,
-}: UserProfileProviderProps) {
-  const [profile, setProfile] = useState<UserProfile | null>(initialProfile)
-  const [isLoading, setIsLoading] = useState(initialProfile === null)
-  const hydratedRef = useRef(false)
+export function UserProfileProvider({ children, initialProfile = null }: UserProfileProviderProps) {
+  const [profile, setProfile] = useState<UserProfile | null>(initialProfile);
+  const [isLoading, setIsLoading] = useState(initialProfile === null);
+  const hydratedRef = useRef(false);
 
-  // Sync state when server-provided props change
-  useEffect(() => {
-    if (initialProfile !== null) {
-      setProfile(initialProfile)
-    }
-  }, [initialProfile])
+  // A new server profile is adopted during render, never in an effect
+  // (realtime-and-caching checklist).
+  const [adoptedProfile, setAdoptedProfile] = useState(initialProfile);
+  if (initialProfile !== adoptedProfile) {
+    setAdoptedProfile(initialProfile);
+    if (initialProfile !== null) setProfile(initialProfile);
+  }
 
   // Self-hydration: fetch profile client-side when no server data was provided
   useEffect(() => {
-    if (hydratedRef.current || initialProfile !== null) return
-    hydratedRef.current = true
-    refreshProfile()
+    if (hydratedRef.current || initialProfile !== null) return;
+    hydratedRef.current = true;
+    refreshProfile();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one self-hydration on mount, guarded by hydratedRef
-  }, [])
+  }, []);
 
   // Fetch profile from Supabase (client-side)
   const refreshProfile = useCallback(async () => {
-    setIsLoading(true)
+    setIsLoading(true);
     try {
-      const supabase = createSupabaseBrowserClient()
+      const supabase = createSupabaseBrowserClient();
       const {
         data: { user },
-      } = await supabase.auth.getUser()
+      } = await supabase.auth.getUser();
 
       if (!user || !user.email) {
-        setProfile(null)
-        return
+        setProfile(null);
+        return;
       }
 
       const { data, error } = await supabase
         .from('profiles')
         .select('id, first_name, last_name, avatar_path')
         .eq('id', user.id)
-        .single()
+        .single();
 
       if (error) {
-        console.error('Error fetching profile:', error)
-        return
+        // The provider has no surface of its own; consumers keep their name fallbacks.
+        logError('user_profile.read_failed', error);
+        return;
       }
 
       if (data) {
@@ -94,12 +94,12 @@ export function UserProfileProvider({
           email: user.email,
           avatarPath: data.avatar_path,
           avatarUrl: getProfileAvatarUrl(data.avatar_path),
-        })
+        });
       }
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }, [])
+  }, []);
 
   const value = useMemo<UserProfileContextValue>(
     () => ({
@@ -107,22 +107,17 @@ export function UserProfileProvider({
       isLoading,
       refreshProfile,
     }),
-    [profile, isLoading, refreshProfile]
-  )
+    [profile, isLoading, refreshProfile],
+  );
 
-  return (
-    <UserProfileContext.Provider value={value}>
-      {children}
-    </UserProfileContext.Provider>
-  )
+  return <UserProfileContext.Provider value={value}>{children}</UserProfileContext.Provider>;
 }
 
 // Hook
 export function useUserProfile() {
-  const context = useContext(UserProfileContext)
+  const context = useContext(UserProfileContext);
   if (!context) {
-    throw new Error('useUserProfile must be used within a UserProfileProvider')
+    throw new Error('useUserProfile must be used within a UserProfileProvider');
   }
-  return context
+  return context;
 }
-

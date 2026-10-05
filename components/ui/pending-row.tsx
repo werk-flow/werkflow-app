@@ -17,15 +17,19 @@ export function PendingRow({
   cells,
   interactive,
   label = 'Wird gespeichert',
+  rowId,
 }: {
   columns: readonly SkeletonColumn[];
   cells?: Partial<Record<string, React.ReactNode>>;
   interactive?: TableRowInteractive | undefined;
   label?: string;
+  /** Stable identity for tests and row-scoped lookups; never styled. */
+  rowId?: string | undefined;
 }) {
   return (
     <TableRow
       interactive={interactive}
+      rowId={rowId}
       role="status"
       aria-label={label}
       data-pending-row=""

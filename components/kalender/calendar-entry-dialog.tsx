@@ -2,24 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Briefcase, CalendarPlus, Clock } from 'lucide-react';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { ErrorText } from '@/components/ui/error-text';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { CreateJobFormContent } from '@/components/auftraege/create-job-form-content';
+import { CreateJobFormContent } from '@/components/auftraege/forms/create-job-form-content';
+import { OptionsLoadError } from '@/components/auftraege/shared/options-load-error';
 import { ManualEntryFormContent } from '@/components/manual-entry-form-content';
-import { getOrgMembersAction } from '@/lib/members/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
 import { useOrganization } from '@/components/organization/organization-context';
 import { useLiveView } from '@/hooks/use-live-view';
-import type {
-  CalendarEntryDialogMember,
-} from '@/lib/jobs/types';
-import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
+import type { CalendarEntryDialogMember } from '@/lib/jobs/types';
+import type { OrgMemberOption } from '@/components/auftraege/shared/employee-multi-select';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import type { CalendarEntryDraft } from './calendar-entry-draft';
 import { PlanningEntryForm } from './planning-entry-form';
@@ -50,27 +42,36 @@ export function CalendarEntryDialog({
   onDraftChange,
 }: CalendarEntryDialogProps) {
   const { activeOrg, activeOrgId } = useOrganization();
-  const [activeTab, setActiveTab] = useState<string>('job');
+  const isAdminOrManager = activeOrg?.role === 'admin' || activeOrg?.role === 'buero';
+  const initialTab = lockEntryMode || !isAdminOrManager ? 'entry' : 'planning';
+  const [activeTab, setActiveTab] = useState<string>(initialTab);
+  // The running save of the active tab's form keeps the dialog open until it answers.
+  const [isFormPending, setIsFormPending] = useState(false);
   const activeTabRef = useRef(activeTab);
   const jobDraftRef = useRef<CalendarEntryDraft | null>(null);
   const manualDraftRef = useRef<CalendarEntryDraft | null>(null);
-  const isAdminOrManager = activeOrg?.role === 'admin' || activeOrg?.role === 'buero';
   const memberView = useLiveView<CalendarEntryDialogMember[]>({
     tables: ['organization_members', 'profiles'],
-    enabled: open && isAdminOrManager && Boolean(activeOrgId),
+    enabled: open && activeTab !== 'planning' && isAdminOrManager && Boolean(activeOrgId),
     resetKey: `${activeOrgId}:${activeOrg?.role}`,
     read: async () => {
       if (!activeOrgId) return { ok: false, error: 'member_read_failed' };
-      const result = await getOrgMembersAction(activeOrgId).catch(() => ({ success: false as const }));
+      const result = await readInBackground('organization-member-options', { organizationId: activeOrgId });
       if (!result.success) return { ok: false, error: 'member_read_failed' };
-      return { ok: true, data: result.members.map((member) => ({
-        userId: member.user_id, firstName: member.first_name ?? '', lastName: member.last_name ?? '',
-        email: member.email, role: member.role,
-      })) };
+      return {
+        ok: true,
+        data: result.members.map((member) => ({
+          userId: member.user_id,
+          firstName: member.first_name ?? '',
+          lastName: member.last_name ?? '',
+          email: member.email,
+          role: member.role,
+        })),
+      };
     },
   });
-  const isLoadingData = memberView.isLoading;
-  const hasDataLoadFailed = Boolean(memberView.error);
+  const isLoadingData = activeTab !== 'planning' && memberView.isLoading;
+  const hasDataLoadFailed = activeTab !== 'planning' && Boolean(memberView.error);
 
   useEffect(() => {
     if (open) return;
@@ -85,7 +86,7 @@ export function CalendarEntryDialog({
         onDraftChange?.(draft);
       }
     },
-    [onDraftChange]
+    [onDraftChange],
   );
 
   const handleActiveTabChange = useCallback(
@@ -93,14 +94,10 @@ export function CalendarEntryDialog({
       activeTabRef.current = nextTab;
       setActiveTab(nextTab);
       onDraftChange?.(
-        nextTab === 'job'
-          ? jobDraftRef.current
-          : nextTab === 'entry'
-            ? manualDraftRef.current
-            : null
+        nextTab === 'job' ? jobDraftRef.current : nextTab === 'entry' ? manualDraftRef.current : null,
       );
     },
-    [onDraftChange]
+    [onDraftChange],
   );
 
   const handleManualDraftChange = useCallback(
@@ -110,7 +107,7 @@ export function CalendarEntryDialog({
         onDraftChange?.(draft);
       }
     },
-    [onDraftChange]
+    [onDraftChange],
   );
 
   const defaultDurationHours = useMemo(() => {
@@ -118,7 +115,7 @@ export function CalendarEntryDialog({
     const [inH, inM] = preselectedClockInTime.split(':').map(Number);
     const [outH, outM] = preselectedClockOutTime.split(':').map(Number);
     if (inH === undefined || inM === undefined || outH === undefined || outM === undefined) return undefined;
-    const totalMin = (outH * 60 + outM) - (inH * 60 + inM);
+    const totalMin = outH * 60 + outM - (inH * 60 + inM);
     if (totalMin <= 0) return undefined;
     return String(totalMin / 60);
   }, [preselectedClockInTime, preselectedClockOutTime]);
@@ -131,44 +128,46 @@ export function CalendarEntryDialog({
         lastName: member.lastName,
         role: member.role,
       })),
-    [memberView.data]
+    [memberView.data],
   );
 
   useEffect(() => {
-    if (!open || !activeOrgId) return;
-    const initialTab = lockEntryMode || !isAdminOrManager ? 'entry' : 'planning';
+    if (open || !activeOrgId) return;
     activeTabRef.current = initialTab;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- reopening resets the user's previous tab to the role-appropriate creation tab
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset while closed so reopening never mounts an unrelated form and starts its reads
     setActiveTab(initialTab);
-  }, [activeOrgId, isAdminOrManager, lockEntryMode, open]);
+  }, [activeOrgId, initialTab, open]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="sm:max-w-[540px]"
-        onOpenAutoFocus={(e) => e.preventDefault()}
-      >
+    <Dialog open={open} onOpenChange={onOpenChange} pending={isFormPending}>
+      <DialogContent workspace onOpenAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>Kalendereintrag erstellen</DialogTitle>
           <DialogDescription>
-            Plane einen Termin, erstelle einen Auftrag oder erfasse tatsächliche
-            Arbeitszeit.
+            Plane einen Termin, erstelle einen Auftrag oder erfasse tatsächliche Arbeitszeit.
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={handleActiveTabChange} className="flex min-h-0 flex-1 flex-col">
-          <TabsList className="w-full">
+        <Tabs
+          value={activeTab}
+          // A tab change unmounts the saving form and would release the dialog mid-request.
+          onValueChange={(nextTab) => {
+            if (!isFormPending) handleActiveTabChange(nextTab);
+          }}
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <TabsList className="h-11 w-full p-0 sm:h-9 sm:p-0.5">
             {isAdminOrManager && (
-              <TabsTrigger value="planning" className="flex-1 gap-1.5">
+              <TabsTrigger value="planning" className="h-11 flex-1 gap-1.5 sm:h-8">
                 <CalendarPlus className="h-3.5 w-3.5" />
                 Termin planen
               </TabsTrigger>
             )}
-            <TabsTrigger value="job" className="flex-1 gap-1.5">
+            <TabsTrigger value="job" className="h-11 flex-1 gap-1.5 sm:h-8">
               <Briefcase className="h-3.5 w-3.5" />
               Auftrag erstellen
             </TabsTrigger>
-            <TabsTrigger value="entry" className="flex-1 gap-1.5">
+            <TabsTrigger value="entry" className="h-11 flex-1 gap-1.5 sm:h-8">
               <Clock className="h-3.5 w-3.5" />
               Manuelle Eintragung
             </TabsTrigger>
@@ -180,6 +179,7 @@ export function CalendarEntryDialog({
                 defaultDate={preselectedDate}
                 defaultTime={preselectedClockInTime}
                 defaultUserId={preselectedUserId}
+                onPendingChange={setIsFormPending}
                 onSuccess={async () => {
                   onOpenChange(false);
                   await onJobSuccess?.();
@@ -190,15 +190,15 @@ export function CalendarEntryDialog({
 
           {isLoadingData && (
             <div className="rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-              Referenzdaten werden geladen. Die vorausgefüllten Felder kannst du
-              schon direkt anpassen.
+              Referenzdaten werden geladen. Die vorausgefüllten Felder kannst du schon direkt anpassen.
             </div>
           )}
           {hasDataLoadFailed && (
-            <ErrorText>
-              Die Mitarbeiter konnten nicht geladen werden.
-              Bitte schließe den Dialog und öffne ihn erneut.
-            </ErrorText>
+            <OptionsLoadError
+              error="Die Mitarbeiter konnten nicht geladen werden."
+              onRetry={() => void memberView.refresh()}
+              retrying={memberView.isRefreshing}
+            />
           )}
 
           <TabsContent value="job" className="flex min-h-0 flex-1 flex-col">
@@ -212,6 +212,7 @@ export function CalendarEntryDialog({
               defaultEmployeeIds={preselectedUserId ? [preselectedUserId] : undefined}
               isActive={activeTab === 'job'}
               onDraftChange={handleJobDraftChange}
+              onPendingChange={setIsFormPending}
               onSuccess={() => {
                 onOpenChange(false);
                 onJobSuccess?.();
@@ -219,7 +220,7 @@ export function CalendarEntryDialog({
             />
           </TabsContent>
 
-          <TabsContent value="entry">
+          <TabsContent value="entry" className="flex min-h-0 flex-1 flex-col">
             <ManualEntryFormContent
               preselectedDate={preselectedDate}
               preselectedUserId={preselectedUserId}
@@ -229,6 +230,7 @@ export function CalendarEntryDialog({
               lockEntryMode={lockEntryMode}
               isActive={activeTab === 'entry'}
               onDraftChange={handleManualDraftChange}
+              onPendingChange={setIsFormPending}
               onSuccess={async (entries) => {
                 await onManualEntrySuccess?.(entries);
                 // Close-then-banner: the form itself shows the success banner

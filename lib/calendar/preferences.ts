@@ -1,5 +1,6 @@
-import { z } from 'zod';
+import { z } from '@/lib/zod';
 import type { Json } from '@/lib/supabase/database.types';
+import { isJsonRecord } from '@/lib/supabase/json';
 
 /**
  * Per-user calendar preferences (P1-24a, criterion 20), stored under the
@@ -12,7 +13,13 @@ import type { Json } from '@/lib/supabase/database.types';
 export const CALENDAR_HORIZON_WEEKS = [1, 2, 4, 6] as const;
 export type CalendarHorizonWeeks = (typeof CALENDAR_HORIZON_WEEKS)[number];
 
-export const CALENDAR_DISPATCH_FILTERS = ['nicht_gesendet', 'ausstehend', 'bestaetigt', 'rueckfrage', 'nicht_moeglich'] as const;
+export const CALENDAR_DISPATCH_FILTERS = [
+  'nicht_gesendet',
+  'ausstehend',
+  'bestaetigt',
+  'rueckfrage',
+  'nicht_moeglich',
+] as const;
 
 export const calendarPreferencesSchema = z.object({
   view: z.enum(['day', 'week', 'month']).nullable(),
@@ -48,15 +55,11 @@ export const DEFAULT_CALENDAR_PREFERENCES: CalendarPreferences = {
 
 const CALENDAR_KEY = 'calendar';
 
-function isJsonObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 /** Field-by-field lenient read: every invalid field takes its default. */
 export function readCalendarPreferences(preferences: Json | null | undefined): CalendarPreferences {
-  if (!isJsonObject(preferences)) return DEFAULT_CALENDAR_PREFERENCES;
+  if (!isJsonRecord(preferences)) return DEFAULT_CALENDAR_PREFERENCES;
   const stored = preferences[CALENDAR_KEY];
-  if (!isJsonObject(stored)) return DEFAULT_CALENDAR_PREFERENCES;
+  if (!isJsonRecord(stored)) return DEFAULT_CALENDAR_PREFERENCES;
   const result: Record<string, unknown> = { ...DEFAULT_CALENDAR_PREFERENCES };
   for (const [key, fieldSchema] of Object.entries(calendarPreferencesSchema.shape)) {
     const parsed = fieldSchema.safeParse(stored[key]);
@@ -66,12 +69,17 @@ export function readCalendarPreferences(preferences: Json | null | undefined): C
 }
 
 /** The JSON to store: the other preference keys stay untouched. */
-export function writeCalendarPreferencesJson(current: Json | null | undefined, preferences: CalendarPreferences): Json {
-  const base = isJsonObject(current) ? current : {};
+export function writeCalendarPreferencesJson(
+  current: Json | null | undefined,
+  preferences: CalendarPreferences,
+): Json {
+  const base = isJsonRecord(current) ? current : {};
   return { ...base, [CALENDAR_KEY]: preferences } as Json;
 }
 
 /** The actual-time toggle's effective value when the user has not chosen one. */
-export function resolveShowActualTime(preferences: Pick<CalendarPreferences, 'showActualTime' | 'horizonWeeks'>): boolean {
+export function resolveShowActualTime(
+  preferences: Pick<CalendarPreferences, 'showActualTime' | 'horizonWeeks'>,
+): boolean {
   return preferences.showActualTime ?? preferences.horizonWeeks === 1;
 }

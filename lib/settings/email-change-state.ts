@@ -1,27 +1,30 @@
 import 'server-only';
 
 import { getCachedUser } from '@/lib/data/cached';
+import { logReadFailure } from '@/lib/data/read-request-cache';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import type { Database } from '@/lib/supabase/database.types';
 import { transitionEmailChange } from '@/lib/settings/email-change-transition';
 import {
   type EmailChangeWizardState,
   CURRENT_EMAIL_OTP_RESEND_COOLDOWN_SECONDS,
 } from '@/lib/settings/email-change.types';
 
-type EmailChangeChallengeRow = {
-  challenge_id: string;
-  completion_token: string | null;
-  user_id: string;
-  current_email: string;
-  status: 'pending_current' | 'current_verified' | 'pending_new';
-  current_email_code_expires_at: string | null;
-  current_email_last_sent_at: string | null;
-  current_email_verified_expires_at: string | null;
-  new_email: string | null;
-  new_email_code_expires_at: string | null;
-  new_email_last_sent_at: string | null;
-  new_email_requested_at: string | null;
-};
+type EmailChangeChallengeRow = Pick<
+  Database['public']['Tables']['email_change_challenges']['Row'],
+  | 'challenge_id'
+  | 'completion_token'
+  | 'user_id'
+  | 'current_email'
+  | 'status'
+  | 'current_email_code_expires_at'
+  | 'current_email_last_sent_at'
+  | 'current_email_verified_expires_at'
+  | 'new_email'
+  | 'new_email_code_expires_at'
+  | 'new_email_last_sent_at'
+  | 'new_email_requested_at'
+>;
 
 function toIsoOrNull(value: Date | null) {
   return value ? value.toISOString() : null;
@@ -54,21 +57,32 @@ function buildIdleState(currentEmail: string | null): EmailChangeWizardState {
   };
 }
 
-async function getChallengeRow(userId: string) {
+/**
+ * The challenge row, null without one. A failed read throws when
+ * `failOnReadError` is set (the settings page shows it with a retry); the
+ * wizard actions keep their idle fallback after a committed step.
+ */
+async function getChallengeRow(userId: string, failOnReadError: boolean) {
   const admin = createSupabaseAdminClient();
-  const { data } = await admin
+  const { data, error } = await admin
     .from('email_change_challenges')
     .select(
-      'challenge_id, completion_token, user_id, current_email, status, current_email_code_expires_at, current_email_last_sent_at, current_email_verified_expires_at, new_email, new_email_code_expires_at, new_email_last_sent_at, new_email_requested_at'
+      'challenge_id, completion_token, user_id, current_email, status, current_email_code_expires_at, current_email_last_sent_at, current_email_verified_expires_at, new_email, new_email_code_expires_at, new_email_last_sent_at, new_email_requested_at',
     )
     .eq('user_id', userId)
     .maybeSingle();
+  if (error) {
+    logReadFailure('getChallengeRow: email change challenge failed', error);
+    if (failOnReadError) throw new Error('email_change_state_read_failed');
+    return null;
+  }
 
-  return (data as EmailChangeChallengeRow | null) ?? null;
+  return data as EmailChangeChallengeRow | null;
 }
 
-export async function getInitialEmailChangeWizardState(): Promise<EmailChangeWizardState> {
-
+export async function getInitialEmailChangeWizardState({
+  failOnReadError = false,
+}: { failOnReadError?: boolean } = {}): Promise<EmailChangeWizardState> {
   const {
     data: { user },
   } = await getCachedUser();
@@ -81,7 +95,7 @@ export async function getInitialEmailChangeWizardState(): Promise<EmailChangeWiz
   // The custom email-change wizard intentionally persists all intermediate state
   // in public.email_change_challenges and does not depend on auth.users
   // pending email-change columns.
-  const challenge = await getChallengeRow(user.id);
+  const challenge = await getChallengeRow(user.id, failOnReadError);
   const now = Date.now();
 
   // Recover cleanup after Auth changed the account but its HTTP response was
@@ -89,7 +103,8 @@ export async function getInitialEmailChangeWizardState(): Promise<EmailChangeWiz
   if (challenge?.completion_token) {
     if (challenge.new_email === currentEmail.trim().toLowerCase()) {
       const result = await transitionEmailChange(user, 'complete', {
-        challengeId: challenge.challenge_id, completionToken: challenge.completion_token,
+        challengeId: challenge.challenge_id,
+        completionToken: challenge.completion_token,
       });
       if (!('error' in result)) return buildIdleState(currentEmail);
     }
@@ -111,10 +126,7 @@ export async function getInitialEmailChangeWizardState(): Promise<EmailChangeWiz
       newEmail: null,
       currentOtpExpiresAt: challenge.current_email_code_expires_at,
       currentOtpResendAvailableAt: toIsoOrNull(
-        addSeconds(
-          challenge.current_email_last_sent_at,
-          CURRENT_EMAIL_OTP_RESEND_COOLDOWN_SECONDS
-        )
+        addSeconds(challenge.current_email_last_sent_at, CURRENT_EMAIL_OTP_RESEND_COOLDOWN_SECONDS),
       ),
       currentEmailVerifiedExpiresAt: null,
       newEmailOtpExpiresAt: null,
@@ -133,8 +145,7 @@ export async function getInitialEmailChangeWizardState(): Promise<EmailChangeWiz
       newEmail: null,
       currentOtpExpiresAt: null,
       currentOtpResendAvailableAt: null,
-      currentEmailVerifiedExpiresAt:
-        challenge.current_email_verified_expires_at,
+      currentEmailVerifiedExpiresAt: challenge.current_email_verified_expires_at,
       newEmailOtpExpiresAt: null,
       newEmailResendAvailableAt: null,
     };
@@ -152,14 +163,13 @@ export async function getInitialEmailChangeWizardState(): Promise<EmailChangeWiz
       newEmail: challenge.new_email,
       currentOtpExpiresAt: null,
       currentOtpResendAvailableAt: null,
-      currentEmailVerifiedExpiresAt:
-        challenge.current_email_verified_expires_at,
+      currentEmailVerifiedExpiresAt: challenge.current_email_verified_expires_at,
       newEmailOtpExpiresAt: challenge.new_email_code_expires_at,
       newEmailResendAvailableAt: toIsoOrNull(
         addSeconds(
           challenge.new_email_last_sent_at ?? challenge.new_email_requested_at,
-          CURRENT_EMAIL_OTP_RESEND_COOLDOWN_SECONDS
-        )
+          CURRENT_EMAIL_OTP_RESEND_COOLDOWN_SECONDS,
+        ),
       ),
     };
   }

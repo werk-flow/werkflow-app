@@ -1,19 +1,16 @@
-import type { HTMLAttributes, ReactElement, ReactNode } from "react";
-import { FileText } from "lucide-react";
+import { useId, type HTMLAttributes, type ReactElement, type ReactNode } from 'react';
+import { FileText } from 'lucide-react';
 
-import { ListRow } from "@/components/ui/list-row";
-import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
+import { ListRow } from '@/components/ui/list-row';
+import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
+import { SectionTitle } from '@/components/shared/section-title';
 
 export const CONTEXTUAL_DOCUMENTS_EMPHASIZE_UPLOAD = true;
 
-export const CONTEXTUAL_DOCUMENT_LIST_CLASS =
-  "min-w-0 overflow-hidden rounded-md border";
+export const CONTEXTUAL_DOCUMENT_LIST_CLASS = 'min-w-0 overflow-hidden rounded-md border';
 
-type ContextualDocumentsFrameProps = Omit<
-  HTMLAttributes<HTMLDivElement>,
-  "title"
-> & {
+type ContextualDocumentsFrameProps = Omit<HTMLAttributes<HTMLDivElement>, 'title'> & {
   title: string;
   description: string;
   actions?: ReactNode;
@@ -28,13 +25,15 @@ export function ContextualDocumentsFrame({
   className,
   ...props
 }: ContextualDocumentsFrameProps): ReactElement {
+  const titleId = useId();
   return (
     <div
       data-slot="contextual-documents-frame"
-      className={cn(
-        "min-w-0 rounded-lg border bg-card p-4 transition-colors sm:p-5",
-        className,
-      )}
+      className={cn('min-w-0 rounded-lg border bg-card p-4 transition-colors sm:p-5', className)}
+      // Before the spread: the skeleton's role="status" wins, and its own
+      // aria-label must not lose to the title (aria-labelledby takes precedence).
+      role="region"
+      aria-labelledby={props['aria-label'] ? undefined : titleId}
       {...props}
     >
       <div
@@ -42,17 +41,13 @@ export function ContextualDocumentsFrame({
         className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
       >
         <div className="min-w-0">
-          <h3 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-            <FileText className="size-4" />
+          <SectionTitle id={titleId} icon={<FileText className="size-4" />}>
             {title}
-          </h3>
+          </SectionTitle>
           <p className="mt-1 text-xs text-muted-foreground">{description}</p>
         </div>
         {actions && (
-          <div
-            data-slot="contextual-documents-actions"
-            className="flex shrink-0 flex-wrap gap-2"
-          >
+          <div data-slot="contextual-documents-actions" className="flex shrink-0 flex-wrap gap-2">
             {actions}
           </div>
         )}
@@ -67,19 +62,20 @@ export function ContextualDocumentRowFrame({
   children,
   indented = false,
   skeleton = false,
+  rowId,
 }: {
   children: ReactNode;
   indented?: boolean;
   skeleton?: boolean;
+  /** Stable identity for tests and row-scoped lookups; never styled. */
+  rowId?: string | undefined;
 }): ReactElement {
   return (
     <ListRow
       variant="plain"
       skeleton={skeleton}
-      className={cn(
-        "flex min-w-0 items-center justify-between gap-3 px-3 py-2.5",
-        indented && "pl-8",
-      )}
+      rowId={rowId}
+      className={cn('flex min-w-0 items-center justify-between gap-3 px-3 py-2.5', indented && 'pl-8')}
     >
       {children}
     </ListRow>
@@ -87,7 +83,7 @@ export function ContextualDocumentRowFrame({
 }
 
 export function ContextualDocumentsSkeleton({
-  title = "Dokumente & Bilder",
+  title = 'Dokumente & Bilder',
   description,
   canUpload = false,
   canAttach = false,
@@ -110,9 +106,7 @@ export function ContextualDocumentsSkeleton({
         canUpload ? (
           <>
             {canAttach && <Skeleton className="h-8 w-28" />}
-            <Skeleton
-              className={cn("w-28", emphasizeUpload ? "h-8" : "h-11")}
-            />
+            <Skeleton className={cn('w-28', emphasizeUpload ? 'h-8' : 'h-11')} />
           </>
         ) : undefined
       }

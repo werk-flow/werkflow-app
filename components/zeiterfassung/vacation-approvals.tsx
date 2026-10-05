@@ -1,11 +1,10 @@
 'use client';
 
-import { useCallback, useState } from 'react';
-import { Check, Loader2, Palmtree, Undo2, X } from 'lucide-react';
+import { useState } from 'react';
+import { Loader2, Palmtree } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
 import { SectionError } from '@/components/ui/section-error';
-import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -15,169 +14,78 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
-import { InlinePending } from '@/components/ui/inline-pending';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  cancelApprovedVacationRequest,
-  decideVacationRequest,
-  type ApproverVacationRequest,
-} from '@/lib/vacation/actions';
+import type { ApproverVacationRequest } from '@/lib/vacation/actions';
 import { readInBackground } from '@/lib/data/background-read-client';
-import { formatVacationDays } from '@/lib/vacation/balance';
-import { VACATION_PORTION_LABELS } from '@/lib/vacation/types';
 import { useBusyIds } from '@/hooks/use-busy-id';
+import { useOptimisticList } from '@/hooks/use-optimistic-list';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
+import { useVacationApprovalDecisions } from './use-vacation-approvals';
+import { VacationApprovalApprovedList, VacationApprovalPendingCard } from './vacation-approvals-cards';
 
-const DECISION_ERROR_MESSAGES: Record<string, string> = {
-  self_approval_not_allowed:
-    'Eigene Urlaubsanträge können nicht selbst freigegeben werden.',
-  not_responsible:
-    'Du bist für diese Urlaubsfreigabe nicht mehr verantwortlich. Die Ansicht wurde aktualisiert.',
-  responsibility_load_failed:
-    'Die aktuelle Freigabeverantwortung konnte nicht geprüft werden. Bitte versuche es erneut.',
-  reason_required: 'Bitte gib einen Grund an.',
-  request_not_pending: 'Der Antrag ist nicht mehr offen.',
-  request_not_approved: 'Der Antrag ist nicht mehr genehmigt.',
-  request_not_found: 'Der Antrag wurde nicht gefunden.',
-  target_not_found: 'Die Person wurde nicht gefunden.',
-  not_authenticated: 'Bitte melde dich erneut an.',
-  not_a_member: 'Du gehörst dieser Organisation nicht mehr an.',
-  load_failed: 'Die Anträge konnten nicht geladen werden.',
-  fetch_failed: 'Die Anträge konnten nicht geladen werden.',
-  update_failed: 'Die Entscheidung konnte nicht gespeichert werden.',
-  unexpected_error: 'Die Entscheidung konnte nicht gespeichert werden.',
-};
-
-function formatDate(value: string): string {
-  return new Date(`${value}T00:00:00`).toLocaleDateString('de-DE', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
-}
-
-function formatRange(startDate: string, endDate: string): string {
-  if (startDate === endDate) return formatDate(startDate);
-  return `${formatDate(startDate)} – ${formatDate(endDate)}`;
-}
-
-type ReasonDialogState =
-  | { mode: 'closed' }
-  | { mode: 'reject'; item: ApproverVacationRequest }
-  | { mode: 'cancel'; item: ApproverVacationRequest };
+const EMPTY_REQUESTS: ApproverVacationRequest[] = [];
+const getVacationRequestId = (item: ApproverVacationRequest) => item.request.id;
 
 type ApproverVacationLists = {
   pending: ApproverVacationRequest[];
   approved: ApproverVacationRequest[];
 };
 
+async function readApproverVacationLists(
+  signal: AbortSignal,
+): Promise<LiveViewResult<ApproverVacationLists>> {
+  const [pendingResult, approvedResult] = await Promise.all([
+    readInBackground('pending-vacation-for-approver', {}, signal),
+    readInBackground('decidable-approved-vacation', {}, signal),
+  ]);
+  if (!pendingResult.success || !approvedResult.success) {
+    return { ok: false };
+  }
+  return {
+    ok: true,
+    data: {
+      pending: pendingResult.requests,
+      approved: approvedResult.requests,
+    },
+  };
+}
+
 export function VacationApprovals() {
-  const [actionError, setActionError] = useState<string | null>(null);
-  // Row-scoped pending: the decided card spins until the live read confirms;
-  // the other cards stay actionable.
+  // Guards a second decision on the same request while its write runs.
   const busy = useBusyIds();
-  const [reasonDialog, setReasonDialog] = useState<ReasonDialogState>({
-    mode: 'closed',
-  });
 
   const view = useLiveView<ApproverVacationLists>({
     tables: ['vacation_requests'],
-    read: async ({ signal }): Promise<LiveViewResult<ApproverVacationLists>> => {
-      const [pendingResult, approvedResult] = await Promise.all([
-        readInBackground('pending-vacation-for-approver', {}, signal),
-        readInBackground('decidable-approved-vacation', {}, signal),
-      ]);
-      if (!pendingResult.success || !approvedResult.success) {
-        return { ok: false };
-      }
-      return {
-        ok: true,
-        data: {
-          pending: pendingResult.requests,
-          approved: approvedResult.requests,
-        },
-      };
-    },
+    read: ({ signal }) => readApproverVacationLists(signal),
   });
 
-  const pending = view.data?.pending ?? [];
-  const approved = view.data?.approved ?? [];
+  // A decided request leaves its list at once; the overlay expires when the
+  // authoritative read no longer carries it and rolls back on a refusal.
+  const pendingList = useOptimisticList({
+    items: view.data?.pending ?? EMPTY_REQUESTS,
+    getId: getVacationRequestId,
+  });
+  const approvedList = useOptimisticList({
+    items: view.data?.approved ?? EMPTY_REQUESTS,
+    getId: getVacationRequestId,
+  });
+  const pending = pendingList.items.map((row) => row.item);
+  const approved = approvedList.items.map((row) => row.item);
   const isLoading = view.isLoading;
   // Keep last-known data on transient failures; only an initial load that
   // never produced data shows the visible failure state.
   const loadFailed = !isLoading && view.data === undefined;
-  const refetch = view.refresh;
 
-  // One failure, one surface: the section-level error survives the follow-up
-  // refetch even when the acted-on card disappears (the section deliberately
-  // stays mounted while an actionError is set).
-  const reportActionError = useCallback((error: string, fallback: string) => {
-    setActionError(DECISION_ERROR_MESSAGES[error] ?? fallback);
-  }, []);
-
-  const handleApprove = async (item: ApproverVacationRequest) => {
-    if (busy.isBusy(item.request.id)) return;
-    setActionError(null);
-    await busy.run(item.request.id, async () => {
-      try {
-        const result = await decideVacationRequest({
-          requestId: item.request.id,
-          decision: 'approve',
-        });
-        if (!result.success) {
-          reportActionError(
-            result.error,
-            'Die Freigabe konnte nicht gespeichert werden.'
-          );
-        }
-      } catch (error) {
-        console.error('Error approving vacation request:', error);
-        reportActionError(
-          'unexpected_error',
-          'Die Freigabe konnte nicht gespeichert werden.'
-        );
-      }
-      await refetch();
-    });
-  };
-
-  const handleReasonSubmit = async (reason: string) => {
-    if (reasonDialog.mode === 'closed') return;
-    const { item, mode } = reasonDialog;
-    setActionError(null);
-    await busy.run(item.request.id, async () => {
-      try {
-        const result =
-          mode === 'reject'
-            ? await decideVacationRequest({
-                requestId: item.request.id,
-                decision: 'reject',
-                comment: reason,
-              })
-            : await cancelApprovedVacationRequest({
-                requestId: item.request.id,
-                reason,
-              });
-        if (!result.success) {
-          reportActionError(
-            result.error,
-            'Die Entscheidung konnte nicht gespeichert werden.'
-          );
-        }
-      } catch (error) {
-        console.error('Error deciding vacation request:', error);
-        reportActionError(
-          'unexpected_error',
-          'Die Entscheidung konnte nicht gespeichert werden.'
-        );
-      }
-      // The dialog closes once the server answered; the card keeps its
-      // spinner until the refetch lands.
-      setReasonDialog({ mode: 'closed' });
-      await refetch();
-    });
-  };
+  const {
+    actionError,
+    reasonDialog,
+    setReasonDialog,
+    dialogError,
+    setDialogError,
+    handleApprove,
+    handleReasonSubmit,
+  } = useVacationApprovalDecisions({ view, busy, pendingList, approvedList });
 
   if (isLoading) {
     return (
@@ -190,7 +98,9 @@ export function VacationApprovals() {
   // A failed initial load must be visible, never an empty screen.
   if (loadFailed && pending.length === 0 && approved.length === 0) {
     return (
-      <SectionError>Die Urlaubsanträge konnten nicht geladen werden.</SectionError>
+      <SectionError onRetry={() => void view.refresh()} retryPending={view.isRefreshing}>
+        Die Urlaubsanträge konnten nicht geladen werden.
+      </SectionError>
     );
   }
 
@@ -199,12 +109,7 @@ export function VacationApprovals() {
   // empties the lists (the user would lose their in-progress reason mid-typing
   // and the pending server action), and an action error must stay readable so
   // the user understands why a card vanished.
-  if (
-    pending.length === 0 &&
-    approved.length === 0 &&
-    !actionError &&
-    reasonDialog.mode === 'closed'
-  ) {
+  if (pending.length === 0 && approved.length === 0 && !actionError && reasonDialog.mode === 'closed') {
     return null;
   }
 
@@ -218,136 +123,35 @@ export function VacationApprovals() {
       <ErrorText className="px-1">{actionError}</ErrorText>
 
       {pending.map((item) => (
-        <Card key={item.request.id} data-vacation-request={item.request.id}>
-          <CardContent className="p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="flex items-center gap-2 font-medium">
-                  {item.personName}
-                  <InlinePending active={busy.isBusy(item.request.id)} />
-                </p>
-                <p className="mt-0.5 text-sm text-muted-foreground tabular-nums">
-                  {formatRange(item.request.startDate, item.request.endDate)}
-                  {` · ${VACATION_PORTION_LABELS[item.request.dayPortion]}`}
-                  {` · ${formatVacationDays(item.totalDays)}`}
-                </p>
-                {item.balance ? (
-                  item.balance.entitlementDays !== null ? (
-                    <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
-                      Resturlaub {item.balance.year}:{' '}
-                      {formatVacationDays(item.balance.remainingDays ?? 0)} von{' '}
-                      {formatVacationDays(item.balance.entitlementDays)}
-                    </p>
-                  ) : (
-                    <p className="mt-0.5 text-xs font-medium text-warning-text">
-                      Kein Urlaubsanspruch hinterlegt – Anspruch in der
-                      Personalakte unter Beschäftigung pflegen.
-                    </p>
-                  )
-                ) : null}
-                {item.request.comment && (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Notiz: {item.request.comment}
-                  </p>
-                )}
-                {item.hasAbsenceOverlap && (
-                  <p className="mt-1 text-xs font-medium text-warning-text">
-                    Hinweis: Für diese Person liegt im beantragten Zeitraum eine
-                    weitere Abwesenheit vor.
-                  </p>
-                )}
-                {item.assignedJobsInRange.length > 0 && (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Im Zeitraum eingeplant:{' '}
-                    {item.assignedJobsInRange
-                      .map(
-                        (job) => `${job.title} (${formatDate(job.plannedDate)})`
-                      )
-                      .join(', ')}
-                  </p>
-                )}
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={() => setReasonDialog({ mode: 'reject', item })}
-                  disabled={busy.isBusy(item.request.id)}
-                  aria-label={`Urlaubsantrag von ${item.personName} ablehnen`}
-                >
-                  <X className="size-3.5" />
-                  Ablehnen
-                </Button>
-                <Button
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={() => void handleApprove(item)}
-                  disabled={busy.isBusy(item.request.id)}
-                  aria-label={`Urlaubsantrag von ${item.personName} genehmigen`}
-                >
-                  <Check className="size-3.5" />
-                  Genehmigen
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <VacationApprovalPendingCard
+          key={item.request.id}
+          item={item}
+          busy={busy}
+          setReasonDialog={setReasonDialog}
+          handleApprove={handleApprove}
+        />
       ))}
 
       {approved.length > 0 && (
-        <div className="space-y-2">
-          <h4 className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Genehmigter Urlaub
-          </h4>
-          {approved.map((item) => (
-            <Card key={item.request.id}>
-              <CardContent className="flex flex-wrap items-center justify-between gap-3 p-3">
-                <div className="min-w-0">
-                  <p className="flex items-center gap-2 text-sm font-medium">
-                    {item.personName}
-                    <InlinePending active={busy.isBusy(item.request.id)} />
-                  </p>
-                  <p className="text-xs text-muted-foreground tabular-nums">
-                    {formatRange(item.request.startDate, item.request.endDate)}
-                    {` · ${formatVacationDays(item.totalDays)}`}
-                  </p>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={() => setReasonDialog({ mode: 'cancel', item })}
-                  disabled={busy.isBusy(item.request.id)}
-                  aria-label={`Genehmigten Urlaub von ${item.personName} stornieren`}
-                >
-                  <Undo2 className="size-3.5" />
-                  Stornieren
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <VacationApprovalApprovedList approved={approved} busy={busy} setReasonDialog={setReasonDialog} />
       )}
 
       {reasonDialog.mode !== 'closed' && (
         <ReasonDialog
-          title={
-            reasonDialog.mode === 'reject'
-              ? 'Urlaubsantrag ablehnen'
-              : 'Genehmigten Urlaub stornieren'
-          }
+          title={reasonDialog.mode === 'reject' ? 'Urlaubsantrag ablehnen' : 'Genehmigten Urlaub stornieren'}
           description={
             reasonDialog.mode === 'reject'
               ? `Der Antrag von ${reasonDialog.item.personName} wird mit Begründung abgelehnt.`
               : `Die Stornierung stellt die verbrauchten Urlaubstage von ${reasonDialog.item.personName} nachvollziehbar wieder her.`
           }
-          confirmLabel={
-            reasonDialog.mode === 'reject' ? 'Ablehnen' : 'Stornieren'
-          }
+          confirmLabel={reasonDialog.mode === 'reject' ? 'Ablehnen' : 'Stornieren'}
           isBusy={busy.isBusy(reasonDialog.item.request.id)}
+          submitError={dialogError}
           onConfirm={handleReasonSubmit}
-          onClose={() => setReasonDialog({ mode: 'closed' })}
+          onClose={() => {
+            setDialogError(null);
+            setReasonDialog({ mode: 'closed' });
+          }}
         />
       )}
     </div>
@@ -359,6 +163,7 @@ function ReasonDialog({
   description,
   confirmLabel,
   isBusy,
+  submitError,
   onConfirm,
   onClose,
 }: {
@@ -366,6 +171,7 @@ function ReasonDialog({
   description: string;
   confirmLabel: string;
   isBusy: boolean;
+  submitError: string | null;
   onConfirm: (reason: string) => void;
   onClose: () => void;
 }) {
@@ -384,20 +190,15 @@ function ReasonDialog({
   };
 
   return (
-    <Dialog open onOpenChange={(open) => !open && !isBusy && onClose()}>
-      <DialogContent className="sm:max-w-[425px]">
+    <Dialog open onOpenChange={(open) => !open && onClose()} pending={isBusy}>
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} noValidate>
           <div className="grid gap-4 py-4">
-            <Field
-              label="Grund"
-              htmlFor="vacation-decision-reason"
-              required
-              error={error}
-            >
+            <Field label="Grund" htmlFor="vacation-decision-reason" required error={error}>
               <Textarea
                 value={reason}
                 onChange={(e) => {
@@ -408,13 +209,9 @@ function ReasonDialog({
               />
             </Field>
           </div>
+          <ErrorText className="pb-3">{submitError}</ErrorText>
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              disabled={isBusy}
-            >
+            <Button type="button" variant="outline" onClick={onClose} disabled={isBusy}>
               Abbrechen
             </Button>
             <Button type="submit" disabled={isBusy}>

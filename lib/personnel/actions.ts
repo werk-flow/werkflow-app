@@ -1,10 +1,13 @@
 'use server';
 
-import { updateTag } from 'next/cache';
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { logReadFailure } from '@/lib/data/read-request-cache';
+import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
+import { boundedText, normalizeOptionalText, nullableBoundedText } from '@/lib/validation/text';
+import { LIST_ROW_CAP, readCompleteRows } from '@/lib/supabase/query-batches';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
-import { CACHE_TAGS } from '@/lib/data/cached';
-import { sendOrgInvite, type InviteRole } from '@/lib/invites/actions';
+import type { InviteRole } from '@/lib/invites/actions';
+import { createAndMailOrganizationInvite } from '@/lib/invites/send-invite';
+import { getAuthenticatedUser } from '@/lib/data/cached';
 import { formatProfileName } from '@/lib/members/profile-name';
 import {
   EMPLOYMENT_TYPES,
@@ -17,48 +20,96 @@ import {
   type EmploymentCondition,
   type EmploymentType,
 } from '@/lib/personnel/types';
-import {
-  toWorkSchedule,
-  WORK_SCHEDULE_DAY_COLUMNS,
-  type WorkSchedule,
-} from '@/lib/personnel/schedule';
+import { toWorkSchedule, type WorkSchedule } from '@/lib/personnel/schedule';
+import { logError } from '@/lib/logging';
+import { recordEmployeeRecordEvent } from '@/lib/personnel/employee-record-events';
+import { rpcArgs } from '@/lib/supabase/rpc-args';
+import { z } from '@/lib/zod';
+import { uuidSchema } from '@/lib/validation/uuid';
+import type { ActionFailure } from '@/lib/action-result';
 
-type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
+// Boundary schemas: types, ids and bounds. The value rules below keep their
+// own error codes for the forms.
+const createPersonnelRecordSchema = z.object({
+  firstName: boundedText(200).optional(),
+  lastName: boundedText(200),
+  employeeNumber: boundedText(100).optional(),
+  entryDate: boundedText(10).optional(),
+  notes: boundedText(5000).optional(),
+});
+const masterDataPatchSchema = z.strictObject({
+  employeeNumber: nullableBoundedText(100),
+  firstName: nullableBoundedText(200),
+  lastName: nullableBoundedText(200),
+  phone: nullableBoundedText(100),
+  privateEmail: nullableBoundedText(320),
+  street: nullableBoundedText(300),
+  postalCode: nullableBoundedText(20),
+  city: nullableBoundedText(200),
+  emergencyContactName: nullableBoundedText(200),
+  emergencyContactPhone: nullableBoundedText(100),
+  entryDate: nullableBoundedText(10),
+  exitDate: nullableBoundedText(10),
+  notes: nullableBoundedText(5000),
+});
+const employmentConditionSchema = z.object({
+  validFrom: boundedText(10),
+  employmentType: z.enum(['vollzeit', 'teilzeit', 'ausbildung', 'minijob', 'sonstiges']),
+  weeklyHours: z.number().nullable().default(null),
+  vacationDaysPerYear: z.number().nullable().default(null),
+  note: boundedText(2000).nullable().default(null),
+});
+const workScheduleSchema = z.object({
+  validFrom: boundedText(10),
+  dayMinutes: z.array(z.number()).max(7),
+  note: boundedText(2000).nullable().default(null),
+});
+const inviteEmailSchema = z.string().trim().toLowerCase().pipe(z.email().max(320));
+const inviteRoleInputSchema = z.enum(['buero', 'employee']);
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-function isValidIsoDate(value: string): boolean {
+function isParsableIsoDate(value: string): boolean {
   return ISO_DATE_PATTERN.test(value) && !Number.isNaN(Date.parse(value));
 }
 
-function normalizeOptionalText(value: string | null | undefined): string | null {
-  if (value === undefined || value === null) return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
+// The refusals of the personnel write functions (migration
+// 20261004190100_write_personnel_history_with_its_change.sql), each an action
+// failure code. Each function writes the change and its history row together
+// or refuses and changes nothing.
+const PERSONNEL_WRITE_REFUSALS: ReadonlySet<string> = new Set([
+  'invalid_input',
+  'not_authorized',
+  'record_not_found',
+  'condition_not_found',
+  'schedule_not_found',
+  'number_taken',
+  'exit_before_entry',
+  'name_managed_by_profile',
+  'duplicate_valid_from',
+]);
+
+// The refusal raised under the lock, or the action's own failure code for
+// anything else.
+function personnelWriteFailure(
+  error: { message: string } | null,
+  failureCode: string,
+  logLabel: string,
+): ActionFailure {
+  if (error && PERSONNEL_WRITE_REFUSALS.has(error.message)) return { success: false, error: error.message };
+  logError(logLabel, error);
+  return { success: false, error: failureCode };
 }
 
-async function recordPersonnelEvent(
-  admin: AdminClient,
-  input: {
-    orgId: string;
-    employeeRecordId: string;
-    eventType: string;
-    eventPayload?: Record<string, unknown>;
-    actorId: string;
-  }
-): Promise<void> {
-  const { error } = await admin.from('employee_record_events').insert({
-    organization_id: input.orgId,
-    employee_record_id: input.employeeRecordId,
-    event_type: input.eventType,
-    event_payload: input.eventPayload ?? {},
-    created_by: input.actorId,
-  });
-
-  if (error) {
-    // The audit trail must not block the business action; surface it in logs.
-    console.error('Failed to record employee record event:', error);
-  }
+/** Identity, active organization and the manager role, for the personnel writes. */
+async function requirePersonnelManager(): Promise<
+  { success: true; context: { orgId: string; userId: string } } | ActionFailure
+> {
+  const auth = await authenticateAndAuthorize();
+  if (!auth.success) return auth;
+  const { orgId, userId, isManagerOrAbove } = auth.context;
+  if (!isManagerOrAbove) return { success: false, error: 'not_authorized' };
+  return { success: true, context: { orgId, userId } };
 }
 
 async function requireManagerAndRecord(recordId: string): Promise<
@@ -67,7 +118,7 @@ async function requireManagerAndRecord(recordId: string): Promise<
       context: { orgId: string; userId: string; admin: AdminClient };
       record: EmployeeRecord;
     }
-  | { success: false; error: string }
+  | ActionFailure
 > {
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
@@ -112,8 +163,7 @@ export type PersonnelListEntry = {
  * currently effective condition.
  */
 export async function getPersonnelRecords(): Promise<
-  | { success: true; entries: PersonnelListEntry[] }
-  | { success: false; error: string }
+  { success: true; entries: PersonnelListEntry[] } | ActionFailure
 > {
   try {
     const auth = await authenticateAndAuthorize();
@@ -126,54 +176,63 @@ export async function getPersonnelRecords(): Promise<
 
     const admin = createSupabaseAdminClient();
     const [recordsResult, conditionsResult] = await Promise.all([
-      admin
-        .from('employee_records')
-        .select('*, organization_invites(status)')
-        .eq('organization_id', orgId),
-      admin
-        .from('employment_conditions')
-        .select('*')
-        .eq('organization_id', orgId)
-        // Same Europe/Berlin business date the derived states use — a UTC
-        // date here would disagree with them around midnight.
-        .lte('valid_from', getBusinessTodayIso())
-        .order('valid_from', { ascending: false }),
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('employee_records')
+            .select('*, organization_invites(status)')
+            .eq('organization_id', orgId)
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('employment_conditions')
+            .select('*')
+            .eq('organization_id', orgId)
+            // Same Europe/Berlin business date the derived states use — a UTC
+            // date here would disagree with them around midnight.
+            .lte('valid_from', getBusinessTodayIso())
+            .order('valid_from', { ascending: false })
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
     ]);
 
-    if (recordsResult.error) {
-      console.error('Failed to load employee records:', recordsResult.error);
+    // Missing conditions would render as "no condition" for real employees, so both reads must be complete.
+    const loadError = recordsResult.error ?? conditionsResult.error;
+    if (loadError) {
+      logReadFailure('getPersonnelRecords: employee records or conditions failed', loadError);
       return { success: false, error: 'load_failed' };
     }
 
     const currentConditionByRecord = new Map<string, EmploymentCondition>();
-    for (const row of conditionsResult.data ?? []) {
+    for (const row of conditionsResult.data) {
       if (!currentConditionByRecord.has(row.employee_record_id)) {
-        currentConditionByRecord.set(
-          row.employee_record_id,
-          toEmploymentCondition(row)
-        );
+        currentConditionByRecord.set(row.employee_record_id, toEmploymentCondition(row));
       }
     }
 
-    const entries: PersonnelListEntry[] = (recordsResult.data ?? []).map(
-      (row) => {
-        // supabase-js types embedded to-one relations inconsistently; accept
-        // both the object and single-element-array shapes.
-        const rawInvite = row.organization_invites as unknown;
-        const invite = (
-          Array.isArray(rawInvite) ? (rawInvite[0] ?? null) : rawInvite
-        ) as { status: string } | null;
-        return {
-          record: toEmployeeRecord(row),
-          hasPendingInvite: invite?.status === 'pending',
-          currentCondition: currentConditionByRecord.get(row.id) ?? null,
-        };
-      }
-    );
+    const entries: PersonnelListEntry[] = recordsResult.data.map((row) => {
+      // supabase-js types embedded to-one relations inconsistently; accept
+      // both the object and single-element-array shapes.
+      const rawInvite = row.organization_invites as unknown;
+      const invite = (Array.isArray(rawInvite) ? (rawInvite[0] ?? null) : rawInvite) as {
+        status: string;
+      } | null;
+      return {
+        record: toEmployeeRecord(row),
+        hasPendingInvite: invite?.status === 'pending',
+        currentCondition: currentConditionByRecord.get(row.id) ?? null,
+      };
+    });
 
     return { success: true, entries };
   } catch (error) {
-    console.error('Unexpected error in getPersonnelRecords:', error);
+    logError('Unexpected error in getPersonnelRecords:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
@@ -194,9 +253,12 @@ export type PersonnelDetail = {
  * be a member's user id (existing `/mitarbeiter/[userId]` links) or the
  * employee record id (personnel records without a login).
  */
-export async function getPersonnelDetail(idOrUserId: string): Promise<
-  { success: true; detail: PersonnelDetail } | { success: false; error: string }
-> {
+export async function getPersonnelDetail(
+  idOrUserIdInput: string,
+): Promise<{ success: true; detail: PersonnelDetail } | ActionFailure> {
+  const parsedIdOrUserId = uuidSchema.safeParse(idOrUserIdInput);
+  if (!parsedIdOrUserId.success) return { success: false, error: 'invalid_input' };
+  const idOrUserId = parsedIdOrUserId.data;
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
@@ -208,21 +270,29 @@ export async function getPersonnelDetail(idOrUserId: string): Promise<
 
     const admin = createSupabaseAdminClient();
 
-    const { data: byUser } = await admin
+    const { data: byUser, error: byUserError } = await admin
       .from('employee_records')
       .select('*, organization_invites(status)')
       .eq('organization_id', orgId)
       .eq('user_id', idOrUserId)
       .maybeSingle();
+    if (byUserError) {
+      logReadFailure('getPersonnelDetail: record by user failed', byUserError);
+      return { success: false, error: 'load_failed' };
+    }
 
     let row = byUser;
     if (!row) {
-      const { data: byId } = await admin
+      const { data: byId, error: byIdError } = await admin
         .from('employee_records')
         .select('*, organization_invites(status)')
         .eq('organization_id', orgId)
         .eq('id', idOrUserId)
         .maybeSingle();
+      if (byIdError) {
+        logReadFailure('getPersonnelDetail: record by id failed', byIdError);
+        return { success: false, error: 'load_failed' };
+      }
       row = byId;
     }
 
@@ -234,43 +304,44 @@ export async function getPersonnelDetail(idOrUserId: string): Promise<
       admin
         .from('employment_conditions')
         .select('*')
+        .eq('organization_id', orgId)
         .eq('employee_record_id', row.id)
         .order('valid_from', { ascending: false }),
       admin
         .from('work_schedules')
         .select('*')
+        .eq('organization_id', orgId)
         .eq('employee_record_id', row.id)
         .order('valid_from', { ascending: false }),
       admin
         .from('employee_record_events')
         .select('*')
+        .eq('organization_id', orgId)
         .eq('employee_record_id', row.id)
         .order('created_at', { ascending: false })
         .limit(50),
       row.user_id
-        ? admin
-            .from('profiles')
-            .select('first_name, last_name, email')
-            .eq('id', row.user_id)
-            .maybeSingle()
+        ? admin.from('profiles').select('first_name, last_name, email').eq('id', row.user_id).maybeSingle()
         : Promise.resolve({ data: null }),
     ]);
 
     // A failed conditions/schedules load must fail the detail explicitly —
     // otherwise the surface would silently show the labeled default target
     // although a real schedule exists.
-    if (conditionsResult.error || schedulesResult.error) {
-      console.error(
-        'Failed to load personnel detail context:',
-        conditionsResult.error ?? schedulesResult.error
-      );
+    // The history and the linked login's name fail it too: an empty history
+    // or a missing name would look like facts.
+    const profileError = 'error' in profileResult ? profileResult.error : null;
+    const contextError =
+      conditionsResult.error ?? schedulesResult.error ?? eventsResult.error ?? profileError;
+    if (contextError) {
+      logError('Failed to load personnel detail context:', contextError);
       return { success: false, error: 'load_failed' };
     }
 
     const rawInvite = row.organization_invites as unknown;
-    const invite = (
-      Array.isArray(rawInvite) ? (rawInvite[0] ?? null) : rawInvite
-    ) as { status: string } | null;
+    const invite = (Array.isArray(rawInvite) ? (rawInvite[0] ?? null) : rawInvite) as {
+      status: string;
+    } | null;
 
     const profile = profileResult.data;
 
@@ -287,7 +358,7 @@ export async function getPersonnelDetail(idOrUserId: string): Promise<
       },
     };
   } catch (error) {
-    console.error('Unexpected error in getPersonnelDetail:', error);
+    logError('Unexpected error in getPersonnelDetail:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
@@ -296,9 +367,7 @@ export async function getPersonnelDetail(idOrUserId: string): Promise<
 // Personnel Number Suggestion
 // ============================================
 
-export async function suggestPersonnelNumber(): Promise<
-  { success: true; number: string } | { success: false; error: string }
-> {
+export async function suggestPersonnelNumber(): Promise<{ success: true; number: string } | ActionFailure> {
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
@@ -314,13 +383,13 @@ export async function suggestPersonnelNumber(): Promise<
     });
 
     if (error || !data) {
-      console.error('Failed to suggest personnel number:', error);
+      logError('Failed to suggest personnel number:', error);
       return { success: false, error: 'suggestion_failed' };
     }
 
     return { success: true, number: data };
   } catch (error) {
-    console.error('Unexpected error in suggestPersonnelNumber:', error);
+    logError('Unexpected error in suggestPersonnelNumber:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
@@ -337,21 +406,18 @@ export type CreatePersonnelRecordInput = {
   notes?: string;
 };
 
-export type CreatePersonnelRecordResult =
-  | { success: true; recordId: string }
-  | { success: false; error: string };
+export type CreatePersonnelRecordResult = { success: true; recordId: string } | ActionFailure;
 
 export async function createPersonnelRecord(
-  input: CreatePersonnelRecordInput
+  rawInput: CreatePersonnelRecordInput,
 ): Promise<CreatePersonnelRecordResult> {
+  const parsedInput = createPersonnelRecordSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   try {
-    const auth = await authenticateAndAuthorize();
-    if (!auth.success) return auth;
-    const { orgId, userId, isManagerOrAbove } = auth.context;
-
-    if (!isManagerOrAbove) {
-      return { success: false, error: 'not_authorized' };
-    }
+    const guard = await requirePersonnelManager();
+    if (!guard.success) return guard;
+    const { orgId, userId } = guard.context;
 
     const lastName = normalizeOptionalText(input.lastName);
     if (!lastName) {
@@ -359,52 +425,30 @@ export async function createPersonnelRecord(
     }
 
     const entryDate = normalizeOptionalText(input.entryDate);
-    if (entryDate && !isValidIsoDate(entryDate)) {
+    if (entryDate && !isParsableIsoDate(entryDate)) {
       return { success: false, error: 'invalid_entry_date' };
     }
 
-    const admin = createSupabaseAdminClient();
-    const { data, error } = await admin
-      .from('employee_records')
-      .insert({
-        organization_id: orgId,
-        first_name: normalizeOptionalText(input.firstName),
-        last_name: lastName,
-        employee_number: normalizeOptionalText(input.employeeNumber),
-        entry_date: entryDate,
-        notes: normalizeOptionalText(input.notes),
-        created_by: userId,
-      })
-      .select('id')
-      .single();
-
-    if (error || !data) {
-      if (error?.code === '23505') {
-        return { success: false, error: 'number_taken' };
-      }
-      console.error('Failed to create personnel record:', error);
-      return { success: false, error: 'create_failed' };
+    // One call creates the record and its 'created' history row.
+    const { data: recordId, error } = await createSupabaseAdminClient().rpc(
+      'create_employee_record',
+      rpcArgs('create_employee_record', {
+        p_actor_id: userId,
+        p_organization_id: orgId,
+        p_first_name: normalizeOptionalText(input.firstName),
+        p_last_name: lastName,
+        p_employee_number: normalizeOptionalText(input.employeeNumber),
+        p_entry_date: entryDate,
+        p_notes: normalizeOptionalText(input.notes),
+      }),
+    );
+    if (error || !recordId) {
+      return personnelWriteFailure(error, 'create_failed', 'Failed to create personnel record:');
     }
 
-    await recordPersonnelEvent(admin, {
-      orgId,
-      employeeRecordId: data.id,
-      eventType: 'created',
-      eventPayload: {
-        employee_number: normalizeOptionalText(input.employeeNumber),
-        first_name: normalizeOptionalText(input.firstName),
-        last_name: lastName,
-        entry_date: entryDate,
-        notes: normalizeOptionalText(input.notes),
-      },
-      actorId: userId,
-    });
-
-    updateTag(CACHE_TAGS.personnel(orgId));
-
-    return { success: true, recordId: data.id };
+    return { success: true, recordId };
   } catch (error) {
-    console.error('Unexpected error in createPersonnelRecord:', error);
+    logError('Unexpected error in createPersonnelRecord:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
@@ -451,78 +495,52 @@ export type UpdatePersonnelResult = {
 };
 
 export async function updatePersonnelMasterData(
-  recordId: string,
-  patch: PersonnelMasterDataPatch
+  recordIdInput: string,
+  patchInput: PersonnelMasterDataPatch,
 ): Promise<UpdatePersonnelResult> {
+  const parsedPatch = masterDataPatchSchema.safeParse(patchInput);
+  if (!parsedPatch.success) return { success: false, error: 'invalid_input' };
+  const patch = parsedPatch.data;
+  const parsedRecordId = uuidSchema.safeParse(recordIdInput);
+  if (!parsedRecordId.success) return { success: false, error: 'invalid_input' };
+  const recordId = parsedRecordId.data;
   try {
-    const guard = await requireManagerAndRecord(recordId);
+    const guard = await requirePersonnelManager();
     if (!guard.success) return guard;
-    const { orgId, userId, admin } = guard.context;
-    const { record } = guard;
+    const { orgId, userId } = guard.context;
 
-    const update: Record<string, string | null> = {};
-    const changes: Record<string, { from: unknown; to: unknown }> = {};
-
+    const columnPatch: Record<string, string | null> = {};
     for (const key of Object.keys(patch) as (keyof PersonnelMasterDataPatch)[]) {
       if (!(key in MASTER_DATA_COLUMNS)) continue;
-
       const normalized = normalizeOptionalText(patch[key]);
-
-      if (
-        (key === 'entryDate' || key === 'exitDate') &&
-        normalized &&
-        !isValidIsoDate(normalized)
-      ) {
+      if ((key === 'entryDate' || key === 'exitDate') && normalized && !isParsableIsoDate(normalized)) {
         return { success: false, error: 'invalid_date' };
       }
-
-      const previous = record[key];
-      if (previous === normalized) continue;
-
-      // For linked records the global profile name is authoritative; only an
-      // actual name change is rejected, unchanged values pass through above.
-      if ((key === 'firstName' || key === 'lastName') && record.userId) {
-        return { success: false, error: 'name_managed_by_profile' };
-      }
-
-      update[MASTER_DATA_COLUMNS[key]] = normalized;
-      changes[MASTER_DATA_COLUMNS[key]] = { from: previous, to: normalized };
+      columnPatch[MASTER_DATA_COLUMNS[key]] = normalized;
     }
 
-    if (Object.keys(update).length === 0) {
+    if (Object.keys(columnPatch).length === 0) {
       return { success: true };
     }
 
-    const { error } = await admin
-      .from('employee_records')
-      .update(update)
-      .eq('id', recordId)
-      .eq('organization_id', orgId);
-
-    if (error) {
-      if (error.code === '23505') {
-        return { success: false, error: 'number_taken' };
-      }
-      if (error.code === '23514') {
-        return { success: false, error: 'exit_before_entry' };
-      }
-      console.error('Failed to update personnel master data:', error);
-      return { success: false, error: 'update_failed' };
-    }
-
-    await recordPersonnelEvent(admin, {
-      orgId,
-      employeeRecordId: recordId,
-      eventType: 'master_data_updated',
-      eventPayload: { changes },
-      actorId: userId,
-    });
-
-    updateTag(CACHE_TAGS.personnel(orgId));
+    // One call compares the patch with the record under lock, writes the
+    // fields that differ and records them in 'master_data_updated'. A linked
+    // record's name belongs to the profile: only a real change is refused.
+    const { error } = await createSupabaseAdminClient().rpc(
+      'update_employee_master_data',
+      rpcArgs('update_employee_master_data', {
+        p_actor_id: userId,
+        p_organization_id: orgId,
+        p_record_id: recordId,
+        p_patch: columnPatch,
+      }),
+    );
+    if (error)
+      return personnelWriteFailure(error, 'update_failed', 'Failed to update personnel master data:');
 
     return { success: true };
   } catch (error) {
-    console.error('Unexpected error in updatePersonnelMasterData:', error);
+    logError('Unexpected error in updatePersonnelMasterData:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
@@ -539,10 +557,8 @@ export type EmploymentConditionInput = {
   note?: string | null;
 };
 
-function validateConditionInput(
-  input: EmploymentConditionInput
-): string | null {
-  if (!input.validFrom || !isValidIsoDate(input.validFrom)) {
+function validateConditionInput(input: EmploymentConditionInput): string | null {
+  if (!input.validFrom || !isParsableIsoDate(input.validFrom)) {
     return 'invalid_valid_from';
   }
   if (!EMPLOYMENT_TYPES.includes(input.employmentType)) {
@@ -551,9 +567,7 @@ function validateConditionInput(
   if (
     input.weeklyHours !== undefined &&
     input.weeklyHours !== null &&
-    (Number.isNaN(input.weeklyHours) ||
-      input.weeklyHours < 0 ||
-      input.weeklyHours > 100)
+    (Number.isNaN(input.weeklyHours) || input.weeklyHours < 0 || input.weeklyHours > 100)
   ) {
     return 'invalid_weekly_hours';
   }
@@ -570,212 +584,117 @@ function validateConditionInput(
 }
 
 export async function addEmploymentCondition(
-  recordId: string,
-  input: EmploymentConditionInput
+  recordIdInput: string,
+  rawInput: EmploymentConditionInput,
 ): Promise<UpdatePersonnelResult> {
+  const parsedInput = employmentConditionSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
+  const parsedRecordId = uuidSchema.safeParse(recordIdInput);
+  if (!parsedRecordId.success) return { success: false, error: 'invalid_input' };
+  const recordId = parsedRecordId.data;
   try {
-    const guard = await requireManagerAndRecord(recordId);
+    const guard = await requirePersonnelManager();
     if (!guard.success) return guard;
-    const { orgId, userId, admin } = guard.context;
+    const { orgId, userId } = guard.context;
 
     const validationError = validateConditionInput(input);
     if (validationError) {
       return { success: false, error: validationError };
     }
 
-    const { data, error } = await admin
-      .from('employment_conditions')
-      .insert({
-        organization_id: orgId,
-        employee_record_id: recordId,
-        valid_from: input.validFrom,
-        employment_type: input.employmentType,
-        weekly_hours: input.weeklyHours ?? null,
-        vacation_days_per_year: input.vacationDaysPerYear ?? null,
-        note: normalizeOptionalText(input.note),
-        created_by: userId,
-      })
-      .select('id')
-      .single();
-
-    if (error || !data) {
-      if (error?.code === '23505') {
-        return { success: false, error: 'duplicate_valid_from' };
-      }
-      console.error('Failed to add employment condition:', error);
-      return { success: false, error: 'create_failed' };
-    }
-
-    await recordPersonnelEvent(admin, {
-      orgId,
-      employeeRecordId: recordId,
-      eventType: 'condition_added',
-      eventPayload: {
-        condition_id: data.id,
-        valid_from: input.validFrom,
-        employment_type: input.employmentType,
-        weekly_hours: input.weeklyHours ?? null,
-        vacation_days_per_year: input.vacationDaysPerYear ?? null,
-        note: normalizeOptionalText(input.note),
-      },
-      actorId: userId,
-    });
-
-    updateTag(CACHE_TAGS.personnel(orgId));
+    // One call checks the record under lock, adds the condition and records
+    // its 'condition_added' history row.
+    const { error } = await createSupabaseAdminClient().rpc(
+      'add_employment_condition',
+      rpcArgs('add_employment_condition', {
+        p_actor_id: userId,
+        p_organization_id: orgId,
+        p_record_id: recordId,
+        p_valid_from: input.validFrom,
+        p_employment_type: input.employmentType,
+        p_weekly_hours: input.weeklyHours ?? null,
+        p_vacation_days_per_year: input.vacationDaysPerYear ?? null,
+        p_note: normalizeOptionalText(input.note),
+      }),
+    );
+    if (error) return personnelWriteFailure(error, 'create_failed', 'Failed to add employment condition:');
 
     return { success: true };
   } catch (error) {
-    console.error('Unexpected error in addEmploymentCondition:', error);
+    logError('Unexpected error in addEmploymentCondition:', error);
     return { success: false, error: 'unexpected_error' };
   }
-}
-
-async function requireManagerAndCondition(conditionId: string): Promise<
-  | {
-      success: true;
-      context: { orgId: string; userId: string; admin: AdminClient };
-      condition: EmploymentCondition;
-    }
-  | { success: false; error: string }
-> {
-  const auth = await authenticateAndAuthorize();
-  if (!auth.success) return auth;
-  const { orgId, userId, isManagerOrAbove } = auth.context;
-
-  if (!isManagerOrAbove) {
-    return { success: false, error: 'not_authorized' };
-  }
-
-  const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
-    .from('employment_conditions')
-    .select('*')
-    .eq('id', conditionId)
-    .eq('organization_id', orgId)
-    .single();
-
-  if (error || !data) {
-    return { success: false, error: 'condition_not_found' };
-  }
-
-  return {
-    success: true,
-    context: { orgId, userId, admin },
-    condition: toEmploymentCondition(data),
-  };
 }
 
 export async function updateEmploymentCondition(
-  conditionId: string,
-  input: EmploymentConditionInput
+  conditionIdInput: string,
+  rawInput: EmploymentConditionInput,
 ): Promise<UpdatePersonnelResult> {
+  const parsedInput = employmentConditionSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
+  const parsedConditionId = uuidSchema.safeParse(conditionIdInput);
+  if (!parsedConditionId.success) return { success: false, error: 'invalid_input' };
+  const conditionId = parsedConditionId.data;
   try {
-    const guard = await requireManagerAndCondition(conditionId);
+    const guard = await requirePersonnelManager();
     if (!guard.success) return guard;
-    const { orgId, userId, admin } = guard.context;
-    const { condition } = guard;
+    const { orgId, userId } = guard.context;
 
     const validationError = validateConditionInput(input);
     if (validationError) {
       return { success: false, error: validationError };
     }
 
-    const { error } = await admin
-      .from('employment_conditions')
-      .update({
-        valid_from: input.validFrom,
-        employment_type: input.employmentType,
-        weekly_hours: input.weeklyHours ?? null,
-        vacation_days_per_year: input.vacationDaysPerYear ?? null,
-        note: normalizeOptionalText(input.note),
-      })
-      .eq('id', conditionId)
-      .eq('organization_id', orgId);
-
-    if (error) {
-      if (error.code === '23505') {
-        return { success: false, error: 'duplicate_valid_from' };
-      }
-      console.error('Failed to update employment condition:', error);
-      return { success: false, error: 'update_failed' };
-    }
-
-    // Corrections stay traceable: the audit event keeps the full before/after.
-    await recordPersonnelEvent(admin, {
-      orgId,
-      employeeRecordId: condition.employeeRecordId,
-      eventType: 'condition_updated',
-      eventPayload: {
-        condition_id: conditionId,
-        before: {
-          valid_from: condition.validFrom,
-          employment_type: condition.employmentType,
-          weekly_hours: condition.weeklyHours,
-          vacation_days_per_year: condition.vacationDaysPerYear,
-          note: condition.note,
-        },
-        after: {
-          valid_from: input.validFrom,
-          employment_type: input.employmentType,
-          weekly_hours: input.weeklyHours ?? null,
-          vacation_days_per_year: input.vacationDaysPerYear ?? null,
-          note: normalizeOptionalText(input.note),
-        },
-      },
-      actorId: userId,
-    });
-
-    updateTag(CACHE_TAGS.personnel(orgId));
+    // Corrections stay traceable: one call corrects the condition under lock
+    // and records 'condition_updated' with the full before and after.
+    const { error } = await createSupabaseAdminClient().rpc(
+      'update_employment_condition',
+      rpcArgs('update_employment_condition', {
+        p_actor_id: userId,
+        p_organization_id: orgId,
+        p_condition_id: conditionId,
+        p_valid_from: input.validFrom,
+        p_employment_type: input.employmentType,
+        p_weekly_hours: input.weeklyHours ?? null,
+        p_vacation_days_per_year: input.vacationDaysPerYear ?? null,
+        p_note: normalizeOptionalText(input.note),
+      }),
+    );
+    if (error) return personnelWriteFailure(error, 'update_failed', 'Failed to update employment condition:');
 
     return { success: true };
   } catch (error) {
-    console.error('Unexpected error in updateEmploymentCondition:', error);
+    logError('Unexpected error in updateEmploymentCondition:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
-export async function deleteEmploymentCondition(
-  conditionId: string
-): Promise<UpdatePersonnelResult> {
+export async function deleteEmploymentCondition(conditionIdInput: string): Promise<UpdatePersonnelResult> {
+  const parsedConditionId = uuidSchema.safeParse(conditionIdInput);
+  if (!parsedConditionId.success) return { success: false, error: 'invalid_input' };
+  const conditionId = parsedConditionId.data;
   try {
-    const guard = await requireManagerAndCondition(conditionId);
+    const guard = await requirePersonnelManager();
     if (!guard.success) return guard;
-    const { orgId, userId, admin } = guard.context;
-    const { condition } = guard;
+    const { orgId, userId } = guard.context;
 
-    const { error } = await admin
-      .from('employment_conditions')
-      .delete()
-      .eq('id', conditionId)
-      .eq('organization_id', orgId);
-
-    if (error) {
-      console.error('Failed to delete employment condition:', error);
-      return { success: false, error: 'delete_failed' };
-    }
-
-    await recordPersonnelEvent(admin, {
-      orgId,
-      employeeRecordId: condition.employeeRecordId,
-      eventType: 'condition_deleted',
-      eventPayload: {
-        condition_id: conditionId,
-        deleted: {
-          valid_from: condition.validFrom,
-          employment_type: condition.employmentType,
-          weekly_hours: condition.weeklyHours,
-          vacation_days_per_year: condition.vacationDaysPerYear,
-          note: condition.note,
-        },
-      },
-      actorId: userId,
-    });
-
-    updateTag(CACHE_TAGS.personnel(orgId));
+    // One call deletes the condition and records 'condition_deleted' with the
+    // deleted values.
+    const { error } = await createSupabaseAdminClient().rpc(
+      'delete_employment_condition',
+      rpcArgs('delete_employment_condition', {
+        p_actor_id: userId,
+        p_organization_id: orgId,
+        p_condition_id: conditionId,
+      }),
+    );
+    if (error) return personnelWriteFailure(error, 'delete_failed', 'Failed to delete employment condition:');
 
     return { success: true };
   } catch (error) {
-    console.error('Unexpected error in deleteEmploymentCondition:', error);
+    logError('Unexpected error in deleteEmploymentCondition:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
@@ -792,243 +711,128 @@ export type WorkScheduleInput = {
 };
 
 function validateScheduleInput(input: WorkScheduleInput): string | null {
-  if (!input.validFrom || !isValidIsoDate(input.validFrom)) {
+  if (!input.validFrom || !isParsableIsoDate(input.validFrom)) {
     return 'invalid_valid_from';
   }
   if (!Array.isArray(input.dayMinutes) || input.dayMinutes.length !== 7) {
     return 'invalid_day_minutes';
   }
   for (const minutes of input.dayMinutes) {
-    if (
-      !Number.isInteger(minutes) ||
-      minutes < 0 ||
-      minutes > 1440
-    ) {
+    if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440) {
       return 'invalid_day_minutes';
     }
   }
   return null;
 }
 
-function scheduleAuditPayload(input: {
-  validFrom: string;
-  dayMinutes: number[];
-  note: string | null;
-}): Record<string, unknown> {
-  return {
-    valid_from: input.validFrom,
-    day_minutes: input.dayMinutes,
-    weekly_minutes: input.dayMinutes.reduce((total, m) => total + m, 0),
-    note: input.note,
-  };
-}
-
-function toDayMinuteColumns(dayMinutes: number[]): Record<string, number> {
-  const columns: Record<string, number> = {};
-  dayMinutes.forEach((minutes, index) => {
-    const column = WORK_SCHEDULE_DAY_COLUMNS[index];
-    if (column) columns[column] = minutes;
-  });
-  return columns;
-}
-
 export async function addWorkSchedule(
-  recordId: string,
-  input: WorkScheduleInput
+  recordIdInput: string,
+  rawInput: WorkScheduleInput,
 ): Promise<UpdatePersonnelResult> {
+  const parsedInput = workScheduleSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
+  const parsedRecordId = uuidSchema.safeParse(recordIdInput);
+  if (!parsedRecordId.success) return { success: false, error: 'invalid_input' };
+  const recordId = parsedRecordId.data;
   try {
-    const guard = await requireManagerAndRecord(recordId);
+    const guard = await requirePersonnelManager();
     if (!guard.success) return guard;
-    const { orgId, userId, admin } = guard.context;
+    const { orgId, userId } = guard.context;
 
     const validationError = validateScheduleInput(input);
     if (validationError) {
       return { success: false, error: validationError };
     }
 
-    const { data, error } = await admin
-      .from('work_schedules')
-      .insert({
-        organization_id: orgId,
-        employee_record_id: recordId,
-        valid_from: input.validFrom,
-        ...toDayMinuteColumns(input.dayMinutes),
-        note: normalizeOptionalText(input.note),
-        created_by: userId,
-      })
-      .select('id')
-      .single();
-
-    if (error || !data) {
-      if (error?.code === '23505') {
-        return { success: false, error: 'duplicate_valid_from' };
-      }
-      console.error('Failed to add work schedule:', error);
-      return { success: false, error: 'create_failed' };
-    }
-
-    await recordPersonnelEvent(admin, {
-      orgId,
-      employeeRecordId: recordId,
-      eventType: 'schedule_added',
-      eventPayload: {
-        schedule_id: data.id,
-        ...scheduleAuditPayload({
-          validFrom: input.validFrom,
-          dayMinutes: input.dayMinutes,
-          note: normalizeOptionalText(input.note),
-        }),
-      },
-      actorId: userId,
-    });
-
-    updateTag(CACHE_TAGS.personnel(orgId));
+    // One call checks the record under lock, adds the schedule and records
+    // its 'schedule_added' history row.
+    const { error } = await createSupabaseAdminClient().rpc(
+      'add_work_schedule',
+      rpcArgs('add_work_schedule', {
+        p_actor_id: userId,
+        p_organization_id: orgId,
+        p_record_id: recordId,
+        p_valid_from: input.validFrom,
+        p_day_minutes: input.dayMinutes,
+        p_note: normalizeOptionalText(input.note),
+      }),
+    );
+    if (error) return personnelWriteFailure(error, 'create_failed', 'Failed to add work schedule:');
 
     return { success: true };
   } catch (error) {
-    console.error('Unexpected error in addWorkSchedule:', error);
+    logError('Unexpected error in addWorkSchedule:', error);
     return { success: false, error: 'unexpected_error' };
   }
-}
-
-async function requireManagerAndSchedule(scheduleId: string): Promise<
-  | {
-      success: true;
-      context: { orgId: string; userId: string; admin: AdminClient };
-      schedule: WorkSchedule;
-    }
-  | { success: false; error: string }
-> {
-  const auth = await authenticateAndAuthorize();
-  if (!auth.success) return auth;
-  const { orgId, userId, isManagerOrAbove } = auth.context;
-
-  if (!isManagerOrAbove) {
-    return { success: false, error: 'not_authorized' };
-  }
-
-  const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
-    .from('work_schedules')
-    .select('*')
-    .eq('id', scheduleId)
-    .eq('organization_id', orgId)
-    .single();
-
-  if (error || !data) {
-    return { success: false, error: 'schedule_not_found' };
-  }
-
-  return {
-    success: true,
-    context: { orgId, userId, admin },
-    schedule: toWorkSchedule(data),
-  };
 }
 
 export async function updateWorkSchedule(
-  scheduleId: string,
-  input: WorkScheduleInput
+  scheduleIdInput: string,
+  rawInput: WorkScheduleInput,
 ): Promise<UpdatePersonnelResult> {
+  const parsedInput = workScheduleSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
+  const parsedScheduleId = uuidSchema.safeParse(scheduleIdInput);
+  if (!parsedScheduleId.success) return { success: false, error: 'invalid_input' };
+  const scheduleId = parsedScheduleId.data;
   try {
-    const guard = await requireManagerAndSchedule(scheduleId);
+    const guard = await requirePersonnelManager();
     if (!guard.success) return guard;
-    const { orgId, userId, admin } = guard.context;
-    const { schedule } = guard;
+    const { orgId, userId } = guard.context;
 
     const validationError = validateScheduleInput(input);
     if (validationError) {
       return { success: false, error: validationError };
     }
 
-    const { error } = await admin
-      .from('work_schedules')
-      .update({
-        valid_from: input.validFrom,
-        ...toDayMinuteColumns(input.dayMinutes),
-        note: normalizeOptionalText(input.note),
-      })
-      .eq('id', scheduleId)
-      .eq('organization_id', orgId);
-
-    if (error) {
-      if (error.code === '23505') {
-        return { success: false, error: 'duplicate_valid_from' };
-      }
-      console.error('Failed to update work schedule:', error);
-      return { success: false, error: 'update_failed' };
-    }
-
-    // Corrections stay traceable: the audit event keeps the full before/after.
-    await recordPersonnelEvent(admin, {
-      orgId,
-      employeeRecordId: schedule.employeeRecordId,
-      eventType: 'schedule_updated',
-      eventPayload: {
-        schedule_id: scheduleId,
-        before: scheduleAuditPayload({
-          validFrom: schedule.validFrom,
-          dayMinutes: schedule.dayMinutes,
-          note: schedule.note,
-        }),
-        after: scheduleAuditPayload({
-          validFrom: input.validFrom,
-          dayMinutes: input.dayMinutes,
-          note: normalizeOptionalText(input.note),
-        }),
-      },
-      actorId: userId,
-    });
-
-    updateTag(CACHE_TAGS.personnel(orgId));
+    // Corrections stay traceable: one call corrects the schedule under lock
+    // and records 'schedule_updated' with the full before and after.
+    const { error } = await createSupabaseAdminClient().rpc(
+      'update_work_schedule',
+      rpcArgs('update_work_schedule', {
+        p_actor_id: userId,
+        p_organization_id: orgId,
+        p_schedule_id: scheduleId,
+        p_valid_from: input.validFrom,
+        p_day_minutes: input.dayMinutes,
+        p_note: normalizeOptionalText(input.note),
+      }),
+    );
+    if (error) return personnelWriteFailure(error, 'update_failed', 'Failed to update work schedule:');
 
     return { success: true };
   } catch (error) {
-    console.error('Unexpected error in updateWorkSchedule:', error);
+    logError('Unexpected error in updateWorkSchedule:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
-export async function deleteWorkSchedule(
-  scheduleId: string
-): Promise<UpdatePersonnelResult> {
+export async function deleteWorkSchedule(scheduleIdInput: string): Promise<UpdatePersonnelResult> {
+  const parsedScheduleId = uuidSchema.safeParse(scheduleIdInput);
+  if (!parsedScheduleId.success) return { success: false, error: 'invalid_input' };
+  const scheduleId = parsedScheduleId.data;
   try {
-    const guard = await requireManagerAndSchedule(scheduleId);
+    const guard = await requirePersonnelManager();
     if (!guard.success) return guard;
-    const { orgId, userId, admin } = guard.context;
-    const { schedule } = guard;
+    const { orgId, userId } = guard.context;
 
-    const { error } = await admin
-      .from('work_schedules')
-      .delete()
-      .eq('id', scheduleId)
-      .eq('organization_id', orgId);
-
-    if (error) {
-      console.error('Failed to delete work schedule:', error);
-      return { success: false, error: 'delete_failed' };
-    }
-
-    await recordPersonnelEvent(admin, {
-      orgId,
-      employeeRecordId: schedule.employeeRecordId,
-      eventType: 'schedule_deleted',
-      eventPayload: {
-        schedule_id: scheduleId,
-        deleted: scheduleAuditPayload({
-          validFrom: schedule.validFrom,
-          dayMinutes: schedule.dayMinutes,
-          note: schedule.note,
-        }),
-      },
-      actorId: userId,
-    });
-
-    updateTag(CACHE_TAGS.personnel(orgId));
+    // One call deletes the schedule and records 'schedule_deleted' with the
+    // deleted version.
+    const { error } = await createSupabaseAdminClient().rpc(
+      'delete_work_schedule',
+      rpcArgs('delete_work_schedule', {
+        p_actor_id: userId,
+        p_organization_id: orgId,
+        p_schedule_id: scheduleId,
+      }),
+    );
+    if (error) return personnelWriteFailure(error, 'delete_failed', 'Failed to delete work schedule:');
 
     return { success: true };
   } catch (error) {
-    console.error('Unexpected error in deleteWorkSchedule:', error);
+    logError('Unexpected error in deleteWorkSchedule:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
@@ -1038,10 +842,19 @@ export async function deleteWorkSchedule(
 // ============================================
 
 export async function sendPersonnelInvite(
-  recordId: string,
-  email: string,
-  role: InviteRole
+  recordIdInput: string,
+  emailInput: string,
+  roleInput: InviteRole,
 ): Promise<UpdatePersonnelResult> {
+  const parsedRole = inviteRoleInputSchema.safeParse(roleInput);
+  if (!parsedRole.success) return { success: false, error: 'invalid_input' };
+  const role = parsedRole.data;
+  const parsedEmail = inviteEmailSchema.safeParse(emailInput);
+  if (!parsedEmail.success) return { success: false, error: 'invalid_email' };
+  const email = parsedEmail.data;
+  const parsedRecordId = uuidSchema.safeParse(recordIdInput);
+  if (!parsedRecordId.success) return { success: false, error: 'invalid_input' };
+  const recordId = parsedRecordId.data;
   try {
     const guard = await requireManagerAndRecord(recordId);
     if (!guard.success) return guard;
@@ -1052,59 +865,39 @@ export async function sendPersonnelInvite(
       return { success: false, error: 'already_has_login' };
     }
 
-    // A previously connected invite that is still pending would stay
-    // redeemable after being replaced and could create a duplicate person on
-    // redemption; cancel it first. Redeemed/expired invites stay untouched.
-    if (record.inviteId) {
-      const { error: cancelError } = await admin
-        .from('organization_invites')
-        .update({ status: 'cancelled' })
-        .eq('id', record.inviteId)
-        .eq('organization_id', orgId)
-        .eq('status', 'pending');
-      if (cancelError) {
-        console.error(
-          'Failed to cancel previously connected invite:',
-          cancelError
-        );
-        return { success: false, error: 'invite_failed' };
-      }
-    }
+    // One transaction cancels the record's pending invite (it would otherwise
+    // stay redeemable and create a duplicate person), creates the new invite
+    // and connects it; a failed mail withdraws all of it again.
+    const user = await getAuthenticatedUser();
+    const sent = await createAndMailOrganizationInvite({
+      admin,
+      organizationId: orgId,
+      inviterId: userId,
+      inviterFallbackName: user?.email || 'Ein Administrator',
+      email,
+      role,
+      employeeRecordId: recordId,
+      replacedInviteId: record.inviteId,
+    });
+    if (!sent.success) return sent;
 
-    const inviteResult = await sendOrgInvite(email, role);
-    if (!inviteResult.success || !inviteResult.inviteId) {
-      return {
-        success: false,
-        error: inviteResult.error ?? 'invite_failed',
-      };
-    }
-
-    const { error } = await admin
-      .from('employee_records')
-      .update({ invite_id: inviteResult.inviteId })
-      .eq('id', recordId)
-      .eq('organization_id', orgId);
-
-    if (error) {
-      // The invite exists but could not be connected; the office can retry or
-      // the redemption simply creates a fresh record via the membership trigger.
-      console.error('Failed to connect invite to personnel record:', error);
-      return { success: false, error: 'invite_connect_failed' };
-    }
-
-    await recordPersonnelEvent(admin, {
+    // „Einladung versendet“ in the record history is a separate write after the
+    // mail on purpose: a mail cannot join a database transaction, and the row
+    // must only claim a mail that went out. The history is append-only, so a
+    // row written with the invite in create_organization_invite could not be
+    // withdrawn when the mail fails. A failed write here is logged and the
+    // sent invite stands.
+    await recordEmployeeRecordEvent(admin, {
       orgId,
       employeeRecordId: recordId,
       eventType: 'invite_connected',
-      eventPayload: { invite_id: inviteResult.inviteId, email },
+      eventPayload: { invite_id: sent.inviteId, email },
       actorId: userId,
     });
 
-    updateTag(CACHE_TAGS.personnel(orgId));
-
     return { success: true };
   } catch (error) {
-    console.error('Unexpected error in sendPersonnelInvite:', error);
+    logError('Unexpected error in sendPersonnelInvite:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }

@@ -26,33 +26,36 @@ type ListRowProps = React.HTMLAttributes<HTMLDivElement> & {
   asChild?: boolean;
   /** Loading placeholder: same box, same hover, hidden from assistive tech. */
   skeleton?: boolean;
+  /** Stable identity for tests and row-scoped lookups; never styled. */
+  rowId?: string | undefined;
 };
 
 export function listRowClassName(
   interactive: boolean | undefined,
   className?: string,
-  variant: ListRowVariant = 'card'
+  variant: ListRowVariant = 'card',
 ): string {
   return cn(
     variant === 'plain' ? LIST_ROW_PLAIN_CLASS : LIST_ROW_BASE_CLASS,
     interactive && LIST_ROW_INTERACTIVE_CLASS,
-    className
+    className,
   );
 }
 
 export const ListRow = React.forwardRef<HTMLDivElement, ListRowProps>(
-  ({ interactive, variant, asChild, skeleton, className, ...props }, ref) => {
+  ({ interactive, variant, asChild, skeleton, rowId, className, ...props }, ref) => {
     const Comp = asChild ? Slot : 'div';
     return (
       <Comp
         ref={ref}
         data-slot="list-row"
+        data-row-id={rowId}
         data-skeleton={skeleton ? '' : undefined}
         aria-hidden={skeleton ? true : undefined}
         className={listRowClassName(interactive, className, variant)}
         {...props}
       />
     );
-  }
+  },
 );
 ListRow.displayName = 'ListRow';

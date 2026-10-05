@@ -1,8 +1,9 @@
-import { z } from 'zod';
+import { z } from '@/lib/zod';
 
 import type { BackgroundReadInput, BackgroundReadKind, BackgroundReadResult } from './background-reads';
+import type { ActionFailure } from '@/lib/action-result';
 
-export type BackgroundReadFailure = { success: false; error: 'background_read_failed' };
+export type BackgroundReadFailure = ActionFailure<'background_read_failed'>;
 
 const envelopeSchema = z.object({ success: z.boolean() }).passthrough();
 
@@ -17,7 +18,7 @@ const envelopeSchema = z.object({ success: z.boolean() }).passthrough();
 export async function readInBackground<Kind extends BackgroundReadKind>(
   kind: Kind,
   input: BackgroundReadInput<Kind>,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<BackgroundReadResult<Kind> | BackgroundReadFailure> {
   try {
     const query = new URLSearchParams({ kind, input: JSON.stringify(input) });

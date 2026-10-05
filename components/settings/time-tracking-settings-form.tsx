@@ -1,134 +1,107 @@
-'use client'
+'use client';
 
-import { zodResolver } from '@hookform/resolvers/zod'
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useForm } from 'react-hook-form'
-import { z } from 'zod'
+import { describeFailure } from '@/lib/action-messages';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useForm } from 'react-hook-form';
+import { z } from '@/lib/zod';
 
-import { useBanner } from '@/components/ui/banner'
-import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import { Field } from '@/components/ui/field'
-import { Form, FormField } from '@/components/ui/form'
-import { Input } from '@/components/ui/input'
-import { InlinePending } from '@/components/ui/inline-pending'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { updateTimeTrackingSettings } from '@/lib/time-tracking/settings-actions'
+import { useBanner } from '@/components/ui/banner';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Field } from '@/components/ui/field';
+import { Form, FormField } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import { InlinePending } from '@/components/ui/inline-pending';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { updateTimeTrackingSettings } from '@/lib/time-tracking/settings-actions';
 import {
   BREAK_MODE_OPTIONS,
   timeTrackingSettingsSchema,
   type TimeTrackingSettingsValues,
-} from '@/lib/time-tracking/settings'
+} from '@/lib/time-tracking/settings';
 
 const ERROR_MESSAGES = {
-  not_authenticated: 'Du bist nicht angemeldet.',
   org_not_found: 'Die aktive Organisation konnte nicht gefunden werden.',
   not_authorized: 'Nur Admins können diese Regeln ändern.',
   invalid_input: 'Bitte prüfe die Pausenregeln.',
   no_changes: 'Es wurden keine Änderungen vorgenommen.',
   update_failed: 'Die Zeiterfassungsregeln konnten nicht gespeichert werden.',
-} satisfies Record<string, string>
-const ERROR_MESSAGE_BY_CODE: Record<string, string> = ERROR_MESSAGES
+} satisfies Record<string, string>;
 
 type TimeTrackingSettingsFormProps = {
-  initialSettings: TimeTrackingSettingsValues
-  role: 'admin' | 'buero' | 'employee'
-}
+  initialSettings: TimeTrackingSettingsValues;
+  role: 'admin' | 'buero' | 'employee';
+};
 
-type TimeTrackingSettingsFormInput = z.input<typeof timeTrackingSettingsSchema>
-type TimeTrackingSettingsFormOutput = z.output<typeof timeTrackingSettingsSchema>
+type TimeTrackingSettingsFormInput = z.input<typeof timeTrackingSettingsSchema>;
+type TimeTrackingSettingsFormOutput = z.output<typeof timeTrackingSettingsSchema>;
 
-export function TimeTrackingSettingsForm({
-  initialSettings,
-  role,
-}: TimeTrackingSettingsFormProps) {
-  const router = useRouter()
-  const { showBanner } = useBanner()
-  const [isSaving, setIsSaving] = useState(false)
-  const canEdit = role === 'admin'
+export function TimeTrackingSettingsForm({ initialSettings, role }: TimeTrackingSettingsFormProps) {
+  const router = useRouter();
+  const { showBanner } = useBanner();
+  const [isSaving, setIsSaving] = useState(false);
+  const canEdit = role === 'admin';
   const {
     breakMode: initialBreakMode,
     autoBreakThresholdMinutes: initialAutoBreakThresholdMinutes,
     autoBreakDurationMinutes: initialAutoBreakDurationMinutes,
-  } = initialSettings
+  } = initialSettings;
 
-  const form = useForm<
-    TimeTrackingSettingsFormInput,
-    undefined,
-    TimeTrackingSettingsFormOutput
-  >({
+  const form = useForm<TimeTrackingSettingsFormInput, undefined, TimeTrackingSettingsFormOutput>({
     resolver: zodResolver(timeTrackingSettingsSchema),
     defaultValues: initialSettings,
-  })
+  });
 
-  const selectedBreakMode = form.watch('breakMode')
-  const { reset } = form
+  const selectedBreakMode = form.watch('breakMode');
+  const { reset } = form;
 
   useEffect(() => {
     reset({
       breakMode: initialBreakMode,
       autoBreakThresholdMinutes: initialAutoBreakThresholdMinutes,
       autoBreakDurationMinutes: initialAutoBreakDurationMinutes,
-    })
-  }, [
-    initialAutoBreakDurationMinutes,
-    initialAutoBreakThresholdMinutes,
-    initialBreakMode,
-    reset,
-  ])
+    });
+  }, [initialAutoBreakDurationMinutes, initialAutoBreakThresholdMinutes, initialBreakMode, reset]);
 
   const onSubmit = form.handleSubmit(async (values) => {
     if (!canEdit) {
-      return
+      return;
     }
 
-    setIsSaving(true)
+    setIsSaving(true);
 
     try {
-      const result = await updateTimeTrackingSettings(values)
+      const result = await updateTimeTrackingSettings(values);
 
       if (!result.success) {
         showBanner({
-          message: ERROR_MESSAGE_BY_CODE[result.error] ?? ERROR_MESSAGES.update_failed,
+          message: describeFailure(result.error, ERROR_MESSAGES, ERROR_MESSAGES.update_failed),
           variant: 'error',
-        })
-        return
+        });
+        return;
       }
 
       form.reset({
         breakMode: result.breakMode,
         autoBreakThresholdMinutes: result.autoBreakThresholdMinutes,
         autoBreakDurationMinutes: result.autoBreakDurationMinutes,
-      })
-      router.refresh()
+      });
+      router.refresh();
       showBanner({
         message: 'Die Regeln für die Zeiterfassung wurden gespeichert.',
         variant: 'success',
-      })
-    } catch (error) {
-      console.error('Unexpected error saving time-tracking settings:', error)
-      showBanner({ message: ERROR_MESSAGES.update_failed, variant: 'error' })
+      });
+    } catch {
+      showBanner({ message: ERROR_MESSAGES.update_failed, variant: 'error' });
     } finally {
-      setIsSaving(false)
+      setIsSaving(false);
     }
-  })
+  });
 
   return (
-    <div className="space-y-6 pb-28">
+    <div className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -136,8 +109,7 @@ export function TimeTrackingSettingsForm({
             <InlinePending active={isSaving} label="Zeiterfassungsregeln werden gespeichert" />
           </CardTitle>
           <CardDescription>
-            Lege fest, ob Pausen weiter manuell gestempelt werden oder automatisch
-            abgezogen werden.
+            Lege fest, ob Pausen weiter manuell gestempelt werden oder automatisch abgezogen werden.
           </CardDescription>
         </CardHeader>
         <Form {...form}>
@@ -151,8 +123,8 @@ export function TimeTrackingSettingsForm({
                     label="Art der Pausenbuchung"
                     required
                     description={
-                      BREAK_MODE_OPTIONS.find((option) => option.value === field.value)
-                        ?.description ?? BREAK_MODE_OPTIONS[0]?.description
+                      BREAK_MODE_OPTIONS.find((option) => option.value === field.value)?.description ??
+                      BREAK_MODE_OPTIONS[0]?.description
                     }
                     error={fieldState.error?.message}
                   >
@@ -187,20 +159,18 @@ export function TimeTrackingSettingsForm({
                       description="Ab dieser gesamten Anwesenheitszeit wird die automatische Pause berücksichtigt."
                       error={fieldState.error?.message}
                     >
-                        <Input
-                          name={field.name}
-                          ref={field.ref}
-                          type="text"
-                          inputMode="numeric"
-                          disabled={!canEdit || isSaving || selectedBreakMode !== 'automatic'}
-                          onBlur={field.onBlur}
-                          value={typeof field.value === 'number' ? field.value : ''}
-                          onChange={(event) =>
-                            field.onChange(
-                              Number(event.target.value.replace(/[^0-9]/g, '') || 0)
-                            )
-                          }
-                        />
+                      <Input
+                        name={field.name}
+                        ref={field.ref}
+                        type="text"
+                        inputMode="numeric"
+                        disabled={!canEdit || isSaving || selectedBreakMode !== 'automatic'}
+                        onBlur={field.onBlur}
+                        value={typeof field.value === 'number' ? field.value : ''}
+                        onChange={(event) =>
+                          field.onChange(Number(event.target.value.replace(/[^0-9]/g, '') || 0))
+                        }
+                      />
                     </Field>
                   )}
                 />
@@ -214,20 +184,18 @@ export function TimeTrackingSettingsForm({
                       description="Diese Minuten werden automatisch abgezogen, sobald die Schwelle erreicht ist."
                       error={fieldState.error?.message}
                     >
-                        <Input
-                          name={field.name}
-                          ref={field.ref}
-                          type="text"
-                          inputMode="numeric"
-                          disabled={!canEdit || isSaving || selectedBreakMode !== 'automatic'}
-                          onBlur={field.onBlur}
-                          value={typeof field.value === 'number' ? field.value : ''}
-                          onChange={(event) =>
-                            field.onChange(
-                              Number(event.target.value.replace(/[^0-9]/g, '') || 0)
-                            )
-                          }
-                        />
+                      <Input
+                        name={field.name}
+                        ref={field.ref}
+                        type="text"
+                        inputMode="numeric"
+                        disabled={!canEdit || isSaving || selectedBreakMode !== 'automatic'}
+                        onBlur={field.onBlur}
+                        value={typeof field.value === 'number' ? field.value : ''}
+                        onChange={(event) =>
+                          field.onChange(Number(event.target.value.replace(/[^0-9]/g, '') || 0))
+                        }
+                      />
                     </Field>
                   )}
                 />
@@ -239,16 +207,13 @@ export function TimeTrackingSettingsForm({
                   ? 'Neue Regeln gelten sofort für offene und kommende Zeiterfassungen. Bereits abgeschlossene Historie wird nicht rückwirkend umgeschrieben.'
                   : 'Du kannst diese Regeln einsehen, aber nur der Admin kann sie ändern.'}
               </p>
-              <Button
-                type="submit"
-                disabled={!canEdit || isSaving || !form.formState.isDirty}
-              >
-                {isSaving ? 'Speichert...' : 'Zeiterfassung speichern'}
+              <Button type="submit" disabled={!canEdit || isSaving || !form.formState.isDirty}>
+                {isSaving ? 'Speichert…' : 'Zeiterfassung speichern'}
               </Button>
             </CardFooter>
           </form>
         </Form>
       </Card>
     </div>
-  )
+  );
 }

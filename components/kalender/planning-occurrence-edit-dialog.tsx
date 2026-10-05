@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Loader2, Repeat2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { usePlanningOptions } from '@/hooks/use-planning-options';
+
+import { Loader2 } from 'lucide-react';
 
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
-import { DatePicker } from '@/components/ui/date-picker';
 import {
   Dialog,
   DialogBody,
@@ -15,47 +16,38 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { DurationHoursInput } from '@/components/ui/duration-hours-input';
 import { ErrorText } from '@/components/ui/error-text';
-import { Field } from '@/components/ui/field';
-import { SearchableMultiSelect } from '@/components/ui/searchable-select';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { TimeInput } from '@/components/ui/time-input';
-import {
-  formatMinutesAsHoursInput,
-  parseHoursInputToMinutes,
-} from '@/lib/jobs/planned-working';
+import { focusFirstInvalidField, REASON_MIN_8_MESSAGE } from '@/lib/ui/field-validation';
+import { formatMinutesAsHoursInput } from '@/lib/jobs/planned-working';
 import type { CalendarJob } from '@/lib/jobs/types';
 import {
-  extendPlanningSeriesHorizon,
-  getPlanningOptions,
   reschedulePlanningSeries,
   setPlanningOccurrenceStatus,
   updatePlanningCalendarEntry,
 } from '@/lib/planning/actions';
 import type { PlanningConflict } from '@/lib/planning/types';
-import { toLocalDateString } from '@/lib/utils';
 import { calendarRefusalMessage } from '@/lib/calendar/messages';
+import {
+  checkPlanningOccurrenceEdit,
+  planningEditSuccessMessage,
+  planningStatusChangeMessage,
+  type PlanningEditScope,
+  type PlanningOccurrenceFieldErrors,
+  type PlanningStatusIntent,
+} from '@/lib/calendar/planning-occurrence-edit';
+import {
+  PlanningOccurrenceConflictWarning,
+  PlanningOccurrenceScheduleFields,
+  PlanningOccurrenceStatusPanel,
+  PlanningSeriesScopeField,
+} from './planning-occurrence-edit-sections';
+import { usePlanningSeriesExtension } from './use-planning-series-extension';
 
 interface PlanningOccurrenceEditDialogProps {
   job: CalendarJob;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
-}
-
-function isoToLocalDate(value: string): Date | undefined {
-  if (!value) return undefined;
-  const [year, month, day] = value.split('-').map(Number);
-  if (year === undefined || month === undefined || day === undefined) return undefined;
-  return new Date(year, month - 1, day);
 }
 
 export function PlanningOccurrenceEditDialog({
@@ -65,82 +57,39 @@ export function PlanningOccurrenceEditDialog({
   onSuccess,
 }: PlanningOccurrenceEditDialogProps) {
   const { showBanner } = useBanner();
-  const assignedEmployeeRecordKey = (
-    job.assignedEmployeeRecordIds ?? []
-  ).join(',');
+  const assignedEmployeeRecordKey = (job.assignedEmployeeRecordIds ?? []).join(',');
   const [date, setDate] = useState(job.plannedDate ?? '');
   const [time, setTime] = useState(job.plannedTime ?? '09:00');
   const [durationHours, setDurationHours] = useState(
-    formatMinutesAsHoursInput(job.estimatedDurationMinutes ?? 60)
+    formatMinutesAsHoursInput(job.estimatedDurationMinutes ?? 60),
   );
-  const [scope, setScope] = useState<'one' | 'future' | 'series'>('one');
-  const [employeeRecordIds, setEmployeeRecordIds] = useState(
-    job.assignedEmployeeRecordIds ?? []
-  );
-  const [employees, setEmployees] = useState<
-    Array<{
-      employeeRecordId: string;
-      firstName: string;
-      lastName: string;
-      employeeNumber: string | null;
-      userId: string | null;
-    }>
-  >([]);
-  const [optionsFailed, setOptionsFailed] = useState(false);
+  const [scope, setScope] = useState<PlanningEditScope>('one');
+  const [employeeRecordIds, setEmployeeRecordIds] = useState(job.assignedEmployeeRecordIds ?? []);
+  const employeeSearch = usePlanningOptions('employees', employeeRecordIds, [], open);
   const [conflicts, setConflicts] = useState<PlanningConflict[]>([]);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [statusIntent, setStatusIntent] = useState<
-    'skipped' | 'cancelled' | null
-  >(null);
-  const [extending, setExtending] = useState(false);
-  const [extendError, setExtendError] = useState<string | null>(null);
-  const [extendConflicts, setExtendConflicts] = useState<PlanningConflict[]>([]);
-  const [extendFingerprint, setExtendFingerprint] = useState<string | null>(
-    null
-  );
-  const [extendReason, setExtendReason] = useState('');
+  const [statusIntent, setStatusIntent] = useState<PlanningStatusIntent | null>(null);
+  const [statusReasonError, setStatusReasonError] = useState<string | undefined>();
+  const extension = usePlanningSeriesExtension({ seriesId: job.seriesId, showBanner, onSuccess });
+  const { resetSeriesExtension } = extension;
 
   useEffect(() => {
     if (!open) return;
     setDate(job.plannedDate ?? '');
     setTime(job.plannedTime ?? '09:00');
-    setDurationHours(
-      formatMinutesAsHoursInput(job.estimatedDurationMinutes ?? 60)
-    );
+    setDurationHours(formatMinutesAsHoursInput(job.estimatedDurationMinutes ?? 60));
     setScope('one');
-    setEmployeeRecordIds(
-      assignedEmployeeRecordKey ? assignedEmployeeRecordKey.split(',') : []
-    );
+    setEmployeeRecordIds(assignedEmployeeRecordKey ? assignedEmployeeRecordKey.split(',') : []);
     setConflicts([]);
     setFingerprint(null);
     setReason('');
     setSubmitError(null);
     setStatusIntent(null);
-    setExtendError(null);
-    setExtendConflicts([]);
-    setExtendFingerprint(null);
-    setExtendReason('');
-    setOptionsFailed(false);
-    let active = true;
-    void getPlanningOptions()
-      .then((result) => {
-        if (!active) return;
-        if (result.success) {
-          setEmployees(result.employees);
-          return;
-        }
-        setOptionsFailed(true);
-      })
-      .catch(() => {
-        if (!active) return;
-        setOptionsFailed(true);
-      });
-    return () => {
-      active = false;
-    };
+    setStatusReasonError(undefined);
+    resetSeriesExtension();
   }, [
     assignedEmployeeRecordKey,
     job.estimatedDurationMinutes,
@@ -148,59 +97,32 @@ export function PlanningOccurrenceEditDialog({
     job.plannedDate,
     job.plannedTime,
     open,
+    resetSeriesExtension,
   ]);
 
-  const employeeOptions = useMemo(
-    () =>
-      employees.map((employee) => ({
-        value: employee.employeeRecordId,
-        label:
-          `${employee.firstName} ${employee.lastName}`.trim() ||
-          employee.employeeNumber ||
-          'Unbenannt',
-        description: employee.userId ? undefined : 'Ohne App-Zugang',
-      })),
-    [employees]
-  );
-
-  const [fieldErrors, setFieldErrors] = useState<{
-    date?: string;
-    duration?: string;
-    reason?: string;
-  }>({});
-  const durationMinutes = parseHoursInputToMinutes(durationHours);
-  const durationInvalid =
-    job.timeKind !== 'all_day' &&
-    (durationMinutes === null ||
-      durationMinutes < 15 ||
-      durationMinutes > 168 * 60);
+  const [fieldErrors, setFieldErrors] = useState<PlanningOccurrenceFieldErrors>({});
 
   async function handleSubmit() {
     if (!job.occurrenceId) return;
     setFieldErrors({});
-    // Required inputs in visual order; the first missing one gets the focus.
-    const missing: Array<[keyof typeof fieldErrors, string, string]> = [];
-    if (!date) missing.push(['date', 'Bitte wähle ein Datum.', 'planning-edit-date']);
-    if (durationInvalid) missing.push(['duration', 'Bitte eine gültige Dauer angeben.', 'planning-edit-duration']);
-    if (conflicts.length > 0 && reason.trim().length < 8) missing.push(['reason', 'Bitte begründe die Änderung mit mindestens 8 Zeichen.', 'planning-edit-reason']);
-    const [firstMissing] = missing;
-    if (firstMissing) {
-      setFieldErrors(Object.fromEntries(missing.map(([key, message]) => [key, message])));
-      document.getElementById(firstMissing[2])?.focus();
+    const editCheck = checkPlanningOccurrenceEdit({
+      date,
+      time,
+      durationHours,
+      timeKind: job.timeKind,
+      employeeRecordIds,
+      conflicts,
+      fingerprint,
+      reason,
+    });
+    if (editCheck.kind === 'missing') {
+      setFieldErrors(Object.fromEntries(editCheck.inputs.map(({ field, message }) => [field, message])));
+      document.getElementById(editCheck.inputs[0].elementId)?.focus();
       return;
     }
     setSubmitting(true);
     setSubmitError(null);
-    const input = {
-      plannedDate: date,
-      ...(job.timeKind === 'all_day' ? {} : { plannedTime: time }),
-      ...(job.timeKind === 'all_day' || durationMinutes === null
-        ? {}
-        : { estimatedDurationMinutes: durationMinutes }),
-      selectedEmployeeRecordIds: employeeRecordIds,
-      overrideReason: conflicts.length ? reason || null : null,
-      assessmentFingerprint: conflicts.length ? fingerprint : null,
-    };
+    const { input } = editCheck;
     try {
       const result =
         scope === 'one'
@@ -208,27 +130,16 @@ export function PlanningOccurrenceEditDialog({
           : await reschedulePlanningSeries(job.occurrenceId, scope, input);
       if (result.success) {
         onOpenChange(false);
-        showBanner({
-          variant: 'success',
-          message:
-            scope === 'one'
-              ? 'Termin wurde angepasst.'
-              : scope === 'future'
-                ? 'Dieser und zukünftige Termine wurden angepasst.'
-                : 'Alle noch änderbaren Serientermine wurden angepasst.',
-        });
+        showBanner({ variant: 'success', message: planningEditSuccessMessage(scope) });
         onSuccess?.();
         return;
       }
       if (
-        (result.error === 'planning_warning' ||
-          result.error === 'stale_assessment') &&
-        'conflicts' in result &&
-        'fingerprint' in result &&
-        Array.isArray(result.conflicts) &&
-        typeof result.fingerprint === 'string'
+        (result.error === 'planning_warning' || result.error === 'stale_assessment') &&
+        result.conflicts !== undefined &&
+        result.fingerprint !== undefined
       ) {
-        setConflicts(result.conflicts as PlanningConflict[]);
+        setConflicts(result.conflicts);
         setFingerprint(result.fingerprint);
         if (result.error === 'stale_assessment') {
           showBanner({
@@ -246,88 +157,21 @@ export function PlanningOccurrenceEditDialog({
     }
   }
 
-  // P1-11-F02: one click extends the series horizon by six months at a time.
-  // The extension re-checks capacity/qualification like any other planning and
-  // demands a fresh decision when the facts changed since the shown warning.
-  async function handleExtendSeries() {
-    if (!job.seriesId) return;
-    if (extendConflicts.length > 0 && extendReason.trim().length < 8) return;
-    setExtending(true);
-    setExtendError(null);
-    try {
-      const result = await extendPlanningSeriesHorizon(
-        job.seriesId,
-        extendConflicts.length > 0
-          ? {
-              assessmentFingerprint: extendFingerprint,
-              overrideReason: extendReason.trim(),
-            }
-          : undefined
-      );
-      if (result.success) {
-        if (result.occurrenceIds.length === 0) {
-          showBanner({
-            variant: 'info',
-            message: 'Die Serie ist bereits bis zu ihrem Ende geplant.',
-          });
-          return;
-        }
-        showBanner({
-          variant: 'success',
-          message: `Serie wurde um sechs Monate verlängert (${result.occurrenceIds.length} neue Termine).`,
-        });
-        setExtendConflicts([]);
-        setExtendFingerprint(null);
-        setExtendReason('');
-        onSuccess?.();
-        return;
-      }
-      if (
-        (result.error === 'planning_warning' ||
-          result.error === 'stale_assessment') &&
-        result.conflicts &&
-        result.fingerprint
-      ) {
-        setExtendConflicts(result.conflicts);
-        setExtendFingerprint(result.fingerprint);
-        if (result.error === 'stale_assessment') {
-          showBanner({
-            variant: 'info',
-            message: 'Die Planungslage hat sich geändert. Bitte erneut prüfen.',
-          });
-        }
-        return;
-      }
-      setExtendError(calendarRefusalMessage(result.error) ?? 'Die Serie konnte nicht verlängert werden.');
-    } catch {
-      setExtendError('Die Serie konnte nicht verlängert werden.');
-    } finally {
-      setExtending(false);
-    }
-  }
-
   async function handleStatusChange() {
-    if (!job.occurrenceId || !statusIntent || reason.trim().length < 8) return;
+    if (!job.occurrenceId || !statusIntent) return;
+    const reasonError = reason.trim().length < 8 ? REASON_MIN_8_MESSAGE : undefined;
+    setStatusReasonError(reasonError);
+    if (focusFirstInvalidField({ 'planning-status-reason': reasonError })) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const result = await setPlanningOccurrenceStatus(
-        job.occurrenceId,
-        statusIntent,
-        reason
-      );
+      const result = await setPlanningOccurrenceStatus(job.occurrenceId, statusIntent, reason);
       if (!result.success) {
         setSubmitError('Der Terminstatus konnte nicht geändert werden.');
         return;
       }
       onOpenChange(false);
-      showBanner({
-        variant: 'success',
-        message:
-          statusIntent === 'skipped'
-            ? 'Termin wurde ausgelassen.'
-            : 'Termin wurde abgesagt.',
-      });
+      showBanner({ variant: 'success', message: planningStatusChangeMessage(statusIntent) });
       onSuccess?.();
     } catch {
       setSubmitError('Der Terminstatus konnte nicht geändert werden.');
@@ -337,13 +181,11 @@ export function PlanningOccurrenceEditDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+    <Dialog open={open} onOpenChange={onOpenChange} pending={submitting}>
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Geplanten Termin bearbeiten</DialogTitle>
-          <DialogDescription>
-            Die Planung ändert keine bereits erfasste Arbeitszeit.
-          </DialogDescription>
+          <DialogDescription>Die Planung ändert keine bereits erfasste Arbeitszeit.</DialogDescription>
         </DialogHeader>
         <form
           onSubmit={(event) => {
@@ -355,274 +197,123 @@ export function PlanningOccurrenceEditDialog({
         >
           <DialogBody className="space-y-4">
             {job.seriesId && (
-              <Field label="Änderungsumfang" htmlFor="planning-edit-scope">
-                <Select
-                  value={scope}
-                  onValueChange={(value) => {
-                    setScope(value as typeof scope);
-                    setConflicts([]);
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="one">Nur dieser Termin</SelectItem>
-                    <SelectItem value="future">Dieser und zukünftige</SelectItem>
-                    <SelectItem value="series">Ganze Serie ab frühestem änderbaren Termin</SelectItem>
-                  </SelectContent>
-                </Select>
-                {scope !== 'one' && (
-                  <p className="flex gap-1.5 text-xs text-muted-foreground">
-                    <Repeat2 className="mt-0.5 size-3.5 shrink-0" />
-                    Vergangene, begonnene und einzeln angepasste Termine bleiben
-                    erhalten. „Dieser und zukünftige“ erzeugt einen
-                    nachvollziehbaren Serienabschnitt.
-                  </p>
-                )}
-                <div className="space-y-2 rounded-md border bg-muted/20 p-2.5">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs text-muted-foreground">
-                      Die Serie ist zunächst 18 Monate im Voraus geplant.
-                    </p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={
-                        extending ||
-                        (extendConflicts.length > 0 &&
-                          extendReason.trim().length < 8)
-                      }
-                      onClick={() => void handleExtendSeries()}
-                    >
-                      {extending && <Loader2 className="size-4 animate-spin" />}
-                      {extending
-                        ? 'Wird verlängert …'
-                        : extendConflicts.length > 0
-                          ? 'Mit Begründung verlängern'
-                          : 'Serie um sechs Monate verlängern'}
-                    </Button>
-                  </div>
-                  <ErrorText>{extendError}</ErrorText>
-                  {extendConflicts.length > 0 && (
-                    <div
-                      data-planning-warning
-                      role="status"
-                      className="space-y-2 rounded-md border border-warning/40 bg-warning-soft p-2.5"
-                    >
-                      <p className="text-sm font-medium">Planungshinweise</p>
-                      <ul className="space-y-1 text-sm">
-                        {extendConflicts.map((conflict, index) => (
-                          <li key={`extend-${conflict.kind}-${index}`}>
-                            •{' '}
-                            {conflict.employeeName
-                              ? `${conflict.employeeName}: `
-                              : ''}
-                            {conflict.message}
-                            {conflict.localDate ? ` (${conflict.localDate})` : ''}
-                          </li>
-                        ))}
-                      </ul>
-                      <Field label="Begründung" htmlFor="planning-extend-reason" required>
-                        <Textarea
-                          value={extendReason}
-                          onChange={(event) => setExtendReason(event.target.value)}
-                          placeholder="Warum ist die Verlängerung trotzdem sinnvoll?"
-                        />
-                      </Field>
-                    </div>
-                  )}
-                </div>
-              </Field>
-            )}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Datum" htmlFor="planning-edit-date" required error={fieldErrors.date}>
-                <DatePicker
-                  ariaLabel="Datum des Termins"
-                  value={isoToLocalDate(date)}
-                  onChange={(nextDate) => {
-                    setDate(nextDate ? toLocalDateString(nextDate) : '');
-                    setConflicts([]);
-                  }}
-                />
-              </Field>
-              {job.timeKind !== 'all_day' && (
-                <Field label="Beginn" htmlFor="planning-edit-time" required>
-                  <TimeInput
-                    value={time}
-                    onChange={(nextTime) => {
-                      setTime(nextTime);
-                      setConflicts([]);
-                    }}
-                  />
-                </Field>
-              )}
-            </div>
-            {job.timeKind !== 'all_day' && (
-              <Field label="Dauer" htmlFor="planning-edit-duration" required error={fieldErrors.duration}>
-                <DurationHoursInput
-                  id="planning-edit-duration"
-                  value={durationHours}
-                  onChange={(nextValue) => {
-                    setDurationHours(nextValue);
-                    setConflicts([]);
-                  }}
-                />
-              </Field>
-            )}
-            <Field
-              label="Mitarbeiter"
-              htmlFor="planning-edit-employees"
-              error={
-                optionsFailed
-                  ? 'Die Mitarbeiterliste konnte nicht geladen werden.'
-                  : null
-              }
-            >
-              <SearchableMultiSelect
-                options={employeeOptions}
-                selectedIds={employeeRecordIds}
-                onSelectionChange={(ids) => {
-                  setEmployeeRecordIds(ids);
-                  setConflicts([]);
-                }}
-                placeholder="Mitarbeiter zuweisen"
-                selectedLabel={(count) =>
-                  count === 1 ? '1 Mitarbeiter' : `${count} Mitarbeiter`
-                }
-                searchPlaceholder="Mitarbeiter suchen …"
-                emptyMessage="Kein Mitarbeiter gefunden"
+              <PlanningSeriesScopeField
+                scope={scope}
+                onScopeChange={setScope}
+                onConflictsChange={setConflicts}
+                extension={extension}
               />
-            </Field>
+            )}
+            <PlanningOccurrenceScheduleFields
+              timeKind={job.timeKind}
+              date={date}
+              dateError={fieldErrors.date}
+              onDateChange={setDate}
+              time={time}
+              onTimeChange={setTime}
+              durationHours={durationHours}
+              durationError={fieldErrors.duration}
+              onDurationHoursChange={setDurationHours}
+              employeeSelect={employeeSearch.select}
+              employeeRecordIds={employeeRecordIds}
+              onEmployeeRecordIdsChange={setEmployeeRecordIds}
+              onConflictsChange={setConflicts}
+            />
             {conflicts.length > 0 && (
-              <div data-planning-warning role="status" className="space-y-3 rounded-lg border border-warning/40 bg-warning-soft p-3">
-                <p className="flex items-center gap-2 font-medium">
-                  <AlertTriangle className="size-4 text-warning-text" />
-                  Planungshinweise
-                </p>
-                <ul className="space-y-1 text-sm">
-                  {conflicts.map((conflict, index) => (
-                    <li key={`${conflict.kind}-${index}`}>
-                      • {conflict.employeeName ? `${conflict.employeeName}: ` : ''}
-                      {conflict.message}
-                      {conflict.localDate ? ` (${conflict.localDate})` : ''}
-                    </li>
-                  ))}
-                </ul>
-                <Field
-                  label="Begründung"
-                  htmlFor="planning-edit-reason"
-                  required
-                  description="Mindestens 8 Zeichen."
-                  error={fieldErrors.reason}
-                >
-                  <Textarea
-                    value={reason}
-                    onChange={(event) => setReason(event.target.value)}
-                    placeholder="Warum ist die Änderung trotzdem sinnvoll?"
-                  />
-                </Field>
-              </div>
+              <PlanningOccurrenceConflictWarning
+                conflicts={conflicts}
+                reason={reason}
+                reasonError={fieldErrors.reason}
+                onReasonChange={setReason}
+              />
             )}
             {statusIntent && (
-              <div className="space-y-3 rounded-lg border p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="font-medium">
-                    {statusIntent === 'skipped'
-                      ? 'Diesen Termin auslassen'
-                      : 'Diesen Termin absagen'}
-                  </p>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setStatusIntent(null);
-                      setReason('');
-                      setSubmitError(null);
-                    }}
-                  >
-                    Zurück zum Bearbeiten
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Der Termin bleibt für Verlauf und Nachvollziehbarkeit erhalten
-                  und wird nicht gelöscht.
-                </p>
-                <Field
-                  label="Begründung"
-                  htmlFor="planning-status-reason"
-                  required
-                  description="Mindestens 8 Zeichen."
-                >
-                  <Textarea
-                    value={reason}
-                    onChange={(event) => setReason(event.target.value)}
-                    placeholder="Kurze nachvollziehbare Begründung"
-                  />
-                </Field>
-              </div>
+              <PlanningOccurrenceStatusPanel
+                statusIntent={statusIntent}
+                onStatusIntentChange={setStatusIntent}
+                reason={reason}
+                reasonError={statusReasonError}
+                onReasonChange={setReason}
+                onSubmitErrorChange={setSubmitError}
+              />
             )}
             <ErrorText>{submitError}</ErrorText>
           </DialogBody>
-          <DialogFooter className="pt-4">
-            <div className="mr-auto flex gap-2">
-              {job.seriesId && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setStatusIntent('skipped');
-                    setReason('');
-                    setConflicts([]);
-                    setSubmitError(null);
-                  }}
-                >
-                  Auslassen
-                </Button>
-              )}
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={() => {
-                  setStatusIntent('cancelled');
-                  setReason('');
-                  setConflicts([]);
-                  setSubmitError(null);
-                }}
-              >
-                Termin absagen
-              </Button>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Schließen
-            </Button>
-            <Button
-              type="submit"
-              disabled={
-                submitting ||
-                // Status changes (auslassen/absagen) are a one-field form and
-                // may gate on their reason; schedule edits report missing
-                // input on submit and only stay locked while the employee
-                // list failed to load.
-                (statusIntent !== null ? reason.trim().length < 8 : optionsFailed)
-              }
-            >
-              {submitting && <Loader2 className="size-4 animate-spin" />}
-              {submitting
-                ? 'Wird geprüft …'
-                : statusIntent
-                  ? 'Status speichern'
-                  : 'Änderung speichern'}
-            </Button>
-          </DialogFooter>
+          <PlanningOccurrenceEditFooter
+            isSeries={Boolean(job.seriesId)}
+            submitting={submitting}
+            statusIntent={statusIntent}
+            onStatusIntentChange={setStatusIntent}
+            onReasonChange={setReason}
+            onConflictsChange={setConflicts}
+            onSubmitErrorChange={setSubmitError}
+            onOpenChange={onOpenChange}
+          />
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+interface PlanningOccurrenceEditFooterProps {
+  isSeries: boolean;
+  submitting: boolean;
+  statusIntent: PlanningStatusIntent | null;
+  onStatusIntentChange: (statusIntent: PlanningStatusIntent | null) => void;
+  onReasonChange: (reason: string) => void;
+  onConflictsChange: (conflicts: PlanningConflict[]) => void;
+  onSubmitErrorChange: (submitError: string | null) => void;
+  onOpenChange: (open: boolean) => void;
+}
+
+/** Skip and cancel start the status step; the submit saves the edit or the status change. */
+function PlanningOccurrenceEditFooter({
+  isSeries,
+  submitting,
+  statusIntent,
+  onStatusIntentChange,
+  onReasonChange,
+  onConflictsChange,
+  onSubmitErrorChange,
+  onOpenChange,
+}: PlanningOccurrenceEditFooterProps) {
+  return (
+    <DialogFooter className="pt-4">
+      <div className="flex flex-col gap-2 sm:mr-auto sm:flex-row">
+        {isSeries && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              onStatusIntentChange('skipped');
+              onReasonChange('');
+              onConflictsChange([]);
+              onSubmitErrorChange(null);
+            }}
+          >
+            Auslassen
+          </Button>
+        )}
+        <Button
+          type="button"
+          variant="destructive"
+          onClick={() => {
+            onStatusIntentChange('cancelled');
+            onReasonChange('');
+            onConflictsChange([]);
+            onSubmitErrorChange(null);
+          }}
+        >
+          Termin absagen
+        </Button>
+      </div>
+      <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+        Schließen
+      </Button>
+      <Button type="submit" disabled={submitting}>
+        {submitting && <Loader2 className="size-4 animate-spin" />}
+        {submitting ? 'Wird geprüft …' : statusIntent ? 'Status speichern' : 'Änderung speichern'}
+      </Button>
+    </DialogFooter>
   );
 }

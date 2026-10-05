@@ -2,8 +2,15 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { autoScrollDue, autoScrollVelocity, exceedsDragThreshold } from '@/lib/calendar/drag-math';
+import { ghostPaint, ghostWidth, visibleGhostOrigin, zoneAtPoint } from '@/lib/calendar/drag-ghost';
 import { CALENDAR_LAYER_CLASS } from '../surface/layers';
-import { targetKey, type CalendarDragPayload, type CalendarDragTarget, type DragModifiers, type DragVerdict } from './payload';
+import {
+  targetKey,
+  type CalendarDragPayload,
+  type CalendarDragTarget,
+  type DragModifiers,
+  type DragVerdict,
+} from './payload';
 
 /**
  * The calendar's one drag engine (P1-24a, decision Q6): pointer events with
@@ -18,11 +25,24 @@ import { targetKey, type CalendarDragPayload, type CalendarDragTarget, type Drag
 export type DragSurface = {
   /** Client coordinates to a target, against a map computed at drag start. */
   /** `origin` is the ghost's top-left corner: the card's own edge, for surfaces with an axis. */
-  resolveTarget: (point: { x: number; y: number }, payload: CalendarDragPayload, modifiers: DragModifiers, origin: { x: number; y: number }) => CalendarDragTarget | null;
+  resolveTarget: (
+    point: { x: number; y: number },
+    payload: CalendarDragPayload,
+    modifiers: DragModifiers,
+    origin: { x: number; y: number },
+  ) => CalendarDragTarget | null;
   /** The client pre-check: the same rule the server enforces, or a view rule. */
-  checkTarget: (target: CalendarDragTarget, payload: CalendarDragPayload, modifiers: DragModifiers) => DragVerdict;
+  checkTarget: (
+    target: CalendarDragTarget,
+    payload: CalendarDragPayload,
+    modifiers: DragModifiers,
+  ) => DragVerdict;
   /** Called on target change only; writes to the DOM, never to React state. */
-  onTargetChange?: (target: CalendarDragTarget | null, verdict: DragVerdict | null, payload: CalendarDragPayload) => void;
+  onTargetChange?: (
+    target: CalendarDragTarget | null,
+    verdict: DragVerdict | null,
+    payload: CalendarDragPayload,
+  ) => void;
   onDrop: (target: CalendarDragTarget, payload: CalendarDragPayload, modifiers: DragModifiers) => void;
   onEnd?: (payload: CalendarDragPayload) => void;
   /** Auto-scroll container, if any. */
@@ -69,57 +89,121 @@ type ActiveDrag = {
 
 const LONG_PRESS_MS = 250;
 
+/** Writes the ghost's state, message, width and on-screen position for the current target. */
+function paintDragGhost(ghost: HTMLDivElement | null, drag: ActiveDrag): void {
+  if (!ghost) return;
+  const x = drag.last.x - drag.session.pointerOffset.x;
+  const y = drag.last.y - drag.session.pointerOffset.y;
+  const { state, text } = ghostPaint(Boolean(drag.target), drag.verdict);
+  ghost.dataset.state = state;
+  const message = ghost.querySelector<HTMLElement>('[data-ghost-message]');
+  if (message) {
+    if (message.textContent !== text) message.textContent = text;
+    message.hidden = text === '';
+    ghost.style.width = `${ghostWidth(drag.session.ghost.width, text !== '', window.innerWidth)}px`;
+  }
+  // A refusal can be taller than the source card. Keep the full message on screen
+  // without changing the pointer coordinates used to resolve the actual drop.
+  const visible = visibleGhostOrigin(
+    { x, y },
+    { width: ghost.offsetWidth, height: ghost.offsetHeight },
+    { width: window.innerWidth, height: window.innerHeight },
+  );
+  ghost.style.transform = `translate3d(${Math.round(visible.x)}px, ${Math.round(visible.y)}px, 0)`;
+}
+
+// The click that follows a pointer release lands on the drag source; after a
+// moved drag it must not open the card. One capture-phase listener eats it
+// and leaves on the next task if no click arrives.
+function suppressNextClick(): void {
+  const swallow = (event: MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    remove();
+  };
+  const remove = () => {
+    window.removeEventListener('click', swallow, true);
+    window.clearTimeout(timer);
+  };
+  window.addEventListener('click', swallow, true);
+  const timer = window.setTimeout(remove, 0);
+}
+
+/**
+ * The moment a press becomes a drag (past the threshold, or after a touch
+ * long-press): mark the body, let the surface compute its map, measure the
+ * drop zones and show the ghost at the source card's size.
+ */
+function activateDrag(
+  drag: ActiveDrag,
+  surface: DragSurface | null,
+  zones: readonly ZoneRegistration[],
+  ghost: HTMLDivElement | null,
+): void {
+  drag.moved = true;
+  document.body.classList.add('is-dragging');
+  surface?.prepare?.(drag.session.payload);
+  drag.zones = zones.map((registration) => ({
+    zone: registration.zone,
+    rect: registration.element.getBoundingClientRect(),
+  }));
+  if (ghost) {
+    ghost.hidden = false;
+    ghost.style.width = `${drag.session.ghost.width}px`;
+    ghost.style.minHeight = `${drag.session.ghost.height}px`;
+  }
+}
+
+/** Scrolls the container once the pointer has rested at its edge; true while the pointer is in the edge band. */
+function scrollAtEdge(drag: ActiveDrag, container: HTMLElement, point: { x: number; y: number }): boolean {
+  const rect = container.getBoundingClientRect();
+  const dx = autoScrollVelocity(point.x, rect.left, rect.right);
+  const dy = autoScrollVelocity(point.y, rect.top, rect.bottom);
+  if (dx === 0 && dy === 0) {
+    drag.edgeSince = null;
+    return false;
+  }
+  drag.edgeSince ??= performance.now();
+  if (autoScrollDue(drag.edgeSince, performance.now())) container.scrollBy(dx, dy);
+  return true;
+}
+
+/** The drag ends: stop the frame, hide the ghost, release the capture, swallow the click after a move. */
+function releaseDrag(drag: ActiveDrag, ghost: HTMLDivElement | null): void {
+  if (drag.frame !== null) cancelAnimationFrame(drag.frame);
+  document.body.classList.remove('is-dragging');
+  if (ghost) {
+    ghost.hidden = true;
+    ghost.dataset.state = 'idle';
+  }
+  if (drag.captured && 'releasePointerCapture' in drag.captured) {
+    try {
+      (drag.captured as HTMLElement).releasePointerCapture(drag.pointerId);
+    } catch {
+      /* already released */
+    }
+  }
+  if (drag.moved) suppressNextClick();
+}
+
 export function CalendarDragProvider({ children }: { children: ReactNode }): React.JSX.Element {
   const ghostRef = useRef<HTMLDivElement>(null);
   const surfaceRef = useRef<DragSurface | null>(null);
   const zonesRef = useRef<ZoneRegistration[]>([]);
   const activeRef = useRef<ActiveDrag | null>(null);
 
-  const paintGhost = useCallback((drag: ActiveDrag) => {
-    const ghost = ghostRef.current;
-    if (!ghost) return;
-    const x = drag.last.x - drag.session.pointerOffset.x;
-    const y = drag.last.y - drag.session.pointerOffset.y;
-    ghost.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`;
-    const verdict = drag.verdict;
-    ghost.dataset.state = !drag.target ? 'idle' : verdict?.ok ? 'valid' : 'refused';
-    const message = ghost.querySelector<HTMLElement>('[data-ghost-message]');
-    if (message) {
-      const text = drag.target && verdict && !verdict.ok ? verdict.message : (verdict?.ok && verdict.label) || '';
-      if (message.textContent !== text) message.textContent = text;
-      message.hidden = text === '';
-    }
-  }, []);
-
-  // The click that follows a pointer release lands on the drag source; after a
-  // moved drag it must not open the card. One capture-phase listener eats it
-  // and leaves on the next task if no click arrives.
-  const suppressNextClick = useCallback(() => {
-    const swallow = (event: MouseEvent) => { event.preventDefault(); event.stopPropagation(); remove(); };
-    const remove = () => { window.removeEventListener('click', swallow, true); window.clearTimeout(timer); };
-    window.addEventListener('click', swallow, true);
-    const timer = window.setTimeout(remove, 0);
-  }, []);
-
   const finish = useCallback((dropped: boolean) => {
     const drag = activeRef.current;
     if (!drag) return;
     activeRef.current = null;
-    if (drag.frame !== null) cancelAnimationFrame(drag.frame);
-    document.body.classList.remove('is-dragging');
-    const ghost = ghostRef.current;
-    if (ghost) { ghost.hidden = true; ghost.dataset.state = 'idle'; }
-    if (drag.captured && 'releasePointerCapture' in drag.captured) {
-      try { (drag.captured as HTMLElement).releasePointerCapture(drag.pointerId); } catch { /* already released */ }
-    }
-    if (drag.moved) suppressNextClick();
+    releaseDrag(drag, ghostRef.current);
     const surface = surfaceRef.current;
     surface?.onTargetChange?.(null, null, drag.session.payload);
     if (dropped && drag.moved && drag.target && drag.verdict?.ok && surface) {
       surface.onDrop(drag.target, drag.session.payload, { copy: drag.last.alt, fine: drag.last.shift });
     }
     surface?.onEnd?.(drag.session.payload);
-  }, [suppressNextClick]);
+  }, []);
 
   // One frame per pointer batch: resolve the target, run the pre-check on a
   // change, auto-scroll the surface's container, and paint the ghost.
@@ -131,22 +215,12 @@ export function CalendarDragProvider({ children }: { children: ReactNode }): Rea
     const surface = surfaceRef.current;
     const point = { x: drag.last.x, y: drag.last.y };
     const container = surface?.scrollContainer() ?? null;
-    if (container) {
-      const rect = container.getBoundingClientRect();
-      const dx = autoScrollVelocity(point.x, rect.left, rect.right);
-      const dy = autoScrollVelocity(point.y, rect.top, rect.bottom);
-      if (dx !== 0 || dy !== 0) {
-        drag.edgeSince ??= performance.now();
-        if (autoScrollDue(drag.edgeSince, performance.now())) container.scrollBy(dx, dy);
-        drag.frame = requestAnimationFrame(() => stepRef.current());
-      } else {
-        drag.edgeSince = null;
-      }
-    }
+    if (container && scrollAtEdge(drag, container, point))
+      drag.frame = requestAnimationFrame(() => stepRef.current());
     const modifiers: DragModifiers = { copy: drag.last.alt, fine: drag.last.shift };
     const origin = { x: point.x - drag.session.pointerOffset.x, y: point.y - drag.session.pointerOffset.y };
     // A card that left the Parkplatz cannot land back on it: the panel's zone is invisible to a parked payload.
-    const zone = drag.session.payload.kind === 'parked' ? undefined : drag.zones.find((entry) => point.x >= entry.rect.left && point.x <= entry.rect.right && point.y >= entry.rect.top && point.y <= entry.rect.bottom);
+    const zone = drag.session.payload.kind === 'parked' ? undefined : zoneAtPoint(drag.zones, point);
     const target: CalendarDragTarget | null = zone
       ? { kind: 'zone', zone: zone.zone }
       : (surface?.resolveTarget(point, drag.session.payload, modifiers, origin) ?? null);
@@ -157,9 +231,11 @@ export function CalendarDragProvider({ children }: { children: ReactNode }): Rea
       drag.verdict = target && surface ? surface.checkTarget(target, drag.session.payload, modifiers) : null;
       surface?.onTargetChange?.(target, drag.verdict, drag.session.payload);
     }
-    paintGhost(drag);
-  }, [paintGhost]);
-  useEffect(() => { stepRef.current = step; }, [step]);
+    paintDragGhost(ghostRef.current, drag);
+  }, []);
+  useEffect(() => {
+    stepRef.current = step;
+  }, [step]);
 
   const schedule = useCallback(() => {
     const drag = activeRef.current;
@@ -172,25 +248,11 @@ export function CalendarDragProvider({ children }: { children: ReactNode }): Rea
       const drag = activeRef.current;
       if (!drag || event.pointerId !== drag.pointerId) return;
       const events = 'getCoalescedEvents' in event ? event.getCoalescedEvents() : [];
-      const latest = events.length ? events[events.length - 1] ?? event : event;
+      const latest = events.length ? (events[events.length - 1] ?? event) : event;
       drag.last = { x: latest.clientX, y: latest.clientY, alt: event.altKey, shift: event.shiftKey };
       if (!drag.moved) {
         if (!exceedsDragThreshold(drag.start, drag.last)) return;
-        drag.moved = true;
-        document.body.classList.add('is-dragging');
-        const surface = surfaceRef.current;
-        surface?.prepare?.(drag.session.payload);
-        drag.zones = zonesRef.current.map((registration) => ({ zone: registration.zone, rect: registration.element.getBoundingClientRect() }));
-        const ghost = ghostRef.current;
-        if (ghost) {
-          ghost.hidden = false;
-          ghost.style.width = `${drag.session.ghost.width}px`;
-          ghost.style.height = `${drag.session.ghost.height}px`;
-          const label = ghost.querySelector<HTMLElement>('[data-ghost-label]');
-          if (label) label.textContent = drag.session.ghost.label;
-          const secondary = ghost.querySelector<HTMLElement>('[data-ghost-secondary]');
-          if (secondary) { secondary.textContent = drag.session.ghost.secondary ?? ''; secondary.hidden = !drag.session.ghost.secondary; }
-        }
+        activateDrag(drag, surfaceRef.current, zonesRef.current, ghostRef.current);
       }
       schedule();
     };
@@ -200,7 +262,10 @@ export function CalendarDragProvider({ children }: { children: ReactNode }): Rea
       drag.last = { x: event.clientX, y: event.clientY, alt: event.altKey, shift: event.shiftKey };
       if (drag.moved) {
         // A final synchronous resolve, so the drop lands where the pointer let go.
-        if (drag.frame !== null) { cancelAnimationFrame(drag.frame); drag.frame = null; }
+        if (drag.frame !== null) {
+          cancelAnimationFrame(drag.frame);
+          drag.frame = null;
+        }
         step();
       }
       finish(true);
@@ -213,7 +278,11 @@ export function CalendarDragProvider({ children }: { children: ReactNode }): Rea
     const onKey = (event: KeyboardEvent) => {
       const drag = activeRef.current;
       if (!drag) return;
-      if (event.key === 'Escape') { event.preventDefault(); finish(false); return; }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        finish(false);
+        return;
+      }
       if (event.key === 'Alt' || event.key === 'Shift') {
         drag.last = { ...drag.last, alt: event.altKey, shift: event.shiftKey };
         drag.targetKey = '';
@@ -230,64 +299,83 @@ export function CalendarDragProvider({ children }: { children: ReactNode }): Rea
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onCancel);
-    window.addEventListener('keydown', onKey);
+    // Capture, so Escape cancels the drag before the panels' document
+    // handlers see it; the cancel prevents default and the panel stays open.
+    window.addEventListener('keydown', onKey, { capture: true });
     window.addEventListener('keyup', onKeyUp);
     return () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onCancel);
-      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keydown', onKey, { capture: true });
       window.removeEventListener('keyup', onKeyUp);
       finish(false);
     };
   }, [finish, schedule, step]);
 
-  const startDrag = useCallback((event: React.PointerEvent, session: DragSession) => {
-    if (activeRef.current || event.button !== 0) return;
-    const element = event.currentTarget;
-    const isTouch = event.pointerType === 'touch';
-    const drag: ActiveDrag = {
-      session,
-      pointerId: event.pointerId,
-      start: { x: event.clientX, y: event.clientY },
-      last: { x: event.clientX, y: event.clientY, alt: event.altKey, shift: event.shiftKey },
-      moved: false,
-      zones: [],
-      targetKey: 'none',
-      target: null,
-      verdict: null,
-      frame: null,
-      captured: element,
-      edgeSince: null,
-    };
-    activeRef.current = drag;
-    try { element.setPointerCapture(event.pointerId); } catch { drag.captured = null; }
-    if (isTouch) {
-      // A touch starts the drag after a long press; a quick swipe pans instead.
-      window.setTimeout(() => {
-        const current = activeRef.current;
-        if (current === drag && !current.moved) {
-          current.moved = true;
-          document.body.classList.add('is-dragging');
-          surfaceRef.current?.prepare?.(session.payload);
-          current.zones = zonesRef.current.map((registration) => ({ zone: registration.zone, rect: registration.element.getBoundingClientRect() }));
-          const ghost = ghostRef.current;
-          if (ghost) { ghost.hidden = false; ghost.style.width = `${session.ghost.width}px`; ghost.style.height = `${session.ghost.height}px`; }
-          schedule();
-        }
-      }, LONG_PRESS_MS);
-    }
-  }, [schedule]);
-
-  const value = useMemo<EngineContextValue>(() => ({
-    startDrag,
-    registerSurface: (surface) => { surfaceRef.current = surface; },
-    registerDropZone: (registration) => {
-      zonesRef.current = [...zonesRef.current, registration];
-      return () => { zonesRef.current = zonesRef.current.filter((entry) => entry !== registration); };
+  const startDrag = useCallback(
+    (event: React.PointerEvent, session: DragSession) => {
+      if (activeRef.current || event.button !== 0) return;
+      const element = event.currentTarget;
+      const isTouch = event.pointerType === 'touch';
+      const drag: ActiveDrag = {
+        session,
+        pointerId: event.pointerId,
+        start: { x: event.clientX, y: event.clientY },
+        last: { x: event.clientX, y: event.clientY, alt: event.altKey, shift: event.shiftKey },
+        moved: false,
+        zones: [],
+        targetKey: 'none',
+        target: null,
+        verdict: null,
+        frame: null,
+        captured: element,
+        edgeSince: null,
+      };
+      activeRef.current = drag;
+      // Both pointer movement and a stationary touch long-press reveal this same content.
+      const label = ghostRef.current?.querySelector<HTMLElement>('[data-ghost-label]');
+      if (label) label.textContent = session.ghost.label;
+      const secondary = ghostRef.current?.querySelector<HTMLElement>('[data-ghost-secondary]');
+      if (secondary) {
+        secondary.textContent = session.ghost.secondary ?? '';
+        secondary.hidden = !session.ghost.secondary;
+      }
+      try {
+        element.setPointerCapture(event.pointerId);
+      } catch {
+        drag.captured = null;
+      }
+      if (isTouch) {
+        // A touch starts the drag after a long press; a quick swipe pans instead.
+        window.setTimeout(() => {
+          const current = activeRef.current;
+          if (current === drag && !current.moved) {
+            activateDrag(current, surfaceRef.current, zonesRef.current, ghostRef.current);
+            schedule();
+          }
+        }, LONG_PRESS_MS);
+      }
     },
-    isDragging: () => activeRef.current?.moved === true,
-  }), [startDrag]);
+    [schedule],
+  );
+
+  const value = useMemo<EngineContextValue>(
+    () => ({
+      startDrag,
+      registerSurface: (surface) => {
+        surfaceRef.current = surface;
+      },
+      registerDropZone: (registration) => {
+        zonesRef.current = [...zonesRef.current, registration];
+        return () => {
+          zonesRef.current = zonesRef.current.filter((entry) => entry !== registration);
+        };
+      },
+      isDragging: () => activeRef.current?.moved === true,
+    }),
+    [startDrag],
+  );
 
   return (
     <DragEngineContext.Provider value={value}>
@@ -302,7 +390,7 @@ export function CalendarDragProvider({ children }: { children: ReactNode }): Rea
       >
         <span data-ghost-label="" className="truncate" />
         <span data-ghost-secondary="" className="truncate text-[11px] opacity-80" hidden />
-        <span data-ghost-message="" className="whitespace-normal text-[11px] leading-tight" hidden />
+        <span data-ghost-message="" className="whitespace-normal break-words text-xs leading-normal" hidden />
       </div>
     </DragEngineContext.Provider>
   );

@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
+import { SHARED_FAILURE_CODES } from '@/lib/action-result';
 import {
   CALENDAR_REFUSAL_CODES,
   calendarRefusalMessage,
@@ -24,6 +26,8 @@ const CALENDAR_ACTION_MODULES = [
   'lib/work-lifecycle/actions.ts',
   'lib/time-tracking/actions.ts',
   'lib/calendar/actions.ts',
+  'lib/calendar/board-actions.ts',
+  'lib/calendar/preferences-actions.ts',
   'lib/calendar/client.ts',
   'lib/calendar/action-result.ts',
   'lib/parking/actions.ts',
@@ -52,7 +56,12 @@ describe('calendar message map', () => {
     for (const code of CALENDAR_REFUSAL_CODES) {
       const sentence = calendarRefusalMessage(code, { name: 'Sven Neumann', date: '18.9.' });
       if (sentence === null) {
-        expect(['planning_warning', 'qualification_warning', 'qualification_declined', 'no_changes']).toContain(code);
+        expect([
+          'planning_warning',
+          'qualification_warning',
+          'qualification_declined',
+          'no_changes',
+        ]).toContain(code);
         continue;
       }
       expect(sentence.length, code).toBeGreaterThan(20);
@@ -61,19 +70,30 @@ describe('calendar message map', () => {
     }
   });
 
+  test('every shared failure code has a sentence, and a closed period keeps the shared one', () => {
+    // A guard in any calendar-reachable action can answer a shared code
+    // (lib/action-result.ts); the database refuses time-fact writes in a
+    // closed period, so a calendar time edit can return `period_closed`.
+    for (const code of SHARED_FAILURE_CODES) {
+      expect(isCalendarRefusalCode(code), code).toBe(true);
+      expect(calendarRefusalMessage(code), code).not.toBeNull();
+    }
+    expect(calendarRefusalMessage('period_closed')).toBe(SHARED_FAILURE_MESSAGES.period_closed);
+  });
+
   test('fills the person and the date into the sentences that name them', () => {
     expect(calendarRefusalMessage('person_absent', { name: 'Sven Neumann', date: '18.9.' })).toBe(
       'Sven Neumann ist am 18.9. abwesend. Wähle einen anderen Tag oder eine andere Person.',
     );
-    expect(calendarRefusalMessage('overlapping_session', {})).toContain('Diese Person hat');
+    expect(calendarRefusalMessage('overlapping_time_block', {})).toContain('Diese Person hat');
   });
 
   test('passes a server sentence through, never renders an unknown code, and prefixes undo failures', () => {
     const serverSentence = 'Zeitstempel kann nicht in der Zukunft liegen.';
     expect(calendarRefusalMessage(serverSentence)).toBe(serverSentence);
     expect(calendarRefusalMessage('some_new_code')).not.toContain('some_new_code');
-    expect(calendarUndoFailureMessage('overlapping_session', { name: 'Mia' })).toBe(
-      'Rückgängig war nicht möglich: Mia hat in diesem Zeitraum bereits Arbeitszeit. Wähle eine freie Zeit oder eine andere Person.',
+    expect(calendarUndoFailureMessage('overlapping_time_block', { name: 'Mia' })).toBe(
+      'Rückgängig war nicht möglich: Mia hat in diesem Zeitraum bereits Arbeitszeit. Wähle eine freie Zeit.',
     );
     expect(formatRefusalDate('2026-09-08')).toBe('8.9.');
   });
@@ -83,12 +103,19 @@ describe('calendar message map', () => {
     function visit(directory: string): void {
       for (const entry of readdirSync(directory, { withFileTypes: true })) {
         const path = join(directory, entry.name);
-        if (entry.isDirectory()) { visit(path); continue; }
+        if (entry.isDirectory()) {
+          visit(path);
+          continue;
+        }
         if (!entry.name.endsWith('.tsx')) continue;
         const source = readFileSync(path, 'utf8');
         // A raw code reaches the user through `{result.error}`, `message: result.error`
         // or a `?? error` fallback; the message layer is the only allowed route.
-        if (/\{\s*\w+\.error\s*\}|message:\s*\w+\.error\s*[,}]|\?\?\s*\w+\.error\s*[,;)}]|return\s+error;/.test(source)) {
+        if (
+          /\{\s*\w+\.error\s*\}|message:\s*\w+\.error\s*[,}]|\?\?\s*\w+\.error\s*[,;)}]|return\s+error;/.test(
+            source,
+          )
+        ) {
           offenders.push(path.slice(repositoryRoot.length + 1));
         }
       }

@@ -6,7 +6,7 @@
 // an item its viewer cannot act on.
 
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
-import { z } from 'zod';
+import { z } from '@/lib/zod';
 
 import { useOrganization } from '@/components/organization/organization-context';
 import type { AttentionCounts } from '@/lib/attention/types';
@@ -23,8 +23,7 @@ type AttentionCountContextValue = AttentionCounts & {
   refreshAttentionCounts: () => Promise<void>;
 };
 
-const AttentionCountContext =
-  createContext<AttentionCountContextValue | null>(null);
+const AttentionCountContext = createContext<AttentionCountContextValue | null>(null);
 
 // Boundary parse of our own route handler's JSON (app/api/attention-counts).
 const attentionCountsResponseSchema = z.union([
@@ -77,6 +76,7 @@ export function AttentionCountProvider({
       'sickness_reports',
       'employee_capabilities',
       'organization_capabilities',
+      'organization_join_requests',
       'client_requests',
       'client_follow_ups',
       'planning_dispatches',
@@ -98,10 +98,7 @@ export function AttentionCountProvider({
       // than one that silently claims "nothing to do".
       return readAttentionCounts(signal);
     },
-    initialData:
-      activeOrgId && activeOrgId === initialOrganizationId
-        ? initialCounts
-        : undefined,
+    initialData: activeOrgId && activeOrgId === initialOrganizationId ? initialCounts : undefined,
     // Switching organizations resets to zero immediately: the previous
     // organization's numbers are wrong for the new one, and an honest zero
     // beats a stale claim while the fetch is in flight. Keep-last-known
@@ -116,22 +113,16 @@ export function AttentionCountProvider({
       ...(view.data ?? ZERO_COUNTS),
       refreshAttentionCounts: view.refresh,
     }),
-    [view.data, view.refresh]
+    [view.data, view.refresh],
   );
 
-  return (
-    <AttentionCountContext.Provider value={value}>
-      {children}
-    </AttentionCountContext.Provider>
-  );
+  return <AttentionCountContext.Provider value={value}>{children}</AttentionCountContext.Provider>;
 }
 
 export function useAttentionCounts() {
   const context = useContext(AttentionCountContext);
   if (!context) {
-    throw new Error(
-      'useAttentionCounts must be used within AttentionCountProvider'
-    );
+    throw new Error('useAttentionCounts must be used within AttentionCountProvider');
   }
 
   return context;

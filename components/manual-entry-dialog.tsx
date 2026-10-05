@@ -8,7 +8,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger
+  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ManualEntryFormContent } from '@/components/manual-entry-form-content';
@@ -35,9 +35,10 @@ export function ManualEntryDialog({
   preselectedClockOutTime,
   lockEntryMode,
   controlledOpen,
-  onOpenChange: onOpenChangeProp
+  onOpenChange: onOpenChangeProp,
 }: ManualEntryDialogProps) {
   const [internalOpen, setInternalOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : internalOpen;
   const setOpen = (v: boolean) => {
@@ -46,7 +47,7 @@ export function ManualEntryDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={setOpen} pending={isSaving}>
       {!isControlled && (
         <DialogTrigger asChild>
           {trigger || (
@@ -61,8 +62,7 @@ export function ManualEntryDialog({
         <DialogHeader>
           <DialogTitle>Manuelle Eintragung</DialogTitle>
           <DialogDescription>
-            Füge einen manuellen Zeiteintrag hinzu. Dieser muss ggf. genehmigt
-            werden.
+            Füge einen manuellen Zeiteintrag hinzu. Dieser muss ggf. genehmigt werden.
           </DialogDescription>
         </DialogHeader>
         <ManualEntryFormContent
@@ -71,6 +71,7 @@ export function ManualEntryDialog({
           preselectedClockInTime={preselectedClockInTime}
           preselectedClockOutTime={preselectedClockOutTime}
           lockEntryMode={lockEntryMode}
+          onPendingChange={setIsSaving}
           onSuccess={async (entries) => {
             await onSuccess?.(entries);
             // Close-then-banner: the form shows the success banner.

@@ -1,7 +1,5 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Loader2, Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -17,55 +15,21 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Field } from '@/components/ui/field';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { SearchableSelect } from '@/components/ui/searchable-select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DateTimeField } from '@/components/ui/date-time-field';
 import { ErrorText } from '@/components/ui/error-text';
-import { Separator } from '@/components/ui/separator';
-import { useBanner } from '@/components/ui/banner';
-import { ClientSelectWithCreate } from '@/components/auftraege/client-select-with-create';
-import { SiteContactFields } from '@/components/auftraege/site-contact-fields';
-import {
-  formatBerlinDateTimeInput,
-  parseBerlinDateTimeInput,
-} from '@/lib/customer-relationships/date-time';
-import {
-  createClientRequest,
-  getNextRequestNumber,
-  type CreateClientRequestInput,
-} from '@/lib/requests/actions';
 import {
   REQUEST_CATEGORY_LABELS,
   REQUEST_CATEGORY_ORDER,
-  REQUEST_SOURCE_LABELS,
-  REQUEST_SOURCE_ORDER,
   REQUEST_URGENCY_LABELS,
   REQUEST_URGENCY_ORDER,
   type RequestCategory,
-  type RequestSource,
   type RequestUrgency,
 } from '@/lib/requests/types';
 import type { Client } from '@/lib/jobs/types';
-
-const ERROR_MESSAGES = {
-  not_authenticated: 'Du bist nicht angemeldet.',
-  no_active_org: 'Keine Organisation ausgewählt.',
-  not_authorized: 'Du bist nicht berechtigt, Anfragen zu verwalten.',
-  summary_required: 'Bitte beschreibe kurz das Anliegen.',
-  request_number_taken: 'Diese Anfragenummer ist bereits vergeben.',
-  invalid_received_at: 'Bitte gib eine gültige Eingangszeit ein.',
-  client_not_found: 'Der Kunde wurde nicht gefunden.',
-  create_failed: 'Fehler beim Speichern der Anfrage.',
-  unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.',
-} satisfies Record<string, string>;
-const ERROR_MESSAGE_BY_CODE: Record<string, string> = ERROR_MESSAGES;
+import { CreateRequestCustomerFields } from './create-request-customer-fields';
+import { CreateRequestFurtherFields } from './create-request-further-fields';
+import { useCreateRequestForm } from './use-create-request-form';
 
 type RequestAssigneeOption = {
   userId: string;
@@ -78,166 +42,49 @@ interface CreateRequestDialogProps {
 }
 
 export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogProps) {
-  const router = useRouter();
-  const { showBanner } = useBanner();
-  const [open, setOpen] = useState(false);
-
-  const [summary, setSummary] = useState('');
-  const [details, setDetails] = useState('');
-  const [requestNumber, setRequestNumber] = useState('');
-  const requestNumberEditedRef = useRef(false);
-  const [clientId, setClientId] = useState('');
-  const [siteId, setSiteId] = useState('');
-  const [contactId, setContactId] = useState('');
-  const [callerName, setCallerName] = useState('');
-  const [callerPhone, setCallerPhone] = useState('');
-  const [callerEmail, setCallerEmail] = useState('');
-  const [callerAddress, setCallerAddress] = useState('');
-  const [category, setCategory] = useState<RequestCategory>('sonstiges');
-  const [urgency, setUrgency] = useState<RequestUrgency>('normal');
-  const [source, setSource] = useState<RequestSource>('telefon');
-  const [receivedAt, setReceivedAt] = useState(() =>
-    formatBerlinDateTimeInput(new Date())
-  );
-  const [assignedTo, setAssignedTo] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
-
-  // Suggest the next free number when the dialog opens; the field stays
-  // editable. The suggestion must never overwrite a number the user has
-  // already typed while the fetch was in flight.
-  useEffect(() => {
-    if (!open) return;
-    let isCurrent = true;
-    getNextRequestNumber()
-      .then((result) => {
-        if (isCurrent && result.success && !requestNumberEditedRef.current) {
-          setRequestNumber((current) => current || result.requestNumber);
-        }
-      })
-      .catch(() => undefined);
-    return () => {
-      isCurrent = false;
-    };
-  }, [open]);
-
-  const resetForm = () => {
-    requestNumberEditedRef.current = false;
-    setSummary('');
-    setDetails('');
-    setRequestNumber('');
-    setClientId('');
-    setSiteId('');
-    setContactId('');
-    setCallerName('');
-    setCallerPhone('');
-    setCallerEmail('');
-    setCallerAddress('');
-    setCategory('sonstiges');
-    setUrgency('normal');
-    setSource('telefon');
-    setReceivedAt(formatBerlinDateTimeInput(new Date()));
-    setAssignedTo('');
-    setHasAttemptedSubmit(false);
-    setError(null);
-  };
-
-  const handleOpenChange = (nextOpen: boolean) => {
-    setOpen(nextOpen);
-    if (nextOpen) {
-      setReceivedAt(formatBerlinDateTimeInput(new Date()));
-    } else {
-      resetForm();
-    }
-  };
-
-  const handleClientChange = (nextClientId: string) => {
-    setClientId(nextClientId);
-    setSiteId('');
-    setContactId('');
-  };
-
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setHasAttemptedSubmit(true);
-    setError(null);
-
-    if (!summary.trim()) {
-      document.getElementById('request-summary')?.focus();
-      return;
-    }
-
-    const receivedAtDate = receivedAt
-      ? parseBerlinDateTimeInput(receivedAt)
-      : null;
-    if (receivedAt && !receivedAtDate) {
-      setError(ERROR_MESSAGES.invalid_received_at);
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const input: CreateClientRequestInput = {
-        summary: summary.trim(),
-        ...(details.trim() ? { details: details.trim() } : {}),
-        ...(requestNumber.trim() ? { requestNumber: requestNumber.trim() } : {}),
-        ...(clientId ? { clientId } : {}),
-        ...(siteId ? { siteId } : {}),
-        ...(contactId ? { contactId } : {}),
-        ...(callerName.trim() ? { callerName: callerName.trim() } : {}),
-        ...(callerPhone.trim() ? { callerPhone: callerPhone.trim() } : {}),
-        ...(callerEmail.trim() ? { callerEmail: callerEmail.trim() } : {}),
-        ...(callerAddress.trim() ? { callerAddress: callerAddress.trim() } : {}),
-        category,
-        urgency,
-        source,
-        ...(receivedAtDate ? { receivedAt: receivedAtDate.toISOString() } : {}),
-        ...(assignedTo ? { assignedTo } : {}),
-      };
-
-      const result = await createClientRequest(input);
-      if (!result.success) {
-        setError(ERROR_MESSAGE_BY_CODE[result.error] || 'Unbekannter Fehler');
-        return;
-      }
-
-      handleOpenChange(false);
-      showBanner({ variant: 'success', message: 'Anfrage wurde erfasst.' });
-      router.push(`/anfragen/${result.request.id}`);
-      router.refresh();
-    } catch {
-      setError('Ein unerwarteter Fehler ist aufgetreten.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const showSummaryError = hasAttemptedSubmit && !summary.trim();
-  const showReceivedAtError = error === ERROR_MESSAGES.invalid_received_at;
+  const form = useCreateRequestForm();
+  const {
+    open,
+    handleOpenChange,
+    summary,
+    setSummary,
+    category,
+    setCategory,
+    urgency,
+    setUrgency,
+    receivedAt,
+    setReceivedAt,
+    isLoading,
+    error,
+    showSummaryError,
+    showReceivedAtError,
+    handleSubmit,
+  } = form;
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange} pending={isLoading}>
       <DialogTrigger asChild>
         <Button size="default" className="gap-2">
           <Plus className="size-4" />
-          <span className="hidden sm:inline">Anfrage erfassen</span>
-          <span className="sm:hidden">Erfassen</span>
+          <span className="sr-only sm:not-sr-only">Anfrage erfassen</span>
+          <span className="sm:hidden" aria-hidden="true">
+            Erfassen
+          </span>
         </Button>
       </DialogTrigger>
-      <DialogContent
-        className="sm:max-w-[520px]"
-        onOpenAutoFocus={(e) => e.preventDefault()}
-      >
+      <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>Neue Anfrage erfassen</DialogTitle>
           <DialogDescription>
-            Halte das Anliegen direkt während des Gesprächs fest. Nur die
-            Beschreibung ist Pflicht – alles andere kannst du später ergänzen.
+            Halte das Anliegen direkt während des Gesprächs fest. Nur die Beschreibung ist Pflicht – alles
+            andere kannst du später ergänzen.
           </DialogDescription>
         </DialogHeader>
         <form
-          onSubmit={(e) => { e.stopPropagation(); handleSubmit(e); }}
+          onSubmit={(e) => {
+            e.stopPropagation();
+            handleSubmit(e);
+          }}
           noValidate
           className="flex min-h-0 flex-1 flex-col"
         >
@@ -299,7 +146,7 @@ export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogP
             <Field
               label="Eingangszeit"
               htmlFor="request-received-at-date"
-              error={showReceivedAtError ? ERROR_MESSAGES.invalid_received_at : null}
+              error={showReceivedAtError ? error : null}
             >
               <DateTimeField
                 idPrefix="request-received-at"
@@ -308,158 +155,20 @@ export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogP
                 disabled={isLoading}
                 dateAriaLabel="Eingangsdatum"
                 invalid={showReceivedAtError}
-                describedById={
-                  showReceivedAtError ? 'request-received-at-date-error' : undefined
-                }
+                describedById={showReceivedAtError ? 'request-received-at-date-error' : undefined}
               />
             </Field>
 
-            <Separator />
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Kunde
-            </p>
+            <CreateRequestCustomerFields clients={clients} form={form} />
 
-            <Field
-              label="Kunde"
-              htmlFor="request-client"
-              description={
-                !clientId
-                  ? 'Unbekannte Anrufer kannst du unten festhalten und später einem Kunden zuordnen.'
-                  : undefined
-              }
-            >
-              <ClientSelectWithCreate
-                clients={clients}
-                value={clientId}
-                onValueChange={handleClientChange}
-                disabled={isLoading}
-              />
-            </Field>
-
-            {clientId ? (
-              <SiteContactFields
-                clientId={clientId}
-                siteId={siteId}
-                contactId={contactId}
-                onSiteChange={(nextSiteId) => setSiteId(nextSiteId)}
-                onContactChange={setContactId}
-                disabled={isLoading}
-                idPrefix="request"
-              />
-            ) : (
-              <div className="grid gap-3 rounded-md border bg-muted/20 p-3">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Anrufer/in (noch kein Kunde)
-                </p>
-                <Field label="Name" htmlFor="request-caller-name">
-                  <Input
-                    placeholder="Name der Anruferin / des Anrufers"
-                    value={callerName}
-                    onChange={(e) => setCallerName(e.target.value)}
-                    disabled={isLoading}
-                  />
-                </Field>
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Telefon" htmlFor="request-caller-phone">
-                    <Input
-                      type="tel"
-                      placeholder="+49 123 456789"
-                      value={callerPhone}
-                      onChange={(e) => setCallerPhone(e.target.value)}
-                      disabled={isLoading}
-                    />
-                  </Field>
-                  <Field label="E-Mail" htmlFor="request-caller-email">
-                    <Input
-                      type="text"
-                      inputMode="email"
-                      placeholder="name@beispiel.de"
-                      value={callerEmail}
-                      onChange={(e) => setCallerEmail(e.target.value)}
-                      disabled={isLoading}
-                    />
-                  </Field>
-                </div>
-                <Field label="Adresse" htmlFor="request-caller-address">
-                  <Input
-                    placeholder="Straße, PLZ Ort"
-                    value={callerAddress}
-                    onChange={(e) => setCallerAddress(e.target.value)}
-                    disabled={isLoading}
-                  />
-                </Field>
-              </div>
-            )}
-
-            <Separator />
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Weitere Angaben
-            </p>
-
-            <Field label="Details" htmlFor="request-details">
-              <Textarea
-                placeholder="Weitere Angaben aus dem Gespräch..."
-                value={details}
-                onChange={(e) => setDetails(e.target.value)}
-                disabled={isLoading}
-              />
-            </Field>
-
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Eingang über" htmlFor="request-source">
-                <Select
-                  value={source}
-                  onValueChange={(value) => setSource(value as RequestSource)}
-                  disabled={isLoading}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {REQUEST_SOURCE_ORDER.map((value) => (
-                      <SelectItem key={value} value={value}>
-                        {REQUEST_SOURCE_LABELS[value]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field label="Anfragenummer" htmlFor="request-number">
-                <Input
-                  placeholder="ANF-2026-001"
-                  value={requestNumber}
-                  onChange={(event) => {
-                    requestNumberEditedRef.current = true;
-                    setRequestNumber(event.target.value);
-                  }}
-                  disabled={isLoading}
-                />
-              </Field>
-            </div>
-
-            <Field label="Zuständig" htmlFor="request-assignee">
-              <SearchableSelect
-                options={assignees.map((assignee) => ({
-                  value: assignee.userId,
-                  label: assignee.name,
-                }))}
-                value={assignedTo}
-                onChange={setAssignedTo}
-                placeholder="Niemand zuständig"
-                searchPlaceholder="Mitarbeiter suchen..."
-                emptyMessage="Kein Mitarbeiter gefunden"
-                allowNone
-                noneLabel="Niemand zuständig"
-                disabled={isLoading}
-              />
-            </Field>
+            <CreateRequestFurtherFields assignees={assignees} form={form} />
 
             <ErrorText>{showReceivedAtError ? null : error}</ErrorText>
           </DialogBody>
-          <DialogFooter className="pt-4">
+          <DialogFooter>
             <Button type="submit" disabled={isLoading}>
               {isLoading && <Loader2 className="size-4 animate-spin" />}
-              {isLoading ? 'Wird gespeichert...' : 'Anfrage erfassen'}
+              {isLoading ? 'Wird gespeichert…' : 'Anfrage erfassen'}
             </Button>
           </DialogFooter>
         </form>

@@ -1,59 +1,34 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { PlainButton } from '@/components/ui/plain-button';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
-import {
-  InputOTP,
-  InputOTPGroup,
-  InputOTPSlot
-} from '@/components/ui/input-otp';
+import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
-
-const RESEND_COOLDOWN_SECONDS = 60;
+import { redeemOtpInvite } from '@/components/otp-form-invite';
+import { useOtpResend } from '@/components/use-otp-form-resend';
 
 type OTPFormProps = React.ComponentProps<typeof Card> & {
   email: string;
   inviteCode?: string | undefined;
 };
 
-export function OTPForm({
-  email,
-  inviteCode,
-  className,
-  ...props
-}: OTPFormProps) {
+export function OTPForm({ email, inviteCode, className, ...props }: OTPFormProps) {
   const router = useRouter();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [code, setCode] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isResending, setIsResending] = useState(false);
-  const [resendCooldown, setResendCooldown] = useState(RESEND_COOLDOWN_SECONDS);
-
-  useEffect(() => {
-    if (resendCooldown <= 0) {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      setResendCooldown((prev) => Math.max(prev - 1, 0));
-    }, 1000);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [resendCooldown]);
+  const { resendCooldown, isResending, handleResend } = useOtpResend({
+    supabase,
+    email,
+    setFormError,
+  });
 
   const maskedEmail = (() => {
     const [localPart, domain] = email.split('@');
@@ -61,9 +36,7 @@ export function OTPForm({
       return email;
     }
     const obfuscatedLocal =
-      localPart.length <= 3
-        ? `${localPart[0] ?? ''}***`
-        : `${localPart.slice(0, 3)}***`;
+      localPart.length <= 3 ? `${localPart[0] ?? ''}***` : `${localPart.slice(0, 3)}***`;
     return `${obfuscatedLocal}@${domain}`;
   })();
 
@@ -82,18 +55,15 @@ export function OTPForm({
     try {
       const {
         data: { session },
-        error
+        error,
       } = await supabase.auth.verifyOtp({
         email,
         token: sanitizedCode,
-        type: 'email'
+        type: 'email',
       });
 
       if (error || !session) {
-        console.error('Failed to verify OTP', error);
-        setFormError(
-          'Der Code ist ungültig oder abgelaufen. Bitte versuche es erneut.'
-        );
+        setFormError('Der Code ist ungültig oder abgelaufen. Bitte versuche es erneut.');
         setIsSubmitting(false);
         return;
       }
@@ -101,12 +71,12 @@ export function OTPForm({
       await fetch('/auth/callback', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           event: 'SIGNED_IN',
-          session
-        })
+          session,
+        }),
       });
 
       // Note: Profile is automatically created by database trigger on auth.users INSERT
@@ -116,123 +86,25 @@ export function OTPForm({
       // 1. If inviteCode prop is passed (user came from invite link), use that
       // 2. Otherwise, check user metadata for pending_invite_code (user signed up via invite but logged in elsewhere)
       const effectiveInviteCode =
-        inviteCode ||
-        (session.user.user_metadata?.pending_invite_code as string | undefined);
+        inviteCode || (session.user.user_metadata?.pending_invite_code as string | undefined);
 
       // If there's an invite code, redeem it via server action to ensure proper auth context
       if (effectiveInviteCode) {
-        try {
-          const response = await fetch('/api/redeem-invite', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ inviteCode: effectiveInviteCode })
-          });
-
-          const result = await response.json();
-
-          if (!response.ok) {
-            console.error('Failed to redeem invite:', result);
-            if (result.error === 'email_mismatch') {
-              const invitedEmail = result.invitedEmail || '';
-              window.location.assign(`/invite-error?error=email_mismatch&email=${encodeURIComponent(
-                invitedEmail
-              )}&invite_code=${effectiveInviteCode}`);
-              return;
-            }
-            if (result.error === 'admin_mismatch') {
-              window.location.assign('/invite-error?error=admin_mismatch');
-              return;
-            }
-            if (result.error === 'invite_expired') {
-              window.location.assign('/invite-error?error=invite_expired');
-              return;
-            }
-            if (result.error === 'invite_cancelled') {
-              window.location.assign('/invite-error?error=invite_cancelled');
-              return;
-            }
-            if (result.error === 'invite_already_used') {
-              window.location.assign('/invite-error?error=invite_already_used');
-              return;
-            }
-            if (result.error === 'invalid_invite') {
-              window.location.assign('/invite-error?error=invalid_invite');
-              return;
-            }
-            // For other errors, continue to dashboard
-          } else if (result.success && result.organizationId) {
-            // Successfully redeemed - cookie is already set by the API
-            // Clear the pending_invite_code from user metadata since it's been used
-            await supabase.auth.updateUser({
-              data: { pending_invite_code: null }
-            });
-            // Use hard navigation to ensure the cookie is read correctly
-            if (result.alreadyMember) {
-              window.location.assign(
-                `/dashboard?already_member=${result.organizationId}`
-              );
-            } else {
-              window.location.assign(`/dashboard?joined=${result.organizationId}`);
-            }
-            return;
-          }
-        } catch (err) {
-          console.error('Error redeeming invite:', err);
-          // Continue to dashboard on error
-        }
+        if (await redeemOtpInvite(supabase, effectiveInviteCode)) return;
       }
 
       router.replace('/');
       router.refresh();
-    } catch (error) {
-      console.error('Unexpected error verifying OTP', error);
-      setFormError(
-        'Es ist ein unerwarteter Fehler aufgetreten. Bitte versuche es erneut.'
-      );
+    } catch {
+      setFormError('Es ist ein unerwarteter Fehler aufgetreten. Bitte versuche es erneut.');
       setIsSubmitting(false);
     }
   }
-
-  async function handleResend() {
-    if (resendCooldown > 0 || isResending) {
-      return;
-    }
-
-    setFormError(null);
-    setIsResending(true);
-
-    try {
-      // Use resend method to resend the signup confirmation email (OTP)
-      const { error } = await supabase.auth.resend({
-        type: 'signup',
-        email
-      });
-
-      if (error) {
-        console.error('Failed to resend OTP', error);
-        setFormError(
-          'Der Code konnte nicht erneut gesendet werden. Bitte versuche es später erneut.'
-        );
-      } else {
-        setResendCooldown(RESEND_COOLDOWN_SECONDS);
-      }
-    } catch (error) {
-      console.error('Unexpected error during resend', error);
-      setFormError(
-        'Es ist ein unerwarteter Fehler aufgetreten. Bitte versuche es später erneut.'
-      );
-    } finally {
-      setIsResending(false);
-    }
-  }
-
   return (
     <Card className={className} {...props}>
       <CardHeader>
         <CardTitle>Verifizierungscode eingeben</CardTitle>
-        <CardDescription>
-          Wir haben einen sechsstelligen Code an {maskedEmail} gesendet.
-        </CardDescription>
+        <CardDescription>Wir haben einen sechsstelligen Code an {maskedEmail} gesendet.</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit}>
@@ -266,23 +138,21 @@ export function OTPForm({
 
             <div className="flex flex-col gap-4">
               <Button type="submit" disabled={isSubmitting} className="w-full">
-                {isSubmitting ? 'Überprüfung läuft...' : 'Code bestätigen'}
+                {isSubmitting ? 'Überprüfung läuft…' : 'Code bestätigen'}
               </Button>
               <p className="text-center text-sm text-muted-foreground">
                 Code nicht erhalten?{' '}
                 {resendCooldown > 0 ? (
-                  <span className="text-muted-foreground">
-                    Erneut senden in {resendCooldown}s
-                  </span>
+                  <span className="text-muted-foreground">Erneut senden in {resendCooldown}s</span>
                 ) : (
-                  <button
+                  <PlainButton
                     type="button"
                     onClick={handleResend}
                     disabled={isResending}
                     className="text-primary-text underline-offset-4 hover:underline"
                   >
-                    {isResending ? 'Sende erneut...' : 'Erneut senden'}
-                  </button>
+                    {isResending ? 'Sende erneut…' : 'Erneut senden'}
+                  </PlainButton>
                 )}
               </p>
             </div>

@@ -1,16 +1,17 @@
 'use server';
 
 import { updateTag } from 'next/cache';
+import { z } from '@/lib/zod';
 
+import type { ActionResult } from '@/lib/action-result';
 import { CACHE_TAGS } from '@/lib/data/cached';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { isHolidayRegion } from '@/lib/personnel/holidays';
 import { getBusinessTodayIso } from '@/lib/personnel/types';
-import {
-  parseHolidayRegionHistory,
-  type HolidayRegionHistoryEntry,
-} from '@/lib/personnel/targets';
+import { parseHolidayRegionHistory, type HolidayRegionHistoryEntry } from '@/lib/personnel/targets';
+import { logError } from '@/lib/logging';
+import { uuidSchema } from '@/lib/validation/uuid';
 
 // Organization holiday/closure configuration (P1-04).
 // - Holiday region: admin-only (structural policy, break-settings precedent),
@@ -19,21 +20,21 @@ import {
 // - Closure days (Betriebsruhe): admin + Büro (operational planning), only for
 //   today/future dates so past targets are never silently rewritten.
 
-export type CalendarActionResult =
-  | { success: true }
-  | { success: false; error: string };
+export type CalendarActionResult = ActionResult;
 
-export async function setHolidayRegion(
-  region: string | null
-): Promise<CalendarActionResult> {
+const holidayRegionInputSchema = z.string().refine(isHolidayRegion).nullable();
+
+export async function setHolidayRegion(region: string | null): Promise<CalendarActionResult> {
+  const parsedRegion = holidayRegionInputSchema.safeParse(region);
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
     const { orgId, userId } = auth.context;
 
-    if (region !== null && !isHolidayRegion(region)) {
+    if (!parsedRegion.success) {
       return { success: false, error: 'invalid_region' };
     }
+    const selectedRegion = parsedRegion.data;
 
     const admin = createSupabaseAdminClient();
     const { data: organization, error: orgError } = await admin
@@ -59,38 +60,33 @@ export async function setHolidayRegion(
       .maybeSingle();
 
     if (settingsError) {
-      console.error('Failed to read holiday settings:', settingsError);
+      logError('setHolidayRegion: settings read failed', settingsError);
       return { success: false, error: 'update_failed' };
     }
 
-    if ((settingsRow?.holiday_region ?? null) === region) {
+    if ((settingsRow?.holiday_region ?? null) === selectedRegion) {
       return { success: true };
     }
 
     const nextEntry: HolidayRegionHistoryEntry = {
       // Empty string marks an explicit deselection in the history.
-      region: region ?? '',
+      region: selectedRegion ?? '',
       effectiveFrom: new Date().toISOString(),
     };
-    const nextHistory = [
-      ...parseHolidayRegionHistory(settingsRow?.holiday_region_history),
-      nextEntry,
-    ];
+    const nextHistory = [...parseHolidayRegionHistory(settingsRow?.holiday_region_history), nextEntry];
 
-    const { error: updateError } = await admin
-      .from('organization_settings')
-      .upsert(
-        {
-          organization_id: orgId,
-          holiday_region: region,
-          holiday_region_history: nextHistory,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'organization_id' }
-      );
+    const { error: updateError } = await admin.from('organization_settings').upsert(
+      {
+        organization_id: orgId,
+        holiday_region: selectedRegion,
+        holiday_region_history: nextHistory,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'organization_id' },
+    );
 
     if (updateError) {
-      console.error('Failed to update holiday region:', updateError);
+      logError('setHolidayRegion: settings write failed', updateError);
       return { success: false, error: 'update_failed' };
     }
 
@@ -99,17 +95,26 @@ export async function setHolidayRegion(
 
     return { success: true };
   } catch (error) {
-    console.error('Unexpected error in setHolidayRegion:', error);
+    logError('setHolidayRegion: unexpected failure', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
+const closureDayInputSchema = z.object({
+  closureDate: z
+    .string()
+    .regex(ISO_DATE_PATTERN)
+    .refine((value) => !Number.isNaN(Date.parse(value))),
+  label: z.string().nullish(),
+});
+
 export async function addClosureDay(input: {
   closureDate: string;
   label?: string | null;
 }): Promise<CalendarActionResult> {
+  const parsedInput = closureDayInputSchema.safeParse(input);
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
@@ -119,24 +124,22 @@ export async function addClosureDay(input: {
       return { success: false, error: 'not_authorized' };
     }
 
-    if (
-      !ISO_DATE_PATTERN.test(input.closureDate) ||
-      Number.isNaN(Date.parse(input.closureDate))
-    ) {
+    if (!parsedInput.success) {
       return { success: false, error: 'invalid_date' };
     }
+    const { closureDate } = parsedInput.data;
 
     // V1 rule: no past dates — a historical day's target must never be
     // silently rewritten by adding a closure day after the fact.
-    if (input.closureDate < getBusinessTodayIso()) {
+    if (closureDate < getBusinessTodayIso()) {
       return { success: false, error: 'date_in_past' };
     }
 
-    const label = input.label?.trim();
+    const label = parsedInput.data.label?.trim();
     const admin = createSupabaseAdminClient();
     const { error } = await admin.from('organization_closure_days').insert({
       organization_id: orgId,
-      closure_date: input.closureDate,
+      closure_date: closureDate,
       label: label && label.length > 0 ? label : null,
       created_by: userId,
     });
@@ -145,7 +148,7 @@ export async function addClosureDay(input: {
       if (error.code === '23505') {
         return { success: false, error: 'duplicate_date' };
       }
-      console.error('Failed to add closure day:', error);
+      logError('addClosureDay: closure day write failed', error);
       return { success: false, error: 'create_failed' };
     }
 
@@ -153,14 +156,13 @@ export async function addClosureDay(input: {
 
     return { success: true };
   } catch (error) {
-    console.error('Unexpected error in addClosureDay:', error);
+    logError('addClosureDay: unexpected failure', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
-export async function removeClosureDay(
-  closureDayId: string
-): Promise<CalendarActionResult> {
+export async function removeClosureDay(closureDayId: string): Promise<CalendarActionResult> {
+  const parsedId = uuidSchema.safeParse(closureDayId);
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
@@ -169,12 +171,15 @@ export async function removeClosureDay(
     if (!isManagerOrAbove) {
       return { success: false, error: 'not_authorized' };
     }
+    if (!parsedId.success) {
+      return { success: false, error: 'closure_day_not_found' };
+    }
 
     const admin = createSupabaseAdminClient();
     const { data: closureDay, error: loadError } = await admin
       .from('organization_closure_days')
       .select('id, closure_date')
-      .eq('id', closureDayId)
+      .eq('id', parsedId.data)
       .eq('organization_id', orgId)
       .maybeSingle();
 
@@ -190,11 +195,11 @@ export async function removeClosureDay(
     const { error } = await admin
       .from('organization_closure_days')
       .delete()
-      .eq('id', closureDayId)
+      .eq('id', parsedId.data)
       .eq('organization_id', orgId);
 
     if (error) {
-      console.error('Failed to remove closure day:', error);
+      logError('removeClosureDay: closure day delete failed', error);
       return { success: false, error: 'delete_failed' };
     }
 
@@ -202,7 +207,7 @@ export async function removeClosureDay(
 
     return { success: true };
   } catch (error) {
-    console.error('Unexpected error in removeClosureDay:', error);
+    logError('removeClosureDay: unexpected failure', error);
     return { success: false, error: 'unexpected_error' };
   }
 }

@@ -1,5 +1,6 @@
 'use client';
 
+import { PlainButton } from '@/components/ui/plain-button';
 import { Clock3, Coffee, Loader2, Play } from 'lucide-react';
 import { useState } from 'react';
 
@@ -7,13 +8,7 @@ import { ClockActionList } from '@/components/clock-action-list';
 import { useClockState } from '@/components/clock-state-provider';
 import { useOrganization } from '@/components/organization/organization-context';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { SectionError } from '@/components/ui/section-error';
 import { usePendingTask } from '@/hooks/use-server-action';
 import {
@@ -28,7 +23,11 @@ import { useBanner } from '@/components/ui/banner';
 import { cn } from '@/lib/utils';
 
 function formatBerlinTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' });
+  return new Date(iso).toLocaleTimeString('de-DE', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Europe/Berlin',
+  });
 }
 
 export function ClockFAB() {
@@ -37,6 +36,7 @@ export function ClockFAB() {
   const { showBanner } = useBanner();
   const { run, isPending: isHotKeyRunning } = usePendingTask();
   const [open, setOpen] = useState(false);
+  const [isListRunning, setIsListRunning] = useState(false);
   const [sheetPickerMode, setSheetPickerMode] = useState<ClockPickerMode | null>(null);
   const [pendingHotKey, setPendingHotKey] = useState<string | null>(null);
 
@@ -74,7 +74,7 @@ export function ClockFAB() {
             variant: 'error',
             message: getTransitionErrorMessage(
               result.error,
-              'Die Aktivität konnte nicht gespeichert werden. Bitte versuche es erneut.'
+              'Die Aktivität konnte nicht gespeichert werden. Bitte versuche es erneut.',
             ),
           });
         } else if (result.outcome === 'recovery_required') {
@@ -88,7 +88,7 @@ export function ClockFAB() {
 
   return (
     <>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={setOpen} pending={isPending || isListRunning}>
         <DialogContent placement="anchored">
           <DialogHeader>
             <DialogTitle>{isClockedIn ? 'Laufende Zeiterfassung' : 'Zeiterfassung starten'}</DialogTitle>
@@ -102,23 +102,29 @@ export function ClockFAB() {
             organizationId={activeOrgId}
             initialPickerMode={sheetPickerMode}
             onSettled={() => setOpen(false)}
+            onPendingChange={setIsListRunning}
           />
         </DialogContent>
       </Dialog>
 
       <div
+        data-clock-fab=""
+        // The confirmed state for measurements and tests; a pending transition is never "in" or "out".
+        data-clock-state={
+          !isReady ? 'loading' : isPending ? 'pending' : isOnBreak ? 'break' : isClockedIn ? 'in' : 'out'
+        }
         className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-2 will-change-transform"
         style={{ contain: 'layout style' }}
       >
         {isClockedIn && currentLabel && (
-          <button
+          <PlainButton
             type="button"
             onClick={() => openSheet()}
             title="Laufende Zeiterfassung öffnen"
             className="flex min-h-11 max-w-64 items-center rounded-md border bg-background/95 px-3 py-2 text-sm font-medium shadow-xs transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
           >
             <span className="min-w-0 truncate">{currentLabel}</span>
-          </button>
+          </PlainButton>
         )}
         {hotKeys.map((action) => (
           <Button
@@ -137,8 +143,10 @@ export function ClockFAB() {
           size="icon"
           className={cn(
             'size-14 rounded-full shadow-lg',
-            isClockedIn && !isOnBreak && 'bg-success/90 text-success-foreground hover:bg-success animate-green-glow',
-            isOnBreak && 'bg-warning/90 text-warning-foreground hover:bg-warning animate-yellow-glow'
+            isClockedIn &&
+              !isOnBreak &&
+              'bg-success/90 text-success-foreground hover:bg-success animate-green-glow',
+            isOnBreak && 'bg-warning/90 text-warning-foreground hover:bg-warning animate-yellow-glow',
           )}
           onClick={() => openSheet()}
           disabled={!isReady || isPending}
@@ -156,11 +164,7 @@ export function ClockFAB() {
           )}
         </Button>
         {statusError && (
-          <SectionError
-            className="max-w-64 shadow-lg"
-            onRetry={() => void refresh()}
-            retryLabel="Erneut laden"
-          >
+          <SectionError className="max-w-64 shadow-lg" onRetry={() => void refresh()}>
             Der Zeitstatus konnte nicht sicher geladen werden.
           </SectionError>
         )}

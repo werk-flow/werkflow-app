@@ -1,23 +1,43 @@
 'use server';
 
-import { revalidatePath, updateTag } from 'next/cache';
+import { revalidatePath } from 'next/cache';
 
-import { CACHE_TAGS } from '@/lib/data/cached';
+import type { ActionResult } from '@/lib/action-result';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { getBusinessTodayIso } from '@/lib/personnel/types';
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
+import { rpcArgs } from '@/lib/supabase/rpc-args';
+import { isValidIsoDate } from '@/lib/calendar/date-range';
 import {
   resolveEffectiveResponsibility,
   type ResponsibilityAssignment,
   type ResponsibilityConfiguration,
 } from './resolution';
 import { loadResponsibilityRuntimeState } from './server';
-import type {
-  OrganizationResponsibility,
-  ResponsibilityConfigurationMode,
-} from './types';
+import type { OrganizationResponsibility, ResponsibilityConfigurationMode } from './types';
+import { logError } from '@/lib/logging';
+import { Constants } from '@/lib/supabase/database.types';
+import { uuidSchema } from '@/lib/validation/uuid';
+import { z } from '@/lib/zod';
 
-type ActionResult = { success: true } | { success: false; error: string };
+// Boundary schemas: the owner's arguments arrive from the network unchecked.
+const responsibilitySchema = z.enum(Constants.public.Enums.organization_responsibility);
+const configurationSchema = z.object({
+  responsibility: responsibilitySchema,
+  mode: z.enum(Constants.public.Enums.responsibility_configuration_mode),
+  employeeRecordIds: z.array(uuidSchema).max(1000),
+});
+const appliedConfigurationSchema = configurationSchema.extend({
+  expectedConfigurationId: uuidSchema.nullable(),
+});
+const delegationSchema = z.object({
+  responsibility: responsibilitySchema,
+  delegatorEmployeeRecordId: uuidSchema,
+  substituteEmployeeRecordId: uuidSchema,
+  validFrom: z.string().max(10),
+  validUntil: z.string().max(10),
+  note: z.string().max(2000),
+});
 
 export type ResponsibilityPreview = {
   expectedConfigurationId: string | null;
@@ -46,22 +66,10 @@ function normalizeDatabaseError(message: string): string {
   return knownCodes.find((code) => message.includes(code)) ?? 'save_failed';
 }
 
-function isValidIsoDate(value: string): boolean {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return false;
-
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const parsed = new Date(Date.UTC(year, month - 1, day));
-  return (
-    parsed.getUTCFullYear() === year &&
-    parsed.getUTCMonth() === month - 1 &&
-    parsed.getUTCDate() === day
-  );
-}
-
-async function requireOwner() {
+/** Responsibility settings belong to the organization owner alone, not to every admin. */
+async function requireOwner(): Promise<
+  ActionResult<{ context: { orgId: string; userId: string; admin: AdminClient } }>
+> {
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
   const { orgId, userId } = auth.context;
@@ -73,29 +81,28 @@ async function requireOwner() {
     .single();
 
   if (error || !organization) {
-    return { success: false as const, error: 'organization_not_found' };
+    return { success: false, error: 'organization_not_found' };
   }
   if (organization.admin_id !== userId) {
-    return { success: false as const, error: 'not_authorized' };
+    return { success: false, error: 'not_authorized' };
   }
-  return { success: true as const, context: { orgId, userId, admin } };
+  return { success: true, context: { orgId, userId, admin } };
 }
 
-function refreshResponsibilitySurfaces(organizationId: string): void {
-  updateTag(CACHE_TAGS.responsibilities(organizationId));
+function refreshResponsibilitySurfaces(): void {
   revalidatePath('/einstellungen/mitarbeiter');
   revalidatePath('/mitarbeiter');
   revalidatePath('/zeiterfassung');
 }
 
-export async function previewResponsibilityConfiguration(input: {
+export async function previewResponsibilityConfiguration(rawInput: {
   responsibility: OrganizationResponsibility;
   mode: ResponsibilityConfigurationMode;
   employeeRecordIds: string[];
-}): Promise<
-  | { success: true; preview: ResponsibilityPreview }
-  | { success: false; error: string }
-> {
+}): Promise<ActionResult<{ preview: ResponsibilityPreview }>> {
+  const parsedInput = configurationSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   const owner = await requireOwner();
   if (!owner.success) return owner;
 
@@ -109,9 +116,7 @@ export async function previewResponsibilityConfiguration(input: {
   if (
     selectedIds.some(
       (employeeRecordId) =>
-        !state.members.some(
-          (member) => member.active && member.employeeRecordId === employeeRecordId
-        )
+        !state.members.some((member) => member.active && member.employeeRecordId === employeeRecordId),
     )
   ) {
     return { success: false, error: 'responsibility_holder_not_active_member' };
@@ -137,10 +142,7 @@ export async function previewResponsibilityConfiguration(input: {
           roleSnapshot: null,
         }))
       : state.members.flatMap((member, index) => {
-          if (
-            !member.active ||
-            (member.role !== 'admin' && member.role !== 'buero')
-          ) {
+          if (!member.active || (member.role !== 'admin' && member.role !== 'buero')) {
             return [];
           }
           return [
@@ -172,12 +174,8 @@ export async function previewResponsibilityConfiguration(input: {
     delegations: state.delegations,
   });
 
-  const currentIds = new Set(
-    current.holders.map((holder) => holder.employeeRecordId)
-  );
-  const proposedIds = new Set(
-    proposed.holders.map((holder) => holder.employeeRecordId)
-  );
+  const currentIds = new Set(current.holders.map((holder) => holder.employeeRecordId));
+  const proposedIds = new Set(proposed.holders.map((holder) => holder.employeeRecordId));
 
   return {
     success: true,
@@ -188,45 +186,46 @@ export async function previewResponsibilityConfiguration(input: {
       businessDate,
       effectiveHolderIds: Array.from(proposedIds),
       gainedHolderIds: Array.from(proposedIds).filter(
-        (employeeRecordId) => !currentIds.has(employeeRecordId)
+        (employeeRecordId) => !currentIds.has(employeeRecordId),
       ),
-      lostHolderIds: Array.from(currentIds).filter(
-        (employeeRecordId) => !proposedIds.has(employeeRecordId)
-      ),
+      lostHolderIds: Array.from(currentIds).filter((employeeRecordId) => !proposedIds.has(employeeRecordId)),
     },
   };
 }
 
-export async function applyResponsibilityConfiguration(input: {
+export async function applyResponsibilityConfiguration(rawInput: {
   responsibility: OrganizationResponsibility;
   mode: ResponsibilityConfigurationMode;
   employeeRecordIds: string[];
   expectedConfigurationId: string | null;
 }): Promise<ActionResult> {
+  const parsedInput = appliedConfigurationSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   const owner = await requireOwner();
   if (!owner.success) return owner;
 
   const { error } = await owner.context.admin.rpc(
     'apply_responsibility_configuration',
-    {
+    rpcArgs('apply_responsibility_configuration', {
       p_organization_id: owner.context.orgId,
       p_responsibility: input.responsibility,
       p_mode: input.mode,
       p_employee_record_ids: Array.from(new Set(input.employeeRecordIds)),
       p_actor_id: owner.context.userId,
       p_expected_configuration_id: input.expectedConfigurationId,
-    }
+    }),
   );
   if (error) {
-    console.error('Failed to apply responsibility configuration:', error);
+    logError('Failed to apply responsibility configuration:', error);
     return { success: false, error: normalizeDatabaseError(error.message) };
   }
 
-  refreshResponsibilitySurfaces(owner.context.orgId);
+  refreshResponsibilitySurfaces();
   return { success: true };
 }
 
-export async function createResponsibilityDelegation(input: {
+export async function createResponsibilityDelegation(rawInput: {
   responsibility: OrganizationResponsibility;
   delegatorEmployeeRecordId: string;
   substituteEmployeeRecordId: string;
@@ -234,6 +233,9 @@ export async function createResponsibilityDelegation(input: {
   validUntil: string;
   note: string;
 }): Promise<ActionResult> {
+  const parsedInput = delegationSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   const owner = await requireOwner();
   if (!owner.success) return owner;
   if (
@@ -244,47 +246,56 @@ export async function createResponsibilityDelegation(input: {
     return { success: false, error: 'responsibility_delegation_invalid_dates' };
   }
 
-  const { error } = await owner.context.admin.rpc(
-    'create_responsibility_delegation',
-    {
-      p_organization_id: owner.context.orgId,
-      p_responsibility: input.responsibility,
-      p_delegator_employee_record_id: input.delegatorEmployeeRecordId,
-      p_substitute_employee_record_id: input.substituteEmployeeRecordId,
-      p_valid_from: input.validFrom,
-      p_valid_until: input.validUntil,
-      p_note: input.note,
-      p_actor_id: owner.context.userId,
-    }
-  );
+  const { error } = await owner.context.admin.rpc('create_responsibility_delegation', {
+    p_organization_id: owner.context.orgId,
+    p_responsibility: input.responsibility,
+    p_delegator_employee_record_id: input.delegatorEmployeeRecordId,
+    p_substitute_employee_record_id: input.substituteEmployeeRecordId,
+    p_valid_from: input.validFrom,
+    p_valid_until: input.validUntil,
+    p_note: input.note,
+    p_actor_id: owner.context.userId,
+  });
   if (error) {
-    console.error('Failed to create responsibility delegation:', error);
+    logError('Failed to create responsibility delegation:', error);
     return { success: false, error: normalizeDatabaseError(error.message) };
   }
 
-  refreshResponsibilitySurfaces(owner.context.orgId);
+  refreshResponsibilitySurfaces();
   return { success: true };
 }
 
-export async function endResponsibilityDelegation(
-  delegationId: string
-): Promise<ActionResult> {
+export async function endResponsibilityDelegation(rawDelegationId: string): Promise<ActionResult> {
+  const parsedDelegationId = uuidSchema.safeParse(rawDelegationId);
+  if (!parsedDelegationId.success) return { success: false, error: 'invalid_input' };
+  const delegationId = parsedDelegationId.data;
   const owner = await requireOwner();
   if (!owner.success) return owner;
 
-  const { error } = await owner.context.admin.rpc(
-    'end_responsibility_delegation',
-    {
-      p_delegation_id: delegationId,
-      p_revoked_from: getBusinessTodayIso(),
-      p_actor_id: owner.context.userId,
-    }
-  );
+  // The RPC checks the actor against the delegation's own organization; this
+  // read binds the delegation to the active organization first.
+  const { data: delegation, error: delegationError } = await owner.context.admin
+    .from('organization_responsibility_delegations')
+    .select('id')
+    .eq('organization_id', owner.context.orgId)
+    .eq('id', delegationId)
+    .maybeSingle();
+  if (delegationError) {
+    logError('Failed to load responsibility delegation:', delegationError);
+    return { success: false, error: 'save_failed' };
+  }
+  if (!delegation) return { success: false, error: 'responsibility_delegation_not_found' };
+
+  const { error } = await owner.context.admin.rpc('end_responsibility_delegation', {
+    p_delegation_id: delegationId,
+    p_revoked_from: getBusinessTodayIso(),
+    p_actor_id: owner.context.userId,
+  });
   if (error) {
-    console.error('Failed to end responsibility delegation:', error);
+    logError('Failed to end responsibility delegation:', error);
     return { success: false, error: normalizeDatabaseError(error.message) };
   }
 
-  refreshResponsibilitySurfaces(owner.context.orgId);
+  refreshResponsibilitySurfaces();
   return { success: true };
 }

@@ -1,5 +1,5 @@
-import { z } from "zod";
-import { uuidSchema } from "@/lib/validation/uuid";
+import { z } from '@/lib/zod';
+import { uuidSchema } from '@/lib/validation/uuid';
 
 import {
   EQUIPMENT_CATEGORIES,
@@ -8,12 +8,11 @@ import {
   EQUIPMENT_SUBTYPES,
   EQUIPMENT_SUBTYPES_BY_CATEGORY,
   type EquipmentSubtype,
-} from "./types";
+} from './types';
 
-const optionalText = (maximum: number) =>
-  z.string().trim().max(maximum).optional().nullable();
+const optionalText = (maximum: number) => z.string().trim().max(maximum).optional().nullable();
 const optionalDate = z
-  .union([z.string().date(), z.literal(""), z.null()])
+  .union([z.string().date(), z.literal(''), z.null()])
   .optional()
   .transform((value) => value || null);
 
@@ -47,39 +46,33 @@ export const equipmentFormSchema = z
     effectiveAt: z.string().datetime({ offset: true }).optional().nullable(),
   })
   .superRefine((input, context) => {
-    const validSubtypes = EQUIPMENT_SUBTYPES_BY_CATEGORY[
-      input.category
-    ] as readonly EquipmentSubtype[];
+    const validSubtypes = EQUIPMENT_SUBTYPES_BY_CATEGORY[input.category] as readonly EquipmentSubtype[];
     if (input.subtype && !validSubtypes.includes(input.subtype)) {
       context.addIssue({
-        code: "custom",
-        path: ["subtype"],
-        message: "Der Untertyp passt nicht zur gewählten Kategorie.",
+        code: 'custom',
+        path: ['subtype'],
+        message: 'Der Untertyp passt nicht zur gewählten Kategorie.',
       });
     }
-    if (input.category === "system_component" && !input.parentEquipmentId) {
+    if (input.category === 'system_component' && !input.parentEquipmentId) {
       context.addIssue({
-        code: "custom",
-        path: ["parentEquipmentId"],
-        message: "Eine Komponente benötigt eine übergeordnete Anlage.",
+        code: 'custom',
+        path: ['parentEquipmentId'],
+        message: 'Eine Komponente benötigt eine übergeordnete Anlage.',
       });
     }
-    if (input.category !== "system_component" && input.parentEquipmentId) {
+    if (input.category !== 'system_component' && input.parentEquipmentId) {
       context.addIssue({
-        code: "custom",
-        path: ["parentEquipmentId"],
-        message: "Nur Komponenten können einer Anlage untergeordnet werden.",
+        code: 'custom',
+        path: ['parentEquipmentId'],
+        message: 'Nur Komponenten können einer Anlage untergeordnet werden.',
       });
     }
-    if (
-      input.warrantyStartDate &&
-      input.warrantyEndDate &&
-      input.warrantyEndDate < input.warrantyStartDate
-    ) {
+    if (input.warrantyStartDate && input.warrantyEndDate && input.warrantyEndDate < input.warrantyStartDate) {
       context.addIssue({
-        code: "custom",
-        path: ["warrantyEndDate"],
-        message: "Das Gewährleistungsende darf nicht vor dem Beginn liegen.",
+        code: 'custom',
+        path: ['warrantyEndDate'],
+        message: 'Das Gewährleistungsende darf nicht vor dem Beginn liegen.',
       });
     }
   });
@@ -141,26 +134,16 @@ export const equipmentWorkLinkSchema = z
     reason: optionalText(1000),
     idempotencyKey: uuidSchema,
   })
-  .refine(
-    (input) =>
-      Number(Boolean(input.jobId)) + Number(Boolean(input.projectId)) === 1,
-    {
-      message: "Genau ein Arbeitsbezug ist erforderlich.",
-      path: ["jobId"],
-    },
-  );
+  .refine((input) => Number(Boolean(input.jobId)) + Number(Boolean(input.projectId)) === 1, {
+    message: 'Genau ein Arbeitsbezug ist erforderlich.',
+    path: ['jobId'],
+  });
 
 export const equipmentSourceSchema = z
   .object({
     equipmentId: uuidSchema,
     expectedVersion: z.number().int().positive(),
-    targetType: z.enum([
-      "job",
-      "project",
-      "artifact_revision",
-      "handover_release",
-      "document",
-    ]),
+    targetType: z.enum(['job', 'project', 'artifact_revision', 'handover_release', 'document']),
     targetId: uuidSchema,
     documentVersionNumber: z.number().int().positive().optional().nullable(),
     reason: z.string().trim().min(3).max(1000),
@@ -168,11 +151,11 @@ export const equipmentSourceSchema = z
   })
   .superRefine((input, context) => {
     const hasDocumentVersion = Boolean(input.documentVersionNumber);
-    if ((input.targetType === "document") !== hasDocumentVersion) {
+    if ((input.targetType === 'document') !== hasDocumentVersion) {
       context.addIssue({
-        code: "custom",
-        path: ["documentVersionNumber"],
-        message: "Für ein Dokument ist eine exakte Version erforderlich.",
+        code: 'custom',
+        path: ['documentVersionNumber'],
+        message: 'Für ein Dokument ist eine exakte Version erforderlich.',
       });
     }
   });

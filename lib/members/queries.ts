@@ -5,37 +5,38 @@ import 'server-only';
 // 'use server' file: exporting these helpers as Server Actions made the
 // caller-supplied user ID a public parameter (SI-014).
 
+import type { ActionResult } from '@/lib/action-result';
+import { logReadFailure } from '@/lib/data/read-request-cache';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { readInBatches } from '@/lib/supabase/query-batches';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import type { OrgMemberInfo } from './actions';
+import { logError } from '@/lib/logging';
+
+export type OrgMembersRead = ActionResult<{ members: OrgMemberInfo[] }, 'load_failed'>;
 
 /**
  * Members of one organization as seen by `userId`. The security-definer RPC
  * raises `not_authorized` unless `userId` is a member, so callers must pass
- * the verified session user, never an ID from the request.
+ * the verified session user, never an ID from the request. A failed read is
+ * `load_failed`, never an empty member list.
  */
-export async function getOrgMembersForUser(
-  organizationId: string,
-  userId: string
-): Promise<OrgMemberInfo[]> {
+export async function getOrgMembersForUser(organizationId: string, userId: string): Promise<OrgMembersRead> {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin.rpc('get_org_members_for_user', {
     p_org_id: organizationId,
-    p_user_id: userId
+    p_user_id: userId,
   });
 
   if (error) {
-    console.error('Error fetching organization members:', error);
-    return [];
+    logError('Error fetching organization members:', error);
+    return { success: false, error: 'load_failed' };
   }
 
-  return (data ?? []) as OrgMemberInfo[];
+  return { success: true, members: (data ?? []) as OrgMemberInfo[] };
 }
 
-export type ProfileNameMap = Record<
-  string,
-  { firstName: string | null; lastName: string | null }
->;
+type ProfileNameMap = Record<string, { firstName: string | null; lastName: string | null }>;
 
 /**
  * Display names for user IDs the caller may see: current co-members of any of
@@ -43,12 +44,14 @@ export type ProfileNameMap = Record<
  * one of those organizations (an exited member stays visible in the personnel
  * list). IDs outside that set are silently absent from the result (SI-015).
  */
+export type ProfileNamesRead = ActionResult<{ profiles: ProfileNameMap }, 'load_failed'>;
+
 export async function getProfileNamesVisibleTo(
   callerUserId: string,
-  userIds: readonly string[]
-): Promise<ProfileNameMap> {
+  userIds: readonly string[],
+): Promise<ProfileNamesRead> {
   const requested = [...new Set(userIds)].filter(Boolean);
-  if (requested.length === 0) return {};
+  if (requested.length === 0) return { success: true, profiles: {} };
 
   // The caller-scoped RLS policy evaluates effective P1-24 access now. Do not
   // authorize this fresh read from cached memberships after an out-of-band revoke.
@@ -57,43 +60,59 @@ export async function getProfileNamesVisibleTo(
     .from('organization_members')
     .select('organization_id')
     .eq('user_id', callerUserId);
-  if (membershipError || !callerMemberships?.length) return {};
+  if (membershipError) {
+    logReadFailure('getProfileNamesVisibleTo: caller memberships failed', membershipError);
+    return { success: false, error: 'load_failed' };
+  }
+  // A caller without a membership sees no names: that is the visibility rule, not a failure.
+  if (callerMemberships.length === 0) return { success: true, profiles: {} };
 
   const admin = createSupabaseAdminClient();
   const organizationIds = callerMemberships.map((membership) => membership.organization_id);
   const [coMembersResult, personnelResult] = await Promise.all([
-    admin
-      .from('organization_members')
-      .select('user_id')
-      .in('organization_id', organizationIds)
-      .in('user_id', requested),
-    admin
-      .from('employee_records')
-      .select('user_id')
-      .in('organization_id', organizationIds)
-      .in('user_id', requested),
+    readInBatches(requested, (batch) =>
+      admin
+        .from('organization_members')
+        .select('user_id')
+        .in('organization_id', organizationIds)
+        .in('user_id', [...batch]),
+    ),
+    readInBatches(requested, (batch) =>
+      admin
+        .from('employee_records')
+        .select('user_id')
+        .in('organization_id', organizationIds)
+        .in('user_id', [...batch]),
+    ),
   ]);
-  if (coMembersResult.error || personnelResult.error) return {};
+  const visibilityError = coMembersResult.error ?? personnelResult.error;
+  if (visibilityError) {
+    logReadFailure('getProfileNamesVisibleTo: visibility read failed', visibilityError);
+    return { success: false, error: 'load_failed' };
+  }
 
   const visibleIds = new Set<string>([
-    ...(coMembersResult.data ?? []).map((row) => row.user_id),
-    ...(personnelResult.data ?? [])
-      .map((row) => row.user_id)
-      .filter((id): id is string => typeof id === 'string'),
+    ...coMembersResult.data.map((row) => row.user_id),
+    ...personnelResult.data.map((row) => row.user_id).filter((id): id is string => typeof id === 'string'),
   ]);
   visibleIds.add(callerUserId);
   const lookup = requested.filter((id) => visibleIds.has(id));
-  if (lookup.length === 0) return {};
+  if (lookup.length === 0) return { success: true, profiles: {} };
 
-  const { data: profiles, error } = await admin
-    .from('profiles')
-    .select('id, first_name, last_name')
-    .in('id', lookup);
-  if (error || !profiles) return {};
+  const { data: profiles, error } = await readInBatches(lookup, (batch) =>
+    admin
+      .from('profiles')
+      .select('id, first_name, last_name')
+      .in('id', [...batch]),
+  );
+  if (error) {
+    logReadFailure('getProfileNamesVisibleTo: profile read failed', error);
+    return { success: false, error: 'load_failed' };
+  }
 
   const map: ProfileNameMap = {};
   for (const profile of profiles) {
     map[profile.id] = { firstName: profile.first_name, lastName: profile.last_name };
   }
-  return map;
+  return { success: true, profiles: map };
 }

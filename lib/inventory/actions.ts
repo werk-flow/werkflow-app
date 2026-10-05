@@ -1,15 +1,16 @@
 'use server';
 
-import { revalidatePath, updateTag } from 'next/cache';
+import { revalidatePath } from 'next/cache';
 
-import { readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
+import type { ActionFailure, ActionResult } from '@/lib/action-result';
+import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { inventoryPageQuerySchema, inventoryPageResultSchema } from './list-page';
-import { CACHE_TAGS } from '@/lib/data/cached';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { rpcArgs } from '@/lib/supabase/rpc-args';
+import { loggedRead, logReadErrors } from '@/lib/data/read-request-cache';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import type { AuthContext } from '@/lib/jobs/auth';
 import type {
-  InventoryBarcodeRow,
   InventoryCategoryRow,
   InventoryItem,
   InventoryItemRow,
@@ -17,32 +18,39 @@ import type {
   InventoryLocation,
   InventoryLocationRow,
   InventoryLocationType,
-  InventoryMovementListItem,
   InventoryMovementRow,
   InventoryOverview,
-  InventoryOverviewItem,
   InventoryPickerOption,
   ProjectMaterialSummary,
   InventoryStockLevelRow,
-  InventoryStockStatus,
-  InventorySupplierRow,
   JobMaterialLine,
   JobMaterialLineRow,
-  InventoryAssetInstanceRow,
 } from './types';
 import {
+  INVENTORY_PICKER_PAGE_SIZE,
   toInventoryCategory,
   toInventoryItem,
   toInventoryLocation,
-  toInventorySupplier,
   toNumber,
 } from './types';
-
-type ActionResult<T> =
-  | ({ success: true } & T)
-  | { success: false; error: string };
-
-type SupabaseAdminClient = ReturnType<typeof createSupabaseAdminClient>;
+import { asRows, loadInventoryOverviewLists, loadInventoryPickerOptions } from './catalog-reads';
+import type { SupabaseAdminClient } from './catalog-reads';
+import { logError } from '@/lib/logging';
+import { uuidSchema } from '@/lib/validation/uuid';
+import {
+  adjustInventoryStockSchema,
+  createInventoryLocationSchema,
+  createJobMaterialLineSchema,
+  createProjectMaterialLineSchema,
+  importInventoryRowsSchema,
+  optionalItemIdSchema,
+  pickerSearchSchema,
+  returnJobMaterialSchema,
+  takeJobMaterialSchema,
+  takeProjectMaterialSchema,
+  updateJobMaterialLineSchema,
+  upsertInventoryItemSchema,
+} from './action-schemas';
 
 export type CreateInventoryLocationInput = {
   name: string;
@@ -170,10 +178,6 @@ async function requireInventoryManager(): Promise<ActionResult<{ context: AuthCo
   return auth;
 }
 
-function asRows<T>(data: unknown): T[] {
-  return Array.isArray(data) ? (data as T[]) : [];
-}
-
 function asRow<T>(data: unknown): T | null {
   return data ? (data as T) : null;
 }
@@ -183,9 +187,11 @@ function cleanText(value: string | null | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
+// Quantities are `numeric(12,3)`: rounding to two digits turned a booked
+// 0,125 m into 0,13 and refused its return as more than was taken.
 function normalizeQuantity(value: number): number {
   if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.round(value * 100) / 100);
+  return Math.max(0, Math.round(value * 1000) / 1000);
 }
 
 function normalizePrice(value: number | null | undefined): number | null {
@@ -239,45 +245,35 @@ function normalizeInventoryUnitInput(value: string | null | undefined): string {
   return aliases[normalized] ?? value?.trim() ?? 'piece';
 }
 
-function getStockStatus(item: InventoryItem, totalOnHand: number): InventoryStockStatus {
-  if (!item.trackQuantity) return 'in_stock';
-  if (totalOnHand <= 0) return 'out_of_stock';
-  if (item.globalMinimumStock > 0 && totalOnHand <= item.globalMinimumStock) {
-    return 'low_stock';
-  }
-  return 'in_stock';
-}
-
-function invalidateInventory(orgId: string) {
-  updateTag(CACHE_TAGS.inventory(orgId));
+function invalidateInventory() {
   revalidatePath('/inventar');
 }
 
-async function ensureInventoryDefaults(
-  admin: SupabaseAdminClient,
-  context: AuthContext
-): Promise<void> {
+async function ensureInventoryDefaults(admin: SupabaseAdminClient, context: AuthContext): Promise<void> {
   const { error } = await admin.rpc('ensure_inventory_defaults', {
     p_org_id: context.orgId,
     p_actor_id: context.userId,
   });
 
   if (error) {
-    console.error('Error ensuring inventory defaults:', error);
+    logError('Error ensuring inventory defaults:', error);
   }
 }
 
 async function getJobContext(
   admin: SupabaseAdminClient,
   context: AuthContext,
-  jobId: string
+  jobId: string,
 ): Promise<ActionResult<{ job: { id: string; project_id: string | null } }>> {
-  const { data, error } = await admin
-    .from('jobs')
-    .select('id, project_id')
-    .eq('id', jobId)
-    .eq('organization_id', context.orgId)
-    .maybeSingle();
+  const { data, error } = await loggedRead(
+    'getJobContext: jobs read failed',
+    admin
+      .from('jobs')
+      .select('id, project_id')
+      .eq('id', jobId)
+      .eq('organization_id', context.orgId)
+      .maybeSingle(),
+  );
 
   const job = asRow<{ id: string; project_id: string | null }>(data);
   if (error || !job) {
@@ -285,12 +281,16 @@ async function getJobContext(
   }
 
   if (!context.isManagerOrAbove) {
-    const { data: assignment } = await admin
-      .from('job_assignments')
-      .select('id')
-      .eq('job_id', jobId)
-      .eq('user_id', context.userId)
-      .maybeSingle();
+    const { data: assignment } = await loggedRead(
+      'getJobContext: job_assignments read failed',
+      admin
+        .from('job_assignments')
+        .select('id')
+        .eq('organization_id', context.orgId)
+        .eq('job_id', jobId)
+        .eq('user_id', context.userId)
+        .maybeSingle(),
+    );
 
     if (!assignment) {
       return { success: false, error: 'not_authorized' };
@@ -303,14 +303,17 @@ async function getJobContext(
 async function getProjectContext(
   admin: SupabaseAdminClient,
   context: AuthContext,
-  projectId: string
+  projectId: string,
 ): Promise<ActionResult<{ project: { id: string } }>> {
-  const { data, error } = await admin
-    .from('projects')
-    .select('id')
-    .eq('id', projectId)
-    .eq('organization_id', context.orgId)
-    .maybeSingle();
+  const { data, error } = await loggedRead(
+    'getProjectContext: projects read failed',
+    admin
+      .from('projects')
+      .select('id')
+      .eq('id', projectId)
+      .eq('organization_id', context.orgId)
+      .maybeSingle(),
+  );
 
   const project = asRow<{ id: string }>(data);
   if (error || !project) {
@@ -324,115 +327,37 @@ async function getProjectContext(
   return { success: true, project };
 }
 
-async function ensureSupplier(
-  admin: SupabaseAdminClient,
-  orgId: string,
-  supplierId: string | null | undefined,
-  supplierName: string | null | undefined
-): Promise<string | null> {
-  if (supplierId) return supplierId;
+// The refusals of save_inventory_item, import_inventory_row (migration
+// 20261004151000) and take_unplanned_inventory_material (20261004151100) that
+// the action passes on as its failure code.
+const INVENTORY_WRITE_REFUSALS = new Set([
+  'not_authorized',
+  'invalid_input',
+  'location_required_for_initial_stock',
+  'item_not_found',
+  'category_not_found',
+  'supplier_not_found',
+  'location_not_found',
+  'barcode_taken',
+  'batch_not_found',
+  'job_not_found',
+  'project_not_found',
+]);
 
-  const name = cleanText(supplierName);
-  if (!name) return null;
-
-  const { data: existing } = await admin
-    .from('inventory_suppliers')
-    .select('id')
-    .eq('organization_id', orgId)
-    .ilike('name', name)
-    .maybeSingle();
-
-  const existingSupplier = asRow<{ id: string }>(existing);
-  if (existingSupplier) return existingSupplier.id;
-
-  const { data, error } = await admin
-    .from('inventory_suppliers')
-    .insert({
-      organization_id: orgId,
-      name,
-    })
-    .select('id')
-    .single();
-
-  if (error) {
-    console.error('Error creating inventory supplier:', error);
-    return null;
+function inventoryWriteFailure(
+  label: string,
+  error: { code?: string; message?: string },
+  fallback: 'save_failed' | 'movement_failed',
+): ActionFailure {
+  const message = error.message ?? '';
+  if (INVENTORY_WRITE_REFUSALS.has(message)) return { success: false, error: message };
+  logError(label, error);
+  if (message.includes('inventory stock cannot go below zero')) {
+    return { success: false, error: 'stock_would_go_negative' };
   }
-
-  return asRow<{ id: string }>(data)?.id ?? null;
-}
-
-async function ensureCategory(
-  admin: SupabaseAdminClient,
-  orgId: string,
-  categoryName: string | null | undefined
-): Promise<string | null> {
-  const name = cleanText(categoryName);
-  if (!name) return null;
-
-  const { data: existing } = await admin
-    .from('inventory_categories')
-    .select('id')
-    .eq('organization_id', orgId)
-    .ilike('name', name)
-    .maybeSingle();
-
-  const existingCategory = asRow<{ id: string }>(existing);
-  if (existingCategory) return existingCategory.id;
-
-  const { data, error } = await admin
-    .from('inventory_categories')
-    .insert({
-      organization_id: orgId,
-      name,
-      sort_order: 100,
-    })
-    .select('id')
-    .single();
-
-  if (error) {
-    console.error('Error creating inventory category:', error);
-    return null;
-  }
-
-  return asRow<{ id: string }>(data)?.id ?? null;
-}
-
-async function ensureLocation(
-  admin: SupabaseAdminClient,
-  context: AuthContext,
-  locationName: string | null | undefined
-): Promise<string | null> {
-  const name = cleanText(locationName);
-  if (!name) return null;
-
-  const { data: existing } = await admin
-    .from('inventory_locations')
-    .select('id')
-    .eq('organization_id', context.orgId)
-    .ilike('name', name)
-    .maybeSingle();
-
-  const existingLocation = asRow<{ id: string }>(existing);
-  if (existingLocation) return existingLocation.id;
-
-  const { data, error } = await admin
-    .from('inventory_locations')
-    .insert({
-      organization_id: context.orgId,
-      name,
-      location_type: 'room',
-      created_by: context.userId,
-    })
-    .select('id')
-    .single();
-
-  if (error) {
-    console.error('Error creating inventory location:', error);
-    return null;
-  }
-
-  return asRow<{ id: string }>(data)?.id ?? null;
+  if (message.includes('not available for stock movement'))
+    return { success: false, error: 'movement_failed' };
+  return { success: false, error: fallback };
 }
 
 async function recordMovement(
@@ -446,26 +371,28 @@ async function recordMovement(
     jobId?: string | null;
     projectId?: string | null;
     jobMaterialLineId?: string | null;
-    importBatchId?: string | null;
     reason?: string | null;
-  }
+  },
 ): Promise<ActionResult<{ quantityAfter: number }>> {
-  const { data, error } = await admin.rpc('record_inventory_movement', {
-    p_organization_id: context.orgId,
-    p_actor_id: context.userId,
-    p_item_id: input.itemId,
-    p_location_id: input.locationId,
-    p_movement_type: input.movementType,
-    p_quantity_delta: input.quantityDelta,
-    p_job_id: input.jobId ?? null,
-    p_project_id: input.projectId ?? null,
-    p_job_material_line_id: input.jobMaterialLineId ?? null,
-    p_import_batch_id: input.importBatchId ?? null,
-    p_reason: cleanText(input.reason),
-  });
+  const { data, error } = await admin.rpc(
+    'record_inventory_movement',
+    rpcArgs('record_inventory_movement', {
+      p_organization_id: context.orgId,
+      p_actor_id: context.userId,
+      p_item_id: input.itemId,
+      p_location_id: input.locationId,
+      p_movement_type: input.movementType,
+      p_quantity_delta: input.quantityDelta,
+      p_job_id: input.jobId ?? null,
+      p_project_id: input.projectId ?? null,
+      p_job_material_line_id: input.jobMaterialLineId ?? null,
+      p_import_batch_id: null,
+      p_reason: cleanText(input.reason),
+    }),
+  );
 
   if (error) {
-    console.error('Error recording inventory movement.', {
+    logError('Error recording inventory movement.', {
       code: error.code ?? 'unknown',
     });
     if (error.message?.includes('inventory stock cannot go below zero')) {
@@ -477,37 +404,62 @@ async function recordMovement(
     return { success: false, error: 'movement_failed' };
   }
 
-  return { success: true, quantityAfter: toNumber(data as number | string | null) };
-}
-
-async function deleteFailedUnplannedMaterialLine(
-  admin: SupabaseAdminClient,
-  organizationId: string,
-  lineId: string
-): Promise<void> {
-  const { error } = await admin
-    .from('job_material_lines')
-    .delete()
-    .eq('id', lineId)
-    .eq('organization_id', organizationId);
-
-  if (error) {
-    console.error('Error cleaning up failed unplanned material line.', {
-      code: error.code ?? 'unknown',
-    });
+  // The function returns one row per recorded movement.
+  const [movement] = data ?? [];
+  if (!movement) {
+    logError('Error recording inventory movement: no movement row returned.');
+    return { success: false, error: 'movement_failed' };
   }
+  return { success: true, quantityAfter: toNumber(movement.quantity_after) };
 }
 
-type InventoryOrganizationReferenceTable =
-  | 'inventory_categories'
-  | 'inventory_locations';
+// A take without a planned line: the unplanned line and the take commit
+// together, so a refused take leaves no empty line behind.
+async function takeUnplannedMaterial(
+  admin: SupabaseAdminClient,
+  context: AuthContext,
+  input: {
+    jobId: string | null;
+    projectId: string | null;
+    itemId: string;
+    locationId: string;
+    quantity: number;
+    reason: string | null | undefined;
+    defaultReason: string;
+  },
+): Promise<ActionResult<{ quantityAfter: number }>> {
+  const { data, error } = await admin.rpc(
+    'take_unplanned_inventory_material',
+    rpcArgs('take_unplanned_inventory_material', {
+      p_organization_id: context.orgId,
+      p_actor_id: context.userId,
+      p_job_id: input.jobId,
+      p_project_id: input.projectId,
+      p_item_id: input.itemId,
+      p_location_id: input.locationId,
+      p_quantity: input.quantity,
+      p_reason: cleanText(input.reason) ?? input.defaultReason,
+      p_notes: cleanText(input.reason),
+    }),
+  );
+  if (error) {
+    return inventoryWriteFailure(
+      'takeUnplannedMaterial: take_unplanned_inventory_material failed',
+      error,
+      'movement_failed',
+    );
+  }
+  return { success: true, quantityAfter: toNumber(data) };
+}
+
+type InventoryOrganizationReferenceTable = 'inventory_categories' | 'inventory_locations';
 
 async function resolveInventoryOrganizationReference(
   admin: SupabaseAdminClient,
   table: InventoryOrganizationReferenceTable,
   organizationId: string,
   inputId: string | null | undefined,
-  missingError: 'category_not_found' | 'location_not_found'
+  missingError: 'category_not_found' | 'location_not_found',
 ): Promise<ActionResult<{ referenceId: string | null }>> {
   const referenceId = cleanText(inputId);
   if (!referenceId) return { success: true, referenceId: null };
@@ -520,7 +472,7 @@ async function resolveInventoryOrganizationReference(
     .maybeSingle();
 
   if (error) {
-    console.error('Error resolving inventory organization reference.', {
+    logError('Error resolving inventory organization reference.', {
       code: error.code ?? 'unknown',
       table,
     });
@@ -533,7 +485,9 @@ async function resolveInventoryOrganizationReference(
   return { success: true, referenceId: resolvedReference.id };
 }
 
-export async function getInventoryOverview(input: unknown = {}): Promise<ActionResult<{ overview: InventoryOverview }>> {
+export async function getInventoryOverview(
+  input: unknown = {},
+): Promise<ActionResult<{ overview: InventoryOverview }>> {
   const auth = await requireInventoryManager();
   if (!auth.success) return auth;
   const parsedQuery = inventoryPageQuerySchema.safeParse(input);
@@ -544,305 +498,45 @@ export async function getInventoryOverview(input: unknown = {}): Promise<ActionR
   await ensureInventoryDefaults(admin, auth.context);
   const [pageResult, movementsResult] = await Promise.all([
     admin.rpc('list_inventory_page', { p_organization_id: orgId, p_query: query }),
-    admin.from('inventory_movements').select('*').eq('organization_id', orgId)
-      .order('created_at', { ascending: false }).order('id').limit(40),
+    admin
+      .from('inventory_movements')
+      .select('*')
+      .eq('organization_id', orgId)
+      .order('created_at', { ascending: false })
+      .order('id')
+      .limit(40),
   ]);
-  if (pageResult.error || movementsResult.error) return { success: false, error: 'inventory_failed' };
+  if (pageResult.error || movementsResult.error) {
+    logReadErrors('getInventoryOverview: read failed', pageResult.error, movementsResult.error);
+    return { success: false, error: 'inventory_failed' };
+  }
   const parsedPage = inventoryPageResultSchema.safeParse(pageResult.data);
   if (!parsedPage.success) return { success: false, error: 'inventory_failed' };
   const page = parsedPage.data;
-  const supportIds = [...new Set([...page.supportIds, ...(movementsResult.data ?? []).map(movement => movement.item_id)])];
-  const jobIds = [...new Set((movementsResult.data ?? []).flatMap(row => row.job_id ? [row.job_id] : []))];
-  const projectIds = [...new Set((movementsResult.data ?? []).flatMap(row => row.project_id ? [row.project_id] : []))];
-  const [categoriesResult, locationsResult, suppliersResult, itemsResult, barcodesResult,
-    stockLevelsResult, materialLinesResult, assetInstancesResult, jobsResult, projectsResult] = await Promise.all([
-    readCompleteRows((from,to) => admin.from('inventory_categories').select('*').eq('organization_id',orgId).order('sort_order').order('name').order('id').range(from,to),1000),
-    readCompleteRows((from,to) => admin.from('inventory_locations').select('*').eq('organization_id',orgId).order('sort_order').order('name').order('id').range(from,to),1000),
-    readCompleteRows((from,to) => admin.from('inventory_suppliers').select('*').eq('organization_id',orgId).order('name').order('id').range(from,to),1000),
-    readInBatches(supportIds, batch => admin.from('inventory_items').select('*').eq('organization_id',orgId).in('id',[...batch])),
-    readInBatches(supportIds, batch => readCompleteRows((from,to) => admin.from('inventory_item_barcodes').select('*').eq('organization_id',orgId).in('item_id',[...batch]).order('is_primary',{ascending:false}).order('id').range(from,to),10000)),
-    readInBatches(supportIds, batch => readCompleteRows((from,to) => admin.from('inventory_stock_levels').select('*').eq('organization_id',orgId).in('item_id',[...batch]).order('id').range(from,to),10000)),
-    readInBatches(supportIds, batch => readCompleteRows((from,to) => admin.from('job_material_lines').select('*').eq('organization_id',orgId).in('item_id',[...batch]).neq('status','cancelled').order('id').range(from,to),10000)),
-    readInBatches(supportIds, batch => readCompleteRows((from,to) => admin.from('inventory_asset_instances').select('*').eq('organization_id',orgId).in('item_id',[...batch]).order('id').range(from,to),10000)),
-    readInBatches(jobIds, batch => admin.from('jobs').select('id, job_number, title').eq('organization_id',orgId).in('id',[...batch])),
-    readInBatches(projectIds, batch => admin.from('projects').select('id, project_number, name').eq('organization_id',orgId).in('id',[...batch])),
-  ]);
-  if ([categoriesResult,locationsResult,suppliersResult,itemsResult,barcodesResult,stockLevelsResult,
-    materialLinesResult,assetInstancesResult,jobsResult,projectsResult].some(result => result.error)) {
-    return { success: false, error: 'inventory_failed' };
-  }
-
-  const categories = asRows<InventoryCategoryRow>(categoriesResult.data).map(toInventoryCategory);
-  const locations = asRows<InventoryLocationRow>(locationsResult.data).map(toInventoryLocation);
-  const suppliers = asRows<InventorySupplierRow>(suppliersResult.data).map(toInventorySupplier);
-  const items = asRows<InventoryItemRow>(itemsResult.data).map(toInventoryItem);
-  const barcodes = asRows<InventoryBarcodeRow>(barcodesResult.data);
-  const stockLevels = asRows<InventoryStockLevelRow>(stockLevelsResult.data);
-  const materialLines = asRows<JobMaterialLineRow>(materialLinesResult.data);
   const movements = asRows<InventoryMovementRow>(movementsResult.data);
-  const assetInstances = asRows<InventoryAssetInstanceRow>(assetInstancesResult.data);
-  const jobs = asRows<{ id: string; job_number: string | null; title: string }>(
-    jobsResult.data
-  );
-  const projects = asRows<{ id: string; project_number: string | null; name: string }>(
-    projectsResult.data
-  );
-
-  const categoryMap = new Map(categories.map((category) => [category.id, category]));
-  const locationMap = new Map(locations.map((location) => [location.id, location]));
-  const supplierMap = new Map(suppliers.map((supplier) => [supplier.id, supplier]));
-  const itemMap = new Map(items.map((item) => [item.id, item]));
-  const jobMap = new Map(jobs.map((job) => [job.id, job]));
-  const projectMap = new Map(projects.map((project) => [project.id, project]));
-
-  const barcodesByItem = new Map<string, InventoryBarcodeRow[]>();
-  for (const barcode of barcodes) {
-    const list = barcodesByItem.get(barcode.item_id) ?? [];
-    list.push(barcode);
-    barcodesByItem.set(barcode.item_id, list);
-  }
-
-  const stockByItem = new Map<string, InventoryStockLevelRow[]>();
-  for (const stock of stockLevels) {
-    const list = stockByItem.get(stock.item_id) ?? [];
-    list.push(stock);
-    stockByItem.set(stock.item_id, list);
-  }
-
-  const plannedByItem = new Map<string, number>();
-  for (const line of materialLines) {
-    const plannedOpen = Math.max(
-      0,
-      toNumber(line.planned_quantity) - toNumber(line.taken_quantity)
-    );
-    plannedByItem.set(
-      line.item_id,
-      (plannedByItem.get(line.item_id) ?? 0) + plannedOpen
-    );
-  }
-
-  const assetCountByItem = new Map<string, number>();
-  for (const asset of assetInstances) {
-    assetCountByItem.set(asset.item_id, (assetCountByItem.get(asset.item_id) ?? 0) + 1);
-  }
-
-  // The page is the filtered, ordered id list; movement-only items feed the lookups above but are not page rows.
-  const overviewItems: InventoryOverviewItem[] = page.ids.flatMap((id) => {
-    const item = itemMap.get(id);
-    if (!item) return [];
-    const itemStock = stockByItem.get(item.id) ?? [];
-    const stockByLocation = itemStock.map((stock) => ({
-      locationId: stock.location_id,
-      locationName: locationMap.get(stock.location_id)?.name ?? 'Unbekanntes Lager',
-      quantityOnHand: toNumber(stock.quantity_on_hand),
-    }));
-    const totalOnHand = stockByLocation.reduce(
-      (sum, stock) => sum + stock.quantityOnHand,
-      0
-    );
-    const plannedQuantity = plannedByItem.get(item.id) ?? 0;
-    const itemBarcodes = barcodesByItem.get(item.id) ?? [];
-    const primaryBarcode =
-      itemBarcodes.find((barcode) => barcode.is_primary)?.barcode_value ??
-      itemBarcodes[0]?.barcode_value ??
-      null;
-
-    return [{
-      ...item,
-      categoryName: item.categoryId ? categoryMap.get(item.categoryId)?.name ?? null : null,
-      supplierName: item.supplierId ? supplierMap.get(item.supplierId)?.name ?? null : null,
-      primaryBarcode,
-      barcodes: itemBarcodes.map((barcode) => barcode.barcode_value),
-      totalOnHand,
-      plannedQuantity,
-      availableQuantity: Math.max(0, totalOnHand - plannedQuantity),
-      stockStatus: getStockStatus(item, totalOnHand),
-      stockByLocation,
-      assetInstanceCount: assetCountByItem.get(item.id) ?? 0,
-    }];
-  });
-
-  const movementItems: InventoryMovementListItem[] = movements.map((movement) => ({
-    id: movement.id,
-    itemId: movement.item_id,
-    itemName: itemMap.get(movement.item_id)?.name ?? 'Unbekannter Artikel',
-    locationId: movement.location_id,
-    locationName: locationMap.get(movement.location_id)?.name ?? 'Unbekanntes Lager',
-    movementType: movement.movement_type,
-    quantityDelta: toNumber(movement.quantity_delta),
-    quantityBefore: toNumber(movement.quantity_before),
-    quantityAfter: toNumber(movement.quantity_after),
-    jobId: movement.job_id,
-    jobTitle: movement.job_id ? jobMap.get(movement.job_id)?.title ?? null : null,
-    jobNumber: movement.job_id ? jobMap.get(movement.job_id)?.job_number ?? null : null,
-    projectId: movement.project_id,
-    projectName: movement.project_id ? projectMap.get(movement.project_id)?.name ?? null : null,
-    projectNumber: movement.project_id
-      ? projectMap.get(movement.project_id)?.project_number ?? null
-      : null,
-    reason: movement.reason,
-    createdAt: movement.created_at,
-  }));
+  const lists = await loadInventoryOverviewLists(admin, orgId, page, movements);
+  if (!lists.success) return lists;
 
   const summary = page.summary;
 
   return {
     success: true,
     overview: {
-      categories,
-      locations,
-      suppliers,
-      items: overviewItems,
-      movements: movementItems,
+      categories: lists.categories,
+      locations: lists.locations,
+      suppliers: lists.suppliers,
+      items: lists.items,
+      movements: lists.movements,
       summary,
-      page: { query, ids: page.ids, total: page.total, locationIds: page.locationIds, locationCounts: page.locationCounts },
+      page: {
+        query,
+        ids: page.ids,
+        total: page.total,
+        locationIds: page.locationIds,
+        locationCounts: page.locationCounts,
+      },
     },
   };
-}
-
-async function loadInventoryPickerOptions(
-  admin: SupabaseAdminClient,
-  orgId: string,
-  includeOfficeDetails: boolean,
-  options?: { searchTerm?: string; itemLimit?: number; exactItemId?: string | undefined }
-): Promise<ActionResult<{ items: InventoryPickerOption[]; locations: InventoryLocation[] }>> {
-  const searchTerm = options?.searchTerm?.trim().slice(0, 80) ?? '';
-  const itemLimit = options?.itemLimit;
-  let itemIds: string[] | null = options?.exactItemId ? [options.exactItemId] : null;
-  const matchedBarcodeByItem = new Map<string, string>();
-
-  if (!options?.exactItemId && searchTerm) {
-    const pattern = `%${searchTerm}%`;
-    const [names, skus, manufacturers, barcodes] = await Promise.all([
-      admin.from('inventory_items').select('id').eq('organization_id', orgId)
-        .eq('is_active', true).ilike('name', pattern).limit(itemLimit ?? 50),
-      admin.from('inventory_items').select('id').eq('organization_id', orgId)
-        .eq('is_active', true).ilike('internal_sku', pattern).limit(itemLimit ?? 50),
-      admin.from('inventory_items').select('id').eq('organization_id', orgId)
-        .eq('is_active', true).ilike('manufacturer', pattern).limit(itemLimit ?? 50),
-      admin.from('inventory_item_barcodes').select('item_id, barcode_value').eq('organization_id', orgId)
-        .ilike('barcode_value', pattern).limit(itemLimit ?? 50),
-    ]);
-    if ([names, skus, manufacturers, barcodes].some((result) => result.error)) {
-      return { success: false, error: 'items_failed' };
-    }
-    for (const barcode of barcodes.data ?? []) {
-      if (!matchedBarcodeByItem.has(barcode.item_id)) {
-        matchedBarcodeByItem.set(barcode.item_id, barcode.barcode_value);
-      }
-    }
-    itemIds = Array.from(new Set([
-      ...(barcodes.data ?? []).map((row) => row.item_id),
-      ...(skus.data ?? []).map((row) => row.id),
-      ...(names.data ?? []).map((row) => row.id),
-      ...(manufacturers.data ?? []).map((row) => row.id),
-    ])).slice(0, itemLimit ?? 50);
-  }
-
-  let itemsQuery = admin
-      .from('inventory_items')
-      .select('*')
-      .eq('organization_id', orgId)
-      .eq('is_active', true)
-      .order('name', { ascending: true });
-  if (itemIds) itemsQuery = itemsQuery.in('id', itemIds);
-  if (itemLimit) itemsQuery = itemsQuery.limit(itemLimit);
-  const [itemsResult, locationsResult] = await Promise.all([
-    itemIds?.length === 0
-      ? Promise.resolve({ data: [], error: null })
-      : itemsQuery,
-    admin
-      .from('inventory_locations')
-      .select('*')
-      .eq('organization_id', orgId)
-      .eq('is_active', true)
-      .order('sort_order', { ascending: true })
-      .order('name', { ascending: true }),
-  ]);
-
-  if (itemsResult.error) return { success: false, error: 'items_failed' };
-  if (locationsResult.error) return { success: false, error: 'locations_failed' };
-
-  const itemRows = asRows<InventoryItemRow>(itemsResult.data);
-  const loadedItemIds = itemRows.map((item) => item.id);
-  const categoryIds = Array.from(new Set(itemRows.flatMap((item) => item.category_id ? [item.category_id] : [])));
-  const supplierIds = Array.from(new Set(itemRows.flatMap((item) => item.supplier_id ? [item.supplier_id] : [])));
-  const [categoriesResult, suppliersResult, stockResult, barcodesResult] = await Promise.all([
-    categoryIds.length > 0
-      ? admin.from('inventory_categories').select('*').eq('organization_id', orgId).in('id', categoryIds)
-      : Promise.resolve({ data: [], error: null }),
-    includeOfficeDetails && supplierIds.length > 0
-      ? admin.from('inventory_suppliers').select('*').eq('organization_id', orgId).in('id', supplierIds)
-      : Promise.resolve({ data: [], error: null }),
-    loadedItemIds.length > 0
-      ? admin.from('inventory_stock_levels').select('*').eq('organization_id', orgId).in('item_id', loadedItemIds)
-      : Promise.resolve({ data: [], error: null }),
-    loadedItemIds.length > 0
-      ? admin.from('inventory_item_barcodes').select('*').eq('organization_id', orgId)
-          .in('item_id', loadedItemIds).order('is_primary', { ascending: false })
-      : Promise.resolve({ data: [], error: null }),
-  ]);
-  if (categoriesResult.error) return { success: false, error: 'categories_failed' };
-  if (suppliersResult.error) return { success: false, error: 'suppliers_failed' };
-  if (stockResult.error) return { success: false, error: 'stock_failed' };
-  if (barcodesResult.error) return { success: false, error: 'barcodes_failed' };
-
-  const categories = asRows<InventoryCategoryRow>(categoriesResult.data).map(toInventoryCategory);
-  const suppliers = asRows<InventorySupplierRow>(suppliersResult.data).map(toInventorySupplier);
-  const locations = asRows<InventoryLocationRow>(locationsResult.data).map(toInventoryLocation);
-  const categoryMap = new Map(categories.map((category) => [category.id, category]));
-  const supplierMap = new Map(suppliers.map((supplier) => [supplier.id, supplier]));
-  const locationMap = new Map(locations.map((location) => [location.id, location]));
-  const barcodesByItem = new Map<string, InventoryBarcodeRow[]>();
-
-  for (const barcode of asRows<InventoryBarcodeRow>(barcodesResult.data)) {
-    const list = barcodesByItem.get(barcode.item_id) ?? [];
-    list.push(barcode);
-    barcodesByItem.set(barcode.item_id, list);
-  }
-
-  const stockByItem = new Map<string, InventoryStockLevelRow[]>();
-  for (const stock of asRows<InventoryStockLevelRow>(stockResult.data)) {
-    const list = stockByItem.get(stock.item_id) ?? [];
-    list.push(stock);
-    stockByItem.set(stock.item_id, list);
-  }
-
-  const pickerItems = itemRows.map((row) => {
-    const item = toInventoryItem(row);
-    const stockByLocation = (stockByItem.get(item.id) ?? []).map((stock) => ({
-      locationId: stock.location_id,
-      locationName: locationMap.get(stock.location_id)?.name ?? 'Unbekanntes Lager',
-      quantityOnHand: toNumber(stock.quantity_on_hand),
-    }));
-    return {
-      id: item.id,
-      itemType: item.itemType,
-      name: item.name,
-      unit: item.unit,
-      internalSku: item.internalSku,
-      manufacturer: item.manufacturer,
-      supplierName: includeOfficeDetails && item.supplierId
-        ? supplierMap.get(item.supplierId)?.name ?? null
-        : null,
-      supplierArticleNumber: includeOfficeDetails ? item.supplierArticleNumber : null,
-      primaryBarcode:
-        matchedBarcodeByItem.get(item.id) ??
-        barcodesByItem.get(item.id)?.find((barcode) => barcode.is_primary)
-          ?.barcode_value ??
-        barcodesByItem.get(item.id)?.[0]?.barcode_value ??
-        null,
-      categoryName: item.categoryId ? categoryMap.get(item.categoryId)?.name ?? null : null,
-      isBillable: includeOfficeDetails && item.isBillable,
-      availableQuantity: stockByLocation.reduce(
-        (sum, stock) => sum + stock.quantityOnHand,
-        0
-      ),
-      stockByLocation,
-    };
-  });
-
-  return { success: true, items: pickerItems, locations };
 }
 
 export async function getInventoryPickerOptions(): Promise<
@@ -857,15 +551,52 @@ export async function getInventoryPickerOptions(): Promise<
 }
 
 /**
+ * The office picker on a job or project: one page of the catalog, the matches
+ * of a search, or the one item an existing line refers to. The page never
+ * carries the whole organization.
+ */
+export async function getInventoryPickerPage(
+  searchTermInput = '',
+  exactItemIdInput?: string,
+): Promise<ActionResult<{ items: InventoryPickerOption[]; locations: InventoryLocation[] }>> {
+  const parsedExactItemId = optionalItemIdSchema.safeParse(exactItemIdInput);
+  if (!parsedExactItemId.success) return { success: false, error: 'invalid_input' };
+  const exactItemId = parsedExactItemId.data;
+  const parsedSearchTerm = pickerSearchSchema.safeParse(searchTermInput);
+  if (!parsedSearchTerm.success) return { success: false, error: 'invalid_input' };
+  const searchTerm = parsedSearchTerm.data;
+  const auth = await requireInventoryManager();
+  if (!auth.success) return auth;
+
+  const admin = createSupabaseAdminClient();
+  // The first page of a job or project sets up the defaults; a search only reads.
+  if (!searchTerm && !exactItemId) await ensureInventoryDefaults(admin, auth.context);
+  return loadInventoryPickerOptions(admin, auth.context.orgId, true, {
+    searchTerm,
+    itemLimit: INVENTORY_PICKER_PAGE_SIZE,
+    exactItemId,
+  });
+}
+
+/**
  * Loads the existing catalog only after an assigned worker starts a material
  * action. Unlike the office picker, reading an assigned job never creates
  * inventory defaults and never exposes supplier or billability details.
  */
 export async function getInventoryPickerOptionsForJob(
-  jobId: string,
-  searchTerm = '',
-  exactItemId?: string
+  jobIdInput: string,
+  searchTermInput = '',
+  exactItemIdInput?: string,
 ): Promise<ActionResult<{ items: InventoryPickerOption[]; locations: InventoryLocation[] }>> {
+  const parsedExactItemId = optionalItemIdSchema.safeParse(exactItemIdInput);
+  if (!parsedExactItemId.success) return { success: false, error: 'invalid_input' };
+  const exactItemId = parsedExactItemId.data;
+  const parsedSearchTerm = pickerSearchSchema.safeParse(searchTermInput);
+  if (!parsedSearchTerm.success) return { success: false, error: 'invalid_input' };
+  const searchTerm = parsedSearchTerm.data;
+  const parsedJobId = uuidSchema.safeParse(jobIdInput);
+  if (!parsedJobId.success) return { success: false, error: 'invalid_input' };
+  const jobId = parsedJobId.data;
   const auth = await getAuthContext();
   if (!auth.success) return auth;
 
@@ -873,17 +604,19 @@ export async function getInventoryPickerOptionsForJob(
   const jobContext = await getJobContext(admin, auth.context, jobId);
   if (!jobContext.success) return jobContext;
 
-  return loadInventoryPickerOptions(
-    admin,
-    auth.context.orgId,
-    auth.context.isManagerOrAbove,
-    { searchTerm, itemLimit: 50, exactItemId }
-  );
+  return loadInventoryPickerOptions(admin, auth.context.orgId, auth.context.isManagerOrAbove, {
+    searchTerm,
+    itemLimit: INVENTORY_PICKER_PAGE_SIZE,
+    exactItemId,
+  });
 }
 
 export async function createInventoryLocation(
-  input: CreateInventoryLocationInput
+  rawInput: CreateInventoryLocationInput,
 ): Promise<ActionResult<{ location: InventoryLocation }>> {
+  const parsedInput = createInventoryLocationSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   const auth = await requireInventoryManager();
   if (!auth.success) return auth;
 
@@ -905,17 +638,20 @@ export async function createInventoryLocation(
     .single();
 
   if (error || !data) {
-    console.error('Error creating inventory location:', error);
+    logError('Error creating inventory location:', error);
     return { success: false, error: 'create_failed' };
   }
 
-  invalidateInventory(auth.context.orgId);
+  invalidateInventory();
   return { success: true, location: toInventoryLocation(data as InventoryLocationRow) };
 }
 
 export async function upsertInventoryItem(
-  input: UpsertInventoryItemInput
+  rawInput: UpsertInventoryItemInput,
 ): Promise<ActionResult<{ item: InventoryItem }>> {
+  const parsedInput = upsertInventoryItemSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   const auth = await requireInventoryManager();
   if (!auth.success) return auth;
 
@@ -924,49 +660,21 @@ export async function upsertInventoryItem(
   if (!input.unit.trim()) return { success: false, error: 'unit_required' };
 
   const initialQuantity = normalizeQuantity(input.initialQuantity ?? 0);
-  const requestedInitialLocationId = input.id ? null : input.initialLocationId ?? null;
+  const requestedInitialLocationId = input.id ? null : (input.initialLocationId ?? null);
   if (initialQuantity > 0 && !requestedInitialLocationId) {
     return { success: false, error: 'location_required_for_initial_stock' };
   }
 
   const admin = createSupabaseAdminClient();
-  const [categoryReference, initialLocationReference] = await Promise.all([
-    resolveInventoryOrganizationReference(
-      admin,
-      'inventory_categories',
-      auth.context.orgId,
-      input.categoryId,
-      'category_not_found'
-    ),
-    resolveInventoryOrganizationReference(
-      admin,
-      'inventory_locations',
-      auth.context.orgId,
-      requestedInitialLocationId,
-      'location_not_found'
-    ),
-  ]);
-  if (!categoryReference.success) return categoryReference;
-  if (!initialLocationReference.success) return initialLocationReference;
-
-  const initialLocationId = initialLocationReference.referenceId;
-  const supplierId = await ensureSupplier(
-    admin,
-    auth.context.orgId,
-    input.supplierId,
-    input.supplierName
-  );
-
-  const payload = {
-    organization_id: auth.context.orgId,
+  const item = {
     item_type: input.itemType,
     name,
     description: cleanText(input.description),
-    category_id: categoryReference.referenceId,
+    category_id: cleanText(input.categoryId),
     unit: normalizeInventoryUnitInput(input.unit),
     internal_sku: cleanText(input.internalSku),
     manufacturer: cleanText(input.manufacturer),
-    supplier_id: supplierId,
+    supplier_id: cleanText(input.supplierId),
     supplier_article_number: cleanText(input.supplierArticleNumber),
     purchase_price_cents: normalizePrice(input.purchasePriceCents),
     sale_price_cents: normalizePrice(input.salePriceCents),
@@ -977,79 +685,43 @@ export async function upsertInventoryItem(
         ? null
         : normalizeQuantity(input.globalTargetStock),
     track_quantity: input.trackQuantity ?? true,
-    track_individual_assets:
-      input.trackIndividualAssets ?? ['asset', 'tool'].includes(input.itemType),
+    track_individual_assets: input.trackIndividualAssets ?? ['asset', 'tool'].includes(input.itemType),
     notes: cleanText(input.notes),
   };
 
-  const query = input.id
-    ? admin
-        .from('inventory_items')
-        .update(payload)
-        .eq('id', input.id)
-        .eq('organization_id', auth.context.orgId)
-    : admin.from('inventory_items').insert({
-        ...payload,
-        created_by: auth.context.userId,
-      });
-
-  const { data, error } = await query.select().single();
-  if (error || !data) {
-    console.error('Error upserting inventory item:', error);
-    return { success: false, error: 'save_failed' };
+  // The item, its primary barcode and its first count commit together or not at all.
+  const { data, error } = await admin.rpc(
+    'save_inventory_item',
+    rpcArgs('save_inventory_item', {
+      p_organization_id: auth.context.orgId,
+      p_actor_id: auth.context.userId,
+      p_item_id: input.id ?? null,
+      p_item: item,
+      p_supplier_name: cleanText(input.supplierName),
+      p_barcode: cleanText(input.barcode),
+      p_initial_location_id: requestedInitialLocationId,
+      p_initial_quantity: input.id ? 0 : initialQuantity,
+    }),
+  );
+  if (error) {
+    return inventoryWriteFailure('upsertInventoryItem: save_inventory_item failed', error, 'save_failed');
   }
 
-  const item = toInventoryItem(data as InventoryItemRow);
-  const barcode = cleanText(input.barcode);
-  if (barcode) {
-    const { data: existingBarcode } = await admin
-      .from('inventory_item_barcodes')
-      .select('id')
-      .eq('organization_id', auth.context.orgId)
-      .eq('barcode_value', barcode)
-      .maybeSingle();
-
-    if (!existingBarcode) {
-      const { error: barcodeError } = await admin.from('inventory_item_barcodes').insert({
-        organization_id: auth.context.orgId,
-        item_id: item.id,
-        barcode_value: barcode,
-        barcode_type: 'unknown',
-        is_primary: true,
-      });
-
-      if (barcodeError) {
-        console.error('Error saving inventory barcode:', barcodeError);
-      }
-    }
-  }
-
-  if (!input.id && initialQuantity > 0 && initialLocationId) {
-    const movement = await recordMovement(admin, auth.context, {
-      itemId: item.id,
-      locationId: initialLocationId,
-      movementType: 'initial_count',
-      quantityDelta: initialQuantity,
-      reason: 'Erstbestand beim Anlegen',
-    });
-
-    if (!movement.success) return movement;
-  }
-
-  invalidateInventory(auth.context.orgId);
-  return { success: true, item };
+  invalidateInventory();
+  return { success: true, item: toInventoryItem(data as InventoryItemRow) };
 }
 
 export async function adjustInventoryStock(
-  input: AdjustInventoryStockInput
+  rawInput: AdjustInventoryStockInput,
 ): Promise<ActionResult<{ quantityAfter: number }>> {
+  const parsedInput = adjustInventoryStockSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   const auth = await requireInventoryManager();
   if (!auth.success) return auth;
 
   const explicitDelta =
-    input.quantityDelta !== undefined && Number.isFinite(input.quantityDelta)
-      ? input.quantityDelta
-      : null;
+    input.quantityDelta !== undefined && Number.isFinite(input.quantityDelta) ? input.quantityDelta : null;
   const positiveQuantity = normalizeQuantity(input.quantity ?? 0);
   const quantityDelta =
     explicitDelta !== null
@@ -1074,13 +746,91 @@ export async function adjustInventoryStock(
 
   if (!result.success) return result;
 
-  invalidateInventory(auth.context.orgId);
+  invalidateInventory();
   return result;
 }
 
+// The shared write of a planned material line for a job or a project whose
+// access the calling action has already checked.
+async function insertMaterialLine(
+  admin: SupabaseAdminClient,
+  context: AuthContext,
+  {
+    owner,
+    input,
+    readLabel,
+    failureLabel,
+  }: {
+    owner: { job_id: string | null; project_id: string | null };
+    input: {
+      itemId: string;
+      preferredLocationId?: string | null | undefined;
+      plannedQuantity: number;
+      notes?: string | null | undefined;
+    };
+    readLabel: string;
+    failureLabel: string;
+  },
+): Promise<ActionResult<{ lineId: string }>> {
+  const plannedQuantity = normalizeQuantity(input.plannedQuantity);
+  if (plannedQuantity <= 0) return { success: false, error: 'quantity_required' };
+
+  const { data: itemRow } = await loggedRead(
+    readLabel,
+    admin
+      .from('inventory_items')
+      .select('*')
+      .eq('id', input.itemId)
+      .eq('organization_id', context.orgId)
+      .maybeSingle(),
+  );
+
+  const item = itemRow ? toInventoryItem(itemRow as InventoryItemRow) : null;
+  if (!item) return { success: false, error: 'item_not_found' };
+
+  const locationReference = await resolveInventoryOrganizationReference(
+    admin,
+    'inventory_locations',
+    context.orgId,
+    input.preferredLocationId,
+    'location_not_found',
+  );
+  if (!locationReference.success) return locationReference;
+
+  const { data, error } = await admin
+    .from('job_material_lines')
+    .insert({
+      organization_id: context.orgId,
+      ...owner,
+      item_id: item.id,
+      preferred_location_id: locationReference.referenceId,
+      planned_quantity: plannedQuantity,
+      is_billable: item.isBillable,
+      notes: cleanText(input.notes),
+      created_by: context.userId,
+    })
+    .select()
+    .single();
+
+  if (error || !data) {
+    logError(failureLabel, error);
+    return { success: false, error: 'create_failed' };
+  }
+
+  invalidateInventory();
+  revalidatePath('/auftraege', 'layout');
+
+  // The write already committed. Refreshing labels/stock belongs to the reader;
+  // a failed read must never tell the caller to repeat this mutation.
+  return { success: true, lineId: data.id };
+}
+
 export async function createJobMaterialLine(
-  input: CreateJobMaterialLineInput
-): Promise<ActionResult<{ line: JobMaterialLine }>> {
+  rawInput: CreateJobMaterialLineInput,
+): Promise<ActionResult<{ lineId: string }>> {
+  const parsedInput = createJobMaterialLineSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   const auth = await requireInventoryManager();
   if (!auth.success) return auth;
 
@@ -1088,61 +838,20 @@ export async function createJobMaterialLine(
   const jobContext = await getJobContext(admin, auth.context, input.jobId);
   if (!jobContext.success) return jobContext;
 
-  const plannedQuantity = normalizeQuantity(input.plannedQuantity);
-  if (plannedQuantity <= 0) return { success: false, error: 'quantity_required' };
-
-  const { data: itemRow } = await admin
-    .from('inventory_items')
-    .select('*')
-    .eq('id', input.itemId)
-    .eq('organization_id', auth.context.orgId)
-    .maybeSingle();
-
-  const item = itemRow ? toInventoryItem(itemRow as InventoryItemRow) : null;
-  if (!item) return { success: false, error: 'item_not_found' };
-
-  const locationReference = await resolveInventoryOrganizationReference(
-    admin,
-    'inventory_locations',
-    auth.context.orgId,
-    input.preferredLocationId,
-    'location_not_found'
-  );
-  if (!locationReference.success) return locationReference;
-
-  const { data, error } = await admin
-    .from('job_material_lines')
-    .insert({
-      organization_id: auth.context.orgId,
-      job_id: jobContext.job.id,
-      project_id: jobContext.job.project_id,
-      item_id: item.id,
-      preferred_location_id: locationReference.referenceId,
-      planned_quantity: plannedQuantity,
-      is_billable: item.isBillable,
-      notes: cleanText(input.notes),
-      created_by: auth.context.userId,
-    })
-    .select()
-    .single();
-
-  if (error || !data) {
-    console.error('Error creating job material line:', error);
-    return { success: false, error: 'create_failed' };
-  }
-
-  invalidateInventory(auth.context.orgId);
-  updateTag(CACHE_TAGS.jobs(auth.context.orgId));
-  revalidatePath('/auftraege', 'layout');
-
-  const [line] = await hydrateJobMaterialLines(admin, auth.context.orgId, [data as JobMaterialLineRow]);
-  if (!line) return { success: false, error: 'lines_failed' };
-  return { success: true, line };
+  return insertMaterialLine(admin, auth.context, {
+    owner: { job_id: jobContext.job.id, project_id: jobContext.job.project_id },
+    input,
+    readLabel: 'createJobMaterialLine: inventory_items read failed',
+    failureLabel: 'Error creating job material line:',
+  });
 }
 
 export async function createProjectMaterialLine(
-  input: CreateProjectMaterialLineInput
-): Promise<ActionResult<{ line: JobMaterialLine }>> {
+  rawInput: CreateProjectMaterialLineInput,
+): Promise<ActionResult<{ lineId: string }>> {
+  const parsedInput = createProjectMaterialLineSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   const auth = await requireInventoryManager();
   if (!auth.success) return auth;
 
@@ -1150,71 +859,33 @@ export async function createProjectMaterialLine(
   const projectContext = await getProjectContext(admin, auth.context, input.projectId);
   if (!projectContext.success) return projectContext;
 
-  const plannedQuantity = normalizeQuantity(input.plannedQuantity);
-  if (plannedQuantity <= 0) return { success: false, error: 'quantity_required' };
-
-  const { data: itemRow } = await admin
-    .from('inventory_items')
-    .select('*')
-    .eq('id', input.itemId)
-    .eq('organization_id', auth.context.orgId)
-    .maybeSingle();
-
-  const item = itemRow ? toInventoryItem(itemRow as InventoryItemRow) : null;
-  if (!item) return { success: false, error: 'item_not_found' };
-
-  const locationReference = await resolveInventoryOrganizationReference(
-    admin,
-    'inventory_locations',
-    auth.context.orgId,
-    input.preferredLocationId,
-    'location_not_found'
-  );
-  if (!locationReference.success) return locationReference;
-
-  const { data, error } = await admin
-    .from('job_material_lines')
-    .insert({
-      organization_id: auth.context.orgId,
-      job_id: null,
-      project_id: projectContext.project.id,
-      item_id: item.id,
-      preferred_location_id: locationReference.referenceId,
-      planned_quantity: plannedQuantity,
-      is_billable: item.isBillable,
-      notes: cleanText(input.notes),
-      created_by: auth.context.userId,
-    })
-    .select()
-    .single();
-
-  if (error || !data) {
-    console.error('Error creating project material line:', error);
-    return { success: false, error: 'create_failed' };
-  }
-
-  invalidateInventory(auth.context.orgId);
-  updateTag(CACHE_TAGS.projects(auth.context.orgId));
-  revalidatePath('/auftraege', 'layout');
-
-  const [line] = await hydrateJobMaterialLines(admin, auth.context.orgId, [data as JobMaterialLineRow]);
-  if (!line) return { success: false, error: 'lines_failed' };
-  return { success: true, line };
+  return insertMaterialLine(admin, auth.context, {
+    owner: { job_id: null, project_id: projectContext.project.id },
+    input,
+    readLabel: 'createProjectMaterialLine: inventory_items read failed',
+    failureLabel: 'Error creating project material line:',
+  });
 }
 
 export async function updateJobMaterialLine(
-  input: UpdateJobMaterialLineInput
-): Promise<ActionResult<{ line: JobMaterialLine }>> {
+  rawInput: UpdateJobMaterialLineInput,
+): Promise<ActionResult<{ lineId: string }>> {
+  const parsedInput = updateJobMaterialLineSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   const auth = await requireInventoryManager();
   if (!auth.success) return auth;
 
   const admin = createSupabaseAdminClient();
-  const { data: existing } = await admin
-    .from('job_material_lines')
-    .select('*')
-    .eq('id', input.lineId)
-    .eq('organization_id', auth.context.orgId)
-    .maybeSingle();
+  const { data: existing } = await loggedRead(
+    'updateJobMaterialLine: job_material_lines read failed',
+    admin
+      .from('job_material_lines')
+      .select('*')
+      .eq('id', input.lineId)
+      .eq('organization_id', auth.context.orgId)
+      .maybeSingle(),
+  );
 
   if (!existing) return { success: false, error: 'line_not_found' };
 
@@ -1222,19 +893,21 @@ export async function updateJobMaterialLine(
   if (input.itemId !== undefined && input.itemId !== existing.item_id) {
     const existingLine = existing as JobMaterialLineRow;
     const hasMovement =
-      toNumber(existingLine.taken_quantity) > 0 ||
-      toNumber(existingLine.returned_quantity) > 0;
+      toNumber(existingLine.taken_quantity) > 0 || toNumber(existingLine.returned_quantity) > 0;
 
     if (hasMovement) {
       return { success: false, error: 'line_has_movements' };
     }
 
-    const { data: itemRow } = await admin
-      .from('inventory_items')
-      .select('*')
-      .eq('id', input.itemId)
-      .eq('organization_id', auth.context.orgId)
-      .maybeSingle();
+    const { data: itemRow } = await loggedRead(
+      'updateJobMaterialLine: inventory_items read failed',
+      admin
+        .from('inventory_items')
+        .select('*')
+        .eq('id', input.itemId)
+        .eq('organization_id', auth.context.orgId)
+        .maybeSingle(),
+    );
 
     const item = itemRow ? toInventoryItem(itemRow as InventoryItemRow) : null;
     if (!item) return { success: false, error: 'item_not_found' };
@@ -1248,7 +921,7 @@ export async function updateJobMaterialLine(
       'inventory_locations',
       auth.context.orgId,
       input.preferredLocationId,
-      'location_not_found'
+      'location_not_found',
     );
     if (!locationReference.success) return locationReference;
     updateData.preferred_location_id = locationReference.referenceId;
@@ -1276,32 +949,35 @@ export async function updateJobMaterialLine(
     .single();
 
   if (error || !data) {
-    console.error('Error updating job material line:', error);
+    logError('Error updating job material line:', error);
     return { success: false, error: 'update_failed' };
   }
 
-  invalidateInventory(auth.context.orgId);
-  updateTag(CACHE_TAGS.jobs(auth.context.orgId));
+  invalidateInventory();
   revalidatePath('/auftraege', 'layout');
 
-  const [line] = await hydrateJobMaterialLines(admin, auth.context.orgId, [data as JobMaterialLineRow]);
-  if (!line) return { success: false, error: 'lines_failed' };
-  return { success: true, line };
+  // The write already committed. Refreshing labels/stock belongs to the reader;
+  // a failed read must never tell the caller to repeat this mutation.
+  return { success: true, lineId: data.id };
 }
 
-export async function deleteJobMaterialLine(
-  lineId: string
-): Promise<{ success: true } | { success: false; error: string }> {
+export async function deleteJobMaterialLine(lineIdInput: string): Promise<ActionResult> {
+  const parsedLineId = uuidSchema.safeParse(lineIdInput);
+  if (!parsedLineId.success) return { success: false, error: 'invalid_input' };
+  const lineId = parsedLineId.data;
   const auth = await requireInventoryManager();
   if (!auth.success) return auth;
 
   const admin = createSupabaseAdminClient();
-  const { data: existing } = await admin
-    .from('job_material_lines')
-    .select('*')
-    .eq('id', lineId)
-    .eq('organization_id', auth.context.orgId)
-    .maybeSingle();
+  const { data: existing } = await loggedRead(
+    'deleteJobMaterialLine: job_material_lines read failed',
+    admin
+      .from('job_material_lines')
+      .select('*')
+      .eq('id', lineId)
+      .eq('organization_id', auth.context.orgId)
+      .maybeSingle(),
+  );
 
   const line = asRow<JobMaterialLineRow>(existing);
   if (!line) return { success: false, error: 'line_not_found' };
@@ -1320,19 +996,21 @@ export async function deleteJobMaterialLine(
         .eq('organization_id', auth.context.orgId);
 
   if (result.error) {
-    console.error('Error deleting job material line:', result.error);
+    logError('Error deleting job material line:', result.error);
     return { success: false, error: 'delete_failed' };
   }
 
-  invalidateInventory(auth.context.orgId);
-  updateTag(CACHE_TAGS.jobs(auth.context.orgId));
+  invalidateInventory();
   revalidatePath('/auftraege', 'layout');
   return { success: true };
 }
 
 export async function getJobMaterialLines(
-  jobId: string
+  jobIdInput: string,
 ): Promise<ActionResult<{ lines: JobMaterialLine[] }>> {
+  const parsedJobId = uuidSchema.safeParse(jobIdInput);
+  if (!parsedJobId.success) return { success: false, error: 'invalid_input' };
+  const jobId = parsedJobId.data;
   const auth = await getAuthContext();
   if (!auth.success) return auth;
 
@@ -1340,24 +1018,28 @@ export async function getJobMaterialLines(
   const jobContext = await getJobContext(admin, auth.context, jobId);
   if (!jobContext.success) return jobContext;
 
-  const { data, error } = await admin
-    .from('job_material_lines')
-    .select('*')
-    .eq('organization_id', auth.context.orgId)
-    .eq('job_id', jobId)
-    .neq('status', 'cancelled')
-    .order('created_at', { ascending: true });
+  const { data, error } = await readCompleteRows(
+    (from, to) =>
+      admin
+        .from('job_material_lines')
+        .select('*')
+        .eq('organization_id', auth.context.orgId)
+        .eq('job_id', jobId)
+        .neq('status', 'cancelled')
+        .order('created_at', { ascending: true })
+        .order('id')
+        .range(from, to),
+    LIST_ROW_CAP,
+  );
 
   if (error) {
-    console.error('Error fetching job material lines:', error);
+    logError('Error fetching job material lines:', error);
     return { success: false, error: 'lines_failed' };
   }
 
-  const lines = await hydrateJobMaterialLines(
-    admin,
-    auth.context.orgId,
-    asRows<JobMaterialLineRow>(data)
-  );
+  const hydrated = await hydrateJobMaterialLines(admin, auth.context.orgId, asRows<JobMaterialLineRow>(data));
+  if (!hydrated.success) return hydrated;
+  const { lines } = hydrated;
 
   return {
     success: true,
@@ -1368,8 +1050,11 @@ export async function getJobMaterialLines(
 }
 
 export async function getProjectMaterialSummary(
-  projectId: string
+  projectIdInput: string,
 ): Promise<ActionResult<{ summary: ProjectMaterialSummary }>> {
+  const parsedProjectId = uuidSchema.safeParse(projectIdInput);
+  if (!parsedProjectId.success) return { success: false, error: 'invalid_input' };
+  const projectId = parsedProjectId.data;
   const auth = await getAuthContext();
   if (!auth.success) return auth;
 
@@ -1378,37 +1063,49 @@ export async function getProjectMaterialSummary(
   if (!projectContext.success) return projectContext;
 
   const [linesResult, jobsResult] = await Promise.all([
-    admin
-      .from('job_material_lines')
-      .select('*')
-      .eq('organization_id', auth.context.orgId)
-      .eq('project_id', projectId)
-      .neq('status', 'cancelled')
-      .order('created_at', { ascending: true }),
-    admin
-      .from('jobs')
-      .select('id, job_number, title')
-      .eq('organization_id', auth.context.orgId)
-      .eq('project_id', projectId)
-      .order('created_at', { ascending: true }),
+    readCompleteRows(
+      (from, to) =>
+        admin
+          .from('job_material_lines')
+          .select('*')
+          .eq('organization_id', auth.context.orgId)
+          .eq('project_id', projectId)
+          .neq('status', 'cancelled')
+          .order('created_at', { ascending: true })
+          .order('id')
+          .range(from, to),
+      LIST_ROW_CAP,
+    ),
+    readCompleteRows(
+      (from, to) =>
+        admin
+          .from('jobs')
+          .select('id, job_number, title')
+          .eq('organization_id', auth.context.orgId)
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: true })
+          .order('id')
+          .range(from, to),
+      LIST_ROW_CAP,
+    ),
   ]);
 
   if (linesResult.error) {
-    console.error('Error fetching project material lines:', linesResult.error);
+    logError('Error fetching project material lines:', linesResult.error);
     return { success: false, error: 'lines_failed' };
   }
   if (jobsResult.error) {
-    console.error('Error fetching project jobs for material summary:', jobsResult.error);
+    logError('Error fetching project jobs for material summary:', jobsResult.error);
     return { success: false, error: 'jobs_failed' };
   }
 
   const rows = asRows<JobMaterialLineRow>(linesResult.data);
-  const lines = await hydrateJobMaterialLines(admin, auth.context.orgId, rows);
+  const hydrated = await hydrateJobMaterialLines(admin, auth.context.orgId, rows);
+  if (!hydrated.success) return hydrated;
+  const { lines } = hydrated;
   const directLines = lines.filter((line) => !line.jobId);
   const jobLines = lines.filter((line) => line.jobId);
-  const jobs = asRows<{ id: string; job_number: string | null; title: string | null }>(
-    jobsResult.data
-  );
+  const jobs = asRows<{ id: string; job_number: string | null; title: string | null }>(jobsResult.data);
   const jobMap = new Map(jobs.map((job) => [job.id, job]));
   const jobGroups = jobs
     .map((job) => ({
@@ -1433,17 +1130,15 @@ export async function getProjectMaterialSummary(
   const totalMap = new Map<string, ProjectMaterialSummary['totals'][number]>();
   for (const line of lines) {
     const key = `${line.itemId}:${line.unit}`;
-    const current =
-      totalMap.get(key) ??
-      {
-        itemId: line.itemId,
-        itemName: line.itemName,
-        unit: line.unit,
-        plannedQuantity: 0,
-        takenQuantity: 0,
-        returnedQuantity: 0,
-        billableQuantity: 0,
-      };
+    const current = totalMap.get(key) ?? {
+      itemId: line.itemId,
+      itemName: line.itemName,
+      unit: line.unit,
+      plannedQuantity: 0,
+      takenQuantity: 0,
+      returnedQuantity: 0,
+      billableQuantity: 0,
+    };
     current.plannedQuantity += line.plannedQuantity;
     current.takenQuantity += line.takenQuantity;
     current.returnedQuantity += line.returnedQuantity;
@@ -1456,9 +1151,7 @@ export async function getProjectMaterialSummary(
     summary: {
       directLines,
       jobGroups,
-      totals: Array.from(totalMap.values()).sort((a, b) =>
-        a.itemName.localeCompare(b.itemName, 'de')
-      ),
+      totals: Array.from(totalMap.values()).sort((a, b) => a.itemName.localeCompare(b.itemName, 'de')),
     },
   };
 }
@@ -1466,23 +1159,61 @@ export async function getProjectMaterialSummary(
 async function hydrateJobMaterialLines(
   admin: SupabaseAdminClient,
   orgId: string,
-  rows: JobMaterialLineRow[]
-): Promise<JobMaterialLine[]> {
-  if (rows.length === 0) return [];
+  rows: JobMaterialLineRow[],
+): Promise<ActionResult<{ lines: JobMaterialLine[] }>> {
+  if (rows.length === 0) return { success: true, lines: [] };
 
   const itemIds = Array.from(new Set(rows.map((line) => line.item_id)));
   const locationIds = Array.from(
-    new Set(rows.map((line) => line.preferred_location_id).filter(Boolean))
+    new Set(rows.map((line) => line.preferred_location_id).filter(Boolean)),
   ) as string[];
 
   const [itemsResult, categoriesResult, locationsResult, stockResult] = await Promise.all([
-    admin.from('inventory_items').select('*').eq('organization_id', orgId).in('id', itemIds),
-    admin.from('inventory_categories').select('*').eq('organization_id', orgId),
-    locationIds.length > 0
-      ? admin.from('inventory_locations').select('*').eq('organization_id', orgId).in('id', locationIds)
-      : Promise.resolve({ data: [] }),
-    admin.from('inventory_stock_levels').select('*').eq('organization_id', orgId).in('item_id', itemIds),
+    readInBatches(itemIds, (batch) =>
+      admin
+        .from('inventory_items')
+        .select('*')
+        .eq('organization_id', orgId)
+        .in('id', [...batch]),
+    ),
+    readCompleteRows(
+      (from, to) =>
+        admin
+          .from('inventory_categories')
+          .select('*')
+          .eq('organization_id', orgId)
+          .order('id')
+          .range(from, to),
+      LIST_ROW_CAP,
+    ),
+    readInBatches(locationIds, (batch) =>
+      admin
+        .from('inventory_locations')
+        .select('*')
+        .eq('organization_id', orgId)
+        .in('id', [...batch]),
+    ),
+    readInBatches(itemIds, (batch) =>
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('inventory_stock_levels')
+            .select('*')
+            .eq('organization_id', orgId)
+            .in('item_id', [...batch])
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+    ),
   ]);
+  const hydrationError =
+    itemsResult.error ?? categoriesResult.error ?? locationsResult.error ?? stockResult.error;
+  if (hydrationError) {
+    // A missing item read would drop its lines; never show a partial list.
+    logError('Error hydrating job material lines:', hydrationError);
+    return { success: false, error: 'lines_failed' };
+  }
 
   const items = asRows<InventoryItemRow>(itemsResult.data).map(toInventoryItem);
   const categories = asRows<InventoryCategoryRow>(categoriesResult.data).map(toInventoryCategory);
@@ -1494,13 +1225,10 @@ async function hydrateJobMaterialLines(
 
   const stockByItem = new Map<string, number>();
   for (const stock of stockLevels) {
-    stockByItem.set(
-      stock.item_id,
-      (stockByItem.get(stock.item_id) ?? 0) + toNumber(stock.quantity_on_hand)
-    );
+    stockByItem.set(stock.item_id, (stockByItem.get(stock.item_id) ?? 0) + toNumber(stock.quantity_on_hand));
   }
 
-  return rows.flatMap((line) => {
+  const lines = rows.flatMap((line): JobMaterialLine[] => {
     const item = itemMap.get(line.item_id);
     if (!item) return [];
 
@@ -1513,10 +1241,10 @@ async function hydrateJobMaterialLines(
         itemName: item.name,
         itemType: item.itemType,
         unit: item.unit,
-        categoryName: item.categoryId ? categoryMap.get(item.categoryId)?.name ?? null : null,
+        categoryName: item.categoryId ? (categoryMap.get(item.categoryId)?.name ?? null) : null,
         preferredLocationId: line.preferred_location_id,
         preferredLocationName: line.preferred_location_id
-          ? locationMap.get(line.preferred_location_id)?.name ?? null
+          ? (locationMap.get(line.preferred_location_id)?.name ?? null)
           : null,
         plannedQuantity: toNumber(line.planned_quantity),
         takenQuantity: toNumber(line.taken_quantity),
@@ -1530,11 +1258,15 @@ async function hydrateJobMaterialLines(
       },
     ];
   });
+  return { success: true, lines };
 }
 
 export async function takeJobMaterial(
-  input: TakeJobMaterialInput
+  rawInput: TakeJobMaterialInput,
 ): Promise<ActionResult<{ quantityAfter: number }>> {
+  const parsedInput = takeJobMaterialSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   const auth = await getAuthContext();
   if (!auth.success) return auth;
 
@@ -1546,88 +1278,55 @@ export async function takeJobMaterial(
   const jobContext = await getJobContext(admin, auth.context, input.jobId);
   if (!jobContext.success) return jobContext;
 
-  let lineId = input.lineId ?? null;
-  let itemId = input.itemId ?? null;
-  let createdLineId: string | null = null;
-
-  if (lineId) {
-    const { data: line } = await admin
-      .from('job_material_lines')
-      .select('*')
-      .eq('id', lineId)
-      .eq('organization_id', auth.context.orgId)
-      .eq('job_id', input.jobId)
-      .maybeSingle();
+  let result: ActionResult<{ quantityAfter: number }>;
+  if (input.lineId) {
+    const { data: line } = await loggedRead(
+      'takeJobMaterial: job_material_lines read failed',
+      admin
+        .from('job_material_lines')
+        .select('*')
+        .eq('id', input.lineId)
+        .eq('organization_id', auth.context.orgId)
+        .eq('job_id', input.jobId)
+        .maybeSingle(),
+    );
     const existingLine = asRow<JobMaterialLineRow>(line);
     if (!existingLine) return { success: false, error: 'line_not_found' };
-    itemId = existingLine.item_id;
+    result = await recordMovement(admin, auth.context, {
+      itemId: existingLine.item_id,
+      locationId: input.locationId,
+      movementType: 'job_take',
+      quantityDelta: -quantity,
+      jobId: jobContext.job.id,
+      projectId: jobContext.job.project_id,
+      jobMaterialLineId: existingLine.id,
+      reason: input.reason || 'Für Auftrag entnommen',
+    });
   } else {
-    if (!itemId) return { success: false, error: 'item_required' };
-
-    const { data: itemRow } = await admin
-      .from('inventory_items')
-      .select('*')
-      .eq('id', itemId)
-      .eq('organization_id', auth.context.orgId)
-      .maybeSingle();
-    const item = itemRow ? toInventoryItem(itemRow as InventoryItemRow) : null;
-    if (!item) return { success: false, error: 'item_not_found' };
-
-    const { data: newLine, error: lineError } = await admin
-      .from('job_material_lines')
-      .insert({
-        organization_id: auth.context.orgId,
-        job_id: jobContext.job.id,
-        project_id: jobContext.job.project_id,
-        item_id: item.id,
-        preferred_location_id: input.locationId,
-        planned_quantity: 0,
-        is_billable: item.isBillable,
-        is_unplanned: true,
-        notes: cleanText(input.reason),
-        created_by: auth.context.userId,
-      })
-      .select('id')
-      .single();
-
-    if (lineError || !newLine) {
-      console.error('Error creating unplanned material line:', lineError);
-      return { success: false, error: 'line_create_failed' };
-    }
-
-    lineId = asRow<{ id: string }>(newLine)?.id ?? null;
-    createdLineId = lineId;
+    if (!input.itemId) return { success: false, error: 'item_required' };
+    result = await takeUnplannedMaterial(admin, auth.context, {
+      jobId: jobContext.job.id,
+      projectId: null,
+      itemId: input.itemId,
+      locationId: input.locationId,
+      quantity,
+      reason: input.reason,
+      defaultReason: 'Für Auftrag entnommen',
+    });
   }
+  if (!result.success) return result;
 
-  if (!itemId || !lineId) return { success: false, error: 'line_not_found' };
-
-  const result = await recordMovement(admin, auth.context, {
-    itemId,
-    locationId: input.locationId,
-    movementType: 'job_take',
-    quantityDelta: -quantity,
-    jobId: jobContext.job.id,
-    projectId: jobContext.job.project_id,
-    jobMaterialLineId: lineId,
-    reason: input.reason || 'Für Auftrag entnommen',
-  });
-
-  if (!result.success) {
-    if (createdLineId) {
-      await deleteFailedUnplannedMaterialLine(admin, auth.context.orgId, createdLineId);
-    }
-    return result;
-  }
-
-  invalidateInventory(auth.context.orgId);
-  updateTag(CACHE_TAGS.jobs(auth.context.orgId));
+  invalidateInventory();
   revalidatePath('/auftraege', 'layout');
   return result;
 }
 
 export async function takeProjectMaterial(
-  input: Omit<TakeJobMaterialInput, 'jobId'> & { projectId: string }
+  rawInput: Omit<TakeJobMaterialInput, 'jobId'> & { projectId: string },
 ): Promise<ActionResult<{ quantityAfter: number }>> {
+  const parsedInput = takeProjectMaterialSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   const auth = await getAuthContext();
   if (!auth.success) return auth;
 
@@ -1639,88 +1338,55 @@ export async function takeProjectMaterial(
   const projectContext = await getProjectContext(admin, auth.context, input.projectId);
   if (!projectContext.success) return projectContext;
 
-  let lineId = input.lineId ?? null;
-  let itemId = input.itemId ?? null;
-  let createdLineId: string | null = null;
-
-  if (lineId) {
-    const { data: line } = await admin
-      .from('job_material_lines')
-      .select('*')
-      .eq('id', lineId)
-      .eq('organization_id', auth.context.orgId)
-      .eq('project_id', input.projectId)
-      .is('job_id', null)
-      .maybeSingle();
+  let result: ActionResult<{ quantityAfter: number }>;
+  if (input.lineId) {
+    const { data: line } = await loggedRead(
+      'takeProjectMaterial: job_material_lines read failed',
+      admin
+        .from('job_material_lines')
+        .select('*')
+        .eq('id', input.lineId)
+        .eq('organization_id', auth.context.orgId)
+        .eq('project_id', input.projectId)
+        .is('job_id', null)
+        .maybeSingle(),
+    );
     const existingLine = asRow<JobMaterialLineRow>(line);
     if (!existingLine) return { success: false, error: 'line_not_found' };
-    itemId = existingLine.item_id;
+    result = await recordMovement(admin, auth.context, {
+      itemId: existingLine.item_id,
+      locationId: input.locationId,
+      movementType: 'job_take',
+      quantityDelta: -quantity,
+      projectId: projectContext.project.id,
+      jobMaterialLineId: existingLine.id,
+      reason: input.reason || 'Für Projekt entnommen',
+    });
   } else {
-    if (!itemId) return { success: false, error: 'item_required' };
-
-    const { data: itemRow } = await admin
-      .from('inventory_items')
-      .select('*')
-      .eq('id', itemId)
-      .eq('organization_id', auth.context.orgId)
-      .maybeSingle();
-    const item = itemRow ? toInventoryItem(itemRow as InventoryItemRow) : null;
-    if (!item) return { success: false, error: 'item_not_found' };
-
-    const { data: newLine, error: lineError } = await admin
-      .from('job_material_lines')
-      .insert({
-        organization_id: auth.context.orgId,
-        job_id: null,
-        project_id: projectContext.project.id,
-        item_id: item.id,
-        preferred_location_id: input.locationId,
-        planned_quantity: 0,
-        is_billable: item.isBillable,
-        is_unplanned: true,
-        notes: cleanText(input.reason),
-        created_by: auth.context.userId,
-      })
-      .select('id')
-      .single();
-
-    if (lineError || !newLine) {
-      console.error('Error creating direct project material line:', lineError);
-      return { success: false, error: 'line_create_failed' };
-    }
-
-    lineId = asRow<{ id: string }>(newLine)?.id ?? null;
-    createdLineId = lineId;
+    if (!input.itemId) return { success: false, error: 'item_required' };
+    result = await takeUnplannedMaterial(admin, auth.context, {
+      jobId: null,
+      projectId: projectContext.project.id,
+      itemId: input.itemId,
+      locationId: input.locationId,
+      quantity,
+      reason: input.reason,
+      defaultReason: 'Für Projekt entnommen',
+    });
   }
+  if (!result.success) return result;
 
-  if (!itemId || !lineId) return { success: false, error: 'line_not_found' };
-
-  const result = await recordMovement(admin, auth.context, {
-    itemId,
-    locationId: input.locationId,
-    movementType: 'job_take',
-    quantityDelta: -quantity,
-    projectId: projectContext.project.id,
-    jobMaterialLineId: lineId,
-    reason: input.reason || 'Für Projekt entnommen',
-  });
-
-  if (!result.success) {
-    if (createdLineId) {
-      await deleteFailedUnplannedMaterialLine(admin, auth.context.orgId, createdLineId);
-    }
-    return result;
-  }
-
-  invalidateInventory(auth.context.orgId);
-  updateTag(CACHE_TAGS.projects(auth.context.orgId));
+  invalidateInventory();
   revalidatePath('/auftraege', 'layout');
   return result;
 }
 
 export async function returnJobMaterial(
-  input: ReturnJobMaterialInput
+  rawInput: ReturnJobMaterialInput,
 ): Promise<ActionResult<{ quantityAfter: number }>> {
+  const parsedInput = returnJobMaterialSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   const auth = await getAuthContext();
   if (!auth.success) return auth;
 
@@ -1728,12 +1394,15 @@ export async function returnJobMaterial(
   if (quantity <= 0) return { success: false, error: 'quantity_required' };
 
   const admin = createSupabaseAdminClient();
-  const { data: lineData } = await admin
-    .from('job_material_lines')
-    .select('*')
-    .eq('id', input.lineId)
-    .eq('organization_id', auth.context.orgId)
-    .maybeSingle();
+  const { data: lineData } = await loggedRead(
+    'returnJobMaterial: job_material_lines read failed',
+    admin
+      .from('job_material_lines')
+      .select('*')
+      .eq('id', input.lineId)
+      .eq('organization_id', auth.context.orgId)
+      .maybeSingle(),
+  );
 
   const line = asRow<JobMaterialLineRow>(lineData);
   if (!line) return { success: false, error: 'line_not_found' };
@@ -1772,16 +1441,22 @@ export async function returnJobMaterial(
 
   if (!result.success) return result;
 
-  invalidateInventory(auth.context.orgId);
-  updateTag(CACHE_TAGS.projects(auth.context.orgId));
-  updateTag(CACHE_TAGS.jobs(auth.context.orgId));
+  invalidateInventory();
   revalidatePath('/auftraege', 'layout');
   return result;
 }
 
+/**
+ * Books CSV rows directly. A matched row adds its quantity as a receipt; a new
+ * item's quantity is its first count. A row with a quantity but no Lager keeps
+ * its item and books nothing, counted in `missingLocationCount`.
+ */
 export async function importInventoryRows(
-  input: ImportInventoryRowsInput
-): Promise<ActionResult<{ importedCount: number; failedCount: number }>> {
+  rawInput: ImportInventoryRowsInput,
+): Promise<ActionResult<{ importedCount: number; missingLocationCount: number; failedCount: number }>> {
+  const parsedInput = importInventoryRowsSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   const auth = await requireInventoryManager();
   if (!auth.success) return auth;
 
@@ -1807,11 +1482,12 @@ export async function importInventoryRows(
 
   const batch = asRow<{ id: string }>(batchData);
   if (batchError || !batch) {
-    console.error('Error creating inventory import batch:', batchError);
+    logError('Error creating inventory import batch:', batchError);
     return { success: false, error: 'batch_failed' };
   }
 
   let importedCount = 0;
+  let missingLocationCount = 0;
   let failedCount = 0;
 
   for (const row of rows) {
@@ -1822,51 +1498,20 @@ export async function importInventoryRows(
         continue;
       }
 
-      const categoryId = await ensureCategory(admin, auth.context.orgId, row.categoryName);
-      const supplierId = await ensureSupplier(
-        admin,
-        auth.context.orgId,
-        null,
-        row.supplierName
-      );
-      const locationId = await ensureLocation(admin, auth.context, row.locationName);
-
-      let itemId: string | null = null;
-      const internalSku = cleanText(row.internalSku);
-      const barcode = cleanText(row.barcode);
-
-      if (internalSku) {
-        const { data: existing } = await admin
-          .from('inventory_items')
-          .select('id')
-          .eq('organization_id', auth.context.orgId)
-          .eq('internal_sku', internalSku)
-          .maybeSingle();
-        itemId = asRow<{ id: string }>(existing)?.id ?? null;
-      }
-
-      if (!itemId && barcode) {
-        const { data: existingBarcode } = await admin
-          .from('inventory_item_barcodes')
-          .select('item_id')
-          .eq('organization_id', auth.context.orgId)
-          .eq('barcode_value', barcode)
-          .maybeSingle();
-        itemId = asRow<{ item_id: string }>(existingBarcode)?.item_id ?? null;
-      }
-
-      if (!itemId) {
-        const { data: insertedItem, error: itemError } = await admin
-          .from('inventory_items')
-          .insert({
-            organization_id: auth.context.orgId,
+      // One row is one transaction: its item, barcode and stock movement commit
+      // together, and a failed lookup or write fails the row instead of skipping a step.
+      const { data: outcome, error } = await admin.rpc(
+        'import_inventory_row',
+        rpcArgs('import_inventory_row', {
+          p_organization_id: auth.context.orgId,
+          p_actor_id: auth.context.userId,
+          p_import_batch_id: batch.id,
+          p_item: {
             item_type: row.itemType ?? 'material',
             name,
-            category_id: categoryId,
             unit: normalizeInventoryUnitInput(row.unit),
-            internal_sku: internalSku,
+            internal_sku: cleanText(row.internalSku),
             manufacturer: cleanText(row.manufacturer),
-            supplier_id: supplierId,
             supplier_article_number: cleanText(row.supplierArticleNumber),
             purchase_price_cents: normalizePrice(row.purchasePriceCents),
             sale_price_cents: normalizePrice(row.salePriceCents),
@@ -1877,64 +1522,25 @@ export async function importInventoryRows(
                 ? null
                 : normalizeQuantity(row.targetStock),
             notes: cleanText(row.notes),
-            created_by: auth.context.userId,
-          })
-          .select('id')
-          .single();
-
-        if (itemError || !insertedItem) {
-          console.error('Error importing inventory item:', itemError);
-          failedCount++;
-          continue;
-        }
-
-        itemId = asRow<{ id: string }>(insertedItem)?.id ?? null;
-      }
-
-      if (!itemId) {
+          },
+          p_category_name: cleanText(row.categoryName),
+          p_supplier_name: cleanText(row.supplierName),
+          p_location_name: cleanText(row.locationName),
+          p_barcode: cleanText(row.barcode),
+          p_quantity: normalizeQuantity(row.quantity ?? 0),
+          p_reason: `CSV-Import: ${fileName}`,
+        }),
+      );
+      if (error) {
+        inventoryWriteFailure('importInventoryRows: import_inventory_row failed', error, 'save_failed');
         failedCount++;
         continue;
       }
 
-      if (barcode) {
-        const { data: existingBarcode } = await admin
-          .from('inventory_item_barcodes')
-          .select('id')
-          .eq('organization_id', auth.context.orgId)
-          .eq('barcode_value', barcode)
-          .maybeSingle();
-
-        if (!existingBarcode) {
-          await admin.from('inventory_item_barcodes').insert({
-            organization_id: auth.context.orgId,
-            item_id: itemId,
-            barcode_value: barcode,
-            barcode_type: 'unknown',
-            is_primary: true,
-          });
-        }
-      }
-
-      const quantity = normalizeQuantity(row.quantity ?? 0);
-      if (locationId && quantity > 0) {
-        const movement = await recordMovement(admin, auth.context, {
-          itemId,
-          locationId,
-          movementType: 'initial_count',
-          quantityDelta: quantity,
-          importBatchId: batch.id,
-          reason: `CSV-Import: ${fileName}`,
-        });
-
-        if (!movement.success) {
-          failedCount++;
-          continue;
-        }
-      }
-
-      importedCount++;
+      if (outcome === 'missing_location') missingLocationCount++;
+      else importedCount++;
     } catch (error) {
-      console.error('Unexpected row import error:', error);
+      logError('Unexpected row import error:', error);
       failedCount++;
     }
   }
@@ -1943,16 +1549,18 @@ export async function importInventoryRows(
     .from('inventory_import_batches')
     .update({
       status: failedCount > 0 ? 'failed' : 'imported',
-      imported_count: importedCount,
+      // The batch has no column for rows without a Lager; their items were imported.
+      imported_count: importedCount + missingLocationCount,
       failed_count: failedCount,
       completed_at: new Date().toISOString(),
     })
+    .eq('organization_id', auth.context.orgId)
     .eq('id', batch.id);
 
   if (updateError) {
-    console.error('Error updating inventory import batch:', updateError);
+    logError('Error updating inventory import batch:', updateError);
   }
 
-  invalidateInventory(auth.context.orgId);
-  return { success: true, importedCount, failedCount };
+  invalidateInventory();
+  return { success: true, importedCount, missingLocationCount, failedCount };
 }

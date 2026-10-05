@@ -44,10 +44,8 @@ function resolveAutoDismissMs(banner: Omit<BannerState, 'id'>): number | null {
 }
 
 const VARIANT_CLASSES: Record<BannerVariant, string> = {
-  success:
-    'bg-success-soft text-success-soft-foreground ring-success/40',
-  error:
-    'bg-destructive-soft text-destructive-soft-foreground ring-destructive/40',
+  success: 'bg-success-soft text-success-soft-foreground ring-success/40',
+  error: 'bg-destructive-soft text-destructive-soft-foreground ring-destructive/40',
   info: 'bg-info-soft text-info-soft-foreground ring-info/40',
   progress: 'bg-background text-foreground ring-border',
 };
@@ -79,27 +77,30 @@ export function Banner({
       // pushes the banner off-center. Change neither side without the other.
       className={cn(
         'fixed left-1/2 top-4 z-[120] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2',
-        isExiting ? 'animate-banner-out' : 'animate-banner-in'
+        isExiting ? 'animate-banner-out' : 'animate-banner-in',
       )}
-      role="alert"
-      aria-live="assertive"
+      role={isExiting ? undefined : 'alert'}
+      aria-live={isExiting ? 'off' : banner.variant === 'error' ? 'assertive' : 'polite'}
+      aria-hidden={isExiting || undefined}
+      inert={isExiting || undefined}
+      data-banner-id={banner.id}
     >
       <div
         className={cn(
-          'flex items-center gap-3 rounded-lg p-4 shadow-lg ring-1',
-          VARIANT_CLASSES[banner.variant]
+          'flex items-center gap-3 rounded-lg px-4 py-3 shadow-lg ring-1',
+          VARIANT_CLASSES[banner.variant],
         )}
       >
         <BannerIcon variant={banner.variant} />
-        <p className="flex-1 text-sm font-medium">{banner.message}</p>
+        <p className="min-w-0 flex-1 break-words text-sm">{banner.message}</p>
         {banner.actionLabel && banner.onAction && (
           // A real button with an icon, not underlined text: the action (e.g.
           // „Rückgängig") must read as a clickable control at a glance.
           <button
             type="button"
             onClick={() => {
-              banner.onAction?.();
               onDismiss();
+              banner.onAction?.();
             }}
             className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-current/25 bg-white/40 px-2.5 py-1 text-sm font-semibold transition-colors hover:bg-white/70 dark:bg-white/10 dark:hover:bg-white/20"
           >
@@ -114,7 +115,7 @@ export function Banner({
           // two identical labels on one screen are ambiguous for screen
           // readers and break strict-mode test locators.
           aria-label="Hinweis schließen"
-          className="shrink-0 opacity-70 transition-opacity hover:opacity-100"
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md opacity-70 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current"
         >
           <X className="size-4" />
         </button>
@@ -134,7 +135,7 @@ type ShowBannerInput = {
 };
 
 type BannerContextValue = {
-  showBanner: (banner: ShowBannerInput) => void;
+  showBanner: (banner: ShowBannerInput) => () => void;
   dismissBanner: () => void;
 };
 
@@ -143,15 +144,17 @@ const BannerContext = createContext<BannerContextValue | null>(null);
 export function BannerProvider({ children }: { children: ReactNode }) {
   const [banner, setBanner] = useState<BannerState | null>(null);
   const [isExiting, setIsExiting] = useState(false);
+  const [outgoing, setOutgoing] = useState<BannerState | null>(null);
+  const currentRef = useRef<BannerState | null>(null);
+  const outgoingTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const nextIdRef = useRef(1);
-  const autoDismissRef = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined
-  );
+  const autoDismissRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const exitRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const clearTimers = useCallback(() => {
     clearTimeout(autoDismissRef.current);
     clearTimeout(exitRef.current);
+    clearTimeout(outgoingTimerRef.current);
   }, []);
 
   const dismissBanner = useCallback(() => {
@@ -160,6 +163,7 @@ export function BannerProvider({ children }: { children: ReactNode }) {
     clearTimeout(exitRef.current);
     exitRef.current = setTimeout(() => {
       setBanner(null);
+      currentRef.current = null;
       setIsExiting(false);
     }, EXIT_ANIMATION_MS);
   }, []);
@@ -168,30 +172,33 @@ export function BannerProvider({ children }: { children: ReactNode }) {
     ({ autoDismissMs, ...input }: ShowBannerInput) => {
       clearTimers();
       setIsExiting(false);
-      setBanner({ ...input, id: nextIdRef.current++ });
+      setOutgoing(currentRef.current);
+      const next = { ...input, id: nextIdRef.current++ };
+      currentRef.current = next;
+      setBanner(next);
+      outgoingTimerRef.current = setTimeout(() => setOutgoing(null), EXIT_ANIMATION_MS);
 
-      const dismissAfter =
-        autoDismissMs === undefined ? resolveAutoDismissMs(input) : autoDismissMs;
+      const dismissAfter = autoDismissMs === undefined ? resolveAutoDismissMs(input) : autoDismissMs;
       if (dismissAfter !== null) {
         autoDismissRef.current = setTimeout(dismissBanner, dismissAfter);
       }
+      // Disposal belongs to this message, never to a newer caller's feedback.
+      return () => {
+        if (currentRef.current?.id === next.id) dismissBanner();
+      };
     },
-    [clearTimers, dismissBanner]
+    [clearTimers, dismissBanner],
   );
 
   useEffect(() => clearTimers, [clearTimers]);
 
-  const value = useMemo(
-    () => ({ showBanner, dismissBanner }),
-    [showBanner, dismissBanner]
-  );
+  const value = useMemo(() => ({ showBanner, dismissBanner }), [showBanner, dismissBanner]);
 
   return (
     <BannerContext.Provider value={value}>
       {children}
-      {banner && (
-        <Banner banner={banner} onDismiss={dismissBanner} isExiting={isExiting} />
-      )}
+      {outgoing && <Banner key={outgoing.id} banner={outgoing} onDismiss={() => {}} isExiting />}
+      {banner && <Banner key={banner.id} banner={banner} onDismiss={dismissBanner} isExiting={isExiting} />}
     </BannerContext.Provider>
   );
 }
@@ -229,31 +236,31 @@ export function UrlFlashBanner({
 
   const [banner, setBanner] = useState<BannerState | null>(null);
   const [isExiting, setIsExiting] = useState(false);
-  const exitRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  const dismiss = useCallback(() => {
-    setIsExiting(true);
-    clearTimeout(exitRef.current);
-    exitRef.current = setTimeout(() => {
-      setBanner(null);
+  // The banner derives from the param during render, never in an effect. An
+  // effect that runs in a hydration commit inherits that commit's priority:
+  // at idle priority its update waited behind the page's background work,
+  // the param was stripped meanwhile, and the confirmation never showed.
+  const [shownParam, setShownParam] = useState<string | null>(null);
+  if (paramValue !== shownParam) {
+    setShownParam(paramValue);
+    if (paramValue) {
+      setBanner({
+        id: (banner?.id ?? 0) + 1,
+        variant,
+        message: messageTemplate.replace('{name}', paramValue),
+      });
       setIsExiting(false);
-    }, EXIT_ANIMATION_MS);
-  }, []);
+    }
+  }
+
+  const dismiss = useCallback(() => setIsExiting(true), []);
 
   useEffect(() => {
     if (!paramValue) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- the banner is intentionally derived once from the URL event before the param is removed
-    setBanner({
-      id: Date.now(),
-      variant,
-      message: messageTemplate.replace('{name}', paramValue),
-    });
-    setIsExiting(false);
-
     const url = new URL(window.location.href);
     url.searchParams.delete(paramKey);
     router.replace(url.pathname + url.search, { scroll: false });
-  }, [paramValue, paramKey, messageTemplate, router, variant]);
+  }, [paramValue, paramKey, router]);
 
   useEffect(() => {
     if (!banner) return;
@@ -261,10 +268,18 @@ export function UrlFlashBanner({
     return () => clearTimeout(timer);
   }, [banner, dismiss]);
 
-  useEffect(() => () => clearTimeout(exitRef.current), []);
+  // A banner arriving during the exit sets `isExiting` back and cancels the removal.
+  useEffect(() => {
+    if (!isExiting) return;
+    const timer = setTimeout(() => {
+      setBanner(null);
+      setIsExiting(false);
+    }, EXIT_ANIMATION_MS);
+    return () => clearTimeout(timer);
+  }, [isExiting]);
 
   if (!banner) return null;
-  return <Banner banner={banner} onDismiss={dismiss} isExiting={isExiting} />;
+  return <Banner key={banner.id} banner={banner} onDismiss={dismiss} isExiting={isExiting} />;
 }
 
 /**
@@ -289,6 +304,7 @@ export function UndoBanner({
   if (!banner) return null;
   return (
     <Banner
+      key={banner.id}
       banner={{
         id: banner.id,
         variant: 'success',

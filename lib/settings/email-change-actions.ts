@@ -1,7 +1,8 @@
 'use server';
 
+import { loggedRead } from '@/lib/data/read-request-cache';
 import { randomInt } from 'crypto';
-import { z } from 'zod';
+import { z } from '@/lib/zod';
 import { updateTag } from 'next/cache';
 import type { User } from '@supabase/supabase-js';
 import { CACHE_TAGS, getAuthenticatedUser } from '@/lib/data/cached';
@@ -11,13 +12,18 @@ import { isDefiniteEmailUpdateRejection } from '@/lib/settings/email-change-rule
 import { hashEmailChangeOtp } from '@/lib/settings/otp-hash';
 import { transitionEmailChange } from '@/lib/settings/email-change-transition';
 import {
-  CURRENT_EMAIL_OTP_EXPIRY_MINUTES, CURRENT_EMAIL_OTP_LENGTH,
+  CURRENT_EMAIL_OTP_EXPIRY_MINUTES,
+  CURRENT_EMAIL_OTP_LENGTH,
   type EmailChangeActionResult,
 } from '@/lib/settings/email-change.types';
+import { consumeRateLimit } from '@/lib/security/rate-limit';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 
-const otpCodeSchema = z.string().trim().regex(/^\d{6}$/);
-const newEmailSchema = z.string().trim().email().max(320);
+const otpCodeSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{6}$/);
+const newEmailSchema = z.string().trim().toLowerCase().pipe(z.email().max(320));
 
 function hashOtpCode(user: User, code: string): string {
   return hashEmailChangeOtp({ secret: getEmailOtpHashSecret(), userId: user.id, code });
@@ -34,18 +40,44 @@ async function buildResult(
   return { success, error, state: await getInitialEmailChangeWizardState() };
 }
 
+// The 60-second send window per account (transition_email_change) paces
+// resends; this budget caps codes per hour per account and per recipient, so
+// the wizard cannot mail a stream of addresses. It runs before the transition,
+// so a refused request leaves the challenge untouched. A limiter that cannot
+// decide refuses with a retryable failure (rate-limit.ts).
+async function consumeEmailChangeCodeLimit(
+  userId: string,
+  recipient: string,
+): Promise<EmailChangeActionResult | null> {
+  const verdict = await consumeRateLimit(
+    { action: 'email_change_code_per_user', subject: userId },
+    { action: 'email_change_code_per_recipient', subject: recipient },
+  );
+  if (verdict === 'limited') return buildResult(false, 'too_many_attempts');
+  if (verdict === 'unavailable') return buildResult(false, 'unexpected_error');
+  return null;
+}
+
 async function sendEmailChangeOtpEmail(params: {
-  userId: string; email: string; code: string; kind: 'current' | 'new';
+  userId: string;
+  email: string;
+  code: string;
+  kind: 'current' | 'new';
 }): Promise<EmailChangeActionResult> {
   const admin = createSupabaseAdminClient();
-  const { data: profile } = await admin.from('profiles').select('first_name').eq('id', params.userId).maybeSingle();
+  const { data: profile } = await loggedRead(
+    'sendEmailChangeOtpEmail: profiles read failed',
+    admin.from('profiles').select('first_name').eq('id', params.userId).maybeSingle(),
+  );
   const secretKey = getSupabaseSecretKey();
   const { error } = await admin.functions.invoke('send-email-change-current-otp', {
     headers: { apikey: secretKey, Authorization: `Bearer ${secretKey}` },
     body: {
       to: params.email,
       firstName: typeof profile?.first_name === 'string' ? profile.first_name : null,
-      code: params.code, expiresInMinutes: CURRENT_EMAIL_OTP_EXPIRY_MINUTES, kind: params.kind,
+      code: params.code,
+      expiresInMinutes: CURRENT_EMAIL_OTP_EXPIRY_MINUTES,
+      kind: params.kind,
     },
   });
   return buildResult(!error, error ? 'email_send_failed' : undefined);
@@ -55,10 +87,13 @@ export async function requestCurrentEmailChangeOtp(): Promise<EmailChangeActionR
   const user = await getAuthenticatedUser();
   if (!user) return buildResult(false, 'not_authenticated');
   if (!user.email) return buildResult(false, 'no_active_email');
+  const email = user.email.trim().toLowerCase();
+  const refused = await consumeEmailChangeCodeLimit(user.id, email);
+  if (refused) return refused;
   const code = generateOtpCode();
   const result = await transitionEmailChange(user, 'request_current', { codeHash: hashOtpCode(user, code) });
   if ('error' in result) return buildResult(false, result.error);
-  return sendEmailChangeOtpEmail({ userId: user.id, email: user.email.trim().toLowerCase(), code, kind: 'current' });
+  return sendEmailChangeOtpEmail({ userId: user.id, email, code, kind: 'current' });
 }
 
 export async function verifyCurrentEmailChangeOtp(code: string): Promise<EmailChangeActionResult> {
@@ -66,19 +101,26 @@ export async function verifyCurrentEmailChangeOtp(code: string): Promise<EmailCh
   if (!user) return buildResult(false, 'not_authenticated');
   const parsed = otpCodeSchema.safeParse(code);
   if (!parsed.success) return buildResult(false, 'invalid_code');
-  const result = await transitionEmailChange(user, 'verify_current', { codeHash: hashOtpCode(user, parsed.data) });
+  const result = await transitionEmailChange(user, 'verify_current', {
+    codeHash: hashOtpCode(user, parsed.data),
+  });
   return 'error' in result ? buildResult(false, result.error) : buildResult(true);
 }
 
+/** `email` is the parsed, lower-case destination address. */
 async function sendNewEmailCode(
-  user: User, newEmail: string, operation: 'save_new' | 'resend_new',
+  user: User,
+  email: string,
+  operation: 'save_new' | 'resend_new',
 ): Promise<EmailChangeActionResult> {
-  const parsed = newEmailSchema.safeParse(newEmail);
-  if (!parsed.success) return buildResult(false, 'invalid_email');
-  const email = parsed.data.toLowerCase();
   if (email === user.email?.trim().toLowerCase()) return buildResult(false, 'invalid_email');
+  const refused = await consumeEmailChangeCodeLimit(user.id, email);
+  if (refused) return refused;
   const code = generateOtpCode();
-  const result = await transitionEmailChange(user, operation, { codeHash: hashOtpCode(user, code), newEmail: email });
+  const result = await transitionEmailChange(user, operation, {
+    codeHash: hashOtpCode(user, code),
+    newEmail: email,
+  });
   if ('error' in result) return buildResult(false, result.error);
   return sendEmailChangeOtpEmail({ userId: user.id, email, code, kind: 'new' });
 }
@@ -86,13 +128,17 @@ async function sendNewEmailCode(
 export async function savePendingNewEmailVerification(newEmail: string): Promise<EmailChangeActionResult> {
   const user = await getAuthenticatedUser();
   if (!user) return buildResult(false, 'not_authenticated');
-  return sendNewEmailCode(user, newEmail, 'save_new');
+  const parsed = newEmailSchema.safeParse(newEmail);
+  if (!parsed.success) return buildResult(false, 'invalid_email');
+  return sendNewEmailCode(user, parsed.data, 'save_new');
 }
 
 export async function touchPendingNewEmailVerification(newEmail: string): Promise<EmailChangeActionResult> {
   const user = await getAuthenticatedUser();
   if (!user) return buildResult(false, 'not_authenticated');
-  return sendNewEmailCode(user, newEmail, 'resend_new');
+  const parsed = newEmailSchema.safeParse(newEmail);
+  if (!parsed.success) return buildResult(false, 'invalid_email');
+  return sendNewEmailCode(user, parsed.data, 'resend_new');
 }
 
 export async function verifyNewEmailChangeOtp(code: string): Promise<EmailChangeActionResult> {
@@ -110,7 +156,8 @@ export async function verifyNewEmailChangeOtp(code: string): Promise<EmailChange
     const admin = createSupabaseAdminClient();
     try {
       const { error } = await admin.auth.admin.updateUserById(user.id, {
-        email: claim.email, email_confirm: true,
+        email: claim.email,
+        email_confirm: true,
         user_metadata: { ...user.user_metadata, email: claim.email, email_verified: true },
       });
       if (error) {
@@ -135,9 +182,13 @@ export async function verifyNewEmailChangeOtp(code: string): Promise<EmailChange
   return {
     success: true,
     state: {
-      step: 'idle', currentEmail: completed.email, newEmail: null,
-      currentOtpExpiresAt: null, currentOtpResendAvailableAt: null,
-      currentEmailVerifiedExpiresAt: null, newEmailOtpExpiresAt: null,
+      step: 'idle',
+      currentEmail: completed.email,
+      newEmail: null,
+      currentOtpExpiresAt: null,
+      currentOtpResendAvailableAt: null,
+      currentEmailVerifiedExpiresAt: null,
+      newEmailOtpExpiresAt: null,
       newEmailResendAvailableAt: null,
     },
   };

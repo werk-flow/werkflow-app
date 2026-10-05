@@ -21,10 +21,8 @@ import {
   evaluateCustomerCommunicationGuidance,
   recordCustomerCommunicationException,
 } from '@/lib/customer-relationships/actions';
-import type {
-  CommunicationChannel,
-  CommunicationWarningCode,
-} from '@/lib/customer-relationships/types';
+import type { CommunicationChannel, CommunicationWarningCode } from '@/lib/customer-relationships/types';
+import { loadDocument } from '@/lib/navigation/document-load';
 
 const WARNING_TEXT: Record<CommunicationWarningCode, string> = {
   do_not_contact: 'Für diesen Kunden ist ein Nicht-kontaktieren-Hinweis hinterlegt.',
@@ -40,10 +38,7 @@ type PendingContact = {
   warnings: CommunicationWarningCode[];
 };
 
-function isAllowedContactHref(
-  channel: PendingContact['channel'],
-  href: string
-): boolean {
+function isAllowedContactHref(channel: PendingContact['channel'], href: string): boolean {
   try {
     const url = new URL(href);
     return url.protocol === (channel === 'phone' ? 'tel:' : 'mailto:');
@@ -52,11 +47,7 @@ function isAllowedContactHref(
   }
 }
 
-export function useCommunicationContactGuard({
-  clientId,
-}: {
-  clientId: string;
-}) {
+export function useCommunicationContactGuard({ clientId }: { clientId: string }) {
   const { showBanner } = useBanner();
   const [pendingContact, setPendingContact] = useState<PendingContact | null>(null);
   const [reason, setReason] = useState('');
@@ -85,7 +76,7 @@ export function useCommunicationContactGuard({
         return;
       }
       if (result.data.warnings.length === 0) {
-        window.location.href = input.href;
+        loadDocument(input.href);
         return;
       }
       setReason('');
@@ -109,7 +100,10 @@ export function useCommunicationContactGuard({
         reason,
       });
       if (!result.success) {
-        showBanner({ variant: 'error', message: 'Die begründete Ausnahme konnte nicht dokumentiert werden.' });
+        showBanner({
+          variant: 'error',
+          message: 'Die begründete Ausnahme konnte nicht dokumentiert werden.',
+        });
         return;
       }
       const href = pendingContact.href;
@@ -118,23 +112,22 @@ export function useCommunicationContactGuard({
         return;
       }
       setPendingContact(null);
-      window.location.href = href;
+      loadDocument(href);
     });
   }
 
   const dialog = (
     <Dialog
       open={pendingContact !== null}
-      onOpenChange={(open) => !open && !isPending && setPendingContact(null)}
+      onOpenChange={(open) => !open && setPendingContact(null)}
+      pending={isPending}
     >
-      <DialogContent
-        onEscapeKeyDown={(event) => isPending && event.preventDefault()}
-        onPointerDownOutside={(event) => isPending && event.preventDefault()}
-      >
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Kontaktvorgabe prüfen</DialogTitle>
           <DialogDescription>
-            Prüfe den Kontakt zu {pendingContact?.contactName}, bevor du fortfährst. WerkFlow entscheidet nicht über die rechtliche Zulässigkeit.
+            Prüfe den Kontakt zu {pendingContact?.contactName}, bevor du fortfährst. WerkFlow entscheidet
+            nicht über die rechtliche Zulässigkeit.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -166,7 +159,9 @@ export function useCommunicationContactGuard({
           </Field>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setPendingContact(null)} disabled={isPending}>Abbrechen</Button>
+          <Button variant="outline" onClick={() => setPendingContact(null)} disabled={isPending}>
+            Abbrechen
+          </Button>
           <Button onClick={continueWithException} disabled={isPending}>
             {isPending && <Loader2 className="size-4 animate-spin" />}
             Begründet fortfahren

@@ -1,24 +1,20 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { CalendarClock, Loader2, ShieldCheck } from 'lucide-react';
+import { useState } from 'react';
+import { Loader2, ShieldCheck } from 'lucide-react';
 
-import { useBanner } from '@/components/ui/banner';
+import { OwnResponsibilitySummary } from '@/components/settings/own-responsibility-summary';
+import {
+  ResponsibilityEffectPreview,
+  ResponsibilityHolderChecklist,
+} from '@/components/settings/responsibility-configuration-sections';
+import { DelegationDialog } from '@/components/settings/responsibility-delegation-dialog';
+import { DelegationList } from '@/components/settings/responsibility-delegation-list';
+import { holderSourceLabel, personName } from '@/components/settings/responsibility-display';
+import { useResponsibilityConfigurationForm } from '@/components/settings/use-responsibility-configuration-form';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ErrorText } from '@/components/ui/error-text';
-import { SearchableSelect } from '@/components/ui/searchable-select';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
-import { DatePicker } from '@/components/ui/date-picker';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -28,97 +24,18 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
-import {
-  applyResponsibilityConfiguration,
-  createResponsibilityDelegation,
-  endResponsibilityDelegation,
-  previewResponsibilityConfiguration,
-  type ResponsibilityPreview,
-} from '@/lib/responsibilities/actions';
-import type {
-  EffectiveResponsibilityHolder,
-  ResponsibilityDelegation,
-} from '@/lib/responsibilities/resolution';
 import type { ResponsibilitySettingsData } from '@/lib/responsibilities/server';
 import {
-  formatResponsibilityPersonName,
   ORGANIZATION_RESPONSIBILITIES,
   RESPONSIBILITY_DESCRIPTIONS,
   RESPONSIBILITY_LABELS,
   type OrganizationResponsibility,
   type ResponsibilityConfigurationMode,
-  type ResponsibilityPerson,
 } from '@/lib/responsibilities/types';
-import { ROLE_LABELS } from '@/lib/roles';
-import { toLocalDateString } from '@/lib/utils';
 
-const ERROR_MESSAGES = {
-  not_authorized: 'Nur der Admin kann Verantwortlichkeiten ändern.',
-  organization_not_found: 'Die aktive Organisation wurde nicht gefunden.',
-  load_failed: 'Die Verantwortlichkeiten konnten nicht geladen werden.',
-  responsibility_configuration_changed:
-    'Die Verantwortlichkeit wurde zwischenzeitlich geändert. Bitte prüfe die aktuelle Wirkung erneut.',
-  responsibility_requires_active_holder:
-    'Mindestens eine aktive Person muss verantwortlich bleiben.',
-  responsibility_holder_not_active_member:
-    'Eine ausgewählte Person ist kein aktives Organisationsmitglied mehr.',
-  responsibility_delegation_invalid_dates:
-    'Bitte wähle einen gültigen Zeitraum ab heute.',
-  responsibility_delegator_not_current_holder:
-    'Die vertretene Person trägt diese Verantwortung nicht mehr.',
-  responsibility_substitute_not_active_member:
-    'Die Vertretung ist kein aktives Organisationsmitglied mehr.',
-  responsibility_delegation_same_person:
-    'Verantwortliche Person und Vertretung müssen verschieden sein.',
-  responsibility_delegation_overlap:
-    'Für diese Vertretung besteht in diesem Zeitraum bereits eine Überschneidung.',
-  responsibility_delegation_not_found:
-    'Die Vertretung wurde nicht gefunden.',
-  save_failed: 'Die Änderung konnte nicht gespeichert werden.',
-} satisfies Record<string, string>;
-const ERROR_MESSAGE_BY_CODE: Record<string, string> = ERROR_MESSAGES;
-
-function personName(
-  people: ResponsibilityPerson[],
-  employeeRecordId: string
-): string {
-  const person = people.find(
-    (candidate) => candidate.employeeRecordId === employeeRecordId
-  );
-  return person ? formatResponsibilityPersonName(person) : 'Unbekannte Person';
-}
-
-function formatDate(value: string): string {
-  return new Date(`${value}T12:00:00`).toLocaleDateString('de-DE');
-}
-
-function holderSourceLabel(holder: EffectiveResponsibilityHolder): string {
-  if (holder.source.kind === 'direct_assignment') return 'Direkt zugewiesen';
-  if (holder.source.kind === 'delegation') {
-    return `Vertretung bis ${formatDate(holder.source.validUntil)}`;
-  }
-  return `Standard: ${ROLE_LABELS[holder.source.role]}`;
-}
-
-function isoToDate(value: string): Date | undefined {
-  if (!value) return undefined;
-  return new Date(`${value}T12:00:00`);
-}
-
-export function ResponsibilitySettings({
-  data,
-}: {
-  data: ResponsibilitySettingsData;
-}) {
+export function ResponsibilitySettings({ data }: { data: ResponsibilitySettingsData }) {
   useRealtimeRouterRefresh({
     tables: [
       'organization_responsibility_configurations',
@@ -133,14 +50,13 @@ export function ResponsibilitySettings({
     data.currentEmployeeRecordId !== null &&
     (ORGANIZATION_RESPONSIBILITIES.some((responsibility) =>
       data.effective[responsibility].holders.some(
-        (holder) => holder.employeeRecordId === data.currentEmployeeRecordId
-      )
+        (holder) => holder.employeeRecordId === data.currentEmployeeRecordId,
+      ),
     ) ||
       data.delegations.some(
         (delegation) =>
-          delegation.delegatorEmployeeRecordId ===
-            data.currentEmployeeRecordId ||
-          delegation.substituteEmployeeRecordId === data.currentEmployeeRecordId
+          delegation.delegatorEmployeeRecordId === data.currentEmployeeRecordId ||
+          delegation.substituteEmployeeRecordId === data.currentEmployeeRecordId,
       ));
 
   if (data.currentUserRole === 'employee') {
@@ -153,8 +69,7 @@ export function ResponsibilitySettings({
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            Für dich sind derzeit keine Verantwortlichkeiten oder Vertretungen
-            eingetragen.
+            Für dich sind derzeit keine Verantwortlichkeiten oder Vertretungen eingetragen.
           </p>
         </CardContent>
       </Card>
@@ -171,84 +86,22 @@ export function ResponsibilitySettings({
             Verantwortlichkeiten und Freigaben
           </CardTitle>
           <CardDescription>
-            Feste Rollen bleiben verständlich. Einzelne Freigaben können
-            gezielt übertragen werden, ohne weitere Verwaltungsrechte zu
-            vergeben.
+            Feste Rollen bleiben verständlich. Einzelne Freigaben können gezielt übertragen werden, ohne
+            weitere Verwaltungsrechte zu vergeben.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            Änderungen gelten ab der Speicherung. Vergangene Zuständigkeiten
-            und Vertretungszeiträume bleiben im Verlauf erhalten.
+            Änderungen gelten ab der Speicherung. Vergangene Zuständigkeiten und Vertretungszeiträume bleiben
+            im Verlauf erhalten.
           </p>
         </CardContent>
       </Card>
 
       {ORGANIZATION_RESPONSIBILITIES.map((responsibility) => (
-        <ResponsibilityCard
-          key={responsibility}
-          data={data}
-          responsibility={responsibility}
-        />
+        <ResponsibilityCard key={responsibility} data={data} responsibility={responsibility} />
       ))}
     </div>
-  );
-}
-
-function OwnResponsibilitySummary({
-  data,
-}: {
-  data: ResponsibilitySettingsData;
-}) {
-  const ownRecordId = data.currentEmployeeRecordId;
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Meine Verantwortlichkeiten und Vertretungen</CardTitle>
-        <CardDescription>
-          Hier siehst du Freigaben und Vertretungen, die dich betreffen.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-5">
-        {ORGANIZATION_RESPONSIBILITIES.map((responsibility) => {
-          const holder = data.effective[responsibility].holders.find(
-            (candidate) => candidate.employeeRecordId === ownRecordId
-          );
-          const relatedDelegations = data.delegations.filter(
-            (delegation) =>
-              delegation.responsibility === responsibility &&
-              (delegation.delegatorEmployeeRecordId === ownRecordId ||
-                delegation.substituteEmployeeRecordId === ownRecordId)
-          );
-          return (
-            <section key={responsibility} className="space-y-2 border-b pb-5 last:border-0 last:pb-0">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="font-medium">
-                  {RESPONSIBILITY_LABELS[responsibility]}
-                </h2>
-                <Badge variant={holder ? 'default' : 'secondary'}>
-                  {holder ? 'Aktuell verantwortlich' : 'Nicht verantwortlich'}
-                </Badge>
-              </div>
-              {holder ? (
-                <p className="text-sm text-muted-foreground">
-                  {holderSourceLabel(holder)}
-                </p>
-              ) : null}
-              {relatedDelegations.map((delegation) => (
-                <p key={delegation.id} className="text-sm text-muted-foreground">
-                  {delegation.substituteEmployeeRecordId === ownRecordId
-                    ? `Vertretung für ${personName(data.people, delegation.delegatorEmployeeRecordId)}`
-                    : `Vertreten durch ${personName(data.people, delegation.substituteEmployeeRecordId)}`}{' '}
-                  vom {formatDate(delegation.validFrom)} bis{' '}
-                  {formatDate(delegation.validUntil)}
-                </p>
-              ))}
-            </section>
-          );
-        })}
-      </CardContent>
-    </Card>
   );
 }
 
@@ -273,14 +126,10 @@ function ResponsibilityCard({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
             <CardTitle>{RESPONSIBILITY_LABELS[responsibility]}</CardTitle>
-            <CardDescription>
-              {RESPONSIBILITY_DESCRIPTIONS[responsibility]}
-            </CardDescription>
+            <CardDescription>{RESPONSIBILITY_DESCRIPTIONS[responsibility]}</CardDescription>
           </div>
           <Badge variant="secondary">
-            {effective.mode === 'role_default'
-              ? 'Standardrollen'
-              : 'Bestimmte Personen'}
+            {effective.mode === 'role_default' ? 'Standardrollen' : 'Bestimmte Personen'}
           </Badge>
         </div>
       </CardHeader>
@@ -297,15 +146,12 @@ function ResponsibilityCard({
                   <span className="text-sm font-medium">
                     {personName(data.people, holder.employeeRecordId)}
                   </span>
-                  <span className="text-xs text-muted-foreground">
-                    {holderSourceLabel(holder)}
-                  </span>
+                  <span className="text-xs text-muted-foreground">{holderSourceLabel(holder)}</span>
                 </li>
               ))
             ) : (
               <li className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
-                Aktuell ist keine aktive Person verfügbar. Bitte prüfe die
-                Verantwortlichkeit.
+                Aktuell ist keine aktive Person verfügbar. Bitte prüfe die Verantwortlichkeit.
               </li>
             )}
           </ul>
@@ -314,15 +160,9 @@ function ResponsibilityCard({
         <section className="space-y-2">
           <h3 className="text-sm font-medium">Vertretungen</h3>
           {delegations.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Keine Vertretung eingetragen.
-            </p>
+            <p className="text-sm text-muted-foreground">Keine Vertretung eingetragen.</p>
           ) : (
-            <DelegationList
-              data={data}
-              delegations={delegations}
-              canEdit={canEdit}
-            />
+            <DelegationList data={data} delegations={delegations} canEdit={canEdit} />
           )}
         </section>
       </CardContent>
@@ -334,11 +174,7 @@ function ResponsibilityCard({
         </p>
         {canEdit ? (
           <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setDelegationOpen(true)}
-            >
+            <Button type="button" variant="outline" onClick={() => setDelegationOpen(true)}>
               Vertretung eintragen
             </Button>
             <Button type="button" onClick={() => setConfigurationOpen(true)}>
@@ -366,92 +202,6 @@ function ResponsibilityCard({
   );
 }
 
-function DelegationList({
-  data,
-  delegations,
-  canEdit,
-}: {
-  data: ResponsibilitySettingsData;
-  delegations: ResponsibilityDelegation[];
-  canEdit: boolean;
-}) {
-  const router = useRouter();
-  const { showBanner } = useBanner();
-  const [endingId, setEndingId] = useState<string | null>(null);
-
-  const handleEnd = async (delegationId: string) => {
-    setEndingId(delegationId);
-    try {
-      const result = await endResponsibilityDelegation(delegationId);
-      if (!result.success) {
-        showBanner({
-          message: ERROR_MESSAGE_BY_CODE[result.error] ?? ERROR_MESSAGES.save_failed,
-          variant: 'error',
-        });
-        return;
-      }
-      router.refresh();
-      showBanner({ message: 'Die Vertretung wurde beendet.', variant: 'success' });
-    } catch (error) {
-      console.error('Unexpected error ending responsibility delegation:', error);
-      showBanner({ message: ERROR_MESSAGES.save_failed, variant: 'error' });
-    } finally {
-      setEndingId(null);
-    }
-  };
-
-  return (
-    <ul className="grid gap-2">
-      {delegations.map((delegation) => {
-        const effectiveUntil = delegation.revokedFrom
-          ? delegation.revokedFrom
-          : delegation.validUntil;
-        const isEnded =
-          effectiveUntil < data.businessDate ||
-          delegation.revokedFrom === data.businessDate;
-        return (
-          <li
-            key={delegation.id}
-            className="flex flex-col gap-2 rounded-md border px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
-          >
-            <div className="text-sm">
-              <p className="font-medium">
-                {personName(
-                  data.people,
-                  delegation.substituteEmployeeRecordId
-                )}
-              </p>
-              <p className="text-muted-foreground">
-                Für{' '}
-                {personName(data.people, delegation.delegatorEmployeeRecordId)} ·{' '}
-                {formatDate(delegation.validFrom)}–{formatDate(delegation.validUntil)}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge variant={isEnded ? 'secondary' : 'outline'}>
-                {isEnded ? 'Beendet' : 'Zeitlich begrenzt'}
-              </Badge>
-              {canEdit && !isEnded ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  disabled={endingId !== null}
-                  onClick={() => void handleEnd(delegation.id)}
-                >
-                  {endingId === delegation.id
-                    ? 'Wird beendet…'
-                    : 'Heute beenden'}
-                </Button>
-              ) : null}
-            </div>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
 function ConfigurationDialog({
   data,
   responsibility,
@@ -463,97 +213,26 @@ function ConfigurationDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const router = useRouter();
-  const { showBanner } = useBanner();
-  const current = data.effective[responsibility];
-  const baseHolderIds = useMemo(
-    () =>
-      current.holders
-        .filter((holder) => holder.source.kind !== 'delegation')
-        .map((holder) => holder.employeeRecordId),
-    [current.holders]
-  );
-  const [mode, setMode] = useState<ResponsibilityConfigurationMode>(
-    current.mode
-  );
-  const [selectedIds, setSelectedIds] = useState<string[]>(baseHolderIds);
-  const [preview, setPreview] = useState<ResponsibilityPreview | null>(null);
-  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-
-  const reset = () => {
-    setMode(current.mode);
-    setSelectedIds(baseHolderIds);
-    setPreview(null);
-  };
-  const handleOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen) reset();
-    onOpenChange(nextOpen);
-  };
-
-  const handlePreview = async () => {
-    setIsLoadingPreview(true);
-    try {
-      const result = await previewResponsibilityConfiguration({
-        responsibility,
-        mode,
-        employeeRecordIds: mode === 'selected' ? selectedIds : [],
-      });
-      if (!result.success) {
-        showBanner({
-          message: ERROR_MESSAGE_BY_CODE[result.error] ?? ERROR_MESSAGES.save_failed,
-          variant: 'error',
-        });
-        return;
-      }
-      setPreview(result.preview);
-    } catch (error) {
-      console.error('Unexpected error previewing responsibility configuration:', error);
-      showBanner({ message: ERROR_MESSAGES.save_failed, variant: 'error' });
-    } finally {
-      setIsLoadingPreview(false);
-    }
-  };
-
-  const handleSave = async () => {
-    if (!preview) return;
-    setIsSaving(true);
-    try {
-      const result = await applyResponsibilityConfiguration({
-        responsibility,
-        mode,
-        employeeRecordIds: mode === 'selected' ? selectedIds : [],
-        expectedConfigurationId: preview.expectedConfigurationId,
-      });
-      if (!result.success) {
-        showBanner({
-          message: ERROR_MESSAGE_BY_CODE[result.error] ?? ERROR_MESSAGES.save_failed,
-          variant: 'error',
-        });
-        return;
-      }
-      handleOpenChange(false);
-      router.refresh();
-      showBanner({
-        message: `${RESPONSIBILITY_LABELS[responsibility]} wurden gespeichert.`,
-        variant: 'success',
-      });
-    } catch (error) {
-      console.error('Unexpected error applying responsibility configuration:', error);
-      showBanner({ message: ERROR_MESSAGES.save_failed, variant: 'error' });
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  const {
+    mode,
+    selectedIds,
+    preview,
+    isLoadingPreview,
+    isSaving,
+    changeMode,
+    togglePerson,
+    handleOpenChange,
+    handlePreview,
+    handleSave,
+  } = useResponsibilityConfigurationForm({ data, responsibility, onOpenChange });
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-xl">
+    <Dialog open={open} onOpenChange={handleOpenChange} pending={isSaving || isLoadingPreview}>
+      <DialogContent size="xl">
         <DialogHeader>
           <DialogTitle>{RESPONSIBILITY_LABELS[responsibility]} ändern</DialogTitle>
           <DialogDescription>
-            Wähle zuerst die Regel. Danach zeigt WerkFlow die effektive Wirkung,
-            bevor etwas gespeichert wird.
+            Wähle zuerst die Regel. Danach zeigt WerkFlow die effektive Wirkung, bevor etwas gespeichert wird.
           </DialogDescription>
         </DialogHeader>
 
@@ -561,99 +240,37 @@ function ConfigurationDialog({
           <Field label="Verantwortliche Personen" htmlFor={`${responsibility}-mode`}>
             <Select
               value={mode}
-              onValueChange={(value) => {
-                setMode(value as ResponsibilityConfigurationMode);
-                setPreview(null);
-              }}
+              onValueChange={(value) => changeMode(value as ResponsibilityConfigurationMode)}
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="role_default">
-                  Standardrollen: Admin und Büro
-                </SelectItem>
+                <SelectItem value="role_default">Standardrollen: Admin und Büro</SelectItem>
                 <SelectItem value="selected">Bestimmte Personen</SelectItem>
               </SelectContent>
             </Select>
           </Field>
 
           {mode === 'selected' ? (
-            <fieldset className="space-y-2">
-              <legend className="text-sm font-medium">Personen auswählen</legend>
-              <div className="max-h-52 space-y-1 overflow-y-auto rounded-md border p-2">
-                {data.people.map((person) => {
-                  const checked = selectedIds.includes(person.employeeRecordId);
-                  const checkboxId = `${responsibility}-${person.employeeRecordId}`;
-                  return (
-                    <label
-                      key={person.employeeRecordId}
-                      htmlFor={checkboxId}
-                      className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 hover:bg-accent"
-                    >
-                      <Checkbox
-                        id={checkboxId}
-                        checked={checked}
-                        onCheckedChange={(nextChecked) => {
-                          setSelectedIds((currentIds) =>
-                            nextChecked
-                              ? [...currentIds, person.employeeRecordId]
-                              : currentIds.filter(
-                                  (id) => id !== person.employeeRecordId
-                                )
-                          );
-                          setPreview(null);
-                        }}
-                      />
-                      <span className="min-w-0 text-sm">
-                        <span className="font-medium">
-                          {formatResponsibilityPersonName(person)}
-                        </span>{' '}
-                        <span className="text-muted-foreground">
-                          · {ROLE_LABELS[person.role]}
-                        </span>
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            </fieldset>
+            <ResponsibilityHolderChecklist
+              responsibility={responsibility}
+              people={data.people}
+              selectedIds={selectedIds}
+              onToggle={togglePerson}
+            />
           ) : null}
 
-          {preview ? (
-            <div className="space-y-3 rounded-lg border bg-muted/30 p-3" data-testid="effective-access-preview">
-              <div>
-                <p className="text-sm font-medium">Wirkung ab heute</p>
-                <p className="text-xs text-muted-foreground">
-                  {formatDate(preview.businessDate)} · erst nach Bestätigung
-                </p>
-              </div>
-              <PreviewNames
-                label="Erhält Zugriff"
-                testId="preview-gained"
-                ids={preview.gainedHolderIds}
-                people={data.people}
-                emptyLabel="Niemand zusätzlich"
-              />
-              <PreviewNames
-                label="Verliert Zugriff"
-                testId="preview-lost"
-                ids={preview.lostHolderIds}
-                people={data.people}
-                emptyLabel="Niemand"
-              />
-              <PreviewNames
-                label="Danach verantwortlich"
-                testId="preview-effective"
-                ids={preview.effectiveHolderIds}
-                people={data.people}
-              />
-            </div>
-          ) : null}
+          {preview ? <ResponsibilityEffectPreview preview={preview} people={data.people} /> : null}
         </div>
 
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => handleOpenChange(false)}
+            disabled={isSaving || isLoadingPreview}
+          >
             Abbrechen
           </Button>
           {preview ? (
@@ -662,254 +279,12 @@ function ConfigurationDialog({
               Änderung bestätigen
             </Button>
           ) : (
-            <Button
-              type="button"
-              disabled={isLoadingPreview}
-              onClick={() => void handlePreview()}
-            >
+            <Button type="button" disabled={isLoadingPreview} onClick={() => void handlePreview()}>
               {isLoadingPreview && <Loader2 className="animate-spin" />}
               Wirkung prüfen
             </Button>
           )}
         </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function PreviewNames({
-  label,
-  testId,
-  ids,
-  people,
-  emptyLabel = 'Niemand',
-}: {
-  label: string;
-  testId: string;
-  ids: string[];
-  people: ResponsibilityPerson[];
-  emptyLabel?: string;
-}) {
-  return (
-    <div className="text-sm" data-testid={testId}>
-      <p className="font-medium">{label}</p>
-      <p className="text-muted-foreground">
-        {ids.length > 0
-          ? ids.map((id) => personName(people, id)).join(', ')
-          : emptyLabel}
-      </p>
-    </div>
-  );
-}
-
-function DelegationDialog({
-  data,
-  responsibility,
-  open,
-  onOpenChange,
-}: {
-  data: ResponsibilitySettingsData;
-  responsibility: OrganizationResponsibility;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const router = useRouter();
-  const { showBanner } = useBanner();
-  const baseHolders = data.effective[responsibility].holders.filter(
-    (holder) => holder.source.kind !== 'delegation'
-  );
-  const [delegatorId, setDelegatorId] = useState(
-    baseHolders[0]?.employeeRecordId ?? ''
-  );
-  const [substituteId, setSubstituteId] = useState('');
-  const [validFrom, setValidFrom] = useState(data.businessDate);
-  const [validUntil, setValidUntil] = useState(data.businessDate);
-  const [note, setNote] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [personErrors, setPersonErrors] = useState<{
-    delegator?: string | undefined;
-    substitute?: string | undefined;
-  }>({});
-  const hasInvalidDateRange = validUntil < validFrom;
-  const dateRangeError = hasInvalidDateRange
-    ? 'Das Enddatum darf nicht vor dem Startdatum liegen.'
-    : null;
-  const canSave =
-    Boolean(delegatorId) && Boolean(substituteId) && !hasInvalidDateRange;
-
-  const reset = () => {
-    setDelegatorId(baseHolders[0]?.employeeRecordId ?? '');
-    setSubstituteId('');
-    setValidFrom(data.businessDate);
-    setValidUntil(data.businessDate);
-    setNote('');
-    setSaveError(null);
-    setPersonErrors({});
-  };
-  const handleOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen) reset();
-    onOpenChange(nextOpen);
-  };
-
-  const handleSave = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (isSaving) return;
-    const nextPersonErrors = {
-      delegator: delegatorId
-        ? undefined
-        : 'Bitte wähle die verantwortliche Person aus.',
-      substitute: substituteId ? undefined : 'Bitte wähle eine Vertretung aus.',
-    };
-    setPersonErrors(nextPersonErrors);
-    const firstInvalidId = nextPersonErrors.delegator
-      ? `${responsibility}-delegator`
-      : nextPersonErrors.substitute
-        ? `${responsibility}-substitute`
-        : hasInvalidDateRange
-          ? `${responsibility}-valid-until`
-          : null;
-    if (firstInvalidId) {
-      document.getElementById(firstInvalidId)?.focus();
-      return;
-    }
-    setIsSaving(true);
-    setSaveError(null);
-    try {
-      const result = await createResponsibilityDelegation({
-        responsibility,
-        delegatorEmployeeRecordId: delegatorId,
-        substituteEmployeeRecordId: substituteId,
-        validFrom,
-        validUntil,
-        note,
-      });
-      if (!result.success) {
-        setSaveError(ERROR_MESSAGE_BY_CODE[result.error] ?? ERROR_MESSAGES.save_failed);
-        return;
-      }
-      handleOpenChange(false);
-      router.refresh();
-      showBanner({ message: 'Die Vertretung wurde eingetragen.', variant: 'success' });
-    } catch (error) {
-      console.error('Unexpected error creating responsibility delegation:', error);
-      setSaveError(ERROR_MESSAGES.save_failed);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle>Vertretung für {RESPONSIBILITY_LABELS[responsibility]}</DialogTitle>
-          <DialogDescription>
-            Die verantwortliche Person behält ihre Freigabe. Die Vertretung
-            erhält sie nur im gewählten Zeitraum.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSave} noValidate className="grid gap-4 sm:grid-cols-2">
-          <Field
-            label="Verantwortliche Person"
-            htmlFor={`${responsibility}-delegator`}
-            required
-            error={personErrors.delegator}
-            className="sm:col-span-2"
-          >
-            <SearchableSelect
-              options={baseHolders.map((holder) => ({
-                value: holder.employeeRecordId,
-                label: personName(data.people, holder.employeeRecordId),
-              }))}
-              value={delegatorId}
-              onChange={(value) => {
-                setDelegatorId(value);
-                setPersonErrors((current) => ({ ...current, delegator: undefined }));
-              }}
-              placeholder="Person wählen"
-              searchPlaceholder="Person suchen …"
-              emptyMessage="Keine Person gefunden"
-            />
-          </Field>
-          <Field
-            label="Vertretung"
-            htmlFor={`${responsibility}-substitute`}
-            required
-            error={personErrors.substitute}
-            className="sm:col-span-2"
-          >
-            <SearchableSelect
-              options={data.people
-                .filter((person) => person.employeeRecordId !== delegatorId)
-                .map((person) => ({
-                  value: person.employeeRecordId,
-                  label: formatResponsibilityPersonName(person),
-                }))}
-              value={substituteId}
-              onChange={(value) => {
-                setSubstituteId(value);
-                setPersonErrors((current) => ({ ...current, substitute: undefined }));
-              }}
-              placeholder="Vertretung wählen"
-              searchPlaceholder="Person suchen …"
-              emptyMessage="Keine Person gefunden"
-            />
-          </Field>
-          <Field label="Gültig ab" htmlFor={`${responsibility}-valid-from`} required>
-            <DatePicker
-              ariaLabel="Gültig ab"
-              value={isoToDate(validFrom)}
-              onChange={(date) => date && setValidFrom(toLocalDateString(date))}
-            />
-          </Field>
-          <Field
-            label="Gültig bis"
-            htmlFor={`${responsibility}-valid-until`}
-            required
-            error={dateRangeError}
-          >
-            <DatePicker
-              ariaLabel="Gültig bis"
-              value={isoToDate(validUntil)}
-              onChange={(date) => date && setValidUntil(toLocalDateString(date))}
-            />
-          </Field>
-          <Field
-            label="Hinweis (optional)"
-            htmlFor={`${responsibility}-delegation-note`}
-            className="sm:col-span-2"
-          >
-            <Textarea
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-              placeholder="Zum Beispiel: Urlaubsvertretung"
-              maxLength={500}
-            />
-          </Field>
-          {canSave ? (
-            <div className="rounded-md border bg-muted/30 p-3 text-sm sm:col-span-2">
-              <p className="flex items-center gap-2 font-medium">
-                <CalendarClock className="size-4" /> Wirkung
-              </p>
-              <p className="mt-1 text-muted-foreground">
-                Die Vertretung gilt einschließlich {formatDate(validFrom)} und{' '}
-                {formatDate(validUntil)}. Ab dem Folgetag endet der Zugriff
-                automatisch.
-              </p>
-            </div>
-          ) : null}
-          <ErrorText className="sm:col-span-2">{saveError}</ErrorText>
-          <DialogFooter className="sm:col-span-2">
-            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
-              Abbrechen
-            </Button>
-            <Button type="submit" disabled={isSaving}>
-              {isSaving && <Loader2 className="animate-spin" />}
-              Vertretung speichern
-            </Button>
-          </DialogFooter>
-        </form>
       </DialogContent>
     </Dialog>
   );

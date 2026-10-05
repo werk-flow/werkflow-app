@@ -1,45 +1,30 @@
-import type { Database, Json } from "@/lib/supabase/database.types";
+import type { ActionFailure, ActionResult } from '@/lib/action-result';
+import type { ProfileReference } from '@/lib/profile-reference';
+import type { Database, Json } from '@/lib/supabase/database.types';
 
-export const DOCUMENT_STORAGE_BUCKET = "organization-documents";
+export const DOCUMENT_STORAGE_BUCKET = 'organization-documents';
 export const DOCUMENT_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
 
-export const DOCUMENT_CATEGORIES = [
-  "photo",
-  "contract",
-  "invoice",
-  "offer",
-  "report",
-  "other",
-] as const;
+export const DOCUMENT_CATEGORIES = ['photo', 'contract', 'invoice', 'offer', 'report', 'other'] as const;
 
 export type DocumentCategory = (typeof DOCUMENT_CATEGORIES)[number];
 
 export const DOCUMENT_CATEGORY_LABELS: Record<DocumentCategory, string> = {
-  photo: "Fotos",
-  contract: "Verträge",
-  invoice: "Rechnungen",
-  offer: "Angebote",
-  report: "Berichte",
-  other: "Sonstige",
+  photo: 'Fotos',
+  contract: 'Verträge',
+  invoice: 'Rechnungen',
+  offer: 'Angebote',
+  report: 'Berichte',
+  other: 'Sonstige',
 };
 
-export type DocumentFolderRow =
-  Database["public"]["Tables"]["document_folders"]["Row"];
-export type DocumentRow = Database["public"]["Tables"]["documents"]["Row"];
-export type DocumentLinkRow =
-  Database["public"]["Tables"]["document_links"]["Row"];
-export type DocumentAuditEventRow =
-  Database["public"]["Tables"]["document_audit_events"]["Row"];
-export type DocumentVersionRow =
-  Database["public"]["Tables"]["document_versions"]["Row"];
+export type DocumentFolderRow = Database['public']['Tables']['document_folders']['Row'];
+export type DocumentRow = Database['public']['Tables']['documents']['Row'];
+export type DocumentLinkRow = Database['public']['Tables']['document_links']['Row'];
+export type DocumentAuditEventRow = Database['public']['Tables']['document_audit_events']['Row'];
+export type DocumentVersionRow = Database['public']['Tables']['document_versions']['Row'];
 
-export type DocumentUploader = {
-  userId: string;
-  firstName: string | null;
-  lastName: string | null;
-  email: string | null;
-  avatarPath: string | null;
-};
+export type DocumentUploader = ProfileReference;
 
 /** What a document link records about an employee; no role or split name is read for it. */
 export type DocumentEmployee = {
@@ -48,24 +33,18 @@ export type DocumentEmployee = {
   email: string | null;
 };
 
-export type DocumentEquipment = {
-  id: string;
-  equipmentNumber: string;
-  name: string;
-};
-
 export type DocumentContextTarget =
-  | { kind: "job"; jobId: string }
-  | { kind: "project"; projectId: string }
-  | { kind: "client"; clientId: string }
-  | { kind: "employee"; employeeId: string }
-  | { kind: "request"; requestId: string }
-  | { kind: "equipment"; equipmentId: string }
-  | { kind: "service_case"; serviceCaseId: string }
-  | { kind: "maintenance_coverage"; maintenanceCoverageId: string };
+  | { kind: 'job'; jobId: string }
+  | { kind: 'project'; projectId: string }
+  | { kind: 'client'; clientId: string }
+  | { kind: 'employee'; employeeId: string }
+  | { kind: 'request'; requestId: string }
+  | { kind: 'equipment'; equipmentId: string }
+  | { kind: 'service_case'; serviceCaseId: string }
+  | { kind: 'maintenance_coverage'; maintenanceCoverageId: string };
 
 export type DocumentUploadTarget =
-  | { kind: "library"; folderId?: string | null }
+  | { kind: 'library'; folderId?: string | null }
   | (DocumentContextTarget & { folderId?: string | null });
 
 export type DocumentFolder = {
@@ -133,47 +112,63 @@ export type OrganizationDocument = {
   links: DocumentLink[];
 };
 
-export type DocumentLibraryView =
-  | "all"
-  | "unorganized"
-  | "work"
-  | "jobs"
-  | "projects"
-  | "clients"
-  | "employees"
-  | "folders"
-  | "photos"
-  | "contracts"
-  | "invoices"
-  | "offers"
-  | "reports"
-  | "other"
-  | "trash";
+export const DOCUMENT_LIBRARY_VIEWS = [
+  'all',
+  'unorganized',
+  'work',
+  'jobs',
+  'projects',
+  'clients',
+  'employees',
+  'folders',
+  'photos',
+  'contracts',
+  'invoices',
+  'offers',
+  'reports',
+  'other',
+  'trash',
+] as const;
 
-export type DocumentLibraryLinkFilter =
-  "all" | "unlinked" | "jobs" | "projects" | "clients" | "employees";
+export type DocumentLibraryView = (typeof DOCUMENT_LIBRARY_VIEWS)[number];
 
-export type DocumentLibraryCategoryFilter = DocumentCategory | "all";
+export const DOCUMENT_LIBRARY_LINK_FILTERS = [
+  'all',
+  'unlinked',
+  'jobs',
+  'projects',
+  'clients',
+  'employees',
+] as const;
 
-export type DocumentLibrarySort =
-  "name" | "created_at" | "updated_at" | "size_bytes" | "type" | "category";
+export type DocumentLibraryLinkFilter = (typeof DOCUMENT_LIBRARY_LINK_FILTERS)[number];
 
-export type DocumentLibraryResult =
-  | {
-      success: true;
-      page: number; total: number; folderPage: number; folderTotal: number;
-      breadcrumbs: DocumentFolder[];
-      folders: DocumentFolder[];
-      documents: OrganizationDocument[];
-    }
-  | { success: false; error: string };
+export type DocumentLibraryCategoryFilter = DocumentCategory | 'all';
 
-export type DocumentListResult =
-  | { success: true; documents: OrganizationDocument[] }
-  | { success: false; error: string };
+export const DOCUMENT_LIBRARY_SORTS = [
+  'name',
+  'created_at',
+  'updated_at',
+  'size_bytes',
+  'type',
+  'category',
+] as const;
 
-export type DocumentMutationResult =
-  { success: true } | { success: false; error: string };
+export type DocumentLibrarySort = (typeof DOCUMENT_LIBRARY_SORTS)[number];
+
+export type DocumentLibraryResult = ActionResult<{
+  page: number;
+  total: number;
+  folderPage: number;
+  folderTotal: number;
+  breadcrumbs: DocumentFolder[];
+  folders: DocumentFolder[];
+  documents: OrganizationDocument[];
+}>;
+
+export type DocumentListResult = ActionResult<{ documents: OrganizationDocument[] }>;
+
+export type DocumentMutationResult = ActionResult;
 
 export type UpdateDocumentLinksInput = {
   documentId: string;
@@ -187,19 +182,8 @@ export type UpdateDocumentLinksInput = {
   removeLinkIds?: string[];
 };
 
-export type UpdateDocumentLinksResult =
-  | {
-      success: true;
-      addedCount: number;
-      removedCount: number;
-    }
-  | {
-      success: false;
-      error: string;
-      addedCount: number;
-      removedCount: number;
-      failedCount: number;
-    };
+/** All or nothing: a failure changed no link. */
+export type UpdateDocumentLinksResult = ActionResult<{ addedCount: number; removedCount: number }>;
 
 export type LinkDocumentsToTargetInput = {
   documentIds: string[];
@@ -214,12 +198,7 @@ export type LinkDocumentsToTargetInput = {
 
 export type LinkDocumentsToTargetResult =
   | { success: true; linkedCount: number }
-  | {
-      success: false;
-      error: string;
-      linkedCount: number;
-      failedCount: number;
-    };
+  | (ActionFailure & { linkedCount: number; failedCount: number });
 
 export type ProjectJobDocumentGroup = {
   jobId: string;
@@ -228,23 +207,16 @@ export type ProjectJobDocumentGroup = {
   documents: OrganizationDocument[];
 };
 
-export type ProjectDocumentsOverviewResult =
-  | {
-      success: true;
-      projectDocuments: OrganizationDocument[];
-      jobDocumentGroups: ProjectJobDocumentGroup[];
-    }
-  | { success: false; error: string };
+export type ProjectDocumentsOverviewResult = ActionResult<{
+  projectDocuments: OrganizationDocument[];
+  jobDocumentGroups: ProjectJobDocumentGroup[];
+}>;
 
-export type DocumentResult =
-  | { success: true; document: OrganizationDocument }
-  | { success: false; error: string };
+export type DocumentResult = ActionResult<{ document: OrganizationDocument }>;
 
-export type FolderResult =
-  { success: true; folder: DocumentFolder } | { success: false; error: string };
+export type FolderResult = ActionResult<{ folder: DocumentFolder }>;
 
-export type SignedDocumentUrlResult =
-  { success: true; signedUrl: string } | { success: false; error: string };
+export type SignedDocumentUrlResult = ActionResult<{ signedUrl: string }>;
 
 type DocumentUploadTicket = {
   documentId: string;
@@ -252,9 +224,7 @@ type DocumentUploadTicket = {
   uploadUrl: string;
 };
 
-export type DocumentUploadTicketResult =
-  | { success: true; ticket: DocumentUploadTicket }
-  | { success: false; error: string };
+export type DocumentUploadTicketResult = ActionResult<{ ticket: DocumentUploadTicket }>;
 
 type DocumentVersionUploadTicket = {
   documentId: string;
@@ -263,9 +233,7 @@ type DocumentVersionUploadTicket = {
   uploadUrl: string;
 };
 
-export type DocumentVersionUploadTicketResult =
-  | { success: true; ticket: DocumentVersionUploadTicket }
-  | { success: false; error: string };
+export type DocumentVersionUploadTicketResult = ActionResult<{ ticket: DocumentVersionUploadTicket }>;
 
 export type DocumentAuditEvent = {
   id: string;
@@ -301,15 +269,9 @@ export type DocumentDetailsResult =
       auditEvents: DocumentAuditEvent[];
       versions: DocumentVersion[];
     }
-  | {
-      success: false;
-      error: string;
-      document?: OrganizationDocument;
-    };
+  | (ActionFailure & { document?: OrganizationDocument });
 
-export type VersionResult =
-  | { success: true; version: DocumentVersion }
-  | { success: false; error: string };
+export type VersionResult = ActionResult<{ version: DocumentVersion }>;
 
 export function toDocumentFolder(
   row: DocumentFolderRow,
@@ -377,12 +339,8 @@ export function toDocumentLink(
   };
 }
 
-export function toDocumentCategory(
-  value: string | null | undefined,
-): DocumentCategory {
-  return DOCUMENT_CATEGORIES.includes(value as DocumentCategory)
-    ? (value as DocumentCategory)
-    : "other";
+export function toDocumentCategory(value: string | null | undefined): DocumentCategory {
+  return DOCUMENT_CATEGORIES.includes(value as DocumentCategory) ? (value as DocumentCategory) : 'other';
 }
 
 export function toOrganizationDocument({

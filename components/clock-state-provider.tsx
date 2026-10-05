@@ -1,14 +1,6 @@
 'use client';
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  type ReactNode,
-} from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
 
 import { useOrganization } from '@/components/organization/organization-context';
 import { useLiveView } from '@/hooks/use-live-view';
@@ -16,16 +8,9 @@ import { useServerAction } from '@/hooks/use-server-action';
 import { getCurrentClockState } from '@/lib/time-tracking/state-client';
 import { isClockStateEventRelevant } from '@/lib/time-tracking/clock-state-events';
 import { getNonNegativeElapsedMs } from '@/lib/time-tracking/helpers';
-import {
-  transitionTimeActivity,
-  type TimeTransitionInput,
-} from '@/lib/time-tracking/segment-actions';
+import { transitionTimeActivity, type TimeTransitionInput } from '@/lib/time-tracking/segment-actions';
 import { createActivitySelection } from '@/lib/time-tracking/segments';
-import type {
-  LiveClockState,
-  TimeActivitySelection,
-  TimeTransitionResult,
-} from '@/lib/time-tracking/types';
+import type { LiveClockState, TimeActivitySelection, TimeTransitionResult } from '@/lib/time-tracking/types';
 
 /**
  * Optimistic echo of a successful transition (feedback canon: the user's own
@@ -39,7 +24,7 @@ import type {
 function applyTransitionEcho(
   previous: LiveClockState,
   selection: TimeActivitySelection | null,
-  result: Extract<TimeTransitionResult, { success: true }>
+  result: Extract<TimeTransitionResult, { success: true }>,
 ): LiveClockState {
   if (result.outcome !== 'active' && result.outcome !== 'ended') return previous;
   const now = new Date().toISOString();
@@ -141,20 +126,14 @@ export function ClockStateProvider({
     read: async ({ signal }) => {
       if (!activeOrgId) return { ok: true, data: null };
       const result = await getCurrentClockState(activeOrgId, signal);
-      return result.success
-        ? { ok: true, data: result.state }
-        : { ok: false, error: result.error };
+      return result.success ? { ok: true, data: result.state } : { ok: false, error: result.error };
     },
-    initialData:
-      initialState && initialState.organizationId === activeOrgId
-        ? initialState
-        : undefined,
+    initialData: initialState && initialState.organizationId === activeOrgId ? initialState : undefined,
     resetKey: activeOrgId,
   });
   const { run, isPending } = useServerAction(transitionTimeActivity);
   const { refresh, invalidate, setData } = view;
-  const currentState =
-    view.data?.organizationId === activeOrgId ? view.data : null;
+  const currentState = view.data?.organizationId === activeOrgId ? view.data : null;
   const isReady = currentState !== null && !view.isLoading && !view.error;
   useEffect(() => {
     activeJobIdRef.current = currentState?.activeJobId ?? null;
@@ -169,7 +148,7 @@ export function ClockStateProvider({
     async (
       action: TimeTransitionInput['action'],
       selection: TimeActivitySelection | null,
-      acknowledgeLong = false
+      acknowledgeLong = false,
     ): Promise<TimeTransitionResult> => {
       if (!activeOrgId) return { success: false, error: 'no_active_org' };
       // Never infer a new session from an unknown or failed initial read.
@@ -191,51 +170,45 @@ export function ClockStateProvider({
       if (result.success) {
         // Echo first so no in-flight read overwrites it, then read fresh.
         invalidate();
-        setData((previous) =>
-          previous ? applyTransitionEcho(previous, selection, result) : previous
-        );
+        setData((previous) => (previous ? applyTransitionEcho(previous, selection, result) : previous));
       }
-      if (
-        result.success ||
-        (!result.success && result.error === 'time_transition_stale_version')
-      ) {
+      if (result.success || (!result.success && result.error === 'time_transition_stale_version')) {
         await refresh();
       }
       return result;
     },
-    [activeOrgId, invalidate, isReady, refresh, run, sessionId, sessionVersion, setData]
+    [activeOrgId, invalidate, isReady, refresh, run, sessionId, sessionVersion, setData],
   );
 
   const transitionActivity = useCallback(
     async (selection: TimeActivitySelection): Promise<TimeTransitionResult> => {
-      const action = legacyOpen
-        ? 'continue_legacy'
-        : isClockedIn
-          ? 'switch'
-          : 'start';
+      const action = legacyOpen ? 'continue_legacy' : isClockedIn ? 'switch' : 'start';
       return execute(action, selection);
     },
-    [execute, isClockedIn, legacyOpen]
+    [execute, isClockedIn, legacyOpen],
   );
   const recoverAndContinue = useCallback(
     (selection: TimeActivitySelection) => execute('recover_continue', selection, true),
-    [execute]
+    [execute],
   );
   const clockIn = useCallback(
     (jobId: string | null) => transitionActivity(createActivitySelection('work', jobId)),
-    [transitionActivity]
+    [transitionActivity],
   );
-  const clockOut = useCallback((acknowledgeRecovery = false) => {
-    const action = legacyOpen
-      ? 'end_legacy'
-      : recoveryReason && acknowledgeRecovery
-        ? 'recover_end'
-        : 'end';
-    return execute(action, null, acknowledgeRecovery && action === 'recover_end');
-  }, [execute, legacyOpen, recoveryReason]);
+  const clockOut = useCallback(
+    (acknowledgeRecovery = false) => {
+      const action = legacyOpen
+        ? 'end_legacy'
+        : recoveryReason && acknowledgeRecovery
+          ? 'recover_end'
+          : 'end';
+      return execute(action, null, acknowledgeRecovery && action === 'recover_end');
+    },
+    [execute, legacyOpen, recoveryReason],
+  );
   const switchJob = useCallback(
     (jobId: string | null) => transitionActivity(createActivitySelection('work', jobId)),
-    [transitionActivity]
+    [transitionActivity],
   );
 
   const value = useMemo<ClockStateContextValue>(
@@ -264,7 +237,7 @@ export function ClockStateProvider({
       view.isLoading,
       isReady,
       refresh,
-    ]
+    ],
   );
 
   return <ClockStateContext.Provider value={value}>{children}</ClockStateContext.Provider>;

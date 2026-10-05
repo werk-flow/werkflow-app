@@ -1,89 +1,46 @@
-"use client";
+'use client';
 
+import { PlainButton } from '@/components/ui/plain-button';
 import { formatGermanDate as formatDate } from '@/lib/utils';
 import { formatFileSize } from '@/lib/documents/format';
-import {
-  useEffect,
-  useRef,
-  useState,
-  type DragEvent,
-  type ReactElement,
-} from "react";
-import { useRouter } from "next/navigation";
-import {
-  ChevronRight,
-  Download,
-  FileText,
-  LinkIcon,
-  Loader2,
-  MoreHorizontal,
-  Pencil,
-  Trash2,
-  Undo2,
-  Unlink,
-  Upload,
-} from "lucide-react";
+import { useState, type DragEvent, type ReactElement } from 'react';
+import { useRouter } from 'next/navigation';
+import { ChevronRight, FileText } from 'lucide-react';
 
-import { Button } from "@/components/ui/button";
-import { Field } from "@/components/ui/field";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogBody,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { InlinePending } from "@/components/ui/inline-pending";
-import { Input } from "@/components/ui/input";
-import {
-  deleteDocument,
-  renameDocument as renameDocumentAction,
-  restoreDocument,
-  unlinkDocument,
-} from "@/lib/documents/actions";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { InlinePending } from '@/components/ui/inline-pending';
 import {
   DOCUMENT_CATEGORY_LABELS,
   type DocumentContextTarget,
   type OrganizationDocument,
   type ProjectJobDocumentGroup,
-} from "@/lib/documents/types";
-import { useBanner } from "@/components/ui/banner";
-import { useBusyIds } from "@/hooks/use-busy-id";
-import { useRealtimeRouterRefresh } from "@/hooks/use-realtime-router-refresh";
-import { useSettleOnChange } from "@/hooks/use-settle-on-change";
-import { cn } from "@/lib/utils";
-import { AttachDocumentDialog } from "./attach-document-dialog";
-import { DocumentLinkDialog } from "./document-link-dialog";
+} from '@/lib/documents/types';
+import { useBanner } from '@/components/ui/banner';
+import { useBusyIds } from '@/hooks/use-busy-id';
+import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
+import { useSettleOnChange } from '@/hooks/use-settle-on-change';
+import { cn } from '@/lib/utils';
+import { AttachDocumentDialog } from './attach-document-dialog';
+import { getContextualAttachTarget, getContextualDocumentLinkContext } from './contextual-documents-context';
+import { ContextualDocumentsDeleteDialog } from './contextual-documents-delete-dialog';
+import { ContextualDocumentsEmptyState } from './contextual-documents-empty-state';
+import { ContextualDocumentsRenameForm } from './contextual-documents-rename-form';
 import {
-  DocumentUploadDialog,
-  type DocumentUploadItem,
-} from "./document-upload-dialog";
-import { DocumentViewerDialog } from "./document-viewer-dialog";
+  ContextualDocumentRowMenu,
+  type ContextualDocumentRowMenuProps,
+} from './contextual-documents-row-menu';
+import { ContextualDocumentsToolbar } from './contextual-documents-toolbar';
+import { DocumentLinkDialog } from './document-link-dialog';
+import { DocumentUploadDialog } from './document-upload-dialog';
+import { DocumentViewerDialog } from './document-viewer-dialog';
 import {
   ContextualDocumentsFrame,
   ContextualDocumentRowFrame,
   CONTEXTUAL_DOCUMENT_LIST_CLASS,
   CONTEXTUAL_DOCUMENTS_EMPHASIZE_UPLOAD,
-} from "./contextual-documents-layout";
+} from './contextual-documents-layout';
+import { useContextualDocumentRowActions } from './use-contextual-documents-row-actions';
+import { useContextualDocumentUploads } from './use-contextual-documents-uploads';
 
 type ContextualDocumentsSectionProps = {
   title: string;
@@ -98,176 +55,122 @@ type ContextualDocumentsSectionProps = {
   keepUploadedDocumentsVisible?: boolean;
 };
 
-function getContextLink(
-  document: OrganizationDocument,
-  context: {
-    jobId?: string | undefined;
-    projectId?: string | undefined;
-    clientId?: string | undefined;
-    employeeId?: string | undefined;
-    requestId?: string | undefined;
-    equipmentId?: string | undefined;
-    serviceCaseId?: string | undefined;
-    maintenanceCoverageId?: string | undefined;
-  },
-) {
-  return document.links.find((link) => {
-    if (context.jobId) return link.jobId === context.jobId;
-    if (context.projectId) return link.projectId === context.projectId;
-    if (context.clientId) return link.clientId === context.clientId;
-    if (context.employeeId) return link.employeeId === context.employeeId;
-    if (context.requestId) return link.requestId === context.requestId;
-    if (context.equipmentId) return link.equipmentId === context.equipmentId;
-    if (context.serviceCaseId)
-      return link.serviceCaseId === context.serviceCaseId;
-    if (context.maintenanceCoverageId)
-      return link.maintenanceCoverageId === context.maintenanceCoverageId;
-    return false;
-  });
-}
-
-function getDeleteDescription(document: OrganizationDocument): string {
-  const linkCount = document.links.length;
-
-  if (linkCount <= 1) {
-    return `„${document.displayName}“ wird aus der gesamten Dokumentenablage in den Papierkorb verschoben. Die Datei ist danach überall nicht mehr verfügbar.`;
-  }
-
-  return `„${document.displayName}“ ist mit ${linkCount} Aufträgen, Projekten, Kunden oder Mitarbeitern verknüpft. Das Löschen entfernt die Datei überall aus WerkFlow und verschiebt sie in den Papierkorb – nicht nur auf dieser Seite.`;
-}
-
-function getUnlinkLabel(context: {
-  jobId?: string | undefined;
-  projectId?: string | undefined;
-  clientId?: string | undefined;
-  employeeId?: string | undefined;
-  requestId?: string | undefined;
-  equipmentId?: string | undefined;
-  serviceCaseId?: string | undefined;
-  maintenanceCoverageId?: string | undefined;
-}): string {
-  if (context.jobId) return "Verknüpfung zu diesem Auftrag entfernen";
-  if (context.projectId) return "Verknüpfung zu diesem Projekt entfernen";
-  if (context.clientId) return "Verknüpfung zu diesem Kunden entfernen";
-  if (context.employeeId) return "Verknüpfung zu diesem Mitarbeiter entfernen";
-  if (context.requestId) return "Verknüpfung zu dieser Anfrage entfernen";
-  if (context.equipmentId) return "Verknüpfung zu dieser Anlage entfernen";
-  if (context.serviceCaseId)
-    return "Verknüpfung zu diesem Servicefall entfernen";
-  if (context.maintenanceCoverageId)
-    return "Verknüpfung zu dieser Abdeckung entfernen";
-  return "Verknüpfung entfernen";
-}
-
-type DocumentRowProps = {
-  document: OrganizationDocument;
-  /** This row's own action is in flight; the other rows stay usable. */
-  isBusy: boolean;
-  canManage: boolean;
-  context: {
-    jobId?: string | undefined;
-    projectId?: string | undefined;
-    clientId?: string | undefined;
-    employeeId?: string | undefined;
-    requestId?: string | undefined;
-    equipmentId?: string | undefined;
-    serviceCaseId?: string | undefined;
-    maintenanceCoverageId?: string | undefined;
-  };
+type DocumentRowProps = ContextualDocumentRowMenuProps & {
   indented?: boolean;
-  onOpen: (document: OrganizationDocument) => void;
-  onManageLinks: (document: OrganizationDocument) => void;
-  onRename: (document: OrganizationDocument) => void;
-  onUnlink: (document: OrganizationDocument) => void;
-  onDelete: (document: OrganizationDocument) => void;
 };
 
-function DocumentRow({
-  document,
-  isBusy,
-  canManage,
-  context,
-  indented = false,
-  onOpen,
-  onManageLinks,
-  onRename,
-  onUnlink,
-  onDelete,
-}: DocumentRowProps) {
-  const contextLink = getContextLink(document, context);
+/** What every row of one list shares; the row adds its document and busy state. */
+type SharedDocumentRowProps = Omit<DocumentRowProps, 'document' | 'isBusy' | 'indented'>;
+
+function DocumentRow({ indented = false, ...menuProps }: DocumentRowProps) {
+  const { document, isBusy, onOpen } = menuProps;
   return (
-    <ContextualDocumentRowFrame indented={indented}>
-      <button
-        type="button"
-        onClick={() => onOpen(document)}
-        className="min-w-0 flex-1 text-left"
-      >
+    <ContextualDocumentRowFrame indented={indented} rowId={document.id}>
+      <PlainButton type="button" onClick={() => onOpen(document)} className="min-w-0 flex-1 text-left">
         <span className="flex min-w-0 items-center gap-2">
           <FileText className="size-4 shrink-0 text-muted-foreground" />
-          <span className="truncate text-sm font-medium">
-            {document.displayName}
-          </span>
+          <span className="truncate text-sm font-medium">{document.displayName}</span>
           <InlinePending active={isBusy} />
         </span>
         <span className="ml-6 mt-0.5 block text-xs text-muted-foreground">
-          {DOCUMENT_CATEGORY_LABELS[document.category]} ·{" "}
-          {formatFileSize(document.sizeBytes)} ·{" "}
+          {DOCUMENT_CATEGORY_LABELS[document.category]} · {formatFileSize(document.sizeBytes)} ·{' '}
           {formatDate(document.updatedAt)}
-          {document.links.length > 1
-            ? ` · ${document.links.length} Verknüpfungen`
-            : ""}
+          {document.links.length > 1 ? ` · ${document.links.length} Verknüpfungen` : ''}
         </span>
-      </button>
+      </PlainButton>
 
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            disabled={isBusy}
-            className="shrink-0"
-          >
-            <MoreHorizontal className="size-4" />
-            <span className="sr-only">Dateiaktionen öffnen</span>
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => onOpen(document)}>
-            <Download className="size-4" />
-            Öffnen
-          </DropdownMenuItem>
-          {canManage && (
-            <>
-              <DropdownMenuItem onClick={() => onManageLinks(document)}>
-                <LinkIcon className="size-4" />
-                Verknüpfungen verwalten
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onRename(document)}>
-                <Pencil className="size-4" />
-                Umbenennen
-              </DropdownMenuItem>
-              {contextLink && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => onUnlink(document)}>
-                    <Unlink className="size-4" />
-                    {getUnlinkLabel(context)}
-                  </DropdownMenuItem>
-                </>
-              )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                variant="destructive"
-                onClick={() => onDelete(document)}
-              >
-                <Trash2 className="size-4" />
-                In Papierkorb verschieben
-              </DropdownMenuItem>
-            </>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <ContextualDocumentRowMenu {...menuProps} />
     </ContextualDocumentRowFrame>
+  );
+}
+
+function ContextualDocumentList({
+  documents,
+  isBusy,
+  rowProps,
+}: {
+  documents: OrganizationDocument[];
+  isBusy: (documentId: string) => boolean;
+  rowProps: SharedDocumentRowProps;
+}): ReactElement {
+  return (
+    <div className={CONTEXTUAL_DOCUMENT_LIST_CLASS}>
+      {documents.map((document) => (
+        <DocumentRow key={document.id} document={document} isBusy={isBusy(document.id)} {...rowProps} />
+      ))}
+    </div>
+  );
+}
+
+/** A project's own documents, followed by its jobs as expandable groups. */
+function ContextualProjectDocumentGroups({
+  documents,
+  jobDocumentGroups,
+  expandedJobGroups,
+  onToggleJobGroup,
+  isBusy,
+  rowProps,
+}: {
+  documents: OrganizationDocument[];
+  jobDocumentGroups: ProjectJobDocumentGroup[];
+  expandedJobGroups: Set<string>;
+  onToggleJobGroup: (jobId: string) => void;
+  isBusy: (documentId: string) => boolean;
+  rowProps: SharedDocumentRowProps;
+}): ReactElement {
+  return (
+    <div className="space-y-3">
+      {documents.length > 0 && (
+        <div>
+          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Projektdateien
+          </p>
+          <ContextualDocumentList documents={documents} isBusy={isBusy} rowProps={rowProps} />
+        </div>
+      )}
+
+      {jobDocumentGroups.map((group) => {
+        const isExpanded = expandedJobGroups.has(group.jobId);
+        const jobLabel = group.jobNumber ? `${group.jobNumber} · ${group.jobTitle}` : group.jobTitle;
+
+        return (
+          <div key={group.jobId} className="rounded-md border">
+            <PlainButton
+              type="button"
+              onClick={() => onToggleJobGroup(group.jobId)}
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-muted/40"
+            >
+              <ChevronRight
+                className={cn(
+                  'size-4 shrink-0 text-muted-foreground transition-transform duration-200',
+                  isExpanded && 'rotate-90',
+                )}
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium">{jobLabel}</span>
+                <span className="block text-xs text-muted-foreground">
+                  {group.documents.length} {group.documents.length === 1 ? 'Datei' : 'Dateien'}
+                </span>
+              </span>
+            </PlainButton>
+            {isExpanded && (
+              <div className="divide-y border-t">
+                {group.documents.map((document) => (
+                  <DocumentRow
+                    key={document.id}
+                    document={document}
+                    isBusy={isBusy(document.id)}
+                    indented
+                    {...rowProps}
+                    context={{ jobId: group.jobId }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -283,104 +186,34 @@ export function ContextualDocumentsSection({
   emphasizeUpload = CONTEXTUAL_DOCUMENTS_EMPHASIZE_UPLOAD,
   keepUploadedDocumentsVisible = false,
 }: ContextualDocumentsSectionProps): ReactElement {
-  const jobId =
-    documentTarget.kind === "job" ? documentTarget.jobId : undefined;
-  const projectId =
-    documentTarget.kind === "project" ? documentTarget.projectId : undefined;
-  const clientId =
-    documentTarget.kind === "client" ? documentTarget.clientId : undefined;
-  const employeeId =
-    documentTarget.kind === "employee" ? documentTarget.employeeId : undefined;
-  const requestId =
-    documentTarget.kind === "request" ? documentTarget.requestId : undefined;
-  const equipmentId =
-    documentTarget.kind === "equipment"
-      ? documentTarget.equipmentId
-      : undefined;
-  const serviceCaseId =
-    documentTarget.kind === "service_case"
-      ? documentTarget.serviceCaseId
-      : undefined;
-  const maintenanceCoverageId =
-    documentTarget.kind === "maintenance_coverage"
-      ? documentTarget.maintenanceCoverageId
-      : undefined;
+  const context = getContextualDocumentLinkContext(documentTarget);
+  const attachTarget = canManage ? getContextualAttachTarget(context) : null;
   const router = useRouter();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const uploadItemIdRef = useRef(0);
   // Row-scoped pending: the acting row shows a spinner and stays busy until
   // the refreshed props land, so the rename/unlink/trash result is on screen
-  // before the indicator goes away (feedback canon, 2026-09-03).
+  // before the indicator goes away (feedback canon).
   const { isBusy, run: runBusy } = useBusyIds();
   const waitForDocuments = useSettleOnChange(documents);
   const { showBanner } = useBanner();
   const [attachDialogOpen, setAttachDialogOpen] = useState(false);
-  const [linkDialogDocument, setLinkDialogDocument] =
-    useState<OrganizationDocument | null>(null);
-  const [expandedJobGroups, setExpandedJobGroups] = useState<Set<string>>(
-    new Set(),
-  );
+  const [linkDialogDocument, setLinkDialogDocument] = useState<OrganizationDocument | null>(null);
+  const [expandedJobGroups, setExpandedJobGroups] = useState<Set<string>>(new Set());
   const [isDragActive, setIsDragActive] = useState(false);
-  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
-  const [uploadItems, setUploadItems] = useState<DocumentUploadItem[]>([]);
-  const [recentlyUploadedDocuments, setRecentlyUploadedDocuments] = useState<
-    OrganizationDocument[]
-  >([]);
-  const [viewerDocument, setViewerDocument] =
-    useState<OrganizationDocument | null>(null);
-  const [renameDocument, setRenameDocument] =
-    useState<OrganizationDocument | null>(null);
-  const [renameValue, setRenameValue] = useState("");
-  const [renameError, setRenameError] = useState<string | null>(null);
-  const [deleteDocumentTarget, setDeleteDocumentTarget] =
-    useState<OrganizationDocument | null>(null);
-  const isRenamePending = renameDocument ? isBusy(renameDocument.id) : false;
-
-  useEffect(() => {
-    if (recentlyUploadedDocuments.length === 0) return;
-    const timer = window.setTimeout(
-      () => setRecentlyUploadedDocuments([]),
-      60_000,
-    );
-    return () => window.clearTimeout(timer);
-  }, [recentlyUploadedDocuments]);
-
-  const context = {
-    jobId,
-    projectId,
-    clientId,
-    employeeId,
-    requestId,
-    equipmentId,
-    serviceCaseId,
-    maintenanceCoverageId,
-  };
-  const displayedDocuments = keepUploadedDocumentsVisible
-    ? [
-        ...recentlyUploadedDocuments.filter(
-          (recentDocument) =>
-            !documents.some((document) => document.id === recentDocument.id),
-        ),
-        ...documents,
-      ]
-    : documents;
+  const uploads = useContextualDocumentUploads({
+    documents,
+    keepUploadedDocumentsVisible,
+  });
+  const [viewerDocument, setViewerDocument] = useState<OrganizationDocument | null>(null);
+  const [deleteDocumentTarget, setDeleteDocumentTarget] = useState<OrganizationDocument | null>(null);
+  const { displayedDocuments } = uploads;
   const totalDocumentCount =
-    displayedDocuments.length +
-    jobDocumentGroups.reduce(
-      (total, group) => total + group.documents.length,
-      0,
-    );
+    displayedDocuments.length + jobDocumentGroups.reduce((total, group) => total + group.documents.length, 0);
 
   useRealtimeRouterRefresh({
-    tables: [
-      "documents",
-      "document_links",
-      "document_audit_events",
-      "document_versions",
-    ],
+    tables: ['documents', 'document_links', 'document_audit_events', 'document_versions'],
   });
 
-  function showFeedback(variant: "success" | "error", message: string) {
+  function showFeedback(variant: 'success' | 'error', message: string) {
     showBanner({ variant, message });
   }
 
@@ -389,135 +222,19 @@ export function ContextualDocumentsSection({
     await waitForDocuments();
   }
 
-  // A thrown action (network, session) must not vanish behind `void`.
-  function runRowTask(
-    documentId: string,
-    task: () => Promise<void>,
-    failureMessage: string,
-  ) {
-    void runBusy(documentId, task).catch(() =>
-      showFeedback("error", failureMessage),
-    );
-  }
-
-  function handleUpload(files: FileList | null) {
-    if (!files || files.length === 0) return;
-
-    setUploadItems(
-      Array.from(files).map((file) => {
-        uploadItemIdRef.current += 1;
-        return {
-          id: `context-upload-${uploadItemIdRef.current}`,
-          file,
-        };
-      }),
-    );
-    setUploadDialogOpen(true);
-  }
-
-  function handleRenameConfirm() {
-    if (!renameDocument) return;
-    const nextName = renameValue.trim();
-    if (!nextName || nextName === renameDocument.displayName) {
-      setRenameDocument(null);
-      return;
-    }
-
-    const documentId = renameDocument.id;
-    const renameFailure = "Die Datei konnte nicht umbenannt werden.";
-    setRenameError(null);
-    void runBusy(documentId, async () => {
-      const result = await renameDocumentAction({
-        documentId,
-        displayName: nextName,
-      });
-      if (!result.success) {
-        setRenameError(renameFailure);
-        return;
-      }
-      setRecentlyUploadedDocuments((current) =>
-        current.map((recentDocument) =>
-          recentDocument.id === documentId
-            ? { ...recentDocument, displayName: nextName }
-            : recentDocument,
-        ),
-      );
-      setRenameDocument(null);
-      await settleAfterRefresh();
-    }).catch(() => setRenameError(renameFailure));
-  }
-
-  function handleUnlink(document: OrganizationDocument) {
-    const link = getContextLink(document, context);
-    if (!link) return;
-
-    const unlinkFailure = "Die Verknüpfung konnte nicht entfernt werden.";
-    runRowTask(
-      document.id,
-      async () => {
-        const result = await unlinkDocument({ linkId: link.id });
-        if (!result.success) {
-          showFeedback("error", unlinkFailure);
-          return;
-        }
-        setRecentlyUploadedDocuments((current) =>
-          current.filter((recentDocument) => recentDocument.id !== document.id),
-        );
-        showFeedback(
-          "success",
-          "Verknüpfung wurde entfernt. Die Datei bleibt in der Dokumentenablage.",
-        );
-        await settleAfterRefresh();
-      },
-      unlinkFailure,
-    );
-  }
-
-  function handleTrash(target: OrganizationDocument) {
-    const trashFailure = "Die Datei konnte nicht gelöscht werden.";
-    const restoreFailure = "Die Datei konnte nicht wiederhergestellt werden.";
-    runRowTask(
-      target.id,
-      async () => {
-        const result = await deleteDocument(target.id);
-        if (!result.success) {
-          showFeedback("error", trashFailure);
-          return;
-        }
-        setRecentlyUploadedDocuments((current) =>
-          current.filter((recentDocument) => recentDocument.id !== target.id),
-        );
-        showBanner({
-          variant: "success",
-          message: "Datei wurde in den Papierkorb verschoben.",
-          actionLabel: "Rückgängig",
-          actionIcon: <Undo2 className="size-3.5" />,
-          onAction: () =>
-            runRowTask(
-              target.id,
-              async () => {
-                const restored = await restoreDocument(target.id);
-                if (!restored.success) {
-                  showFeedback("error", restoreFailure);
-                  return;
-                }
-                showFeedback("success", "Datei wurde wiederhergestellt.");
-                await settleAfterRefresh();
-              },
-              restoreFailure,
-            ),
-        });
-        await settleAfterRefresh();
-      },
-      trashFailure,
-    );
-  }
+  const rowActions = useContextualDocumentRowActions({
+    runBusy,
+    settleAfterRefresh,
+    showBanner,
+    setRecentlyUploadedDocuments: uploads.setRecentlyUploadedDocuments,
+  });
+  const isRenamePending = rowActions.renameDocument ? isBusy(rowActions.renameDocument.id) : false;
 
   function handleDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
     setIsDragActive(false);
     if (!canUpload) return;
-    handleUpload(event.dataTransfer.files);
+    uploads.handleUpload(event.dataTransfer.files);
   }
 
   function toggleJobGroup(jobIdToToggle: string) {
@@ -529,96 +246,15 @@ export function ContextualDocumentsSection({
     });
   }
 
-  const rowProps = {
+  const rowProps: SharedDocumentRowProps = {
     canManage,
     context,
     onOpen: setViewerDocument,
     onManageLinks: setLinkDialogDocument,
-    onRename: (document: OrganizationDocument) => {
-      setRenameError(null);
-      setRenameDocument(document);
-      setRenameValue(document.displayName);
-    },
-    onUnlink: handleUnlink,
+    onRename: rowActions.startRename,
+    onUnlink: rowActions.handleUnlink,
     onDelete: setDeleteDocumentTarget,
   };
-
-  function renderFlatList(documentList: OrganizationDocument[]) {
-    return (
-      <div className={CONTEXTUAL_DOCUMENT_LIST_CLASS}>
-        {documentList.map((document) => (
-          <DocumentRow
-            key={document.id}
-            document={document}
-            isBusy={isBusy(document.id)}
-            {...rowProps}
-          />
-        ))}
-      </div>
-    );
-  }
-
-  function renderGroupedProjectView() {
-    return (
-      <div className="space-y-3">
-        {displayedDocuments.length > 0 && (
-          <div>
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Projektdateien
-            </p>
-            {renderFlatList(displayedDocuments)}
-          </div>
-        )}
-
-        {jobDocumentGroups.map((group) => {
-          const isExpanded = expandedJobGroups.has(group.jobId);
-          const jobLabel = group.jobNumber
-            ? `${group.jobNumber} · ${group.jobTitle}`
-            : group.jobTitle;
-
-          return (
-            <div key={group.jobId} className="rounded-md border">
-              <button
-                type="button"
-                onClick={() => toggleJobGroup(group.jobId)}
-                className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-muted/40"
-              >
-                <ChevronRight
-                  className={cn(
-                    "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
-                    isExpanded && "rotate-90",
-                  )}
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium">
-                    {jobLabel}
-                  </span>
-                  <span className="block text-xs text-muted-foreground">
-                    {group.documents.length}{" "}
-                    {group.documents.length === 1 ? "Datei" : "Dateien"}
-                  </span>
-                </span>
-              </button>
-              {isExpanded && (
-                <div className="divide-y border-t">
-                  {group.documents.map((document) => (
-                    <DocumentRow
-                      key={document.id}
-                      document={document}
-                      isBusy={isBusy(document.id)}
-                      indented
-                      {...rowProps}
-                      context={{ jobId: group.jobId }}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
 
   return (
     <ContextualDocumentsFrame
@@ -627,46 +263,16 @@ export function ContextualDocumentsSection({
       description={description}
       actions={
         canUpload ? (
-          <>
-            {canManage &&
-              (jobId ||
-                projectId ||
-                clientId ||
-                employeeId ||
-                equipmentId ||
-                serviceCaseId ||
-                maintenanceCoverageId) && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setAttachDialogOpen(true)}
-                >
-                  <LinkIcon className="size-4" />
-                  Verknüpfen
-                </Button>
-              )}
-            <Button
-              type="button"
-              size="sm"
-              variant={emphasizeUpload ? "default" : "outline"}
-              className={emphasizeUpload ? undefined : "min-h-11"}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload className="size-4" />
-              Hochladen
-            </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              className="hidden"
-              onChange={(event) => handleUpload(event.target.files)}
-            />
-          </>
+          <ContextualDocumentsToolbar
+            canAttach={attachTarget !== null}
+            emphasizeUpload={emphasizeUpload}
+            fileInputRef={uploads.fileInputRef}
+            onAttach={() => setAttachDialogOpen(true)}
+            onFilesSelected={uploads.handleUpload}
+          />
         ) : undefined
       }
-      className={cn(isDragActive && "border-primary bg-primary/5")}
+      className={cn(isDragActive && 'border-primary bg-primary/5')}
       onDragOver={(event) => {
         if (!canUpload) return;
         event.preventDefault();
@@ -676,52 +282,35 @@ export function ContextualDocumentsSection({
       onDrop={handleDrop}
     >
       {totalDocumentCount === 0 ? (
-        <div className="rounded-md border border-dashed bg-muted/20 px-4 py-6 text-center">
-          <p className="text-sm font-medium">Noch keine Dokumente vorhanden.</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {canUpload
-              ? canManage
-                ? "Lade Dateien hoch oder verknüpfe vorhandene Dokumente aus der Dokumentenablage."
-                : jobId
-                  ? "Lade Dateien direkt zu diesem Auftrag hoch."
-                  : projectId
-                    ? "Lade Dateien direkt zu diesem Projekt hoch."
-                    : contextLabel
-                      ? `Lade Dateien direkt zu ${contextLabel} hoch.`
-                      : "Lade Dateien direkt in diesem Bereich hoch."
-              : "Sobald Dokumente vorhanden sind, erscheinen sie hier."}
-          </p>
-        </div>
-      ) : projectId ? (
-        renderGroupedProjectView()
+        <ContextualDocumentsEmptyState
+          canUpload={canUpload}
+          canAttach={attachTarget !== null}
+          context={context}
+          contextLabel={contextLabel}
+        />
+      ) : context.projectId ? (
+        <ContextualProjectDocumentGroups
+          documents={displayedDocuments}
+          jobDocumentGroups={jobDocumentGroups}
+          expandedJobGroups={expandedJobGroups}
+          onToggleJobGroup={toggleJobGroup}
+          isBusy={isBusy}
+          rowProps={rowProps}
+        />
       ) : (
-        renderFlatList(displayedDocuments)
+        <ContextualDocumentList documents={displayedDocuments} isBusy={isBusy} rowProps={rowProps} />
       )}
 
       <DocumentUploadDialog
-        open={uploadDialogOpen}
-        onOpenChange={setUploadDialogOpen}
-        items={uploadItems}
+        open={uploads.uploadDialogOpen}
+        onOpenChange={uploads.setUploadDialogOpen}
+        items={uploads.uploadItems}
         target={documentTarget}
         onComplete={(failedCount, uploadedDocuments) => {
           if (failedCount > 0) {
-            showFeedback(
-              "error",
-              `${failedCount} Datei(en) konnten nicht hochgeladen werden.`,
-            );
+            showFeedback('error', `${failedCount} Datei(en) konnten nicht hochgeladen werden.`);
           }
-          if (fileInputRef.current) fileInputRef.current.value = "";
-          if (keepUploadedDocumentsVisible) {
-            setRecentlyUploadedDocuments((current) => [
-              ...uploadedDocuments,
-              ...current.filter(
-                (document) =>
-                  !uploadedDocuments.some(
-                    (uploaded) => uploaded.id === document.id,
-                  ),
-              ),
-            ]);
-          }
+          uploads.handleUploadFinished(uploadedDocuments);
           router.refresh();
         }}
       />
@@ -733,7 +322,7 @@ export function ContextualDocumentsSection({
       />
 
       <DocumentLinkDialog
-        key={linkDialogDocument?.id ?? "closed-context-link-dialog"}
+        key={linkDialogDocument?.id ?? 'closed-context-link-dialog'}
         document={linkDialogDocument}
         open={!!linkDialogDocument}
         onOpenChange={(open) => !open && setLinkDialogDocument(null)}
@@ -744,136 +333,50 @@ export function ContextualDocumentsSection({
       />
 
       <Dialog
-        open={!!renameDocument}
+        open={!!rowActions.renameDocument}
         onOpenChange={(open) => {
           if (open) return;
-          setRenameDocument(null);
-          setRenameError(null);
+          rowActions.closeRenameDialog();
         }}
+        pending={isRenamePending}
       >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Datei umbenennen</DialogTitle>
             <DialogDescription>
-              Vergib einen klaren Namen, damit das Dokument später leicht
-              gefunden wird.
+              Vergib einen klaren Namen, damit das Dokument später leicht gefunden wird.
             </DialogDescription>
           </DialogHeader>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              if (isRenamePending) return;
-              handleRenameConfirm();
-            }}
-            noValidate
-            className="flex min-h-0 flex-1 flex-col gap-4"
-          >
-            <DialogBody>
-              <Field
-                label="Dateiname"
-                htmlFor="contextual-document-name"
-                required
-                error={renameError}
-              >
-                <Input
-                  value={renameValue}
-                  onChange={(event) => setRenameValue(event.target.value)}
-                  placeholder="Dateiname"
-                  autoFocus
-                />
-              </Field>
-            </DialogBody>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setRenameDocument(null)}
-              >
-                Abbrechen
-              </Button>
-              <Button type="submit" disabled={isRenamePending}>
-                {isRenamePending && <Loader2 className="size-4 animate-spin" />}
-                Umbenennen
-              </Button>
-            </DialogFooter>
-          </form>
+          <ContextualDocumentsRenameForm
+            value={rowActions.renameValue}
+            error={rowActions.renameError}
+            isPending={isRenamePending}
+            onValueChange={rowActions.setRenameValue}
+            onCancel={rowActions.cancelRename}
+            onSubmit={rowActions.handleRenameConfirm}
+          />
         </DialogContent>
       </Dialog>
 
-      <AlertDialog
-        open={!!deleteDocumentTarget}
-        onOpenChange={(open) => !open && setDeleteDocumentTarget(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              Datei in Papierkorb verschieben?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {deleteDocumentTarget
-                ? getDeleteDescription(deleteDocumentTarget)
-                : ""}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              onClick={() => {
-                const target = deleteDocumentTarget;
-                setDeleteDocumentTarget(null);
-                if (target) handleTrash(target);
-              }}
-            >
-              In Papierkorb verschieben
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ContextualDocumentsDeleteDialog
+        target={deleteDocumentTarget}
+        onClose={() => setDeleteDocumentTarget(null)}
+        onConfirm={rowActions.handleTrash}
+      />
 
-      {canManage &&
-        (jobId ||
-          projectId ||
-          clientId ||
-          employeeId ||
-          equipmentId ||
-          serviceCaseId ||
-          maintenanceCoverageId) && (
-          <AttachDocumentDialog
-            open={attachDialogOpen}
-            onOpenChange={setAttachDialogOpen}
-            targetType={
-              jobId
-                ? "job"
-                : projectId
-                  ? "project"
-                  : clientId
-                    ? "client"
-                    : employeeId
-                      ? "employee"
-                      : equipmentId
-                        ? "equipment"
-                        : serviceCaseId
-                          ? "service_case"
-                          : "maintenance_coverage"
-            }
-            targetId={
-              jobId ??
-              projectId ??
-              clientId ??
-              employeeId ??
-              equipmentId ??
-              serviceCaseId ??
-              maintenanceCoverageId!
-            }
-            targetLabel={contextLabel}
-            onAttached={(variant, message) => {
-              showFeedback(variant, message);
-              router.refresh();
-            }}
-          />
-        )}
+      {attachTarget && (
+        <AttachDocumentDialog
+          open={attachDialogOpen}
+          onOpenChange={setAttachDialogOpen}
+          targetType={attachTarget.targetType}
+          targetId={attachTarget.targetId}
+          targetLabel={contextLabel}
+          onAttached={(variant, message) => {
+            showFeedback(variant, message);
+            router.refresh();
+          }}
+        />
+      )}
     </ContextualDocumentsFrame>
   );
 }

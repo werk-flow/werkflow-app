@@ -1,15 +1,10 @@
-import { z } from 'zod';
+import { z } from '@/lib/zod';
 import { uuidSchema } from '@/lib/validation/uuid';
 
 import type { TimeCorrectionKind } from './types';
 
 const timeCorrectionSourceInputSchema = z.object({
-  kind: z.enum([
-    'legacy_entry',
-    'canonical_session',
-    'canonical_segment',
-    'correction_application',
-  ]),
+  kind: z.enum(['legacy_entry', 'canonical_session', 'canonical_segment', 'correction_application']),
   id: uuidSchema,
 });
 
@@ -25,28 +20,28 @@ const timeCorrectionFactInputSchema = z.object({
     .optional(),
 });
 
+const calendarBoundarySchema = z.object({
+  source: timeCorrectionSourceInputSchema.extend({ version: z.string().min(1).max(200) }),
+  entryType: z.enum(['clock_in', 'clock_out', 'break_start', 'break_end']),
+  originalTimestamp: z.iso.datetime({ offset: true }),
+  timestamp: z.iso.datetime({ offset: true }),
+  employeeRecordId: uuidSchema,
+});
+
+export type CalendarCorrectionBoundary = z.infer<typeof calendarBoundarySchema>;
+
 export const submitTimeCorrectionSchema = z.object({
   organizationId: uuidSchema,
   subjectEmployeeRecordId: uuidSchema,
-  kind: z.enum([
-    'add',
-    'edit',
-    'delete',
-    'split',
-    'reclassify',
-    'reallocate',
-    'reassign',
-    'missed_clock',
-  ]),
+  kind: z.enum(['add', 'edit', 'delete', 'split', 'reclassify', 'reallocate', 'reassign', 'missed_clock']),
   reason: z.string().trim().min(3).max(2000),
   source: timeCorrectionSourceInputSchema.nullable(),
   proposedFacts: z.array(timeCorrectionFactInputSchema).max(20),
   operationId: uuidSchema,
+  calendarAdjustment: z.array(calendarBoundarySchema).min(2).max(20).optional(),
 });
 
-export type SubmitTimeCorrectionInput = z.infer<
-  typeof submitTimeCorrectionSchema
->;
+export type SubmitTimeCorrectionInput = z.infer<typeof submitTimeCorrectionSchema>;
 
 export const reviewTimeCorrectionSchema = z.object({
   requestId: uuidSchema,
@@ -56,9 +51,7 @@ export const reviewTimeCorrectionSchema = z.object({
   operationId: uuidSchema,
 });
 
-export type ReviewTimeCorrectionInput = z.infer<
-  typeof reviewTimeCorrectionSchema
->;
+export type ReviewTimeCorrectionInput = z.infer<typeof reviewTimeCorrectionSchema>;
 
 export function validateCorrectionShape(input: {
   kind: TimeCorrectionKind;

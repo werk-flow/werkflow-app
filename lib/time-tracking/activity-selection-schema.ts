@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from '@/lib/zod';
 import { uuidSchema } from '@/lib/validation/uuid';
 import type { TimeActivitySelection } from './types';
 
@@ -42,4 +42,3 @@ export const timeActivitySelectionSchema: z.ZodType<TimeActivitySelection> = z.u
     internalType: z.enum(['internal_work', 'meeting', 'training', 'other']),
   }),
 ]);
-

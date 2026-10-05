@@ -18,6 +18,7 @@ import { TimeActivityDialog } from '@/components/time-activity-dialog';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
+import { useReportPending } from '@/hooks/use-report-pending';
 import { usePendingTask } from '@/hooks/use-server-action';
 import {
   deriveClockActions,
@@ -50,20 +51,32 @@ const ICONS: Record<ClockActionIcon, typeof Play> = {
 export function ClockActionList({
   organizationId,
   onSettled,
+  onPendingChange,
   initialPickerMode = null,
   className,
 }: {
   organizationId: string;
   /** Called after a transition the list performed was accepted; containers close on it. */
   onSettled?: () => void;
+  /** Reports the running transition, so a hosting dialog stays open until it answers. */
+  onPendingChange?: ((pending: boolean) => void) | undefined;
   /** Open the job picker at once, for a hot key whose action is a job choice. */
   initialPickerMode?: ClockPickerMode | null;
   className?: string;
 }) {
-  const { state, isReady, isPending, statusError, refresh, transitionActivity, recoverAndContinue, clockOut } =
-    useClockState();
+  const {
+    state,
+    isReady,
+    isPending,
+    statusError,
+    refresh,
+    transitionActivity,
+    recoverAndContinue,
+    clockOut,
+  } = useClockState();
   const { showBanner } = useBanner();
   const { run, isPending: isRunning } = usePendingTask();
+  useReportPending(isRunning, onPendingChange);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pickerMode, setPickerMode] = useState<ClockPickerMode | null>(initialPickerMode);
@@ -116,11 +129,15 @@ export function ClockActionList({
         perform(
           action.id,
           () => (recovery ? recoverAndContinue(action.selection) : transitionActivity(action.selection)),
-          'Die Aktivität konnte nicht gespeichert werden. Bitte versuche es erneut.'
+          'Die Aktivität konnte nicht gespeichert werden. Bitte versuche es erneut.',
         );
         return;
       case 'end':
-        perform(action.id, () => clockOut(recovery), 'Die Erfassung konnte nicht beendet werden. Bitte versuche es erneut.');
+        perform(
+          action.id,
+          () => clockOut(recovery),
+          'Die Erfassung konnte nicht beendet werden. Bitte versuche es erneut.',
+        );
         return;
       case 'picker':
         setError(null);
@@ -142,7 +159,7 @@ export function ClockActionList({
       () => (recovery ? recoverAndContinue(selection) : transitionActivity(selection)),
       mode === 'clock_in'
         ? 'Das Einstempeln hat nicht funktioniert. Bitte versuche es erneut.'
-        : 'Der Auftrag konnte nicht gewechselt werden. Bitte versuche es erneut.'
+        : 'Der Auftrag konnte nicht gewechselt werden. Bitte versuche es erneut.',
     );
   }
 
@@ -151,7 +168,10 @@ export function ClockActionList({
       {recovery && (
         <div className="rounded-md border border-warning/40 bg-warning-soft p-3 text-sm text-warning-soft-foreground">
           <p className="font-medium">Ungewöhnlich lange Erfassung</p>
-          <p className="mt-1">Prüfe den Stand. Jede Aktion unten setzt die Erfassung bewusst fort; „Erfassung beenden“ schließt sie.</p>
+          <p className="mt-1">
+            Prüfe den Stand. Jede Aktion unten setzt die Erfassung bewusst fort; „Erfassung beenden“ schließt
+            sie.
+          </p>
         </div>
       )}
       <div className="flex flex-col gap-2" role="group" aria-label="Nächste Aktion">
@@ -163,11 +183,19 @@ export function ClockActionList({
               key={action.id}
               type="button"
               variant={isPrimary ? 'default' : action.kind === 'more' ? 'ghost' : 'outline'}
-              className={cn('h-auto min-h-12 w-full justify-start gap-3 px-4 text-left text-base whitespace-normal', action.kind === 'more' && 'text-muted-foreground')}
+              className={cn(
+                'h-auto min-h-12 w-full justify-start gap-3 px-4 text-left text-base whitespace-normal',
+                action.kind === 'more' && 'text-muted-foreground',
+              )}
               disabled={busy}
+              aria-busy={pendingId === action.id || undefined}
               onClick={() => activate(action)}
             >
-              {pendingId === action.id ? <Loader2 className="size-5 animate-spin" /> : <Icon className="size-5" />}
+              {pendingId === action.id ? (
+                <Loader2 className="size-5 animate-spin" />
+              ) : (
+                <Icon className="size-5" />
+              )}
               <span className="min-w-0 flex-1 truncate">{action.label}</span>
             </Button>
           );
@@ -192,7 +220,8 @@ export function ClockActionList({
         organizationId={organizationId}
         mode={pickerMode ?? 'clock_in'}
         currentJobId={state?.activeJobId ?? null}
-        isPending={busy}
+        isPending={isPending || isRunning}
+        isStatusLoading={!isReady}
       />
       <TimeActivityDialog
         open={moreOpen}

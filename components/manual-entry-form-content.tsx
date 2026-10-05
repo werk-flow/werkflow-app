@@ -1,50 +1,25 @@
 'use client';
 
 import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
-import { useState, useEffect, useMemo } from 'react';
-import { usePendingTask } from '@/hooks/use-server-action';
-import { Loader2, Clock } from 'lucide-react';
-import { useBanner } from '@/components/ui/banner';
+import { useReportPending } from '@/hooks/use-report-pending';
+import { useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
-import { TimeInput } from '@/components/ui/time-input';
-import { Field } from '@/components/ui/field';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '@/components/ui/select';
-import { SearchableSelect } from '@/components/ui/searchable-select';
-import { DatePicker } from '@/components/ui/date-picker';
+import { OptionsLoadError } from '@/components/auftraege/shared/options-load-error';
+import { DialogBody, DialogFooter } from '@/components/ui/dialog';
 import { useOrganization } from '@/components/organization/organization-context';
-import {
-  addManualEntry,
-  getTimeEntries
-} from '@/lib/time-tracking/actions';
-import { getOrgMembersAction } from '@/lib/members/actions';
-import type {
-  CalendarEntryDialogJobOption,
-  CalendarEntryDialogMember,
-} from '@/lib/jobs/types';
-import { validateManualEntries } from '@/lib/time-tracking/validation';
-import type {
-  ManualEntryInput,
-  TimeEntry
-} from '@/lib/time-tracking/types';
+import type { CalendarEntryDialogJobOption, CalendarEntryDialogMember } from '@/lib/jobs/types';
+import type { TimeEntry } from '@/lib/time-tracking/types';
 import { useUserProfile } from '@/components/user/user-profile-context';
-import { toLocalDateString } from '@/lib/utils';
 import type { CalendarEntryDraft } from '@/components/kalender/calendar-entry-draft';
-
-/** Minutes since midnight for `HH:MM`; an empty part is invalid rather than zero (`Number('')` is 0). */
-function clockTimeToMinutes(value: string): number {
-  const [hours, minutes] = value.split(':');
-  if (!hours || !minutes) return Number.NaN;
-  return Number(hours) * 60 + Number(minutes);
-}
-
-type EntryMode = 'clock_in' | 'clock_out' | 'both';
+import { useManualEntryDraftReport, type ManualEntryMode } from '@/components/use-manual-entry-form-draft';
+import {
+  ManualEntryAssignmentFields,
+  ManualEntryTimeFields,
+} from '@/components/manual-entry-form-content-fields';
+import { useManualEntryMembers } from '@/components/use-manual-entry-form-members';
+import { useManualEntrySubmit } from '@/components/use-manual-entry-form-submit';
 
 type OrgMember = CalendarEntryDialogMember;
 type JobOption = CalendarEntryDialogJobOption;
@@ -61,6 +36,8 @@ export interface ManualEntryFormContentProps {
   onDraftChange?: ((draft: CalendarEntryDraft | null) => void) | undefined;
   /** Whether the form is active/visible. Controls data-fetching effects. Defaults to true. */
   isActive?: boolean | undefined;
+  /** Reports the save's pending state so the hosting dialog stays open while it runs. */
+  onPendingChange?: ((pending: boolean) => void) | undefined;
 }
 
 export function ManualEntryFormContent({
@@ -74,389 +51,129 @@ export function ManualEntryFormContent({
   lockEntryMode,
   onDraftChange,
   isActive = true,
+  onPendingChange,
 }: ManualEntryFormContentProps) {
   const { activeOrgId, activeOrg } = useOrganization();
   const { profile } = useUserProfile();
-  const { run: runPendingTask, isPending } = usePendingTask();
 
-  const [entryMode, setEntryMode] = useState<EntryMode>('both');
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(
-    preselectedDate ?? new Date()
-  );
+  const [entryMode, setEntryMode] = useState<ManualEntryMode>('both');
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(preselectedDate ?? new Date());
   const [clockInTime, setClockInTime] = useState(preselectedClockInTime || '09:00');
   const [clockOutTime, setClockOutTime] = useState(preselectedClockOutTime || '17:00');
   const isAdmin = activeOrg?.role === 'admin';
-  const isAdminOrManager =
-    activeOrg?.role === 'admin' || activeOrg?.role === 'buero';
+  const isAdminOrManager = activeOrg?.role === 'admin' || activeOrg?.role === 'buero';
   const currentUserId = profile?.id || null;
   const [selectedUserId, setSelectedUserId] = useState(
-    preselectedUserId || (isAdminOrManager ? '' : currentUserId || '')
+    preselectedUserId || (isAdminOrManager ? '' : currentUserId || ''),
   );
-
-  const [members, setMembers] = useState<OrgMember[]>(prefetchedMembers ?? []);
-  const [isLoadingMembers, setIsLoadingMembers] = useState(false);
-
   const [selectedJobId, setSelectedJobId] = useState<string>('');
-  const canAssignJob =
-    entryMode === 'clock_in' || entryMode === 'both';
+  const canAssignJob = entryMode === 'clock_in' || entryMode === 'both';
 
-  const [error, setError] = useState<string | null>(null);
-  // A failed option load leaves a select empty; the reason must be visible.
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<{ member?: string; date?: string }>({});
-  const { showBanner } = useBanner();
-
-  useEffect(() => {
-    if (!prefetchedMembers) return;
-    setMembers(prefetchedMembers);
-    setIsLoadingMembers(false);
-  }, [prefetchedMembers]);
-
-  useEffect(() => {
-    if (!isActive || !isAdminOrManager || !activeOrgId || prefetchedMembers) return;
-    const fetchMembers = async () => {
-      setIsLoadingMembers(true);
-      try {
-        const result = await getOrgMembersAction(activeOrgId!);
-        if (result.success) {
-          setMembers(
-            (result.members || []).map((member) => ({
-              userId: member.user_id,
-              firstName: member.first_name ?? '',
-              lastName: member.last_name ?? '',
-              email: member.email,
-              role: member.role,
-            }))
-          );
-        } else {
-          setLoadError('Die Mitarbeiterliste konnte nicht geladen werden.');
-        }
-      } catch (err) {
-        console.error('Error fetching members:', err);
-        setLoadError('Die Mitarbeiterliste konnte nicht geladen werden.');
-      } finally {
-        setIsLoadingMembers(false);
-      }
-    };
-    fetchMembers();
-  }, [isActive, isAdminOrManager, activeOrgId, prefetchedMembers]);
-
-  useEffect(() => {
-    if (canAssignJob) return;
-    setSelectedJobId('');
-  }, [canAssignJob]);
-
-  useEffect(() => {
-    if (!isActive || !onDraftChange) return;
-
-    const targetUserId = isAdminOrManager ? selectedUserId : currentUserId;
-    // An invalid time yields NaN, which the finite check below rejects.
-    const durationMinutes = clockTimeToMinutes(clockOutTime) - clockTimeToMinutes(clockInTime);
-
-    if (
-      entryMode !== 'both' ||
-      !selectedDate ||
-      !targetUserId ||
-      !Number.isFinite(durationMinutes) ||
-      durationMinutes <= 0
-    ) {
-      onDraftChange(null);
-      return;
-    }
-
-    onDraftChange({
-      date: selectedDate,
-      startTime: clockInTime,
-      durationMinutes,
-      userIds: [targetUserId]
-    });
-  }, [
-    clockInTime,
-    clockOutTime,
+  const { handleSubmit, isPending, error, fieldErrors } = useManualEntrySubmit({
+    activeOrgId,
+    isAdmin,
+    isAdminOrManager,
     currentUserId,
     entryMode,
+    selectedDate,
+    clockInTime,
+    clockOutTime,
+    selectedUserId,
+    canAssignJob,
+    selectedJobId,
+    onSuccess,
+  });
+  useReportPending(isPending, onPendingChange);
+  const { memberOptions, isLoadingMembers, loadError, retryLoadMembers } = useManualEntryMembers({
     isActive,
     isAdminOrManager,
+    activeOrgId,
+    prefetchedMembers,
+  });
+
+  function changeEntryMode(mode: ManualEntryMode) {
+    setEntryMode(mode);
+    // An entry without a clock-in cannot carry a job, so a job chosen before the mode change is dropped.
+    if (mode !== 'clock_in' && mode !== 'both') setSelectedJobId('');
+  }
+
+  useManualEntryDraftReport({
+    isActive,
     onDraftChange,
+    isAdminOrManager,
+    selectedUserId,
+    currentUserId,
+    entryMode,
     selectedDate,
-    selectedUserId
-  ]);
+    clockInTime,
+    clockOutTime,
+  });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setFieldErrors({});
-
-    if (!activeOrgId) {
-      setError('Keine Organisation ausgewählt.');
-      return;
-    }
-
-    if (isAdminOrManager && !selectedUserId) {
-      setFieldErrors({ member: 'Bitte wähle einen Mitarbeiter aus.' });
-      document.getElementById('manual-entry-member')?.focus();
-      return;
-    }
-
-    const targetUserId = isAdminOrManager ? selectedUserId : currentUserId;
-    if (!targetUserId) {
-      setError('Keine Benutzerinformation verfügbar.');
-      return;
-    }
-
-    if (!selectedDate) {
-      setFieldErrors({ date: 'Bitte ein gültiges Datum wählen.' });
-      document.getElementById('manual-entry-date')?.focus();
-      return;
-    }
-
-    const dateIso = toLocalDateString(selectedDate);
-    const entries: ManualEntryInput[] = [];
-
-    if (entryMode === 'clock_in' || entryMode === 'both') {
-      const clockInTimestamp = new Date(
-        `${dateIso}T${clockInTime}:00`
-      ).toISOString();
-      entries.push({ entryType: 'clock_in', timestamp: clockInTimestamp });
-    }
-
-    if (entryMode === 'clock_out' || entryMode === 'both') {
-      const clockOutTimestamp = new Date(
-        `${dateIso}T${clockOutTime}:00`
-      ).toISOString();
-      entries.push({ entryType: 'clock_out', timestamp: clockOutTimestamp });
-    }
-
-    void runPendingTask(async () => {
-      try {
-        const dayStart = new Date(dateIso);
-        dayStart.setHours(0, 0, 0, 0);
-        const dayEnd = new Date(dateIso);
-        dayEnd.setHours(23, 59, 59, 999);
-
-        const existingResult = await getTimeEntries({
-          organizationId: activeOrgId,
-          from: dayStart.toISOString(),
-          to: dayEnd.toISOString(),
-          userId: targetUserId
-        });
-
-        let existingEntries: TimeEntry[] = [];
-        if (existingResult.success) existingEntries = existingResult.entries;
-
-        const validationResult = validateManualEntries(existingEntries, entries, {
-          allowFutureTimestamps: isAdmin
-        });
-        if (!validationResult.valid) {
-          setError(validationResult.error || 'Validierung fehlgeschlagen.');
-          return;
-        }
-
-        const result = await addManualEntry({
-          organizationId: activeOrgId,
-          targetUserId,
-          entries,
-          ...(canAssignJob && selectedJobId ? { jobId: selectedJobId } : {})
-        });
-
-        if (result.success) {
-          const isPendingResult = result.entries.some((e) => e.status === 'pending');
-          showBanner({
-            variant: 'success',
-            message: isPendingResult
-              ? 'Antrag wurde zur Genehmigung eingereicht.'
-              : 'Eintrag erfolgreich erstellt!',
-          });
-          await onSuccess?.(result.entries);
-        } else {
-          if (
-            result.error === 'working_in_other_org' &&
-            'otherOrgName' in result &&
-            typeof result.otherOrgName === 'string'
-          ) {
-            const isSelf = targetUserId === currentUserId;
-            const title = isSelf
-              ? 'Bereits in anderer Organisation eingestempelt'
-              : 'Mitarbeiter ist bereits in anderer Organisation eingestempelt';
-            const message = isSelf
-              ? `Du bist aktuell in „${result.otherOrgName}“ eingestempelt. Bitte stemple dort zuerst aus, bevor du hier startest.`
-              : `Der ausgewählte Mitarbeiter ist aktuell in „${result.otherOrgName}“ eingestempelt. Bitte zuerst dort ausstempeln, bevor hier eine offene Arbeitszeit gestartet wird.`;
-
-            // One failure, one surface: the inline error carries the full
-            // explanation (the earlier extra top banner double-reported it).
-            setError(`${title}: ${message}`);
-          } else {
-            setError(getErrorMessage(result.error));
-          }
-        }
-      } catch (err) {
-        console.error('Error submitting manual entry:', err);
-        setError('Ein unerwarteter Fehler ist aufgetreten.');
-      }
-    });
-  };
-
-  const memberOptions = useMemo(
-    () =>
-      members.map((m) => ({
-        value: m.userId,
-        label:
-          m.firstName || m.lastName
-            ? `${m.firstName || ''} ${m.lastName || ''}`.trim()
-            : m.email,
-        description: m.email
-      })),
-    [members]
+  const jobSearch = useJobEntityOptions(
+    { kind: 'jobs', purpose: 'manual-entry' },
+    selectedJobId ? [selectedJobId] : [],
+    (prefetchedJobs ?? []).map((job) => ({
+      value: job.id,
+      label: job.title,
+      description: job.jobNumber ?? undefined,
+    })),
   );
-
-  const jobSearch = useJobEntityOptions({ kind: 'jobs', purpose: 'manual-entry' }, selectedJobId ? [selectedJobId] : [],
-    (prefetchedJobs ?? []).map((job) => ({ value: job.id, label: job.title, description: job.jobNumber ?? undefined })));
-  const isLoadingJobs = jobSearch.loading;
-  const isOwnBueroEntry =
-    activeOrg?.role === 'buero' && selectedUserId === currentUserId;
+  const isOwnBueroEntry = activeOrg?.role === 'buero' && selectedUserId === currentUserId;
 
   if (!activeOrgId || !activeOrg) return null;
 
   return (
-    <>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <ErrorText>{loadError}</ErrorText>
-        {!lockEntryMode && (
-          <Field label="Art des Eintrags">
-            <Select
-              value={entryMode}
-              onValueChange={(value) => setEntryMode(value as EntryMode)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="both">
-                  Einstempeln & Ausstempeln
-                </SelectItem>
-                <SelectItem value="clock_in">Nur Einstempeln</SelectItem>
-                <SelectItem value="clock_out">Nur Ausstempeln</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-        )}
+    <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+      <DialogBody className="space-y-4">
+        <OptionsLoadError error={loadError} onRetry={retryLoadMembers} retrying={isLoadingMembers} />
+        <ManualEntryAssignmentFields
+          lockEntryMode={lockEntryMode}
+          entryMode={entryMode}
+          setEntryMode={changeEntryMode}
+          isAdminOrManager={isAdminOrManager}
+          memberError={fieldErrors.member}
+          memberOptions={memberOptions}
+          selectedUserId={selectedUserId}
+          setSelectedUserId={setSelectedUserId}
+          isLoadingMembers={isLoadingMembers}
+          canAssignJob={canAssignJob}
+          jobSearch={jobSearch}
+          selectedJobId={selectedJobId}
+          setSelectedJobId={setSelectedJobId}
+          isPending={isPending}
+        />
 
-        {isAdminOrManager && (
-          <Field
-            label="Mitarbeiter"
-            htmlFor="manual-entry-member"
-            required
-            error={fieldErrors.member}
-          >
-            <SearchableSelect
-              options={memberOptions}
-              value={selectedUserId}
-              onChange={setSelectedUserId}
-              placeholder={
-                isLoadingMembers ? 'Lädt...' : 'Mitarbeiter auswählen'
-              }
-              searchPlaceholder="Mitarbeiter suchen..."
-              emptyMessage="Kein Mitarbeiter gefunden"
-              disabled={isLoadingMembers}
-            />
-          </Field>
-        )}
-
-        {canAssignJob && (
-          <Field label="Auftrag (optional)">
-            <SearchableSelect
-              {...jobSearch}
-              value={selectedJobId}
-              onChange={(v) => setSelectedJobId(v)}
-              placeholder={
-                isLoadingJobs ? 'Lädt...' : 'Kein Auftrag'
-              }
-              searchPlaceholder="Auftrag suchen..."
-              emptyMessage="Kein Auftrag gefunden"
-              disabled={isPending}
-              allowNone
-              noneLabel="Kein Auftrag"
-            />
-          </Field>
-        )}
-
-        <Field
-          label="Datum"
-          htmlFor="manual-entry-date"
-          required
-          error={fieldErrors.date}
-        >
-          <DatePicker
-            ariaLabel="Datum"
-            value={selectedDate}
-            onChange={setSelectedDate}
-            placeholder="Datum wählen"
-          />
-        </Field>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {(entryMode === 'clock_in' || entryMode === 'both') && (
-            <Field label="Einstempeln" htmlFor="clockInTime" required>
-              <div className="relative">
-                <Clock className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-foreground/80" />
-                <TimeInput
-                  value={clockInTime}
-                  onChange={setClockInTime}
-                  className="pl-10 pr-3"
-                />
-              </div>
-            </Field>
-          )}
-          {(entryMode === 'clock_out' || entryMode === 'both') && (
-            <Field label="Ausstempeln" htmlFor="clockOutTime" required>
-              <div className="relative">
-                <Clock className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-foreground/80" />
-                <TimeInput
-                  value={clockOutTime}
-                  onChange={setClockOutTime}
-                  className="pl-10 pr-3"
-                />
-              </div>
-            </Field>
-          )}
-        </div>
+        <ManualEntryTimeFields
+          entryMode={entryMode}
+          dateError={fieldErrors.date}
+          selectedDate={selectedDate}
+          setSelectedDate={setSelectedDate}
+          clockInTime={clockInTime}
+          setClockInTime={setClockInTime}
+          clockOutTime={clockOutTime}
+          setClockOutTime={setClockOutTime}
+        />
 
         <ErrorText>{error}</ErrorText>
 
         {isOwnBueroEntry ? (
           <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-            Eigene Nachträge werden zur Freigabe eingereicht. Du kannst sie
-            nicht selbst freigeben.
+            Eigene Nachträge werden zur Freigabe eingereicht. Du kannst sie nicht selbst freigeben.
           </p>
         ) : null}
-
-        <div className="flex justify-end gap-2 pt-2">
-          <Button type="submit" disabled={isPending}>
-            {isPending ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Speichern...
-              </>
-            ) : (
-              'Speichern'
-            )}
-          </Button>
-        </div>
-      </form>
-    </>
+      </DialogBody>
+      <DialogFooter>
+        <Button type="submit" className="h-11 sm:h-9" disabled={isPending}>
+          {isPending ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Speichern…
+            </>
+          ) : (
+            'Speichern'
+          )}
+        </Button>
+      </DialogFooter>
+    </form>
   );
-}
-
-function getErrorMessage(error: string): string {
-  const messages: Record<string, string> = {
-    not_authenticated: 'Du bist nicht angemeldet.',
-    not_a_member: 'Du bist kein Mitglied dieser Organisation.',
-    not_authorized: 'Du hast keine Berechtigung für diese Aktion.',
-    target_not_a_member:
-      'Der ausgewählte Mitarbeiter ist kein Mitglied dieser Organisation.',
-    validation_failed: 'Die Validierung ist fehlgeschlagen.',
-    insert_failed: 'Der Eintrag konnte nicht gespeichert werden.',
-    unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.'
-  };
-  return messages[error] || error;
 }

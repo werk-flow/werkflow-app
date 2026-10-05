@@ -1,19 +1,14 @@
 'use client';
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { PlainButton } from '@/components/ui/plain-button';
+import { useId, useMemo, useState, type ReactNode } from 'react';
 import { Pencil, Loader2, RotateCcw } from 'lucide-react';
 import { useServerAction } from '@/hooks/use-server-action';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { DatePicker } from '@/components/ui/date-picker';
 import { TimeInput } from '@/components/ui/time-input';
@@ -29,6 +24,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { toLocalDateString } from '@/lib/utils';
+import { SectionTitle } from '@/components/shared/section-title';
 
 export class MetadataSaveError extends Error {
   override name = 'MetadataSaveError';
@@ -37,21 +33,23 @@ export class MetadataSaveError extends Error {
 export interface MetadataField {
   label: string;
   value: React.ReactNode;
-  editableConfig?: {
-    type: 'text' | 'textarea' | 'select' | 'date' | 'time' | 'duration';
-    currentValue: string;
-    onSave: (newValue: string) => Promise<void>;
-    options?: { value: string; label: string }[] | undefined;
-    placeholder?: string | undefined;
-    nullable?: boolean | undefined;
-    confirmBeforeSave?: {
-      shouldConfirm: (newValue: string, currentValue: string) => boolean;
-      title: string;
-      description: ReactNode;
-      confirmLabel?: string;
-      loadingLabel?: string;
-    };
-  } | undefined;
+  editableConfig?:
+    | {
+        type: 'text' | 'textarea' | 'select' | 'date' | 'time' | 'duration';
+        currentValue: string;
+        onSave: (newValue: string) => Promise<void>;
+        options?: { value: string; label: string }[] | undefined;
+        placeholder?: string | undefined;
+        nullable?: boolean | undefined;
+        confirmBeforeSave?: {
+          shouldConfirm: (newValue: string, currentValue: string) => boolean;
+          title: string;
+          description: ReactNode;
+          confirmLabel?: string;
+          loadingLabel?: string;
+        };
+      }
+    | undefined;
 }
 
 interface MetadataSectionProps {
@@ -69,34 +67,30 @@ type PendingSaveConfirmation = {
   onSave: (newValue: string) => Promise<void>;
 };
 
-export function MetadataSection({
-  title,
-  fields,
-  isEditable,
-}: MetadataSectionProps) {
+export function MetadataSection({ title, fields, isEditable }: MetadataSectionProps) {
   const [editingFieldLabel, setEditingFieldLabel] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [pendingFieldLabel, setPendingFieldLabel] = useState<string | null>(null);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
-  const [pendingSaveConfirmation, setPendingSaveConfirmation] =
-    useState<PendingSaveConfirmation | null>(null);
+  const [pendingSaveConfirmation, setPendingSaveConfirmation] = useState<PendingSaveConfirmation | null>(
+    null,
+  );
   const [saveError, setSaveError] = useState<string | null>(null);
+  const titleId = useId();
   // Pending state binds to the awaited server call and nothing else
   // (freshness contract rule 6 — the P1-16 defect this section fixed).
   const { run: runSave, isPending } = useServerAction(
     async (value: string, onSave: (newValue: string) => Promise<void>) => {
       await onSave(value);
-    }
+    },
   );
 
   const currentEditingField = useMemo(
     () => fields.find((field) => field.label === editingFieldLabel) ?? null,
-    [editingFieldLabel, fields]
+    [editingFieldLabel, fields],
   );
   const currentConfig = currentEditingField?.editableConfig;
-  const hasUnsavedChanges = currentConfig
-    ? editValue !== currentConfig.currentValue
-    : false;
+  const hasUnsavedChanges = currentConfig ? editValue !== currentConfig.currentValue : false;
 
   const openFieldEditor = (fieldLabel: string) => {
     const nextField = fields.find((field) => field.label === fieldLabel);
@@ -151,11 +145,7 @@ export function MetadataSection({
         setSaveError(
           error instanceof MetadataSaveError
             ? error.message
-            : 'Die Änderung konnte nicht gespeichert werden.'
-        );
-        console.error(
-          `Failed to save metadata field "${currentEditingField?.label ?? 'unknown'}"`,
-          error
+            : 'Die Änderung konnte nicht gespeichert werden.',
         );
       }
     })();
@@ -170,7 +160,7 @@ export function MetadataSection({
         title: confirmation.title,
         description: confirmation.description,
         confirmLabel: confirmation.confirmLabel ?? 'Speichern',
-        loadingLabel: confirmation.loadingLabel ?? 'Wird gespeichert...',
+        loadingLabel: confirmation.loadingLabel ?? 'Wird gespeichert…',
         newValue: editValue,
         onSave: currentConfig.onSave,
       });
@@ -189,11 +179,15 @@ export function MetadataSection({
 
   return (
     <>
-      <div className="rounded-lg border bg-card p-4 sm:p-5">
+      <div
+        className="rounded-lg border bg-card p-4 sm:p-5"
+        role={title ? 'region' : undefined}
+        aria-labelledby={title ? titleId : undefined}
+      >
         {title && (
-          <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          <SectionTitle id={titleId} className="mb-3">
             {title}
-          </h3>
+          </SectionTitle>
         )}
         <div className="grid gap-3">
           {fields.map((field) => (
@@ -221,15 +215,13 @@ export function MetadataSection({
           <AlertDialogHeader>
             <AlertDialogTitle>Ungespeicherte Änderungen verwerfen?</AlertDialogTitle>
             <AlertDialogDescription>
-              Deine aktuellen Änderungen wurden noch nicht gespeichert. Wenn du ein
-              anderes Feld bearbeitest, gehen diese Änderungen verloren.
+              Deine aktuellen Änderungen wurden noch nicht gespeichert. Wenn du ein anderes Feld bearbeitest,
+              gehen diese Änderungen verloren.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Zurück</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDiscardAndContinue}>
-              Verwerfen und wechseln
-            </AlertDialogAction>
+            <AlertDialogAction onClick={handleDiscardAndContinue}>Verwerfen und wechseln</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -238,6 +230,7 @@ export function MetadataSection({
         onOpenChange={(open) => {
           if (!open) setPendingSaveConfirmation(null);
         }}
+        pending={isPending}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -290,16 +283,10 @@ function MetadataFieldRow({
     const canClear = config.nullable;
     const clearDisabled = !editValue.trim() || isPending;
     return (
-      <div className="grid gap-1.5">
-        <span className="text-xs font-medium text-muted-foreground">
-          {field.label}
-        </span>
+      <div className="grid gap-1.5" role="group" aria-label={field.label}>
+        <span className="text-xs font-medium text-muted-foreground">{field.label}</span>
         <div
-          className={
-            supportsInlineActions
-              ? 'flex flex-col gap-2 sm:flex-row sm:items-start'
-              : 'grid gap-2'
-          }
+          className={supportsInlineActions ? 'flex flex-col gap-2 sm:flex-row sm:items-start' : 'grid gap-2'}
         >
           <div className="min-w-0 flex-1">
             {config.type === 'text' && (
@@ -349,11 +336,7 @@ function MetadataFieldRow({
                   disabled={isPending}
                 />
               ) : (
-                <Select
-                  value={editValue}
-                  onValueChange={onEditValueChange}
-                  disabled={isPending}
-                >
+                <Select value={editValue} onValueChange={onEditValueChange} disabled={isPending}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -369,11 +352,7 @@ function MetadataFieldRow({
             {config.type === 'date' && (
               <DatePicker
                 value={editValue ? new Date(editValue) : undefined}
-                onChange={(date) =>
-                  onEditValueChange(
-                    date ? toLocalDateString(date) : ''
-                  )
-                }
+                onChange={(date) => onEditValueChange(date ? toLocalDateString(date) : '')}
                 disabled={isPending}
               />
             )}
@@ -408,29 +387,18 @@ function MetadataFieldRow({
                 variant="ghost"
                 className="gap-1.5"
                 onClick={() => onEditValueChange('')}
+                // eslint-disable-next-line ui/action-disabled-only-while-pending -- nothing to clear: the field is already empty
                 disabled={clearDisabled}
               >
                 <RotateCcw className="size-3.5" />
                 Leeren
               </Button>
             )}
-            <Button
-              type="button"
-              variant="default"
-              onClick={onSave}
-              disabled={isPending || !hasChanges}
-            >
-              {isPending && (
-                <Loader2 className="mr-2 size-3.5 animate-spin" />
-              )}
+            <Button type="button" variant="default" onClick={onSave} disabled={isPending || !hasChanges}>
+              {isPending && <Loader2 className="mr-2 size-3.5 animate-spin" />}
               Speichern
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onCancel}
-              disabled={isPending}
-            >
+            <Button type="button" variant="outline" onClick={onCancel} disabled={isPending}>
               Abbrechen
             </Button>
           </div>
@@ -441,14 +409,12 @@ function MetadataFieldRow({
   }
 
   return (
-    <div className="group grid min-w-0 gap-0.5">
-      <span className="text-xs font-medium text-muted-foreground">
-        {field.label}
-      </span>
+    <div className="group grid min-w-0 gap-0.5" role="group" aria-label={field.label}>
+      <span className="text-xs font-medium text-muted-foreground">{field.label}</span>
       <div className="flex min-w-0 items-center gap-1.5">
         <span className="min-w-0 break-words text-sm">{field.value ?? '—'}</span>
         {canEdit && (
-          <button
+          <PlainButton
             type="button"
             onClick={onStartEditing}
             aria-label={`${field.label} bearbeiten`}
@@ -456,7 +422,7 @@ function MetadataFieldRow({
             className="shrink-0 rounded p-0.5 text-muted-foreground opacity-100 transition-opacity hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 [@media(hover:hover)_and_(pointer:fine)]:opacity-0 [@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100"
           >
             <Pencil className="size-3" />
-          </button>
+          </PlainButton>
         )}
       </div>
     </div>

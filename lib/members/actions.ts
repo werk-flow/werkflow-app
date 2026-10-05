@@ -1,27 +1,36 @@
 'use server';
 
+import type { ActionFailure, ActionResult } from '@/lib/action-result';
+import { logReadErrors } from '@/lib/data/read-request-cache';
 import { cookies } from 'next/headers';
 import { updateTag } from 'next/cache';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { getAuthenticatedUser, getCachedMemberships, CACHE_TAGS } from '@/lib/data/cached';
-import { getBusinessTodayIso } from '@/lib/personnel/types';
 import { getResponsibilitiesStrandedByMemberRemoval } from '@/lib/responsibilities/server';
-import { getOrgMembersForUser, getProfileNamesVisibleTo } from './queries';
+import { getOrgMembersForUser, getProfileNamesVisibleTo, type ProfileNamesRead } from './queries';
+import { z } from '@/lib/zod';
+import { logError } from '@/lib/logging';
+import { uuidSchema } from '@/lib/validation/uuid';
+import { Constants } from '@/lib/supabase/database.types';
+
+const memberRoleChangeSchema = z.object({
+  memberId: uuidSchema,
+  newRole: z.enum(Constants.public.Enums.org_role),
+});
+// One page of member names; the callers ask for the people visible in one list.
+const profileIdsSchema = z.array(uuidSchema).max(1000);
 
 // Role hierarchy for permission checks
 // Lower number = higher rank
 const ROLE_HIERARCHY: Record<OrgRole, number> = {
   admin: 1,
   buero: 2,
-  employee: 3
+  employee: 3,
 };
 
-export type OrgRole =
-  | 'admin'
-  | 'buero'
-  | 'employee';
+export type OrgRole = 'admin' | 'buero' | 'employee';
 
 export type UpdateRoleResult = {
   success: boolean;
@@ -45,14 +54,14 @@ export type RemoveMemberResult = {
  * - Managers can only assign roles below manager (accountant, secretary, employee)
  */
 export async function updateMemberRole(
-  memberId: string,
-  newRole: OrgRole
+  memberIdInput: string,
+  newRoleInput: OrgRole,
 ): Promise<UpdateRoleResult> {
+  const parsed = memberRoleChangeSchema.safeParse({ memberId: memberIdInput, newRole: newRoleInput });
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  const { memberId, newRole } = parsed.data;
   try {
-    const [user, cookieStore] = await Promise.all([
-      getAuthenticatedUser(),
-      cookies()
-    ]);
+    const [user, cookieStore] = await Promise.all([getAuthenticatedUser(), cookies()]);
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
@@ -128,15 +137,13 @@ export async function updateMemberRole(
       .eq('user_id', memberId);
 
     if (updateError) {
-      console.error('Error updating member role:', updateError);
+      logError('Error updating member role:', updateError);
       return { success: false, error: 'update_failed' };
     }
 
-    updateTag(CACHE_TAGS.memberships(memberId));
-
     return { success: true };
   } catch (error) {
-    console.error('Unexpected error in updateMemberRole:', error);
+    logError('Unexpected error in updateMemberRole:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
@@ -150,14 +157,12 @@ export async function updateMemberRole(
  * - Admins can remove anyone (except themselves)
  * - Managers can only remove users below manager level (accountant, secretary, employee)
  */
-export async function removeMember(
-  memberId: string
-): Promise<RemoveMemberResult> {
+export async function removeMember(memberIdInput: string): Promise<RemoveMemberResult> {
+  const parsedMemberId = uuidSchema.safeParse(memberIdInput);
+  if (!parsedMemberId.success) return { success: false, error: 'invalid_input' };
+  const memberId = parsedMemberId.data;
   try {
-    const [user, cookieStore] = await Promise.all([
-      getAuthenticatedUser(),
-      cookies()
-    ]);
+    const [user, cookieStore] = await Promise.all([getAuthenticatedUser(), cookies()]);
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
@@ -218,14 +223,15 @@ export async function removeMember(
       }
     }
 
-    // Check before clocking out or deleting time data: the database trigger is
-    // the final backstop, but discovering the conflict after those destructive
-    // steps would leave a partial removal.
-    const strandedResponsibilities =
-      await getResponsibilitiesStrandedByMemberRemoval({
-        organizationId: orgId,
-        userId: memberId,
-      });
+    // Names every stranded responsibility at once; the membership trigger is
+    // the backstop and names only the first.
+    const strandedResponsibilities = await getResponsibilitiesStrandedByMemberRemoval({
+      organizationId: orgId,
+      userId: memberId,
+    });
+    if (!strandedResponsibilities) {
+      return { success: false, error: 'delete_failed' };
+    }
     if (strandedResponsibilities.length > 0) {
       return {
         success: false,
@@ -233,22 +239,25 @@ export async function removeMember(
       };
     }
 
-    const { data: autoClockedOut, error: deleteError } = await admin.rpc(
-      'remove_member_with_time_capture',
-      {
-        p_organization_id: orgId,
-        p_target_user_id: memberId,
-        p_actor_id: user.id,
-        p_operation_id: crypto.randomUUID(),
-      }
-    );
+    // One transaction: the membership goes, and the personnel record survives
+    // marked as exited today with a membership_removed event (P1-03), or
+    // nothing changes. P1-33 replaces this flow with real offboarding.
+    const { error: deleteError } = await admin.rpc('remove_member_with_time_capture', {
+      p_organization_id: orgId,
+      p_target_user_id: memberId,
+      p_actor_id: user.id,
+      p_operation_id: crypto.randomUUID(),
+    });
 
     if (deleteError) {
-      console.error('Error removing member atomically:', deleteError);
+      logError('Error removing member atomically:', deleteError);
       // SI-006 containment: recorded time keeps the member; offboarding runs
       // through the P1-24 employment transitions until P1-33.
       if (deleteError.message.includes('time_member_removal_has_history')) {
         return { success: false, error: 'has_time_history' };
+      }
+      if (deleteError.message.includes('member_removal_exit_before_entry')) {
+        return { success: false, error: 'exit_before_entry' };
       }
       if (deleteError.message.includes('last_responsibility_holder:')) {
         const responsibility = deleteError.message.includes('leave_approval')
@@ -262,74 +271,13 @@ export async function removeMember(
       return { success: false, error: 'delete_failed' };
     }
 
-    // P1-03 (owner-approved): the personnel record survives the destructive
-    // membership removal and is marked as exited so the person stays
-    // distinguishable in history. P1-33 replaces this whole flow with real
-    // offboarding.
-    try {
-      // Europe/Berlin business date, like every other personnel-state check.
-      const todayIso = getBusinessTodayIso();
-
-      const { data: personnelRecord } = await admin
-        .from('employee_records')
-        .select('id, exit_date')
-        .eq('organization_id', orgId)
-        .eq('user_id', memberId)
-        .maybeSingle();
-
-      if (
-        personnelRecord &&
-        (!personnelRecord.exit_date || personnelRecord.exit_date >= todayIso)
-      ) {
-        const { error: exitError } = await admin
-          .from('employee_records')
-          .update({ exit_date: todayIso })
-          .eq('id', personnelRecord.id)
-          .eq('organization_id', orgId);
-
-        if (exitError) {
-          console.error(
-            'Error marking personnel record as exited on member removal:',
-            exitError
-          );
-        } else {
-          const { error: eventError } = await admin
-            .from('employee_record_events')
-            .insert({
-              organization_id: orgId,
-              employee_record_id: personnelRecord.id,
-              event_type: 'membership_removed',
-              event_payload: {
-                exit_date: todayIso,
-                auto_clocked_out: autoClockedOut === true,
-              },
-              created_by: user.id,
-            });
-          if (eventError) {
-            console.error(
-              'Error recording membership_removed event:',
-              eventError
-            );
-          }
-        }
-      }
-    } catch (e) {
-      console.error(
-        'Unexpected error updating personnel record on member removal:',
-        e
-      );
-    }
-
-    updateTag(CACHE_TAGS.memberships(memberId));
-    updateTag(CACHE_TAGS.personnel(orgId));
-    updateTag(CACHE_TAGS.responsibilities(orgId));
     if (orgId) {
       updateTag(CACHE_TAGS.memberCount(orgId));
     }
 
     return { success: true };
   } catch (error) {
-    console.error('Unexpected error in removeMember:', error);
+    logError('Unexpected error in removeMember:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
@@ -349,8 +297,11 @@ export type OrgMemberInfo = {
  * The unauthenticated read helper lives in `lib/members/queries.ts` (SI-014).
  */
 export async function getOrgMembersAction(
-  organizationId: string
-): Promise<{ success: true; members: OrgMemberInfo[] } | { success: false; error: string }> {
+  organizationIdInput: string,
+): Promise<ActionResult<{ members: OrgMemberInfo[] }>> {
+  const parsedOrganizationId = uuidSchema.safeParse(organizationIdInput);
+  if (!parsedOrganizationId.success) return { success: false, error: 'invalid_input' };
+  const organizationId = parsedOrganizationId.data;
   try {
     const user = await getAuthenticatedUser();
     if (!user) {
@@ -369,15 +320,15 @@ export async function getOrgMembersAction(
       return { success: false, error: 'not_authorized' };
     }
 
-    let filtered = await getOrgMembersForUser(organizationId, user.id);
+    const membersRead = await getOrgMembersForUser(organizationId, user.id);
+    if (!membersRead.success) return membersRead;
 
-    if (userRole === 'buero') {
-      filtered = filtered.filter(
-        (m) => m.role === 'employee' || m.user_id === user.id
-      );
-    }
+    const members =
+      userRole === 'buero'
+        ? membersRead.members.filter((m) => m.role === 'employee' || m.user_id === user.id)
+        : membersRead.members;
 
-    return { success: true, members: filtered };
+    return { success: true, members };
   } catch {
     return { success: false, error: 'unexpected_error' };
   }
@@ -386,18 +337,20 @@ export async function getOrgMembersAction(
 /**
  * Get profile display names for a list of user IDs (server action replacement for /api/get-profiles).
  */
-export async function getProfilesByIds(
-  userIds: string[]
-): Promise<Record<string, { firstName: string | null; lastName: string | null }>> {
-  if (!Array.isArray(userIds) || userIds.length === 0) return {};
+export async function getProfilesByIds(userIdsInput: string[]): Promise<ProfileNamesRead | ActionFailure> {
+  const parsedUserIds = profileIdsSchema.safeParse(userIdsInput);
+  if (!parsedUserIds.success) return { success: false, error: 'invalid_input' };
+  const userIds = parsedUserIds.data;
+  if (userIds.length === 0) return { success: true, profiles: {} };
 
   try {
     // Names are visible only across shared organizations (SI-015).
     const user = await getAuthenticatedUser();
-    if (!user) return {};
+    if (!user) return { success: false, error: 'not_authenticated' };
     return await getProfileNamesVisibleTo(user.id, userIds);
-  } catch {
-    return {};
+  } catch (error) {
+    logError('getProfilesByIds: unexpected failure', error);
+    return { success: false, error: 'unexpected_error' };
   }
 }
 
@@ -418,11 +371,10 @@ export type MemberDetail = {
  * Get detailed info for a single org member.
  * Requires admin/manager access.
  */
-export async function getMemberDetail(
-  userId: string
-): Promise<
-  { success: true; member: MemberDetail } | { success: false; error: string }
-> {
+export async function getMemberDetail(userIdInput: string): Promise<ActionResult<{ member: MemberDetail }>> {
+  const parsedUserId = uuidSchema.safeParse(userIdInput);
+  if (!parsedUserId.success) return { success: false, error: 'invalid_input' };
+  const userId = parsedUserId.data;
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
@@ -441,21 +393,19 @@ export async function getMemberDetail(
         .eq('organization_id', orgId)
         .eq('user_id', userId)
         .single(),
-      admin
-        .from('profiles')
-        .select('id, first_name, last_name, email')
-        .eq('id', userId)
-        .single(),
+      admin.from('profiles').select('id, first_name, last_name, email').eq('id', userId).single(),
     ]);
 
     const { data: membership, error: membershipError } = membershipResult;
     const { data: profile, error: profileError } = profileResult;
 
     if (membershipError || !membership) {
+      logReadErrors('getMemberDetail: read failed', membershipError);
       return { success: false, error: 'not_found' };
     }
 
     if (profileError || !profile) {
+      logReadErrors('getMemberDetail: read failed', profileError);
       return { success: false, error: 'not_found' };
     }
 
@@ -471,7 +421,7 @@ export async function getMemberDetail(
       },
     };
   } catch (error) {
-    console.error('Unexpected error in getMemberDetail:', error);
+    logError('Unexpected error in getMemberDetail:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }

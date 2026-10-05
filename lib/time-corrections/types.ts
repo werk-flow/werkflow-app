@@ -1,16 +1,16 @@
+import type { ActionFailure } from '@/lib/action-result';
 import type { Database, Json } from '@/lib/supabase/database.types';
+import { timeActivitySelectionSchema } from '@/lib/time-tracking/activity-selection-schema';
 import type {
   TimeEntry,
   TimeEntryType,
   TimeSegmentKind,
+  TimeActivitySelection,
 } from '@/lib/time-tracking/types';
 
-export type TimeCorrectionKind =
-  Database['public']['Enums']['time_correction_kind'];
-export type TimeCorrectionStatus =
-  Database['public']['Enums']['time_correction_status'];
-type TimeCorrectionSourceKind =
-  Database['public']['Enums']['time_correction_source_kind'];
+export type TimeCorrectionKind = Database['public']['Enums']['time_correction_kind'];
+export type TimeCorrectionStatus = Database['public']['Enums']['time_correction_status'];
+type TimeCorrectionSourceKind = Database['public']['Enums']['time_correction_source_kind'];
 
 export const TIME_CORRECTION_KIND_LABELS = {
   add: 'Zeit nachtragen',
@@ -41,6 +41,7 @@ export type TimeCorrectionFact = {
   jobId: string | null;
   activityKind: TimeSegmentKind | null;
   isManual: boolean;
+  activity?: TimeActivitySelection;
 };
 
 export type TimeCorrectionSnapshot = {
@@ -102,16 +103,29 @@ export type TimeCorrectionResult =
       applicationId?: string | null | undefined;
       replayed: boolean;
     }
-  | { success: false; error: string };
+  | ActionFailure;
 
-export type TimeCorrectionListResult =
-  | { success: true; requests: TimeCorrectionRequest[] }
-  | { success: false; error: string };
+export type TimeCorrectionListResult = { success: true; requests: TimeCorrectionRequest[] } | ActionFailure;
+
+/** One page of the correction history and how many requests the caller sees in all. */
+export type TimeCorrectionHistoryResult =
+  | { success: true; page: { requests: TimeCorrectionRequest[]; total: number } }
+  | ActionFailure;
 
 export function isTimeCorrectionSnapshot(value: Json): value is TimeCorrectionSnapshot {
   if (!value || Array.isArray(value) || typeof value !== 'object') return false;
   const record = value as Record<string, Json | undefined>;
-  return record.schemaVersion === 1 && Array.isArray(record.facts);
+  return (
+    record.schemaVersion === 1 &&
+    Array.isArray(record.facts) &&
+    record.facts.every(
+      (fact) =>
+        fact !== null &&
+        typeof fact === 'object' &&
+        !Array.isArray(fact) &&
+        (fact.activity === undefined || timeActivitySelectionSchema.safeParse(fact.activity).success),
+    )
+  );
 }
 
 export function correctionFactToEntry(
@@ -119,7 +133,7 @@ export function correctionFactToEntry(
   application: Pick<
     TimeCorrectionApplicationProjection,
     'applicationId' | 'appliedAt' | 'appliedBy' | 'sourceFingerprint'
-  >
+  >,
 ): TimeEntry {
   return {
     id: `correction:${application.applicationId}:${fact.factId}`,
@@ -135,6 +149,7 @@ export function correctionFactToEntry(
     createdAt: application.appliedAt,
     updatedAt: application.appliedAt,
     activityKind: fact.activityKind ?? undefined,
+    ...(fact.activity ? { activitySelection: fact.activity } : {}),
     correctionApplicationId: application.applicationId,
     correctionSourceFingerprint: application.sourceFingerprint,
   };

@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from '@/lib/zod';
 
 export const profileSettingsSchema = z.object({
   firstName: z
@@ -10,7 +10,7 @@ export const profileSettingsSchema = z.object({
     .string()
     .trim()
     .min(1, 'Bitte gib einen Nachnamen ein.')
-    .max(80, 'Der Nachname darf maximal 80 Zeichen lang sein.')
+    .max(80, 'Der Nachname darf maximal 80 Zeichen lang sein.'),
 });
 
 export type ProfileSettingsValues = z.infer<typeof profileSettingsSchema>;

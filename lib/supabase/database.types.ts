@@ -4614,6 +4614,62 @@ export type Database = {
           },
         ];
       };
+      organization_join_attempts: {
+        Row: {
+          attempted_at: string;
+          id: string;
+          user_id: string;
+        };
+        Insert: {
+          attempted_at?: string;
+          id?: string;
+          user_id: string;
+        };
+        Update: {
+          attempted_at?: string;
+          id?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
+      organization_join_requests: {
+        Row: {
+          decided_at: string | null;
+          decided_by: string | null;
+          id: string;
+          organization_id: string;
+          requested_at: string;
+          status: string;
+          user_id: string;
+        };
+        Insert: {
+          decided_at?: string | null;
+          decided_by?: string | null;
+          id?: string;
+          organization_id: string;
+          requested_at?: string;
+          status?: string;
+          user_id: string;
+        };
+        Update: {
+          decided_at?: string | null;
+          decided_by?: string | null;
+          id?: string;
+          organization_id?: string;
+          requested_at?: string;
+          status?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "organization_join_requests_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       organization_members: {
         Row: {
           id: string;
@@ -7497,6 +7553,30 @@ export type Database = {
           },
         ];
       };
+      rate_limit_attempts: {
+        Row: {
+          action: string;
+          attempted_at: string;
+          expires_at: string;
+          id: number;
+          subject_hash: string;
+        };
+        Insert: {
+          action: string;
+          attempted_at?: string;
+          expires_at: string;
+          id?: never;
+          subject_hash: string;
+        };
+        Update: {
+          action?: string;
+          attempted_at?: string;
+          expires_at?: string;
+          id?: never;
+          subject_hash?: string;
+        };
+        Relationships: [];
+      };
       realtime_deletions: {
         Row: {
           created_at: string;
@@ -10162,6 +10242,29 @@ export type Database = {
           },
         ];
       };
+      time_timeline_revisions: {
+        Row: {
+          organization_id: string;
+          revision: number;
+        };
+        Insert: {
+          organization_id: string;
+          revision?: number;
+        };
+        Update: {
+          organization_id?: string;
+          revision?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_timeline_revisions_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: true;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       vacation_request_events: {
         Row: {
           created_at: string;
@@ -12623,6 +12726,58 @@ export type Database = {
         };
         Returns: string;
       };
+      add_employee_capability: {
+        Args: {
+          p_actor_id: string;
+          p_capability_id: string;
+          p_confirmation_status: string;
+          p_employee_record_id: string;
+          p_evidence_state: string;
+          p_issuer: string;
+          p_operational_note: string;
+          p_organization_id: string;
+          p_renewal_due_date: string;
+          p_supersedes_id: string;
+          p_valid_from: string;
+          p_valid_until: string;
+        };
+        Returns: string;
+      };
+      add_employment_condition: {
+        Args: {
+          p_actor_id: string;
+          p_employment_type: string;
+          p_note: string;
+          p_organization_id: string;
+          p_record_id: string;
+          p_vacation_days_per_year: number;
+          p_valid_from: string;
+          p_weekly_hours: number;
+        };
+        Returns: string;
+      };
+      add_team_membership: {
+        Args: {
+          p_actor_id: string;
+          p_employee_record_id: string;
+          p_organization_id: string;
+          p_team_id: string;
+          p_valid_from: string;
+          p_valid_until: string;
+        };
+        Returns: undefined;
+      };
+      add_work_schedule: {
+        Args: {
+          p_actor_id: string;
+          p_day_minutes: number[];
+          p_note: string;
+          p_organization_id: string;
+          p_record_id: string;
+          p_valid_from: string;
+        };
+        Returns: string;
+      };
       apply_responsibility_configuration: {
         Args: {
           p_actor_id: string;
@@ -12674,6 +12829,14 @@ export type Database = {
         };
         Returns: Json;
       };
+      approve_organization_join_request: {
+        Args: {
+          p_approver_id: string;
+          p_organization_id: string;
+          p_request_id: string;
+        };
+        Returns: string;
+      };
       assign_time_account_policy: {
         Args: {
           p_actor_id: string;
@@ -12703,6 +12866,40 @@ export type Database = {
         };
         Returns: string[];
       };
+      cancel_approved_vacation_request: {
+        Args: {
+          p_actor_id: string;
+          p_organization_id: string;
+          p_reason: string;
+          p_request_id: string;
+        };
+        Returns: {
+          approved_days_by_year: Json | null;
+          cancellation_reason: string | null;
+          cancelled_at: string | null;
+          cancelled_by: string | null;
+          comment: string | null;
+          created_at: string;
+          day_portion: string;
+          decided_at: string | null;
+          decided_by: string | null;
+          decision_comment: string | null;
+          employee_record_id: string;
+          end_date: string;
+          id: string;
+          organization_id: string;
+          requested_by: string | null;
+          start_date: string;
+          status: string;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "vacation_requests";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       cancel_planning_dispatch: {
         Args: {
           p_actor_id: string;
@@ -12711,6 +12908,38 @@ export type Database = {
           p_reason: string;
         };
         Returns: undefined;
+      };
+      cancel_sickness_report: {
+        Args: {
+          p_actor_id: string;
+          p_organization_id: string;
+          p_reason: string;
+          p_report_id: string;
+        };
+        Returns: {
+          absence_type: string;
+          cancellation_reason: string | null;
+          cancelled_at: string | null;
+          cancelled_by: string | null;
+          created_at: string;
+          day_portion: string;
+          employee_record_id: string;
+          end_date: string | null;
+          evidence_required: boolean;
+          evidence_status: string;
+          id: string;
+          organization_id: string;
+          reported_by: string | null;
+          start_date: string;
+          status: string;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "sickness_reports";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       challenge_planning_dispatch: {
         Args: {
@@ -12754,6 +12983,54 @@ export type Database = {
           p_reason: string;
         };
         Returns: number;
+      };
+      close_client_request: {
+        Args: {
+          p_actor_id: string;
+          p_note: string;
+          p_organization_id: string;
+          p_reason: Database["public"]["Enums"]["request_close_reason"];
+          p_request_id: string;
+        };
+        Returns: {
+          assigned_to: string | null;
+          caller_address: string | null;
+          caller_email: string | null;
+          caller_name: string | null;
+          caller_phone: string | null;
+          category: Database["public"]["Enums"]["request_category"];
+          client_id: string | null;
+          closed_at: string | null;
+          closed_by: string | null;
+          closed_note: string | null;
+          closed_reason:
+            | Database["public"]["Enums"]["request_close_reason"]
+            | null;
+          contact_id: string | null;
+          converted_at: string | null;
+          converted_by: string | null;
+          converted_job_id: string | null;
+          converted_project_id: string | null;
+          created_at: string;
+          created_by: string | null;
+          details: string | null;
+          id: string;
+          organization_id: string;
+          received_at: string;
+          request_number: string | null;
+          site_id: string | null;
+          source: Database["public"]["Enums"]["request_source"];
+          status: Database["public"]["Enums"]["request_status"];
+          summary: string;
+          updated_at: string;
+          urgency: Database["public"]["Enums"]["request_urgency"];
+        };
+        SetofOptions: {
+          from: "*";
+          to: "client_requests";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       close_time_period: {
         Args: {
@@ -12827,6 +13104,166 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      consume_rate_limit: {
+        Args: {
+          p_action: string;
+          p_max_attempts: number;
+          p_subject_hash: string;
+          p_window_seconds: number;
+        };
+        Returns: boolean;
+      };
+      convert_client_request_to_job: {
+        Args: {
+          p_actor_id: string;
+          p_assessed_for_date: string;
+          p_coverage_fingerprint: string;
+          p_coverage_snapshot: Json;
+          p_job: Json;
+          p_organization_id: string;
+          p_override_reason: string;
+          p_record_assessment: boolean;
+          p_request_id: string;
+          p_requirements_snapshot: Json;
+          p_selected_employee_record_ids: string[];
+          p_selected_user_ids: string[];
+          p_team_source_id: string;
+          p_template_assessment: boolean;
+          p_template_version_id: string;
+        };
+        Returns: {
+          actual_completion_date: string | null;
+          client_id: string | null;
+          contact_id: string | null;
+          created_at: string;
+          created_by: string;
+          description: string | null;
+          estimated_duration_minutes: number | null;
+          execution_state:
+            | Database["public"]["Enums"]["work_execution_state"]
+            | null;
+          execution_version: number;
+          id: string;
+          job_number: string | null;
+          location: string | null;
+          organization_id: string;
+          planned_date: string | null;
+          planned_time: string | null;
+          planned_working_minutes: number | null;
+          priority: Database["public"]["Enums"]["job_priority"];
+          project_id: string | null;
+          site_id: string | null;
+          status: Database["public"]["Enums"]["job_status"];
+          title: string;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "jobs";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      convert_client_request_to_project: {
+        Args: {
+          p_actor_id: string;
+          p_organization_id: string;
+          p_project: Json;
+          p_request_id: string;
+          p_template_version_id: string;
+        };
+        Returns: {
+          client_id: string | null;
+          contact_id: string | null;
+          created_at: string;
+          created_by: string;
+          description: string | null;
+          execution_override_reason: string | null;
+          execution_state_override:
+            | Database["public"]["Enums"]["work_execution_state"]
+            | null;
+          execution_version: number;
+          id: string;
+          name: string;
+          organization_id: string;
+          planned_end_date: string | null;
+          planned_start_date: string | null;
+          project_number: string | null;
+          site_id: string | null;
+          status_override: Database["public"]["Enums"]["project_status"] | null;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "projects";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      copy_document: {
+        Args: {
+          p_actor_id: string;
+          p_display_name: string;
+          p_document_id: string;
+          p_folder_id: string;
+          p_organization_id: string;
+          p_source_document_id: string;
+          p_storage_path: string;
+        };
+        Returns: {
+          category: string;
+          copied_from_document_id: string | null;
+          created_at: string;
+          current_version_number: number;
+          delete_reason: string | null;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          display_name: string;
+          folder_id: string | null;
+          id: string;
+          metadata: Json;
+          mime_type: string | null;
+          organization_id: string;
+          original_file_name: string;
+          size_bytes: number;
+          storage_bucket: string;
+          storage_path: string;
+          updated_at: string;
+          uploaded_by: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "documents";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      copy_document_folder: {
+        Args: {
+          p_actor_id: string;
+          p_documents: Json;
+          p_folders: Json;
+          p_organization_id: string;
+          p_source_folder_id: string;
+          p_target_parent_folder_id: string;
+        };
+        Returns: {
+          created_at: string;
+          created_by: string;
+          deleted_at: string | null;
+          id: string;
+          name: string;
+          organization_id: string;
+          parent_folder_id: string | null;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "document_folders";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       correct_installed_equipment_terminal_action: {
         Args: {
           p_actor_id: string;
@@ -12881,6 +13318,53 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      correct_sickness_report: {
+        Args: {
+          p_absence_type: string;
+          p_actor_id: string;
+          p_day_portion: string;
+          p_end_date: string;
+          p_organization_id: string;
+          p_reason: string;
+          p_report_id: string;
+          p_start_date: string;
+        };
+        Returns: {
+          absence_type: string;
+          cancellation_reason: string | null;
+          cancelled_at: string | null;
+          cancelled_by: string | null;
+          created_at: string;
+          day_portion: string;
+          employee_record_id: string;
+          end_date: string | null;
+          evidence_required: boolean;
+          evidence_status: string;
+          id: string;
+          organization_id: string;
+          reported_by: string | null;
+          start_date: string;
+          status: string;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "sickness_reports";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      create_capability_definition: {
+        Args: {
+          p_actor_id: string;
+          p_description: string;
+          p_kind: string;
+          p_name: string;
+          p_organization_id: string;
+          p_warning_days: number;
+        };
+        Returns: string;
+      };
       create_client_follow_up: {
         Args: {
           p_actor_id: string;
@@ -12920,6 +13404,78 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      create_client_request: {
+        Args: {
+          p_actor_id: string;
+          p_assigned_to: string;
+          p_caller_address: string;
+          p_caller_email: string;
+          p_caller_name: string;
+          p_caller_phone: string;
+          p_category: Database["public"]["Enums"]["request_category"];
+          p_client_id: string;
+          p_contact_id: string;
+          p_details: string;
+          p_organization_id: string;
+          p_received_at: string;
+          p_request_number: string;
+          p_site_id: string;
+          p_source: Database["public"]["Enums"]["request_source"];
+          p_summary: string;
+          p_urgency: Database["public"]["Enums"]["request_urgency"];
+        };
+        Returns: {
+          assigned_to: string | null;
+          caller_address: string | null;
+          caller_email: string | null;
+          caller_name: string | null;
+          caller_phone: string | null;
+          category: Database["public"]["Enums"]["request_category"];
+          client_id: string | null;
+          closed_at: string | null;
+          closed_by: string | null;
+          closed_note: string | null;
+          closed_reason:
+            | Database["public"]["Enums"]["request_close_reason"]
+            | null;
+          contact_id: string | null;
+          converted_at: string | null;
+          converted_by: string | null;
+          converted_job_id: string | null;
+          converted_project_id: string | null;
+          created_at: string;
+          created_by: string | null;
+          details: string | null;
+          id: string;
+          organization_id: string;
+          received_at: string;
+          request_number: string | null;
+          site_id: string | null;
+          source: Database["public"]["Enums"]["request_source"];
+          status: Database["public"]["Enums"]["request_status"];
+          summary: string;
+          updated_at: string;
+          urgency: Database["public"]["Enums"]["request_urgency"];
+        };
+        SetofOptions: {
+          from: "*";
+          to: "client_requests";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      create_employee_record: {
+        Args: {
+          p_actor_id: string;
+          p_employee_number: string;
+          p_entry_date: string;
+          p_first_name: string;
+          p_last_name: string;
+          p_notes: string;
+          p_organization_id: string;
+        };
+        Returns: string;
       };
       create_installed_equipment: {
         Args: {
@@ -12968,6 +13524,66 @@ export type Database = {
         SetofOptions: {
           from: "*";
           to: "installed_equipment";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      create_job_instruction_item: {
+        Args: {
+          p_actor_id: string;
+          p_after_item_id: string;
+          p_content: string;
+          p_job_id: string;
+          p_organization_id: string;
+        };
+        Returns: string;
+      };
+      create_job_with_assignments: {
+        Args: {
+          p_actor_id: string;
+          p_assessed_for_date: string;
+          p_coverage_fingerprint: string;
+          p_coverage_snapshot: Json;
+          p_job: Json;
+          p_organization_id: string;
+          p_override_reason: string;
+          p_record_assessment: boolean;
+          p_requirements_snapshot: Json;
+          p_selected_employee_record_ids: string[];
+          p_selected_user_ids: string[];
+          p_team_source_id: string;
+          p_template_assessment: boolean;
+          p_template_version_id: string;
+        };
+        Returns: {
+          actual_completion_date: string | null;
+          client_id: string | null;
+          contact_id: string | null;
+          created_at: string;
+          created_by: string;
+          description: string | null;
+          estimated_duration_minutes: number | null;
+          execution_state:
+            | Database["public"]["Enums"]["work_execution_state"]
+            | null;
+          execution_version: number;
+          id: string;
+          job_number: string | null;
+          location: string | null;
+          organization_id: string;
+          planned_date: string | null;
+          planned_time: string | null;
+          planned_working_minutes: number | null;
+          priority: Database["public"]["Enums"]["job_priority"];
+          project_id: string | null;
+          site_id: string | null;
+          status: Database["public"]["Enums"]["job_status"];
+          title: string;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "jobs";
           isOneToOne: true;
           isSetofReturn: false;
         };
@@ -13042,6 +13658,112 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      create_maintenance_plan_with_due_work: {
+        Args: {
+          p_actor_id: string;
+          p_idempotency_key: string;
+          p_maintenance_plan_id: string;
+          p_organization_id: string;
+          p_payload: Json;
+          p_revision_id: string;
+          p_through_date: string;
+        };
+        Returns: {
+          archived_at: string | null;
+          archived_by: string | null;
+          client_id: string;
+          created_at: string;
+          created_by: string;
+          current_revision_id: string | null;
+          generation_through_date: string | null;
+          id: string;
+          maintenance_coverage_id: string | null;
+          organization_id: string;
+          plan_number: string;
+          site_id: string;
+          status: Database["public"]["Enums"]["maintenance_plan_status"];
+          updated_at: string;
+          updated_by: string;
+          version: number;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "maintenance_plans";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      create_maintenance_visit_job: {
+        Args: {
+          p_actor_id: string;
+          p_assessed_for_date: string;
+          p_coverage_fingerprint: string;
+          p_coverage_snapshot: Json;
+          p_expected_versions: number[];
+          p_idempotency_key: string;
+          p_job: Json;
+          p_maintenance_due_work_ids: string[];
+          p_organization_id: string;
+          p_override_reason: string;
+          p_reason: string;
+          p_record_assessment: boolean;
+          p_requirements_snapshot: Json;
+          p_selected_employee_record_ids: string[];
+          p_selected_user_ids: string[];
+          p_team_source_id: string;
+          p_template_assessment: boolean;
+          p_template_version_id: string;
+        };
+        Returns: {
+          actual_completion_date: string | null;
+          client_id: string | null;
+          contact_id: string | null;
+          created_at: string;
+          created_by: string;
+          description: string | null;
+          estimated_duration_minutes: number | null;
+          execution_state:
+            | Database["public"]["Enums"]["work_execution_state"]
+            | null;
+          execution_version: number;
+          id: string;
+          job_number: string | null;
+          location: string | null;
+          organization_id: string;
+          planned_date: string | null;
+          planned_time: string | null;
+          planned_working_minutes: number | null;
+          priority: Database["public"]["Enums"]["job_priority"];
+          project_id: string | null;
+          site_id: string | null;
+          status: Database["public"]["Enums"]["job_status"];
+          title: string;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "jobs";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      create_organization_invite: {
+        Args: {
+          p_email: string;
+          p_employee_record_id: string;
+          p_invite_code: string;
+          p_invited_role: Database["public"]["Enums"]["org_role"];
+          p_organization_id: string;
+        };
+        Returns: {
+          invite_id: string;
+          replaced_invite_id: string;
+        }[];
+      };
+      create_organization_with_defaults: {
+        Args: { p_admin_id: string; p_name: string; p_unique_code: string };
+        Returns: string;
+      };
       create_payroll_mapping_version: {
         Args: {
           p_actor_id: string;
@@ -13092,6 +13814,41 @@ export type Database = {
           p_series: Json;
         };
         Returns: string[];
+      };
+      create_project_with_template: {
+        Args: {
+          p_actor_id: string;
+          p_organization_id: string;
+          p_project: Json;
+          p_template_version_id: string;
+        };
+        Returns: {
+          client_id: string | null;
+          contact_id: string | null;
+          created_at: string;
+          created_by: string;
+          description: string | null;
+          execution_override_reason: string | null;
+          execution_state_override:
+            | Database["public"]["Enums"]["work_execution_state"]
+            | null;
+          execution_version: number;
+          id: string;
+          name: string;
+          organization_id: string;
+          planned_end_date: string | null;
+          planned_start_date: string | null;
+          project_number: string | null;
+          site_id: string | null;
+          status_override: Database["public"]["Enums"]["project_status"] | null;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "projects";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       create_responsibility_delegation: {
         Args: {
@@ -13146,6 +13903,52 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      create_sickness_report: {
+        Args: {
+          p_absence_type: string;
+          p_actor_id: string;
+          p_day_portion: string;
+          p_employee_record_id: string;
+          p_end_date: string;
+          p_evidence_required: boolean;
+          p_organization_id: string;
+          p_self_reported: boolean;
+          p_start_date: string;
+        };
+        Returns: {
+          absence_type: string;
+          cancellation_reason: string | null;
+          cancelled_at: string | null;
+          cancelled_by: string | null;
+          created_at: string;
+          day_portion: string;
+          employee_record_id: string;
+          end_date: string | null;
+          evidence_required: boolean;
+          evidence_status: string;
+          id: string;
+          organization_id: string;
+          reported_by: string | null;
+          start_date: string;
+          status: string;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "sickness_reports";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      create_team: {
+        Args: {
+          p_actor_id: string;
+          p_description: string;
+          p_name: string;
+          p_organization_id: string;
+        };
+        Returns: string;
+      };
       create_time_account_policy_version: {
         Args: {
           p_actor_id: string;
@@ -13182,6 +13985,44 @@ export type Database = {
           p_subject_employee_record_id: string;
         };
         Returns: Json;
+      };
+      create_vacation_request: {
+        Args: {
+          p_actor_id: string;
+          p_comment: string;
+          p_day_portion: string;
+          p_employee_record_id: string;
+          p_end_date: string;
+          p_organization_id: string;
+          p_preview_days_by_year: Json;
+          p_start_date: string;
+        };
+        Returns: {
+          approved_days_by_year: Json | null;
+          cancellation_reason: string | null;
+          cancelled_at: string | null;
+          cancelled_by: string | null;
+          comment: string | null;
+          created_at: string;
+          day_portion: string;
+          decided_at: string | null;
+          decided_by: string | null;
+          decision_comment: string | null;
+          employee_record_id: string;
+          end_date: string;
+          id: string;
+          organization_id: string;
+          requested_by: string | null;
+          start_date: string;
+          status: string;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "vacation_requests";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       create_work_artifact_revision: {
         Args: {
@@ -13221,6 +14062,35 @@ export type Database = {
           p_template_id: string;
         };
         Returns: string;
+      };
+      decide_entry_change_request: {
+        Args: {
+          p_actor_id: string;
+          p_decision: string;
+          p_organization_id: string;
+          p_request_id: string;
+        };
+        Returns: {
+          change_type: Database["public"]["Enums"]["entry_change_type"];
+          created_at: string;
+          entry_id: string;
+          id: string;
+          organization_id: string;
+          original_timestamp: string | null;
+          paired_entry_id: string | null;
+          proposed_timestamp: string | null;
+          requested_by: string;
+          reviewed_at: string | null;
+          reviewed_by: string | null;
+          status: Database["public"]["Enums"]["change_request_status"];
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "entry_change_requests";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       decide_time_account_adjustment: {
         Args: {
@@ -13269,6 +14139,96 @@ export type Database = {
         };
         Returns: string;
       };
+      decide_vacation_request: {
+        Args: {
+          p_actor_id: string;
+          p_approved_days_by_year: Json;
+          p_comment: string;
+          p_decision: string;
+          p_organization_id: string;
+          p_request_id: string;
+        };
+        Returns: {
+          approved_days_by_year: Json | null;
+          cancellation_reason: string | null;
+          cancelled_at: string | null;
+          cancelled_by: string | null;
+          comment: string | null;
+          created_at: string;
+          day_portion: string;
+          decided_at: string | null;
+          decided_by: string | null;
+          decision_comment: string | null;
+          employee_record_id: string;
+          end_date: string;
+          id: string;
+          organization_id: string;
+          requested_by: string | null;
+          start_date: string;
+          status: string;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "vacation_requests";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      delete_document_folder: {
+        Args: {
+          p_actor_id: string;
+          p_folder_id: string;
+          p_organization_id: string;
+        };
+        Returns: number;
+      };
+      delete_employment_condition: {
+        Args: {
+          p_actor_id: string;
+          p_condition_id: string;
+          p_organization_id: string;
+        };
+        Returns: undefined;
+      };
+      delete_instruction_item: {
+        Args: { p_item_id: string; p_organization_id: string };
+        Returns: undefined;
+      };
+      delete_time_entries: {
+        Args: {
+          p_actor_id: string;
+          p_authorized_user_ids: string[];
+          p_entry_ids: string[];
+          p_organization_id: string;
+        };
+        Returns: number;
+      };
+      delete_work_schedule: {
+        Args: {
+          p_actor_id: string;
+          p_organization_id: string;
+          p_schedule_id: string;
+        };
+        Returns: undefined;
+      };
+      discard_unsent_organization_invite: {
+        Args: {
+          p_invite_id: string;
+          p_organization_id: string;
+          p_replaced_invite_id: string;
+        };
+        Returns: boolean;
+      };
+      dissolve_team: {
+        Args: {
+          p_actor_id: string;
+          p_organization_id: string;
+          p_reason: string;
+          p_team_id: string;
+        };
+        Returns: undefined;
+      };
       end_responsibility_delegation: {
         Args: {
           p_actor_id: string;
@@ -13277,9 +14237,68 @@ export type Database = {
         };
         Returns: undefined;
       };
+      end_sickness_report: {
+        Args: {
+          p_actor_id: string;
+          p_end_date: string;
+          p_organization_id: string;
+          p_report_id: string;
+        };
+        Returns: {
+          absence_type: string;
+          cancellation_reason: string | null;
+          cancelled_at: string | null;
+          cancelled_by: string | null;
+          created_at: string;
+          day_portion: string;
+          employee_record_id: string;
+          end_date: string | null;
+          evidence_required: boolean;
+          evidence_status: string;
+          id: string;
+          organization_id: string;
+          reported_by: string | null;
+          start_date: string;
+          status: string;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "sickness_reports";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      end_team_membership: {
+        Args: {
+          p_actor_id: string;
+          p_membership_id: string;
+          p_organization_id: string;
+          p_valid_until: string;
+        };
+        Returns: undefined;
+      };
       ensure_inventory_defaults: {
         Args: { p_actor_id: string; p_org_id: string };
         Returns: undefined;
+      };
+      export_work_artifact: {
+        Args: {
+          p_action_id: string;
+          p_actor_id: string;
+          p_artifact_id: string;
+          p_content_hash: string;
+          p_document_id: string;
+          p_expected_version: number;
+          p_file_name: string;
+          p_link_id: string;
+          p_organization_id: string;
+          p_renderer_version: string;
+          p_revision_id: string;
+          p_size_bytes: number;
+          p_storage_path: string;
+        };
+        Returns: Json;
       };
       extend_planning_series_materialization: {
         Args: {
@@ -13316,6 +14335,88 @@ export type Database = {
           p_organization_id: string;
         };
         Returns: string;
+      };
+      finalize_document_upload: {
+        Args: {
+          p_actor_id: string;
+          p_category: string;
+          p_display_name: string;
+          p_document_id: string;
+          p_folder_id: string;
+          p_link_kind: string;
+          p_link_target_id: string;
+          p_mime_type: string;
+          p_organization_id: string;
+          p_original_file_name: string;
+          p_size_bytes: number;
+          p_storage_path: string;
+        };
+        Returns: {
+          category: string;
+          copied_from_document_id: string | null;
+          created_at: string;
+          current_version_number: number;
+          delete_reason: string | null;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          display_name: string;
+          folder_id: string | null;
+          id: string;
+          metadata: Json;
+          mime_type: string | null;
+          organization_id: string;
+          original_file_name: string;
+          size_bytes: number;
+          storage_bucket: string;
+          storage_path: string;
+          updated_at: string;
+          uploaded_by: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "documents";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      finalize_document_version_upload: {
+        Args: {
+          p_actor_id: string;
+          p_document_id: string;
+          p_expected_version_number: number;
+          p_mime_type: string;
+          p_organization_id: string;
+          p_original_file_name: string;
+          p_size_bytes: number;
+          p_storage_path: string;
+        };
+        Returns: {
+          category: string;
+          copied_from_document_id: string | null;
+          created_at: string;
+          current_version_number: number;
+          delete_reason: string | null;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          display_name: string;
+          folder_id: string | null;
+          id: string;
+          metadata: Json;
+          mime_type: string | null;
+          organization_id: string;
+          original_file_name: string;
+          size_bytes: number;
+          storage_bucket: string;
+          storage_path: string;
+          updated_at: string;
+          uploaded_by: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "documents";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       finalize_payroll_export: {
         Args: {
@@ -13500,17 +14601,6 @@ export type Database = {
           isSetofReturn: true;
         };
       };
-      get_org_members: {
-        Args: { p_org_id: string };
-        Returns: {
-          email: string;
-          first_name: string;
-          joined_at: string;
-          last_name: string;
-          role: Database["public"]["Enums"]["org_role"];
-          user_id: string;
-        }[];
-      };
       get_org_members_for_user: {
         Args: { p_org_id: string; p_user_id: string };
         Returns: {
@@ -13557,6 +14647,21 @@ export type Database = {
           p_target_type: string;
         };
         Returns: Json;
+      };
+      import_inventory_row: {
+        Args: {
+          p_actor_id: string;
+          p_barcode: string;
+          p_category_name: string;
+          p_import_batch_id: string;
+          p_item: Json;
+          p_location_name: string;
+          p_organization_id: string;
+          p_quantity: number;
+          p_reason: string;
+          p_supplier_name: string;
+        };
+        Returns: string;
       };
       is_member_of_org: {
         Args: { p_org_id: string; p_user_id: string };
@@ -13848,6 +14953,17 @@ export type Database = {
         Args: { p_filters: Json; p_organization_id: string };
         Returns: Json;
       };
+      list_equipment_page: {
+        Args: {
+          p_category?: string;
+          p_include_archived?: boolean;
+          p_organization_id: string;
+          p_page?: number;
+          p_page_size?: number;
+          p_search?: string;
+        };
+        Returns: Json;
+      };
       list_inventory_page: {
         Args: { p_organization_id: string; p_query?: Json };
         Returns: Json;
@@ -13861,6 +14977,18 @@ export type Database = {
         };
         Returns: Json;
       };
+      list_maintenance_workspace_page: {
+        Args: {
+          p_coverage_page?: number;
+          p_due_page?: number;
+          p_due_through: string;
+          p_organization_id: string;
+          p_page_size?: number;
+          p_plan_page?: number;
+          p_search?: string;
+        };
+        Returns: Json;
+      };
       list_project_job_page: {
         Args: {
           p_is_manager: boolean;
@@ -13871,6 +14999,82 @@ export type Database = {
           p_user_id: string;
         };
         Returns: Json;
+      };
+      list_request_page: {
+        Args: {
+          p_categories?: string[];
+          p_organization_id: string;
+          p_page?: number;
+          p_page_size?: number;
+          p_search?: string;
+          p_status?: string;
+        };
+        Returns: Json;
+      };
+      list_service_case_page: {
+        Args: {
+          p_organization_id: string;
+          p_page?: number;
+          p_page_size?: number;
+          p_search?: string;
+          p_status?: string;
+        };
+        Returns: Json;
+      };
+      list_time_correction_history_page: {
+        Args: {
+          p_caller_user_id: string;
+          p_organization_id: string;
+          p_page?: number;
+          p_page_size?: number;
+          p_visibility: string;
+        };
+        Returns: Json;
+      };
+      mark_attention_notifications_read: {
+        Args: {
+          p_actor_id: string;
+          p_markers: Json;
+          p_organization_id: string;
+          p_via: string;
+        };
+        Returns: undefined;
+      };
+      move_document: {
+        Args: {
+          p_actor_id: string;
+          p_display_name: string;
+          p_document_id: string;
+          p_folder_id: string;
+          p_organization_id: string;
+        };
+        Returns: {
+          category: string;
+          copied_from_document_id: string | null;
+          created_at: string;
+          current_version_number: number;
+          delete_reason: string | null;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          display_name: string;
+          folder_id: string | null;
+          id: string;
+          metadata: Json;
+          mime_type: string | null;
+          organization_id: string;
+          original_file_name: string;
+          size_bytes: number;
+          storage_bucket: string;
+          storage_path: string;
+          updated_at: string;
+          uploaded_by: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "documents";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       open_time_account: {
         Args: {
@@ -13898,6 +15102,14 @@ export type Database = {
           p_target_type: string;
         };
         Returns: string;
+      };
+      permanently_delete_document: {
+        Args: {
+          p_actor_id: string;
+          p_document_id: string;
+          p_organization_id: string;
+        };
+        Returns: string[];
       };
       prepare_time_period: {
         Args: {
@@ -13930,6 +15142,54 @@ export type Database = {
           p_sources: Json;
         };
         Returns: string;
+      };
+      promote_client_request_caller: {
+        Args: {
+          p_actor_id: string;
+          p_client_type: Database["public"]["Enums"]["client_type"];
+          p_name: string;
+          p_organization_id: string;
+          p_request_id: string;
+        };
+        Returns: {
+          assigned_to: string | null;
+          caller_address: string | null;
+          caller_email: string | null;
+          caller_name: string | null;
+          caller_phone: string | null;
+          category: Database["public"]["Enums"]["request_category"];
+          client_id: string | null;
+          closed_at: string | null;
+          closed_by: string | null;
+          closed_note: string | null;
+          closed_reason:
+            | Database["public"]["Enums"]["request_close_reason"]
+            | null;
+          contact_id: string | null;
+          converted_at: string | null;
+          converted_by: string | null;
+          converted_job_id: string | null;
+          converted_project_id: string | null;
+          created_at: string;
+          created_by: string | null;
+          details: string | null;
+          id: string;
+          organization_id: string;
+          received_at: string;
+          request_number: string | null;
+          site_id: string | null;
+          source: Database["public"]["Enums"]["request_source"];
+          status: Database["public"]["Enums"]["request_status"];
+          summary: string;
+          updated_at: string;
+          urgency: Database["public"]["Enums"]["request_urgency"];
+        };
+        SetofOptions: {
+          from: "*";
+          to: "client_requests";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       publish_personnel_onboarding_template: {
         Args: {
@@ -13966,6 +15226,34 @@ export type Database = {
           p_template_id: string;
         };
         Returns: string;
+      };
+      read_time_correction_applications: {
+        Args: {
+          p_from?: string;
+          p_organization_id: string;
+          p_to?: string;
+          p_user_ids?: string[];
+        };
+        Returns: {
+          applied_at: string;
+          applied_by: string;
+          applied_snapshot: Json;
+          before_snapshot: Json;
+          id: string;
+          operation_id: string;
+          organization_id: string;
+          previous_application_id: string | null;
+          request_id: string;
+          responsibility_snapshot: Json;
+          revision: number;
+          source_fingerprint: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "time_correction_applications";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
       };
       record_client_communication_exception: {
         Args: {
@@ -14046,14 +15334,6 @@ export type Database = {
           p_signature_document_id: string;
         };
         Returns: Json;
-      };
-      redeem_organization_invite: {
-        Args: { p_invite_code: string };
-        Returns: {
-          already_member: boolean;
-          org_id: string;
-          org_name: string;
-        }[];
       };
       redeem_organization_invite_for_user: {
         Args: { p_invite_code: string; p_user_id: string };
@@ -14169,6 +15449,41 @@ export type Database = {
         };
         Returns: number;
       };
+      rename_document: {
+        Args: {
+          p_actor_id: string;
+          p_display_name: string;
+          p_document_id: string;
+          p_organization_id: string;
+        };
+        Returns: {
+          category: string;
+          copied_from_document_id: string | null;
+          created_at: string;
+          current_version_number: number;
+          delete_reason: string | null;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          display_name: string;
+          folder_id: string | null;
+          id: string;
+          metadata: Json;
+          mime_type: string | null;
+          organization_id: string;
+          original_file_name: string;
+          size_bytes: number;
+          storage_bucket: string;
+          storage_path: string;
+          updated_at: string;
+          uploaded_by: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "documents";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       renew_employee_capability: {
         Args: {
           p_actor_id: string;
@@ -14185,6 +15500,52 @@ export type Database = {
           p_valid_until: string;
         };
         Returns: string;
+      };
+      reopen_client_request: {
+        Args: {
+          p_actor_id: string;
+          p_organization_id: string;
+          p_request_id: string;
+        };
+        Returns: {
+          assigned_to: string | null;
+          caller_address: string | null;
+          caller_email: string | null;
+          caller_name: string | null;
+          caller_phone: string | null;
+          category: Database["public"]["Enums"]["request_category"];
+          client_id: string | null;
+          closed_at: string | null;
+          closed_by: string | null;
+          closed_note: string | null;
+          closed_reason:
+            | Database["public"]["Enums"]["request_close_reason"]
+            | null;
+          contact_id: string | null;
+          converted_at: string | null;
+          converted_by: string | null;
+          converted_job_id: string | null;
+          converted_project_id: string | null;
+          created_at: string;
+          created_by: string | null;
+          details: string | null;
+          id: string;
+          organization_id: string;
+          received_at: string;
+          request_number: string | null;
+          site_id: string | null;
+          source: Database["public"]["Enums"]["request_source"];
+          status: Database["public"]["Enums"]["request_status"];
+          summary: string;
+          updated_at: string;
+          urgency: Database["public"]["Enums"]["request_urgency"];
+        };
+        SetofOptions: {
+          from: "*";
+          to: "client_requests";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       reopen_time_period: {
         Args: {
@@ -14207,6 +15568,15 @@ export type Database = {
           p_request_hash: string;
         };
         Returns: string;
+      };
+      reorder_instruction_items: {
+        Args: {
+          p_item_ids: string[];
+          p_job_id: string;
+          p_organization_id: string;
+          p_project_id: string;
+        };
+        Returns: undefined;
       };
       replace_installed_equipment: {
         Args: {
@@ -14353,6 +15723,23 @@ export type Database = {
         };
         Returns: undefined;
       };
+      restore_document: {
+        Args: {
+          p_actor_id: string;
+          p_display_name: string;
+          p_document_id: string;
+          p_organization_id: string;
+        };
+        Returns: undefined;
+      };
+      retire_capability_definition: {
+        Args: {
+          p_actor_id: string;
+          p_capability_id: string;
+          p_organization_id: string;
+        };
+        Returns: undefined;
+      };
       return_work_handover_for_correction: {
         Args: {
           p_actor_id: string;
@@ -14377,6 +15764,16 @@ export type Database = {
         };
         Returns: Json;
       };
+      review_time_entries: {
+        Args: {
+          p_actor_id: string;
+          p_authorized_user_ids: string[];
+          p_decision: string;
+          p_entry_ids: string[];
+          p_organization_id: string;
+        };
+        Returns: number;
+      };
       revise_maintenance_plan: {
         Args: {
           p_actor_id: string;
@@ -14387,6 +15784,43 @@ export type Database = {
           p_payload: Json;
           p_reason: string;
           p_revision_id: string;
+        };
+        Returns: {
+          archived_at: string | null;
+          archived_by: string | null;
+          client_id: string;
+          created_at: string;
+          created_by: string;
+          current_revision_id: string | null;
+          generation_through_date: string | null;
+          id: string;
+          maintenance_coverage_id: string | null;
+          organization_id: string;
+          plan_number: string;
+          site_id: string;
+          status: Database["public"]["Enums"]["maintenance_plan_status"];
+          updated_at: string;
+          updated_by: string;
+          version: number;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "maintenance_plans";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      revise_maintenance_plan_with_due_work: {
+        Args: {
+          p_actor_id: string;
+          p_expected_version: number;
+          p_idempotency_key: string;
+          p_maintenance_plan_id: string;
+          p_organization_id: string;
+          p_payload: Json;
+          p_reason: string;
+          p_revision_id: string;
+          p_through_date: string;
         };
         Returns: {
           archived_at: string | null;
@@ -14464,6 +15898,51 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      save_inventory_item: {
+        Args: {
+          p_actor_id: string;
+          p_barcode: string;
+          p_initial_location_id: string;
+          p_initial_quantity: number;
+          p_item: Json;
+          p_item_id: string;
+          p_organization_id: string;
+          p_supplier_name: string;
+        };
+        Returns: {
+          category_id: string | null;
+          created_at: string;
+          created_by: string | null;
+          currency_code: string;
+          description: string | null;
+          global_minimum_stock: number;
+          global_target_stock: number | null;
+          id: string;
+          internal_sku: string | null;
+          is_active: boolean;
+          is_billable: boolean;
+          item_type: string;
+          manufacturer: string | null;
+          name: string;
+          notes: string | null;
+          organization_id: string;
+          purchase_price_cents: number | null;
+          sale_price_cents: number | null;
+          supplier_article_number: string | null;
+          supplier_id: string | null;
+          tax_rate_basis_points: number;
+          track_individual_assets: boolean;
+          track_quantity: boolean;
+          unit: string;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "inventory_items";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       save_personnel_onboarding_requirement: {
         Args: {
           p_actor_id: string;
@@ -14525,6 +16004,59 @@ export type Database = {
           p_template_id: string;
         };
         Returns: string;
+      };
+      schedule_maintenance_visit: {
+        Args: {
+          p_actor_id: string;
+          p_assignments: Json;
+          p_capacity_fingerprint: string;
+          p_capacity_snapshot: Json;
+          p_expected_version: number;
+          p_idempotency_key: string;
+          p_maintenance_due_work_id: string;
+          p_occurrence: Json;
+          p_organization_id: string;
+          p_qualification_fingerprint: string;
+          p_qualification_snapshot: Json;
+        };
+        Returns: string;
+      };
+      search_equipment_options: {
+        Args: {
+          p_client_id?: string;
+          p_offset?: number;
+          p_organization_id: string;
+          p_search?: string;
+        };
+        Returns: Json;
+      };
+      search_planning_options: {
+        Args: {
+          p_default_user_ids?: string[];
+          p_kind: string;
+          p_offset?: number;
+          p_organization_id: string;
+          p_query?: string;
+          p_selected_ids?: string[];
+        };
+        Returns: Json;
+      };
+      search_work_predecessor_options: {
+        Args: {
+          p_kind: string;
+          p_limit?: number;
+          p_organization_id: string;
+          p_search?: string;
+        };
+        Returns: Json;
+      };
+      set_apprentice_warning_enabled: {
+        Args: {
+          p_actor_id: string;
+          p_enabled: boolean;
+          p_organization_id: string;
+        };
+        Returns: undefined;
       };
       set_client_communication_preference: {
         Args: {
@@ -14914,6 +16446,39 @@ export type Database = {
         };
         Returns: number;
       };
+      set_sickness_evidence: {
+        Args: {
+          p_actor_id: string;
+          p_evidence_required: boolean;
+          p_evidence_status: string;
+          p_organization_id: string;
+          p_report_id: string;
+        };
+        Returns: {
+          absence_type: string;
+          cancellation_reason: string | null;
+          cancelled_at: string | null;
+          cancelled_by: string | null;
+          created_at: string;
+          day_portion: string;
+          employee_record_id: string;
+          end_date: string | null;
+          evidence_required: boolean;
+          evidence_status: string;
+          id: string;
+          organization_id: string;
+          reported_by: string | null;
+          start_date: string;
+          status: string;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "sickness_reports";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       set_work_blocker_state: {
         Args: {
           p_actor_id: string;
@@ -14952,6 +16517,20 @@ export type Database = {
           p_request_hash: string;
         };
         Returns: string;
+      };
+      take_unplanned_inventory_material: {
+        Args: {
+          p_actor_id: string;
+          p_item_id: string;
+          p_job_id: string;
+          p_location_id: string;
+          p_notes: string;
+          p_organization_id: string;
+          p_project_id: string;
+          p_quantity: number;
+          p_reason: string;
+        };
+        Returns: number;
       };
       transition_client_follow_up: {
         Args: {
@@ -15091,6 +16670,42 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      transition_maintenance_plan_with_due_work: {
+        Args: {
+          p_actor_id: string;
+          p_expected_version: number;
+          p_idempotency_key: string;
+          p_maintenance_plan_id: string;
+          p_organization_id: string;
+          p_reason: string;
+          p_through_date: string;
+          p_to_status: Database["public"]["Enums"]["maintenance_plan_status"];
+        };
+        Returns: {
+          archived_at: string | null;
+          archived_by: string | null;
+          client_id: string;
+          created_at: string;
+          created_by: string;
+          current_revision_id: string | null;
+          generation_through_date: string | null;
+          id: string;
+          maintenance_coverage_id: string | null;
+          organization_id: string;
+          plan_number: string;
+          site_id: string;
+          status: Database["public"]["Enums"]["maintenance_plan_status"];
+          updated_at: string;
+          updated_by: string;
+          version: number;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "maintenance_plans";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       transition_time_activity: {
         Args: {
           p_acknowledge_long?: boolean;
@@ -15149,6 +16764,14 @@ export type Database = {
           gate_snapshot: Json;
         }[];
       };
+      trash_document: {
+        Args: {
+          p_actor_id: string;
+          p_document_id: string;
+          p_organization_id: string;
+        };
+        Returns: undefined;
+      };
       unlink_installed_equipment_document: {
         Args: {
           p_actor_id: string;
@@ -15179,6 +16802,58 @@ export type Database = {
           p_reason: string;
         };
         Returns: boolean;
+      };
+      unpark_job_into_schedule: {
+        Args: {
+          p_actor_id: string;
+          p_assessed_for_date: string;
+          p_changes: Json;
+          p_coverage_fingerprint: string;
+          p_coverage_snapshot: Json;
+          p_expected_blocker_version: number;
+          p_job_id: string;
+          p_organization_id: string;
+          p_override_reason: string;
+          p_reason: string;
+          p_record_assessment: boolean;
+          p_replace_assignments: boolean;
+          p_requirements_snapshot: Json;
+          p_selected_employee_record_ids: string[];
+          p_selected_user_ids: string[];
+          p_team_source_id: string;
+        };
+        Returns: {
+          actual_completion_date: string | null;
+          client_id: string | null;
+          contact_id: string | null;
+          created_at: string;
+          created_by: string;
+          description: string | null;
+          estimated_duration_minutes: number | null;
+          execution_state:
+            | Database["public"]["Enums"]["work_execution_state"]
+            | null;
+          execution_version: number;
+          id: string;
+          job_number: string | null;
+          location: string | null;
+          organization_id: string;
+          planned_date: string | null;
+          planned_time: string | null;
+          planned_working_minutes: number | null;
+          priority: Database["public"]["Enums"]["job_priority"];
+          project_id: string | null;
+          site_id: string | null;
+          status: Database["public"]["Enums"]["job_status"];
+          title: string;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "jobs";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       unpark_work_target: {
         Args: {
@@ -15231,6 +16906,144 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      update_client_request: {
+        Args: {
+          p_actor_id: string;
+          p_changes: Json;
+          p_organization_id: string;
+          p_request_id: string;
+        };
+        Returns: {
+          assigned_to: string | null;
+          caller_address: string | null;
+          caller_email: string | null;
+          caller_name: string | null;
+          caller_phone: string | null;
+          category: Database["public"]["Enums"]["request_category"];
+          client_id: string | null;
+          closed_at: string | null;
+          closed_by: string | null;
+          closed_note: string | null;
+          closed_reason:
+            | Database["public"]["Enums"]["request_close_reason"]
+            | null;
+          contact_id: string | null;
+          converted_at: string | null;
+          converted_by: string | null;
+          converted_job_id: string | null;
+          converted_project_id: string | null;
+          created_at: string;
+          created_by: string | null;
+          details: string | null;
+          id: string;
+          organization_id: string;
+          received_at: string;
+          request_number: string | null;
+          site_id: string | null;
+          source: Database["public"]["Enums"]["request_source"];
+          status: Database["public"]["Enums"]["request_status"];
+          summary: string;
+          updated_at: string;
+          urgency: Database["public"]["Enums"]["request_urgency"];
+        };
+        SetofOptions: {
+          from: "*";
+          to: "client_requests";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      update_document_category: {
+        Args: {
+          p_actor_id: string;
+          p_category: string;
+          p_document_id: string;
+          p_organization_id: string;
+        };
+        Returns: {
+          category: string;
+          copied_from_document_id: string | null;
+          created_at: string;
+          current_version_number: number;
+          delete_reason: string | null;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          display_name: string;
+          folder_id: string | null;
+          id: string;
+          metadata: Json;
+          mime_type: string | null;
+          organization_id: string;
+          original_file_name: string;
+          size_bytes: number;
+          storage_bucket: string;
+          storage_path: string;
+          updated_at: string;
+          uploaded_by: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "documents";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      update_document_links: {
+        Args: {
+          p_actor_id: string;
+          p_add_client_ids: string[];
+          p_add_employee_ids: string[];
+          p_add_equipment_ids: string[];
+          p_add_job_ids: string[];
+          p_add_maintenance_coverage_ids: string[];
+          p_add_project_ids: string[];
+          p_add_service_case_ids: string[];
+          p_document_id: string;
+          p_organization_id: string;
+          p_remove_link_ids: string[];
+        };
+        Returns: {
+          added_count: number;
+          removed_count: number;
+        }[];
+      };
+      update_employee_capability: {
+        Args: {
+          p_actor_id: string;
+          p_confirmation_status: string;
+          p_evidence_state: string;
+          p_issuer: string;
+          p_operational_note: string;
+          p_organization_id: string;
+          p_record_id: string;
+          p_renewal_due_date: string;
+          p_valid_from: string;
+          p_valid_until: string;
+        };
+        Returns: undefined;
+      };
+      update_employee_master_data: {
+        Args: {
+          p_actor_id: string;
+          p_organization_id: string;
+          p_patch: Json;
+          p_record_id: string;
+        };
+        Returns: undefined;
+      };
+      update_employment_condition: {
+        Args: {
+          p_actor_id: string;
+          p_condition_id: string;
+          p_employment_type: string;
+          p_note: string;
+          p_organization_id: string;
+          p_vacation_days_per_year: number;
+          p_valid_from: string;
+          p_weekly_hours: number;
+        };
+        Returns: undefined;
       };
       update_installed_equipment_details: {
         Args: {
@@ -15298,6 +17111,56 @@ export type Database = {
         };
         Returns: undefined;
       };
+      update_job_with_assignments: {
+        Args: {
+          p_actor_id: string;
+          p_assessed_for_date: string;
+          p_changes: Json;
+          p_coverage_fingerprint: string;
+          p_coverage_snapshot: Json;
+          p_job_id: string;
+          p_organization_id: string;
+          p_override_reason: string;
+          p_record_assessment: boolean;
+          p_replace_assignments: boolean;
+          p_requirements_snapshot: Json;
+          p_selected_employee_record_ids: string[];
+          p_selected_user_ids: string[];
+          p_team_source_id: string;
+        };
+        Returns: {
+          actual_completion_date: string | null;
+          client_id: string | null;
+          contact_id: string | null;
+          created_at: string;
+          created_by: string;
+          description: string | null;
+          estimated_duration_minutes: number | null;
+          execution_state:
+            | Database["public"]["Enums"]["work_execution_state"]
+            | null;
+          execution_version: number;
+          id: string;
+          job_number: string | null;
+          location: string | null;
+          organization_id: string;
+          planned_date: string | null;
+          planned_time: string | null;
+          planned_working_minutes: number | null;
+          priority: Database["public"]["Enums"]["job_priority"];
+          project_id: string | null;
+          site_id: string | null;
+          status: Database["public"]["Enums"]["job_status"];
+          title: string;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "jobs";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       update_maintenance_coverage: {
         Args: {
           p_actor_id: string;
@@ -15363,6 +17226,40 @@ export type Database = {
         };
         Returns: number;
       };
+      update_project_with_jobs: {
+        Args: {
+          p_changes: Json;
+          p_organization_id: string;
+          p_project_id: string;
+        };
+        Returns: {
+          client_id: string | null;
+          contact_id: string | null;
+          created_at: string;
+          created_by: string;
+          description: string | null;
+          execution_override_reason: string | null;
+          execution_state_override:
+            | Database["public"]["Enums"]["work_execution_state"]
+            | null;
+          execution_version: number;
+          id: string;
+          name: string;
+          organization_id: string;
+          planned_end_date: string | null;
+          planned_start_date: string | null;
+          project_number: string | null;
+          site_id: string | null;
+          status_override: Database["public"]["Enums"]["project_status"] | null;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "projects";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       update_service_case: {
         Args: {
           p_actor_id: string;
@@ -15404,6 +17301,40 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      update_team: {
+        Args: {
+          p_actor_id: string;
+          p_description: string;
+          p_name: string;
+          p_organization_id: string;
+          p_team_id: string;
+        };
+        Returns: undefined;
+      };
+      update_time_tracking_settings: {
+        Args: {
+          p_actor_id: string;
+          p_auto_break_duration_minutes: number;
+          p_auto_break_threshold_minutes: number;
+          p_break_ends: Json;
+          p_break_mode: string;
+          p_break_policy_history: Json;
+          p_expected_settings: Json;
+          p_organization_id: string;
+        };
+        Returns: undefined;
+      };
+      update_work_schedule: {
+        Args: {
+          p_actor_id: string;
+          p_day_minutes: number[];
+          p_note: string;
+          p_organization_id: string;
+          p_schedule_id: string;
+          p_valid_from: string;
+        };
+        Returns: undefined;
       };
       upsert_work_blocker: {
         Args: {
@@ -15499,6 +17430,39 @@ export type Database = {
           p_request_id: string;
         };
         Returns: Json;
+      };
+      withdraw_vacation_request: {
+        Args: {
+          p_actor_id: string;
+          p_organization_id: string;
+          p_request_id: string;
+        };
+        Returns: {
+          approved_days_by_year: Json | null;
+          cancellation_reason: string | null;
+          cancelled_at: string | null;
+          cancelled_by: string | null;
+          comment: string | null;
+          created_at: string;
+          day_portion: string;
+          decided_at: string | null;
+          decided_by: string | null;
+          decision_comment: string | null;
+          employee_record_id: string;
+          end_date: string;
+          id: string;
+          organization_id: string;
+          requested_by: string | null;
+          start_date: string;
+          status: string;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "vacation_requests";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       withdraw_work_handover: {
         Args: {

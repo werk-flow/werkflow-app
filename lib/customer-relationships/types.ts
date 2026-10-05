@@ -1,9 +1,7 @@
+import type { ActionFailure } from '@/lib/action-result';
 import type { Json } from '@/lib/supabase/database.types';
-import type { z } from 'zod';
-import type {
-  communicationPreferenceInputSchema,
-  communicationSettingsInputSchema,
-} from './schemas';
+import type { z } from '@/lib/zod';
+import type { communicationPreferenceInputSchema, communicationSettingsInputSchema } from './schemas';
 
 export const TIMELINE_PAGE_SIZE = 25;
 export const FOLLOW_UP_PAGE_SIZE = 50;
@@ -86,22 +84,11 @@ export type FollowUpOwner = {
   role: 'admin' | 'buero';
 };
 
-export type CommunicationChannel =
-  | 'phone'
-  | 'email'
-  | 'sms'
-  | 'letter'
-  | 'in_person';
+export type CommunicationChannel = 'phone' | 'email' | 'sms' | 'letter' | 'in_person';
 
-export type CommunicationPurpose =
-  | 'appointment_service'
-  | 'marketing'
-  | 'commercial_required';
+export type CommunicationPurpose = 'appointment_service' | 'marketing' | 'commercial_required';
 
-export type CommunicationPreferenceState =
-  | 'allowed'
-  | 'disallowed'
-  | 'unknown';
+export type CommunicationPreferenceState = 'allowed' | 'disallowed' | 'unknown';
 
 export type CommunicationSettings = {
   id: string;
@@ -129,10 +116,7 @@ export type CommunicationPreference = {
   updatedAt: string;
 };
 
-export type CommunicationWarningCode =
-  | 'do_not_contact'
-  | 'wrong_contact'
-  | 'disallowed_channel';
+export type CommunicationWarningCode = 'do_not_contact' | 'wrong_contact' | 'disallowed_channel';
 
 export type CommunicationGuidance = {
   state: CommunicationPreferenceState;
@@ -150,14 +134,10 @@ export type CustomerRelationshipBundle = {
 
 export type { FollowUpInput } from './schemas';
 
-export type CommunicationSettingsInput = z.infer<
-  typeof communicationSettingsInputSchema
->;
+export type CommunicationSettingsInput = z.infer<typeof communicationSettingsInputSchema>;
 
-export type CommunicationPreferenceInput = z.infer<
-  typeof communicationPreferenceInputSchema
->;
+export type CommunicationPreferenceInput = z.infer<typeof communicationPreferenceInputSchema>;
 
 export type RelationshipActionResult<T = undefined> =
   | (T extends undefined ? { success: true } : { success: true; data: T })
-  | { success: false; error: string };
+  | ActionFailure;

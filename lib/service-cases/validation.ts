@@ -1,19 +1,13 @@
-import { z } from "zod";
-import { uuidSchema } from "@/lib/validation/uuid";
+import { z } from '@/lib/zod';
+import { nullableTrimmedText } from '@/lib/validation/text';
+import { uuidSchema } from '@/lib/validation/uuid';
 
 import {
   SERVICE_CASE_CHARGE_CONTEXTS,
   SERVICE_CASE_RELATION_TYPES,
   SERVICE_CASE_STATUSES,
   SERVICE_CASE_URGENCIES,
-} from "./types";
-
-const nullableText = (minimum: number, maximum: number) =>
-  z.preprocess(
-    (value) =>
-      typeof value === "string" && value.trim() === "" ? null : value,
-    z.string().trim().min(minimum).max(maximum).optional().nullable(),
-  );
+} from './types';
 
 export const serviceCaseCreateSchema = z
   .object({
@@ -23,28 +17,28 @@ export const serviceCaseCreateSchema = z
     clientId: uuidSchema.optional().nullable(),
     contactId: uuidSchema.optional().nullable(),
     siteId: uuidSchema.optional().nullable(),
-    originalStatement: nullableText(2, 5000),
-    originalDetails: nullableText(1, 10000),
-    summary: nullableText(2, 300),
+    originalStatement: nullableTrimmedText(2, 5000),
+    originalDetails: nullableTrimmedText(1, 10000),
+    summary: nullableTrimmedText(2, 300),
     urgency: z.enum(SERVICE_CASE_URGENCIES).optional(),
     chargeContext: z.enum(SERVICE_CASE_CHARGE_CONTEXTS),
-    accessInstructions: nullableText(1, 3000),
-    triageNote: nullableText(1, 5000),
+    accessInstructions: nullableTrimmedText(1, 3000),
+    triageNote: nullableTrimmedText(1, 5000),
     equipmentIds: z.array(uuidSchema).max(30),
   })
   .superRefine((input, context) => {
     if (input.sourceRequestId) return;
     for (const [field, value] of [
-      ["clientId", input.clientId],
-      ["siteId", input.siteId],
-      ["originalStatement", input.originalStatement],
-      ["summary", input.summary],
+      ['clientId', input.clientId],
+      ['siteId', input.siteId],
+      ['originalStatement', input.originalStatement],
+      ['summary', input.summary],
     ] as const) {
       if (!value?.trim()) {
         context.addIssue({
-          code: "custom",
+          code: 'custom',
           path: [field],
-          message: "Dieses Feld ist erforderlich.",
+          message: 'Dieses Feld ist erforderlich.',
         });
       }
     }
@@ -58,9 +52,9 @@ export const serviceCaseUpdateSchema = z
     urgency: z.enum(SERVICE_CASE_URGENCIES),
     status: z.enum(SERVICE_CASE_STATUSES),
     chargeContext: z.enum(SERVICE_CASE_CHARGE_CONTEXTS),
-    accessInstructions: nullableText(1, 3000),
-    triageNote: nullableText(1, 5000),
-    resolutionNote: nullableText(3, 5000),
+    accessInstructions: nullableTrimmedText(1, 3000),
+    triageNote: nullableTrimmedText(1, 5000),
+    resolutionNote: nullableTrimmedText(3, 5000),
     jobId: uuidSchema.optional().nullable(),
     equipmentIds: z.array(uuidSchema).max(30),
     reason: z.string().trim().min(3).max(1000),
@@ -68,15 +62,13 @@ export const serviceCaseUpdateSchema = z
   })
   .superRefine((input, context) => {
     if (
-      ["resolved", "closed_without_visit", "duplicate"].includes(
-        input.status,
-      ) &&
+      ['resolved', 'closed_without_visit', 'duplicate'].includes(input.status) &&
       !input.resolutionNote?.trim()
     ) {
       context.addIssue({
-        code: "custom",
-        path: ["resolutionNote"],
-        message: "Für den Abschluss ist eine Begründung erforderlich.",
+        code: 'custom',
+        path: ['resolutionNote'],
+        message: 'Für den Abschluss ist eine Begründung erforderlich.',
       });
     }
   });

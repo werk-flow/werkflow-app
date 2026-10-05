@@ -1,24 +1,17 @@
-import { z } from "zod";
-import { uuidSchema } from "@/lib/validation/uuid";
+import { z } from '@/lib/zod';
+import { uuidSchema } from '@/lib/validation/uuid';
 
-import type { Database } from "@/lib/supabase/database.types";
+import type { Database } from '@/lib/supabase/database.types';
 
-export type PersonnelAccessState =
-  Database["public"]["Enums"]["personnel_access_state"];
-export type PersonnelAccessTransitionKind =
-  Database["public"]["Enums"]["personnel_access_transition_kind"];
-export type PersonnelEmploymentState =
-  Database["public"]["Enums"]["personnel_employment_state"];
+export type PersonnelAccessState = Database['public']['Enums']['personnel_access_state'];
+export type PersonnelAccessTransitionKind = Database['public']['Enums']['personnel_access_transition_kind'];
+export type PersonnelEmploymentState = Database['public']['Enums']['personnel_employment_state'];
 export type PersonnelEmploymentTransitionKind =
-  Database["public"]["Enums"]["personnel_employment_transition_kind"];
-export type PersonnelDocumentAccessClass =
-  Database["public"]["Enums"]["personnel_document_access_class"];
-export type PersonnelDocumentEvidenceState =
-  Database["public"]["Enums"]["personnel_document_evidence_state"];
-export type PersonnelRequirementType =
-  Database["public"]["Enums"]["personnel_requirement_type"];
-export type PersonnelRequirementState =
-  Database["public"]["Enums"]["personnel_requirement_state"];
+  Database['public']['Enums']['personnel_employment_transition_kind'];
+export type PersonnelDocumentAccessClass = Database['public']['Enums']['personnel_document_access_class'];
+export type PersonnelDocumentEvidenceState = Database['public']['Enums']['personnel_document_evidence_state'];
+export type PersonnelRequirementType = Database['public']['Enums']['personnel_requirement_type'];
+export type PersonnelRequirementState = Database['public']['Enums']['personnel_requirement_state'];
 
 const reasonSchema = z.string().trim().min(2).max(500);
 const operationSchema = z.object({
@@ -29,13 +22,13 @@ export const accessTransitionInputSchema = operationSchema.extend({
   employeeRecordId: uuidSchema,
   expectedVersion: z.number().int().nonnegative(),
   transitionKind: z.enum([
-    "schedule_activation",
-    "activate_now",
-    "suspend_now",
-    "schedule_suspension",
-    "cancel_scheduled",
-    "reactivate",
-    "end_access",
+    'schedule_activation',
+    'activate_now',
+    'suspend_now',
+    'schedule_suspension',
+    'cancel_scheduled',
+    'reactivate',
+    'end_access',
   ]),
   effectiveAt: z.iso.datetime({ offset: true }),
   reason: reasonSchema,
@@ -45,15 +38,15 @@ export const employmentTransitionInputSchema = operationSchema.extend({
   employeeRecordId: uuidSchema,
   expectedVersion: z.number().int().nonnegative(),
   transitionKind: z.enum([
-    "plan_start",
-    "start",
-    "record_notice",
-    "plan_exit",
-    "mark_inactive",
-    "exit",
-    "cancel_scheduled",
-    "reverse",
-    "reactivate",
+    'plan_start',
+    'start',
+    'record_notice',
+    'plan_exit',
+    'mark_inactive',
+    'exit',
+    'cancel_scheduled',
+    'reverse',
+    'reactivate',
   ]),
   effectiveOn: z.iso.date(),
   reason: reasonSchema,
@@ -72,14 +65,14 @@ export const saveRequirementInputSchema = operationSchema.extend({
   requirementId: uuidSchema.nullable(),
   expectedVersion: z.number().int().nonnegative(),
   requirementType: z.enum([
-    "document",
-    "qualification",
-    "employment_condition",
-    "work_schedule",
-    "team",
-    "access",
-    "acknowledgement",
-    "manual",
+    'document',
+    'qualification',
+    'employment_condition',
+    'work_schedule',
+    'team',
+    'access',
+    'acknowledgement',
+    'manual',
   ]),
   title: z.string().trim().min(2).max(180),
   description: z.string().trim().max(1200).nullable(),
@@ -87,14 +80,7 @@ export const saveRequirementInputSchema = operationSchema.extend({
   blocksAccess: z.boolean(),
   ownerEmployeeRecordId: uuidSchema.nullable(),
   dueDate: z.iso.date().nullable(),
-  state: z.enum([
-    "missing",
-    "pending",
-    "fulfilled",
-    "blocked",
-    "waived",
-    "cancelled",
-  ]),
+  state: z.enum(['missing', 'pending', 'fulfilled', 'blocked', 'waived', 'cancelled']),
   blockerReason: z.string().trim().max(500).nullable(),
 });
 
@@ -123,12 +109,8 @@ export const personnelDocumentUploadInputSchema = operationSchema.extend({
   documentId: uuidSchema,
   fileName: z.string().trim().min(1).max(255),
   documentType: z.string().trim().min(2).max(120),
-  accessClass: z.enum([
-    "personnel_standard",
-    "admin_restricted",
-    "health_evidence",
-  ]),
-  evidenceState: z.enum(["pending", "valid", "expiring", "superseded"]),
+  accessClass: z.enum(['personnel_standard', 'admin_restricted', 'health_evidence']),
+  evidenceState: z.enum(['pending', 'valid', 'expiring', 'superseded']),
   validUntil: z.iso.date().nullable(),
   cleanupToken: z.string().min(32).max(4096),
 });
@@ -138,14 +120,14 @@ export const personnelDocumentUploadTicketInputSchema = operationSchema.extend({
   fileName: z.string().trim().min(1).max(255),
   fileSizeBytes: z.number().int().positive(),
   mimeType: z.string().trim().max(255).nullable().optional(),
-  accessClass: z.enum(["personnel_standard", "admin_restricted", "health_evidence"]),
+  accessClass: z.enum(['personnel_standard', 'admin_restricted', 'health_evidence']),
 });
 
 export const personnelDocumentUploadCleanupInputSchema = operationSchema.extend({
   employeeRecordId: uuidSchema,
   documentId: uuidSchema,
   fileName: z.string().trim().min(1).max(255),
-  accessClass: z.enum(["personnel_standard", "admin_restricted", "health_evidence"]),
+  accessClass: z.enum(['personnel_standard', 'admin_restricted', 'health_evidence']),
   cleanupToken: z.string().min(32).max(4096),
 });
 
@@ -170,28 +152,28 @@ export const personnelDocumentReleaseInputSchema = operationSchema.extend({
 });
 
 export const ACCESS_STATE_LABELS: Record<PersonnelAccessState, string> = {
-  not_configured: "Nicht eingerichtet",
-  scheduled: "Zugang geplant",
-  active: "Aktiv",
-  suspended: "Gesperrt",
-  ended: "Beendet",
+  not_configured: 'Nicht eingerichtet',
+  scheduled: 'Zugang geplant',
+  active: 'Aktiv',
+  suspended: 'Gesperrt',
+  ended: 'Beendet',
 };
 
 export const EMPLOYMENT_LIFECYCLE_LABELS: Record<PersonnelEmploymentState, string> = {
-  planned: "Eintritt geplant",
-  active: "Aktiv",
-  notice: "Austritt vorgemerkt",
-  inactive: "Inaktiv",
-  exited: "Ausgeschieden",
+  planned: 'Eintritt geplant',
+  active: 'Aktiv',
+  notice: 'Austritt vorgemerkt',
+  inactive: 'Inaktiv',
+  exited: 'Ausgeschieden',
 };
 
 export const REQUIREMENT_STATE_LABELS: Record<PersonnelRequirementState, string> = {
-  missing: "Fehlt",
-  pending: "Offen",
-  fulfilled: "Erledigt",
-  blocked: "Blockiert",
-  waived: "Erlassen",
-  cancelled: "Abgebrochen",
+  missing: 'Fehlt',
+  pending: 'Offen',
+  fulfilled: 'Erledigt',
+  blocked: 'Blockiert',
+  waived: 'Erlassen',
+  cancelled: 'Abgebrochen',
 };
 
 export function getEffectiveAccessState(
@@ -202,12 +184,8 @@ export function getEffectiveAccessState(
   } | null,
   now = Date.now(),
 ): PersonnelAccessState {
-  if (!lifecycle) return "not_configured";
-  if (
-    lifecycle.scheduledState &&
-    lifecycle.scheduledFor &&
-    Date.parse(lifecycle.scheduledFor) <= now
-  ) {
+  if (!lifecycle) return 'not_configured';
+  if (lifecycle.scheduledState && lifecycle.scheduledFor && Date.parse(lifecycle.scheduledFor) <= now) {
     return lifecycle.scheduledState;
   }
   return lifecycle.state;
@@ -223,34 +201,31 @@ export function getMembershipAccessMode(
     } | null;
   },
   now: number,
-): "operational" | "prestart" | "blocked" {
+): 'operational' | 'prestart' | 'blocked' {
   const lifecycle = membership.accessLifecycle;
-  if (!lifecycle) return "operational";
-  const scheduledAt = lifecycle.scheduledFor
-    ? Date.parse(lifecycle.scheduledFor)
-    : Number.NaN;
+  if (!lifecycle) return 'operational';
+  const scheduledAt = lifecycle.scheduledFor ? Date.parse(lifecycle.scheduledFor) : Number.NaN;
   const scheduledIsDue = Number.isFinite(scheduledAt) && scheduledAt <= now;
-  if (
-    scheduledIsDue &&
-    lifecycle.scheduledState === "active" &&
-    membership.hasAccessBlocker
-  ) return "prestart";
+  if (scheduledIsDue && lifecycle.scheduledState === 'active' && membership.hasAccessBlocker)
+    return 'prestart';
   if (scheduledIsDue && lifecycle.scheduledState) {
-    return lifecycle.scheduledState === "active" ? "operational" : "blocked";
+    return lifecycle.scheduledState === 'active' ? 'operational' : 'blocked';
   }
-  if (lifecycle.state === "scheduled" && lifecycle.scheduledState === "active") {
-    return "prestart";
+  if (lifecycle.state === 'scheduled' && lifecycle.scheduledState === 'active') {
+    return 'prestart';
   }
-  return lifecycle.state === "active" ? "operational" : "blocked";
+  return lifecycle.state === 'active' ? 'operational' : 'blocked';
 }
 
-export function getOnboardingCompletion(requirements: Array<{
-  isRequired: boolean;
-  state: PersonnelRequirementState;
-}>): { complete: number; total: number; isReady: boolean } {
+export function getOnboardingCompletion(
+  requirements: Array<{
+    isRequired: boolean;
+    state: PersonnelRequirementState;
+  }>,
+): { complete: number; total: number; isReady: boolean } {
   const required = requirements.filter((requirement) => requirement.isRequired);
-  const complete = required.filter((requirement) =>
-    requirement.state === "fulfilled" || requirement.state === "waived"
+  const complete = required.filter(
+    (requirement) => requirement.state === 'fulfilled' || requirement.state === 'waived',
   ).length;
   // Optional-only plans are ready, but an empty plan cannot prove readiness.
   return {
