@@ -40,7 +40,7 @@ export function MitarbeiterDetailAssignedJobs({
   visibleColumns,
 }: MitarbeiterDetailAssignedJobsProps) {
   return (
-    <div className="space-y-4 md:col-span-3 2xl:col-span-1">
+    <div className="min-w-0 space-y-4">
       <div className="flex items-center gap-2">
         <Briefcase className="size-4 text-muted-foreground" />
         <SectionTitle>Zugewiesene Aufträge</SectionTitle>

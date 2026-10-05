@@ -57,11 +57,13 @@ const PHONE = { width: 375, height: 812 };
 
 // The canon names every viewport, and the office works on laptops. An upright
 // tablet keeps the app sidebar and leaves the least room beside it; 1024 and
-// 1280 px are the laptop widths where a fixed-width toolbar row stops fitting.
+// 1280 px are the laptop widths where a fixed-width toolbar row stops fitting;
+// at 1680 px the detail pages show their widest arrangement, two columns.
 const WIDE_VIEWPORTS = [
   { width: 768, height: 1024 },
   { width: 1024, height: 768 },
   { width: 1280, height: 800 },
+  { width: 1680, height: 1050 },
 ] as const;
 
 const EMPLOYEE_ROUTES = [
@@ -80,6 +82,8 @@ type ViewportReport = {
   nativeDateLikeInputs: number;
   unapprovedVisibleTables: number;
   unapprovedTableScrollRegions: number;
+  contentPastBodyEdge: string[];
+  controlsOutsideTheirCard: string[];
 };
 
 async function measure(page: Page): Promise<ViewportReport> {
@@ -96,7 +100,61 @@ async function measure(page: Page): Promise<ViewportReport> {
         !table.closest('.fc'),
     );
     const nativeDateTypes = new Set(['date', 'time', 'datetime-local', 'month', 'week', 'number', 'range']);
+    // Scroll width does not see everything: a size container keeps its
+    // overflow to itself, and a control can leave its card without leaving
+    // the page. Both are measured on the rendered boxes. Content belongs to
+    // its own region when that region scrolls sideways, shortens a text with
+    // an ellipsis, or is the scrolling title (`data-marquee`); any other
+    // region that clips does not excuse what it cuts off.
+    const insideOwnRegion = (element: Element): boolean => {
+      for (let parent = element.parentElement; parent && parent !== body; parent = parent.parentElement) {
+        const style = getComputedStyle(parent);
+        if (style.overflowX === 'auto' || style.overflowX === 'scroll') return true;
+        if (style.overflowX !== 'visible' && style.textOverflow === 'ellipsis') return true;
+        if (parent.hasAttribute('data-marquee')) return true;
+      }
+      return false;
+    };
+    const name = (element: Element): string =>
+      `${element.tagName.toLowerCase()} „${(element.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 40)}“`;
+    const rendered = Array.from(body?.querySelectorAll<HTMLElement>('*') ?? []).filter((element) => {
+      const box = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return (
+        box.width > 1 &&
+        box.height > 1 &&
+        style.visibility !== 'hidden' &&
+        style.position !== 'fixed' &&
+        !element.closest('.fc') &&
+        !insideOwnRegion(element)
+      );
+    });
+    const bodyRight = body?.getBoundingClientRect().right ?? 0;
+    const pastEdge = rendered.filter((element) => element.getBoundingClientRect().right > bodyRight + 1);
+    const cardOf = (element: Element): Element | null => {
+      for (let parent = element.parentElement; parent && parent !== body; parent = parent.parentElement) {
+        const style = getComputedStyle(parent);
+        if (
+          Number.parseFloat(style.borderRightWidth) > 0 &&
+          Number.parseFloat(style.borderTopLeftRadius) >= 6
+        )
+          return parent;
+      }
+      return null;
+    };
+    const outsideCard = rendered.filter((element) => {
+      if (!element.matches('button, a[href]')) return false;
+      const card = cardOf(element)?.getBoundingClientRect();
+      if (!card) return false;
+      const box = element.getBoundingClientRect();
+      return box.right > card.right + 1 || box.left < card.left - 1;
+    });
     return {
+      contentPastBodyEdge: pastEdge
+        .filter((element) => !element.parentElement || !pastEdge.includes(element.parentElement))
+        .slice(0, 3)
+        .map(name),
+      controlsOutsideTheirCard: outsideCard.slice(0, 3).map(name),
       documentOverflowX: Math.max(0, root.scrollWidth - window.innerWidth),
       documentOverflowY: Math.max(0, root.scrollHeight - window.innerHeight),
       pageBodyOverflowX: body ? Math.max(0, body.scrollWidth - body.clientWidth) : 0,
@@ -126,6 +184,8 @@ async function expectNoSidewaysOverflow(page: Page, label: string): Promise<void
   const report = await measure(page);
   expect(report.documentOverflowX, `${label}: the document must not scroll sideways`).toBe(0);
   expect(report.pageBodyOverflowX, `${label}: content wider than the page body`).toBe(0);
+  expect(report.contentPastBodyEdge, `${label}: content past the right edge of the page body`).toEqual([]);
+  expect(report.controlsOutsideTheirCard, `${label}: a control sticks out of its card`).toEqual([]);
 }
 
 // The warehouse cards are a second layout of /inventar: every world holds one
@@ -177,6 +237,8 @@ async function expectPhoneLayout(
   expect(report, `${route}: the document must not scroll sideways`).toMatchObject({ documentOverflowX: 0 });
   expect(report.documentOverflowY, `${route}: the shell owns vertical scroll, not the document`).toBe(0);
   expect(report.pageBodyOverflowX, `${route}: content wider than the page body`).toBe(0);
+  expect(report.contentPastBodyEdge, `${route}: content past the right edge of the page body`).toEqual([]);
+  expect(report.controlsOutsideTheirCard, `${route}: a control sticks out of its card`).toEqual([]);
   expect(report.nativeSelects, `${route}: native <select> rendered`).toBe(0);
   expect(report.unapprovedTableScrollRegions, `${route}: nested table scroll hides mobile overflow`).toBe(0);
   expect(report.unapprovedVisibleTables, `${route}: data table has no mobile card layout`).toBe(0);
@@ -443,8 +505,15 @@ test.describe('@AUDIT-LAYOUT phone viewport: no horizontal scroll, shell-owned s
 
 test.describe('@AUDIT-LAYOUT tablet and laptop widths: no horizontal scroll', () => {
   for (const route of MANAGER_PHONE_ROUTES) {
-    test(`admin ${route} fits 768, 1024 and 1280 px`, async ({ adminPage, world }) => {
+    test(`admin ${route} fits 768, 1024, 1280 and 1680 px`, async ({ adminPage, world }) => {
       await expectWideLayout(adminPage, route, world);
+    });
+  }
+
+  for (const pattern of DYNAMIC_PHONE_ROUTES) {
+    test(`admin ${pattern} fits 768, 1024, 1280 and 1680 px`, async ({ adminPage, world, businessDate }) => {
+      const destination = await detailDestination(pattern, adminPage, world, businessDate);
+      await expectWideLayout(adminPage, destination.route, world);
     });
   }
 });

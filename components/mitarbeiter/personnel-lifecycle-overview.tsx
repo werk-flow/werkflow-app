@@ -86,7 +86,7 @@ export function PersonnelLifecycleStatusCards({
     <>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-md border p-3">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-sm font-medium">Organisationszugang</span>
             <Badge
               variant={
@@ -123,7 +123,7 @@ export function PersonnelLifecycleStatusCards({
         </div>
 
         <div className="rounded-md border p-3">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-sm font-medium">Beschäftigung</span>
             <Badge variant="secondary">
               {data.employment.state

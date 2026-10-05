@@ -269,82 +269,86 @@ export function ProjectDetailContent({
           isAdminOrManager={isAdminOrManager}
           originRequest={originRequest}
         />
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1.5fr]">
-          {/* Left Column: Metadata + Client */}
-          <div className="space-y-6">
-            <MetadataSection title="Details" fields={metadataFields} isEditable={isAdminOrManager} />
+        {/* Columns follow the width of this content, not of the screen: the app sidebar takes
+            256 px, so a screen breakpoint turned the columns on where they did not fit. */}
+        <div className="@container/detail">
+          <div className="grid grid-cols-1 gap-6 @4xl/detail:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
+            {/* Left Column: Metadata + Client */}
+            <div className="min-w-0 space-y-6">
+              <MetadataSection title="Details" fields={metadataFields} isEditable={isAdminOrManager} />
 
-            <ProjectDetailClientCard
-              liveClient={liveClient}
-              onAssignClient={isAdminOrManager ? () => dialogState.setShowClientDialog(true) : undefined}
-            />
-          </div>
-
-          {/* Right Column: Progress + Jobs + Placeholders */}
-          <div className="space-y-6">
-            <ProjectDetailProgressCard
-              liveDerivedStatus={liveDerivedStatus}
-              completedCount={completedCount}
-              inProgressCount={inProgressCount}
-              jobCount={liveJobs.length}
-            />
-
-            <ProjectDetailChildJobsCard
-              jobs={liveJobs}
-              project={liveProject}
-              isAdminOrManager={isAdminOrManager}
-              onAssignJobs={() => dialogState.setShowAssignJobsDialog(true)}
-            />
-
-            {isAdminOrManager ? (
-              <ProjectDetailManagerSections
-                liveProject={liveProject}
-                instructionItems={instructionItems}
-                materialSummary={materialSummary}
-                inventoryItems={inventoryItems}
-                inventoryLocations={inventoryLocations}
+              <ProjectDetailClientCard
+                liveClient={liveClient}
+                onAssignClient={isAdminOrManager ? () => dialogState.setShowClientDialog(true) : undefined}
               />
-            ) : null}
+            </div>
 
-            {initialArtifacts ? (
-              <WorkArtifactsSection
-                targetType="project"
-                targetId={liveProject.id}
-                initialArtifacts={initialArtifacts}
-                isManager={isAdminOrManager}
-                canApprove={canApproveWorkArtifacts}
-                currentUserId={currentUserId}
-                documents={projectDocuments ?? []}
-                evidenceRequirements={artifactEvidenceRequirements}
-                instructionOptions={artifactInstructionOptions}
-                timeEntryOptions={artifactTimeEntryOptions}
+            {/* Right Column: Progress + Jobs + Placeholders */}
+            <div className="min-w-0 space-y-6">
+              <ProjectDetailProgressCard
+                liveDerivedStatus={liveDerivedStatus}
+                completedCount={completedCount}
+                inProgressCount={inProgressCount}
+                jobCount={liveJobs.length}
               />
-            ) : (
-              <RegionLoadError>Arbeitsnachweise konnten nicht geladen werden.</RegionLoadError>
-            )}
 
-            {projectDocuments ? (
-              <ContextualDocumentsSection
-                title="Dokumente"
-                description="Projektdateien und verknüpfte Auftragsdokumente an einem Ort."
-                documents={projectDocuments}
-                jobDocumentGroups={jobDocumentGroups}
-                documentTarget={{ kind: 'project', projectId: liveProject.id }}
-                contextLabel={liveProject.name}
-                canUpload={isAdminOrManager}
-                canManage={isAdminOrManager}
+              <ProjectDetailChildJobsCard
+                jobs={liveJobs}
+                project={liveProject}
+                isAdminOrManager={isAdminOrManager}
+                onAssignJobs={() => dialogState.setShowAssignJobsDialog(true)}
               />
-            ) : (
-              <RegionLoadError>Dokumente konnten nicht geladen werden.</RegionLoadError>
-            )}
 
-            <ProjectDetailTimeSummaryCard
-              isLoadingTime={isLoadingTime}
-              timeLoadError={timeLoadError}
-              onRetry={() => void timeView.refresh()}
-              retryPending={timeView.isRefreshing}
-              projectTimeSummary={projectTimeSummary}
-            />
+              {isAdminOrManager ? (
+                <ProjectDetailManagerSections
+                  liveProject={liveProject}
+                  instructionItems={instructionItems}
+                  materialSummary={materialSummary}
+                  inventoryItems={inventoryItems}
+                  inventoryLocations={inventoryLocations}
+                />
+              ) : null}
+
+              {initialArtifacts ? (
+                <WorkArtifactsSection
+                  targetType="project"
+                  targetId={liveProject.id}
+                  initialArtifacts={initialArtifacts}
+                  isManager={isAdminOrManager}
+                  canApprove={canApproveWorkArtifacts}
+                  currentUserId={currentUserId}
+                  documents={projectDocuments ?? []}
+                  evidenceRequirements={artifactEvidenceRequirements}
+                  instructionOptions={artifactInstructionOptions}
+                  timeEntryOptions={artifactTimeEntryOptions}
+                />
+              ) : (
+                <RegionLoadError>Arbeitsnachweise konnten nicht geladen werden.</RegionLoadError>
+              )}
+
+              {projectDocuments ? (
+                <ContextualDocumentsSection
+                  title="Dokumente"
+                  description="Projektdateien und verknüpfte Auftragsdokumente an einem Ort."
+                  documents={projectDocuments}
+                  jobDocumentGroups={jobDocumentGroups}
+                  documentTarget={{ kind: 'project', projectId: liveProject.id }}
+                  contextLabel={liveProject.name}
+                  canUpload={isAdminOrManager}
+                  canManage={isAdminOrManager}
+                />
+              ) : (
+                <RegionLoadError>Dokumente konnten nicht geladen werden.</RegionLoadError>
+              )}
+
+              <ProjectDetailTimeSummaryCard
+                isLoadingTime={isLoadingTime}
+                timeLoadError={timeLoadError}
+                onRetry={() => void timeView.refresh()}
+                retryPending={timeView.isRefreshing}
+                projectTimeSummary={projectTimeSummary}
+              />
+            </div>
           </div>
         </div>
       </PageBody>

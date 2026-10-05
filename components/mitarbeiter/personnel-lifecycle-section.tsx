@@ -55,7 +55,7 @@ export function PersonnelLifecycleSection({
 
   return (
     <section
-      className="min-w-0 space-y-4 rounded-lg border bg-card p-4 shadow-xs md:col-span-2 2xl:col-span-1"
+      className="min-w-0 space-y-4 rounded-lg border bg-card p-4 shadow-xs @[70rem]/detail:col-span-2 @7xl/detail:col-span-1"
       aria-labelledby="personnel-lifecycle-title"
       data-testid="personnel-lifecycle"
     >

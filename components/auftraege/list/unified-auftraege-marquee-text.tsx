@@ -35,7 +35,8 @@ export function MarqueeText({ children, className }: { children: React.ReactNode
   }, [check, children]);
 
   return (
-    <div ref={containerRef} className={cn('overflow-hidden', className)}>
+    // `data-marquee` names the one region that clips its text on purpose (layout audit).
+    <div ref={containerRef} data-marquee="" className={cn('overflow-hidden', className)}>
       <span
         ref={textRef}
         // With reduced motion the title does not scroll; it ends in an ellipsis instead of a hard cut.

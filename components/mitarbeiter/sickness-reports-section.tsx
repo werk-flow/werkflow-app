@@ -70,7 +70,7 @@ export function SicknessReportsSection({ recordId }: { recordId: string }) {
 
   return (
     <section className="space-y-3" data-testid="sickness-reports-section">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <SectionTitle icon={<Thermometer className="size-4" />}>Krankmeldungen</SectionTitle>
         <Button
           variant="outline"

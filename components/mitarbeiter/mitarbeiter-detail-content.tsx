@@ -143,65 +143,69 @@ export function MitarbeiterDetailContent({
       ) : null}
 
       <PageBody>
-        <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[1fr_1.5fr]">
-          {/* Left Column: Profile + Status */}
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-3 2xl:grid-cols-1">
-            <MitarbeiterDetailProfileSection
-              member={member}
-              canManage={canManage}
-              roleOptions={roleOptions}
-              onRoleChange={handleRoleChange}
-            />
+        {/* Columns follow the width of this content, not of the screen: the app sidebar takes
+            256 px, so a screen breakpoint turned the columns on where they did not fit. */}
+        <div className="@container/detail">
+          <div className="grid grid-cols-1 gap-6 @7xl/detail:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
+            {/* Left Column: Profile + Status */}
+            <div className="grid grid-cols-1 gap-6 @[70rem]/detail:grid-cols-3 @7xl/detail:grid-cols-1">
+              <MitarbeiterDetailProfileSection
+                member={member}
+                canManage={canManage}
+                roleOptions={roleOptions}
+                onRoleChange={handleRoleChange}
+              />
 
-            <MitarbeiterDetailPersonnelSections
-              personnel={personnel}
-              personnelLoadFailed={personnelLoadFailed}
-              actorNames={actorNames}
-              isAdminOrManager={isAdminOrManager}
-              responsibilitySettings={responsibilitySettings}
-              qualificationSummary={qualificationSummary}
-              lifecycle={lifecycle}
-              canAdministerAccess={canAdministerAccess}
-            />
+              <MitarbeiterDetailPersonnelSections
+                personnel={personnel}
+                personnelLoadFailed={personnelLoadFailed}
+                actorNames={actorNames}
+                isAdminOrManager={isAdminOrManager}
+                responsibilitySettings={responsibilitySettings}
+                qualificationSummary={qualificationSummary}
+                lifecycle={lifecycle}
+                canAdministerAccess={canAdministerAccess}
+              />
 
-            <div className="min-w-0 md:col-span-2 2xl:col-span-1">
-              {documents ? (
-                <ContextualDocumentsSection
-                  title="Dokumente & Bilder"
-                  description="Dokumente, Nachweise und Dateien zu diesem Mitarbeiter."
-                  documents={documents}
-                  documentTarget={{ kind: 'employee', employeeId: member.userId }}
-                  contextLabel={fullName}
-                  canUpload={isAdminOrManager}
-                  canManage={isAdminOrManager}
-                />
-              ) : (
-                <RegionLoadError>Dokumente und Bilder konnten nicht geladen werden.</RegionLoadError>
-              )}
+              <div className="min-w-0 @[70rem]/detail:col-span-2 @7xl/detail:col-span-1">
+                {documents ? (
+                  <ContextualDocumentsSection
+                    title="Dokumente & Bilder"
+                    description="Dokumente, Nachweise und Dateien zu diesem Mitarbeiter."
+                    documents={documents}
+                    documentTarget={{ kind: 'employee', employeeId: member.userId }}
+                    contextLabel={fullName}
+                    canUpload={isAdminOrManager}
+                    canManage={isAdminOrManager}
+                  />
+                ) : (
+                  <RegionLoadError>Dokumente und Bilder konnten nicht geladen werden.</RegionLoadError>
+                )}
+              </div>
+
+              <MitarbeiterDetailTimeCards
+                liveTime={liveTime}
+                breakMode={breakMode}
+                autoBreakThresholdMinutes={autoBreakThresholdMinutes}
+                autoBreakDurationMinutes={autoBreakDurationMinutes}
+              />
             </div>
 
-            <MitarbeiterDetailTimeCards
-              liveTime={liveTime}
-              breakMode={breakMode}
-              autoBreakThresholdMinutes={autoBreakThresholdMinutes}
-              autoBreakDurationMinutes={autoBreakDurationMinutes}
+            {/* Right Column: Jobs Table */}
+            <MitarbeiterDetailAssignedJobs
+              member={member}
+              jobs={jobs}
+              projects={projects}
+              projectGraphProjects={projectGraphProjects}
+              clientMap={clientMap}
+              jobAssignmentMap={jobAssignmentMap}
+              clients={clients}
+              members={members}
+              allProjects={allProjects}
+              isAdminOrManager={isAdminOrManager}
+              visibleColumns={visibleColumns}
             />
           </div>
-
-          {/* Right Column: Jobs Table */}
-          <MitarbeiterDetailAssignedJobs
-            member={member}
-            jobs={jobs}
-            projects={projects}
-            projectGraphProjects={projectGraphProjects}
-            clientMap={clientMap}
-            jobAssignmentMap={jobAssignmentMap}
-            clients={clients}
-            members={members}
-            allProjects={allProjects}
-            isAdminOrManager={isAdminOrManager}
-            visibleColumns={visibleColumns}
-          />
         </div>
       </PageBody>
 

@@ -243,12 +243,18 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
       await completeManagerWork(adminPage, `/auftraege/projekt/${scope.projectNumber}`, true);
       await Promise.all([adminPage.goto(projectRoute), bueroPage.goto(projectRoute)]);
       const adminSection = workHandoverSection(adminPage);
+      const bueroSection = workHandoverSection(bueroPage);
+      await expect(handoverAction(bueroSection, 'saveDraft')).toBeVisible();
+      // The office session is offline while the admin saves, as a tab that
+      // lost its connection is. Online it receives the saved draft within a
+      // fraction of a second and would no longer hold a stale one.
+      await bueroPage.context().setOffline(true);
       await selectAllHandoverSources(adminSection);
       await handoverAction(adminSection, 'saveDraft').click();
       await expect(handoverMessage(adminSection, 'draftSaved')).toBeVisible({
         timeout: 20_000,
       });
-      const bueroSection = workHandoverSection(bueroPage);
+      await bueroPage.context().setOffline(false);
       await handoverAction(bueroSection, 'saveDraft').click();
       await expect(bueroSection).toContainText(HANDOVER_TEXT.staleDraft);
 
