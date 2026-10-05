@@ -1,14 +1,12 @@
+import { RegionLoadError } from '@/components/shared/region-load-error';
 import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { LIST_ROW_CAP, readCompleteRows } from '@/lib/supabase/query-batches';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
-import {
-  getCachedUser,
-  getCachedMemberships,
-  getCachedOrganizationSettings,
-} from '@/lib/data/cached';
+import { getCachedUser, getCachedMemberships, getCachedOrganizationSettings } from '@/lib/data/cached';
 import { InviteDialog } from '@/components/mitarbeiter/invite-dialog';
 import { CreatePersonnelDialog } from '@/components/mitarbeiter/create-personnel-dialog';
 import { MitarbeiterTabs } from '@/components/mitarbeiter/mitarbeiter-tabs';
@@ -20,6 +18,8 @@ import type { OrgMember } from '@/components/mitarbeiter/members-table';
 import type { Invite } from '@/components/mitarbeiter/invitations-table';
 import { getProfilesByIds, type OrgRole } from '@/lib/members/actions';
 import { getOrgMembersForUser } from '@/lib/members/queries';
+import { logError } from '@/lib/logging';
+import { readPendingJoinRequests } from '@/lib/org/join-requests';
 import { getPersonnelRecords } from '@/lib/personnel/actions';
 import { getTodayTargetsForMembers } from '@/lib/personnel/target-actions';
 import { getQualificationWorkspace } from '@/lib/qualifications/actions';
@@ -44,43 +44,45 @@ async function MitarbeiterData({
     responsibilitySettingsResult,
     qualificationWorkspaceResult,
     organizationSettings,
-  ] =
-    await Promise.all([
-      getOrgMembersForUser(activeOrgId, userId),
-      createSupabaseAdminClient()
-        .from('organization_invites')
-        .select(
-          'id, email, status, created_at, expires_at, accepted_at, invited_role'
-        )
-        .eq('organization_id', activeOrgId)
-        .order('created_at', { ascending: false }),
-      getPersonnelRecords(),
-      getTodayTargetsForMembers(),
-      getResponsibilitySettingsData(),
-      getQualificationWorkspace(),
-      getCachedOrganizationSettings(activeOrgId),
-    ]);
+    joinRequestsResult,
+  ] = await Promise.all([
+    getOrgMembersForUser(activeOrgId, userId),
+    // Complete on purpose: a plain select stops at the response cap without
+    // an error and would hide older invitations.
+    readCompleteRows(
+      (from, to) =>
+        createSupabaseAdminClient()
+          .from('organization_invites')
+          .select('id, email, status, created_at, expires_at, accepted_at, invited_role')
+          .eq('organization_id', activeOrgId)
+          .order('created_at', { ascending: false })
+          .order('id')
+          .range(from, to),
+      LIST_ROW_CAP,
+    ),
+    getPersonnelRecords(),
+    getTodayTargetsForMembers(),
+    getResponsibilitySettingsData(),
+    getQualificationWorkspace(),
+    getCachedOrganizationSettings(activeOrgId),
+    readPendingJoinRequests(activeOrgId),
+  ]);
 
   if (!qualificationWorkspaceResult.success) {
-    console.error(
-      'Error fetching qualification workspace:',
-      qualificationWorkspaceResult.error
-    );
+    logError('Mitarbeiter: qualification workspace read failed', qualificationWorkspaceResult.error);
   }
 
-  const memberList = membersResult as OrgMember[];
-  const inviteList = (invitesResult.data as Invite[]) || [];
+  const memberList = membersResult.success ? (membersResult.members as OrgMember[]) : [];
+  const inviteList = invitesResult.data as Invite[];
 
   if (invitesResult.error) {
-    console.error('Error fetching invites:', invitesResult.error);
+    logError('Mitarbeiter: invite read failed', invitesResult.error);
   }
 
   if (!personnelResult.success) {
-    console.error('Error fetching personnel records:', personnelResult.error);
+    logError('Mitarbeiter: personnel record read failed', personnelResult.error);
   }
-  const personnelEntries = personnelResult.success
-    ? personnelResult.entries
-    : [];
+  const personnelEntries = personnelResult.success ? personnelResult.entries : [];
   const removalBlockedByUserId: Record<string, string> = {};
   if (responsibilitySettingsResult.success) {
     for (const entry of personnelEntries) {
@@ -88,8 +90,8 @@ async function MitarbeiterData({
       const message = getResponsibilityRemovalBlockMessage(
         getResponsibilitiesStrandedByEmployeeRemoval(
           responsibilitySettingsResult.data.effective,
-          entry.record.id
-        )
+          entry.record.id,
+        ),
       );
       if (message) removalBlockedByUserId[entry.record.userId] = message;
     }
@@ -99,48 +101,67 @@ async function MitarbeiterData({
   const linkedUserIds = personnelEntries
     .map((entry) => entry.record.userId)
     .filter((id): id is string => Boolean(id));
-  const profileNamesByUserId = await getProfilesByIds(linkedUserIds);
+  const profileNamesResult = await getProfilesByIds(linkedUserIds);
+  const profileNamesByUserId = profileNamesResult.success ? profileNamesResult.profiles : {};
   const personnelProfileNames: Record<string, string> = {};
   for (const entry of personnelEntries) {
     if (!entry.record.userId) continue;
     const profile = profileNamesByUserId[entry.record.userId];
     if (!profile) continue;
-    const name = [profile.firstName, profile.lastName]
-      .filter(Boolean)
-      .join(' ');
+    const name = [profile.firstName, profile.lastName].filter(Boolean).join(' ');
     if (name) personnelProfileNames[entry.record.id] = name;
   }
 
+  // A failed read must not look like an empty list (feedback canon: no
+  // silent failures). The tabs still render what did load.
+  const failedRegions = [
+    membersResult.success ? null : 'Mitarbeiter',
+    joinRequestsResult.success ? null : 'Beitrittsanfragen',
+    invitesResult.error ? 'Einladungen' : null,
+    personnelResult.success ? null : 'Personalakten',
+    qualificationWorkspaceResult.success ? null : 'Qualifikationen',
+    targetsResult.success ? null : 'Tagesziele',
+    responsibilitySettingsResult.success ? null : 'Verantwortlichkeiten',
+    profileNamesResult.success ? null : 'Namen ausgeschiedener Mitarbeiter',
+  ].filter((region): region is string => region !== null);
+
   return (
-    <MitarbeiterTabs
-      members={memberList}
-      invites={inviteList}
-      personnelEntries={personnelEntries}
-      personnelProfileNames={personnelProfileNames}
-      targetsByUserId={
-        targetsResult.success ? targetsResult.targetsByUserId : undefined
-      }
-      removalBlockedByUserId={removalBlockedByUserId}
-      currentUserId={userId}
-      currentUserRole={currentUserRole}
-      organizationId={activeOrgId}
-      breakMode={organizationSettings.breakMode}
-      autoBreakThresholdMinutes={organizationSettings.autoBreakThresholdMinutes}
-      autoBreakDurationMinutes={organizationSettings.autoBreakDurationMinutes}
-      qualificationWorkspace={
-        qualificationWorkspaceResult.success
-          ? qualificationWorkspaceResult.data
-          : null
-      }
-    />
+    <>
+      {failedRegions.length > 0 && (
+        <RegionLoadError className="mb-4" title={`Nicht geladen: ${failedRegions.join(', ')}`}>
+          Die Listen unten können deshalb unvollständig sein. Lade die Seite erneut, bevor du Änderungen
+          vornimmst.
+        </RegionLoadError>
+      )}
+      <MitarbeiterTabs
+        members={memberList}
+        invites={inviteList}
+        joinRequests={joinRequestsResult.success ? joinRequestsResult.requests : []}
+        personnelEntries={personnelEntries}
+        personnelProfileNames={personnelProfileNames}
+        targetsByUserId={targetsResult.success ? targetsResult.targetsByUserId : undefined}
+        removalBlockedByUserId={removalBlockedByUserId}
+        currentUserId={userId}
+        currentUserRole={currentUserRole}
+        organizationId={activeOrgId}
+        breakMode={organizationSettings.breakMode}
+        autoBreakThresholdMinutes={organizationSettings.autoBreakThresholdMinutes}
+        autoBreakDurationMinutes={organizationSettings.autoBreakDurationMinutes}
+        qualificationWorkspace={
+          qualificationWorkspaceResult.success ? qualificationWorkspaceResult.data : null
+        }
+      />
+    </>
   );
 }
 
 export default async function MitarbeiterPage() {
-  const [{ data: { user } }, cookieStore] = await Promise.all([
-    getCachedUser(),
-    cookies()
-  ]);
+  const [
+    {
+      data: { user },
+    },
+    cookieStore,
+  ] = await Promise.all([getCachedUser(), cookies()]);
 
   if (!user) {
     redirect('/login');
@@ -148,7 +169,7 @@ export default async function MitarbeiterPage() {
 
   const [activeOrgId, memberships] = await Promise.all([
     resolveActiveOrgId(cookieStore, user.id),
-    getCachedMemberships(user.id)
+    getCachedMemberships(user.id),
   ]);
 
   if (!activeOrgId) {
@@ -156,9 +177,7 @@ export default async function MitarbeiterPage() {
       <PageShell>
         <PageHeader title="Mitarbeiter" />
         <PageBody>
-          <p className="text-muted-foreground">
-            Bitte wähle zuerst eine Organisation aus.
-          </p>
+          <p className="text-muted-foreground">Bitte wähle zuerst eine Organisation aus.</p>
         </PageBody>
       </PageShell>
     );
@@ -167,8 +186,7 @@ export default async function MitarbeiterPage() {
   const currentMembership = memberships.find((m) => m.orgId === activeOrgId);
 
   const currentUserRole = currentMembership?.role as OrgRole | undefined;
-  const isAdminOrManager =
-    currentUserRole === 'admin' || currentUserRole === 'buero';
+  const isAdminOrManager = currentUserRole === 'admin' || currentUserRole === 'buero';
 
   if (!isAdminOrManager) {
     redirect('/dashboard');
@@ -179,7 +197,7 @@ export default async function MitarbeiterPage() {
       <Suspense fallback={null}>
         <UrlFlashBanner
           paramKey="removed_member"
-          messageTemplate='„{name}" wurde aus der Organisation entfernt.'
+          messageTemplate="„{name}“ wurde aus der Organisation entfernt."
         />
       </Suspense>
       <PageHeader
@@ -194,11 +212,7 @@ export default async function MitarbeiterPage() {
 
       <PageBody>
         <Suspense fallback={<MitarbeiterContentSkeleton />}>
-          <MitarbeiterData
-            activeOrgId={activeOrgId}
-            userId={user.id}
-            currentUserRole={currentUserRole!}
-          />
+          <MitarbeiterData activeOrgId={activeOrgId} userId={user.id} currentUserRole={currentUserRole} />
         </Suspense>
       </PageBody>
     </PageShell>

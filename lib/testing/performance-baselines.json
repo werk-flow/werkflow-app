@@ -7,530 +7,14 @@
   },
   "baselines": [
     {
-      "scenarioId": "calendar.board.cold-open",
-      "scenarioVersion": 1,
-      "profile": "typical",
-      "backend": "local",
-      "context": {
-        "workloadDigest": "0e866add2b8eab984c5efce8aa1a84cefb857c722f0689844454dcd757019ae9",
-        "measurementDigest": "02b3eb4db6af029d234481b58090b97d9f058cf3e14b69d5661c1970da67df5d",
-        "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
-        "role": "admin",
-        "browser": "chromium",
-        "browserVersion": "151.0.7922.34",
-        "viewport": {
-          "width": 1440,
-          "height": 900
-        },
-        "deviceScaleFactor": 1,
-        "platform": "win32",
-        "architecture": "x64",
-        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
-        "logicalProcessors": 14,
-        "memoryGiB": 31,
-        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
-      },
-      "referenceMs": 1248.10009765625,
-      "samples": [
-        1137.699951171875,
-        1248.10009765625,
-        1325.60009765625
-      ],
-      "source": {
-        "runKey": "2026-09-25T025755457Z-2a9fab",
-        "runKeys": [
-          "2026-09-25T025755457Z-2a9fab"
-        ],
-        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
-        "recordedAt": "2026-09-25T03:52:49.789Z"
-      },
-      "review": {
-        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
-        "reviewedAt": "2026-09-25T04:30:55.687Z"
-      }
-    },
-    {
-      "scenarioId": "calendar.board.reassign.visible",
-      "scenarioVersion": 1,
-      "profile": "typical",
-      "backend": "local",
-      "context": {
-        "workloadDigest": "0e866add2b8eab984c5efce8aa1a84cefb857c722f0689844454dcd757019ae9",
-        "measurementDigest": "4889270febe1f68233f846c9ab95b48717fc984be5f403f2b84dcd52c78e920b",
-        "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
-        "role": "admin",
-        "browser": "chromium",
-        "browserVersion": "151.0.7922.34",
-        "viewport": {
-          "width": 1440,
-          "height": 900
-        },
-        "deviceScaleFactor": 1,
-        "platform": "win32",
-        "architecture": "x64",
-        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
-        "logicalProcessors": 14,
-        "memoryGiB": 31,
-        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
-      },
-      "referenceMs": 61.5,
-      "samples": [
-        48.89990234375,
-        61.5,
-        78
-      ],
-      "source": {
-        "runKey": "2026-09-25T025755457Z-2a9fab",
-        "runKeys": [
-          "2026-09-25T025755457Z-2a9fab"
-        ],
-        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
-        "recordedAt": "2026-09-25T03:52:53.166Z"
-      },
-      "review": {
-        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
-        "reviewedAt": "2026-09-25T04:30:55.687Z"
-      }
-    },
-    {
-      "scenarioId": "calendar.board.reassign.settled",
-      "scenarioVersion": 1,
-      "profile": "typical",
-      "backend": "local",
-      "context": {
-        "workloadDigest": "0e866add2b8eab984c5efce8aa1a84cefb857c722f0689844454dcd757019ae9",
-        "measurementDigest": "e56f304e686997ad8ccc077718a15117bdf4c3c4414c7a4a6e93a35040f6b9f3",
-        "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
-        "role": "admin",
-        "browser": "chromium",
-        "browserVersion": "151.0.7922.34",
-        "viewport": {
-          "width": 1440,
-          "height": 900
-        },
-        "deviceScaleFactor": 1,
-        "platform": "win32",
-        "architecture": "x64",
-        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
-        "logicalProcessors": 14,
-        "memoryGiB": 31,
-        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
-      },
-      "referenceMs": 230.099853515625,
-      "samples": [
-        216.300048828125,
-        230.099853515625,
-        234.199951171875
-      ],
-      "source": {
-        "runKey": "2026-09-25T025755457Z-2a9fab",
-        "runKeys": [
-          "2026-09-25T025755457Z-2a9fab"
-        ],
-        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
-        "recordedAt": "2026-09-25T03:52:56.644Z"
-      },
-      "review": {
-        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
-        "reviewedAt": "2026-09-25T04:30:55.687Z"
-      }
-    },
-    {
-      "scenarioId": "calendar.board-to-day.covered",
-      "scenarioVersion": 1,
-      "profile": "typical",
-      "backend": "local",
-      "context": {
-        "workloadDigest": "0e866add2b8eab984c5efce8aa1a84cefb857c722f0689844454dcd757019ae9",
-        "measurementDigest": "ed1ee9365c1a1a3b59ecec81e624c7c86affd4359855f048c6ff4ba3811e62ee",
-        "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
-        "role": "admin",
-        "browser": "chromium",
-        "browserVersion": "151.0.7922.34",
-        "viewport": {
-          "width": 1440,
-          "height": 900
-        },
-        "deviceScaleFactor": 1,
-        "platform": "win32",
-        "architecture": "x64",
-        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
-        "logicalProcessors": 14,
-        "memoryGiB": 31,
-        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
-      },
-      "referenceMs": 102.10009765625,
-      "samples": [
-        84.199951171875,
-        102.10009765625,
-        107.60009765625
-      ],
-      "source": {
-        "runKey": "2026-09-25T025755457Z-2a9fab",
-        "runKeys": [
-          "2026-09-25T025755457Z-2a9fab"
-        ],
-        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
-        "recordedAt": "2026-09-25T03:52:59.347Z"
-      },
-      "review": {
-        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
-        "reviewedAt": "2026-09-25T04:30:55.687Z"
-      }
-    },
-    {
-      "scenarioId": "calendar.day.resize.settled",
-      "scenarioVersion": 1,
-      "profile": "typical",
-      "backend": "local",
-      "context": {
-        "workloadDigest": "0e866add2b8eab984c5efce8aa1a84cefb857c722f0689844454dcd757019ae9",
-        "measurementDigest": "e6469fc065ee380c8500319bb5f550c672b17a97bfc7df973c24895efab5ec77",
-        "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
-        "role": "admin",
-        "browser": "chromium",
-        "browserVersion": "151.0.7922.34",
-        "viewport": {
-          "width": 1440,
-          "height": 900
-        },
-        "deviceScaleFactor": 1,
-        "platform": "win32",
-        "architecture": "x64",
-        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
-        "logicalProcessors": 14,
-        "memoryGiB": 31,
-        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
-      },
-      "referenceMs": 158.699951171875,
-      "samples": [
-        154.7001953125,
-        158.699951171875,
-        159.5
-      ],
-      "source": {
-        "runKey": "2026-09-25T025755457Z-2a9fab",
-        "runKeys": [
-          "2026-09-25T025755457Z-2a9fab"
-        ],
-        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
-        "recordedAt": "2026-09-25T03:52:59.970Z"
-      },
-      "review": {
-        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
-        "reviewedAt": "2026-09-25T04:30:55.687Z"
-      }
-    },
-    {
-      "scenarioId": "calendar.day-to-board.covered",
-      "scenarioVersion": 1,
-      "profile": "typical",
-      "backend": "local",
-      "context": {
-        "workloadDigest": "0e866add2b8eab984c5efce8aa1a84cefb857c722f0689844454dcd757019ae9",
-        "measurementDigest": "d13b5e1bbcb41c3af028a11a776380a4c4d320e83071c03d3210b9d1d091630e",
-        "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
-        "role": "admin",
-        "browser": "chromium",
-        "browserVersion": "151.0.7922.34",
-        "viewport": {
-          "width": 1440,
-          "height": 900
-        },
-        "deviceScaleFactor": 1,
-        "platform": "win32",
-        "architecture": "x64",
-        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
-        "logicalProcessors": 14,
-        "memoryGiB": 31,
-        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
-      },
-      "referenceMs": 379.7998046875,
-      "samples": [
-        374.60009765625,
-        379.7998046875,
-        390.60009765625
-      ],
-      "source": {
-        "runKey": "2026-09-25T025755457Z-2a9fab",
-        "runKeys": [
-          "2026-09-25T025755457Z-2a9fab"
-        ],
-        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
-        "recordedAt": "2026-09-25T03:53:05.725Z"
-      },
-      "review": {
-        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
-        "reviewedAt": "2026-09-25T04:30:55.687Z"
-      }
-    },
-    {
-      "scenarioId": "calendar.board.six-weeks",
-      "scenarioVersion": 1,
-      "profile": "typical",
-      "backend": "local",
-      "context": {
-        "workloadDigest": "0e866add2b8eab984c5efce8aa1a84cefb857c722f0689844454dcd757019ae9",
-        "measurementDigest": "29922cabe4c0df16d7e82e2df787719381a61feeaaa25494ff017fc33b00a72c",
-        "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
-        "role": "admin",
-        "browser": "chromium",
-        "browserVersion": "151.0.7922.34",
-        "viewport": {
-          "width": 1440,
-          "height": 900
-        },
-        "deviceScaleFactor": 1,
-        "platform": "win32",
-        "architecture": "x64",
-        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
-        "logicalProcessors": 14,
-        "memoryGiB": 31,
-        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
-      },
-      "referenceMs": 877,
-      "samples": [
-        869.89990234375,
-        877,
-        914.39990234375
-      ],
-      "source": {
-        "runKey": "2026-09-25T025755457Z-2a9fab",
-        "runKeys": [
-          "2026-09-25T025755457Z-2a9fab"
-        ],
-        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
-        "recordedAt": "2026-09-25T03:53:07.094Z"
-      },
-      "review": {
-        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
-        "reviewedAt": "2026-09-25T04:30:55.687Z"
-      }
-    },
-    {
-      "scenarioId": "calendar.board-to-month.uncovered",
-      "scenarioVersion": 1,
-      "profile": "typical",
-      "backend": "local",
-      "context": {
-        "workloadDigest": "0e866add2b8eab984c5efce8aa1a84cefb857c722f0689844454dcd757019ae9",
-        "measurementDigest": "80e0b61494143ffa1b4d84af734040feb0590e40baf8da22ea2cd44677737b1c",
-        "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
-        "role": "admin",
-        "browser": "chromium",
-        "browserVersion": "151.0.7922.34",
-        "viewport": {
-          "width": 1440,
-          "height": 900
-        },
-        "deviceScaleFactor": 1,
-        "platform": "win32",
-        "architecture": "x64",
-        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
-        "logicalProcessors": 14,
-        "memoryGiB": 31,
-        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
-      },
-      "referenceMs": 415.199951171875,
-      "samples": [
-        400.2001953125,
-        415.199951171875,
-        415.400146484375
-      ],
-      "source": {
-        "runKey": "2026-09-25T025755457Z-2a9fab",
-        "runKeys": [
-          "2026-09-25T025755457Z-2a9fab"
-        ],
-        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
-        "recordedAt": "2026-09-25T03:53:08.203Z"
-      },
-      "review": {
-        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
-        "reviewedAt": "2026-09-25T04:30:55.687Z"
-      }
-    },
-    {
-      "scenarioId": "calendar.month.move.visible",
-      "scenarioVersion": 1,
-      "profile": "typical",
-      "backend": "local",
-      "context": {
-        "workloadDigest": "0e866add2b8eab984c5efce8aa1a84cefb857c722f0689844454dcd757019ae9",
-        "measurementDigest": "d7812693feabf3472ed9637dbae2f2674c44de99a4ca87497dddcbcb7e4a8b14",
-        "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
-        "role": "admin",
-        "browser": "chromium",
-        "browserVersion": "151.0.7922.34",
-        "viewport": {
-          "width": 1440,
-          "height": 900
-        },
-        "deviceScaleFactor": 1,
-        "platform": "win32",
-        "architecture": "x64",
-        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
-        "logicalProcessors": 14,
-        "memoryGiB": 31,
-        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
-      },
-      "referenceMs": 21,
-      "samples": [
-        20.89990234375,
-        21,
-        22.300048828125
-      ],
-      "source": {
-        "runKey": "2026-09-25T025755457Z-2a9fab",
-        "runKeys": [
-          "2026-09-25T025755457Z-2a9fab"
-        ],
-        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
-        "recordedAt": "2026-09-25T03:53:08.714Z"
-      },
-      "review": {
-        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
-        "reviewedAt": "2026-09-25T04:30:55.687Z"
-      }
-    },
-    {
-      "scenarioId": "calendar.month.move.settled",
-      "scenarioVersion": 1,
-      "profile": "typical",
-      "backend": "local",
-      "context": {
-        "workloadDigest": "0e866add2b8eab984c5efce8aa1a84cefb857c722f0689844454dcd757019ae9",
-        "measurementDigest": "6af8371673c57554e9365a60d2637eb04892ef4716f50fbc4736bbca5054082b",
-        "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
-        "role": "admin",
-        "browser": "chromium",
-        "browserVersion": "151.0.7922.34",
-        "viewport": {
-          "width": 1440,
-          "height": 900
-        },
-        "deviceScaleFactor": 1,
-        "platform": "win32",
-        "architecture": "x64",
-        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
-        "logicalProcessors": 14,
-        "memoryGiB": 31,
-        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
-      },
-      "referenceMs": 159.099853515625,
-      "samples": [
-        145.400146484375,
-        159.099853515625,
-        175.2998046875
-      ],
-      "source": {
-        "runKey": "2026-09-25T025755457Z-2a9fab",
-        "runKeys": [
-          "2026-09-25T025755457Z-2a9fab"
-        ],
-        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
-        "recordedAt": "2026-09-25T03:53:11.844Z"
-      },
-      "review": {
-        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
-        "reviewedAt": "2026-09-25T04:30:55.687Z"
-      }
-    },
-    {
-      "scenarioId": "calendar.month-next.uncovered",
-      "scenarioVersion": 3,
-      "profile": "typical",
-      "backend": "local",
-      "context": {
-        "workloadDigest": "0e866add2b8eab984c5efce8aa1a84cefb857c722f0689844454dcd757019ae9",
-        "measurementDigest": "e9f6e1803678cfad1bcf2d159cb2fbf180e62be7129c161b4746baf8815ffd96",
-        "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
-        "role": "admin",
-        "browser": "chromium",
-        "browserVersion": "151.0.7922.34",
-        "viewport": {
-          "width": 1440,
-          "height": 900
-        },
-        "deviceScaleFactor": 1,
-        "platform": "win32",
-        "architecture": "x64",
-        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
-        "logicalProcessors": 14,
-        "memoryGiB": 31,
-        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
-      },
-      "referenceMs": 182.2998046875,
-      "samples": [
-        177.099853515625,
-        182.2998046875,
-        185.900146484375
-      ],
-      "source": {
-        "runKey": "2026-09-25T025755457Z-2a9fab",
-        "runKeys": [
-          "2026-09-25T025755457Z-2a9fab"
-        ],
-        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
-        "recordedAt": "2026-09-25T03:53:14.418Z"
-      },
-      "review": {
-        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
-        "reviewedAt": "2026-09-25T04:30:55.687Z"
-      }
-    },
-    {
-      "scenarioId": "calendar.month-to-board.covered",
-      "scenarioVersion": 1,
-      "profile": "typical",
-      "backend": "local",
-      "context": {
-        "workloadDigest": "0e866add2b8eab984c5efce8aa1a84cefb857c722f0689844454dcd757019ae9",
-        "measurementDigest": "e7cce09c40d7c736ef408573131532c3c10308500870e25fc325d88fe67b69a3",
-        "protocol": "fixed-date-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v4",
-        "role": "admin",
-        "browser": "chromium",
-        "browserVersion": "151.0.7922.34",
-        "viewport": {
-          "width": 1440,
-          "height": 900
-        },
-        "deviceScaleFactor": 1,
-        "platform": "win32",
-        "architecture": "x64",
-        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
-        "logicalProcessors": 14,
-        "memoryGiB": 31,
-        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
-      },
-      "referenceMs": 92.199951171875,
-      "samples": [
-        84.5,
-        92.199951171875,
-        98.5
-      ],
-      "source": {
-        "runKey": "2026-09-25T025755457Z-2a9fab",
-        "runKeys": [
-          "2026-09-25T025755457Z-2a9fab"
-        ],
-        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
-        "recordedAt": "2026-09-25T03:53:14.633Z"
-      },
-      "review": {
-        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
-        "reviewedAt": "2026-09-25T04:30:55.687Z"
-      }
-    },
-    {
       "scenarioId": "customers.list.open",
       "scenarioVersion": 1,
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "0e866add2b8eab984c5efce8aa1a84cefb857c722f0689844454dcd757019ae9",
-        "measurementDigest": "6ef310b05564b5c8b4ea56db3c5494d2c4d3bc02fd52c2af553add977a53b3c1",
-        "protocol": "fixed-workload-fresh-context-customer-then-job-navigation-browser-raf-v3",
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "measurementDigest": "cc83f56e36d1739a38076f3771fd303d385add805d211a57ed363c440cb8b66f",
+        "protocol": "fixed-workload-jobs-warmed-settled-closed-server-fresh-context-customers-jobs-detail-equipment-tasks-browser-raf-v5",
         "role": "admin",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -546,23 +30,31 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 844,
+      "referenceMs": 821.599853515625,
       "samples": [
-        807.699951171875,
-        844,
-        991.199951171875
+        794.000244140625,
+        799.7998046875,
+        810.39990234375,
+        812.10009765625,
+        821.599853515625,
+        837.699951171875,
+        854,
+        862.599853515625,
+        890.69970703125
       ],
       "source": {
-        "runKey": "2026-09-25T025755457Z-5ee091",
+        "runKey": "2026-10-02T204033878Z-b160ca",
         "runKeys": [
-          "2026-09-25T025755457Z-5ee091"
+          "2026-10-02T204033878Z-b160ca",
+          "2026-10-02T204219672Z-06db1c",
+          "2026-10-02T204400079Z-4ce350"
         ],
-        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
-        "recordedAt": "2026-09-25T03:54:40.210Z"
+        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
+        "recordedAt": "2026-10-02T20:44:50.360Z"
       },
       "review": {
-        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
-        "reviewedAt": "2026-09-25T04:30:55.687Z"
+        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
+        "reviewedAt": "2026-10-02T21:08:36.820Z"
       }
     },
     {
@@ -571,9 +63,9 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "0e866add2b8eab984c5efce8aa1a84cefb857c722f0689844454dcd757019ae9",
-        "measurementDigest": "db87dd3cd979637828956cefe23accfba1bba49be228d0e275f9c4845bfcc22c",
-        "protocol": "fixed-workload-fresh-context-customer-then-job-navigation-browser-raf-v3",
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "measurementDigest": "7135262d9a6972cba61be3b87a2a03ba738aad7a566333107dadaf5b9c0aa640",
+        "protocol": "fixed-workload-jobs-warmed-settled-closed-server-fresh-context-customers-jobs-detail-equipment-tasks-browser-raf-v5",
         "role": "admin",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -589,23 +81,796 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 707,
+      "referenceMs": 638.2001953125,
       "samples": [
-        682,
-        707,
-        736.900146484375
+        594.7998046875,
+        627.500244140625,
+        632.999755859375,
+        634.800048828125,
+        638.2001953125,
+        645.099853515625,
+        661.400146484375,
+        670.099853515625,
+        686.099853515625
       ],
       "source": {
-        "runKey": "2026-09-25T025755457Z-5ee091",
+        "runKey": "2026-10-02T204033878Z-b160ca",
         "runKeys": [
-          "2026-09-25T025755457Z-5ee091"
+          "2026-10-02T204033878Z-b160ca",
+          "2026-10-02T204219672Z-06db1c",
+          "2026-10-02T204400079Z-4ce350"
         ],
-        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
-        "recordedAt": "2026-09-25T03:54:41.326Z"
+        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
+        "recordedAt": "2026-10-02T20:44:51.303Z"
       },
       "review": {
-        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
-        "reviewedAt": "2026-09-25T04:30:55.687Z"
+        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
+        "reviewedAt": "2026-10-02T21:08:36.820Z"
+      }
+    },
+    {
+      "scenarioId": "jobs.detail.open",
+      "scenarioVersion": 1,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "measurementDigest": "1171b208dd465f6ea7e3b4dcbb8939eb4fb384dcbbbde503349c82842dbd64c8",
+        "protocol": "fixed-workload-jobs-warmed-settled-closed-server-fresh-context-customers-jobs-detail-equipment-tasks-browser-raf-v5",
+        "role": "admin",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 476.699951171875,
+      "samples": [
+        437.800048828125,
+        465.800048828125,
+        466.60009765625,
+        469,
+        476.699951171875,
+        481.10009765625,
+        496,
+        533,
+        757.800048828125
+      ],
+      "source": {
+        "runKey": "2026-10-02T204033878Z-b160ca",
+        "runKeys": [
+          "2026-10-02T204033878Z-b160ca",
+          "2026-10-02T204219672Z-06db1c",
+          "2026-10-02T204400079Z-4ce350"
+        ],
+        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
+        "recordedAt": "2026-10-02T20:44:52.905Z"
+      },
+      "review": {
+        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
+        "reviewedAt": "2026-10-02T21:08:36.820Z"
+      }
+    },
+    {
+      "scenarioId": "equipment.list.open",
+      "scenarioVersion": 1,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "measurementDigest": "0c4cef0d2f66cb03ea1efc5ac20ec4966875b1c85a6486ab082346f8429a96a3",
+        "protocol": "fixed-workload-jobs-warmed-settled-closed-server-fresh-context-customers-jobs-detail-equipment-tasks-browser-raf-v5",
+        "role": "admin",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 495.500244140625,
+      "samples": [
+        471.300048828125,
+        486.400146484375,
+        487.300048828125,
+        488.80029296875,
+        495.500244140625,
+        496.39990234375,
+        516.400146484375,
+        523.300048828125,
+        523.7001953125
+      ],
+      "source": {
+        "runKey": "2026-10-02T204033878Z-b160ca",
+        "runKeys": [
+          "2026-10-02T204033878Z-b160ca",
+          "2026-10-02T204219672Z-06db1c",
+          "2026-10-02T204400079Z-4ce350"
+        ],
+        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
+        "recordedAt": "2026-10-02T20:44:53.682Z"
+      },
+      "review": {
+        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
+        "reviewedAt": "2026-10-02T21:08:36.820Z"
+      }
+    },
+    {
+      "scenarioId": "tasks.list.open",
+      "scenarioVersion": 1,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "measurementDigest": "d3e92c9edd2911e9b5a447296eb88ff927c45e7c201b429e4ed582f7ddb19f28",
+        "protocol": "fixed-workload-jobs-warmed-settled-closed-server-fresh-context-customers-jobs-detail-equipment-tasks-browser-raf-v5",
+        "role": "admin",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 778.10009765625,
+      "samples": [
+        722.60009765625,
+        763.699951171875,
+        765.7998046875,
+        768,
+        778.10009765625,
+        797.099853515625,
+        801.800048828125,
+        801.900146484375,
+        839.19970703125
+      ],
+      "source": {
+        "runKey": "2026-10-02T204033878Z-b160ca",
+        "runKeys": [
+          "2026-10-02T204033878Z-b160ca",
+          "2026-10-02T204219672Z-06db1c",
+          "2026-10-02T204400079Z-4ce350"
+        ],
+        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
+        "recordedAt": "2026-10-02T20:44:54.723Z"
+      },
+      "review": {
+        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
+        "reviewedAt": "2026-10-02T21:08:36.820Z"
+      }
+    },
+    {
+      "scenarioId": "calendar.board.cold-open",
+      "scenarioVersion": 1,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "measurementDigest": "18ddd30355a8373d4b7307a1e4b3ef7ffd4ff4d065a500d37698f73ab18b31cc",
+        "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
+        "role": "admin",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 1087.60009765625,
+      "samples": [
+        1018.39990234375,
+        1040.300048828125,
+        1050.60009765625,
+        1066.100341796875,
+        1087.60009765625,
+        1121.39990234375,
+        1143.60009765625,
+        1165.39990234375,
+        1627.10009765625
+      ],
+      "source": {
+        "runKey": "2026-10-02T204659260Z-504a3e",
+        "runKeys": [
+          "2026-10-02T204659260Z-504a3e",
+          "2026-10-02T204930415Z-1a2b31",
+          "2026-10-02T205148904Z-3f5894"
+        ],
+        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
+        "recordedAt": "2026-10-02T20:52:56.766Z"
+      },
+      "review": {
+        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
+        "reviewedAt": "2026-10-02T21:08:49.301Z"
+      }
+    },
+    {
+      "scenarioId": "calendar.board.reassign.visible",
+      "scenarioVersion": 1,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "measurementDigest": "12057d4c920c6a60d23ee4ceb222e76aa84e6f71fc8929851cd91224dd4547be",
+        "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
+        "role": "admin",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 59.800048828125,
+      "samples": [
+        55.900146484375,
+        56,
+        56,
+        56.39990234375,
+        59.800048828125,
+        61,
+        68.599853515625,
+        71.199951171875,
+        72.5
+      ],
+      "source": {
+        "runKey": "2026-10-02T204659260Z-504a3e",
+        "runKeys": [
+          "2026-10-02T204659260Z-504a3e",
+          "2026-10-02T204930415Z-1a2b31",
+          "2026-10-02T205148904Z-3f5894"
+        ],
+        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
+        "recordedAt": "2026-10-02T20:52:59.790Z"
+      },
+      "review": {
+        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
+        "reviewedAt": "2026-10-02T21:08:49.301Z"
+      }
+    },
+    {
+      "scenarioId": "calendar.board.reassign.settled",
+      "scenarioVersion": 1,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "measurementDigest": "0a79c00cef8261bec8c971a54b7fcb7a2e1f38740d01227aabbaccc668ebedbb",
+        "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
+        "role": "admin",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 215,
+      "samples": [
+        192.5,
+        205.2998046875,
+        208.199951171875,
+        209.199951171875,
+        215,
+        225.5,
+        230.5,
+        231.7001953125,
+        239.39990234375
+      ],
+      "source": {
+        "runKey": "2026-10-02T204659260Z-504a3e",
+        "runKeys": [
+          "2026-10-02T204659260Z-504a3e",
+          "2026-10-02T204930415Z-1a2b31",
+          "2026-10-02T205148904Z-3f5894"
+        ],
+        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
+        "recordedAt": "2026-10-02T20:53:01.367Z"
+      },
+      "review": {
+        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
+        "reviewedAt": "2026-10-02T21:08:49.301Z"
+      }
+    },
+    {
+      "scenarioId": "calendar.board-to-day.covered",
+      "scenarioVersion": 1,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "measurementDigest": "c698268982ee8f32fa215458acfd1e4b555156d811f14ec4dff965d4e802cee5",
+        "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
+        "role": "admin",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 118.699951171875,
+      "samples": [
+        96.300048828125,
+        105.10009765625,
+        107.400146484375,
+        115.10009765625,
+        118.699951171875,
+        133.199951171875,
+        153.300048828125,
+        203.199951171875,
+        206.60009765625
+      ],
+      "source": {
+        "runKey": "2026-10-02T204659260Z-504a3e",
+        "runKeys": [
+          "2026-10-02T204659260Z-504a3e",
+          "2026-10-02T204930415Z-1a2b31",
+          "2026-10-02T205148904Z-3f5894"
+        ],
+        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
+        "recordedAt": "2026-10-02T20:53:01.977Z"
+      },
+      "review": {
+        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
+        "reviewedAt": "2026-10-02T21:08:49.301Z"
+      }
+    },
+    {
+      "scenarioId": "calendar.day.resize.settled",
+      "scenarioVersion": 1,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "measurementDigest": "e87a907e8fd4f85961bafcb66be8d4b9d0f260b5070faf9c5d05ea9e500e2712",
+        "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
+        "role": "admin",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 167.199951171875,
+      "samples": [
+        157,
+        165.599853515625,
+        166.099853515625,
+        167.099853515625,
+        167.199951171875,
+        173.800048828125,
+        180.39990234375,
+        181.800048828125,
+        216.7998046875
+      ],
+      "source": {
+        "runKey": "2026-10-02T204659260Z-504a3e",
+        "runKeys": [
+          "2026-10-02T204659260Z-504a3e",
+          "2026-10-02T204930415Z-1a2b31",
+          "2026-10-02T205148904Z-3f5894"
+        ],
+        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
+        "recordedAt": "2026-10-02T20:53:02.703Z"
+      },
+      "review": {
+        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
+        "reviewedAt": "2026-10-02T21:08:49.301Z"
+      }
+    },
+    {
+      "scenarioId": "calendar.day-to-board.covered",
+      "scenarioVersion": 1,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "measurementDigest": "7799a4d7f8dc6426087e5815918ab37fab691c52092218c4c5b52d3596e28665",
+        "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
+        "role": "admin",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 176.400146484375,
+      "samples": [
+        129.39990234375,
+        155.099853515625,
+        158.39990234375,
+        166.400146484375,
+        176.400146484375,
+        185,
+        212.800048828125,
+        218.300048828125,
+        225.900146484375
+      ],
+      "source": {
+        "runKey": "2026-10-02T204659260Z-504a3e",
+        "runKeys": [
+          "2026-10-02T204659260Z-504a3e",
+          "2026-10-02T204930415Z-1a2b31",
+          "2026-10-02T205148904Z-3f5894"
+        ],
+        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
+        "recordedAt": "2026-10-02T20:53:04.485Z"
+      },
+      "review": {
+        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
+        "reviewedAt": "2026-10-02T21:08:49.301Z"
+      }
+    },
+    {
+      "scenarioId": "calendar.board.six-weeks",
+      "scenarioVersion": 1,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "measurementDigest": "3edcfa80dbc1349f5963dba677633b719c316ede27b6db0033b291b915b2a627",
+        "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
+        "role": "admin",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 795,
+      "samples": [
+        698,
+        737,
+        738.60009765625,
+        795,
+        795,
+        823.099853515625,
+        840.699951171875,
+        881.2001953125,
+        944.2998046875
+      ],
+      "source": {
+        "runKey": "2026-10-02T204659260Z-504a3e",
+        "runKeys": [
+          "2026-10-02T204659260Z-504a3e",
+          "2026-10-02T204930415Z-1a2b31",
+          "2026-10-02T205148904Z-3f5894"
+        ],
+        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
+        "recordedAt": "2026-10-02T20:53:05.583Z"
+      },
+      "review": {
+        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
+        "reviewedAt": "2026-10-02T21:08:49.301Z"
+      }
+    },
+    {
+      "scenarioId": "calendar.board-to-month.uncovered",
+      "scenarioVersion": 1,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "measurementDigest": "f5965876744d3db9c34c63df7c4dfc5092f303adfa4f545423ad3f7033072a86",
+        "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
+        "role": "admin",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 440.099853515625,
+      "samples": [
+        383.300048828125,
+        415.199951171875,
+        428.2001953125,
+        436.60009765625,
+        440.099853515625,
+        446.39990234375,
+        452.699951171875,
+        461,
+        478.10009765625
+      ],
+      "source": {
+        "runKey": "2026-10-02T204659260Z-504a3e",
+        "runKeys": [
+          "2026-10-02T204659260Z-504a3e",
+          "2026-10-02T204930415Z-1a2b31",
+          "2026-10-02T205148904Z-3f5894"
+        ],
+        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
+        "recordedAt": "2026-10-02T20:53:06.635Z"
+      },
+      "review": {
+        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
+        "reviewedAt": "2026-10-02T21:08:49.301Z"
+      }
+    },
+    {
+      "scenarioId": "calendar.month.move.visible",
+      "scenarioVersion": 1,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "measurementDigest": "0cc7a85fc0a829e2f8e0f90988c752053b67ab84d9670bad8615b7596eac2d35",
+        "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
+        "role": "admin",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 30.39990234375,
+      "samples": [
+        19.199951171875,
+        21,
+        25.10009765625,
+        29,
+        30.39990234375,
+        33.599853515625,
+        34.699951171875,
+        42.60009765625,
+        46.7001953125
+      ],
+      "source": {
+        "runKey": "2026-10-02T204659260Z-504a3e",
+        "runKeys": [
+          "2026-10-02T204659260Z-504a3e",
+          "2026-10-02T204930415Z-1a2b31",
+          "2026-10-02T205148904Z-3f5894"
+        ],
+        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
+        "recordedAt": "2026-10-02T20:53:07.259Z"
+      },
+      "review": {
+        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
+        "reviewedAt": "2026-10-02T21:08:49.301Z"
+      }
+    },
+    {
+      "scenarioId": "calendar.month.move.settled",
+      "scenarioVersion": 1,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "measurementDigest": "3e0bff2e01472c1caf672da7a6a9d9533b2cff24b97990c21ba112ed0ac3f6fc",
+        "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
+        "role": "admin",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 162.300048828125,
+      "samples": [
+        158.199951171875,
+        158.300048828125,
+        159.599853515625,
+        159.7001953125,
+        162.300048828125,
+        168.099853515625,
+        168.60009765625,
+        170.39990234375,
+        184.300048828125
+      ],
+      "source": {
+        "runKey": "2026-10-02T204659260Z-504a3e",
+        "runKeys": [
+          "2026-10-02T204659260Z-504a3e",
+          "2026-10-02T204930415Z-1a2b31",
+          "2026-10-02T205148904Z-3f5894"
+        ],
+        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
+        "recordedAt": "2026-10-02T20:53:08.568Z"
+      },
+      "review": {
+        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
+        "reviewedAt": "2026-10-02T21:08:49.301Z"
+      }
+    },
+    {
+      "scenarioId": "calendar.month-next.uncovered",
+      "scenarioVersion": 3,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "measurementDigest": "52a7b2ea175e9106d2e079ee98d66dcfc217c32b7403d0f29c069770cf642085",
+        "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
+        "role": "admin",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 240.400146484375,
+      "samples": [
+        211,
+        221.900146484375,
+        223.7001953125,
+        237,
+        240.400146484375,
+        244.199951171875,
+        247.89990234375,
+        256.5,
+        284.10009765625
+      ],
+      "source": {
+        "runKey": "2026-10-02T204659260Z-504a3e",
+        "runKeys": [
+          "2026-10-02T204659260Z-504a3e",
+          "2026-10-02T204930415Z-1a2b31",
+          "2026-10-02T205148904Z-3f5894"
+        ],
+        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
+        "recordedAt": "2026-10-02T20:53:09.309Z"
+      },
+      "review": {
+        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
+        "reviewedAt": "2026-10-02T21:08:49.301Z"
+      }
+    },
+    {
+      "scenarioId": "calendar.month-to-board.covered",
+      "scenarioVersion": 1,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "measurementDigest": "3934d1e345c2e4a50e9a42f7fea20df36968de0f4cbe99211de4e901a1cb62a3",
+        "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
+        "role": "admin",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 97.199951171875,
+      "samples": [
+        76.400146484375,
+        90.099853515625,
+        90.199951171875,
+        90.900146484375,
+        97.199951171875,
+        100.39990234375,
+        108.300048828125,
+        112.300048828125,
+        127.5
+      ],
+      "source": {
+        "runKey": "2026-10-02T204659260Z-504a3e",
+        "runKeys": [
+          "2026-10-02T204659260Z-504a3e",
+          "2026-10-02T204930415Z-1a2b31",
+          "2026-10-02T205148904Z-3f5894"
+        ],
+        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
+        "recordedAt": "2026-10-02T20:53:09.540Z"
+      },
+      "review": {
+        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
+        "reviewedAt": "2026-10-02T21:08:49.301Z"
       }
     },
     {
@@ -614,8 +879,8 @@
       "profile": "golden-world",
       "backend": "local",
       "context": {
-        "workloadDigest": "dac0d39b028a80b77f56e61648dee4e50d2bcac90d8960566feca8f0421b850a",
-        "measurementDigest": "2a640ee5bcbc49de911f5d2d2a3bac32869d3a4aa0c36a799770c9e89593ad60",
+        "workloadDigest": "63ff90afc6ac57573cc7be8eba2491852cea039873ce6580c20bb2b0b3a98521",
+        "measurementDigest": "428ca5232235274916c4387639d77f3bc30393be7f8a451a1b1580e6059d1bea",
         "protocol": "independent-fixed-month-three-distinct-overlap-confirmations-browser-raf-v3",
         "role": "buero",
         "browser": "chromium",
@@ -632,23 +897,31 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 1077.5,
+      "referenceMs": 683.800048828125,
       "samples": [
-        1003.599853515625,
-        1077.5,
-        1341.199951171875
+        669.60009765625,
+        673.7001953125,
+        674.39990234375,
+        674.5,
+        683.800048828125,
+        690.300048828125,
+        711.800048828125,
+        728,
+        834.2998046875
       ],
       "source": {
-        "runKey": "2026-09-25T025755457Z-26897b",
+        "runKey": "2026-10-02T205405601Z-0a341d",
         "runKeys": [
-          "2026-09-25T025755457Z-26897b"
+          "2026-10-02T205405601Z-0a341d",
+          "2026-10-02T205624610Z-6f8bc8",
+          "2026-10-02T205856537Z-fc9ed4"
         ],
-        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
-        "recordedAt": "2026-09-25T03:56:46.174Z"
+        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
+        "recordedAt": "2026-10-02T20:59:54.259Z"
       },
       "review": {
-        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
-        "reviewedAt": "2026-09-25T04:30:55.687Z"
+        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
+        "reviewedAt": "2026-10-02T21:09:01.540Z"
       }
     },
     {
@@ -657,9 +930,9 @@
       "profile": "golden-world",
       "backend": "local",
       "context": {
-        "workloadDigest": "dac0d39b028a80b77f56e61648dee4e50d2bcac90d8960566feca8f0421b850a",
-        "measurementDigest": "2477592d539b51c9d4fb62655d2cd3e3392f6c8374728d2a2a70e09989587676",
-        "protocol": "independent-fixed-month-fresh-employee-after-three-saves-browser-raf-v3",
+        "workloadDigest": "63ff90afc6ac57573cc7be8eba2491852cea039873ce6580c20bb2b0b3a98521",
+        "measurementDigest": "4a7ae613252ac1faa76c28d0f5b105dd2be09182297f3f742682ba7aa316fe35",
+        "protocol": "independent-fixed-month-jobs-warmed-settled-closed-server-fresh-employee-after-three-saves-browser-raf-v5",
         "role": "employee",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -675,23 +948,31 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 1070.699951171875,
+      "referenceMs": 434.5,
       "samples": [
-        420.5,
-        1070.699951171875,
-        1084.400146484375
+        415.5,
+        419,
+        428.400146484375,
+        432.60009765625,
+        434.5,
+        447.900146484375,
+        523.7998046875,
+        529.800048828125,
+        531.499755859375
       ],
       "source": {
-        "runKey": "2026-09-25T025755457Z-26897b",
+        "runKey": "2026-10-02T205405601Z-0a341d",
         "runKeys": [
-          "2026-09-25T025755457Z-26897b"
+          "2026-10-02T205405601Z-0a341d",
+          "2026-10-02T205624610Z-6f8bc8",
+          "2026-10-02T205856537Z-fc9ed4"
         ],
-        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
-        "recordedAt": "2026-09-25T03:56:50.817Z"
+        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
+        "recordedAt": "2026-10-02T21:00:07.762Z"
       },
       "review": {
-        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
-        "reviewedAt": "2026-09-25T04:30:55.687Z"
+        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
+        "reviewedAt": "2026-10-02T21:09:01.540Z"
       }
     },
     {
@@ -700,8 +981,8 @@
       "profile": "golden-world",
       "backend": "local",
       "context": {
-        "workloadDigest": "dac0d39b028a80b77f56e61648dee4e50d2bcac90d8960566feca8f0421b850a",
-        "measurementDigest": "d421442b06ca56d520a8403eb210132a53908b7f918e2415bdb6c50491238218",
+        "workloadDigest": "63ff90afc6ac57573cc7be8eba2491852cea039873ce6580c20bb2b0b3a98521",
+        "measurementDigest": "4f021b308b698a58a431e3d83d9bec6bc22c01d06d38fa1955d2ac4d2d432084",
         "protocol": "independent-fixed-month-fresh-admin-after-legacy-save-browser-raf-v3",
         "role": "admin",
         "browser": "chromium",
@@ -718,23 +999,286 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 1099.300048828125,
+      "referenceMs": 454.39990234375,
       "samples": [
-        773.099853515625,
-        1099.300048828125,
-        1118.5
+        421.60009765625,
+        424.39990234375,
+        444.499755859375,
+        447.39990234375,
+        454.39990234375,
+        493.900146484375,
+        541.199951171875,
+        638.60009765625,
+        894.89990234375
       ],
       "source": {
-        "runKey": "2026-09-25T025755457Z-26897b",
+        "runKey": "2026-10-02T205405601Z-0a341d",
         "runKeys": [
-          "2026-09-25T025755457Z-26897b"
+          "2026-10-02T205405601Z-0a341d",
+          "2026-10-02T205624610Z-6f8bc8",
+          "2026-10-02T205856537Z-fc9ed4"
         ],
-        "buildId": "07deffa3-068d-48c2-a65d-e3b9b182fe41",
-        "recordedAt": "2026-09-25T03:56:58.531Z"
+        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
+        "recordedAt": "2026-10-02T21:00:15.740Z"
       },
       "review": {
-        "reason": "Harness overhaul closure: recalibration on the build of report 2026-09-25T025742865Z-0bc6286e after the serial-mode removal changed every performance spec",
-        "reviewedAt": "2026-09-25T04:30:55.687Z"
+        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
+        "reviewedAt": "2026-10-02T21:09:01.540Z"
+      }
+    },
+    {
+      "scenarioId": "time.clock-in.visible",
+      "scenarioVersion": 1,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "measurementDigest": "811c75ba5eb3c67f1527cbcadbaf16203270739eadbbb8a5547e492173433f37",
+        "protocol": "typical-profile-jobs-warmed-settled-closed-server-fresh-employee-dashboard-clock-in-out-browser-raf-v1",
+        "role": "employee",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 73.5,
+      "samples": [
+        63.2001953125,
+        69.300048828125,
+        70.2001953125,
+        71,
+        73.5,
+        77.39990234375,
+        82.099853515625,
+        85.599853515625,
+        91.89990234375
+      ],
+      "source": {
+        "runKey": "2026-10-02T210249684Z-077926",
+        "runKeys": [
+          "2026-10-02T210249684Z-077926",
+          "2026-10-02T210448044Z-257eb7",
+          "2026-10-02T210643434Z-f61e28"
+        ],
+        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
+        "recordedAt": "2026-10-02T21:07:34.565Z"
+      },
+      "review": {
+        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
+        "reviewedAt": "2026-10-02T21:09:13.967Z"
+      }
+    },
+    {
+      "scenarioId": "time.clock-out.visible",
+      "scenarioVersion": 1,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "measurementDigest": "63b5d294d2f6d5b00ab25d86861da32df3f45ffd1492d25d6cc0d29b459d137d",
+        "protocol": "typical-profile-jobs-warmed-settled-closed-server-fresh-employee-dashboard-clock-in-out-browser-raf-v1",
+        "role": "employee",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 62.10009765625,
+      "samples": [
+        52.800048828125,
+        54.300048828125,
+        58,
+        61.699951171875,
+        62.10009765625,
+        65,
+        66.199951171875,
+        67.39990234375,
+        78.10009765625
+      ],
+      "source": {
+        "runKey": "2026-10-02T210249684Z-077926",
+        "runKeys": [
+          "2026-10-02T210249684Z-077926",
+          "2026-10-02T210448044Z-257eb7",
+          "2026-10-02T210643434Z-f61e28"
+        ],
+        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
+        "recordedAt": "2026-10-02T21:07:35.039Z"
+      },
+      "review": {
+        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
+        "reviewedAt": "2026-10-02T21:09:13.967Z"
+      }
+    },
+    {
+      "scenarioId": "time.clock-in.settled",
+      "scenarioVersion": 1,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "measurementDigest": "362a3aca98ca0165644f323e4f099d1c355b59aa83f6c2b0e74d3d7bca3a8fcf",
+        "protocol": "typical-profile-jobs-warmed-settled-closed-server-fresh-employee-dashboard-clock-in-out-browser-raf-v1",
+        "role": "employee",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 209.800048828125,
+      "samples": [
+        197,
+        198.5,
+        199.5,
+        206.89990234375,
+        209.800048828125,
+        211.2001953125,
+        235,
+        235.800048828125,
+        275.5
+      ],
+      "source": {
+        "runKey": "2026-10-02T210249684Z-077926",
+        "runKeys": [
+          "2026-10-02T210249684Z-077926",
+          "2026-10-02T210448044Z-257eb7",
+          "2026-10-02T210643434Z-f61e28"
+        ],
+        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
+        "recordedAt": "2026-10-02T21:07:35.622Z"
+      },
+      "review": {
+        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
+        "reviewedAt": "2026-10-02T21:09:13.967Z"
+      }
+    },
+    {
+      "scenarioId": "time.clock-out.settled",
+      "scenarioVersion": 1,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "measurementDigest": "0a46fe332413b9579454272219a79cdabc9937ac50527aec8225a9321a2ada00",
+        "protocol": "typical-profile-jobs-warmed-settled-closed-server-fresh-employee-dashboard-clock-in-out-browser-raf-v1",
+        "role": "employee",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 195.2998046875,
+      "samples": [
+        173.800048828125,
+        179.7001953125,
+        188.400146484375,
+        189.2001953125,
+        195.2998046875,
+        197.39990234375,
+        203.5,
+        204.5,
+        216.39990234375
+      ],
+      "source": {
+        "runKey": "2026-10-02T210249684Z-077926",
+        "runKeys": [
+          "2026-10-02T210249684Z-077926",
+          "2026-10-02T210448044Z-257eb7",
+          "2026-10-02T210643434Z-f61e28"
+        ],
+        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
+        "recordedAt": "2026-10-02T21:07:36.035Z"
+      },
+      "review": {
+        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
+        "reviewedAt": "2026-10-02T21:09:13.967Z"
+      }
+    },
+    {
+      "scenarioId": "time.approval.cross-session",
+      "scenarioVersion": 1,
+      "profile": "typical",
+      "backend": "local",
+      "context": {
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "measurementDigest": "3196c90e43d21f6ee9d600368542f2cf4f3174f4bd34da8e03b6837238c17653",
+        "protocol": "typical-profile-buero-approves-three-own-submissions-employee-history-browser-raf-v1",
+        "role": "buero",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "deviceScaleFactor": 1,
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
+        "logicalProcessors": 14,
+        "memoryGiB": 31,
+        "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
+      },
+      "referenceMs": 633.10009765625,
+      "samples": [
+        593.699951171875,
+        610.599853515625,
+        620.89990234375,
+        629.60009765625,
+        633.10009765625,
+        664.800048828125,
+        721.5,
+        727.5,
+        771.400146484375
+      ],
+      "source": {
+        "runKey": "2026-10-02T214009813Z-a1d0a4",
+        "runKeys": [
+          "2026-10-02T214009813Z-a1d0a4",
+          "2026-10-02T221229232Z-a15315",
+          "2026-10-02T221405935Z-e8eff3"
+        ],
+        "buildId": "cb86ce19-c9df-4cab-ae3d-d27c4ac8ca7f",
+        "recordedAt": "2026-10-02T22:14:57.502Z"
+      },
+      "review": {
+        "reason": "Virtue-2 closure: the employee history keeps names it read and sends one request per live refresh; all three runs passed on one build",
+        "reviewedAt": "2026-10-02T22:16:49.091Z"
       }
     }
   ]

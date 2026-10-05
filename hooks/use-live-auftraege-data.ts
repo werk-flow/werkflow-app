@@ -1,14 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
-import {
-  type Client,
-  type Job,
-  type Project,
-  type ProjectWithDetails,
-} from '@/lib/jobs/types';
+import { type Client, type Job, type Project, type ProjectWithDetails } from '@/lib/jobs/types';
 
 type JobAssignmentMap = Record<string, string[]>;
 
@@ -23,7 +18,7 @@ type UseLiveAuftraegeDataArgs = {
 
 function mergeProjects(
   primaryProjects: ProjectWithDetails[],
-  supportProjects: ProjectWithDetails[] = []
+  supportProjects: ProjectWithDetails[] = [],
 ): Project[] {
   const merged = new Map<string, Project>();
 
@@ -56,11 +51,7 @@ function stripProjectDetails(project: ProjectWithDetails): Project {
   };
 }
 
-function deriveProjects(
-  rawProjects: Project[],
-  jobs: Job[],
-  clients: Client[]
-): ProjectWithDetails[] {
+function deriveProjects(rawProjects: Project[], jobs: Job[], clients: Client[]): ProjectWithDetails[] {
   const clientLookup = new Map(clients.map((client) => [client.id, client]));
   const countsByProject = new Map<
     string,
@@ -99,7 +90,7 @@ function deriveProjects(
 
     return {
       ...project,
-      client: project.clientId ? clientLookup.get(project.clientId) ?? null : null,
+      client: project.clientId ? (clientLookup.get(project.clientId) ?? null) : null,
       jobCount: counts.total,
       completedJobCount: counts.completed,
       inProgressJobCount: counts.inProgress,
@@ -117,35 +108,55 @@ export function useLiveAuftraegeData({
   preserveProjectCounts = false,
 }: UseLiveAuftraegeDataArgs) {
   const [jobs, setJobs] = useState<Job[]>(initialJobs);
-  const [rawProjects, setRawProjects] = useState<Project[]>(
-    mergeProjects(initialProjects, supportProjects)
-  );
-  const [jobAssignmentMap, setJobAssignmentMap] =
-    useState<JobAssignmentMap>(initialJobAssignmentMap);
+  const [rawProjects, setRawProjects] = useState<Project[]>(mergeProjects(initialProjects, supportProjects));
+  const [jobAssignmentMap, setJobAssignmentMap] = useState<JobAssignmentMap>(initialJobAssignmentMap);
 
   // Server props are the authority for this list: every Realtime change
-  // triggers a debounced route refresh, and the sync effects below adopt the
-  // fresh props. The setters remain for the caller's own-action optimistic
-  // echoes (D4: a user's own action reflects instantly).
+  // triggers a debounced route refresh, and the render below adopts the fresh
+  // props. The setters remain for the caller's own-action optimistic echoes
+  // (D4: a user's own action reflects instantly).
   useRealtimeRouterRefresh({
     tables: ['jobs', 'projects', 'job_assignments'],
   });
 
-  useEffect(() => {
-    setJobs(initialJobs);
-  }, [initialJobs]);
-
-  useEffect(() => {
-    setRawProjects(mergeProjects(initialProjects, supportProjects));
-  }, [initialProjects, supportProjects]);
-
-  useEffect(() => {
-    setJobAssignmentMap(initialJobAssignmentMap);
-  }, [initialJobAssignmentMap]);
+  // Adopted during render, never in a mount effect: inside a hydrated Suspense
+  // boundary that effect runs at idle priority, its update starves behind a
+  // pending route transition, and React then rebases every later functional
+  // update into a new array on each render, which the optimistic list's
+  // effect turns into an endless commit loop.
+  const [adoptedProps, setAdoptedProps] = useState({
+    initialJobs,
+    initialProjects,
+    supportProjects,
+    initialJobAssignmentMap,
+  });
+  const jobsChanged = initialJobs !== adoptedProps.initialJobs;
+  const projectsChanged =
+    initialProjects !== adoptedProps.initialProjects || supportProjects !== adoptedProps.supportProjects;
+  const assignmentsChanged = initialJobAssignmentMap !== adoptedProps.initialJobAssignmentMap;
+  if (jobsChanged || projectsChanged || assignmentsChanged) {
+    setAdoptedProps({ initialJobs, initialProjects, supportProjects, initialJobAssignmentMap });
+    if (jobsChanged) setJobs(initialJobs);
+    if (projectsChanged) setRawProjects(mergeProjects(initialProjects, supportProjects));
+    if (assignmentsChanged) setJobAssignmentMap(initialJobAssignmentMap);
+  }
 
   const projects = useMemo(
-    () => preserveProjectCounts ? rawProjects.map((project) => ({ ...project, ...(initialProjects.find((initial) => initial.id === project.id) ?? { client: null, jobCount: 0, completedJobCount: 0, inProgressJobCount: 0, parkedJobCount: 0 }), ...project })) : deriveProjects(rawProjects, jobs, clients),
-    [rawProjects, jobs, clients, preserveProjectCounts, initialProjects]
+    () =>
+      preserveProjectCounts
+        ? rawProjects.map((project) => ({
+            ...project,
+            ...(initialProjects.find((initial) => initial.id === project.id) ?? {
+              client: null,
+              jobCount: 0,
+              completedJobCount: 0,
+              inProgressJobCount: 0,
+              parkedJobCount: 0,
+            }),
+            ...project,
+          }))
+        : deriveProjects(rawProjects, jobs, clients),
+    [rawProjects, jobs, clients, preserveProjectCounts, initialProjects],
   );
 
   return {

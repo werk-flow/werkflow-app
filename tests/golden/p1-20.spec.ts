@@ -1,563 +1,255 @@
-import type { Locator, Page } from "@playwright/test";
+import type { Page } from '@playwright/test';
 
-import { closeWorkArtifactDialog, workArtifactsSection } from "./support/spec-helpers/work-artifact-dialog";
-import { expect, test } from "./support/fixtures";
-import { getMaintenanceCoverageStateByReference, getMaintenancePlanNumberByClient, getMaintenanceStateByPlanNumber } from "./support/db/service";
-import { getJobNumberById } from "./support/db/work";
+import { expectDefined } from '../../lib/testing/spec-support/expect-defined';
 import {
-  berlinDateAtOffset,
-  ownedBerlinDateAtOffset,
-} from "./support/date-ownership";
-import { requireChainedValue } from "./support/preconditions";
-import { addSiteOnCustomerDetail, createCustomer, openCustomerDetail } from "./support/steps/customers";
-import { createDirectServiceCase, createInstalledEquipment, createMaintenanceCoverageViaDialog, createMaintenancePlanViaDialog } from "./support/steps/service";
-import { typeIntoDateTimeField, visibleText } from "./support/steps/shared";
-import { createAndPublishWorkTemplate, openFieldWorkPack } from "./support/steps/work";
-import type { TestWorld } from "./support/world";
+  beginWorkArtifact,
+  fillWorkArtifactVisit,
+  submitWorkArtifactAndClose,
+  workArtifactField,
+} from './support/spec-helpers/work-artifact-dialog';
+import { expect, test } from './support/fixtures';
+import { seedCustomer } from './support/db/customers';
+import {
+  getMaintenanceCoverageStateByReference,
+  getMaintenancePlanNumberByClient,
+  getMaintenanceStateByPlanNumber,
+  seedInstalledEquipment,
+} from './support/db/service';
+import { getJobNumberById, seedPublishedWorkTemplate } from './support/db/work';
+import { ownedBerlinDateAtOffset } from './support/date-ownership';
+import {
+  createMaintenanceCoverageViaDialog,
+  createMaintenancePlanViaDialog,
+  maintenanceDueEvidence,
+  maintenanceDueRow,
+  maintenanceDueRowAction,
+  maintenanceDueSubmit,
+  maintenanceRenewalSignal,
+  maintenanceSearchUrl,
+  recordCoverageFollowUp,
+} from './support/steps/service';
+import {
+  SHARED_COPY,
+  employeeAssignmentHeading,
+  employeeAssignmentPicker,
+  employeeAssignmentSearch,
+  openEmployeeAssignmentDialog,
+  testData,
+} from './support/steps/shared';
+import { openFieldWorkPack } from './support/steps/work';
 
-const DATES = [
-  ownedBerlinDateAtOffset("p1-20", 105),
-  ownedBerlinDateAtOffset("p1-20", 106),
-  ownedBerlinDateAtOffset("p1-20", 107),
-  ownedBerlinDateAtOffset("p1-20", 108),
-  ownedBerlinDateAtOffset("p1-20", 109),
-] as const;
-// Completion is bounded by the real operating date, not fixture-date
-// ownership. Keep the visit inside that boundary while coverage dates retain
-// P1-20's collision-free audit window.
-const EXECUTION_DATE = berlinDateAtOffset(0);
-const FIRST_DUE_LABEL = new Intl.DateTimeFormat("de-DE").format(
-  new Date(`${EXECUTION_DATE}T12:00:00Z`),
-);
-
-function names(world: TestWorld) {
-  return {
-    customerName: `P120 Golden Kunde ${world.runId}`,
-    siteName: `P120 Golden Heizzentrale ${world.runId}`,
-    equipmentName: `P120 Golden Wärmeerzeuger ${world.runId}`,
-    templateName: `P120 Golden Wartung ${world.runId}`,
-    coverageReference: `P120-VERTRAG-${world.runId}`,
-    serviceSummary: `P120 Golden reaktive Abweichung ${world.runId}`,
-    evidenceTitle: `P120 Golden Wartungsbericht ${world.runId}`,
-    employeeName: `${world.users.employee.firstName} ${world.users.employee.lastName}`,
-  };
+async function createSubmittedReport(page: Page, title: string, visitDate: string): Promise<void> {
+  const dialog = await beginWorkArtifact(page, {
+    kind: 'work_report',
+    title,
+    summary: 'Wartungsumfang nachvollziehbar dokumentiert.',
+  });
+  await fillWorkArtifactVisit(dialog, { date: visitDate, from: '06:00', to: '08:00' });
+  await workArtifactField(dialog, 'performedWork').fill('Anlage geprüft und Messwerte dokumentiert.');
+  await submitWorkArtifactAndClose(dialog);
 }
 
-async function createSubmittedReport(page: Page, title: string): Promise<void> {
-  await workArtifactsSection(page)
-    .getByRole("button", { name: "Neu" })
-    .click();
-  const dialog: Locator = page.getByRole("dialog");
-  await dialog
-    .getByRole("combobox", { name: "Art des Arbeitsnachweises" })
-    .click();
-  await page
-    .getByRole("option", { name: "Arbeitsbericht", exact: true })
-    .click();
-  await dialog.getByLabel("Titel").fill(title);
-  await dialog
-    .getByLabel("Zusammenfassung")
-    .fill("Wartungsumfang nachvollziehbar dokumentiert.");
-  await typeIntoDateTimeField(
-    dialog,
-    "artifact-visit-start",
-    `${EXECUTION_DATE}T06:00`,
-  );
-  await typeIntoDateTimeField(
-    dialog,
-    "artifact-visit-end",
-    `${EXECUTION_DATE}T08:00`,
-  );
-  await dialog
-    .getByLabel("Ausgeführte Arbeiten")
-    .fill("Anlage geprüft und Messwerte dokumentiert.");
-  await dialog
-    .getByRole("button", { name: "Zur Prüfung einreichen", exact: true })
-    .click();
-  await expect(dialog.getByText(/Version 1/)).toBeVisible({ timeout: 20_000 });
-  await closeWorkArtifactDialog(dialog);
-}
-
-async function assignEmployee(
-  page: Page,
-  jobNumber: string,
-  employeeName: string,
-): Promise<void> {
+async function assignEmployee(page: Page, jobNumber: string, employeeName: string): Promise<void> {
   await page.goto(`/auftraege/${jobNumber}`);
-  const assignButton = page.getByRole("button", {
-    name: "Zuweisen",
-    exact: true,
-  });
-  await expect(assignButton).toBeVisible();
-  // A retained-world diagnostic can replay this stage after the fresh run
-  // already persisted the assignment. Keep the stage idempotent while the
-  // first execution still exercises the complete assignment UI.
-  const existingAssignment = page
-    .getByRole("main")
-    .getByRole("link", { name: employeeName, exact: true });
-  if (await existingAssignment.isVisible()) return;
-
-  await assignButton.click();
-  const dialog = page.getByRole("dialog").filter({
-    has: page.getByRole("heading", { name: "Mitarbeiter zuweisen" }),
-  });
-  await dialog
-    .getByRole("combobox")
-    .filter({ hasText: "Mitarbeiter zuweisen" })
-    .click();
-  await page.getByPlaceholder("Mitarbeiter suchen...").fill(employeeName);
-  await page
-    .getByRole("listbox")
-    .getByRole("option")
-    .filter({ hasText: employeeName })
-    .click();
-  await dialog.getByRole("heading", { name: "Mitarbeiter zuweisen" }).click();
-  await dialog.getByRole("button", { name: "Speichern" }).click();
+  const dialog = await openEmployeeAssignmentDialog(page);
+  await employeeAssignmentPicker(dialog).click();
+  await employeeAssignmentSearch(page).fill(employeeName);
+  await page.getByRole('listbox').getByRole('option').filter({ hasText: employeeName }).click();
+  await employeeAssignmentHeading(dialog).click();
+  await dialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
   await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByRole('main').getByRole('link', { name: employeeName, exact: true })).toBeVisible();
 }
 
-test.describe("P1-20 maintenance plan to completed visit @P1-20 @GG-06", () => {
-  test("prepares exact existing owners @P1-20-stage-setup", async ({
-    adminPage,
-    world,
-  }) => {
-    const fixture = names(world);
-    await createCustomer(adminPage, fixture.customerName);
-    await openCustomerDetail(adminPage, fixture.customerName);
-    await addSiteOnCustomerDetail(adminPage, {
-      name: fixture.siteName,
-      street: "Wartungsweg 20",
-      postalCode: "10115",
-      city: "Berlin",
-      isPrimary: true,
-    });
-    await createInstalledEquipment(adminPage, {
-      customerName: fixture.customerName,
-      siteName: fixture.siteName,
-      name: fixture.equipmentName,
-      state: "Aktiv",
-      manufacturer: "WerkFlow Testtechnik",
-      model: "MW 20",
-    });
-    await createAndPublishWorkTemplate(adminPage, {
-      name: fixture.templateName,
-      targetType: "job",
-      firstItem: "Anlage warten",
-      secondItem: "Messwerte dokumentieren",
-      evidenceDescription: "Wartungsbericht",
-    });
-    await createDirectServiceCase(adminPage, {
-      customerName: fixture.customerName,
-      siteName: fixture.siteName,
-      statement: "Bei der Wartung wurde eine gesonderte Störung festgestellt.",
-      summary: fixture.serviceSummary,
-      equipmentName: fixture.equipmentName,
-    });
-  });
-
-  test("records operational coverage and an exact follow-up @P1-20-stage-coverage",
-    {
-      annotation: [
-        {
-          type: "requires-test",
-          description: "prepares exact existing owners @P1-20-stage-setup",
-        },
-      ],
-    }, async ({
-    adminPage,
-    world,
-  }) => {
-    const fixture = names(world);
-    await createMaintenanceCoverageViaDialog(adminPage, {
-      clientName: fixture.customerName,
-      siteName: fixture.siteName,
-      reference: fixture.coverageReference,
-      validFrom: DATES[0],
-      validUntil: DATES[4],
-      noticeDate: DATES[2],
-      renewalDate: DATES[3],
-      reviewDueDate: DATES[1],
-      operationalNote: "Leistungsumfang vor Verlängerung intern prüfen.",
-    });
-    await expect(visibleText(adminPage, "Prüfung vorgemerkt")).toBeVisible();
-    const coverageRow = adminPage.getByRole("main").getByTestId("maintenance-coverage-row")
-      .filter({ hasText: fixture.coverageReference });
-    await coverageRow.getByRole("button", { name: "Wiedervorlage" }).click();
-    const dialog = adminPage.getByRole("dialog");
-    await dialog.getByRole("button", { name: "Speichern" }).click();
-    await expect(dialog).toHaveCount(0, { timeout: 20_000 });
-
-    const state = requireChainedValue(
-      await getMaintenanceCoverageStateByReference(
-        world.orgId,
-        fixture.coverageReference,
-      ),
-      {
-        test: "P1-20 coverage stage",
-        needs: "the operational coverage created in this stage",
-        grep: "@P1-20-stage-setup|@P1-20-stage-coverage",
-        suite: "golden",
-      },
-    );
-    expect(state.coverage).toMatchObject({
-      valid_from: DATES[0],
-      valid_until: DATES[4],
-      review_due_date: DATES[1],
-      status: "active",
-    });
-    expect(state.events.map((event) => event.event_type)).toContain("created");
-    expect(state.followUps).toHaveLength(1);
-  });
-
-  test("activates a versioned plan and materializes the horizon @P1-20-stage-plan",
-    {
-      annotation: [
-        {
-          type: "requires-test",
-          description: "prepares exact existing owners @P1-20-stage-setup",
-        },
-        {
-          type: "requires-test",
-          description:
-            "records operational coverage and an exact follow-up @P1-20-stage-coverage",
-        },
-      ],
-    }, async ({
-    adminPage,
-    world,
-  }) => {
-    const fixture = names(world);
-    await createMaintenancePlanViaDialog(adminPage, {
-      clientName: fixture.customerName,
-      siteName: fixture.siteName,
-      coverageReference: fixture.coverageReference,
-      templateName: fixture.templateName,
-      equipmentName: fixture.equipmentName,
-      effectiveFrom: EXECUTION_DATE,
-      firstDue: EXECUTION_DATE,
-      intervalMonths: "6",
-      instructions: "Zugang über das Büro; Messwerte vollständig erfassen.",
-    });
-    const coverage = requireChainedValue(
-      await getMaintenanceCoverageStateByReference(
-        world.orgId,
-        fixture.coverageReference,
-      ),
-      {
-        test: "P1-20 plan stage coverage",
-        needs: "the coverage from the prior stage",
-        grep: "@P1-20-stage-setup|@P1-20-stage-coverage|@P1-20-stage-plan",
-        suite: "golden",
-      },
-    );
-    const planNumber = requireChainedValue(
-      await getMaintenancePlanNumberByClient(
-        world.orgId,
-        coverage.coverage.client_id,
-      ),
-      {
-        test: "P1-20 plan stage",
-        needs: "the active plan created in this stage",
-        grep: "@P1-20-stage-setup|@P1-20-stage-coverage|@P1-20-stage-plan",
-        suite: "golden",
-      },
-    );
-    const state = requireChainedValue(
-      await getMaintenanceStateByPlanNumber(world.orgId, planNumber),
-      {
-        test: "P1-20 plan state",
-        needs: "the active plan created in this stage",
-        grep: "@P1-20-stage-setup|@P1-20-stage-coverage|@P1-20-stage-plan",
-        suite: "golden",
-      },
-    );
-    expect(state.plan.status).toBe("active");
-    expect(state.revisions).toHaveLength(1);
-    expect(state.equipment).toHaveLength(1);
-    expect(state.dueWork.length).toBeGreaterThanOrEqual(3);
-    expect(state.dueWork[0]).toMatchObject({
-      due_date: EXECUTION_DATE,
-      status: "open",
-      job_id: null,
-      planning_occurrence_id: null,
-    });
-    expect(state.planEvents.map((event) => event.event_type)).toEqual(
-      expect.arrayContaining(["created", "horizon_extended"]),
-    );
-  });
-
-  test("creates and schedules one normal visit job @P1-20-stage-visit",
-    {
-      annotation: [
-        {
-          type: "requires-test",
-          description: "prepares exact existing owners @P1-20-stage-setup",
-        },
-        {
-          type: "requires-test",
-          description:
-            "records operational coverage and an exact follow-up @P1-20-stage-coverage",
-        },
-        {
-          type: "requires-test",
-          description:
-            "activates a versioned plan and materializes the horizon @P1-20-stage-plan",
-        },
-      ],
-    }, async ({
-    adminPage,
-    world,
-  }) => {
-    const fixture = names(world);
-    const coverage = requireChainedValue(
-      await getMaintenanceCoverageStateByReference(
-        world.orgId,
-        fixture.coverageReference,
-      ),
-      {
-        test: "P1-20 visit coverage",
-        needs: "the coverage from the prior stages",
-        grep: "@P1-20-stage-setup|@P1-20-stage-coverage|@P1-20-stage-plan|@P1-20-stage-visit",
-        suite: "golden",
-      },
-    );
-    const planNumber = requireChainedValue(
-      await getMaintenancePlanNumberByClient(
-        world.orgId,
-        coverage.coverage.client_id,
-      ),
-      {
-        test: "P1-20 visit plan",
-        needs: "the plan from the plan stage",
-        grep: "@P1-20-stage-setup|@P1-20-stage-coverage|@P1-20-stage-plan|@P1-20-stage-visit",
-        suite: "golden",
-      },
-    );
-    await adminPage.goto("/service/wartung");
-    const dueRow = adminPage.getByRole("main").getByTestId("maintenance-due-row")
-      .filter({ hasText: planNumber })
-      .filter({ hasText: FIRST_DUE_LABEL });
-    await dueRow.getByRole("button", { name: "Auftrag anlegen" }).click();
-    let dialog = adminPage.getByRole("dialog");
-    await dialog.getByRole("button", { name: "Aktion ausführen" }).click();
-    await expect(dialog).toHaveCount(0, { timeout: 20_000 });
-    let state = requireChainedValue(
-      await getMaintenanceStateByPlanNumber(world.orgId, planNumber),
-      {
-        test: "P1-20 visit state",
-        needs: "the visit job created in this stage",
-        grep: "@P1-20-stage-setup|@P1-20-stage-coverage|@P1-20-stage-plan|@P1-20-stage-visit",
-        suite: "golden",
-      },
-    );
-    const linkedDueWork = requireChainedValue(
-      state.dueWork[0]?.job_id ? state.dueWork[0] : null,
-      {
-        test: "P1-20 visit job",
-        needs: "the linked visit job",
-        grep: "@P1-20-stage-setup|@P1-20-stage-coverage|@P1-20-stage-plan|@P1-20-stage-visit",
-        suite: "golden",
-      },
-    );
-    expect(linkedDueWork.status).toBe("visit_created");
-    await adminPage.goto("/service/wartung");
-    const scheduledRow = adminPage.getByRole("main").getByTestId("maintenance-due-row")
-      .filter({ hasText: planNumber })
-      .filter({ hasText: FIRST_DUE_LABEL });
-    await scheduledRow.getByRole("button", { name: "Termin planen" }).click();
-    dialog = adminPage.getByRole("dialog");
-    await dialog.getByRole("button", { name: "Aktion ausführen" }).click();
-    await expect(dialog).toHaveCount(0, { timeout: 20_000 });
-    state = requireChainedValue(
-      await getMaintenanceStateByPlanNumber(world.orgId, planNumber),
-      {
-        test: "P1-20 scheduled visit",
-        needs: "the scheduled visit from this stage",
-        grep: "@P1-20-stage-setup|@P1-20-stage-coverage|@P1-20-stage-plan|@P1-20-stage-visit",
-        suite: "golden",
-      },
-    );
-    expect(state.dueWork[0]?.planning_occurrence_id).not.toBeNull();
-  });
-
-  test("projects only exact visit context to the assigned employee @P1-20-stage-field",
-    {
-      annotation: [
-        {
-          type: "requires-test",
-          description: "prepares exact existing owners @P1-20-stage-setup",
-        },
-        {
-          type: "requires-test",
-          description:
-            "records operational coverage and an exact follow-up @P1-20-stage-coverage",
-        },
-        {
-          type: "requires-test",
-          description:
-            "activates a versioned plan and materializes the horizon @P1-20-stage-plan",
-        },
-        {
-          type: "requires-test",
-          description:
-            "creates and schedules one normal visit job @P1-20-stage-visit",
-        },
-      ],
-    },
-    async ({
+test.describe('P1-20 maintenance plan to completed visit @P1-20 @GG-06', () => {
+  test('plans maintenance and completes the first visit with exact evidence @P1-20-journey', async ({
     adminPage,
     employeePage,
     world,
+    businessDate,
   }) => {
-    const fixture = names(world);
-    const coverage = requireChainedValue(
-      await getMaintenanceCoverageStateByReference(
-        world.orgId,
-        fixture.coverageReference,
-      ),
-      {
-        test: "P1-20 field coverage",
-        needs: "the retained maintenance coverage",
-        grep: "@P1-20-stage-setup|@P1-20-stage-coverage|@P1-20-stage-plan|@P1-20-stage-visit|@P1-20-stage-field",
-        suite: "golden",
-      },
-    );
-    const planNumber = requireChainedValue(
-      await getMaintenancePlanNumberByClient(
-        world.orgId,
-        coverage.coverage.client_id,
-      ),
-      {
-        test: "P1-20 field plan",
-        needs: "the retained maintenance plan",
-        grep: "@P1-20-stage-setup|@P1-20-stage-coverage|@P1-20-stage-plan|@P1-20-stage-visit|@P1-20-stage-field",
-        suite: "golden",
-      },
-    );
-    const state = requireChainedValue(
-      await getMaintenanceStateByPlanNumber(world.orgId, planNumber),
-      {
-        test: "P1-20 field visit",
-        needs: "the linked visit job",
-        grep: "@P1-20-stage-setup|@P1-20-stage-coverage|@P1-20-stage-plan|@P1-20-stage-visit|@P1-20-stage-field",
-        suite: "golden",
-      },
-    );
-    const jobId = requireChainedValue(state.dueWork[0]?.job_id, {
-      test: "P1-20 field job id",
-      needs: "the exact visit job",
-      grep: "@P1-20-stage-setup|@P1-20-stage-coverage|@P1-20-stage-plan|@P1-20-stage-visit|@P1-20-stage-field",
-      suite: "golden",
-    });
-    const jobNumber = requireChainedValue(
-      await getJobNumberById(world.orgId, jobId),
-      {
-        test: "P1-20 field job number",
-        needs: "the visit job number",
-        grep: "@P1-20-stage-setup|@P1-20-stage-coverage|@P1-20-stage-plan|@P1-20-stage-visit|@P1-20-stage-field",
-        suite: "golden",
-      },
-    );
-    await assignEmployee(adminPage, jobNumber, fixture.employeeName);
-    const pack = await openFieldWorkPack(employeePage, jobNumber);
-    await expect(pack).toContainText(planNumber);
-    await expect(pack).toContainText(fixture.equipmentName);
-    await expect(pack).toContainText("Messwerte vollständig erfassen");
-    await expect(pack).not.toContainText(fixture.coverageReference);
-    await expect(pack).not.toContainText("Leistungsumfang vor Verlängerung");
+    const names = {
+      customer: testData`P120 Golden Kunde ${world.runId}`,
+      site: testData`P120 Golden Heizzentrale ${world.runId}`,
+      equipment: testData`P120 Golden Wärmeerzeuger ${world.runId}`,
+      template: testData`P120 Golden Wartung ${world.runId}`,
+      coverageReference: testData`P120-VERTRAG-${world.runId}`,
+      evidenceTitle: testData`P120 Golden Wartungsbericht ${world.runId}`,
+      employee: `${world.users.employee.firstName} ${world.users.employee.lastName}`,
+    };
+    const operationalNotePrefix = testData`Leistungsumfang vor Verlängerung`;
+    const instructionsFragment = testData`Messwerte vollständig erfassen`;
+    // Completion is bounded by the operating date, so the first visit is due on
+    // the business date while the coverage dates keep P1-20's owned window.
+    const firstDueLabel = new Intl.DateTimeFormat('de-DE').format(new Date(`${businessDate}T12:00:00Z`));
 
-    await employeePage.goto(`/auftraege/${jobNumber}`);
-    await createSubmittedReport(employeePage, fixture.evidenceTitle);
-  });
-
-  test("completes the due item with exact evidence and next due @P1-20-stage-completion",
-    {
-      annotation: [
-        {
-          type: "requires-test",
-          description: "prepares exact existing owners @P1-20-stage-setup",
-        },
-        {
-          type: "requires-test",
-          description:
-            "records operational coverage and an exact follow-up @P1-20-stage-coverage",
-        },
-        {
-          type: "requires-test",
-          description:
-            "activates a versioned plan and materializes the horizon @P1-20-stage-plan",
-        },
-        {
-          type: "requires-test",
-          description:
-            "creates and schedules one normal visit job @P1-20-stage-visit",
-        },
-        {
-          type: "requires-test",
-          description:
-            "projects only exact visit context to the assigned employee @P1-20-stage-field",
-        },
-      ],
-    }, async ({
-    adminPage,
-    world,
-  }) => {
-    const fixture = names(world);
-    const coverage = requireChainedValue(
-      await getMaintenanceCoverageStateByReference(
-        world.orgId,
-        fixture.coverageReference,
-      ),
-      {
-        test: "P1-20 completion coverage",
-        needs: "the retained coverage",
-        grep: "@P1-20-stage-setup|@P1-20-stage-coverage|@P1-20-stage-plan|@P1-20-stage-visit|@P1-20-stage-field|@P1-20-stage-completion",
-        suite: "golden",
-      },
-    );
-    const planNumber = requireChainedValue(
-      await getMaintenancePlanNumberByClient(
-        world.orgId,
-        coverage.coverage.client_id,
-      ),
-      {
-        test: "P1-20 completion plan",
-        needs: "the retained plan",
-        grep: "@P1-20-stage-setup|@P1-20-stage-coverage|@P1-20-stage-plan|@P1-20-stage-visit|@P1-20-stage-field|@P1-20-stage-completion",
-        suite: "golden",
-      },
-    );
-    await adminPage.goto("/service/wartung");
-    const dueRow = adminPage.getByRole("main").getByTestId("maintenance-due-row")
-      .filter({ hasText: planNumber })
-      .filter({ hasText: FIRST_DUE_LABEL });
-    await dueRow.getByRole("button", { name: "Abschließen" }).click();
-    const dialog = adminPage.getByRole("dialog");
-    await dialog
-      .getByText(fixture.evidenceTitle, { exact: false })
-      .locator("..")
-      .getByRole("checkbox")
-      .click();
-    await dialog.getByRole("button", { name: "Aktion ausführen" }).click();
-    await expect(dialog).toHaveCount(0, { timeout: 20_000 });
-    const state = requireChainedValue(
-      await getMaintenanceStateByPlanNumber(world.orgId, planNumber),
-      {
-        test: "P1-20 completion state",
-        needs: "the completed due item",
-        grep: "@P1-20-stage-setup|@P1-20-stage-coverage|@P1-20-stage-plan|@P1-20-stage-visit|@P1-20-stage-field|@P1-20-stage-completion",
-        suite: "golden",
-      },
-    );
-    expect(state.dueWork[0]).toMatchObject({
-      status: "completed",
-      scope_outcome: "complete",
-      completed_on: expect.any(String),
-      next_due_date: expect.any(String),
+    const clientId = await test.step('Seed the customer site, equipment and published template', async () => {
+      const customer = await seedCustomer({
+        orgId: world.orgId,
+        actorId: world.users.admin.id,
+        name: names.customer,
+        sites: [
+          {
+            name: names.site,
+            street: 'Wartungsweg 20',
+            postalCode: '10115',
+            city: 'Berlin',
+            isPrimary: true,
+          },
+        ],
+      });
+      await seedInstalledEquipment({
+        orgId: world.orgId,
+        actorId: world.users.admin.id,
+        clientId: customer.clientId,
+        siteId: expectDefined(customer.siteIds.get(names.site), 'the seeded P1-20 site'),
+        name: names.equipment,
+        manufacturer: 'WerkFlow Testtechnik',
+        model: 'MW 20',
+      });
+      await seedPublishedWorkTemplate({
+        orgId: world.orgId,
+        actorId: world.users.admin.id,
+        name: names.template,
+        targetType: 'job',
+        items: [
+          { content: 'Anlage warten' },
+          { content: 'Messwerte dokumentieren', evidenceDescription: 'Wartungsbericht' },
+        ],
+      });
+      return customer.clientId;
     });
-    expect(state.evidenceLinks).toHaveLength(1);
-    expect(state.dueEvents.map((event) => event.event_type)).toContain(
-      "completed",
-    );
+
+    await test.step('Record the operational coverage and its follow-up', async () => {
+      const validFrom = ownedBerlinDateAtOffset('p1-20', 105);
+      const reviewDueDate = ownedBerlinDateAtOffset('p1-20', 106);
+      const validUntil = ownedBerlinDateAtOffset('p1-20', 109);
+      await createMaintenanceCoverageViaDialog(adminPage, {
+        clientName: names.customer,
+        siteName: names.site,
+        reference: names.coverageReference,
+        validFrom,
+        validUntil,
+        noticeDate: ownedBerlinDateAtOffset('p1-20', 107),
+        renewalDate: ownedBerlinDateAtOffset('p1-20', 108),
+        reviewDueDate,
+        operationalNote: `${operationalNotePrefix} intern prüfen.`,
+      });
+      await expect(maintenanceRenewalSignal(adminPage, 'scheduled')).toBeVisible();
+      await recordCoverageFollowUp(adminPage, names.coverageReference);
+
+      const state = expectDefined(
+        await getMaintenanceCoverageStateByReference(world.orgId, names.coverageReference),
+        'the recorded coverage',
+      );
+      expect(state.coverage).toMatchObject({
+        valid_from: validFrom,
+        valid_until: validUntil,
+        review_due_date: reviewDueDate,
+        status: 'active',
+      });
+      expect(state.events.map((event) => event.event_type)).toContain('created');
+      expect(state.followUps).toHaveLength(1);
+    });
+
+    const planNumber = await test.step('Activate a versioned plan and materialize its horizon', async () => {
+      await createMaintenancePlanViaDialog(adminPage, {
+        clientName: names.customer,
+        siteName: names.site,
+        coverageReference: names.coverageReference,
+        templateName: names.template,
+        equipmentName: names.equipment,
+        effectiveFrom: businessDate,
+        firstDue: businessDate,
+        intervalMonths: '6',
+        instructions: `Zugang über das Büro; ${instructionsFragment}.`,
+      });
+      const activeNumber = expectDefined(
+        await getMaintenancePlanNumberByClient(world.orgId, clientId),
+        'the activated plan',
+      );
+      const state = expectDefined(
+        await getMaintenanceStateByPlanNumber(world.orgId, activeNumber),
+        'plan state',
+      );
+      expect(state.plan.status).toBe('active');
+      expect(state.revisions).toHaveLength(1);
+      expect(state.equipment).toHaveLength(1);
+      expect(state.dueWork.length).toBeGreaterThanOrEqual(3);
+      expect(state.dueWork[0]).toMatchObject({
+        due_date: businessDate,
+        status: 'open',
+        job_id: null,
+        planning_occurrence_id: null,
+      });
+      expect(state.planEvents.map((event) => event.event_type)).toEqual(
+        expect.arrayContaining(['created', 'horizon_extended']),
+      );
+      return activeNumber;
+    });
+
+    const jobNumber = await test.step('Create and schedule one normal visit job', async () => {
+      const dueRow = maintenanceDueRow(adminPage, planNumber, firstDueLabel);
+      // The due list pages; the search puts this plan's items on the first page.
+      await adminPage.goto(maintenanceSearchUrl(planNumber));
+      await maintenanceDueRowAction(dueRow, 'createJob').click();
+      let dialog = adminPage.getByRole('dialog');
+      await maintenanceDueSubmit(dialog).click();
+      await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+      const created = expectDefined(
+        await getMaintenanceStateByPlanNumber(world.orgId, planNumber),
+        'plan state',
+      );
+      const linkedDue = expectDefined(created.dueWork[0], 'the first due item');
+      expect(linkedDue.status).toBe('visit_created');
+      const jobId = expectDefined(linkedDue.job_id, 'the visit job');
+
+      await adminPage.goto(maintenanceSearchUrl(planNumber));
+      await maintenanceDueRowAction(dueRow, 'schedule').click();
+      dialog = adminPage.getByRole('dialog');
+      await maintenanceDueSubmit(dialog).click();
+      await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+      const scheduled = expectDefined(
+        await getMaintenanceStateByPlanNumber(world.orgId, planNumber),
+        'plan state',
+      );
+      expect(scheduled.dueWork[0]?.planning_occurrence_id).not.toBeNull();
+      return expectDefined(await getJobNumberById(world.orgId, jobId), 'the visit job number');
+    });
+
+    await test.step('Show the assigned employee only the exact visit context', async () => {
+      await assignEmployee(adminPage, jobNumber, names.employee);
+      const pack = await openFieldWorkPack(employeePage, jobNumber);
+      await expect(pack).toContainText(planNumber);
+      await expect(pack).toContainText(names.equipment);
+      await expect(pack).toContainText(instructionsFragment);
+      await expect(pack).not.toContainText(names.coverageReference);
+      await expect(pack).not.toContainText(operationalNotePrefix);
+
+      await employeePage.goto(`/auftraege/${jobNumber}`);
+      await createSubmittedReport(employeePage, names.evidenceTitle, businessDate);
+    });
+
+    await test.step('Complete the due item with the exact evidence and next due', async () => {
+      await adminPage.goto(maintenanceSearchUrl(planNumber));
+      const dueRow = maintenanceDueRow(adminPage, planNumber, firstDueLabel);
+      await maintenanceDueRowAction(dueRow, 'complete').click();
+      const dialog = adminPage.getByRole('dialog');
+      await maintenanceDueEvidence(dialog, names.evidenceTitle).click();
+      await maintenanceDueSubmit(dialog).click();
+      await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+      const state = expectDefined(
+        await getMaintenanceStateByPlanNumber(world.orgId, planNumber),
+        'plan state',
+      );
+      expect(state.dueWork[0]).toMatchObject({
+        status: 'completed',
+        scope_outcome: 'complete',
+        completed_on: expect.any(String),
+        next_due_date: expect.any(String),
+      });
+      expect(state.evidenceLinks).toHaveLength(1);
+      expect(state.dueEvents.map((event) => event.event_type)).toContain('completed');
+    });
   });
 });

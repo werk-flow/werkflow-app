@@ -1,66 +1,97 @@
 import type { Locator, Page } from '@playwright/test';
 
-import { expect, test } from "../support/fixtures";
-import { getJobSiteContactState, getVisibleWorkArtifactCountsAs, getWorkArtifactState, getWorkLifecycleState } from '../../golden/support/db/work';
-import { addSiteOnCustomerDetail, createCustomer, openCustomerDetail } from '../../golden/support/steps/customers';
-import { selectFromSearchable, typeIntoDatePickerById, typeIntoDateTimeField, visibleText, textInDom } from '../../golden/support/steps/shared';
+import { expect, test } from '../support/fixtures';
+import type { WorkArtifactKind } from '../../../lib/work-artifacts/types';
+import {
+  getJobSiteContactState,
+  getWorkArtifactState,
+  getWorkLifecycleState,
+  seedJob,
+  seedJobAssignment,
+} from '../../golden/support/db/work';
+import {
+  addSiteOnCustomerDetail,
+  createCustomer,
+  openCustomerDetail,
+} from '../../golden/support/steps/customers';
+import {
+  documentsRegion,
+  documentsRegionUploadInput,
+  documentUploadCompleted,
+} from '../../golden/support/steps/documents';
+import {
+  selectFromSearchable,
+  SHARED_COPY,
+  testData,
+  typeIntoDatePickerById,
+  typeIntoDateTimeField,
+  textInDom,
+} from '../../golden/support/steps/shared';
 import { clockInOnJob, clockOut } from '../../golden/support/steps/time-tracking';
-import { workLifecycleCard, createAndPublishWorkTemplate, createJob, createProject } from '../../golden/support/steps/work';
+import {
+  addDeclaredWorkDependency,
+  createAndPublishWorkTemplate,
+  createJob,
+  createProject,
+  instructionEvidenceFulfilled,
+  jobInstructionItem,
+  lifecycleCardAction,
+  lifecyclePendingFormalApprovals,
+  linkWorkDependencyApproval,
+  WORK_PAGE_LATER_SLICE_TERMS,
+  workDependencyRow,
+  workDependencyStateLabel,
+} from '../../golden/support/steps/work';
 import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
-import { requireVisiblePrecondition } from '../../golden/support/preconditions';
-import { closeWorkArtifactDialog, workArtifactsSection } from '../../golden/support/spec-helpers/work-artifact-dialog';
+import {
+  beginWorkArtifact,
+  closeWorkArtifactDialog,
+  makeWorkArtifactCustomerFacing,
+  openWorkArtifact,
+  openWorkArtifactLinkDisclosure,
+  selectWorkArtifactAuthorization,
+  selectWorkArtifactSeverity,
+  selectWorkArtifactUnit,
+  submitWorkArtifactWithEnter,
+  WORK_ARTIFACTS_EMPTY,
+  workArtifactAction,
+  workArtifactCustomerDecisionPanel,
+  workArtifactDialog,
+  workArtifactEntry,
+  workArtifactField,
+  workArtifactFulfilEvidenceToggle,
+  workArtifactFulfilWithVersion,
+  workArtifactMessage,
+  workArtifactOption,
+  workArtifactPicker,
+  workArtifactsLink,
+  workArtifactsSection,
+  workArtifactStatusLabel,
+  workArtifactStatusText,
+  workArtifactStatusVersion,
+  workArtifactVersion,
+  fillWorkArtifactVisit,
+} from '../../golden/support/spec-helpers/work-artifact-dialog';
+import { workArtifactTaskLink } from '../../golden/support/steps/attention';
+import { expectDefined } from '../../../lib/testing/spec-support/expect-defined';
 
 function digits(dateIso: string): string {
   const [year, month, day] = dateIso.split('-');
   return `${day}${month}${year}`;
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-const PLANNED_DATE = ownedBerlinDateAtOffset('p1-15', 80);
-const DATES = [berlinDateAtOffset(80), berlinDateAtOffset(81), berlinDateAtOffset(82)] as const;
-
-const KIND_LABELS = {
-  site_diary: 'Bautagebuch',
-  work_report: 'Arbeitsbericht',
-  measurement: 'Aufmaß',
-  defect: 'Mangel',
-  change_work: 'Regie-/Änderungsnachweis',
-} as const;
-
-type ArtifactKind = keyof typeof KIND_LABELS;
-
-async function selectOption(page: Page, trigger: Locator, name: string): Promise<void> {
-  await trigger.click();
-  const option = page.getByRole('option', { name, exact: true });
-  await expect(option).toBeVisible({ timeout: 15_000 });
-  await option.click();
-}
-
-async function beginArtifact(page: Page, kind: ArtifactKind, title: string): Promise<Locator> {
-  const section = workArtifactsSection(page);
-  await section.getByRole('button', { name: 'Neu', exact: true }).click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog.getByRole('heading', { name: 'Arbeitsnachweis erstellen' })).toBeVisible();
-  await selectOption(
-    page,
-    dialog.getByRole('combobox', { name: 'Art des Arbeitsnachweises' }),
-    KIND_LABELS[kind]
-  );
-  await dialog.getByLabel('Titel').fill(title);
-  await dialog.getByLabel('Zusammenfassung').fill(`Strukturierter Nachweis ${title}`);
-  return dialog;
+/** A new Arbeitsnachweis of this kind with the title and a summary derived from it. */
+function newArtifact(kind: WorkArtifactKind, title: string): Parameters<typeof beginWorkArtifact>[1] {
+  return { kind, title, summary: `Strukturierter Nachweis ${title}`, strict: true };
 }
 
 async function finishArtifact(dialog: Locator, submit = true): Promise<void> {
   if (submit) {
-    await dialog.getByLabel('Titel', { exact: true }).press('Enter');
+    await submitWorkArtifactWithEnter(dialog);
   } else {
-    await dialog.getByRole('button', { name: 'Als Entwurf speichern', exact: true }).click();
+    await workArtifactAction(dialog, 'saveDraft').click();
   }
-  await expect(dialog.getByText(/Version 1/)).toBeVisible({ timeout: 20_000 });
+  await expect(workArtifactVersion(dialog, 1)).toBeVisible({ timeout: 20_000 });
 }
 
 async function closeArtifact(dialog: Locator): Promise<void> {
@@ -68,32 +99,20 @@ async function closeArtifact(dialog: Locator): Promise<void> {
   await expect(dialog).toHaveCount(0);
 }
 
-function artifactRow(page: Page, title: string): Locator {
-  return workArtifactsSection(page).getByRole('button', {
-    name: new RegExp(`^${escapeRegExp(title)}`),
-  });
+async function submitWorkReport(page: Page, title: string, visitDate: string): Promise<void> {
+  const dialog = await beginWorkArtifact(page, newArtifact('work_report', title));
+  await fillWorkArtifactVisit(dialog, { date: visitDate, from: '08:00', to: '09:00' });
+  await workArtifactField(dialog, 'performedWork').fill(`Arbeiten zu ${title}`);
+  await finishArtifact(dialog);
+  await closeArtifact(dialog);
 }
 
-async function openArtifactAfterReload(page: Page, title: string): Promise<Locator> {
-  const row = artifactRow(page, title);
-  const dialog = page.getByRole('dialog');
-  for (let attempt = 0; attempt < 2; attempt++) {
-    await row.click();
-    if (
-      await dialog
-        .waitFor({ state: 'visible', timeout: 5_000 })
-        .then(() => true)
-        .catch(() => false)
-    ) {
-      return dialog;
-    }
-  }
-  throw new Error(`Artifact dialog did not open after hydration retry: ${title}`);
-}
-
+// The submit, approve and measurement journey lives in tests/golden/p1-15.spec.ts;
+// the organization boundary is in supabase/tests/work_execution_boundaries.sql.
 test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @AUDIT-W2', () => {
-  test('targets, roles, five structured kinds, validation, and organization isolation', async ({
+  test('targets, roles, five structured kinds, validation, and outsider denial', async ({
     adminPage,
+    businessDate,
     employeePage,
     outsiderPage,
     world,
@@ -106,6 +125,7 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     const projectNumber = `PRJ-${world.runId}-P115`;
     const childJobNumber = `${projectNumber}-1`;
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
+    const workDate = berlinDateAtOffset(80);
 
     await createCustomer(adminPage, customerName);
     await openCustomerDetail(adminPage, customerName);
@@ -122,7 +142,7 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
       clientName: customerName,
       siteName,
       assignEmployeeName: employeeName,
-      plannedDateDigits: digits(PLANNED_DATE),
+      plannedDateDigits: digits(ownedBerlinDateAtOffset('p1-15', 80)),
     });
     await createProject(adminPage, {
       projectNumber,
@@ -140,102 +160,91 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
 
     await employeePage.goto(`/auftraege/${jobNumber}`);
     const section = workArtifactsSection(employeePage);
-    await expect(section.getByText('Noch keine Arbeitsnachweise erfasst.')).toBeVisible();
-    await expect(employeePage.getByRole('link', { name: 'Arbeitsnachweise' })).toHaveCount(0);
+    await expect(workArtifactMessage(section, 'empty')).toBeVisible();
+    await expect(workArtifactsLink(employeePage)).toHaveCount(0);
 
-    let dialog = await beginArtifact(
+    let dialog = await beginWorkArtifact(
       employeePage,
-      'work_report',
-      `Entwurf zum Verwerfen ${world.runId}`
+      newArtifact('work_report', `Entwurf zum Verwerfen ${world.runId}`),
     );
-    await dialog.getByLabel('Ausgeführte Arbeiten').fill('Noch nicht eingereichter Testentwurf.');
+    await workArtifactField(dialog, 'performedWork').fill('Noch nicht eingereichter Testentwurf.');
     await finishArtifact(dialog, false);
-    await dialog
-      .locator('#artifact-action-reason')
-      .fill('Eigener ungesendeter Testentwurf wird verworfen.');
-    await dialog.getByRole('button', { name: 'Ungültig setzen' }).click();
-    await expect(dialog.getByText(/Ungültig · Version 1/)).toBeVisible({
+    await dialog.locator('#artifact-action-reason').fill('Eigener ungesendeter Testentwurf wird verworfen.');
+    await workArtifactAction(dialog, 'void').click();
+    await expect(workArtifactStatusVersion(dialog, 'voided', 1)).toBeVisible({
       timeout: 20_000,
     });
     await closeArtifact(dialog);
 
-    dialog = await beginArtifact(employeePage, 'site_diary', `Bautagebuch ${world.runId}`);
-    await dialog.getByLabel('Fortschritt').fill('Zwischenstand noch ohne Arbeitstag.');
+    dialog = await beginWorkArtifact(employeePage, newArtifact('site_diary', `Bautagebuch ${world.runId}`));
+    await workArtifactField(dialog, 'progress').fill('Zwischenstand noch ohne Arbeitstag.');
     await finishArtifact(dialog, false);
-    await expect(dialog.getByText('Entwurf', { exact: false })).toBeVisible();
-    await dialog.getByRole('button', { name: 'Neue Version' }).click();
-    await typeIntoDatePickerById(dialog, 'artifact-work-date', DATES[0]);
-    await dialog.getByLabel('Fortschritt').fill('Rohinstallation im Erdgeschoss abgeschlossen.');
-    await dialog.getByLabel('Anwesende Personen').fill('Monteur, Bauleitung');
-    await dialog.getByLabel('Wetter').fill('Trocken, 18 °C');
-    await dialog.getByLabel('Bedingungen vor Ort').fill('Zugang frei und abgesichert.');
-    await dialog.getByLabel('Lieferungen').fill('Rohrmaterial vollständig eingetroffen.');
-    await dialog.getByLabel('Behinderungen').fill('Keine.');
-    await dialog.getByLabel('Entscheidungen').fill('Steigstrang wird links geführt.');
-    await dialog
-      .getByLabel('Besondere Ereignisse')
-      .fill('Abnahme der Leitungsführung durch Bauleitung.');
-    await dialog.getByRole('button', { name: 'Zur Prüfung einreichen', exact: true }).click();
-    await expect(dialog.getByText(/Version 2/)).toBeVisible({
+    await expect(workArtifactStatusText(dialog, 'draft')).toBeVisible();
+    await workArtifactAction(dialog, 'newVersion').click();
+    await typeIntoDatePickerById(dialog, 'artifact-work-date', workDate);
+    await workArtifactField(dialog, 'progress').fill('Rohinstallation im Erdgeschoss abgeschlossen.');
+    await workArtifactField(dialog, 'attendees').fill('Monteur, Bauleitung');
+    await workArtifactField(dialog, 'weather').fill('Trocken, 18 °C');
+    await workArtifactField(dialog, 'siteConditions').fill('Zugang frei und abgesichert.');
+    await workArtifactField(dialog, 'deliveries').fill('Rohrmaterial vollständig eingetroffen.');
+    await workArtifactField(dialog, 'obstructions').fill('Keine.');
+    await workArtifactField(dialog, 'decisions').fill('Steigstrang wird links geführt.');
+    await workArtifactField(dialog, 'specialEvents').fill('Abnahme der Leitungsführung durch Bauleitung.');
+    await workArtifactAction(dialog, 'submitForReview').click();
+    await expect(workArtifactVersion(dialog, 2)).toBeVisible({
       timeout: 20_000,
     });
     await closeArtifact(dialog);
 
-    dialog = await beginArtifact(employeePage, 'work_report', `Arbeitsbericht ${world.runId}`);
-    await typeIntoDateTimeField(dialog, 'artifact-visit-start', `${DATES[0]}T08:00`);
-    await typeIntoDateTimeField(dialog, 'artifact-visit-end', `${DATES[0]}T10:30`);
-    await dialog
-      .getByLabel('Ausgeführte Arbeiten')
-      .fill('Wärmepumpe geprüft und Filter gereinigt.');
-    await dialog.getByLabel('Offene Arbeiten').fill('Ersatzfilter beim nächsten Termin einsetzen.');
-    await dialog.getByLabel('Materialhinweise').fill('Ein Filtereinsatz vorgemerkt.');
-    await typeIntoDateTimeField(dialog, 'artifact-next-visit', `${DATES[1]}T09:00`);
+    dialog = await beginWorkArtifact(
+      employeePage,
+      newArtifact('work_report', `Arbeitsbericht ${world.runId}`),
+    );
+    await fillWorkArtifactVisit(dialog, { date: workDate, from: '08:00', to: '10:30' });
+    await workArtifactField(dialog, 'performedWork').fill('Wärmepumpe geprüft und Filter gereinigt.');
+    await workArtifactField(dialog, 'openWork').fill('Ersatzfilter beim nächsten Termin einsetzen.');
+    await workArtifactField(dialog, 'materialNotes').fill('Ein Filtereinsatz vorgemerkt.');
+    await typeIntoDateTimeField(dialog, 'artifact-next-visit', `${berlinDateAtOffset(81)}T09:00`);
     await finishArtifact(dialog);
     await closeArtifact(dialog);
 
-    dialog = await beginArtifact(employeePage, 'measurement', `Aufmaß ${world.runId}`);
-    await dialog.getByRole('button', { name: 'Zur Prüfung einreichen', exact: true }).click();
-    await expect(dialog.getByText('Bitte fülle die Pflichtangaben')).toBeVisible();
-    await typeIntoDatePickerById(dialog, 'artifact-measurement-date', DATES[0]);
-    await dialog.getByLabel('Aufmaßort').fill('Heizraum');
-    await dialog.getByLabel('Aufmaßhinweise').fill('Lichte Maße vor Ort geprüft.');
-    await dialog.getByRole('button', { name: 'Position ergänzen' }).click();
-    await dialog.getByLabel('Bezeichnung').fill('Kupferrohr');
+    dialog = await beginWorkArtifact(employeePage, newArtifact('measurement', `Aufmaß ${world.runId}`));
+    await workArtifactAction(dialog, 'submitForReview').click();
+    await expect(workArtifactMessage(dialog, 'requiredFields')).toBeVisible();
+    await typeIntoDatePickerById(dialog, 'artifact-measurement-date', workDate);
+    await workArtifactField(dialog, 'measurementLocation').fill('Heizraum');
+    await workArtifactField(dialog, 'measurementNotes').fill('Lichte Maße vor Ort geprüft.');
+    await workArtifactAction(dialog, 'addMeasurementLine').click();
+    await workArtifactField(dialog, 'lineName').fill('Kupferrohr');
     await dialog.locator('#artifact-measurement-quantity-0').fill('12,5');
-    await selectOption(employeePage, dialog.getByRole('combobox', { name: 'Aufmaßeinheit' }), 'm');
-    await dialog.getByLabel('Ort', { exact: true }).fill('Technikraum Nord');
+    await selectWorkArtifactUnit(employeePage, dialog, 'meter');
+    await workArtifactField(dialog, 'location').fill('Technikraum Nord');
     await finishArtifact(dialog);
     await closeArtifact(dialog);
 
-    dialog = await beginArtifact(employeePage, 'defect', `Mangel ${world.runId}`);
-    await dialog
-      .getByLabel('Mangelbeschreibung')
-      .fill('Dämmung an der Vorlaufleitung ist beschädigt.');
-    await dialog.getByLabel('Ort', { exact: true }).fill('Heizraum');
-    await selectOption(employeePage, dialog.getByRole('combobox', { name: 'Schweregrad' }), 'Hoch');
-    await typeIntoDatePickerById(dialog, 'artifact-due-date', berlinDateAtOffset(0));
-    await dialog.getByLabel('Zuständigkeit').fill('Bauleitung vor Ort');
-    await dialog.getByLabel('Vorgeschlagene Lösung').fill('Dämmung fachgerecht erneuern.');
+    dialog = await beginWorkArtifact(employeePage, newArtifact('defect', `Mangel ${world.runId}`));
+    await workArtifactField(dialog, 'defectDescription').fill(
+      'Dämmung an der Vorlaufleitung ist beschädigt.',
+    );
+    await workArtifactField(dialog, 'location').fill('Heizraum');
+    await selectWorkArtifactSeverity(employeePage, dialog, 'high');
+    await typeIntoDatePickerById(dialog, 'artifact-due-date', businessDate);
+    await workArtifactField(dialog, 'responsibility').fill('Bauleitung vor Ort');
+    await workArtifactField(dialog, 'proposedSolution').fill('Dämmung fachgerecht erneuern.');
     await finishArtifact(dialog);
     await closeArtifact(dialog);
 
     await employeePage.goto(`/auftraege/projekt/${projectNumber}`);
-    dialog = await beginArtifact(employeePage, 'change_work', `Regiearbeit ${world.runId}`);
-    await dialog.getByLabel('Änderungs-/Regiearbeit').fill('Zusätzliche Absperrarmatur montieren.');
-    await dialog
-      .getByLabel('Grund', { exact: true })
-      .fill('Leitungsführung wurde vor Ort geändert.');
-    await dialog.getByLabel('Angefordert durch').fill('Bauleitung, mündlich vor Ort');
-    await dialog.getByLabel('Erwartete Arbeitsminuten').fill('90');
-    await dialog.getByLabel('Tatsächliche Arbeitsminuten').fill('105');
-    await dialog.getByLabel('Erwartetes Material').fill('Eine Absperrarmatur');
-    await dialog.getByLabel('Tatsächliches Material').fill('Eine Absperrarmatur und zwei Fittings');
-    await selectOption(
-      employeePage,
-      dialog.getByRole('combobox', { name: 'Autorisierungsstand' }),
-      'Autorisiert'
-    );
-    await dialog.getByLabel('Terminauswirkung').fill('Keine Auswirkung auf den Endtermin.');
+    dialog = await beginWorkArtifact(employeePage, newArtifact('change_work', `Regiearbeit ${world.runId}`));
+    await workArtifactField(dialog, 'changeWork').fill('Zusätzliche Absperrarmatur montieren.');
+    await workArtifactField(dialog, 'reason').fill('Leitungsführung wurde vor Ort geändert.');
+    await workArtifactField(dialog, 'requestedBy').fill('Bauleitung, mündlich vor Ort');
+    await workArtifactField(dialog, 'expectedMinutes').fill('90');
+    await workArtifactField(dialog, 'actualMinutes').fill('105');
+    await workArtifactField(dialog, 'expectedMaterial').fill('Eine Absperrarmatur');
+    await workArtifactField(dialog, 'actualMaterial').fill('Eine Absperrarmatur und zwei Fittings');
+    await selectWorkArtifactAuthorization(employeePage, dialog, 'authorized');
+    await workArtifactField(dialog, 'scheduleImpact').fill('Keine Auswirkung auf den Endtermin.');
     await finishArtifact(dialog);
     await closeArtifact(dialog);
 
@@ -248,9 +257,7 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
       'work_report',
     ]);
     const activeSiteDiary = activeArtifacts.find((row) => row.kind === 'site_diary');
-    expect(
-      jobState.revisions.filter((row) => row.artifact_id === activeSiteDiary?.id)
-    ).toHaveLength(2);
+    expect(jobState.revisions.filter((row) => row.artifact_id === activeSiteDiary?.id)).toHaveLength(2);
     expect(jobState.artifacts.find((row) => row.status === 'voided')).toMatchObject({
       created_by: world.users.employee.id,
     });
@@ -264,15 +271,9 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
       state: 'open',
       location: 'Heizraum',
     });
-    expect(
-      jobState.revisions.every((row) => row.artifact_id && row.created_by && row.created_at)
-    ).toBe(true);
-    const siteDiaryRevision = jobState.revisions.find(
-      (row) => row.artifact_id === activeSiteDiary?.id
-    );
-    expect(siteDiaryRevision?.site_id).toBe(
-      (await getJobSiteContactState(world.orgId, jobNumber)).siteId
-    );
+    expect(jobState.revisions.every((row) => row.artifact_id && row.created_by && row.created_at)).toBe(true);
+    const siteDiaryRevision = jobState.revisions.find((row) => row.artifact_id === activeSiteDiary?.id);
+    expect(siteDiaryRevision?.site_id).toBe((await getJobSiteContactState(world.orgId, jobNumber)).siteId);
     const projectState = await getWorkArtifactState(world.orgId, {
       projectNumber,
     });
@@ -282,8 +283,6 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
       actual_labor_minutes: 105,
     });
 
-    const outsiderCounts = await getVisibleWorkArtifactCountsAs(world.outsider.admin, world.orgId);
-    expect(Object.values(outsiderCounts).every((count) => count === 0)).toBe(true);
     await outsiderPage.goto(`/auftraege/${jobNumber}`);
     await expect(outsiderPage.getByTestId('work-artifacts-section')).toHaveCount(0);
   });
@@ -297,57 +296,52 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     // P1-15-F28…F40: explicit save/submit, atomic validation, immutable history,
     // correction reasons, no evidence inheritance, stale conflicts, idempotency,
     // and a resting list versus an open edited dialog.
-    const jobNumber = `AUF-${world.runId}-P115`;
-    const title = `Arbeitsbericht ${world.runId}`;
-    await Promise.all([
-      adminPage.goto(`/auftraege/${jobNumber}`),
-      bueroPage.goto(`/auftraege/${jobNumber}`),
-      employeePage.goto(`/auftraege/${jobNumber}`),
-    ]);
-    await requireVisiblePrecondition(artifactRow(adminPage, title), {
-      test: 'immutable revisions, stale-write recovery, idempotent actions, and realtime catch-up',
-      needs: 'the work report created by the first P1-15 test',
-      grep: 'targets, roles, five structured kinds, validation, and organization isolation|immutable revisions, stale-write recovery, idempotent actions, and realtime catch-up',
-      suite: 'audit',
+    const jobNumber = `AUF-${world.runId}-P115-STALE`;
+    const title = `Konfliktbericht ${world.runId}`;
+    const jobId = await seedJob({
+      orgId: world.orgId,
+      actorId: world.users.admin.id,
+      jobNumber,
+      title: `P115 Konflikt ${world.runId}`,
     });
-    await artifactRow(adminPage, title).click();
-    await artifactRow(bueroPage, title).click();
-    const adminDialog = adminPage.getByRole('dialog');
-    const bueroDialog = bueroPage.getByRole('dialog');
-    await adminDialog.getByRole('button', { name: 'Neue Version' }).click();
-    await bueroDialog.getByRole('button', { name: 'Neue Version' }).click();
-    await adminDialog.getByLabel('Titel').fill(`${title} v2`);
-    await adminDialog
-      .getByLabel('Grund der neuen Version')
-      .fill('Leistungsumfang wurde vor Ort präzisiert.');
-    await bueroDialog.getByLabel('Titel').fill(`${title} lokaler Entwurf`);
-    await bueroDialog
-      .getByLabel('Grund der neuen Version')
-      .fill('Lokale, noch nicht gespeicherte Korrektur.');
-    await adminDialog.getByRole('button', { name: 'Als Entwurf speichern' }).click();
-    await expect(adminDialog.getByText(/Version 2/)).toBeVisible({
+    await seedJobAssignment({
+      orgId: world.orgId,
+      actorId: world.users.admin.id,
+      jobId,
+      userId: world.users.employee.id,
+    });
+    await employeePage.goto(`/auftraege/${jobNumber}`);
+    await submitWorkReport(employeePage, title, berlinDateAtOffset(82));
+    await Promise.all([adminPage.goto(`/auftraege/${jobNumber}`), bueroPage.goto(`/auftraege/${jobNumber}`)]);
+    await expect(workArtifactEntry(adminPage, title)).toBeVisible({ timeout: 20_000 });
+    await expect(workArtifactEntry(bueroPage, title)).toBeVisible({ timeout: 20_000 });
+    await workArtifactEntry(adminPage, title).click();
+    await workArtifactEntry(bueroPage, title).click();
+    const adminDialog = workArtifactDialog(adminPage);
+    const bueroDialog = workArtifactDialog(bueroPage);
+    await workArtifactAction(adminDialog, 'newVersion').click();
+    await workArtifactAction(bueroDialog, 'newVersion').click();
+    await workArtifactField(adminDialog, 'title').fill(`${title} v2`);
+    await workArtifactField(adminDialog, 'revisionReason').fill('Leistungsumfang wurde vor Ort präzisiert.');
+    await workArtifactField(bueroDialog, 'title').fill(`${title} lokaler Entwurf`);
+    await workArtifactField(bueroDialog, 'revisionReason').fill('Lokale, noch nicht gespeicherte Korrektur.');
+    await workArtifactAction(adminDialog, 'saveDraft').click();
+    await expect(workArtifactVersion(adminDialog, 2)).toBeVisible({
       timeout: 20_000,
     });
-    await bueroDialog.getByRole('button', { name: 'Als Entwurf speichern' }).click();
-    await expect(
-      bueroDialog.getByText(
-        'Der Arbeitsnachweis wurde zwischenzeitlich geändert. Deine Eingaben bleiben erhalten.'
-      )
-    ).toBeVisible();
-    await expect(bueroDialog.getByLabel('Titel')).toHaveValue(`${title} lokaler Entwurf`);
+    await workArtifactAction(bueroDialog, 'saveDraft').click();
+    await expect(workArtifactMessage(bueroDialog, 'changedMeanwhile')).toBeVisible();
+    await expect(workArtifactField(bueroDialog, 'title')).toHaveValue(`${title} lokaler Entwurf`);
     await closeWorkArtifactDialog(bueroDialog);
-    await expect(artifactRow(bueroPage, `${title} v2`)).toBeVisible({
+    await expect(workArtifactEntry(bueroPage, `${title} v2`)).toBeVisible({
       timeout: 20_000,
     });
 
     const state = await getWorkArtifactState(world.orgId, { jobNumber });
-    const initialReportRevision = state.revisions.find((row) => row.title === title);
-    const report = state.artifacts.find((row) => row.id === initialReportRevision?.artifact_id);
-    const revisions = state.revisions.filter((row) => row.artifact_id === report?.id);
-    expect(revisions).toHaveLength(2);
-    expect(revisions.map((row) => row.title)).toEqual([title, `${title} v2`]);
-    const [firstRevision, secondRevision] = revisions;
-    if (!firstRevision || !secondRevision) throw new Error('P1-15: expected two report revisions');
+    const report = expectDefined(state.artifacts[0], 'the work report');
+    expect(state.revisions.map((row) => row.title)).toEqual([title, `${title} v2`]);
+    const firstRevision = expectDefined(state.revisions[0], 'the first report revision');
+    const secondRevision = expectDefined(state.revisions[1], 'the second report revision');
     expect(secondRevision).toMatchObject({
       corrects_revision_id: firstRevision.id,
       correction_reason: 'Leistungsumfang wurde vor Ort präzisiert.',
@@ -366,92 +360,95 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
   }) => {
     // P1-15-F41…F49 plus F36: shared responsibility, no self-approval,
     // approve/reject/correct/withdraw, stable attention links, and reasoned void.
-    const jobNumber = `AUF-${world.runId}-P115`;
-    const siteDiaryTitle = `Bautagebuch ${world.runId}`;
-    await employeePage.goto(`/auftraege/${jobNumber}`);
-    await requireVisiblePrecondition(artifactRow(employeePage, siteDiaryTitle), {
-      test: 'four-eyes responsibility, review outcomes, attention identity, and void history',
-      needs: 'the submitted site diary and structured artifacts created by the first P1-15 test',
-      grep: 'targets, roles, five structured kinds, validation, and organization isolation|four-eyes responsibility, review outcomes, attention identity, and void history',
-      suite: 'audit',
+    const jobNumber = `AUF-${world.runId}-P115-REVIEW`;
+    const approvedTitle = `Freigabebericht ${world.runId}`;
+    const correctionTitle = `Korrekturbericht ${world.runId}`;
+    const rejectedTitle = `Ablehnungsbericht ${world.runId}`;
+    const withdrawnTitle = `Rückzugsbericht ${world.runId}`;
+    const visitDate = berlinDateAtOffset(83);
+    const jobId = await seedJob({
+      orgId: world.orgId,
+      actorId: world.users.admin.id,
+      jobNumber,
+      title: `P115 Prüfung ${world.runId}`,
     });
-    await artifactRow(employeePage, siteDiaryTitle).click();
-    await expect(employeePage.getByRole('button', { name: 'Intern freigeben' })).toHaveCount(0);
-    await closeWorkArtifactDialog(employeePage.getByRole('dialog'));
+    await seedJobAssignment({
+      orgId: world.orgId,
+      actorId: world.users.admin.id,
+      jobId,
+      userId: world.users.employee.id,
+    });
+    await employeePage.goto(`/auftraege/${jobNumber}`);
+    for (const title of [approvedTitle, correctionTitle, rejectedTitle, withdrawnTitle]) {
+      await submitWorkReport(employeePage, title, visitDate);
+    }
+    await workArtifactEntry(employeePage, approvedTitle).click();
+    await expect(workArtifactAction(employeePage, 'approveInternally')).toHaveCount(0);
+    await closeWorkArtifactDialog(workArtifactDialog(employeePage));
 
     await adminPage.goto('/aufgaben');
-    await expect(
-      adminPage.getByRole('link', {
-        name: `Prüfung für ${siteDiaryTitle} öffnen`,
-      })
-    ).toBeVisible({ timeout: 20_000 });
+    await expect(workArtifactTaskLink(adminPage, 'review', approvedTitle)).toBeVisible({ timeout: 20_000 });
     await adminPage.goto(`/auftraege/${jobNumber}`);
-    await artifactRow(adminPage, siteDiaryTitle).click();
-    const dialog = adminPage.getByRole('dialog');
-    await dialog.getByRole('button', { name: 'Intern freigeben' }).click();
-    await expect(dialog.getByText('Intern freigegeben', { exact: false })).toBeVisible({
+    await workArtifactEntry(adminPage, approvedTitle).click();
+    const dialog = workArtifactDialog(adminPage);
+    await workArtifactAction(dialog, 'approveInternally').click();
+    await expect(workArtifactStatusText(dialog, 'approved')).toBeVisible({
       timeout: 20_000,
     });
     await closeWorkArtifactDialog(dialog);
 
-    const approvedState = await getWorkArtifactState(world.orgId, {
-      jobNumber,
-    });
-    const siteDiary = approvedState.artifacts.find((row) => row.kind === 'site_diary');
+    const approvedState = await getWorkArtifactState(world.orgId, { jobNumber });
+    const approvedRevision = approvedState.revisions.find((row) => row.title === approvedTitle);
+    const approvedReport = approvedState.artifacts.find((row) => row.id === approvedRevision?.artifact_id);
+    expect(approvedReport?.status).toBe('approved');
     const approval = approvedState.actions.find(
-      (row) => row.artifact_id === siteDiary?.id && row.action_type === 'internal_approved'
+      (row) => row.artifact_id === approvedReport?.id && row.action_type === 'internal_approved',
     );
     expect(approval?.responsibility_snapshot).toMatchObject({
       responsibility: 'work_artifact_approval',
     });
     expect(approval?.created_by).toBe(world.users.admin.id);
-    expect(siteDiary?.status).toBe('approved');
 
-    await artifactRow(adminPage, `Aufmaß ${world.runId}`).click();
-    await dialog
-      .locator('#artifact-action-reason')
-      .fill('Aufmaßort muss genauer bezeichnet werden.');
-    await dialog.getByRole('button', { name: 'Korrektur anfordern' }).click();
-    await expect(dialog.getByText('Korrektur angefordert', { exact: false })).toBeVisible({
+    await workArtifactEntry(adminPage, correctionTitle).click();
+    await dialog.locator('#artifact-action-reason').fill('Leistungsort muss genauer bezeichnet werden.');
+    await workArtifactAction(dialog, 'requestCorrection').click();
+    await expect(workArtifactStatusText(dialog, 'correction_requested')).toBeVisible({
       timeout: 20_000,
     });
     await closeWorkArtifactDialog(dialog);
     await employeePage.goto('/aufgaben');
-    await expect(
-      employeePage.getByRole('link', {
-        name: `Korrektur für Aufmaß ${world.runId} öffnen`,
-      })
-    ).toBeVisible({ timeout: 20_000 });
+    await expect(workArtifactTaskLink(employeePage, 'correction', correctionTitle)).toBeVisible({
+      timeout: 20_000,
+    });
 
-    await adminPage.goto(`/auftraege/${jobNumber}`);
-    await artifactRow(adminPage, `Mangel ${world.runId}`).click();
+    await workArtifactEntry(adminPage, rejectedTitle).click();
     await dialog.locator('#artifact-action-reason').fill('Zuständigkeit ist noch nicht eindeutig.');
-    await dialog.getByRole('button', { name: 'Ablehnen' }).click();
-    await expect(dialog.getByText('Abgelehnt', { exact: false })).toBeVisible({
+    await workArtifactAction(dialog, 'reject').click();
+    await expect(workArtifactStatusText(dialog, 'rejected')).toBeVisible({
       timeout: 20_000,
     });
     await closeWorkArtifactDialog(dialog);
 
-    await employeePage.goto(`/auftraege/projekt/PRJ-${world.runId}-P115`);
-    await artifactRow(employeePage, `Regiearbeit ${world.runId}`).click();
-    const employeeDialog = employeePage.getByRole('dialog');
-    await employeeDialog.getByRole('button', { name: 'Prüfung zurückziehen' }).click();
-    await expect(employeeDialog.getByText('Entwurf', { exact: false })).toBeVisible({
+    await employeePage.goto(`/auftraege/${jobNumber}`);
+    await workArtifactEntry(employeePage, withdrawnTitle).click();
+    const employeeDialog = workArtifactDialog(employeePage);
+    await workArtifactAction(employeeDialog, 'withdrawReview').click();
+    await expect(workArtifactStatusText(employeeDialog, 'draft')).toBeVisible({
       timeout: 20_000,
     });
     await closeWorkArtifactDialog(employeeDialog);
 
     await adminPage.goto(`/auftraege/${jobNumber}`);
-    await artifactRow(adminPage, `Mangel ${world.runId}`).click();
-    await dialog
-      .locator('#artifact-action-reason')
-      .fill('Durch einen gültigen Folgevorgang ersetzt.');
-    await dialog.getByRole('button', { name: 'Ungültig setzen' }).click();
-    await expect(dialog.getByText(/Mangel · Ungültig · Version 1/)).toBeVisible({
+    await workArtifactEntry(adminPage, rejectedTitle).click();
+    await dialog.locator('#artifact-action-reason').fill('Durch einen gültigen Folgevorgang ersetzt.');
+    await workArtifactAction(dialog, 'void').click();
+    await expect(workArtifactStatusVersion(dialog, 'voided', 1)).toBeVisible({
       timeout: 20_000,
     });
     await closeWorkArtifactDialog(dialog);
-    await expect(artifactRow(adminPage, `Mangel ${world.runId}`)).toContainText('Ungültig');
+    await expect(workArtifactEntry(adminPage, rejectedTitle)).toContainText(
+      workArtifactStatusLabel('voided'),
+    );
   });
 
   test('customer outcomes, signature, document/source/evidence links, and deterministic export', async ({
@@ -466,10 +463,11 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     const jobNumber = `AUF-${world.runId}-P115-EVIDENCE`;
     const jobTitle = `P115 Nachweisauftrag ${world.runId}`;
     const artifactTitle = `Kundenbericht ${world.runId}`;
+    const commissioning = testData`Inbetriebnahme dokumentieren`;
     await createAndPublishWorkTemplate(adminPage, {
       name: templateName,
       targetType: 'job',
-      firstItem: 'Inbetriebnahme dokumentieren',
+      firstItem: commissioning,
       evidenceDescription: 'Abschlussbericht der Inbetriebnahme',
     });
     await createJob(adminPage, {
@@ -483,25 +481,19 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     // exact-name document selection below.
     const evidenceFileName = `p115-nachweis-${world.runId}.pdf`;
     await employeePage.goto(`/auftraege/${jobNumber}`);
-    const documentsHeading = employeePage.getByRole('heading', {
-      name: 'Dokumente & Bilder',
+    const documents = documentsRegion(employeePage.getByRole('main'));
+    await expect(documents).toBeVisible({ timeout: 30_000 });
+    await documentsRegionUploadInput(documents).setInputFiles({
+      name: evidenceFileName,
+      mimeType: 'application/pdf',
+      buffer: Buffer.from('%PDF-1.4\nP1-15 Nachweisdokument'),
     });
-    await expect(documentsHeading).toBeVisible({ timeout: 30_000 });
-    await documentsHeading
-      .locator('..')
-      .locator('..')
-      .locator('input[type="file"]')
-      .setInputFiles({
-        name: evidenceFileName,
-        mimeType: 'application/pdf',
-        buffer: Buffer.from('%PDF-1.4\nP1-15 Nachweisdokument'),
-      });
-    await expect(visibleText(employeePage, '1 von 1 abgeschlossen')).toBeVisible({
+    await expect(documentUploadCompleted(employeePage, 1, 1)).toBeVisible({
       timeout: 60_000,
     });
-    await expect(textInDom(employeePage, 'Upload fehlgeschlagen.')).toHaveCount(0);
+    await expect(textInDom(employeePage, SHARED_COPY.upload.failed)).toHaveCount(0);
     const evidenceUploadClose = employeePage.getByRole('button', {
-      name: 'Schließen',
+      name: SHARED_COPY.action.close,
     });
     if (await evidenceUploadClose.isVisible().catch(() => false)) {
       await evidenceUploadClose.click();
@@ -512,96 +504,76 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     await clockInOnJob(employeePage, jobTitle);
     await clockOut(employeePage);
     await adminPage.goto(`/auftraege/${jobNumber}`);
-    await expect(workArtifactsSection(adminPage)).toContainText(
-      'Noch keine Arbeitsnachweise erfasst.'
-    );
+    await expect(workArtifactsSection(adminPage)).toContainText(WORK_ARTIFACTS_EMPTY);
     await employeePage.goto(`/auftraege/${jobNumber}`);
-    let dialog = await beginArtifact(employeePage, 'work_report', artifactTitle);
-    await selectOption(
-      employeePage,
-      dialog.getByRole('combobox', {
-        name: 'Sichtbarkeit des Arbeitsnachweises',
-      }),
-      'Für Kundendokumentation'
+    let dialog = await beginWorkArtifact(employeePage, newArtifact('work_report', artifactTitle));
+    await makeWorkArtifactCustomerFacing(employeePage, dialog);
+    await selectFromSearchable(employeePage, workArtifactPicker(dialog, 'instruction'), commissioning);
+    await fillWorkArtifactVisit(dialog, { date: berlinDateAtOffset(84), from: '07:30', to: '09:15' });
+    await workArtifactField(dialog, 'performedWork').fill(
+      'Anlage in Betrieb genommen und Werte protokolliert.',
     );
-    await selectFromSearchable(
-      employeePage,
-      dialog.getByRole('combobox', {
-        name: 'Zugehörige Aufgabe oder Checkliste',
-      }),
-      'Inbetriebnahme dokumentieren'
-    );
-    await typeIntoDateTimeField(dialog, 'artifact-visit-start', `${DATES[2]}T07:30`);
-    await typeIntoDateTimeField(dialog, 'artifact-visit-end', `${DATES[2]}T09:15`);
-    await dialog
-      .getByLabel('Ausgeführte Arbeiten')
-      .fill('Anlage in Betrieb genommen und Werte protokolliert.');
-    await dialog.getByLabel('Kundenaussage').fill('Einweisung wurde vor Ort durchgeführt.');
-    await dialog.getByText('Kundenentscheidung erforderlich').click();
-    await dialog.getByText('Unterschrift erforderlich').click();
+    await workArtifactField(dialog, 'customerStatement').fill('Einweisung wurde vor Ort durchgeführt.');
+    await workArtifactOption(dialog, 'customerDecisionRequired').click();
+    await workArtifactOption(dialog, 'signatureRequired').click();
     await finishArtifact(dialog);
     await closeArtifact(dialog);
 
     await adminPage.reload();
     await adminPage.waitForLoadState('networkidle');
-    await expect(artifactRow(adminPage, artifactTitle)).toBeVisible({
+    await expect(workArtifactEntry(adminPage, artifactTitle)).toBeVisible({
       timeout: 20_000,
     });
-    dialog = await openArtifactAfterReload(adminPage, artifactTitle);
-    await dialog.getByRole('button', { name: 'Intern freigeben' }).click();
-    await expect(dialog.getByText('Intern freigegeben', { exact: false })).toBeVisible({
+    dialog = await openWorkArtifact(adminPage, artifactTitle, { attempts: 2, timeout: 5_000 });
+    await workArtifactAction(dialog, 'approveInternally').click();
+    await expect(workArtifactStatusText(dialog, 'approved')).toBeVisible({
       timeout: 20_000,
     });
     await closeArtifact(dialog);
     await employeePage.reload();
-    dialog = await openArtifactAfterReload(employeePage, artifactTitle);
-    await dialog.getByText('Kundenentscheidung und Unterschrift').click();
-    await expect(
-      dialog.getByText('keine besondere Rechtswirksamkeit', { exact: false })
-    ).toBeVisible();
+    dialog = await openWorkArtifact(employeePage, artifactTitle, { attempts: 2, timeout: 5_000 });
+    await workArtifactCustomerDecisionPanel(dialog).click();
+    await expect(workArtifactMessage(dialog, 'legalNotice')).toBeVisible();
     await dialog.locator('#artifact-customer-name').fill('Erika Beispiel');
     await dialog.locator('#artifact-customer-role').fill('Objektleitung');
-    await dialog
-      .locator('#artifact-customer-relationship')
-      .fill('Bevollmächtigte Ansprechperson vor Ort');
-    await dialog.getByRole('button', { name: 'Bestätigung erfassen' }).click();
+    await dialog.locator('#artifact-customer-relationship').fill('Bevollmächtigte Ansprechperson vor Ort');
+    const acknowledge = workArtifactAction(dialog, 'recordAcknowledgement');
+    await acknowledge.click();
     await expect
       .poll(
         async () =>
           (await getWorkArtifactState(world.orgId, { jobNumber })).actions.filter(
-            (action) => action.action_type === 'customer_acknowledged'
-          ).length
+            (action) => action.action_type === 'customer_acknowledged',
+          ).length,
       )
       .toBe(1);
-    await expect(dialog.getByRole('button', { name: 'Bestätigung erfassen' })).toBeEnabled();
-    await dialog
-      .locator('#artifact-action-reason')
-      .fill('Kundin bittet um Ergänzung der Seriennummer.');
-    await dialog.getByRole('button', { name: 'Vorbehalt erfassen' }).click();
+    await expect(acknowledge).toBeEnabled();
+    await dialog.locator('#artifact-action-reason').fill('Kundin bittet um Ergänzung der Seriennummer.');
+    await workArtifactAction(dialog, 'recordReservation').click();
     await expect
       .poll(
         async () =>
           (await getWorkArtifactState(world.orgId, { jobNumber })).actions.filter(
-            (action) => action.action_type === 'customer_reserved'
-          ).length
+            (action) => action.action_type === 'customer_reserved',
+          ).length,
       )
       .toBe(1);
-    await expect(dialog.getByRole('button', { name: 'Bestätigung erfassen' })).toBeEnabled();
+    await expect(acknowledge).toBeEnabled();
     await dialog
       .locator('#artifact-action-reason')
       .fill('Kunde möchte erst nach eigener Prüfung bestätigen.');
-    await dialog.getByRole('button', { name: 'Ablehnung erfassen' }).click();
+    await workArtifactAction(dialog, 'recordRefusal').click();
     await expect
       .poll(
         async () =>
           (await getWorkArtifactState(world.orgId, { jobNumber })).actions.filter(
-            (action) => action.action_type === 'customer_refused'
-          ).length
+            (action) => action.action_type === 'customer_refused',
+          ).length,
       )
       .toBe(1);
-    await expect(dialog.getByRole('button', { name: 'Bestätigung erfassen' })).toBeEnabled();
+    await expect(acknowledge).toBeEnabled();
 
-    const canvas = dialog.getByLabel('Unterschrift zeichnen');
+    const canvas = workArtifactField(dialog, 'signaturePad');
     await canvas.scrollIntoViewIfNeeded();
     const box = await canvas.boundingBox();
     if (!box) throw new Error('Signature canvas has no bounding box');
@@ -609,49 +581,40 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     await employeePage.mouse.down();
     await employeePage.mouse.move(box.x + 120, box.y + 80, { steps: 8 });
     await employeePage.mouse.up();
-    await expect(dialog.getByRole('button', { name: 'Zurücksetzen' })).toBeEnabled();
-    await dialog.getByRole('button', { name: 'Unterschrift speichern' }).click();
+    await expect(workArtifactAction(dialog, 'resetSignature')).toBeEnabled();
+    await workArtifactAction(dialog, 'saveSignature').click();
     await expect
       .poll(
         async () =>
           (await getWorkArtifactState(world.orgId, { jobNumber })).actions.filter(
-            (action) => action.action_type === 'signature_captured'
+            (action) => action.action_type === 'signature_captured',
           ).length,
-        { timeout: 60_000 }
+        { timeout: 60_000 },
       )
       .toBe(1);
-    await expect(dialog.getByRole('button', { name: 'Export', exact: true })).toBeEnabled();
+    const exportButton = workArtifactAction(dialog, 'export');
+    await expect(exportButton).toBeEnabled();
 
-    const documentDisclosure = dialog
-      .getByRole('button', { name: 'Dokument verknüpfen' })
-      .locator('..');
-    await documentDisclosure.getByRole('button', { name: 'Dokument verknüpfen' }).click();
-    await selectFromSearchable(
-      employeePage,
-      dialog.getByRole('combobox', { name: 'Dokument auswählen' }),
-      evidenceFileName
-    );
-    await documentDisclosure.getByRole('button', { name: 'Verknüpfen', exact: true }).click();
+    const documentDisclosure = await openWorkArtifactLinkDisclosure(dialog, 'document');
+    await selectFromSearchable(employeePage, workArtifactPicker(dialog, 'document'), evidenceFileName);
+    await workArtifactAction(documentDisclosure, 'link').click();
     await expect
       .poll(
         async () =>
           (await getWorkArtifactState(world.orgId, { jobNumber })).documents.filter(
-            (document) => document.relation === 'supporting_evidence'
-          ).length
+            (document) => document.relation === 'supporting_evidence',
+          ).length,
       )
       .toBe(1);
-    await expect(dialog.getByRole('button', { name: 'Export', exact: true })).toBeEnabled();
-    const timeEntryDisclosure = dialog
-      .getByRole('button', { name: 'Zeiteintrag verknüpfen' })
-      .locator('..');
-    await timeEntryDisclosure.getByRole('button', { name: 'Zeiteintrag verknüpfen' }).click();
+    await expect(exportButton).toBeEnabled();
+    const timeEntryDisclosure = await openWorkArtifactLinkDisclosure(dialog, 'timeEntry');
     // The time-entry picker is a searchable select (registry rule for entity
     // lists): its rows are buttons inside the open listbox.
-    await dialog.getByRole('combobox', { name: 'Zeiteintrag auswählen' }).click();
-    const timeEntryOptions = employeePage.getByRole('listbox').getByRole("option");
+    await workArtifactPicker(dialog, 'timeEntry').click();
+    const timeEntryOptions = employeePage.getByRole('listbox').getByRole('option');
     await expect(timeEntryOptions).toHaveCount(1);
     await timeEntryOptions.click();
-    await timeEntryDisclosure.getByRole('button', { name: 'Verknüpfen', exact: true }).click();
+    await workArtifactAction(timeEntryDisclosure, 'link').click();
     await expect
       .poll(async () => {
         const sources = (await getWorkArtifactState(world.orgId, { jobNumber })).sources;
@@ -666,79 +629,68 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
           timeSegmentId: expect.any(String),
         },
       ]);
-    await expect(dialog.getByRole('button', { name: 'Export', exact: true })).toBeEnabled();
-    await dialog.getByText('Nachweiserwartung erfüllen').click();
-    await dialog.getByRole('button', { name: /Mit Version 1 erfüllen/ }).click();
+    await expect(exportButton).toBeEnabled();
+    await workArtifactFulfilEvidenceToggle(dialog).click();
+    await workArtifactFulfilWithVersion(dialog, 1).click();
     await expect
-      .poll(
-        async () => (await getWorkArtifactState(world.orgId, { jobNumber })).fulfillments.length
-      )
+      .poll(async () => (await getWorkArtifactState(world.orgId, { jobNumber })).fulfillments.length)
       .toBe(1);
-    await expect(dialog.getByRole('button', { name: 'Export', exact: true })).toBeEnabled();
-    await dialog.getByRole('button', { name: 'Export', exact: true }).click();
+    await expect(exportButton).toBeEnabled();
+    await exportButton.click();
     await expect
       .poll(
         async () =>
           (await getWorkArtifactState(world.orgId, { jobNumber })).actions.filter(
-            (action) => action.action_type === 'exported'
+            (action) => action.action_type === 'exported',
           ).length,
-        { timeout: 60_000 }
+        { timeout: 60_000 },
       )
       .toBe(1);
-    await expect(dialog.getByRole('button', { name: 'Export', exact: true })).toBeEnabled();
+    await expect(exportButton).toBeEnabled();
     await Promise.all([
       employeePage.waitForResponse(
         (response) =>
-          response.request().method() === 'POST' &&
-          response.url().includes(encodeURIComponent(jobNumber))
+          response.request().method() === 'POST' && response.url().includes(encodeURIComponent(jobNumber)),
       ),
-      dialog.getByRole('button', { name: 'Export', exact: true }).click(),
+      exportButton.click(),
     ]);
-    await expect(dialog.getByRole('button', { name: 'Export', exact: true })).toBeEnabled();
+    await expect(exportButton).toBeEnabled();
     await expect
       .poll(
         async () =>
           (await getWorkArtifactState(world.orgId, { jobNumber })).actions.filter(
-            (action) => action.action_type === 'exported'
-          ).length
+            (action) => action.action_type === 'exported',
+          ).length,
       )
       .toBe(1);
     await closeArtifact(dialog);
 
     await employeePage.reload();
-    await expect(
-      employeePage.getByRole('main').getByTestId('job-instruction-item')
-        .filter({ hasText: 'Inbetriebnahme dokumentieren' })
-        .getByText(/^Nachweis erfüllt:/)
-    ).toBeVisible({ timeout: 20_000 });
+    await expect(instructionEvidenceFulfilled(jobInstructionItem(employeePage, commissioning))).toBeVisible({
+      timeout: 20_000,
+    });
     const state = await getWorkArtifactState(world.orgId, { jobNumber });
-    const [exportedArtifact] = state.artifacts;
-    if (!exportedArtifact) throw new Error('P1-15: expected the exported artifact');
+    const exportedArtifact = expectDefined(state.artifacts[0], 'the exported artifact');
     const currentRevisionId = exportedArtifact.current_revision_id;
     expect(state.actions.filter((row) => row.action_type === 'exported')).toHaveLength(1);
     expect(
       state.actions.filter((row) =>
-        [
-          'customer_acknowledged',
-          'customer_reserved',
-          'customer_refused',
-          'signature_captured',
-        ].includes(row.action_type)
-      )
+        ['customer_acknowledged', 'customer_reserved', 'customer_refused', 'signature_captured'].includes(
+          row.action_type,
+        ),
+      ),
     ).toHaveLength(4);
     expect(
       state.actions
         .filter((row) => row.signer_name)
-        .every(
-          (row) => row.signer_name === 'Erika Beispiel' && row.revision_id === currentRevisionId
-        )
+        .every((row) => row.signer_name === 'Erika Beispiel' && row.revision_id === currentRevisionId),
     ).toBe(true);
     expect(state.documents.filter((row) => row.relation === 'rendered_export')).toHaveLength(1);
     expect(state.documents.find((row) => row.relation === 'rendered_export')).toMatchObject({
-      renderer_version: 'p1-21-html-v4',
+      renderer_version: 'p1-21-html-v5',
     });
     expect(state.documents.find((row) => row.relation === 'rendered_export')?.content_hash).toMatch(
-      /^[0-9a-f]{64}$/
+      /^[0-9a-f]{64}$/,
     );
     expect(state.sources).toHaveLength(1);
     expect(state.fulfillments[0]).toMatchObject({
@@ -750,41 +702,28 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     // approval dependency, shared cache/realtime projections, explicit non-effects,
     // and absence of later-slice modules from this surface.
     await adminPage.goto(`/auftraege/${jobNumber}`);
-    const card = workLifecycleCard(adminPage);
-    await card.getByRole('button', { name: 'Abschlussprüfungen und Verlauf' }).click();
-    await expect(card.getByText(/formale Freigaben offen/)).toBeVisible();
+    await lifecycleCardAction(adminPage, 'gatesAndHistory').click();
+    await expect(lifecyclePendingFormalApprovals(adminPage)).toBeVisible();
     const snapshot = (await getWorkLifecycleState(world.orgId, { jobNumber })).snapshot;
     expect(snapshot.gates.pendingFormalApprovals).toBe(0);
     expect(snapshot.gates.requiredCustomerDecisions).toBe(0);
     expect(snapshot.gates.requiredSignatures).toBe(0);
     expect(snapshot.gates.incompleteInstructionEvidence).toBe(0);
 
-    await card.getByRole('button', { name: 'Voraussetzung', exact: true }).click();
-    dialog = adminPage.getByRole('dialog');
-    await selectOption(adminPage, dialog.locator('#dependency-type'), 'Deklarierte Voraussetzung');
-    await selectFromSearchable(adminPage, dialog.locator('#dependency-target'), 'Freigabe');
-    await dialog
-      .locator('#dependency-description')
-      .fill('Interne Freigabe des Inbetriebnahmeberichts');
-    await dialog.getByRole('button', { name: 'Hinzufügen', exact: true }).click();
+    const dependencyDescription = testData`Interne Freigabe des Inbetriebnahmeberichts`;
+    dialog = await addDeclaredWorkDependency(adminPage, {
+      kind: 'approval',
+      description: dependencyDescription,
+    });
     await expect(dialog).toHaveCount(0, { timeout: 20_000 });
-    const dependencyRow = card
-      .getByTestId('work-dependency-row')
-      .filter({ hasText: 'Interne Freigabe des Inbetriebnahmeberichts' });
-    await expect(dependencyRow).toContainText('offen');
-    await dependencyRow.getByRole('button', { name: 'Freigabe verknüpfen' }).click();
-    dialog = adminPage.getByRole('dialog');
-    await selectFromSearchable(
-      adminPage,
-      dialog.locator('#dependency-artifact-approval'),
-      `Kundenbericht ${world.runId}`
-    );
-    await dialog
-      .locator('#dependency-artifact-reason')
-      .fill('Aktuelle interne Freigabe erfüllt die dokumentierte Voraussetzung.');
-    await dialog.getByRole('button', { name: 'Verknüpfen', exact: true }).click();
+    const dependencyRow = workDependencyRow(adminPage, dependencyDescription);
+    await expect(dependencyRow).toContainText(workDependencyStateLabel('open'));
+    dialog = await linkWorkDependencyApproval(adminPage, dependencyRow, {
+      artifactTitle: artifactTitle,
+      reason: 'Aktuelle interne Freigabe erfüllt die dokumentierte Voraussetzung.',
+    });
     await expect(dialog).toHaveCount(0, { timeout: 20_000 });
-    await expect(dependencyRow).toContainText('erfüllt');
+    await expect(dependencyRow).toContainText(workDependencyStateLabel('satisfied'));
 
     const lifecycle = await getWorkLifecycleState(world.orgId, { jobNumber });
     expect(lifecycle.dependencies.at(-1)).toMatchObject({
@@ -793,8 +732,8 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     });
     expect(lifecycle.dependencies.at(-1)?.artifact_approval_action_id).toBeTruthy();
     await expect(workArtifactsSection(adminPage)).toBeVisible();
-    await expect(textInDom(adminPage, 'Arbeitspack')).toHaveCount(0);
-    await expect(textInDom(adminPage, 'Geräteakte')).toHaveCount(0);
-    await expect(textInDom(adminPage, 'Rechnung erstellen')).toHaveCount(0);
+    for (const term of WORK_PAGE_LATER_SLICE_TERMS) {
+      await expect(textInDom(adminPage, term)).toHaveCount(0);
+    }
   });
 });

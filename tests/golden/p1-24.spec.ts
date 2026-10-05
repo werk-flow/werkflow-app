@@ -1,288 +1,146 @@
-import { expect, test } from "./support/fixtures";
-import { getEmployeeRecordStateByUser, getP124CountsAs, getP124State } from "./support/db/personnel";
-import { expectLiveWithin } from "./support/live";
-import { openMemberDetailFromList } from "./support/steps/personnel";
-import { selectFromSearchable, textInDom, visibleText } from "./support/steps/shared";
+import { expectDefined } from '../../lib/testing/spec-support/expect-defined';
+import { expect, test } from './support/fixtures';
+import { getEmployeeRecordStateByUser, getP124State } from './support/db/personnel';
+import { expectLiveWithin } from './support/live';
+import { ACCESS_STATE_LABELS } from '../../lib/personnel/lifecycle';
+import {
+  acknowledgeRequirementButton,
+  changeOrganizationAccess,
+  confirmReceiptButton,
+  createOnboardingPlan,
+  exportWorkingStateButton,
+  openMemberDetailFromList,
+  PEOPLE_LIFECYCLE_COPY,
+  personnelLifecycle,
+  protectedFileReleaseButton,
+  publishOnboardingTemplate,
+  receiptConfirmedBanner,
+  templateVersionLabel,
+  uploadProtectedPersonnelFile,
+} from './support/steps/personnel';
+import { testData, textInDom, visibleText } from './support/steps/shared';
 
-const templateName = "Sicherer Einstieg";
-const acknowledgementTitle = "Betriebsregeln bestätigen";
-const protectedFileName = "willkommen-p1-24.txt";
+// One connected onboarding: template and plan, a protected document released
+// live to the employee, the employee's receipts, the controlled access
+// transitions and the export. Replay, stale versions, Büro and outsider
+// visibility, retained history and organization teardown are proven in
+// supabase/tests/p1_24_people_lifecycle.sql; audit P1-24 keeps the role and
+// organization denials a user sees.
 
-async function openEmployeeLifecycle(page: Parameters<typeof openMemberDetailFromList>[0], name: string) {
-  await openMemberDetailFromList(page, name);
-  return page.getByRole("main").getByTestId("personnel-lifecycle");
-}
+const templateName = testData`Sicherer Einstieg`;
+const acknowledgementTitle = testData`Betriebsregeln bestätigen`;
+const protectedFileName = testData`willkommen-p1-24.txt`;
 
-test.describe("P1-24 controlled people lifecycle @P1-24 @GG-07", () => {
-  test("creates an explicit template and editable onboarding plan @P1-24-stage-setup", async ({ adminPage, world }) => {
-    await adminPage.goto("/einstellungen/mitarbeiter");
-    if ((await visibleText(adminPage, templateName).count()) === 0) {
-      await expect(visibleText(adminPage, "Noch keine Vorlage eingerichtet.")).toBeVisible();
-      await adminPage.getByRole("button", { name: "Vorlage", exact: true }).click();
-      const templateDialog = adminPage.getByRole("dialog", { name: "Onboardingvorlage veröffentlichen" });
-      await templateDialog.getByLabel("Name").fill(templateName);
-      await selectFromSearchable(
-        adminPage,
-        templateDialog.getByRole("combobox").filter({ hasText: "Manueller Punkt" }),
-        "Bestätigung",
-      );
-      await templateDialog.getByLabel("Erster Punkt").fill(acknowledgementTitle);
-      await templateDialog.getByText("Blockiert die Zugangsaktivierung").click();
-      await templateDialog.getByRole("button", { name: "Veröffentlichen" }).click();
-    }
-    await expect(visibleText(adminPage, templateName)).toBeVisible({ timeout: 15_000 });
-
+test.describe('P1-24 controlled people lifecycle @P1-24 @GG-07', () => {
+  test('onboards an employee with a protected document, receipts and controlled access @P1-24-stage-setup @P1-24-stage-documents-onboarding @P1-24-stage-access-transition @P1-24-stage-boundaries @FRESHNESS', async ({
+    adminPage,
+    employeePage,
+    world,
+  }) => {
+    const employeeRecordId = (await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id)).id;
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
-    const lifecycle = await openEmployeeLifecycle(adminPage, employeeName);
-    await expect(lifecycle.getByText("Noch keine kontrollierte Zugangsregel.")).toBeVisible();
-    if ((await visibleText(lifecycle, acknowledgementTitle).count()) === 0) {
-      await lifecycle.getByRole("button", { name: "Plan anlegen" }).click();
-      const planDialog = adminPage.getByRole("dialog", { name: "Onboardingplan anlegen" });
-      await selectFromSearchable(
-        adminPage,
-        planDialog.getByRole("combobox").filter({ hasText: "Ohne Vorlage" }),
-        "Sicherer Einstieg · Version 1",
-      );
-      await planDialog.getByRole("button", { name: "Plan anlegen" }).click();
-    }
-    await expect(visibleText(lifecycle, acknowledgementTitle)).toBeVisible({ timeout: 15_000 });
+    const lifecycle = personnelLifecycle(adminPage);
 
-    const state = await getP124State(world.orgId);
-    expect(state.plans.length).toBeGreaterThanOrEqual(1);
-    expect(state.requirements.length).toBeGreaterThanOrEqual(1);
-    expect(state.requirements.find((item) => item.title === acknowledgementTitle)).toMatchObject({
-      requirement_type: "acknowledgement",
-      blocks_access: true,
-      state: "missing",
-    });
-  });
-
-  test("releases one protected version and records exact employee receipts @P1-24-stage-documents-onboarding @FRESHNESS",
-    {
-      annotation: [
-        {
-          type: "requires-test",
-          description:
-            "creates an explicit template and editable onboarding plan @P1-24-stage-setup",
-        },
-      ],
-    },
-    async ({ adminPage, employeePage, world }) => {
-      const employeeRecordId = (await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id)).id;
-    const precondition = await getP124State(world.orgId);
-    expect(precondition.requirements.some((item) => item.title === acknowledgementTitle)).toBe(true);
-    await employeePage.goto("/aufgaben");
-    const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
-    const lifecycle = await openEmployeeLifecycle(adminPage, employeeName);
-    let stageState = await getP124State(world.orgId);
-    let expectedDocument = stageState.protectedDocuments.find((item) =>
-      item.employee_record_id === employeeRecordId &&
-      (item.documents as { display_name: string }).display_name === protectedFileName
-    );
-    if (!expectedDocument) {
-      await lifecycle.getByRole("button", { name: "Datei", exact: true }).click();
-      const uploadDialog = adminPage.getByRole("dialog", { name: "Geschützte Personalunterlage" });
-      await uploadDialog.getByLabel("Datei").setInputFiles({
-        name: protectedFileName,
-        mimeType: "text/plain",
-        buffer: Buffer.from("P1-24 protected acceptance file"),
+    await test.step('Publish a template and create the onboarding plan from it', async () => {
+      await adminPage.goto('/einstellungen/mitarbeiter');
+      await expect(visibleText(adminPage, PEOPLE_LIFECYCLE_COPY.noTemplate)).toBeVisible();
+      await publishOnboardingTemplate(adminPage, {
+        name: templateName,
+        firstItemType: 'acknowledgement',
+        firstItemTitle: acknowledgementTitle,
       });
-      await uploadDialog.getByLabel("Dokumentart").fill("Willkommensunterlage");
-      await uploadDialog.getByRole("button", { name: "Hochladen" }).click();
-    }
-    await expect(visibleText(lifecycle, protectedFileName)).toBeVisible({ timeout: 20_000 });
-    stageState = await getP124State(world.orgId);
-    expectedDocument = stageState.protectedDocuments.find((item) =>
-      item.employee_record_id === employeeRecordId &&
-      (item.documents as { display_name: string }).display_name === protectedFileName
-    );
-    expect(expectedDocument).toBeDefined();
-    if (!stageState.releases.some((item) => item.personnel_document_id === expectedDocument?.id)) {
-      await expectLiveWithin(visibleText(employeePage, protectedFileName), {
-          label: "released protected personnel document",
-          actingPage: adminPage,
-          mutation: async (beforeSubmit) => {
-            await beforeSubmit();
-            await lifecycle.getByRole("listitem").filter({ hasText: protectedFileName })
-        .getByRole("button", { name: "Freigeben" }).click();
-    },
-        });
-      } else {
-        await expect(visibleText(employeePage, protectedFileName),
-        ).toBeVisible();
-      }
-      stageState = await getP124State(world.orgId);
-    const expectedRequirement = stageState.requirements.find(
-      (item) =>
-        item.employee_record_id === employeeRecordId &&
-        item.title === acknowledgementTitle,
-    );
-    expect(expectedRequirement).toBeDefined();
-    if (!stageState.acknowledgements.some((item) =>
-      item.employee_record_id === employeeRecordId &&
-      item.requirement_id === expectedRequirement?.id &&
-      item.acknowledgement_kind === "requirement_completed"
-    )) {
-      await expectLiveWithin(
-          visibleText(lifecycle, "Keine offenen Anforderungen."),
-          {
-            label: "employee acknowledgement reflected in manager lifecycle",
-            actingPage: employeePage,
-            mutation: async (beforeSubmit) => {
-              await beforeSubmit();
-              await employeePage.getByRole("button", { name: "Bestätigen", exact: true }).click();
-            },
-          },
-        );
-      } else {
-        await expect(
-          visibleText(lifecycle, "Keine offenen Anforderungen."),
-        ).toBeVisible();
-    }
-    stageState = await getP124State(world.orgId);
-    if (!stageState.acknowledgements.some((item) =>
-      item.employee_record_id === employeeRecordId &&
-      item.personnel_document_id === expectedDocument?.id &&
-      item.acknowledgement_kind === "document_received"
-    )) {
-      await employeePage.getByRole("button", { name: "Erhalt bestätigen" }).click();
-      await expect(employeePage.getByRole("alert").filter({ hasText: "Der Erhalt der Dokumentversion wurde bestätigt." })).toBeVisible();
-    }
+      await expect(visibleText(adminPage, templateName)).toBeVisible({ timeout: 15_000 });
 
-    // A click dispatches the action; only the persisted receipts prove completion.
-    await expect.poll(async () => {
+      await openMemberDetailFromList(adminPage, employeeName);
+      await expect(lifecycle.getByText(PEOPLE_LIFECYCLE_COPY.noAccessRule)).toBeVisible();
+      await createOnboardingPlan(adminPage, templateVersionLabel(templateName, 1));
+      await expect(visibleText(lifecycle, acknowledgementTitle)).toBeVisible({ timeout: 15_000 });
       const state = await getP124State(world.orgId);
-      return state.acknowledgements.filter((item) =>
-        item.employee_record_id === employeeRecordId &&
-        (item.requirement_id === expectedRequirement?.id ||
-          item.personnel_document_id === expectedDocument?.id)
-      ).map((item) => item.acknowledgement_kind).sort();
-    }, { message: "Both exact employee receipts are persisted after one submission" }).toEqual([
-      "document_received",
-      "requirement_completed",
-    ]);
-    await expect(employeePage.getByRole("button", { name: "Erhalt bestätigen" })).toBeEnabled();
+      expect(
+        state.requirements.find(
+          (item) => item.employee_record_id === employeeRecordId && item.title === acknowledgementTitle,
+        ),
+      ).toMatchObject({ requirement_type: 'acknowledgement', blocks_access: true, state: 'missing' });
+    });
 
-    const state = await getP124State(world.orgId);
-    const finalDocument = state.protectedDocuments.find((item) =>
-      item.employee_record_id === employeeRecordId &&
-      (item.documents as { display_name: string }).display_name === protectedFileName
-    );
-    expect(finalDocument).toBeDefined();
-    expect(state.releases.filter((item) => item.personnel_document_id === finalDocument?.id)).toHaveLength(1);
-  });
+    await test.step('Release a protected document live and receive both employee receipts', async () => {
+      await employeePage.goto('/aufgaben');
+      await uploadProtectedPersonnelFile(adminPage, {
+        fileName: protectedFileName,
+        content: 'P1-24 protected acceptance file',
+        documentType: 'Willkommensunterlage',
+      });
 
-  test("suspends only this organization and preserves reversible transition history @P1-24-stage-access-transition",
-    {
-      annotation: [
-        {
-          type: "requires-test",
-          description:
-            "releases one protected version and records exact employee receipts @P1-24-stage-documents-onboarding @FRESHNESS",
+      await expectLiveWithin(visibleText(employeePage, protectedFileName), {
+        label: 'released protected personnel document',
+        actingPage: adminPage,
+        mutation: async (beforeSubmit) => {
+          await beforeSubmit();
+          await protectedFileReleaseButton(lifecycle, protectedFileName).click();
         },
-      ],
-    },
-    async ({ adminPage, employeePage, world }) => {
-      const employeeRecordId = (await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id)).id;
-    const precondition = await getP124State(world.orgId);
-    expect(precondition.acknowledgements.some((item) =>
-      item.employee_record_id === employeeRecordId &&
-      item.acknowledgement_kind === "requirement_completed"
-    )).toBe(true);
-    const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
-    const lifecycle = await openEmployeeLifecycle(adminPage, employeeName);
-    let transitionState = await getP124State(world.orgId);
-    if (!transitionState.accessTransitions.some((item) =>
-      item.employee_record_id === employeeRecordId &&
-      item.transition_kind === "activate_now"
-    )) {
-      await lifecycle.getByRole("button", { name: "Zugang steuern" }).click();
-      const dialog = adminPage.getByRole("dialog", { name: "Organisationszugang steuern" });
-      await selectFromSearchable(adminPage, dialog.getByRole("combobox"), "Jetzt aktivieren");
-      await dialog.getByLabel("Grund").fill("Kontrollierten Zugang starten");
-      await dialog.getByRole("button", { name: "Speichern" }).click();
-      await expect(dialog).toBeHidden({ timeout: 15_000 });
-    }
-    await expect(visibleText(lifecycle, "Aktiv")).toBeVisible({ timeout: 15_000 });
+      });
+      const released = await getP124State(world.orgId);
+      const document = expectDefined(
+        released.protectedDocuments.find(
+          (item) =>
+            item.employee_record_id === employeeRecordId &&
+            (item.documents as { display_name: string }).display_name === protectedFileName,
+        ),
+        'the uploaded protected document',
+      );
+      expect(released.releases.filter((item) => item.personnel_document_id === document.id)).toHaveLength(1);
 
-    transitionState = await getP124State(world.orgId);
-    if (!transitionState.accessTransitions.some((item) =>
-      item.employee_record_id === employeeRecordId &&
-      item.transition_kind === "suspend_now"
-    )) {
-      await lifecycle.getByRole("button", { name: "Zugang steuern" }).click();
-      const dialog = adminPage.getByRole("dialog", { name: "Organisationszugang steuern" });
-      await selectFromSearchable(adminPage, dialog.getByRole("combobox"), "Sofort sperren");
-      await dialog.getByLabel("Grund").fill("Sofortige Organisationssperre");
-      await dialog.getByRole("button", { name: "Speichern" }).click();
-      await expect(dialog).toBeHidden({ timeout: 15_000 });
-    }
-    await expect(visibleText(lifecycle, "Gesperrt")).toBeVisible({ timeout: 15_000 });
-
-    await employeePage.goto("/aufgaben");
-    await expect(employeePage).not.toHaveURL(/\/aufgaben/, { timeout: 15_000 });
-
-    transitionState = await getP124State(world.orgId);
-    if (!transitionState.accessTransitions.some((item) =>
-      item.employee_record_id === employeeRecordId &&
-      item.transition_kind === "reactivate"
-    )) {
-      await lifecycle.getByRole("button", { name: "Zugang steuern" }).click();
-      const dialog = adminPage.getByRole("dialog", { name: "Organisationszugang steuern" });
-      await selectFromSearchable(adminPage, dialog.getByRole("combobox"), "Reaktivieren");
-      await dialog.getByLabel("Grund").fill("Zugang kontrolliert reaktiviert");
-      await dialog.getByRole("button", { name: "Speichern" }).click();
-      await expect(dialog).toBeHidden({ timeout: 15_000 });
-    }
-    await expect(visibleText(lifecycle, "Aktiv")).toBeVisible({ timeout: 15_000 });
-
-    const state = await getP124State(world.orgId);
-    const employeeAccess = state.access.filter(
-      (item) => item.employee_record_id === employeeRecordId,
-    );
-    const employeeAccessTransitions = state.accessTransitions.filter(
-      (item) => item.employee_record_id === employeeRecordId,
-    );
-    expect(employeeAccess).toHaveLength(1);
-    expect(employeeAccessTransitions.map((item) => item.transition_kind)).toEqual([
-      "activate_now",
-      "suspend_now",
-      "reactivate",
-    ]);
-    expect(employeeAccess[0]?.state).toBe("active");
-  });
-
-  test("keeps protected data outside the ordinary library and outsider organization @P1-24-stage-boundaries",
-    {
-      annotation: [
-        {
-          type: "requires-test",
-          description:
-            "releases one protected version and records exact employee receipts @P1-24-stage-documents-onboarding @FRESHNESS",
+      await expectLiveWithin(visibleText(lifecycle, PEOPLE_LIFECYCLE_COPY.noOpenRequirements), {
+        label: 'employee acknowledgement reflected in manager lifecycle',
+        actingPage: employeePage,
+        mutation: async (beforeSubmit) => {
+          await beforeSubmit();
+          await acknowledgeRequirementButton(employeePage).click();
         },
-      ],
-    },
-    async ({ adminPage, outsiderPage, world }) => {
-      const employeeRecordId = (await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id)).id;
-    await adminPage.goto("/dokumente");
-    await expect(textInDom(adminPage, protectedFileName)).toHaveCount(0);
+      });
+      await confirmReceiptButton(employeePage).click();
+      await expect(receiptConfirmedBanner(employeePage)).toBeVisible();
+      // A click dispatches the action; only the persisted receipts prove completion.
+      await expect
+        .poll(
+          async () =>
+            (await getP124State(world.orgId)).acknowledgements
+              .filter((item) => item.employee_record_id === employeeRecordId)
+              .map((item) => item.acknowledgement_kind)
+              .sort(),
+          { message: 'Both exact employee receipts are persisted after one submission each' },
+        )
+        .toEqual(['document_received', 'requirement_completed']);
+    });
 
-    const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
-    const lifecycle = await openEmployeeLifecycle(adminPage, employeeName);
-    const download = adminPage.waitForEvent("download");
-    await lifecycle.getByRole("button", { name: "Arbeitsstand exportieren" }).click();
-    expect((await download).suggestedFilename()).toContain(employeeRecordId);
+    await test.step('Activate, suspend and reactivate the organization access', async () => {
+      for (const [transition, reason, shown] of [
+        ['activate_now', 'Kontrollierten Zugang starten', 'active'],
+        ['suspend_now', 'Sofortige Organisationssperre', 'suspended'],
+        ['reactivate', 'Zugang kontrolliert reaktiviert', 'active'],
+      ] as const) {
+        await changeOrganizationAccess(adminPage, transition, reason);
+        await expect(visibleText(lifecycle, ACCESS_STATE_LABELS[shown])).toBeVisible({ timeout: 15_000 });
+        if (transition === 'suspend_now') {
+          await employeePage.goto('/aufgaben');
+          await expect(employeePage).not.toHaveURL(/\/aufgaben/, { timeout: 15_000 });
+        }
+      }
+      const state = await getP124State(world.orgId);
+      expect(
+        state.accessTransitions
+          .filter((item) => item.employee_record_id === employeeRecordId)
+          .map((item) => item.transition_kind),
+      ).toEqual(['activate_now', 'suspend_now', 'reactivate']);
+    });
 
-    const outsiderCounts = await getP124CountsAs(world.outsider.admin, world.orgId);
-    for (const [table, count] of Object.entries(outsiderCounts)) {
-      expect(count, `outsider read ${table}`).toBe(0);
-    }
-    await outsiderPage.goto(`/mitarbeiter/${employeeRecordId}`);
-    await expect(outsiderPage).not.toHaveURL(new RegExp(employeeRecordId), { timeout: 15_000 });
-
-    const state = await getP124State(world.orgId);
-    expect(state.operations.length).toBeGreaterThanOrEqual(8);
-    expect(state.events.some((event) => event.event_type === "access_transition")).toBe(true);
-    expect(state.events.some((event) => event.event_type === "personnel_document_uploaded")).toBe(true);
+    await test.step('Keep the protected file out of the library and export the working state', async () => {
+      await adminPage.goto('/dokumente');
+      await expect(textInDom(adminPage, protectedFileName)).toHaveCount(0);
+      await openMemberDetailFromList(adminPage, employeeName);
+      const download = adminPage.waitForEvent('download');
+      await exportWorkingStateButton(lifecycle).click();
+      expect((await download).suggestedFilename()).toContain(employeeRecordId);
+    });
   });
 });

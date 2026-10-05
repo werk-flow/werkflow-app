@@ -5,8 +5,9 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
-import { z } from 'zod';
+import { z } from '@/lib/zod';
 
+import { redeemOtpInvite } from '@/components/otp-form-invite';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
@@ -17,9 +18,7 @@ import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
 const loginSchema = z.object({
   email: z.string().email('Bitte gib eine gültige E-Mail-Adresse ein.'),
-  password: z
-    .string()
-    .min(6, 'Das Passwort muss mindestens 6 Zeichen lang sein.')
+  password: z.string().min(1, 'Bitte gib dein Passwort ein.'),
 });
 
 type LoginValues = z.infer<typeof loginSchema>;
@@ -39,128 +38,70 @@ export function LoginForm({ successMessage, inviteCode = '' }: LoginFormProps) {
     resolver: zodResolver(loginSchema),
     defaultValues: {
       email: '',
-      password: ''
-    }
+      password: '',
+    },
   });
 
   const handleSubmit = form.handleSubmit(async (values) => {
     setFormError(null);
     setIsSubmitting(true);
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: values.email,
-      password: values.password
-    });
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: values.email,
+        password: values.password,
+      });
 
-    if (error) {
-      console.error('Failed to sign in', error);
+      if (error) {
+        const errorMessage = error.message?.toLowerCase() ?? '';
+        if (errorMessage.includes('email not confirmed') || errorMessage.includes('email_not_confirmed')) {
+          const { error: resendError } = await supabase.auth.resend({
+            type: 'signup',
+            email: values.email,
+          });
 
-      const errorMessage = error.message?.toLowerCase() ?? '';
-      if (
-        errorMessage.includes('email not confirmed') ||
-        errorMessage.includes('email_not_confirmed')
-      ) {
-        const { error: resendError } = await supabase.auth.resend({
-          type: 'signup',
-          email: values.email
-        });
+          if (resendError) {
+            setFormError('E-Mail nicht verifiziert. Bitte überprüfe dein Postfach oder versuche es erneut.');
+            setIsSubmitting(false);
+            return;
+          }
 
-        if (resendError) {
-          console.error('Failed to resend OTP:', resendError);
-          setFormError(
-            'E-Mail nicht verifiziert. Bitte überprüfe dein Postfach oder versuche es erneut.'
-          );
-          setIsSubmitting(false);
+          const verifyUrl = inviteCode
+            ? `/verify?email=${encodeURIComponent(values.email)}&invite_code=${encodeURIComponent(inviteCode)}`
+            : `/verify?email=${encodeURIComponent(values.email)}`;
+          router.replace(verifyUrl);
+          router.refresh();
           return;
         }
 
-        const verifyUrl = inviteCode
-          ? `/verify?email=${encodeURIComponent(
-              values.email
-            )}&invite_code=${inviteCode}`
-          : `/verify?email=${encodeURIComponent(values.email)}`;
-        router.replace(verifyUrl);
-        router.refresh();
+        setFormError('Anmeldung fehlgeschlagen. Bitte überprüfe deine Zugangsdaten.');
+        setIsSubmitting(false);
         return;
       }
 
-      setFormError(
-        'Anmeldung fehlgeschlagen. Bitte überprüfe deine Zugangsdaten.'
-      );
-      setIsSubmitting(false);
-      return;
-    }
+      if (data.session) {
+        await fetch('/auth/callback', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            event: 'SIGNED_IN',
+            session: data.session,
+          }),
+        });
 
-    if (data.session) {
-      await fetch('/auth/callback', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          event: 'SIGNED_IN',
-          session: data.session
-        })
-      });
-
-      if (inviteCode) {
-        try {
-          const response = await fetch('/api/redeem-invite', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ inviteCode })
-          });
-
-          const result = await response.json();
-
-          if (!response.ok) {
-            console.error('Failed to redeem invite:', result);
-            if (result.error === 'email_mismatch') {
-              const invitedEmail = result.invitedEmail || '';
-              window.location.assign(`/invite-error?error=email_mismatch&email=${encodeURIComponent(
-                invitedEmail
-              )}&invite_code=${inviteCode}`);
-              return;
-            }
-            if (result.error === 'admin_mismatch') {
-              window.location.assign('/invite-error?error=admin_mismatch');
-              return;
-            }
-            if (result.error === 'invite_expired') {
-              window.location.assign('/invite-error?error=invite_expired');
-              return;
-            }
-            if (result.error === 'invite_cancelled') {
-              window.location.assign('/invite-error?error=invite_cancelled');
-              return;
-            }
-            if (result.error === 'invite_already_used') {
-              window.location.assign('/invite-error?error=invite_already_used');
-              return;
-            }
-            if (result.error === 'invalid_invite') {
-              window.location.assign('/invite-error?error=invalid_invite');
-              return;
-            }
-          } else if (result.success && result.organizationId) {
-            if (result.alreadyMember) {
-              window.location.assign(
-                `/dashboard?already_member=${result.organizationId}`
-              );
-            } else {
-              window.location.assign(`/dashboard?joined=${result.organizationId}`);
-            }
-            return;
-          }
-        } catch (err) {
-          console.error('Error redeeming invite:', err);
-        }
+        if (inviteCode && (await redeemOtpInvite(supabase, inviteCode))) return;
       }
-    }
 
-    // Keep isSubmitting=true — the component unmounts on navigation
-    router.replace('/');
-    router.refresh();
+      // Keep isSubmitting=true — the component unmounts on navigation
+      router.replace('/');
+      router.refresh();
+    } catch {
+      // A rejected request (network) must not leave the button spinning.
+      setFormError('Anmeldung fehlgeschlagen. Bitte versuche es erneut.');
+      setIsSubmitting(false);
+    }
   });
 
   return (
@@ -169,9 +110,7 @@ export function LoginForm({ successMessage, inviteCode = '' }: LoginFormProps) {
           would put the credentials into the URL and server logs. */}
       <form className="grid gap-4" method="post" onSubmit={handleSubmit}>
         {successMessage ? (
-          <div className="rounded-lg bg-accent p-3 text-sm text-accent-foreground">
-            {successMessage}
-          </div>
+          <div className="rounded-lg bg-accent p-3 text-sm text-accent-foreground">{successMessage}</div>
         ) : null}
 
         <FormField
@@ -179,12 +118,7 @@ export function LoginForm({ successMessage, inviteCode = '' }: LoginFormProps) {
           name="email"
           render={({ field, fieldState }) => (
             <Field label="E-Mail" required error={fieldState.error?.message}>
-              <Input
-                {...field}
-                type="email"
-                autoComplete="email"
-                placeholder="beispiel@firma.de"
-              />
+              <Input {...field} type="email" autoComplete="email" placeholder="beispiel@firma.de" />
             </Field>
           )}
         />
@@ -210,7 +144,7 @@ export function LoginForm({ successMessage, inviteCode = '' }: LoginFormProps) {
         <ErrorText>{formError}</ErrorText>
 
         <Button className="w-full" disabled={isSubmitting} type="submit">
-          {isSubmitting ? 'Anmeldung läuft...' : 'Anmelden'}
+          {isSubmitting ? 'Anmeldung läuft…' : 'Anmelden'}
         </Button>
       </form>
     </Form>

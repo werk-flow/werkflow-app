@@ -1,205 +1,180 @@
+import {
+  ACCESS_STATE_LABELS,
+  EMPLOYMENT_STATE_LABELS,
+  EMPLOYMENT_TYPE_LABELS,
+} from '../../lib/personnel/types';
 import { expect, test } from './support/fixtures';
-import { checkpointValue, saveCheckpoint } from "./support/checkpoints";
-import { requireChainedValue } from "./support/preconditions";
-import { testBusinessDate } from "../../lib/testing/business-date";
 import { getEmployeeRecordStateByUser } from './support/db/personnel';
 import { getPendingInviteCode } from './support/db/shared';
-import { expectRedirectedAway, joinOrganizationViaInviteLink, removeMemberFromDetail } from './support/steps/organization';
-import { addConditionViaDialog, createPersonnelRecordViaDialog, editConditionWeeklyHours, editPersonnelTextField, openMemberDetailFromList, sendInviteFromPersonnelRecord } from './support/steps/personnel';
+import {
+  expectRedirectedAway,
+  joinOrganizationViaInviteLink,
+  removeMemberFromDetail,
+} from './support/steps/organization';
+import {
+  PERSONNEL_COPY,
+  PERSONNEL_HISTORY_EVENTS,
+  addConditionViaDialog,
+  conditionRow,
+  conditionWeeklyHoursText,
+  createPersonnelRecordViaDialog,
+  editConditionWeeklyHours,
+  openJobEmployeePickerSearch,
+  openMemberDetailFromList,
+  personnelRecordHeader,
+  sendInviteFromPersonnelRecord,
+  versionBadge,
+} from './support/steps/personnel';
 import { expectVisibleAfterSave, visibleText, textInDom } from './support/steps/shared';
 
 // P1-03 — Employee/personnel identity with date-effective employment
-// conditions (@P1-03). Bounded outcome: Admin/Büro maintain a stable personnel
-// identity with master data and date-effective conditions; existing members
-// were migrated automatically; future starters/non-login personnel and exited
-// people stay visibly distinguishable; nothing reinterprets historical time.
+// conditions (@P1-03). The journey: conditions stay distinguishable over time,
+// a record without login stays separate until its invitation links it, and a
+// removed member stays as "Ausgeschieden". The member backfill and the owner
+// protection are database rules (supabase/tests/people_boundaries.sql); the
+// full master-data form, the history attribution and every list badge are the
+// A3 audit's edge cases.
 
-function requirePersonnelRecordId(): string {
-  return requireChainedValue(checkpointValue("p1-03.personnelRecordId"), {
-    test: "P1-03 personnel record consumer",
-    needs: "the exact personnel record created without login",
-    grep: "@P1-03",
-    suite: "golden",
-  });
+function shiftIsoDate(dateIso: string, days: number): string {
+  const [year, month, day] = dateIso.split('-').map(Number);
+  if (year === undefined || month === undefined || day === undefined)
+    throw new Error(`Invalid ISO date: ${dateIso}`);
+  const shifted = new Date(Date.UTC(year, month - 1, day) + days * 86_400_000);
+  return shifted.toISOString().slice(0, 10);
 }
 
-// Business dates are Europe/Berlin dates (sv-SE formats as YYYY-MM-DD).
-function toBerlinIsoDate(value: string | Date): string {
-  return new Intl.DateTimeFormat('sv-SE', {
-    timeZone: 'Europe/Berlin',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(typeof value === 'string' ? new Date(value) : value);
+function toDatePickerDigits(dateIso: string): string {
+  const [year, month, day] = dateIso.split('-');
+  return `${day}${month}${year}`;
+}
+
+function toGermanDate(dateIso: string): string {
+  const [year, month, day] = dateIso.split('-');
+  return `${day}.${month}.${year}`;
 }
 
 test.describe('P1-03 Personalidentität und Konditionen @P1-03', () => {
-  test('Bestehende Mitglieder wurden automatisch migriert', async ({ world }) => {
-    // The backfill/trigger created exactly one record per member with the
-    // membership's join date (as a Berlin business date) as the entry-date
-    // default; nothing invented an employee number.
-    for (const user of [world.users.admin, world.users.buero, world.users.employee]) {
-      const record = await getEmployeeRecordStateByUser(world.orgId, user.id);
-      expect(record.recordCountForUser).toBe(1);
-      expect(record.membershipJoinedAt).not.toBeNull();
-      expect(record.entryDate).toBe(toBerlinIsoDate(record.membershipJoinedAt!));
-      expect(record.exitDate).toBeNull();
-    }
-  });
-
-  test('Admin pflegt Personalien am bestehenden Mitarbeiter', async ({ adminPage, world }) => {
-    const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
-    await openMemberDetailFromList(adminPage, employeeName);
-
-    await editPersonnelTextField(adminPage, 'Personalnummer', 'MA-001');
-    await editPersonnelTextField(adminPage, 'Telefon', '0151 2345678');
-    await editPersonnelTextField(adminPage, 'Notfallkontakt', 'Elke Golden');
-
-    // The change history records the master-data edits.
-    await expect(visibleText(adminPage, 'Personalien geändert')).toBeVisible({
-      timeout: 15_000,
-    });
-  });
-
   test('Konditionen: aktuelle und frühere Version bleiben unterscheidbar', async ({
     adminPage,
+    businessDate,
     world,
   }) => {
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
+    const pastIso = shiftIsoDate(businessDate, -30);
     await openMemberDetailFromList(adminPage, employeeName);
 
     // A past version and a version effective today.
     await addConditionViaDialog(adminPage, {
-      validFromDigits: '01012026',
-      employmentTypeLabel: 'Vollzeit',
+      validFromDigits: toDatePickerDigits(pastIso),
+      employmentTypeLabel: EMPLOYMENT_TYPE_LABELS.vollzeit,
       weeklyHours: '40',
       vacationDays: '30',
     });
     await addConditionViaDialog(adminPage, {
-      employmentTypeLabel: 'Teilzeit',
+      validFromDigits: toDatePickerDigits(businessDate),
+      employmentTypeLabel: EMPLOYMENT_TYPE_LABELS.teilzeit,
       weeklyHours: '25',
     });
 
     // Both versions stay visible and distinguishable: the newer one is the
-    // current condition, the older one is clearly historical.
-    await expectVisibleAfterSave(adminPage, 'Teilzeit');
-    // Exact matching: "Aktuell" must be the version badge, not a substring of
-    // "Aktueller Status".
-    const currentCondition = adminPage.getByRole('listitem').filter({ hasText: 'Teilzeit' });
-    await expect(currentCondition.getByText('Aktuell', { exact: true })).toBeVisible();
-    await expect(visibleText(adminPage, 'Vollzeit')).toBeVisible();
-    const historicalCondition = adminPage
+    // current condition, the older one is clearly historical. Exact matching:
+    // "Aktuell" must be the version badge, not a substring of "Aktueller Status".
+    await expectVisibleAfterSave(adminPage, EMPLOYMENT_TYPE_LABELS.teilzeit);
+    const currentCondition = adminPage
       .getByRole('listitem')
-      .filter({ hasText: 'Gültig ab 01.01.2026' });
-    await expect(historicalCondition.getByText('Früher', { exact: true })).toBeVisible();
-    await expect(visibleText(adminPage, 'Gültig ab 01.01.2026')).toBeVisible();
+      .filter({ hasText: EMPLOYMENT_TYPE_LABELS.teilzeit });
+    await expect(versionBadge(currentCondition, 'current')).toBeVisible();
+    const historicalCondition = conditionRow(adminPage, toGermanDate(pastIso));
+    await expect(versionBadge(historicalCondition, 'former')).toBeVisible();
+    await expect(historicalCondition).toContainText(EMPLOYMENT_TYPE_LABELS.vollzeit);
 
     // Correcting the historical version works and stays traceable.
-    await editConditionWeeklyHours(adminPage, '01.01.2026', '38');
-    await expectVisibleAfterSave(adminPage, '38 Std./Woche');
-    await expect(visibleText(adminPage, 'Kondition geändert')).toBeVisible({
+    await editConditionWeeklyHours(adminPage, toGermanDate(pastIso), '38');
+    await expectVisibleAfterSave(adminPage, conditionWeeklyHoursText(38));
+    await expect(visibleText(adminPage, PERSONNEL_HISTORY_EVENTS.condition_updated)).toBeVisible({
       timeout: 15_000,
     });
   });
 
-  test('Personalakte ohne Zugang ist sichtbar getrennt und in keiner Auswahl', async ({
-    adminPage,
-    world,
-  }) => {
-    // Entry date in the next calendar year so the record is always a future
-    // starter, regardless of when the suite runs.
-    const nextYear = Number(testBusinessDate().slice(0, 4)) + 1;
-    const noraRecordId = await createPersonnelRecordViaDialog(adminPage, {
-      firstName: 'Nora',
-      lastName: `Neuling-${world.runId}`,
-      entryDateDigits: `0101${nextYear}`,
-    });
-    saveCheckpoint("p1-03.personnelRecordId", noraRecordId);
-
-    // The record detail shows the derived states for a future starter.
-    const recordTitleRow = adminPage
-      .getByRole('heading', { name: `Nora Neuling-${world.runId}` })
-      .locator('..');
-    await expect(recordTitleRow.getByText('Geplant', { exact: true })).toBeVisible({
-      timeout: 15_000,
-    });
-    await expect(recordTitleRow.getByText('Ohne Zugang', { exact: true })).toBeVisible();
-
-    // The list page shows the record in the separate personnel section.
-    await adminPage.goto('/mitarbeiter');
-    await expect(visibleText(adminPage, 'Weiteres Personal')).toBeVisible({
-      timeout: 15_000,
-    });
-    await expect(visibleText(adminPage, `Nora Neuling-${world.runId}`)).toBeVisible();
-
-    // No operational picker offers the non-login record: the job dialog's
-    // employee picker finds a real member but not the personnel record.
-    await adminPage.goto('/auftraege');
-    await adminPage.getByRole('button', { name: 'Erstellen', exact: true }).click();
-    await adminPage.getByRole('tab', { name: 'Auftrag erstellen' }).click();
-    await adminPage.getByRole('combobox').filter({ hasText: 'Mitarbeiter zuweisen' }).click();
-    const search = adminPage.getByPlaceholder('Mitarbeiter suchen...');
-    await search.fill(world.users.employee.firstName);
-    await expect(
-      adminPage
-        .getByRole('listbox')
-        .getByRole("option")
-        .filter({
-          hasText: `${world.users.employee.firstName} ${world.users.employee.lastName}`,
-        })
-    ).toBeVisible({ timeout: 15_000 });
-    await search.fill('Neuling');
-    await expect(
-      adminPage.getByRole('listbox').getByRole("option").filter({ hasText: 'Neuling' })
-    ).toHaveCount(0);
-  });
-
-  test('Einladung verknüpft die Personalakte mit dem neuen Zugang',
-    {
-      annotation: [
-        {
-          type: "requires-test",
-          description:
-            "Personalakte ohne Zugang ist sichtbar getrennt und in keiner Auswahl",
-        },
-      ],
-    },
-    async ({
+  test('Personalakte ohne Zugang bleibt getrennt, steht in keiner Auswahl und wird per Einladung verknüpft', async ({
     adminPage,
     browser,
+    businessDate,
     world,
   }) => {
-      const noraRecordId = requirePersonnelRecordId();
-      await adminPage.goto(`/mitarbeiter/${noraRecordId}`);
-    await sendInviteFromPersonnelRecord(adminPage, world.personnelInvitee.email, 'Handwerker/in');
-    await expectVisibleAfterSave(adminPage, 'Eingeladen');
+    const recordName = `${world.personnelInvitee.firstName} ${world.personnelInvitee.lastName}`;
 
-    const inviteCode = await getPendingInviteCode(world.orgId, world.personnelInvitee.email);
-    const context = await browser.newContext({ locale: 'de-DE' });
-    const page = await context.newPage();
-    await joinOrganizationViaInviteLink(page, inviteCode, world.personnelInvitee, world.orgId);
-    await context.close();
+    const recordId = await test.step('Akte für eine künftige Mitarbeiterin anlegen', async () => {
+      // Entry date in the next calendar year: always a future starter.
+      const nextYear = Number(businessDate.slice(0, 4)) + 1;
+      const createdId = await createPersonnelRecordViaDialog(adminPage, {
+        firstName: world.personnelInvitee.firstName,
+        lastName: world.personnelInvitee.lastName,
+        entryDateDigits: `0101${nextYear}`,
+      });
+      const recordHeader = personnelRecordHeader(adminPage, recordName);
+      await expect(recordHeader.getByText(EMPLOYMENT_STATE_LABELS.geplant, { exact: true })).toBeVisible({
+        timeout: 15_000,
+      });
+      await expect(recordHeader.getByText(ACCESS_STATE_LABELS.ohne_zugang, { exact: true })).toBeVisible();
+      return createdId;
+    });
 
-    // The redeemed invite linked the existing record instead of creating a
-    // second one; the login connection is recorded.
-    const record = await getEmployeeRecordStateByUser(world.orgId, world.personnelInvitee.id);
-    expect(record.id).toBe(noraRecordId);
-    expect(record.recordCountForUser).toBe(1);
+    await test.step('Die Akte steht unter Weiteres Personal und in keiner Auswahl', async () => {
+      await adminPage.goto('/mitarbeiter');
+      await expect(visibleText(adminPage, PERSONNEL_COPY.otherPersonnel)).toBeVisible({
+        timeout: 15_000,
+      });
+      await expect(visibleText(adminPage, recordName)).toBeVisible();
 
-    // The new member appears once: in the members table, no longer in the
-    // separate personnel section.
-    await adminPage.goto('/mitarbeiter');
-    const memberName = `${world.personnelInvitee.firstName} ${world.personnelInvitee.lastName}`;
-    await expectVisibleAfterSave(adminPage, memberName);
-    await expect(
-      adminPage.getByRole('main').getByText(memberName).filter({ visible: true })
-    ).toHaveCount(1);
+      // The job dialog's employee picker finds a real member but not the record.
+      const search = await openJobEmployeePickerSearch(adminPage);
+      await search.fill(world.users.employee.firstName);
+      await expect(
+        adminPage
+          .getByRole('listbox')
+          .getByRole('option')
+          .filter({ hasText: `${world.users.employee.firstName} ${world.users.employee.lastName}` }),
+      ).toBeVisible({ timeout: 15_000 });
+      await search.fill(world.personnelInvitee.lastName);
+      await expect(
+        adminPage
+          .getByRole('listbox')
+          .getByRole('option')
+          .filter({ hasText: world.personnelInvitee.lastName }),
+      ).toHaveCount(0);
+    });
+
+    await test.step('Die eingelöste Einladung verknüpft die bestehende Akte', async () => {
+      await adminPage.goto(`/mitarbeiter/${recordId}`);
+      await sendInviteFromPersonnelRecord(adminPage, world.personnelInvitee.email, 'employee');
+      await expectVisibleAfterSave(adminPage, ACCESS_STATE_LABELS.eingeladen);
+
+      const inviteCode = await getPendingInviteCode(world.orgId, world.personnelInvitee.email);
+      const context = await browser.newContext({ locale: 'de-DE' });
+      try {
+        const page = await context.newPage();
+        await joinOrganizationViaInviteLink(page, inviteCode, world.personnelInvitee, world.orgId);
+      } finally {
+        await context.close();
+      }
+
+      // The redeemed invite linked the existing record instead of creating a second one.
+      const record = await getEmployeeRecordStateByUser(world.orgId, world.personnelInvitee.id);
+      expect(record.id).toBe(recordId);
+      expect(record.recordCountForUser).toBe(1);
+
+      // The new member appears once: in the members table, no longer in the
+      // separate personnel section.
+      await adminPage.goto('/mitarbeiter');
+      await expectVisibleAfterSave(adminPage, recordName);
+      await expect(adminPage.getByRole('main').getByText(recordName).filter({ visible: true })).toHaveCount(
+        1,
+      );
+    });
   });
 
-  test('Entfernen heute: Personalakte bleibt als Ausgeschieden erhalten', async ({
-    adminPage,
-    world,
-  }) => {
+  test('Entfernen heute: Personalakte bleibt als Ausgeschieden erhalten', async ({ adminPage, world }) => {
     const removableName = `${world.removableEmployee.firstName} ${world.removableEmployee.lastName}`;
     await removeMemberFromDetail(adminPage, removableName);
 
@@ -210,51 +185,32 @@ test.describe('P1-03 Personalidentität und Konditionen @P1-03', () => {
 
     await adminPage.goto('/mitarbeiter');
     await expectVisibleAfterSave(adminPage, removableName);
-    await expect(visibleText(adminPage, 'Ausgeschieden')).toBeVisible();
+    await expect(visibleText(adminPage, EMPLOYMENT_STATE_LABELS.ausgeschieden)).toBeVisible();
   });
 
-  test('Mitarbeiterrolle erreicht keine Personalflächen',
-    {
-      annotation: [
-        {
-          type: "requires-test",
-          description:
-            "Personalakte ohne Zugang ist sichtbar getrennt und in keiner Auswahl",
-        },
-      ],
-    },
-    async ({ employeePage }) => {
-      const noraRecordId = requirePersonnelRecordId();
-      await expectRedirectedAway(employeePage, '/mitarbeiter');
-    // Direct record URL: the employee role is redirected away and sees nothing.
-    await employeePage.goto(`/mitarbeiter/${noraRecordId}`);
-    await expect(employeePage).not.toHaveURL(new RegExp(noraRecordId), {
+  test('Mitarbeiterrolle und fremde Organisation erreichen keine Personalakte', async ({
+    employeePage,
+    outsiderPage,
+    world,
+  }) => {
+    const adminRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.admin.id);
+    // Every member of this world carries the run's surname suffix; none of it may leak.
+    const worldSurname = world.users.admin.lastName;
+
+    await expectRedirectedAway(employeePage, '/mitarbeiter');
+    await employeePage.goto(`/mitarbeiter/${adminRecord.id}`);
+    await expect(employeePage).not.toHaveURL(new RegExp(adminRecord.id), {
       timeout: 15_000,
     });
-    await expect(textInDom(employeePage, 'Personalien')).toHaveCount(0);
-  });
+    await expect(textInDom(employeePage, PERSONNEL_COPY.personnelSection)).toHaveCount(0);
 
-  test('Fremde Organisation sieht keine Personalakten',
-    {
-      annotation: [
-        {
-          type: "requires-test",
-          description:
-            "Personalakte ohne Zugang ist sichtbar getrennt und in keiner Auswahl",
-        },
-      ],
-    },
-    async ({ outsiderPage, world }) => {
-      const noraRecordId = requirePersonnelRecordId();
-      await outsiderPage.goto('/mitarbeiter');
-    await expect(textInDom(outsiderPage, `Neuling-${world.runId}`)).toHaveCount(0);
-    await expect(textInDom(outsiderPage, world.users.employee.lastName)).toHaveCount(0);
-
-    // Direct record URL from another organization resolves to nothing.
-    await outsiderPage.goto(`/mitarbeiter/${noraRecordId}`);
-    await expect(outsiderPage).not.toHaveURL(new RegExp(noraRecordId), {
+    await outsiderPage.goto('/mitarbeiter');
+    await expect(outsiderPage).toHaveURL(/\/mitarbeiter$/, { timeout: 15_000 });
+    await expect(textInDom(outsiderPage, worldSurname)).toHaveCount(0);
+    await outsiderPage.goto(`/mitarbeiter/${adminRecord.id}`);
+    await expect(outsiderPage).not.toHaveURL(new RegExp(adminRecord.id), {
       timeout: 15_000,
     });
-    await expect(textInDom(outsiderPage, `Neuling-${world.runId}`)).toHaveCount(0);
+    await expect(textInDom(outsiderPage, worldSurname)).toHaveCount(0);
   });
 });

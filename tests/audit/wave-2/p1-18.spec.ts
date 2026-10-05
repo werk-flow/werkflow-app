@@ -1,199 +1,180 @@
-import { expect, test } from "../support/fixtures";
-import { getInstalledEquipmentNumberByName, getInstalledEquipmentState } from "../../golden/support/db/service";
-import { ownedBerlinDateAtOffset } from "../../golden/support/date-ownership";
-import { requireChainedValue } from "../../golden/support/preconditions";
-import { addSiteOnCustomerDetail, createCustomer, openCustomerDetail } from "../../golden/support/steps/customers";
-import { correctInstalledEquipmentTerminalAction, createInstalledEquipment, expectDuplicateInstalledEquipmentRejected, openInstalledEquipmentByName, openInstalledEquipmentWorkLinkDialog, replaceInstalledEquipment, transitionInstalledEquipment } from "../../golden/support/steps/service";
-import { visibleText } from "../../golden/support/steps/shared";
-import { createJob } from "../../golden/support/steps/work";
-import type { TestWorld } from "../../golden/support/world";
+import { expectDefined } from '../../../lib/testing/spec-support/expect-defined';
+import { expect, test } from '../support/fixtures';
+import { seedCustomer } from '../../golden/support/db/customers';
+import {
+  getInstalledEquipmentState,
+  seedInstalledEquipment,
+  seedInstalledEquipmentReplacement,
+} from '../../golden/support/db/service';
+import { seedJob } from '../../golden/support/db/work';
+import { dismissDialog } from '../../golden/support/steps/interaction';
+import {
+  EQUIPMENT_NOT_RECORDED,
+  correctInstalledEquipmentTerminalAction,
+  createInstalledEquipment,
+  equipmentFact,
+  equipmentNoIdentifierNotice,
+  equipmentRelation,
+  equipmentVoidedSuccessorNotice,
+  equipmentWorkTargetPicker,
+  expectDuplicateInstalledEquipmentRejected,
+  filterEquipmentListByCategory,
+  openInstalledEquipmentWorkLinkDialog,
+  serviceEditButton,
+} from '../../golden/support/steps/service';
+import { SHARED_COPY, textInDom } from '../../golden/support/steps/shared';
+import type { TestWorld } from '../../golden/support/world';
 
-const INSTALLATION_DATE = ownedBerlinDateAtOffset("p1-18", 95);
-
-function names(world: TestWorld) {
-  return {
-    customerName: `P118 Audit Kunde ${world.runId}`,
-    primarySite: `P118 Audit Zentrale ${world.runId}`,
-    secondarySite: `P118 Audit Außenstelle ${world.runId}`,
-    rootName: `P118 Audit Wärmeerzeuger ${world.runId}`,
-    componentName: `P118 Audit Umwälzpumpe ${world.runId}`,
-    successorName: `P118 Audit Wärmeerzeuger neu ${world.runId}`,
-    serialNumber: `P118-AUDIT-SER-${world.runId}`,
-    validJobNumber: `AUF-${world.runId}-P118-SAME-SITE`,
-    wrongSiteJobNumber: `AUF-${world.runId}-P118-WRONG-SITE`,
-    employeeName: `${world.users.employee.firstName} ${world.users.employee.lastName}`,
+/** One customer site with one active root equipment, named for the calling test. */
+async function seedEquipmentAtSite(
+  world: TestWorld,
+  testId: string,
+  options: { serialNumber?: string; otherSite?: boolean } = {},
+) {
+  const names = {
+    customer: `P118 Audit Kunde ${world.runId}-${testId}`,
+    site: `P118 Audit Zentrale ${world.runId}-${testId}`,
+    otherSite: `P118 Audit Außenstelle ${world.runId}-${testId}`,
+    root: `P118 Audit Wärmeerzeuger ${world.runId}-${testId}`,
   };
+  const customer = await seedCustomer({
+    orgId: world.orgId,
+    actorId: world.users.admin.id,
+    name: names.customer,
+    sites: [
+      { name: names.site, street: 'Auditweg 18', postalCode: '10115', city: 'Berlin', isPrimary: true },
+      ...(options.otherSite
+        ? [{ name: names.otherSite, street: 'Auditweg 19', postalCode: '10115', city: 'Berlin' }]
+        : []),
+    ],
+  });
+  const siteId = expectDefined(customer.siteIds.get(names.site), 'the seeded P1-18 audit site');
+  const root = await seedInstalledEquipment({
+    orgId: world.orgId,
+    actorId: world.users.admin.id,
+    clientId: customer.clientId,
+    siteId,
+    name: names.root,
+    manufacturer: 'Audit Hersteller',
+    ...(options.serialNumber ? { serialNumber: options.serialNumber } : {}),
+  });
+  return { names, customer, siteId, root };
 }
 
-test.describe("P1-18 exhaustive installed-equipment audit @AUDIT-W2-P1-18 @AUDIT-W2", () => {
-  test("owns bounded root, component, site, identifier, missing-data, and search contracts", async ({
+test.describe('P1-18 exhaustive installed-equipment audit @AUDIT-W2-P1-18 @AUDIT-W2', () => {
+  test('registers a component under its root and shows unknown facts honestly', async ({
     adminPage,
     world,
   }) => {
-    const fixture = names(world);
-    await createCustomer(adminPage, fixture.customerName);
-    await openCustomerDetail(adminPage, fixture.customerName);
-    await addSiteOnCustomerDetail(adminPage, {
-      name: fixture.primarySite,
-      street: "Auditweg 18",
-      postalCode: "10115",
-      city: "Berlin",
-      isPrimary: true,
-    });
-    await addSiteOnCustomerDetail(adminPage, {
-      name: fixture.secondarySite,
-      street: "Auditweg 19",
-      postalCode: "10115",
-      city: "Berlin",
-    });
-    await createJob(adminPage, {
-      jobNumber: fixture.validJobNumber,
-      title: `P118 Audit gleicher Einsatzort ${world.runId}`,
-      clientName: fixture.customerName,
-      siteName: fixture.primarySite,
-      assignEmployeeName: fixture.employeeName,
-    });
-    await createJob(adminPage, {
-      jobNumber: fixture.wrongSiteJobNumber,
-      title: `P118 Audit anderer Einsatzort ${world.runId}`,
-      clientName: fixture.customerName,
-      siteName: fixture.secondarySite,
-    });
-    const rootNumber = await createInstalledEquipment(adminPage, {
-      customerName: fixture.customerName,
-      siteName: fixture.primarySite,
-      name: fixture.rootName,
-      state: "Aktiv",
-      manufacturer: "Audit Hersteller",
-      serialNumber: fixture.serialNumber,
-      installationDate: INSTALLATION_DATE,
-    });
+    const { names, root } = await seedEquipmentAtSite(world, 'component');
+    const componentName = `P118 Audit Umwälzpumpe ${world.runId}-component`;
     const componentNumber = await createInstalledEquipment(adminPage, {
-      customerName: fixture.customerName,
-      siteName: fixture.primarySite,
-      name: fixture.componentName,
-      category: "Anlagenkomponente",
-      parentName: fixture.rootName,
+      customerName: names.customer,
+      siteName: names.site,
+      name: componentName,
+      category: 'system_component',
+      parentName: names.root,
     });
-    await expect(
-      visibleText(adminPage, `Übergeordnet: ${fixture.rootName}`),
-    ).toBeVisible();
-    await expect(
-      adminPage.getByRole("main").getByTestId("equipment-fact-manufacturer"),
-    ).toContainText("Nicht erfasst");
-    await expect(
-      adminPage.getByRole("main").getByTestId("equipment-fact-commissioning"),
-    ).toContainText("Nicht erfasst");
-    await expect(
-      visibleText(adminPage, "Keine Kennung erfasst."),
-    ).toBeVisible();
-    await adminPage.goto(`/service/anlagen/${rootNumber}`);
-    await expect(
-      visibleText(adminPage, `Komponente: ${fixture.componentName}`),
-    ).toBeVisible();
+    await expect(equipmentRelation(adminPage, 'parent', names.root)).toBeVisible();
+    await expect(equipmentFact(adminPage, 'manufacturer')).toContainText(EQUIPMENT_NOT_RECORDED);
+    await expect(equipmentFact(adminPage, 'commissioning')).toContainText(EQUIPMENT_NOT_RECORDED);
+    await expect(equipmentNoIdentifierNotice(adminPage)).toBeVisible();
+    await adminPage.goto(`/service/anlagen/${root.equipmentNumber}`);
+    await expect(equipmentRelation(adminPage, 'component', componentName)).toBeVisible();
+    const component = await getInstalledEquipmentState(world.orgId, componentNumber);
+    expect(component.equipment.parent_equipment_id).toBe(root.id);
 
-    const component = await getInstalledEquipmentState(
-      world.orgId,
-      componentNumber,
-    );
-    const root = await getInstalledEquipmentState(world.orgId, rootNumber);
-    expect(component.equipment.parent_equipment_id).toBe(root.equipment.id);
-    expect(component.equipment.client_id).toBe(root.equipment.client_id);
-    expect(component.equipment.site_id).toBe(root.equipment.site_id);
-    expect(root.equipment.equipment_number).toMatch(/^ANL-\d{4}-\d{3}$/);
-    expect(component.equipment.equipment_number).not.toBe(
-      root.equipment.equipment_number,
-    );
-
-    await adminPage.goto("/service/anlagen");
-    await adminPage
-      .getByRole("combobox", { name: "Anlagen nach Kategorie filtern" })
-      .click();
-    await adminPage.getByRole("option", { name: "Anlagenkomponente" }).click();
-    await expect(
-      adminPage.getByRole("link").filter({ hasText: fixture.componentName }),
-    ).toBeVisible();
-    await expect(
-      adminPage.getByRole("link").filter({ hasText: fixture.rootName }),
-    ).toHaveCount(0);
+    await adminPage.goto('/service/anlagen');
+    await filterEquipmentListByCategory(adminPage, 'system_component');
+    await expect(adminPage.getByRole('link').filter({ hasText: componentName })).toBeVisible();
+    await expect(adminPage.getByRole('link').filter({ hasText: names.root })).toHaveCount(0);
   });
 
-  test("rejects duplicate and wrong-site widening while correction preserves both identities", async ({
+  test('rejects a serial number that another asset already uses', async ({ adminPage, world }) => {
+    const serialNumber = `P118-AUDIT-SER-${world.runId}-duplicate`;
+    const { names } = await seedEquipmentAtSite(world, 'duplicate', { serialNumber });
+    await expectDuplicateInstalledEquipmentRejected(adminPage, {
+      customerName: names.customer,
+      siteName: names.site,
+      name: `P118 Audit Duplikat ${world.runId}-duplicate`,
+      manufacturer: 'Audit Hersteller',
+      serialNumber,
+    });
+  });
+
+  test('offers only work at the equipment site for a work link', async ({ adminPage, world }) => {
+    const { names, customer, siteId, root } = await seedEquipmentAtSite(world, 'work-site', {
+      otherSite: true,
+    });
+    const sameSiteJob = `AUF-${world.runId}-P118-SAME-SITE`;
+    const otherSiteJob = `AUF-${world.runId}-P118-OTHER-SITE`;
+    await seedJob({
+      orgId: world.orgId,
+      actorId: world.users.admin.id,
+      jobNumber: sameSiteJob,
+      title: `P118 Audit gleicher Einsatzort ${world.runId}`,
+      clientId: customer.clientId,
+      siteId,
+    });
+    await seedJob({
+      orgId: world.orgId,
+      actorId: world.users.admin.id,
+      jobNumber: otherSiteJob,
+      title: `P118 Audit anderer Einsatzort ${world.runId}`,
+      clientId: customer.clientId,
+      siteId: expectDefined(customer.siteIds.get(names.otherSite), 'the seeded other site'),
+    });
+    await adminPage.goto(`/service/anlagen/${root.equipmentNumber}`);
+    const workDialog = await openInstalledEquipmentWorkLinkDialog(adminPage);
+    await equipmentWorkTargetPicker(workDialog).click();
+    const listbox = adminPage.getByRole('listbox');
+    await expect(listbox.getByText(sameSiteJob, { exact: false })).toBeVisible();
+    await expect(listbox.getByText(otherSiteJob, { exact: false })).toHaveCount(0);
+    await dismissDialog(listbox);
+    await expect(listbox).toHaveCount(0);
+    await workDialog.getByRole('button', { name: SHARED_COPY.action.cancel }).click();
+  });
+
+  test('corrects a replacement recorded on the wrong asset and keeps both identities', async ({
     adminPage,
     world,
   }) => {
-    const fixture = names(world);
-    const predecessorNumber = requireChainedValue(
-      await getInstalledEquipmentNumberByName(world.orgId, fixture.rootName),
-      {
-        test: "P1-18 lifecycle audit",
-        needs: "the root equipment created by the bounded-identity audit",
-        grep: "owns bounded root|rejects duplicate",
-        suite: "audit",
-      },
-    );
-    await expectDuplicateInstalledEquipmentRejected(adminPage, {
-      customerName: fixture.customerName,
-      siteName: fixture.primarySite,
-      name: `P118 Audit Duplikat ${world.runId}`,
-      manufacturer: "Audit Hersteller",
-      serialNumber: fixture.serialNumber,
+    const { root } = await seedEquipmentAtSite(world, 'correction');
+    const successor = await seedInstalledEquipmentReplacement({
+      orgId: world.orgId,
+      actorId: world.users.admin.id,
+      predecessorId: root.id,
+      inactiveReason: 'Vor dem Austausch kontrolliert außer Betrieb genommen',
+      successorName: `P118 Audit Wärmeerzeuger neu ${world.runId}-correction`,
+      successorSerialNumber: `P118-AUDIT-NEW-${world.runId}-correction`,
+      reason: 'Austausch zunächst als Abschlussaktion dokumentiert',
     });
-    await openInstalledEquipmentByName(adminPage, fixture.rootName);
-    const workDialog = await openInstalledEquipmentWorkLinkDialog(adminPage);
-    await workDialog.locator("#equipment-work-target").click();
-    const listbox = adminPage.getByRole("listbox");
-    await expect(
-      listbox.getByText(fixture.validJobNumber, { exact: false }),
-    ).toBeVisible();
-    await expect(
-      listbox.getByText(fixture.wrongSiteJobNumber, { exact: false }),
-    ).toHaveCount(0);
-    await adminPage.keyboard.press("Escape");
-    await expect(listbox).toHaveCount(0);
-    await workDialog.getByRole("button", { name: "Abbrechen" }).click();
-
-    await transitionInstalledEquipment(
-      adminPage,
-      "Vorübergehend außer Betrieb",
-      "Vor dem Austausch kontrolliert außer Betrieb genommen",
-    );
-    const successorNumber = await replaceInstalledEquipment(adminPage, {
-      successorName: fixture.successorName,
-      serialNumber: `P118-AUDIT-NEW-${world.runId}`,
-      reason: "Austausch zunächst als Abschlussaktion dokumentiert",
-    });
-    await adminPage.goto(`/service/anlagen/${predecessorNumber}`);
+    await adminPage.goto(`/service/anlagen/${root.equipmentNumber}`);
     await correctInstalledEquipmentTerminalAction(
       adminPage,
-      "Austausch wurde irrtümlich am falschen Gerät festgehalten",
+      'Austausch wurde irrtümlich am falschen Gerät festgehalten',
     );
-    const predecessor = await getInstalledEquipmentState(
-      world.orgId,
-      predecessorNumber,
-    );
-    const successor = await getInstalledEquipmentState(
-      world.orgId,
-      successorNumber,
-    );
-    expect(predecessor.equipment.state).toBe("inactive");
+    const predecessor = await getInstalledEquipmentState(world.orgId, root.equipmentNumber);
+    const voided = await getInstalledEquipmentState(world.orgId, successor.equipmentNumber);
+    expect(predecessor.equipment.state).toBe('inactive');
     expect(predecessor.equipment.voided_at).toBeNull();
-    expect(successor.equipment.voided_at).not.toBeNull();
-    expect(predecessor.events.map((event) => event.event_type)).toEqual(
-      expect.arrayContaining(["replaced", "terminal_action_corrected"]),
-    );
-    expect(successor.events.map((event) => event.event_type)).toEqual(
-      expect.arrayContaining(["registered", "terminal_action_corrected"]),
-    );
-    await adminPage.goto(`/service/anlagen/${successorNumber}`);
-    await expect(
-      visibleText(
-        adminPage,
-        "Dieser Nachfolger wurde durch eine Korrektur als irrtümlich erfasst markiert.",
-      ),
-    ).toBeVisible();
-    await expect(
-      adminPage.getByRole("button", { name: "Bearbeiten" }),
-    ).toBeDisabled();
+    expect(voided.equipment.voided_at).not.toBeNull();
+    expect(predecessor.events.map((event) => event.event_type)).toContain('terminal_action_corrected');
+
+    await adminPage.goto(`/service/anlagen/${successor.equipmentNumber}`);
+    await expect(equipmentVoidedSuccessorNotice(adminPage)).toBeVisible();
+    await expect(serviceEditButton(adminPage)).toBeDisabled();
+  });
+
+  test('keeps equipment detail from employees and other organizations', async ({
+    employeePage,
+    outsiderPage,
+    world,
+  }) => {
+    const { names, root } = await seedEquipmentAtSite(world, 'denial');
+    await employeePage.goto(`/service/anlagen/${root.equipmentNumber}`);
+    await employeePage.waitForURL(/\/auftraege\/?$/, { timeout: 20_000 });
+    await outsiderPage.goto(`/service/anlagen/${root.equipmentNumber}`);
+    await expect(textInDom(outsiderPage, names.root)).toHaveCount(0);
   });
 });

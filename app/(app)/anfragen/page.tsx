@@ -1,128 +1,42 @@
-import { SectionError } from '@/components/ui/section-error';
+import { RegionLoadError } from '@/components/shared/region-load-error';
 import { readOrganizationClients } from '@/lib/clients/server';
 import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { logError } from '@/lib/logging';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
-import { toClientRequest } from '@/lib/requests/types';
-import {
-  AnfragenContent,
-  type RequestListEntry,
-} from '@/components/anfragen/anfragen-content';
+import { parseRequestListQuery } from '@/lib/requests/list-page';
+import { readRequestPage } from '@/lib/requests/list-page-server';
+import { AnfragenContent } from '@/components/anfragen/anfragen-content';
 import { CreateRequestDialog } from '@/components/anfragen/create-request-dialog';
 import { AnfragenContentSkeleton } from '@/components/loading-states/anfragen-page-skeleton';
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { OrgRole } from '@/lib/members/actions';
-import {
-  formatProfileName,
-  getManagerAssigneeOptions,
-} from '@/lib/members/profile-name';
+import { getManagerAssigneeOptions } from '@/lib/members/profile-name';
 
-async function AnfragenData({ activeOrgId }: { activeOrgId: string }) {
-  const admin = createSupabaseAdminClient();
-
-  const [requestsResult, clients] = await Promise.all([
-    admin
-      .from('client_requests')
-      .select('*')
-      .eq('organization_id', activeOrgId)
-      .order('received_at', { ascending: false }),
-    admin
-      .from('clients')
-      .select('id, name')
-      .eq('organization_id', activeOrgId),
-  ]);
-
-  if (requestsResult.error) {
-    console.error('Error fetching client requests:', requestsResult.error);
+async function AnfragenData({
+  activeOrgId,
+  searchParams,
+}: {
+  activeOrgId: string;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const query = parseRequestListQuery(await searchParams);
+  const page = await readRequestPage(activeOrgId, query).catch((error: unknown) => {
+    logError('anfragen.page.read_failed', error);
+    return null;
+  });
+  if (!page) {
     return (
-      <SectionError>
-        Die Anfragen konnten nicht geladen werden. Bitte versuche es erneut.
-      </SectionError>
+      <RegionLoadError>Die Anfragen konnten nicht geladen werden. Bitte versuche es erneut.</RegionLoadError>
     );
   }
-
-  const requests = (requestsResult.data ?? []).map(toClientRequest);
-  const clientNameById = new Map(
-    (clients.data ?? []).map((client) => [client.id, client.name])
-  );
-
-  const assigneeIds = Array.from(
-    new Set(
-      requests
-        .map((request) => request.assignedTo)
-        .filter((id): id is string => Boolean(id))
-    )
-  );
-  const convertedJobIds = requests
-    .map((request) => request.convertedJobId)
-    .filter((id): id is string => Boolean(id));
-  const convertedProjectIds = requests
-    .map((request) => request.convertedProjectId)
-    .filter((id): id is string => Boolean(id));
-
-  const [profilesResult, jobsResult, projectsResult] = await Promise.all([
-    assigneeIds.length > 0
-      ? admin
-          .from('profiles')
-          .select('id, first_name, last_name, email')
-          .in('id', assigneeIds)
-      : Promise.resolve({ data: [] }),
-    convertedJobIds.length > 0
-      ? admin
-          .from('jobs')
-          .select('id, title, job_number')
-          .eq('organization_id', activeOrgId)
-          .in('id', convertedJobIds)
-      : Promise.resolve({ data: [] }),
-    convertedProjectIds.length > 0
-      ? admin
-          .from('projects')
-          .select('id, name, project_number')
-          .eq('organization_id', activeOrgId)
-          .in('id', convertedProjectIds)
-      : Promise.resolve({ data: [] }),
-  ]);
-
-  const profileById = new Map(
-    (profilesResult.data ?? []).map((profile) => [profile.id, profile])
-  );
-  const jobById = new Map((jobsResult.data ?? []).map((job) => [job.id, job]));
-  const projectById = new Map(
-    (projectsResult.data ?? []).map((project) => [project.id, project])
-  );
-
-  const entries: RequestListEntry[] = requests.map((request) => {
-    const assignee = request.assignedTo
-      ? profileById.get(request.assignedTo)
-      : null;
-    const job = request.convertedJobId
-      ? jobById.get(request.convertedJobId)
-      : null;
-    const project = request.convertedProjectId
-      ? projectById.get(request.convertedProjectId)
-      : null;
-
-    return {
-      request,
-      clientName: request.clientId
-        ? (clientNameById.get(request.clientId) ?? null)
-        : null,
-      assigneeName: assignee ? formatProfileName(assignee) : null,
-      convertedLabel: job
-        ? `Auftrag ${job.job_number ?? job.title}`
-        : project
-          ? `Projekt ${project.project_number ?? project.name}`
-          : null,
-    };
-  });
-
-  return <AnfragenContent entries={entries} />;
+  return <AnfragenContent {...page} query={query} />;
 }
 
 async function CreateRequestDialogData({ activeOrgId }: { activeOrgId: string }) {
@@ -133,15 +47,23 @@ async function CreateRequestDialogData({ activeOrgId }: { activeOrgId: string })
     getManagerAssigneeOptions(admin, activeOrgId),
   ]);
 
-
-  return <CreateRequestDialog clients={clients} assignees={assignees} />;
+  if (!assignees.success) {
+    return <RegionLoadError>Die Zuständigen für neue Anfragen konnten nicht geladen werden.</RegionLoadError>;
+  }
+  return <CreateRequestDialog clients={clients} assignees={assignees.options} />;
 }
 
-export default async function AnfragenPage() {
-  const [{ data: { user } }, cookieStore] = await Promise.all([
-    getCachedUser(),
-    cookies(),
-  ]);
+export default async function AnfragenPage({
+  searchParams = Promise.resolve({}),
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const [
+    {
+      data: { user },
+    },
+    cookieStore,
+  ] = await Promise.all([getCachedUser(), cookies()]);
 
   if (!user) {
     redirect('/login');
@@ -157,9 +79,7 @@ export default async function AnfragenPage() {
       <PageShell>
         <PageHeader title="Anfragen" />
         <PageBody>
-          <p className="text-muted-foreground">
-            Bitte wähle zuerst eine Organisation aus.
-          </p>
+          <p className="text-muted-foreground">Bitte wähle zuerst eine Organisation aus.</p>
         </PageBody>
       </PageShell>
     );
@@ -167,8 +87,7 @@ export default async function AnfragenPage() {
 
   const currentMembership = memberships.find((m) => m.orgId === activeOrgId);
   const currentUserRole = currentMembership?.role as OrgRole | undefined;
-  const isAdminOrManager =
-    currentUserRole === 'admin' || currentUserRole === 'buero';
+  const isAdminOrManager = currentUserRole === 'admin' || currentUserRole === 'buero';
 
   if (!isAdminOrManager) {
     redirect('/dashboard');
@@ -187,7 +106,7 @@ export default async function AnfragenPage() {
 
       <PageBody>
         <Suspense fallback={<AnfragenContentSkeleton />}>
-          <AnfragenData activeOrgId={activeOrgId} />
+          <AnfragenData activeOrgId={activeOrgId} searchParams={searchParams} />
         </Suspense>
       </PageBody>
     </PageShell>

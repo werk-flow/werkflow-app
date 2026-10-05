@@ -2,12 +2,13 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMemo, useState } from 'react';
-import { useForm, useWatch } from 'react-hook-form';
+import { useForm, useWatch, type Control, type UseFormReturn } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
-import { z } from 'zod';
+import { z } from '@/lib/zod';
 
 import { PasswordRequirements } from '@/components/password/PasswordRequirements';
 import { PasswordStrengthMeter } from '@/components/password/PasswordStrengthMeter';
+import { maskEmail } from '@/components/auth/mask-email';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
@@ -20,29 +21,103 @@ import {
   getPasswordRequirements,
   getPasswordStrengthLevel,
   passwordSchema,
-  translateSupabasePasswordError
+  translateSupabasePasswordError,
 } from '@/lib/validation/password';
 
 const signupSchema = z.object({
-  firstName: z
-    .string()
-    .min(2, 'Der Vorname muss mindestens 2 Zeichen lang sein.'),
-  lastName: z
-    .string()
-    .min(2, 'Der Nachname muss mindestens 2 Zeichen lang sein.'),
+  firstName: z.string().min(2, 'Der Vorname muss mindestens 2 Zeichen lang sein.'),
+  lastName: z.string().min(2, 'Der Nachname muss mindestens 2 Zeichen lang sein.'),
   email: z.string().email('Bitte gib eine gültige E-Mail-Adresse ein.'),
-  password: passwordSchema
+  password: passwordSchema,
 });
 
 type SignupValues = z.infer<typeof signupSchema>;
 
-// Helper to mask email for privacy (e.g., "test@example.com" -> "t***@example.com")
-function maskEmail(email: string): string {
-  const [localPart, domain] = email.split('@');
-  if (localPart === undefined || !domain) return email;
-  const maskedLocal =
-    localPart.length > 1 ? localPart[0] + '***' : localPart + '***';
-  return `${maskedLocal}@${domain}`;
+// Marks every invalid field on the form and returns the first one to focus.
+function flagInvalidSignupFields(
+  form: UseFormReturn<SignupValues>,
+  values: SignupValues,
+  isInviteSignup: boolean,
+  invitedEmail: string | null,
+  passwordRequirements: { allMet: boolean },
+): keyof SignupValues | null {
+  let firstInvalidField: keyof SignupValues | null = null;
+
+  // Validate name fields manually
+  if (values.firstName.length < 2) {
+    form.setError('firstName', {
+      type: 'manual',
+      message: 'Der Vorname muss mindestens 2 Zeichen lang sein.',
+    });
+    firstInvalidField ??= 'firstName';
+  }
+
+  if (values.lastName.length < 2) {
+    form.setError('lastName', {
+      type: 'manual',
+      message: 'Der Nachname muss mindestens 2 Zeichen lang sein.',
+    });
+    firstInvalidField ??= 'lastName';
+  }
+
+  // Validate email
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(values.email)) {
+    form.setError('email', {
+      type: 'manual',
+      message: 'Bitte gib eine gültige E-Mail-Adresse ein.',
+    });
+    firstInvalidField ??= 'email';
+  }
+
+  // If this is an invite signup, ensure the email matches the invited email
+  // This is a client-side safety check (server will also validate)
+  if (isInviteSignup && invitedEmail && values.email.toLowerCase() !== invitedEmail.toLowerCase()) {
+    form.setError('email', {
+      type: 'manual',
+      message: `Diese Einladung ist für ${maskEmail(invitedEmail)} bestimmt.`,
+    });
+    firstInvalidField ??= 'email';
+  }
+
+  // The requirements checklist under the field already names what is
+  // missing; focusing the field is the only extra signal needed.
+  if (!passwordRequirements.allMet) {
+    firstInvalidField ??= 'password';
+  }
+
+  return firstInvalidField;
+}
+
+function SignupNameFields({
+  control,
+  hasAttemptedSubmit,
+}: {
+  control: Control<SignupValues>;
+  hasAttemptedSubmit: boolean;
+}) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 sm:items-start">
+      <FormField
+        control={control}
+        name="firstName"
+        render={({ field, fieldState }) => (
+          <Field label="Vorname" required error={hasAttemptedSubmit ? fieldState.error?.message : undefined}>
+            <Input autoComplete="given-name" placeholder="Max" {...field} />
+          </Field>
+        )}
+      />
+      <FormField
+        control={control}
+        name="lastName"
+        render={({ field, fieldState }) => (
+          <Field label="Nachname" required error={hasAttemptedSubmit ? fieldState.error?.message : undefined}>
+            <Input autoComplete="family-name" placeholder="Mustermann" {...field} />
+          </Field>
+        )}
+      />
+    </div>
+  );
 }
 
 interface SignupFormProps {
@@ -51,11 +126,7 @@ interface SignupFormProps {
   invitedEmail?: string | null;
 }
 
-export function SignupForm({
-  prefillEmail = '',
-  inviteCode = '',
-  invitedEmail = null
-}: SignupFormProps) {
+export function SignupForm({ prefillEmail = '', inviteCode = '', invitedEmail = null }: SignupFormProps) {
   // Determine if this is an invite-based signup (email should be locked)
   const isInviteSignup = !!inviteCode && !!invitedEmail;
   const router = useRouter();
@@ -72,24 +143,17 @@ export function SignupForm({
       firstName: '',
       lastName: '',
       email: prefillEmail,
-      password: ''
-    }
+      password: '',
+    },
   });
 
   const passwordValue =
     useWatch({
       control: form.control,
-      name: 'password'
+      name: 'password',
     }) ?? '';
-  const passwordRequirements = useMemo(
-    () => getPasswordRequirements(passwordValue),
-    [passwordValue]
-  );
-  const passwordStrength = useMemo(
-    () => getPasswordStrengthLevel(passwordValue),
-    [passwordValue]
-  );
-
+  const passwordRequirements = useMemo(() => getPasswordRequirements(passwordValue), [passwordValue]);
+  const passwordStrength = useMemo(() => getPasswordStrengthLevel(passwordValue), [passwordValue]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,54 +162,13 @@ export function SignupForm({
     form.clearErrors('password');
 
     const values = form.getValues();
-    let firstInvalidField: keyof SignupValues | null = null;
-
-    // Validate name fields manually
-    if (values.firstName.length < 2) {
-      form.setError('firstName', {
-        type: 'manual',
-        message: 'Der Vorname muss mindestens 2 Zeichen lang sein.'
-      });
-      firstInvalidField ??= 'firstName';
-    }
-
-    if (values.lastName.length < 2) {
-      form.setError('lastName', {
-        type: 'manual',
-        message: 'Der Nachname muss mindestens 2 Zeichen lang sein.'
-      });
-      firstInvalidField ??= 'lastName';
-    }
-
-    // Validate email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(values.email)) {
-      form.setError('email', {
-        type: 'manual',
-        message: 'Bitte gib eine gültige E-Mail-Adresse ein.'
-      });
-      firstInvalidField ??= 'email';
-    }
-
-    // If this is an invite signup, ensure the email matches the invited email
-    // This is a client-side safety check (server will also validate)
-    if (
-      isInviteSignup &&
-      invitedEmail &&
-      values.email.toLowerCase() !== invitedEmail.toLowerCase()
-    ) {
-      form.setError('email', {
-        type: 'manual',
-        message: `Diese Einladung ist für ${maskEmail(invitedEmail)} bestimmt.`
-      });
-      firstInvalidField ??= 'email';
-    }
-
-    // The requirements checklist under the field already names what is
-    // missing; focusing the field is the only extra signal needed.
-    if (!passwordRequirements.allMet) {
-      firstInvalidField ??= 'password';
-    }
+    const firstInvalidField = flagInvalidSignupFields(
+      form,
+      values,
+      isInviteSignup,
+      invitedEmail,
+      passwordRequirements,
+    );
 
     if (firstInvalidField) {
       form.setFocus(firstInvalidField);
@@ -154,129 +177,93 @@ export function SignupForm({
 
     setIsSubmitting(true);
 
-    // Store invite_code in user metadata if this is an invite-based signup
-    // This allows us to redeem the invite even if the user closes the window
-    // and logs in elsewhere (as long as they signed up via the invite link)
-    const { data, error } = await supabase.auth.signUp({
-      email: values.email,
-      password: values.password,
-      options: {
-        data: {
-          first_name: values.firstName,
-          last_name: values.lastName,
-          // Only store invite_code if this is an invite-based signup
-          ...(isInviteSignup && inviteCode
-            ? { pending_invite_code: inviteCode }
-            : {})
-        }
-      }
-    });
-
-    if (error) {
-      console.error('Failed to sign up', error);
-      const normalizedMessage = error.message?.toLowerCase() ?? '';
-      const isPasswordError = normalizedMessage.includes('password');
-
-      if (isPasswordError) {
-        const friendly = translateSupabasePasswordError(error);
-        form.setError('password', { type: 'server', message: friendly });
-        form.resetField('password', {
-          keepDirty: false,
-          keepError: true,
-          defaultValue: ''
-        });
-        setFormError(null);
-      } else {
-        setFormError(
-          'Registrierung fehlgeschlagen. Bitte überprüfe deine Angaben.'
-        );
-      }
-      setIsSubmitting(false);
-      return;
-    }
-
-    if (data.session && data.user) {
-      const { error: profileError } = await supabase.from('profiles').upsert(
-        {
-          id: data.user.id,
-          first_name: values.firstName,
-          last_name: values.lastName
+    try {
+      // Store invite_code in user metadata if this is an invite-based signup
+      // This allows us to redeem the invite even if the user closes the window
+      // and logs in elsewhere (as long as they signed up via the invite link)
+      const { data, error } = await supabase.auth.signUp({
+        email: values.email,
+        password: values.password,
+        options: {
+          data: {
+            first_name: values.firstName,
+            last_name: values.lastName,
+            // Only store invite_code if this is an invite-based signup
+            ...(isInviteSignup && inviteCode ? { pending_invite_code: inviteCode } : {}),
+          },
         },
-        { onConflict: 'id' }
-      );
+      });
 
-      if (profileError) {
-        console.error('Failed to upsert profile', profileError);
-        setFormError(
-          'Dein Profil konnte nicht gespeichert werden. Bitte versuche es erneut.'
-        );
+      if (error) {
+        const normalizedMessage = error.message?.toLowerCase() ?? '';
+        const isPasswordError = normalizedMessage.includes('password');
+
+        if (isPasswordError) {
+          const friendly = translateSupabasePasswordError(error);
+          form.setError('password', { type: 'server', message: friendly });
+          form.resetField('password', {
+            keepDirty: false,
+            keepError: true,
+            defaultValue: '',
+          });
+          setFormError(null);
+        } else {
+          setFormError('Registrierung fehlgeschlagen. Bitte überprüfe deine Angaben.');
+        }
         setIsSubmitting(false);
         return;
       }
 
-    }
+      if (data.session && data.user) {
+        const { error: profileError } = await supabase.from('profiles').upsert(
+          {
+            id: data.user.id,
+            first_name: values.firstName,
+            last_name: values.lastName,
+          },
+          { onConflict: 'id' },
+        );
 
-    if (data.session) {
-      await fetch('/auth/callback', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          event: 'SIGNED_IN',
-          session: data.session
-        })
-      });
-      // The action identifies the caller from the server session, so it can
-      // only invalidate the profile once the callback has set the cookies.
-      await invalidateProfileCache();
-    }
+        if (profileError) {
+          setFormError('Dein Profil konnte nicht gespeichert werden. Bitte versuche es erneut.');
+          setIsSubmitting(false);
+          return;
+        }
+      }
 
-    // Include invite_code in the verify redirect if present
-    const verifyUrl = inviteCode
-      ? `/verify?email=${encodeURIComponent(
-          values.email
-        )}&invite_code=${inviteCode}`
-      : `/verify?email=${encodeURIComponent(values.email)}`;
-    router.replace(verifyUrl);
-    router.refresh();
+      if (data.session) {
+        await fetch('/auth/callback', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            event: 'SIGNED_IN',
+            session: data.session,
+          }),
+        });
+        // The action identifies the caller from the server session, so it can
+        // only invalidate the profile once the callback has set the cookies.
+        await invalidateProfileCache();
+      }
+
+      // Include invite_code in the verify redirect if present
+      const verifyUrl = inviteCode
+        ? `/verify?email=${encodeURIComponent(values.email)}&invite_code=${encodeURIComponent(inviteCode)}`
+        : `/verify?email=${encodeURIComponent(values.email)}`;
+      router.replace(verifyUrl);
+      router.refresh();
+    } catch {
+      // A rejected request (network) must not leave the button spinning.
+      setFormError('Registrierung fehlgeschlagen. Bitte versuche es erneut.');
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <Form {...form}>
       <form className="grid gap-4" onSubmit={handleSubmit} noValidate>
-        <div className="grid gap-4 sm:grid-cols-2 sm:items-start">
-          <FormField
-            control={form.control}
-            name="firstName"
-            render={({ field, fieldState }) => (
-              <Field
-                label="Vorname"
-                required
-                error={hasAttemptedSubmit ? fieldState.error?.message : undefined}
-              >
-                <Input autoComplete="given-name" placeholder="Max" {...field} />
-              </Field>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="lastName"
-            render={({ field, fieldState }) => (
-              <Field
-                label="Nachname"
-                required
-                error={hasAttemptedSubmit ? fieldState.error?.message : undefined}
-              >
-                <Input
-                  autoComplete="family-name"
-                  placeholder="Mustermann"
-                  {...field}
-                />
-              </Field>
-            )}
-          />
-        </div>
+        <SignupNameFields control={form.control} hasAttemptedSubmit={hasAttemptedSubmit} />
 
         <FormField
           control={form.control}
@@ -286,9 +273,7 @@ export function SignupForm({
               label="E-Mail"
               required
               description={
-                isInviteSignup
-                  ? 'Die E-Mail-Adresse ist durch die Einladung vorgegeben.'
-                  : undefined
+                isInviteSignup ? 'Die E-Mail-Adresse ist durch die Einladung vorgegeben.' : undefined
               }
               error={hasAttemptedSubmit ? fieldState.error?.message : undefined}
             >
@@ -299,9 +284,7 @@ export function SignupForm({
                 autoComplete="email"
                 placeholder="beispiel@firma.de"
                 readOnly={isInviteSignup}
-                className={
-                  isInviteSignup ? 'bg-muted cursor-not-allowed' : ''
-                }
+                className={isInviteSignup ? 'bg-muted cursor-not-allowed' : ''}
               />
             </Field>
           )}
@@ -317,21 +300,11 @@ export function SignupForm({
             <Field
               label="Passwort"
               required
-              error={
-                fieldState.error?.type === 'server'
-                  ? fieldState.error.message
-                  : undefined
-              }
+              error={fieldState.error?.type === 'server' ? fieldState.error.message : undefined}
             >
               <PasswordInput {...field} autoComplete="new-password" />
-              <PasswordStrengthMeter
-                className="mt-2"
-                level={passwordStrength}
-              />
-              <PasswordRequirements
-                className="mt-2"
-                requirements={passwordRequirements}
-              />
+              <PasswordStrengthMeter className="mt-2" level={passwordStrength} />
+              <PasswordRequirements className="mt-2" requirements={passwordRequirements} />
             </Field>
           )}
         />
@@ -339,7 +312,7 @@ export function SignupForm({
         <ErrorText>{formError}</ErrorText>
 
         <Button className="w-full" disabled={isSubmitting} type="submit">
-          {isSubmitting ? 'Konto wird erstellt...' : 'Registrieren'}
+          {isSubmitting ? 'Konto wird erstellt…' : 'Registrieren'}
         </Button>
       </form>
     </Form>

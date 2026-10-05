@@ -1,24 +1,27 @@
 import { redirect } from 'next/navigation';
 import { readOrganizationClients } from '@/lib/clients/server';
 import { cookies } from 'next/headers';
+import { logError } from '@/lib/logging';
 
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
 import { getJobByNumber } from '@/lib/jobs/actions';
 import { getJobInstructionItems } from '@/lib/jobs/instruction-items-actions';
 import { getJobDocuments } from '@/lib/documents/actions';
-import { getInventoryPickerOptions, getJobMaterialLines } from '@/lib/inventory/actions';
+import { getInventoryPickerPage, getJobMaterialLines } from '@/lib/inventory/actions';
 import { type OrgRole } from '@/lib/members/actions';
 import { getOrgMembersForUser } from '@/lib/members/queries';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { JobDetailContent } from '@/components/auftraege/job-detail-content';
-import { FieldWorkPackPage } from '@/components/auftraege/field-work-pack-page';
-import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
+import { JobDetailContent } from '@/components/auftraege/job-detail/job-detail-content';
+import { FieldWorkPackPage } from '@/components/auftraege/work-pack/field-work-pack-page';
+import type { OrgMemberOption } from '@/components/auftraege/shared/employee-multi-select';
+import { RegionLoadError } from '@/components/shared/region-load-error';
 import { RouteRedirect } from '@/components/shared/route-redirect';
 import { getWorkLifecycleSnapshot } from '@/lib/work-lifecycle/actions';
 import { getWorkArtifacts } from '@/lib/work-artifacts/actions';
 import { getEffectiveResponsibilityHolderForActor } from '@/lib/responsibilities/server';
 import { getWorkHandoverWorkspace } from '@/lib/work-handover/actions';
+import { jobDetailHref } from '@/lib/jobs/routes';
 import JobDetailLoading from './loading';
 
 interface JobDetailPageProps {
@@ -26,51 +29,64 @@ interface JobDetailPageProps {
 }
 
 async function JobDetailData({ jobNumber }: { jobNumber: string }) {
-  const [{ data: { user } }, cookieStore] = await Promise.all([
-    getCachedUser(),
-    cookies(),
-  ]);
+  const [
+    {
+      data: { user },
+    },
+    cookieStore,
+  ] = await Promise.all([getCachedUser(), cookies()]);
 
   if (!user) redirect('/login');
 
-  const activeOrgId = await resolveActiveOrgId(cookieStore, user.id);
+  const [activeOrgId, memberships] = await Promise.all([
+    resolveActiveOrgId(cookieStore, user.id),
+    getCachedMemberships(user.id),
+  ]);
   if (!activeOrgId) redirect('/auftraege');
 
-  const memberships = await getCachedMemberships(user.id);
   const currentMembership = memberships.find((m) => m.orgId === activeOrgId);
   const currentUserRole = currentMembership?.role as OrgRole | undefined;
-  const isAdminOrManager =
-    currentUserRole === 'admin' || currentUserRole === 'buero';
+  const isAdminOrManager = currentUserRole === 'admin' || currentUserRole === 'buero';
   if (!isAdminOrManager) {
     return <FieldWorkPackPage jobNumber={jobNumber} currentUserId={user.id} />;
   }
   const supabase = await createSupabaseServerClient();
   const jobResultPromise = getJobByNumber(decodeURIComponent(jobNumber));
   const instructionItemsResultPromise = jobResultPromise.then((result) =>
-    result.success ? getJobInstructionItems(result.job.id) : null
+    result.success ? getJobInstructionItems(result.job.id) : null,
   );
   const documentsResultPromise = jobResultPromise.then((result) =>
-    result.success ? getJobDocuments(result.job.id) : null
+    result.success ? getJobDocuments(result.job.id) : null,
   );
   const materialLinesResultPromise = jobResultPromise.then((result) =>
-    result.success ? getJobMaterialLines(result.job.id) : null
+    result.success ? getJobMaterialLines(result.job.id) : null,
   );
-  const inventoryOptionsResultPromise = getInventoryPickerOptions();
+  const inventoryOptionsResultPromise = getInventoryPickerPage();
   const lifecycleResultPromise = jobResultPromise.then((result) =>
-    result.success
-      ? getWorkLifecycleSnapshot({ targetType: 'job', targetId: result.job.id })
-      : null
+    result.success ? getWorkLifecycleSnapshot({ targetType: 'job', targetId: result.job.id }) : null,
   );
   const artifactsResultPromise = jobResultPromise.then((result) =>
-    result.success ? getWorkArtifacts({ targetType: 'job', targetId: result.job.id }) : null
+    result.success ? getWorkArtifacts({ targetType: 'job', targetId: result.job.id }) : null,
   );
   const approvalHolderPromise = getEffectiveResponsibilityHolderForActor({
-    organizationId: activeOrgId, responsibility: 'work_artifact_approval', actorUserId: user.id,
+    organizationId: activeOrgId,
+    responsibility: 'work_artifact_approval',
+    actorUserId: user.id,
   });
   const handoverWorkspacePromise = jobResultPromise.then((result) =>
+    result.success ? getWorkHandoverWorkspace({ targetType: 'job', targetId: result.job.id }) : null,
+  );
+
+  // Origin request (P1-02): read through the RLS-enforced client, so only
+  // managers (who may see requests) get the back-link.
+  const originRequestPromise = jobResultPromise.then((result) =>
     result.success
-      ? getWorkHandoverWorkspace({ targetType: 'job', targetId: result.job.id })
-      : null
+      ? supabase
+          .from('client_requests')
+          .select('id, request_number, summary')
+          .eq('converted_job_id', result.job.id)
+          .maybeSingle()
+      : null,
   );
 
   const [
@@ -85,6 +101,7 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
     artifactsResult,
     approvalHolder,
     handoverWorkspaceResult,
+    originRequest,
   ] = await Promise.all([
     jobResultPromise,
     getOrgMembersForUser(activeOrgId, user.id),
@@ -97,7 +114,17 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
     artifactsResultPromise,
     approvalHolderPromise,
     handoverWorkspacePromise,
+    originRequestPromise,
   ]);
+
+  // A missing or forbidden job leaves the page; a failed read must not look like one.
+  if (!result.success && (result.error === 'fetch_failed' || result.error === 'unexpected_error')) {
+    return (
+      <RegionLoadError title="Der Auftrag konnte nicht geladen werden">
+        Der Auftrag ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
+      </RegionLoadError>
+    );
+  }
 
   if (!result.success) {
     return (
@@ -107,48 +134,40 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
     );
   }
 
+  if (!membersResult.success) {
+    return (
+      <RegionLoadError title="Der Auftrag konnte nicht geladen werden">
+        Die Mitarbeiterliste ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
+      </RegionLoadError>
+    );
+  }
+
   const { job } = result;
-  const members: OrgMemberOption[] = membersResult.map((member) => ({
+  const members: OrgMemberOption[] = membersResult.members.map((member) => ({
     userId: member.user_id,
     firstName: member.first_name,
     lastName: member.last_name,
     role: member.role,
   }));
 
-
-  const instructionItems =
-    instructionItemsResult && instructionItemsResult.success
-      ? instructionItemsResult.items
-      : [];
-  const documents =
-    documentsResult && documentsResult.success ? documentsResult.documents : [];
-  const materialLines =
-    materialLinesResult && materialLinesResult.success
-      ? materialLinesResult.lines
-      : [];
-  const inventoryItems =
-    inventoryOptionsResult && inventoryOptionsResult.success
-      ? inventoryOptionsResult.items
-      : [];
-  const inventoryLocations =
-    inventoryOptionsResult && inventoryOptionsResult.success
-      ? inventoryOptionsResult.locations
-      : [];
+  // A failed read stays null so that its region shows the failure instead of an empty list.
+  const instructionItems = instructionItemsResult?.success ? instructionItemsResult.items : null;
+  const documents = documentsResult?.success ? documentsResult.documents : null;
+  const materialLines = materialLinesResult?.success ? materialLinesResult.lines : null;
+  const inventoryItems = inventoryOptionsResult.success ? inventoryOptionsResult.items : null;
+  const inventoryLocations = inventoryOptionsResult.success ? inventoryOptionsResult.locations : null;
+  // Only a holder of the handover review may read the workspace; for everyone else the summary stays hidden.
+  const handoverWorkspace = handoverWorkspaceResult?.success
+    ? handoverWorkspaceResult.workspace
+    : handoverWorkspaceResult?.error === 'work_handover_not_authorized'
+      ? 'not_reviewer'
+      : null;
   if (job.project?.projectNumber) {
-    redirect(
-      `/auftraege/projekt/${encodeURIComponent(job.project.projectNumber)}/${encodeURIComponent(job.jobNumber!)}`
-    );
+    redirect(jobDetailHref(job, job.project));
   }
 
-  // Origin request (P1-02): read through the RLS-enforced client, so only
-  // managers (who may see requests) get the back-link.
-  const { data: originRequestRow } = isAdminOrManager
-    ? await supabase
-        .from('client_requests')
-        .select('id, request_number, summary')
-        .eq('converted_job_id', job.id)
-        .maybeSingle()
-    : { data: null };
+  if (originRequest?.error) logError('Job detail: origin request read failed', originRequest.error);
+  const originRequestRow = originRequest?.data ?? null;
 
   return (
     <JobDetailContent
@@ -159,26 +178,26 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
       isAdminOrManager={isAdminOrManager}
       canApproveWorkArtifacts={Boolean(approvalHolder)}
       instructionItems={instructionItems}
-      initialArtifacts={artifactsResult?.success ? artifactsResult.artifacts : []}
+      initialArtifacts={artifactsResult?.success ? artifactsResult.artifacts : null}
       documents={documents}
       materialLines={materialLines}
       inventoryItems={inventoryItems}
       inventoryLocations={inventoryLocations}
       currentUserId={user.id}
       originRequest={
-        originRequestRow
-          ? {
-              label: originRequestRow.request_number
-                ? `Anfrage ${originRequestRow.request_number}`
-                : `Anfrage „${originRequestRow.summary}“`,
-              href: `/anfragen/${originRequestRow.id}`,
-            }
-          : null
+        originRequest?.error
+          ? 'failed'
+          : originRequestRow
+            ? {
+                label: originRequestRow.request_number
+                  ? `Anfrage ${originRequestRow.request_number}`
+                  : `Anfrage „${originRequestRow.summary}“`,
+                href: `/anfragen/${originRequestRow.id}`,
+              }
+            : null
       }
       lifecycleSnapshot={lifecycleResult?.success ? lifecycleResult.snapshot : null}
-      handoverWorkspace={
-        handoverWorkspaceResult?.success ? handoverWorkspaceResult.workspace : null
-      }
+      handoverWorkspace={handoverWorkspace}
     />
   );
 }

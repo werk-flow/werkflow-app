@@ -1,12 +1,11 @@
-"use client";
+'use client';
 
-import { useEffect, useRef, useState, type ReactElement } from "react";
-import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import type { ReactElement } from 'react';
+import { Loader2 } from 'lucide-react';
 
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { DatePicker } from "@/components/ui/date-picker";
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { DatePicker } from '@/components/ui/date-picker';
 import {
   Dialog,
   DialogContent,
@@ -14,80 +13,166 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { DurationHoursInput } from "@/components/ui/duration-hours-input";
-import { ErrorText } from "@/components/ui/error-text";
-import { SectionError } from "@/components/ui/section-error";
-import { Field } from "@/components/ui/field";
-import { SearchableSelect } from "@/components/ui/searchable-select";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Textarea } from "@/components/ui/textarea";
-import { TimeInput } from "@/components/ui/time-input";
-import { useServerAction } from "@/hooks/use-server-action";
-import {
-  completeMaintenanceDueWork,
-  createMaintenanceVisit,
-  getMaintenanceEvidenceOptions,
-  linkMaintenanceServiceCase,
-  scheduleMaintenanceVisit,
-  setMaintenanceDueException,
-} from "@/lib/maintenance/actions";
+} from '@/components/ui/dialog';
+import { DurationHoursInput } from '@/components/ui/duration-hours-input';
+import { ErrorText } from '@/components/ui/error-text';
+import { SectionError } from '@/components/ui/section-error';
+import { Field } from '@/components/ui/field';
+import { SearchableSelect } from '@/components/ui/searchable-select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
+import { TimeInput } from '@/components/ui/time-input';
 import {
   MAINTENANCE_SCOPE_OUTCOMES,
   MAINTENANCE_SCOPE_OUTCOME_LABELS,
   type MaintenanceDueItem,
-  type MaintenanceEvidenceOption,
   type MaintenanceScopeOutcome,
   type MaintenanceWorkspace,
-} from "@/lib/maintenance/types";
-import { formatBerlinLocalDate } from "@/lib/planning/date-time";
-import {
-  formatMinutesAsHoursInput,
-  parseHoursInputToMinutes,
-} from "@/lib/jobs/planned-working";
+} from '@/lib/maintenance/types';
+import { formatBerlinLocalDate } from '@/lib/planning/date-time';
+import type { MaintenanceDueActionKind } from './maintenance-due-action-state';
+import { useMaintenanceDueAction, type MaintenanceDueActionController } from './use-maintenance-due-action';
+import { parseIsoLocalDate } from '@/lib/utils';
 
-const EVIDENCE_LIST_CLASS =
-  "max-h-40 space-y-2 overflow-y-auto rounded-md border p-3";
-const EVIDENCE_ROW_CLASS = "flex items-center gap-2 text-sm";
+const EVIDENCE_LIST_CLASS = 'max-h-40 space-y-2 overflow-y-auto rounded-md border p-3';
+const EVIDENCE_ROW_CLASS = 'flex items-center gap-2 text-sm';
 
-function toLocalDate(value: string): Date | undefined {
-  const [year, month, day] = value.split("-").map(Number);
-  return year && month && day ? new Date(year, month - 1, day) : undefined;
+type DueActionFieldsProps = { controller: MaintenanceDueActionController };
+
+function DueActionSelect({
+  controller,
+  due,
+  hasServiceCases,
+}: DueActionFieldsProps & {
+  due: MaintenanceDueItem;
+  hasServiceCases: boolean;
+}): ReactElement {
+  const canSchedule = due.status === 'visit_created' && !due.planningOccurrenceId;
+  const canComplete = due.status === 'visit_created';
+  return (
+    <Field label="Aktion" htmlFor="due-action">
+      <Select
+        value={controller.action}
+        onValueChange={(value) => controller.setAction(value as MaintenanceDueActionKind)}
+      >
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {due.status === 'open' && <SelectItem value="create_visit">Wartungsauftrag anlegen</SelectItem>}
+          {canSchedule && <SelectItem value="schedule">Termin im Kalender planen</SelectItem>}
+          {canComplete && <SelectItem value="complete">Wartung abschließen</SelectItem>}
+          {hasServiceCases && (
+            <SelectItem value="link_service_case">Reaktiven Servicefall verknüpfen</SelectItem>
+          )}
+          <SelectItem value="skipped">Fälligkeit überspringen</SelectItem>
+          <SelectItem value="cancelled">Fälligkeit absagen</SelectItem>
+          <SelectItem value="superseded">Durch andere Fälligkeit ersetzen</SelectItem>
+        </SelectContent>
+      </Select>
+    </Field>
+  );
 }
 
-type ActionKind =
-  | "create_visit"
-  | "schedule"
-  | "complete"
-  | "link_service_case"
-  | "skipped"
-  | "cancelled"
-  | "superseded";
+function DueScheduleFields({ controller }: DueActionFieldsProps): ReactElement {
+  const { date, setDate, time, setTime, durationHours, setDurationHours, fieldErrors } = controller;
+  return (
+    <div className="grid gap-4 sm:grid-cols-3">
+      <Field label="Datum" htmlFor="due-date" required error={fieldErrors.date}>
+        <DatePicker
+          ariaLabel="Datum"
+          value={parseIsoLocalDate(date)}
+          onChange={(value) => setDate(value ? formatBerlinLocalDate(value) : '')}
+        />
+      </Field>
+      <Field label="Uhrzeit" htmlFor="due-time" required>
+        <TimeInput value={time} onChange={setTime} />
+      </Field>
+      <Field label="Dauer (Stunden)" htmlFor="due-duration" required error={fieldErrors.durationHours}>
+        <DurationHoursInput id="due-duration" value={durationHours} onChange={setDurationHours} />
+      </Field>
+    </div>
+  );
+}
 
-type RequiredField =
-  | "date"
-  | "durationHours"
-  | "completedOn"
-  | "evidenceIds"
-  | "serviceCaseId"
-  | "reason";
-
-// Focus order on a failed submit.
-const REQUIRED_FIELD_IDS: Array<[RequiredField, string]> = [
-  ["date", "due-date"],
-  ["durationHours", "due-duration"],
-  ["completedOn", "due-completed"],
-  ["serviceCaseId", "maintenance-service-case"],
-  ["reason", "due-reason"],
-  ["evidenceIds", "due-evidence"],
-];
+// Stays in this file: lib/ui/contextual-documents-layout.test.ts pins both
+// evidence classes to the loading and the loaded list here.
+function DueCompletionFields({ controller }: DueActionFieldsProps): ReactElement {
+  const { scopeOutcome, setScopeOutcome, completedOn, setCompletedOn, fieldErrors } = controller;
+  const { evidence, evidenceIds, setEvidenceIds, isEvidenceLoading, evidenceLoadFailed } = controller;
+  return (
+    <>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Ergebnis" htmlFor="due-outcome">
+          <Select
+            value={scopeOutcome}
+            onValueChange={(value) => setScopeOutcome(value as MaintenanceScopeOutcome)}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {MAINTENANCE_SCOPE_OUTCOMES.map((value) => (
+                <SelectItem key={value} value={value}>
+                  {MAINTENANCE_SCOPE_OUTCOME_LABELS[value]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="Abgeschlossen am" htmlFor="due-completed" required error={fieldErrors.completedOn}>
+          <DatePicker
+            ariaLabel="Abgeschlossen am"
+            value={parseIsoLocalDate(completedOn)}
+            onChange={(value) => setCompletedOn(value ? formatBerlinLocalDate(value) : '')}
+          />
+        </Field>
+      </div>
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-medium">Versionierte Arbeitsnachweise</legend>
+        {isEvidenceLoading ? (
+          <div className={EVIDENCE_LIST_CLASS} role="status" aria-busy="true">
+            <span className="sr-only">Arbeitsnachweise werden geladen.</span>
+            {[0, 1].map((index) => (
+              <div key={index} className={EVIDENCE_ROW_CLASS} aria-hidden="true">
+                <Skeleton className="size-4 shrink-0" />
+                <Skeleton className="h-5 w-2/3" />
+              </div>
+            ))}
+          </div>
+        ) : evidenceLoadFailed ? (
+          <SectionError onRetry={controller.retryEvidence}>
+            Die Arbeitsnachweise konnten nicht geladen werden.
+          </SectionError>
+        ) : evidence.length ? (
+          <div id="due-evidence" tabIndex={-1} className={EVIDENCE_LIST_CLASS}>
+            {evidence.map((option) => (
+              <label key={option.revisionId} className={EVIDENCE_ROW_CLASS}>
+                <Checkbox
+                  checked={evidenceIds.includes(option.revisionId)}
+                  onCheckedChange={(checked) =>
+                    setEvidenceIds((ids) =>
+                      checked ? [...ids, option.revisionId] : ids.filter((id) => id !== option.revisionId),
+                    )
+                  }
+                />
+                <span>
+                  {option.title} · Revision {option.revisionNumber}
+                </span>
+              </label>
+            ))}
+          </div>
+        ) : (
+          <p className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm">
+            Für diesen Auftrag liegt noch kein versionierter Arbeitsnachweis vor.
+          </p>
+        )}
+        <ErrorText>{fieldErrors.evidenceIds}</ErrorText>
+      </fieldset>
+    </>
+  );
+}
 
 export function MaintenanceDueActionDialog({
   open,
@@ -101,365 +186,37 @@ export function MaintenanceDueActionDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   due: MaintenanceDueItem;
-  defaultAction: ActionKind;
+  defaultAction: MaintenanceDueActionKind;
   plannedDurationMinutes: number;
-  serviceCases: MaintenanceWorkspace["serviceCases"];
+  serviceCases: MaintenanceWorkspace['serviceCases'];
   /** Settled by the caller (a live-view refresh) instead of a route refresh. */
   onSaved?: () => void;
 }): ReactElement {
-  const router = useRouter();
-  const [action, setAction] = useState<ActionKind>(defaultAction);
-  const [reason, setReason] = useState("");
-  const [date, setDate] = useState(due.dueDate);
-  const [time, setTime] = useState("08:00");
-  const [durationHours, setDurationHours] = useState(
-    formatMinutesAsHoursInput(plannedDurationMinutes),
-  );
-  const [scopeOutcome, setScopeOutcome] =
-    useState<MaintenanceScopeOutcome>("complete");
-  const [completedOn, setCompletedOn] = useState(
-    formatBerlinLocalDate(new Date()),
-  );
-  const [evidence, setEvidence] = useState<MaintenanceEvidenceOption[]>([]);
-  const [evidenceIds, setEvidenceIds] = useState<string[]>([]);
-  const [isEvidenceLoading, setIsEvidenceLoading] = useState(true);
-  const [evidenceLoadFailed, setEvidenceLoadFailed] = useState(false);
-  const [serviceCaseId, setServiceCaseId] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [attempted, setAttempted] = useState(false);
-  const idempotencyKey = useRef(crypto.randomUUID());
-  useEffect(() => {
-    if (!open || !due.jobId) return;
-    let current = true;
-    void getMaintenanceEvidenceOptions(due.jobId)
-      .then((result) => {
-        if (!current) return;
-        if (result.success) {
-          setEvidence(result.options);
-        } else {
-          setEvidence([]);
-          setEvidenceLoadFailed(true);
-        }
-        setIsEvidenceLoading(false);
-      })
-      .catch(() => {
-        if (!current) return;
-        setEvidence([]);
-        setEvidenceLoadFailed(true);
-        setIsEvidenceLoading(false);
-      });
-    return () => {
-      current = false;
-    };
-  }, [due.jobId, open]);
-  const { run, isPending } = useServerAction(async () => {
-    setError(null);
-    let result;
-    if (action === "create_visit") {
-      result = await createMaintenanceVisit({
-        dueWorkIds: [due.id],
-        expectedVersions: [due.version],
-        reason: reason || "Wartungsauftrag angelegt",
-        idempotencyKey: idempotencyKey.current,
-      });
-    } else if (action === "schedule" && due.jobId) {
-      result = await scheduleMaintenanceVisit({
-        dueWorkId: due.id,
-        expectedVersion: due.version,
-        jobId: due.jobId,
-        startsAtLocal: `${date}T${time}`,
-        durationMinutes: parseHoursInputToMinutes(durationHours) ?? 0,
-        idempotencyKey: idempotencyKey.current,
-      });
-    } else if (action === "complete") {
-      result = await completeMaintenanceDueWork({
-        dueWorkId: due.id,
-        expectedVersion: due.version,
-        scopeOutcome,
-        completedOn,
-        workArtifactRevisionIds: evidenceIds,
-        reason: reason || "Wartungsumfang dokumentiert",
-        idempotencyKey: idempotencyKey.current,
-      });
-    } else if (action === "link_service_case") {
-      result = await linkMaintenanceServiceCase({
-        planId: due.planId,
-        dueWorkId: due.id,
-        expectedDueVersion: due.version,
-        serviceCaseId,
-        reason,
-        idempotencyKey: idempotencyKey.current,
-      });
-    } else if (["skipped", "cancelled", "superseded"].includes(action)) {
-      result = await setMaintenanceDueException({
-        dueWorkId: due.id,
-        expectedVersion: due.version,
-        toStatus: action,
-        reason,
-        idempotencyKey: idempotencyKey.current,
-      });
-    } else {
-      result = { success: false as const, error: "invalid_input" };
-    }
-    if (!result.success) {
-      const messages: Record<string, string> = {
-        invalid_input: "Bitte prüfe die Angaben.",
-        maintenance_stale_version:
-          "Die Fälligkeit wurde inzwischen geändert. Bitte lade die Seite neu.",
-        maintenance_due_evidence_required:
-          "Wähle mindestens einen versionierten Arbeitsnachweis.",
-        maintenance_due_evidence_mismatch:
-          "Ein gewählter Nachweis gehört nicht zu diesem Auftrag.",
-        maintenance_completion_date_invalid:
-          "Das Abschlussdatum muss im Wartungsfenster liegen und darf nicht in der Zukunft liegen.",
-        maintenance_due_batch_incompatible:
-          "Diese Fälligkeiten können nicht in einem Auftrag zusammengeführt werden.",
-      };
-      setError(
-        messages[result.error] ??
-          "Die Wartungsaktion konnte nicht gespeichert werden.",
-      );
-      return;
-    }
-    onOpenChange(false);
-    if (onSaved) {
-      onSaved();
-    } else {
-      router.refresh();
-    }
+  const controller = useMaintenanceDueAction({
+    open,
+    onOpenChange,
+    due,
+    defaultAction,
+    plannedDurationMinutes,
+    onSaved,
   });
-  const canSchedule =
-    due.status === "visit_created" && !due.planningOccurrenceId;
-  const canComplete = due.status === "visit_created";
-  // The reason field is hidden for schedule, so it must never count as missing there.
-  const showReason = action !== "schedule";
-  const reasonRequired =
-    showReason && action !== "create_visit" && action !== "complete";
-
-  // Mirrors the maintenance validation schemas per action so the user sees the
-  // missing field instead of the generic invalid_input message.
-  function missingFields(): Partial<Record<RequiredField, string>> {
-    const errors: Partial<Record<RequiredField, string>> = {};
-    if (action === "schedule") {
-      if (!date) errors.date = "Bitte wähle ein Datum.";
-      if ((parseHoursInputToMinutes(durationHours) ?? 0) < 15) {
-        errors.durationHours = "Bitte gib mindestens 0,25 Stunden an.";
-      }
-    }
-    if (action === "complete") {
-      if (!completedOn) errors.completedOn = "Bitte gib das Abschlussdatum an.";
-      if (evidenceIds.length === 0) {
-        errors.evidenceIds =
-          "Wähle mindestens einen versionierten Arbeitsnachweis.";
-      }
-    }
-    if (action === "link_service_case" && !serviceCaseId) {
-      errors.serviceCaseId = "Bitte wähle einen Servicefall.";
-    }
-    if (reasonRequired && reason.trim().length < 3) {
-      errors.reason = "Bitte gib eine Begründung mit mindestens 3 Zeichen an.";
-    }
-    return errors;
-  }
-  const fieldErrors = attempted ? missingFields() : {};
-
-  function submit(): void {
-    setError(null);
-    setAttempted(true);
-    const errors = missingFields();
-    const firstInvalid = REQUIRED_FIELD_IDS.find(([key]) => errors[key]);
-    if (firstInvalid) {
-      document.getElementById(firstInvalid[1])?.focus();
-      return;
-    }
-    void run();
-  }
+  const { action, fieldErrors, isPending, showReason, reasonRequired } = controller;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
+    <Dialog open={open} onOpenChange={onOpenChange} pending={isPending}>
+      <DialogContent size="xl">
         <DialogHeader>
           <DialogTitle>Fälligkeit bearbeiten</DialogTitle>
           <DialogDescription>
-            {due.planNumber} · fällig am{" "}
-            {new Intl.DateTimeFormat("de-DE").format(
-              new Date(`${due.dueDate}T12:00:00Z`),
-            )}
+            {due.planNumber} · fällig am{' '}
+            {new Intl.DateTimeFormat('de-DE').format(new Date(`${due.dueDate}T12:00:00Z`))}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
-          <Field label="Aktion" htmlFor="due-action">
-            <Select
-              value={action}
-              onValueChange={(value) => setAction(value as ActionKind)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {due.status === "open" && (
-                  <SelectItem value="create_visit">
-                    Wartungsauftrag anlegen
-                  </SelectItem>
-                )}
-                {canSchedule && (
-                  <SelectItem value="schedule">
-                    Termin im Kalender planen
-                  </SelectItem>
-                )}
-                {canComplete && (
-                  <SelectItem value="complete">Wartung abschließen</SelectItem>
-                )}
-                {serviceCases.length > 0 && (
-                  <SelectItem value="link_service_case">
-                    Reaktiven Servicefall verknüpfen
-                  </SelectItem>
-                )}
-                <SelectItem value="skipped">Fälligkeit überspringen</SelectItem>
-                <SelectItem value="cancelled">Fälligkeit absagen</SelectItem>
-                <SelectItem value="superseded">
-                  Durch andere Fälligkeit ersetzen
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-          {action === "schedule" && (
-            <div className="grid gap-4 sm:grid-cols-3">
-              <Field
-                label="Datum"
-                htmlFor="due-date"
-                required
-                error={fieldErrors.date}
-              >
-                <DatePicker
-                  ariaLabel="Datum"
-                  value={toLocalDate(date)}
-                  onChange={(value) =>
-                    setDate(value ? formatBerlinLocalDate(value) : "")
-                  }
-                />
-              </Field>
-              <Field label="Uhrzeit" htmlFor="due-time" required>
-                <TimeInput value={time} onChange={setTime} />
-              </Field>
-              <Field
-                label="Dauer (Stunden)"
-                htmlFor="due-duration"
-                required
-                error={fieldErrors.durationHours}
-              >
-                <DurationHoursInput
-                  id="due-duration"
-                  value={durationHours}
-                  onChange={setDurationHours}
-                />
-              </Field>
-            </div>
-          )}
-          {action === "complete" && (
-            <>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Ergebnis" htmlFor="due-outcome">
-                  <Select
-                    value={scopeOutcome}
-                    onValueChange={(value) =>
-                      setScopeOutcome(value as MaintenanceScopeOutcome)
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {MAINTENANCE_SCOPE_OUTCOMES.map((value) => (
-                        <SelectItem key={value} value={value}>
-                          {MAINTENANCE_SCOPE_OUTCOME_LABELS[value]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <Field
-                  label="Abgeschlossen am"
-                  htmlFor="due-completed"
-                  required
-                  error={fieldErrors.completedOn}
-                >
-                  <DatePicker
-                    ariaLabel="Abgeschlossen am"
-                    value={toLocalDate(completedOn)}
-                    onChange={(value) =>
-                      setCompletedOn(value ? formatBerlinLocalDate(value) : "")
-                    }
-                  />
-                </Field>
-              </div>
-              <fieldset className="space-y-2">
-                <legend className="text-sm font-medium">
-                  Versionierte Arbeitsnachweise
-                </legend>
-                {isEvidenceLoading ? (
-                  <div
-                    className={EVIDENCE_LIST_CLASS}
-                    role="status"
-                    aria-busy="true"
-                  >
-                    <span className="sr-only">
-                      Arbeitsnachweise werden geladen.
-                    </span>
-                    {[0, 1].map((index) => (
-                      <div
-                        key={index}
-                        className={EVIDENCE_ROW_CLASS}
-                        aria-hidden="true"
-                      >
-                        <Skeleton className="size-4 shrink-0" />
-                        <Skeleton className="h-5 w-2/3" />
-                      </div>
-                    ))}
-                  </div>
-                ) : evidenceLoadFailed ? (
-                  <SectionError>
-                    Die Arbeitsnachweise konnten nicht geladen werden. Schließe
-                    den Dialog und versuche es erneut.
-                  </SectionError>
-                ) : evidence.length ? (
-                  <div
-                    id="due-evidence"
-                    tabIndex={-1}
-                    className={EVIDENCE_LIST_CLASS}
-                  >
-                    {evidence.map((option) => (
-                      <label
-                        key={option.revisionId}
-                        className={EVIDENCE_ROW_CLASS}
-                      >
-                        <Checkbox
-                          checked={evidenceIds.includes(option.revisionId)}
-                          onCheckedChange={(checked) =>
-                            setEvidenceIds((ids) =>
-                              checked
-                                ? [...ids, option.revisionId]
-                                : ids.filter((id) => id !== option.revisionId),
-                            )
-                          }
-                        />
-                        <span>
-                          {option.title} · Revision {option.revisionNumber}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm">
-                    Für diesen Auftrag liegt noch kein versionierter
-                    Arbeitsnachweis vor.
-                  </p>
-                )}
-                <ErrorText>{fieldErrors.evidenceIds}</ErrorText>
-              </fieldset>
-            </>
-          )}
-          {action === "link_service_case" && (
+          <DueActionSelect controller={controller} due={due} hasServiceCases={serviceCases.length > 0} />
+          {action === 'schedule' && <DueScheduleFields controller={controller} />}
+          {action === 'complete' && <DueCompletionFields controller={controller} />}
+          {action === 'link_service_case' && (
             <Field
               label="Servicefall"
               htmlFor="maintenance-service-case"
@@ -467,8 +224,8 @@ export function MaintenanceDueActionDialog({
               error={fieldErrors.serviceCaseId}
             >
               <SearchableSelect
-                value={serviceCaseId}
-                onChange={setServiceCaseId}
+                value={controller.serviceCaseId}
+                onChange={controller.setServiceCaseId}
                 options={serviceCases.map((serviceCase) => ({
                   value: serviceCase.id,
                   label: `${serviceCase.caseNumber} · ${serviceCase.summary}`,
@@ -480,35 +237,29 @@ export function MaintenanceDueActionDialog({
           )}
           {showReason && (
             <Field
-              label={reasonRequired ? "Begründung" : "Notiz (optional)"}
+              label={reasonRequired ? 'Begründung' : 'Notiz (optional)'}
               htmlFor="due-reason"
               required={reasonRequired}
               error={fieldErrors.reason}
             >
               <Textarea
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
+                value={controller.reason}
+                onChange={(event) => controller.setReason(event.target.value)}
               />
             </Field>
           )}
         </div>
-        <ErrorText>{error}</ErrorText>
+        <ErrorText>{controller.error}</ErrorText>
         <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={isPending}
-          >
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
             Abbrechen
           </Button>
           <Button
             type="button"
-            onClick={submit}
+            onClick={controller.submit}
             disabled={
               isPending ||
-              (action === "complete" &&
-                (isEvidenceLoading || evidenceLoadFailed))
+              (action === 'complete' && (controller.isEvidenceLoading || controller.evidenceLoadFailed))
             }
           >
             {isPending && <Loader2 className="size-4 animate-spin" />}

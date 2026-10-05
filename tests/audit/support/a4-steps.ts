@@ -1,56 +1,35 @@
 import { expect, type Locator, type Page } from '@playwright/test';
+import { formatVacationDays } from '../../../lib/vacation/balance';
+import { calendarAbsenceBars } from '../../golden/support/plantafel';
+import { SHARED_COPY } from '../../golden/support/steps/shared';
+import {
+  openOwnVacationSection,
+  requestVacationButton,
+  submitVacationRequestButton,
+  typeVacationRange,
+  vacationHalfDayToggle,
+  vacationPreviewText,
+} from '../../golden/support/steps/vacation';
 
-import { retryDialogTransaction } from '../../golden/support/steps/shared';
+/** The approval card's neutral hint that another absence overlaps the request. */
+export const OTHER_ABSENCE_HINT =
+  'Hinweis: Für diese Person liegt im beantragten Zeitraum eine weitere Abwesenheit vor.';
 
-export async function deleteWorkScheduleViaDetail(
-  page: Page,
-  validFromLabel: string,
-  note: string
-): Promise<void> {
-  // The schedule list has no semantic row marker. The note identifies the
-  // owning list item; first() preserves the original lookup inside support.
-  const row = page.locator('li').filter({ hasText: note }).first();
-  const menuItem = page.getByRole('menuitem', { name: 'Löschen' });
-  const confirmDialog = page.getByRole('alertdialog');
+/** Every word that would reveal a sickness type on an approval card. */
+export const SICKNESS_TYPE_WORDS = /Krankheit|Kind krank|Sonstige/;
 
-  await retryDialogTransaction({
-    dialog: confirmDialog,
-    open: async () => {
-      if (await menuItem.isVisible().catch(() => false)) {
-        await menuItem.press('Escape', { timeout: 5_000 });
-      }
-      await row
-        .getByRole('button', {
-          name: `Aktionen für Wochenplan ab ${validFromLabel}`,
-        })
-        .click({ timeout: 15_000 });
-    },
-    prepare: async () => {
-      await menuItem.click({ timeout: 10_000 });
-      await confirmDialog.waitFor({ state: 'visible', timeout: 10_000 });
-    },
-    submit: async () => {
-      await confirmDialog
-        .getByRole('button', { name: 'Löschen', exact: true })
-        .click({ timeout: 15_000 });
-    },
-  });
-
-  await page.reload({ timeout: 30_000 });
-  await expect(
-    page.getByRole('button', {
-      name: `Aktionen für Wochenplan ab ${validFromLabel}`,
-    })
-  ).toHaveCount(0);
+/** The approval card's line for a job planned inside the request: „Im Zeitraum eingeplant: Titel (dd.mm.yyyy)“. */
+export function plannedInRangeText(jobTitle: string, germanDate: string): string {
+  return `Im Zeitraum eingeplant: ${jobTitle} (${germanDate})`;
 }
 
 export function vacationCalendarEvent(
   page: Page,
   status: 'pending' | 'approved',
-  personName: string
+  personName: string,
 ): Locator {
   // Absence bars carry their tone as data; the person name scopes the bar.
-  return page.locator(`[data-calendar-bar="${status === 'pending' ? 'absence-pending' : 'absence'}"]`).filter({ hasText: personName }).first();
+  return calendarAbsenceBars(page, status).filter({ hasText: personName }).first();
 }
 
 export function vacationRequestCard(page: Page, personName: string): Locator {
@@ -60,5 +39,26 @@ export function vacationRequestCard(page: Page, personName: string): Locator {
 }
 
 export function absenceCalendarEvent(page: Page, label: string): Locator {
-  return page.locator('[data-calendar-bar="absence"]').filter({ hasText: label });
+  return calendarAbsenceBars(page, 'approved').filter({ hasText: label });
+}
+
+/** Opens the request dialog for one day, reads its day preview and cancels without saving. */
+export async function expectVacationPreview(
+  page: Page,
+  dateDigits: string,
+  expectedDays: number,
+  halfDay = false,
+): Promise<void> {
+  await openOwnVacationSection(page);
+  await requestVacationButton(page).click();
+  const dialog = page.getByRole('dialog');
+  await typeVacationRange(dialog, dateDigits, dateDigits);
+  if (halfDay) await vacationHalfDayToggle(dialog).click();
+  await expect(dialog.getByTestId('vacation-days-preview')).toHaveText(
+    vacationPreviewText(formatVacationDays(expectedDays)),
+    { timeout: 15_000 },
+  );
+  await expect(submitVacationRequestButton(dialog)).toBeEnabled();
+  await dialog.getByRole('button', { name: SHARED_COPY.action.cancel }).click();
+  await expect(dialog).toHaveCount(0);
 }

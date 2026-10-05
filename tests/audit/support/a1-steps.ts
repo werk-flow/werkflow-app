@@ -1,15 +1,22 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
-export { visibleMatchingText } from '../../golden/support/steps/shared';
-import { retryDialogTransaction } from '../../golden/support/steps/shared';
-import { workLifecycleCard } from '../../golden/support/steps/work';
+import { WORK_EXECUTION_LABELS } from '../../../lib/work-lifecycle/types';
+import { materialRowLocation, materialRowQuantity } from '../../golden/support/steps/inventory';
+import { detailsRegion, retryDialogTransaction } from '../../golden/support/steps/shared';
+import { lifecycleAction, transitionWork, workLifecycleCard } from '../../golden/support/steps/work';
+
+/** The search field of the material dialog's location picker, named by its placeholder. */
+const MATERIAL_LOCATION_SEARCH = 'Lager suchen …';
+
+/** A presigned storage URL, as the document viewer's links and downloads use it. */
+export const SIGNED_URL_PATTERN = /^https?:\/\/.+X-Amz-(Algorithm|Signature)=/;
 
 export async function bookMaterialDialog(
   page: Page,
   openButton: Locator,
   heading: string,
   quantity: string,
-  submitLabel: string = heading
+  submitLabel: string = heading,
 ): Promise<void> {
   const dialog = page.getByRole('dialog').filter({
     has: page.getByRole('heading', { name: heading }),
@@ -20,100 +27,46 @@ export async function bookMaterialDialog(
     prepare: async () => {
       // These suffix selectors distinguish the generated material controls;
       // every action stays bounded because Realtime can unmount the dialog.
-      await dialog.locator('input[id$="-quantity"]').fill(quantity, { timeout: 15_000 });
-      await dialog.locator('button[id$="-location"]').click({ timeout: 15_000 });
+      await materialRowQuantity(dialog).fill(quantity, { timeout: 15_000 });
+      await materialRowLocation(dialog).click({ timeout: 15_000 });
       const listbox = page.getByRole('listbox');
       await expect(listbox).toBeVisible({ timeout: 15_000 });
-      await listbox.locator('..').getByRole('textbox').fill('Hauptlager (Golden)', {
+      await page.getByRole('textbox', { name: MATERIAL_LOCATION_SEARCH }).fill('Hauptlager (Golden)', {
         timeout: 15_000,
       });
       await listbox
-        .getByRole("option")
+        .getByRole('option')
         .filter({ hasText: 'Hauptlager (Golden)' })
         .first()
         .click({ timeout: 15_000 });
     },
-    submit: () =>
-      dialog.getByRole('button', { name: submitLabel }).click({ timeout: 15_000 }),
+    submit: () => dialog.getByRole('button', { name: submitLabel }).click({ timeout: 15_000 }),
   });
 }
 
-export async function toggleInstructionItem(
-  page: Page,
-  button: Locator,
-  isCompleted: boolean
-): Promise<void> {
-  const mutationFinished = page.waitForResponse((response) => {
-    const body = response.request().postData();
-    return (
-      response.request().method() === 'POST' &&
-      body?.includes('"itemId"') === true &&
-      body.includes(`"isCompleted":${isCompleted}`)
-    );
-  });
-  await button.click();
-  await mutationFinished;
-}
+/** The work states a1 specs move a fresh job into. */
+type SettableJobState = 'in_progress' | 'execution_complete';
 
-export function detailActionsButton(page: Page): Locator {
-  // The sticky detail header has no landmark of its own; the H1 anchors the
-  // same actions trigger on customer, project, and job detail pages.
-  return page
-    .getByRole('heading', { level: 1 })
-    .locator('xpath=ancestor::*[contains(@class, "sticky")][1]')
-    .getByRole('button', { name: 'Aktionen öffnen' });
-}
-
-export async function setJobStatus(page: Page, status: string): Promise<void> {
-  const card = workLifecycleCard(page);
-  const transition = async (label: string): Promise<void> => {
-    await card.getByRole('button', { name: label, exact: true }).click();
-    const dialog = page.getByRole('dialog');
-    await dialog.getByRole('button', { name: 'Änderung speichern' }).click();
-    await expect(dialog).toHaveCount(0, { timeout: 20_000 });
-  };
-  if (status === 'In Bearbeitung') {
-    await transition('In Ausführung');
-  } else if (status === 'Fertig') {
-    await expect(card).toBeVisible({ timeout: 20_000 });
-    const startButton = card.getByRole('button', {
-      name: 'In Ausführung',
-      exact: true,
-    });
-    const canStart = await startButton
+/**
+ * Moves a not-started job to the work state through the lifecycle card and
+ * checks that its Details card shows that state.
+ */
+export async function setJobStatus(page: Page, state: SettableJobState): Promise<void> {
+  if (state === 'in_progress') {
+    await transitionWork(page, 'not_started', 'in_progress');
+  } else {
+    await expect(workLifecycleCard(page)).toBeVisible({ timeout: 20_000 });
+    const canStart = await lifecycleAction(page, 'not_started', 'in_progress')
       .waitFor({ state: 'visible', timeout: 2_000 })
       .then(() => true)
       .catch(() => false);
-    if (canStart) await transition('In Ausführung');
-    await transition('Ausführung abgeschlossen');
-  } else {
-    throw new Error(`A1 lifecycle helper does not support status "${status}".`);
+    if (canStart) await transitionWork(page, 'not_started', 'in_progress');
+    await transitionWork(page, 'in_progress', 'execution_complete');
   }
-  await expect(page.getByRole('heading', { name: 'Details' }).locator('..')).toContainText(status);
+  await expect(detailsRegion(page.getByRole('main'))).toContainText(WORK_EXECUTION_LABELS[state]);
 }
 
-export async function confirmPlanningWarning(
-  page: Page,
-  reason: string,
-  required = true
-): Promise<void> {
-  const warning = page.getByRole('dialog').filter({
-    has: page.getByRole('heading', { name: 'Planungshinweise prüfen' }),
-  });
-  if (required) {
-    await expect(warning).toBeVisible({ timeout: 30_000 });
-  } else if (!(await warning.isVisible({ timeout: 2_000 }).catch(() => false))) {
-    return;
-  }
-  await warning.locator('#planning-warning-reason').fill(reason);
-  await warning.getByRole('button', { name: 'Mit Begründung speichern' }).click();
-  await expect(warning).toHaveCount(0, { timeout: 20_000 });
-}
-
-export async function expectSignedWindowOpen(
-  page: Page,
-  clickDownload: () => Promise<void>
-): Promise<void> {
+export async function expectSignedWindowOpen(page: Page, clickDownload: () => Promise<void>): Promise<void> {
   await page.evaluate(() => {
     document.documentElement.dataset.signedWindowOpenUrl = '';
     const originalOpen = window.open.bind(window);
@@ -127,7 +80,7 @@ export async function expectSignedWindowOpen(
   const popup = await popupPromise;
   await expect
     .poll(() => page.evaluate(() => document.documentElement.dataset.signedWindowOpenUrl ?? ''))
-    .toMatch(/^https?:\/\/.+X-Amz-(Algorithm|Signature)=/);
+    .toMatch(SIGNED_URL_PATTERN);
   await popup.close().catch(() => undefined);
 }
 
@@ -148,127 +101,32 @@ export function upgradeChoiceLink(page: Page): Locator {
   return page.locator('a[href="/upgrade"]');
 }
 
-export function clockInConfirmationButton(page: Page): Locator {
-  return page
-    .getByRole('dialog')
-    .filter({ has: page.getByRole('heading', { name: 'Zeiterfassung starten' }) })
-    .getByRole('button', { name: 'Arbeit starten', exact: true });
-}
-
-export function firstDailyTimeSummary(page: Page): Locator {
-  // The first summary is the explicit subject of the existing seven-day assertion.
-  return page.getByRole('img', { name: /Anwesenheit.*Arbeitszeit.*Pause.*Überstunden/ }).first();
-}
-
-export function customerCountLabel(page: Page): Locator {
-  // The responsive customer views duplicate this count; read the visible copy.
-  return page
-    .getByText(/^\d+ Kunden?$/)
-    .filter({ visible: true })
-    .first();
-}
-
-export function visibleJobSearch(page: Page): Locator {
-  // Desktop and mobile render the same search; interact with the visible copy.
-  return page
-    .getByPlaceholder('Suche nach Titel, Nummer, Kunde, Ort...')
-    .filter({ visible: true })
-    .first();
-}
-
-export function jobTypeFilter(filterPanel: Locator): Locator {
-  // The type control is the final unlabeled "Alle" filter in this panel.
-  return filterPanel.getByRole('combobox').filter({ hasText: 'Alle' }).last();
-}
-
-export function visibleSortButton(section: Locator, name: string): Locator {
-  // Responsive table headers duplicate sort buttons; only one copy is visible.
-  return section.getByRole('button', { name, exact: true }).filter({ visible: true }).first();
-}
-
-export function calendarDay(page: Page, date: string): Locator {
-  // The month grid keys one day's visits and time by this attribute.
-  return page.locator(`[data-month-day="${date}"]`);
-}
-
-export function calendarDayNumber(page: Page, date: string): Locator {
-  // A populated cell's center can target an event; the date number owns day navigation.
-  return page.locator(`[data-month-day-number="${date}"]`);
-}
-
-export function calendarDayJobEvent(page: Page, date: string, title: string): Locator {
-  return calendarDay(page, date).filter({ hasText: title });
-}
-
-export function dayViewJobBlock(page: Page, title: string, userId?: string): Locator {
-  // The day view renders one card per visit and row; a visit with two people shows twice, so a stage names the row.
-  const scope = userId ? `[data-day-view] [data-day-row="${userId}"]` : '[data-day-view]';
-  return page.locator(`${scope} [data-calendar-card]`).filter({ hasText: title });
-}
-
 export function visibleCalendarTimeBlock(page: Page, title: RegExp): Locator {
   // Responsive calendar layers can duplicate blocks; only one is interactive.
   return page.getByTitle(title).filter({ visible: true }).first();
 }
 
-export function parkedJobPill(page: Page, title: string): Locator {
-  // The drag source has no role; its data attribute is the component contract.
-  return page.locator('[data-parkplatz-card]').filter({ hasText: title });
-}
-
-export function calendarTimeline(page: Page, userId: string): Locator {
-  // One person's hour axis in the day view; the drag engine resolves the drop from it.
-  return page.locator(`[data-day-view] [data-day-row="${userId}"] [data-day-timeline]`);
+/** Drags a day-view calendar block vertically onto the named member's row. */
+export async function moveCalendarBlockToMember(
+  page: Page,
+  block: Locator,
+  memberName: string,
+): Promise<void> {
+  const member = page.getByRole('main').getByText(memberName, { exact: true }).filter({ visible: true });
+  await expect(member).toBeVisible();
+  const sourceBox = await block.boundingBox();
+  const targetBox = await member.boundingBox();
+  if (!sourceBox || !targetBox) throw new Error('Calendar drag source or named member has no bounding box');
+  const horizontalPosition = sourceBox.x + sourceBox.width / 2;
+  await page.mouse.move(horizontalPosition, sourceBox.y + sourceBox.height / 2);
+  await page.mouse.down();
+  try {
+    await page.mouse.move(horizontalPosition, targetBox.y + targetBox.height / 2, { steps: 12 });
+  } finally {
+    await page.mouse.up();
+  }
 }
 
 export function clockOutTimeGroup(dialog: Locator): Locator {
   return dialog.getByRole('group', { name: 'Arbeitsende', exact: true });
-}
-
-export function documentUploadInput(page: Page): Locator {
-  // The document picker is visually triggered and has no accessible label.
-  return page.locator('input[type="file"]:not([webkitdirectory])');
-}
-
-export function documentFolderUploadInput(page: Page): Locator {
-  // Directory selection is identifiable only through webkitdirectory.
-  return page.locator('input[webkitdirectory]');
-}
-
-export async function closeDocumentUploadProgressDialog(page: Page): Promise<void> {
-  // The upload dialog exposes both its footer action and Radix icon close as
-  // "Schließen". The footer action is first in the established DOM order.
-  // A fully successful upload closes the dialog by itself 650 ms after
-  // completion, so the click may lose its target mid-way (ninth release run,
-  // 2026-09-14); the helper closes what is still open and then requires the
-  // dialog to be gone.
-  const dialog = page.getByRole('dialog').filter({
-    has: page.getByRole('button', { name: 'Schließen' }),
-  });
-  await dialog
-    .getByRole('button', { name: 'Schließen' })
-    .first()
-    .click({ timeout: 2_000 })
-    .catch(() => undefined);
-  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
-}
-
-export function inventoryLocationCard(page: Page, locationName: string): Locator {
-  // The heading is the card's stable semantic anchor; the ancestor only
-  // establishes the assertion scope for its type and item count.
-  // Scoped to the visible page: a retained hidden copy of the page or an open dialog can repeat the heading.
-  return page
-    .getByRole('main')
-    .getByRole('heading', { name: locationName, exact: true })
-    .filter({ visible: true })
-    .locator('xpath=ancestor::div[contains(@class, "rounded-lg") and contains(@class, "border")][1]');
-}
-
-export function projectMaterialTotal(page: Page, itemName: string): Locator {
-  // The final matching material card is the project aggregate, after direct
-  // material and inherited job sections in stable product order.
-  return page
-    .locator('div.rounded-md.border')
-    .filter({ has: page.getByText(itemName, { exact: true }) })
-    .last();
 }

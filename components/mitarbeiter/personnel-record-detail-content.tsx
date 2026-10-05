@@ -8,29 +8,25 @@ import { WorkScheduleSection } from '@/components/mitarbeiter/work-schedule-sect
 import { SicknessReportsSection } from '@/components/mitarbeiter/sickness-reports-section';
 import { PersonnelHistorySection } from '@/components/mitarbeiter/personnel-history-section';
 import { PersonnelInviteDialog } from '@/components/mitarbeiter/personnel-invite-dialog';
-import {
-  AccessStateBadge,
-  EmploymentStateBadge,
-} from '@/components/mitarbeiter/personnel-state-badges';
+import { AccessStateBadge, EmploymentStateBadge } from '@/components/mitarbeiter/personnel-state-badges';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
-import {
-  formatEmployeeRecordName,
-  getAccessState,
-  getEmploymentState,
-} from '@/lib/personnel/types';
+import { formatEmployeeRecordName, getAccessState, getEmploymentState } from '@/lib/personnel/types';
 import type { PersonnelDetail } from '@/lib/personnel/actions';
 import {
   PersonnelQualificationSummary,
   type PersonnelQualificationSummaryData,
 } from './personnel-qualification-summary';
 import { PersonnelLifecycleSection } from './personnel-lifecycle-section';
+import { RegionLoadError } from '@/components/shared/region-load-error';
 import type { PersonnelLifecycleView } from '@/lib/personnel/lifecycle-actions';
 
 interface PersonnelRecordDetailContentProps {
   detail: PersonnelDetail;
-  actorNames: Record<string, string>;
+  /** Null when the names could not be read: the history says so with a retry. */
+  actorNames: Record<string, string> | null;
   canEdit: boolean;
   qualificationSummary: PersonnelQualificationSummaryData | null;
+  /** `null` when the lifecycle failed to load. */
   lifecycle: PersonnelLifecycleView | null;
   canAdministerAccess: boolean;
 }
@@ -67,10 +63,7 @@ export function PersonnelRecordDetailContent({
   const employmentState = getEmploymentState(record);
   const accessState = getAccessState(record, hasPendingInvite);
 
-  const breadcrumbs = [
-    { label: 'Mitarbeiter', href: '/mitarbeiter' },
-    { label: name },
-  ];
+  const breadcrumbs = [{ label: 'Mitarbeiter', href: '/mitarbeiter' }, { label: name }];
 
   return (
     <PageShell>
@@ -80,7 +73,7 @@ export function PersonnelRecordDetailContent({
         subtitle={
           record.employeeNumber
             ? `Personalnummer ${record.employeeNumber}`
-            : detail.profileEmail ?? undefined
+            : (detail.profileEmail ?? undefined)
         }
         badges={
           <span className="flex flex-wrap items-center gap-1.5">
@@ -98,11 +91,7 @@ export function PersonnelRecordDetailContent({
       <PageBody>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 2xl:grid-cols-3">
           <PersonalienSection record={record} canEdit={canEdit} />
-          <EmploymentConditionsSection
-            recordId={record.id}
-            conditions={conditions}
-            canEdit={canEdit}
-          />
+          <EmploymentConditionsSection recordId={record.id} conditions={conditions} canEdit={canEdit} />
           <WorkScheduleSection
             recordId={record.id}
             schedules={schedules}
@@ -118,7 +107,9 @@ export function PersonnelRecordDetailContent({
               canManage={canEdit}
               canAdministerAccess={canAdministerAccess}
             />
-          ) : null}
+          ) : (
+            <RegionLoadError>Der Personalprozess konnte nicht geladen werden.</RegionLoadError>
+          )}
           <PersonnelHistorySection events={events} actorNames={actorNames} />
         </div>
       </PageBody>

@@ -56,6 +56,8 @@ export async function seedOwnedWorld(input: {
 
 export function assertWorldSeedComplete(world: Pick<TestWorld, 'seedStatus'>): void {
   if (world.seedStatus === 'seeding') {
-    throw new Error('This run retains an incomplete seed. Clean its recorded world before starting fresh; it cannot be replayed as a diagnostic.');
+    throw new Error(
+      'This run retains an incomplete seed. Clean its recorded world before starting fresh; it cannot be replayed as a diagnostic.',
+    );
   }
 }

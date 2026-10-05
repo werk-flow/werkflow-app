@@ -1,15 +1,25 @@
 'use server';
 
-import { UUID_PATTERN } from '@/lib/validation/uuid';
+import type { ActionFailure, ActionResult } from '@/lib/action-result';
+import { uuidSchema } from '@/lib/validation/uuid';
 import { updateTag, revalidatePath } from 'next/cache';
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
+import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { authenticateAndAuthorize } from './auth';
+import {
+  assessAssignmentSelection,
+  assignmentReplacementArguments,
+  type AssignmentContext,
+  type AssignmentReplacement,
+} from './assignment-assessment';
 import { CACHE_TAGS } from '@/lib/data/cached';
+import { logReadFailure, loggedRead, logReadErrors } from '@/lib/data/read-request-cache';
 import {
   type Job,
   type JobStatus,
   type JobPriority,
+  type JobRow,
   type JobWithDetails,
   type JobAssignmentWithProfile,
   type ProjectWithDetails,
@@ -25,25 +35,20 @@ import {
   toProject,
   toJobAssignment,
 } from './types';
-import type {
-  AssignmentApproval,
-  AssignmentEvaluation,
-} from '@/lib/qualifications/types';
-import { loadAssignmentEvaluation } from '@/lib/qualifications/server';
-import type { Json } from '@/lib/supabase/database.types';
-import { validateSiteAndContactForClient } from '@/lib/clients/site-contact-validation';
+import type { AssignmentApproval } from '@/lib/qualifications/types';
+import { toClientContact, toClientSite, type ClientContact, type ClientSite } from '@/lib/clients/types';
+import { logError } from '@/lib/logging';
+import { timeWriteFailure } from '@/lib/time-tracking/closed-periods';
+import { CUSTOMER_REFERENCE_REFUSALS, workWriteFailure } from './write-refusals';
+import { prepareJobUpdate } from './update-preparation';
+import { JOB_CREATION_REFUSALS, prepareJobCreation } from './creation';
 import {
-  toClientContact,
-  toClientSite,
-  type ClientContact,
-  type ClientSite,
-} from '@/lib/clients/types';
-import {
-  applyWorkTemplateWithAdmin,
-  loadWorkTemplateRequirementRows,
-} from '@/lib/work-templates/server';
-
-const MAX_JOB_ASSIGNMENTS = 200;
+  createJobInputSchema,
+  jobNumberLookupSchema,
+  MAX_JOB_ASSIGNMENTS,
+  updateJobArgumentsSchema,
+  updateJobAssignmentsArgumentsSchema,
+} from './action-schemas';
 
 // ============================================
 // Input Types
@@ -69,7 +74,10 @@ export type CreateJobInput = {
   templateVersionId?: string;
 };
 
-export type UpdateJobInput = Omit<Partial<CreateJobInput>, 'plannedDate' | 'plannedTime' | 'estimatedDurationMinutes'> & {
+export type UpdateJobInput = Omit<
+  Partial<CreateJobInput>,
+  'plannedDate' | 'plannedTime' | 'estimatedDurationMinutes'
+> & {
   jobNumber?: string;
   plannedDate?: string | null;
   plannedTime?: string | null;
@@ -77,136 +85,45 @@ export type UpdateJobInput = Omit<Partial<CreateJobInput>, 'plannedDate' | 'plan
   plannedWorkingMinutes?: number | null;
 };
 
-type ProjectClientContext = {
-  id: string;
-  client_id: string | null;
-  site_id: string | null;
-  contact_id: string | null;
-};
+// A refused assignment inside update_job_with_assignments falls back to
+// update_failed: nothing of the edit was saved.
+const JOB_UPDATE_REFUSALS = [
+  'job_not_found',
+  'title_or_description_required',
+  'project_not_found',
+  'job_number_taken',
+  ...CUSTOMER_REFERENCE_REFUSALS,
+];
 
-type AssignmentContext = {
-  admin: ReturnType<typeof createSupabaseAdminClient>;
-  orgId: string;
-  actorId: string;
-};
-
-async function assessAssignmentSelection(input: {
-  context: AssignmentContext;
-  jobId?: string | null | undefined;
-  selectedUserIds: string[];
-  assessedForDate?: string | null | undefined;
-  approval?: AssignmentApproval | null | undefined;
-  requirementRows?: Array<{
-    id: string;
-    capability_id: string;
-    require_confirmation: boolean;
-  }> | undefined;
-}): Promise<
-  | { success: true; evaluation: AssignmentEvaluation }
-  | {
-      success: false;
-      error: 'qualification_warning' | 'stale_evaluation';
-      evaluation: AssignmentEvaluation;
-    }
-  | { success: false; error: string }
-> {
-  const result = await loadAssignmentEvaluation({
-    admin: input.context.admin,
-    orgId: input.context.orgId,
-    jobId: input.jobId,
-    selectedUserIds: input.selectedUserIds,
-    assessedForDate: input.assessedForDate,
-    requirementRows: input.requirementRows,
-  });
-  if (!result.success) return result;
-  if (!result.evaluation.requiresOverride) return result;
-  const approval = input.approval;
-  if (!approval) {
-    return {
-      success: false,
-      error: 'qualification_warning',
-      evaluation: result.evaluation,
-    };
-  }
-  if (approval.fingerprint !== result.evaluation.fingerprint) {
-    return {
-      success: false,
-      error: 'stale_evaluation',
-      evaluation: result.evaluation,
-    };
-  }
-  if (approval.reason.trim().length < 3) {
-    return {
-      success: false,
-      error: 'qualification_warning',
-      evaluation: result.evaluation,
-    };
-  }
-  return result;
-}
-
-function toJson(value: unknown): Json {
-  return JSON.parse(JSON.stringify(value)) as Json;
-}
-
-async function replaceJobAssignmentsAfterAssessment(input: {
-  context: AssignmentContext;
-  jobId: string;
-  selectedUserIds: string[];
-  evaluation: AssignmentEvaluation;
-  approval?: AssignmentApproval | null | undefined;
-  teamSourceId?: string | null | undefined;
-  recordAssessment?: boolean;
-}): Promise<
-  | { success: true; assignments: ReturnType<typeof toJobAssignment>[] }
-  | { success: false; error: string }
-> {
-  const selectedUserIds = [...new Set(input.selectedUserIds)].sort();
-  const recordAssessment = input.recordAssessment ?? (
-    input.evaluation.requirementCoverage.length > 0 ||
-    input.evaluation.apprenticeWarning.status !== 'not_configured'
-  );
+async function replaceJobAssignmentsAfterAssessment(
+  input: AssignmentReplacement & { context: AssignmentContext; jobId: string },
+): Promise<ActionResult<{ assignments: ReturnType<typeof toJobAssignment>[] }>> {
+  const replacement = assignmentReplacementArguments(input);
+  const selectedUserIds = replacement.p_selected_user_ids;
   const { error: replaceError } = await input.context.admin.rpc(
     'replace_job_assignments_with_assessment',
-    {
+    rpcArgs('replace_job_assignments_with_assessment', {
+      ...replacement,
       p_organization_id: input.context.orgId,
       p_job_id: input.jobId,
-      p_selected_user_ids: selectedUserIds,
       p_actor_id: input.context.actorId,
-      p_assessed_for_date: input.evaluation.assessedForDate,
-      p_selected_employee_record_ids:
-        input.evaluation.selectedEmployeeRecordIds,
-      p_requirements_snapshot: toJson(input.evaluation.requirementCoverage),
-      p_coverage_snapshot: toJson({
-        requirements: input.evaluation.requirementCoverage,
-        apprentice_warning: input.evaluation.apprenticeWarning,
-      }),
-      p_coverage_fingerprint: input.evaluation.fingerprint,
-      p_override_reason: input.evaluation.requiresOverride
-        ? input.approval?.reason.trim() || null
-        : null,
-      p_team_source_id:
-        input.teamSourceId ?? input.approval?.teamSourceId ?? null,
-      p_record_assessment: recordAssessment,
-    }
+    }),
   );
   if (replaceError) {
-    console.error('Failed to replace job assignments:', replaceError);
+    logError('Failed to replace job assignments:', replaceError);
     return { success: false, error: 'assign_failed' };
   }
-  const { data: assignmentRows, error: loadError } =
-    await input.context.admin
-      .from('job_assignments')
-      .select('*')
-      .eq('job_id', input.jobId)
-      .order('assigned_at', { ascending: true });
+  const { data: assignmentRows, error: loadError } = await input.context.admin
+    .from('job_assignments')
+    .select('*')
+    .eq('organization_id', input.context.orgId)
+    .eq('job_id', input.jobId)
+    .order('assigned_at', { ascending: true });
   if (loadError) {
-    console.error('Failed to reload job assignments:', loadError);
+    logError('Failed to reload job assignments:', loadError);
     return { success: false, error: 'load_failed' };
   }
-  const rowsByUserId = new Map(
-    (assignmentRows ?? []).map((row) => [row.user_id, row])
-  );
+  const rowsByUserId = new Map((assignmentRows ?? []).map((row) => [row.user_id, row]));
   return {
     success: true,
     assignments: selectedUserIds.flatMap((userId) => {
@@ -229,7 +146,7 @@ export type AuftraegeDialogOptionsResult =
       projects: ProjectWithDetails[];
       jobs: Job[];
     }
-  | { success: false; error: string };
+  | ActionFailure;
 
 export async function getAuftraegeDialogOptions(): Promise<AuftraegeDialogOptionsResult> {
   const auth = await authenticateAndAuthorize();
@@ -239,31 +156,63 @@ export async function getAuftraegeDialogOptions(): Promise<AuftraegeDialogOption
   }
 
   const admin = createSupabaseAdminClient();
-  const [clientsResult, membersResult, projectsResult, jobsResult] =
-    await Promise.all([
-      readCompleteRows((from, to) => admin.from('clients')
-        .select('*')
-        .eq('organization_id', auth.context.orgId)
-        .order('name', { ascending: true }).order('id').range(from, to), LIST_ROW_CAP),
-      admin.rpc('get_org_members_for_user', {
-        p_org_id: auth.context.orgId,
-        p_user_id: auth.context.userId
-      }),
-      readCompleteRows((from, to) => admin.from('projects')
-        .select('*')
-        .eq('organization_id', auth.context.orgId)
-        .order('created_at', { ascending: false }).order('id').range(from, to), LIST_ROW_CAP),
-      readCompleteRows((from, to) => admin.from('jobs')
-        .select('*')
-        .eq('organization_id', auth.context.orgId)
-        .order('planned_date', { ascending: true, nullsFirst: false })
-        .order('created_at', { ascending: false }).order('id').range(from, to), LIST_ROW_CAP),
-    ]);
+  const [clientsResult, membersResult, projectsResult, jobsResult] = await Promise.all([
+    readCompleteRows(
+      (from, to) =>
+        admin
+          .from('clients')
+          .select('*')
+          .eq('organization_id', auth.context.orgId)
+          .order('name', { ascending: true })
+          .order('id')
+          .range(from, to),
+      LIST_ROW_CAP,
+    ),
+    admin.rpc('get_org_members_for_user', {
+      p_org_id: auth.context.orgId,
+      p_user_id: auth.context.userId,
+    }),
+    readCompleteRows(
+      (from, to) =>
+        admin
+          .from('projects')
+          .select('*')
+          .eq('organization_id', auth.context.orgId)
+          .order('created_at', { ascending: false })
+          .order('id')
+          .range(from, to),
+      LIST_ROW_CAP,
+    ),
+    readCompleteRows(
+      (from, to) =>
+        admin
+          .from('jobs')
+          .select('*')
+          .eq('organization_id', auth.context.orgId)
+          .order('planned_date', { ascending: true, nullsFirst: false })
+          .order('created_at', { ascending: false })
+          .order('id')
+          .range(from, to),
+      LIST_ROW_CAP,
+    ),
+  ]);
 
-  if (clientsResult.error) return { success: false, error: 'clients_failed' };
-  if (membersResult.error) return { success: false, error: 'members_failed' };
-  if (projectsResult.error) return { success: false, error: 'projects_failed' };
-  if (jobsResult.error) return { success: false, error: 'jobs_failed' };
+  if (clientsResult.error) {
+    logReadErrors('job dialog options: read failed', clientsResult.error);
+    return { success: false, error: 'clients_failed' };
+  }
+  if (membersResult.error) {
+    logReadErrors('job dialog options: read failed', membersResult.error);
+    return { success: false, error: 'members_failed' };
+  }
+  if (projectsResult.error) {
+    logReadErrors('job dialog options: read failed', projectsResult.error);
+    return { success: false, error: 'projects_failed' };
+  }
+  if (jobsResult.error) {
+    logReadErrors('job dialog options: read failed', jobsResult.error);
+    return { success: false, error: 'jobs_failed' };
+  }
 
   const clients = (clientsResult.data ?? []).map(toClient);
   const clientLookup = new Map(clients.map((client) => [client.id, client]));
@@ -291,17 +240,12 @@ export async function getAuftraegeDialogOptions(): Promise<AuftraegeDialogOption
     success: true,
     clients,
     members: (membersResult.data ?? []).map(
-      (member: {
-        user_id: string;
-        first_name: string | null;
-        last_name: string | null;
-        role: string;
-      }) => ({
+      (member: { user_id: string; first_name: string | null; last_name: string | null; role: string }) => ({
         userId: member.user_id,
         firstName: member.first_name ?? '',
         lastName: member.last_name ?? '',
         role: member.role,
-      })
+      }),
     ),
     projects: (projectsResult.data ?? []).map((row) => {
       const project = toProject(row);
@@ -314,7 +258,7 @@ export async function getAuftraegeDialogOptions(): Promise<AuftraegeDialogOption
 
       return {
         ...project,
-        client: project.clientId ? clientLookup.get(project.clientId) ?? null : null,
+        client: project.clientId ? (clientLookup.get(project.clientId) ?? null) : null,
         jobCount: counts.total,
         completedJobCount: counts.completed,
         inProgressJobCount: counts.inProgress,
@@ -325,43 +269,33 @@ export async function getAuftraegeDialogOptions(): Promise<AuftraegeDialogOption
   };
 }
 
-async function getProjectClientContext(
-  admin: ReturnType<typeof createSupabaseAdminClient>,
-  orgId: string,
-  projectId: string
-): Promise<
-  | { success: true; project: ProjectClientContext }
-  | { success: false; error: 'project_not_found' }
-> {
-  const { data: project, error: projectError } = await admin
-    .from('projects')
-    .select('id, client_id, site_id, contact_id')
-    .eq('id', projectId)
-    .eq('organization_id', orgId)
-    .single();
-
-  if (projectError || !project) {
-    return { success: false, error: 'project_not_found' };
-  }
-
-  return { success: true, project };
-}
-
 // Site/contact context for the job detail surfaces (office and assigned
-// field workers alike).
+// field workers alike). Null when a read failed: a missing site or contact
+// would look like none.
 async function loadJobSiteAndContact(
-  admin: ReturnType<typeof createSupabaseAdminClient>,
+  admin: AdminClient,
+  orgId: string,
   siteId: string | null,
-  contactId: string | null
-): Promise<{ site: ClientSite | null; contact: ClientContact | null }> {
+  contactId: string | null,
+): Promise<{ site: ClientSite | null; contact: ClientContact | null } | null> {
   const [siteResult, contactResult] = await Promise.all([
     siteId
-      ? admin.from('client_sites').select('*').eq('id', siteId).single()
-      : Promise.resolve({ data: null }),
+      ? admin.from('client_sites').select('*').eq('organization_id', orgId).eq('id', siteId).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
     contactId
-      ? admin.from('client_contacts').select('*').eq('id', contactId).single()
-      : Promise.resolve({ data: null }),
+      ? admin
+          .from('client_contacts')
+          .select('*')
+          .eq('organization_id', orgId)
+          .eq('id', contactId)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
   ]);
+  const error = siteResult.error ?? contactResult.error;
+  if (error) {
+    logReadFailure('loadJobSiteAndContact: site or contact failed', error);
+    return null;
+  }
 
   return {
     site: siteResult.data ? toClientSite(siteResult.data) : null,
@@ -373,9 +307,10 @@ async function loadJobSiteAndContact(
 // Actions
 // ============================================
 
-export async function createJob(
-  input: CreateJobInput
-): Promise<CreateJobResult> {
+export async function createJob(rawInput: CreateJobInput): Promise<CreateJobResult> {
+  const parsedInput = createJobInputSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
@@ -385,219 +320,38 @@ export async function createJob(
       return { success: false, error: 'not_authorized' };
     }
 
-    const title = input.title.trim();
-    const description = input.description?.trim() ?? '';
-    if (!title && !description) {
-      return { success: false, error: 'title_or_description_required' };
-    }
-
-    const jobNumber = input.jobNumber?.trim();
-    if (!jobNumber) {
-      return { success: false, error: 'job_number_required' };
-    }
-
     const admin = createSupabaseAdminClient();
-    const assignmentContext: AssignmentContext = {
-      admin,
-      orgId,
-      actorId: userId,
-    };
-    const selectedUserIds = input.selectedUserIds ?? [];
-    const templateRequirements = input.templateVersionId
-      ? await loadWorkTemplateRequirementRows({
-          admin,
-          organizationId: orgId,
-          versionId: input.templateVersionId,
-        })
-      : { success: true as const, rows: [], templateRequirementCount: 0 };
-    if (!templateRequirements.success) return templateRequirements;
-    const assignmentAssessment = await assessAssignmentSelection({
-      context: assignmentContext,
-      selectedUserIds,
-      assessedForDate: input.plannedDate,
-      approval: input.assignmentApproval,
-      requirementRows: input.templateVersionId
-        ? templateRequirements.rows
-        : undefined,
-    });
-    if (!assignmentAssessment.success) return assignmentAssessment;
-
-    const { data: existingNumber } = await admin
-      .from('jobs')
-      .select('id')
-      .eq('organization_id', orgId)
-      .eq('job_number', jobNumber)
-      .maybeSingle();
-
-    if (existingNumber) {
-      return { success: false, error: 'job_number_taken' };
-    }
-
-    let projectContext: ProjectClientContext | undefined;
-    if (input.projectId) {
-      const result = await getProjectClientContext(
-        admin,
-        orgId,
-        input.projectId
-      );
-
-      if (!result.success) {
-        return { success: false, error: 'project_not_found' };
-      }
-
-      projectContext = result.project;
-    }
-
-    if (!input.projectId && input.clientId) {
-      const { data: client, error: clientError } = await admin
-        .from('clients')
-        .select('id')
-        .eq('id', input.clientId)
-        .eq('organization_id', orgId)
-        .single();
-
-      if (clientError || !client) {
-        return { success: false, error: 'client_not_found' };
-      }
-    }
-
-    const effectiveClientId =
-      projectContext
-        ? projectContext.client_id
-        : input.clientId || null;
-    // Undefined inherits the project default; an empty string explicitly clears it.
-    // Keep that distinction intact across client/server serialization.
-    const effectiveSiteId =
-      input.siteId !== undefined
-        ? input.siteId || null
-        : projectContext?.site_id || null;
-    const effectiveContactId =
-      input.contactId !== undefined
-        ? input.contactId || null
-        : projectContext?.contact_id || null;
-
-    const siteContactCheck = await validateSiteAndContactForClient(
-      admin,
-      orgId,
-      effectiveClientId,
-      effectiveSiteId,
-      effectiveContactId
+    const prepared = await prepareJobCreation(
+      { admin, orgId, actorId: userId },
+      input,
+      input.jobNumber ?? '',
     );
-    if (!siteContactCheck.success) {
-      return siteContactCheck;
-    }
+    if (!prepared.success) return prepared;
 
-    const { data, error } = await admin
-      .from('jobs')
-      .insert({
-        organization_id: orgId,
-        project_id: input.projectId || null,
-        client_id: effectiveClientId,
-        site_id: effectiveSiteId,
-        contact_id: effectiveContactId,
-        job_number: jobNumber,
-        title,
-        description: description || null,
-        status: 'nicht_bearbeitet',
-        priority: input.priority ?? 'mittel',
-        planned_date: input.plannedDate || null,
-        planned_time: normalizeJobPlannedTime(input.plannedTime),
-        estimated_duration_minutes: input.estimatedDurationMinutes ?? null,
-        planned_working_minutes: input.plannedWorkingMinutes ?? null,
-        location: input.location?.trim() || null,
-        created_by: userId,
-      })
-      .select()
-      .single();
+    // One transaction: the job, its assignments and its work template, or nothing.
+    const { data, error } = await admin.rpc(
+      'create_job_with_assignments',
+      rpcArgs('create_job_with_assignments', {
+        ...prepared.arguments,
+        p_organization_id: orgId,
+        p_actor_id: userId,
+      }),
+    );
+    if (error) return workWriteFailure('Error creating job:', error, JOB_CREATION_REFUSALS, 'create_failed');
 
-    if (error || !data) {
-      console.error('Error creating job:', error);
-      return { success: false, error: 'create_failed' };
-    }
-
-    if (selectedUserIds.length > 0) {
-      const assignmentResult = await replaceJobAssignmentsAfterAssessment({
-        context: assignmentContext,
-        jobId: data.id,
-        selectedUserIds,
-        evaluation: assignmentAssessment.evaluation,
-        approval: input.assignmentApproval,
-        teamSourceId: input.assignmentTeamSourceId,
-        recordAssessment: templateRequirements.templateRequirementCount === 0,
-      });
-      if (!assignmentResult.success) {
-        const { error: rollbackError } = await admin
-          .from('jobs')
-          .delete()
-          .eq('id', data.id)
-          .eq('organization_id', orgId);
-        if (rollbackError) {
-          console.error('Failed to roll back job after assignment failure:', rollbackError);
-          return { success: false, error: 'rollback_failed' };
-        }
-        return assignmentResult;
-      }
-    }
-
-    if (input.templateVersionId) {
-      const evaluation = assignmentAssessment.evaluation;
-      const { error: templateError } = await applyWorkTemplateWithAdmin(
-        admin,
-        orgId,
-        userId,
-        {
-          templateVersionId: input.templateVersionId,
-          jobId: data.id,
-          idempotencyKey: `create-job-${data.id}-${input.templateVersionId}`,
-          qualificationAssessment: templateRequirements.templateRequirementCount > 0
-            ? {
-                assessedForDate: evaluation.assessedForDate,
-                selectedUserIds: evaluation.selectedUserIds,
-                selectedEmployeeRecordIds: evaluation.selectedEmployeeRecordIds,
-                requirementsSnapshot: toJson(evaluation.requirementCoverage),
-                coverageSnapshot: toJson({ requirements: evaluation.requirementCoverage, apprentice_warning: evaluation.apprenticeWarning }),
-                coverageFingerprint: evaluation.fingerprint,
-                overrideReason: evaluation.requiresOverride ? input.assignmentApproval?.reason.trim() || null : null,
-                teamSourceId: input.assignmentTeamSourceId ?? input.assignmentApproval?.teamSourceId ?? null,
-              }
-            : undefined,
-        }
-      );
-      if (templateError) {
-        console.error('Failed to apply work template while creating job:', templateError);
-        const { error: rollbackError } = await admin.from('jobs').delete().eq('id', data.id).eq('organization_id', orgId);
-        if (rollbackError) return { success: false, error: 'rollback_failed' };
-        const knownCode = [
-          'work_template_version_unavailable',
-          'work_template_reference_unavailable',
-          'work_template_qualification_assessment_required',
-        ].find((code) => templateError.message.includes(code)) ??
-          (['work_template_material_reference_unavailable', 'work_template_capability_reference_unavailable']
-            .some((code) => templateError.message.includes(code))
-            ? 'work_template_reference_unavailable'
-            : undefined);
-        return { success: false, error: knownCode ?? 'template_apply_failed' };
-      }
-    }
-
-    updateTag(CACHE_TAGS.jobs(orgId));
-    updateTag(CACHE_TAGS.qualifications(orgId));
     updateTag(CACHE_TAGS.workTemplates(orgId));
-    if (input.projectId) {
-      updateTag(CACHE_TAGS.projects(orgId));
-    }
 
     return { success: true, job: toJob(data) };
   } catch (error) {
-    console.error('Unexpected error in createJob:', error);
+    logError('Unexpected error in createJob:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
-export async function updateJob(
-  jobId: string,
-  input: UpdateJobInput
-): Promise<UpdateJobResult> {
+export async function updateJob(rawJobId: string, rawInput: UpdateJobInput): Promise<UpdateJobResult> {
+  const parsedArguments = updateJobArgumentsSchema.safeParse({ jobId: rawJobId, input: rawInput });
+  if (!parsedArguments.success) return { success: false, error: 'invalid_input' };
+  const { jobId, input } = parsedArguments.data;
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
@@ -608,263 +362,27 @@ export async function updateJob(
     }
 
     const admin = createSupabaseAdminClient();
+    const prepared = await prepareJobUpdate({ admin, orgId, actorId: auth.context.userId, jobId, input });
+    if (!prepared.success) return prepared;
+    const { data, error } = await admin.rpc('update_job_with_assignments', prepared.arguments);
 
-    const { data: existing, error: fetchError } = await admin
-      .from('jobs')
-      .select(
-        'id, project_id, client_id, site_id, contact_id, status, execution_state, title, description, planned_date'
-      )
-      .eq('id', jobId)
-      .eq('organization_id', orgId)
-      .single();
-
-    if (fetchError || !existing) {
-      return { success: false, error: 'job_not_found' };
+    if (error) {
+      return workWriteFailure('Error updating job:', error, JOB_UPDATE_REFUSALS, 'update_failed');
     }
 
-    const resultingTitle =
-      input.title !== undefined ? input.title.trim() : existing.title.trim();
-    const resultingDescription =
-      input.description !== undefined
-        ? input.description?.trim() ?? ''
-        : existing.description?.trim() ?? '';
-
-    if (!resultingTitle && !resultingDescription) {
-      return { success: false, error: 'title_or_description_required' };
-    }
-
-    const resultingProjectId =
-      input.projectId !== undefined ? input.projectId || null : existing.project_id;
-    let inheritedProjectClientId: string | null | undefined = undefined;
-
-    if (resultingProjectId) {
-      const projectContext = await getProjectClientContext(
-        admin,
-        orgId,
-        resultingProjectId
-      );
-
-      if (!projectContext.success) {
-        return { success: false, error: 'project_not_found' };
-      }
-
-      inheritedProjectClientId = projectContext.project.client_id;
-    }
-
-    if (!resultingProjectId && input.clientId !== undefined && input.clientId) {
-      const { data: client, error: clientError } = await admin
-        .from('clients')
-        .select('id')
-        .eq('id', input.clientId)
-        .eq('organization_id', orgId)
-        .single();
-
-      if (clientError || !client) {
-        return { success: false, error: 'client_not_found' };
-      }
-    }
-
-    if (input.jobNumber !== undefined && input.jobNumber?.trim()) {
-      const { data: numberConflict } = await admin
-        .from('jobs')
-        .select('id')
-        .eq('organization_id', orgId)
-        .eq('job_number', input.jobNumber.trim())
-        .neq('id', jobId)
-        .maybeSingle();
-
-      if (numberConflict) {
-        return { success: false, error: 'job_number_taken' };
-      }
-    }
-
-    const resultingClientId = resultingProjectId
-      ? (inheritedProjectClientId ?? null)
-      : input.clientId !== undefined
-        ? input.clientId || null
-        : existing.client_id;
-    const clientChanged = resultingClientId !== existing.client_id;
-
-    // A customer change invalidates the previous customer's site/contact;
-    // they are cleared unless the caller provides new valid ones.
-    const resultingSiteId =
-      input.siteId !== undefined
-        ? input.siteId || null
-        : clientChanged
-          ? null
-          : existing.site_id;
-    const resultingContactId =
-      input.contactId !== undefined
-        ? input.contactId || null
-        : clientChanged
-          ? null
-          : existing.contact_id;
-
-    if (
-      input.siteId !== undefined ||
-      input.contactId !== undefined ||
-      clientChanged
-    ) {
-      const siteContactCheck = await validateSiteAndContactForClient(
-        admin,
-        orgId,
-        resultingClientId,
-        resultingSiteId,
-        resultingContactId
-      );
-      if (!siteContactCheck.success) {
-        return siteContactCheck;
-      }
-    }
-
-    const updateData: Record<string, unknown> = {};
-    if (input.title !== undefined) updateData.title = input.title.trim();
-    if (input.description !== undefined)
-      updateData.description = input.description?.trim() || null;
-    if (input.projectId !== undefined)
-      updateData.project_id = input.projectId || null;
-    if (resultingProjectId) {
-      updateData.client_id = inheritedProjectClientId ?? null;
-    } else if (input.clientId !== undefined) {
-      updateData.client_id = input.clientId || null;
-    }
-    if (input.siteId !== undefined || clientChanged)
-      updateData.site_id = resultingSiteId;
-    if (input.contactId !== undefined || clientChanged)
-      updateData.contact_id = resultingContactId;
-    if (input.jobNumber !== undefined)
-      updateData.job_number = input.jobNumber?.trim() || null;
-    if (input.priority !== undefined) updateData.priority = input.priority;
-    if (input.plannedDate !== undefined)
-      updateData.planned_date = input.plannedDate || null;
-    if (input.plannedTime !== undefined)
-      updateData.planned_time = normalizeJobPlannedTime(input.plannedTime);
-    if (input.estimatedDurationMinutes !== undefined)
-      updateData.estimated_duration_minutes =
-        input.estimatedDurationMinutes ?? null;
-    if (input.plannedWorkingMinutes !== undefined)
-      updateData.planned_working_minutes = input.plannedWorkingMinutes ?? null;
-    if (input.location !== undefined)
-      updateData.location = input.location?.trim() || null;
-
-    if (
-      input.plannedDate !== undefined &&
-      updateData.planned_date &&
-      existing.status === 'geparkt' &&
-      existing.execution_state === null
-    ) {
-      // Legacy parked rows without a P1-14 blocker stay usable. New parking
-      // is resolved explicitly before planning and never follows the date.
-      updateData.status = 'nicht_bearbeitet';
-    }
-
-    const shouldAssessAssignments =
-      input.selectedUserIds !== undefined || input.plannedDate !== undefined;
-    let assignmentAssessment: AssignmentEvaluation | null = null;
-    let finalSelectedUserIds: string[] | null = null;
-    if (shouldAssessAssignments) {
-      if (input.selectedUserIds !== undefined) {
-        finalSelectedUserIds = input.selectedUserIds;
-      } else {
-        const { data: currentAssignments, error: assignmentLoadError } =
-          await admin
-            .from('job_assignments')
-            .select('user_id')
-            .eq('job_id', jobId);
-        if (assignmentLoadError) {
-          return { success: false, error: 'load_failed' };
-        }
-        finalSelectedUserIds = (currentAssignments ?? []).map(
-          (row) => row.user_id
-        );
-      }
-      const assessmentResult = await assessAssignmentSelection({
-        context: {
-          admin,
-          orgId,
-          actorId: auth.context.userId,
-        },
-        jobId,
-        selectedUserIds: finalSelectedUserIds,
-        assessedForDate:
-          input.plannedDate !== undefined
-            ? input.plannedDate || null
-            : existing.planned_date,
-        approval: input.assignmentApproval,
-      });
-      if (!assessmentResult.success) return assessmentResult;
-      assignmentAssessment = assessmentResult.evaluation;
-    }
-
-    if (
-      Object.keys(updateData).length === 0 &&
-      input.selectedUserIds === undefined
-    ) {
-      return { success: false, error: 'no_changes' };
-    }
-
-    const updateResult =
-      Object.keys(updateData).length > 0
-        ? await admin
-            .from('jobs')
-            .update(updateData)
-            .eq('id', jobId)
-            .eq('organization_id', orgId)
-            .select()
-            .single()
-        : await admin
-            .from('jobs')
-            .select()
-            .eq('id', jobId)
-            .eq('organization_id', orgId)
-            .single();
-    const { data, error } = updateResult;
-
-    if (error || !data) {
-      console.error('Error updating job:', error);
-      return { success: false, error: 'update_failed' };
-    }
-
-    if (assignmentAssessment && finalSelectedUserIds) {
-      const assignmentResult = await replaceJobAssignmentsAfterAssessment({
-        context: {
-          admin,
-          orgId,
-          actorId: auth.context.userId,
-        },
-        jobId,
-        selectedUserIds: finalSelectedUserIds,
-        evaluation: assignmentAssessment,
-        approval: input.assignmentApproval,
-        teamSourceId: input.assignmentTeamSourceId,
-      });
-      if (!assignmentResult.success) {
-        updateTag(CACHE_TAGS.jobs(orgId));
-        updateTag(CACHE_TAGS.qualifications(orgId));
-        revalidatePath('/auftraege', 'layout');
-        return { success: false, error: 'partial_update' };
-      }
-    }
-
-    updateTag(CACHE_TAGS.jobs(orgId));
-    updateTag(CACHE_TAGS.qualifications(orgId));
     revalidatePath('/auftraege', 'layout');
-
-    const projectChanged =
-      input.projectId !== undefined &&
-      input.projectId !== existing.project_id;
-    if (projectChanged || existing.project_id) {
-      updateTag(CACHE_TAGS.projects(orgId));
-    }
 
     return { success: true, job: toJob(data) };
   } catch (error) {
-    console.error('Unexpected error in updateJob:', error);
+    logError('Unexpected error in updateJob:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
-export async function deleteJob(jobId: string): Promise<DeleteJobResult> {
+export async function deleteJob(rawJobId: string): Promise<DeleteJobResult> {
+  const parsedJobId = uuidSchema.safeParse(rawJobId);
+  if (!parsedJobId.success) return { success: false, error: 'job_not_found' };
+  const jobId = parsedJobId.data;
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
@@ -887,51 +405,50 @@ export async function deleteJob(jobId: string): Promise<DeleteJobResult> {
       return { success: false, error: 'job_not_found' };
     }
 
-    const { count: planningOccurrenceCount, error: planningCheckError } =
-      await admin
-        .from('planning_occurrences')
-        .select('id', { count: 'exact', head: true })
-        .eq('organization_id', orgId)
-        .eq('job_id', jobId);
+    const { count: planningOccurrenceCount, error: planningCheckError } = await admin
+      .from('planning_occurrences')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
+      .eq('job_id', jobId);
 
     if (planningCheckError) {
-      console.error('Error checking job planning history:', planningCheckError);
+      logError('Error checking job planning history:', planningCheckError);
       return { success: false, error: 'delete_failed' };
     }
     if ((planningOccurrenceCount ?? 0) > 0) {
       return { success: false, error: 'planning_history_exists' };
     }
 
-    const { error } = await admin
-      .from('jobs')
-      .delete()
-      .eq('id', jobId)
-      .eq('organization_id', orgId);
+    const { error } = await admin.from('jobs').delete().eq('id', jobId).eq('organization_id', orgId);
 
     if (error) {
-      console.error('Error deleting job:', error);
-      return { success: false, error: 'delete_failed' };
+      // Deleting a job clears time_entries.job_id; a closed period refuses that write.
+      return { success: false, error: timeWriteFailure('Error deleting job:', error, 'delete_failed') };
     }
 
-    updateTag(CACHE_TAGS.jobs(orgId));
     revalidatePath('/auftraege', 'layout');
-    if (existing.project_id) {
-      updateTag(CACHE_TAGS.projects(orgId));
-    }
 
     return { success: true };
   } catch (error) {
-    console.error('Unexpected error in deleteJob:', error);
+    logError('Unexpected error in deleteJob:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
 export async function updateJobAssignments(
-  jobId: string,
-  selectedUserIds: string[],
-  approval?: AssignmentApproval | null,
-  teamSourceId?: string | null
+  rawJobId: string,
+  rawSelectedUserIds: string[],
+  rawApproval?: AssignmentApproval | null,
+  rawTeamSourceId?: string | null,
 ): Promise<UpdateJobAssignmentsResult> {
+  const parsedArguments = updateJobAssignmentsArgumentsSchema.safeParse({
+    jobId: rawJobId,
+    selectedUserIds: rawSelectedUserIds,
+    approval: rawApproval,
+    teamSourceId: rawTeamSourceId,
+  });
+  if (!parsedArguments.success) return { success: false, error: 'invalid_input' };
+  const { jobId, selectedUserIds, approval, teamSourceId } = parsedArguments.data;
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
@@ -940,12 +457,7 @@ export async function updateJobAssignments(
       return { success: false, error: 'not_authorized' };
     }
     const normalizedUserIds = [...new Set(selectedUserIds)];
-    if (
-      normalizedUserIds.length > MAX_JOB_ASSIGNMENTS ||
-      normalizedUserIds.some(
-        (selectedUserId) => !UUID_PATTERN.test(selectedUserId)
-      )
-    ) {
+    if (normalizedUserIds.length > MAX_JOB_ASSIGNMENTS) {
       return { success: false, error: 'invalid_input' };
     }
     const admin = createSupabaseAdminClient();
@@ -974,81 +486,157 @@ export async function updateJobAssignments(
       teamSourceId,
     });
     if (!result.success) return result;
-    updateTag(CACHE_TAGS.jobs(orgId));
-    updateTag(CACHE_TAGS.qualifications(orgId));
     revalidatePath('/auftraege', 'layout');
     revalidatePath('/mitarbeiter', 'layout');
     return result;
   } catch (error) {
-    console.error('Unexpected error in updateJobAssignments:', error);
+    logError('Unexpected error in updateJobAssignments:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
-export async function getOrgJobs(): Promise<
-  { success: true; jobs: Job[] } | { success: false; error: string }
-> {
-  try {
-    const auth = await authenticateAndAuthorize();
-    if (!auth.success) return auth;
-    const { userId, orgId, isManagerOrAbove } = auth.context;
+type JobPlanOrderRow = Pick<JobRow, 'planned_date' | 'created_at' | 'id'>;
 
-    const admin = createSupabaseAdminClient();
+/** The job list order (planned date, newest first, id), restored after a batched read. */
+function compareJobRowsByPlan(left: JobPlanOrderRow, right: JobPlanOrderRow): number {
+  if (left.planned_date !== right.planned_date) {
+    if (left.planned_date === null) return 1;
+    if (right.planned_date === null) return -1;
+    return left.planned_date < right.planned_date ? -1 : 1;
+  }
+  return right.created_at.localeCompare(left.created_at) || left.id.localeCompare(right.id);
+}
 
-    if (isManagerOrAbove) {
-      const { data, error } = await readCompleteRows((from, to) => admin.from('jobs').select('*')
+/**
+ * The shared tail of the job detail readers: an employee reads only a job they
+ * are assigned to; the job comes back with its assignees, customer, project,
+ * site and contact.
+ */
+async function readJobDetails(input: {
+  admin: AdminClient;
+  context: { userId: string; orgId: string; isManagerOrAbove: boolean };
+  jobData: JobRow;
+  operation: string;
+}): Promise<ActionResult<{ job: JobWithDetails }>> {
+  const { admin, jobData } = input;
+  const { userId, orgId, isManagerOrAbove } = input.context;
+
+  if (!isManagerOrAbove) {
+    const { data: assignment } = await loggedRead(
+      `${input.operation}: job_assignments read failed`,
+      admin
+        .from('job_assignments')
+        .select('id')
         .eq('organization_id', orgId)
-        .order('planned_date', { ascending: true, nullsFirst: false })
-        .order('created_at', { ascending: false }).order('id').range(from, to), LIST_ROW_CAP);
+        .eq('job_id', jobData.id)
+        .eq('user_id', userId)
+        .single(),
+      true,
+    );
 
-      if (error) {
-        console.error('Error fetching jobs:', error);
-        return { success: false, error: 'fetch_failed' };
-      }
-
-      return { success: true, jobs: (data ?? []).map(toJob) };
+    if (!assignment) {
+      return { success: false, error: 'not_authorized' };
     }
-
-    const { data: assignments, error: assignError } = await readCompleteRows((from, to) => admin.from('job_assignments').select('job_id').eq('organization_id', orgId).eq('user_id', userId).order('id').range(from, to), LIST_ROW_CAP);
-
-    if (assignError) {
-      console.error('Error fetching assignments:', assignError);
-      return { success: false, error: 'fetch_failed' };
-    }
-
-    const assignedJobIds = (assignments ?? []).map((a) => a.job_id);
-
-    if (assignedJobIds.length === 0) {
-      return { success: true, jobs: [] };
-    }
-
-    const { data, error } = await readInBatches(assignedJobIds, (ids) => admin.from('jobs').select('*')
-      .eq('organization_id', orgId)
-      .in('id', [...ids])
-      .order('planned_date', { ascending: true, nullsFirst: false })
-      .order('created_at', { ascending: false }).order('id'));
-
-    if (error) {
-      console.error('Error fetching assigned jobs:', error);
-      return { success: false, error: 'fetch_failed' };
-    }
-
-    return { success: true, jobs: (data ?? []).map(toJob) };
-  } catch (error) {
-    console.error('Unexpected error in getOrgJobs:', error);
-    return { success: false, error: 'unexpected_error' };
   }
+
+  const [assignmentRowsResult, projectResult] = await Promise.all([
+    admin.from('job_assignments').select('*').eq('organization_id', orgId).eq('job_id', jobData.id),
+    jobData.project_id
+      ? admin
+          .from('projects')
+          .select('id, name, project_number, client_id')
+          .eq('organization_id', orgId)
+          .eq('id', jobData.project_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+  ]);
+  if (projectResult.error) {
+    logReadFailure(`${input.operation}: project failed`, projectResult.error);
+    return { success: false, error: 'fetch_failed' };
+  }
+  // A missing assignee list or missing names would show the job as unassigned or
+  // every assignee as "Mitarbeiter", so either read failure fails the detail read.
+  if (assignmentRowsResult.error) {
+    logReadFailure(`${input.operation}: job_assignments failed`, { code: assignmentRowsResult.error.code });
+    return { success: false, error: 'fetch_failed' };
+  }
+  const assignmentRows = assignmentRowsResult.data;
+  const assignments: JobAssignmentWithProfile[] = [];
+  if (assignmentRows.length > 0) {
+    const userIds = assignmentRows.map((a) => a.user_id);
+    const { data: profiles, error: profilesError } = await readInBatches(userIds, (batch) =>
+      admin
+        .from('profiles')
+        .select('id, first_name, last_name, email, avatar_path')
+        .in('id', [...batch]),
+    );
+    if (profilesError) {
+      logReadFailure(`${input.operation}: assignee profiles failed`, profilesError);
+      return { success: false, error: 'fetch_failed' };
+    }
+
+    const profileMap = new Map(profiles.map((p) => [p.id, p]));
+
+    for (const row of assignmentRows) {
+      const profile = profileMap.get(row.user_id);
+      assignments.push({
+        ...toJobAssignment(row),
+        firstName: profile?.first_name ?? null,
+        lastName: profile?.last_name ?? null,
+        email: profile?.email ?? null,
+        avatarPath: profile?.avatar_path ?? null,
+      });
+    }
+  }
+
+  const { data: projectData } = projectResult;
+  const effectiveClientId = projectData ? projectData.client_id : jobData.client_id;
+  const { data: clientData, error: clientError } = effectiveClientId
+    ? await admin
+        .from('clients')
+        .select('*')
+        .eq('organization_id', orgId)
+        .eq('id', effectiveClientId)
+        .maybeSingle()
+    : { data: null, error: null };
+  if (clientError) {
+    logReadFailure(`${input.operation}: client failed`, clientError);
+    return { success: false, error: 'fetch_failed' };
+  }
+
+  const client = clientData ? toClient(clientData) : null;
+  const project = projectData
+    ? {
+        id: projectData.id,
+        name: projectData.name,
+        projectNumber: projectData.project_number,
+      }
+    : null;
+
+  const siteAndContact = await loadJobSiteAndContact(admin, orgId, jobData.site_id, jobData.contact_id);
+  if (!siteAndContact) return { success: false, error: 'fetch_failed' };
+  const { site, contact } = siteAndContact;
+
+  const job: JobWithDetails = {
+    ...toJob({ ...jobData, client_id: effectiveClientId }),
+    assignments,
+    client,
+    project,
+    site,
+    contact,
+  };
+
+  return { success: true, job };
 }
 
-export async function getJobDetails(
-  jobId: string
-): Promise<
-  { success: true; job: JobWithDetails } | { success: false; error: string }
-> {
+export async function getJobDetails(rawJobId: string): Promise<ActionResult<{ job: JobWithDetails }>> {
+  const parsedJobId = uuidSchema.safeParse(rawJobId);
+  if (!parsedJobId.success) return { success: false, error: 'job_not_found' };
+  const jobId = parsedJobId.data;
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
-    const { userId, orgId, isManagerOrAbove } = auth.context;
+    const { orgId } = auth.context;
 
     const admin = createSupabaseAdminClient();
 
@@ -1060,104 +648,25 @@ export async function getJobDetails(
       .single();
 
     if (jobError || !jobData) {
+      logReadErrors('getJobDetails: read failed', jobError);
       return { success: false, error: 'job_not_found' };
     }
 
-    if (!isManagerOrAbove) {
-      const { data: assignment } = await admin
-        .from('job_assignments')
-        .select('id')
-        .eq('job_id', jobId)
-        .eq('user_id', userId)
-        .single();
-
-      if (!assignment) {
-        return { success: false, error: 'not_authorized' };
-      }
-    }
-
-    const [assignmentRowsResult, projectResult] = await Promise.all([
-      admin.from('job_assignments').select('*').eq('job_id', jobId),
-      jobData.project_id
-        ? admin
-            .from('projects')
-            .select('id, name, project_number, client_id')
-            .eq('id', jobData.project_id)
-            .single()
-        : Promise.resolve({ data: null }),
-    ]);
-    const assignmentRows = assignmentRowsResult.data;
-
-    const assignments: JobAssignmentWithProfile[] = [];
-    if (assignmentRows && assignmentRows.length > 0) {
-      const userIds = assignmentRows.map((a) => a.user_id);
-      const { data: profiles } = await admin
-        .from('profiles')
-        .select('id, first_name, last_name, email, avatar_path')
-        .in('id', userIds);
-
-      const profileMap = new Map(
-        (profiles ?? []).map((p) => [p.id, p])
-      );
-
-      for (const row of assignmentRows) {
-        const profile = profileMap.get(row.user_id);
-        assignments.push({
-          ...toJobAssignment(row),
-          firstName: profile?.first_name ?? null,
-          lastName: profile?.last_name ?? null,
-          email: profile?.email ?? null,
-          avatarPath: profile?.avatar_path ?? null,
-        });
-      }
-    }
-
-    const { data: projectData } = projectResult;
-    const effectiveClientId = projectData ? projectData.client_id : jobData.client_id;
-    const { data: clientData } = effectiveClientId
-      ? await admin.from('clients').select('*').eq('id', effectiveClientId).single()
-      : { data: null };
-
-    const client = clientData ? toClient(clientData) : null;
-    const project = projectData
-      ? {
-          id: projectData.id,
-          name: projectData.name,
-          projectNumber: projectData.project_number,
-        }
-      : null;
-
-    const { site, contact } = await loadJobSiteAndContact(
-      admin,
-      jobData.site_id,
-      jobData.contact_id
-    );
-
-    const job: JobWithDetails = {
-      ...toJob({ ...jobData, client_id: effectiveClientId }),
-      assignments,
-      client,
-      project,
-      site,
-      contact,
-    };
-
-    return { success: true, job };
+    return await readJobDetails({ admin, context: auth.context, jobData, operation: 'getJobDetails' });
   } catch (error) {
-    console.error('Unexpected error in getJobDetails:', error);
+    logError('Unexpected error in getJobDetails:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
-export async function getJobByNumber(
-  jobNumber: string
-): Promise<
-  { success: true; job: JobWithDetails } | { success: false; error: string }
-> {
+export async function getJobByNumber(rawJobNumber: string): Promise<ActionResult<{ job: JobWithDetails }>> {
+  const parsedJobNumber = jobNumberLookupSchema.safeParse(rawJobNumber);
+  if (!parsedJobNumber.success) return { success: false, error: 'job_not_found' };
+  const jobNumber = parsedJobNumber.data;
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
-    const { userId, orgId, isManagerOrAbove } = auth.context;
+    const { orgId } = auth.context;
 
     const admin = createSupabaseAdminClient();
 
@@ -1169,97 +678,18 @@ export async function getJobByNumber(
       .single();
 
     if (jobError || !jobData) {
+      logReadErrors('getJobByNumber: read failed', jobError);
       return { success: false, error: 'job_not_found' };
     }
 
-    if (!isManagerOrAbove) {
-      const { data: assignment } = await admin
-        .from('job_assignments')
-        .select('id')
-        .eq('job_id', jobData.id)
-        .eq('user_id', userId)
-        .single();
-
-      if (!assignment) {
-        return { success: false, error: 'not_authorized' };
-      }
-    }
-
-    const [assignmentRowsResult, projectResult] = await Promise.all([
-      admin.from('job_assignments').select('*').eq('job_id', jobData.id),
-      jobData.project_id
-        ? admin
-            .from('projects')
-            .select('id, name, project_number, client_id')
-            .eq('id', jobData.project_id)
-            .single()
-        : Promise.resolve({ data: null }),
-    ]);
-    const assignmentRows = assignmentRowsResult.data;
-    const assignments: JobAssignmentWithProfile[] = [];
-    if (assignmentRows && assignmentRows.length > 0) {
-      const userIds = assignmentRows.map((a) => a.user_id);
-      const { data: profiles } = await admin
-        .from('profiles')
-        .select('id, first_name, last_name, email, avatar_path')
-        .in('id', userIds);
-
-      const profileMap = new Map(
-        (profiles ?? []).map((p) => [p.id, p])
-      );
-
-      for (const row of assignmentRows) {
-        const profile = profileMap.get(row.user_id);
-        assignments.push({
-          ...toJobAssignment(row),
-          firstName: profile?.first_name ?? null,
-          lastName: profile?.last_name ?? null,
-          email: profile?.email ?? null,
-          avatarPath: profile?.avatar_path ?? null,
-        });
-      }
-    }
-
-    const { data: projectData } = projectResult;
-    const effectiveClientId = projectData ? projectData.client_id : jobData.client_id;
-    const { data: clientData } = effectiveClientId
-      ? await admin.from('clients').select('*').eq('id', effectiveClientId).single()
-      : { data: null };
-
-    const client = clientData ? toClient(clientData) : null;
-    const project = projectData
-      ? {
-          id: projectData.id,
-          name: projectData.name,
-          projectNumber: projectData.project_number,
-        }
-      : null;
-
-    const { site, contact } = await loadJobSiteAndContact(
-      admin,
-      jobData.site_id,
-      jobData.contact_id
-    );
-
-    const job: JobWithDetails = {
-      ...toJob({ ...jobData, client_id: effectiveClientId }),
-      assignments,
-      client,
-      project,
-      site,
-      contact,
-    };
-
-    return { success: true, job };
+    return await readJobDetails({ admin, context: auth.context, jobData, operation: 'getJobByNumber' });
   } catch (error) {
-    console.error('Unexpected error in getJobByNumber:', error);
+    logError('Unexpected error in getJobByNumber:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
-export async function getNextJobNumber(): Promise<
-  { success: true; jobNumber: string } | { success: false; error: string }
-> {
+export async function getNextJobNumber(): Promise<ActionResult<{ jobNumber: string }>> {
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
@@ -1271,13 +701,13 @@ export async function getNextJobNumber(): Promise<
     });
 
     if (error || !data) {
-      console.error('Error generating job number:', error);
+      logError('Error generating job number:', error);
       return { success: false, error: 'generation_failed' };
     }
 
     return { success: true, jobNumber: data as string };
   } catch (error) {
-    console.error('Unexpected error in getNextJobNumber:', error);
+    logError('Unexpected error in getNextJobNumber:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
@@ -1298,45 +728,136 @@ export type ClientJobsResult = {
  * Includes jobs directly linked to the client AND jobs belonging to
  * projects linked to the client. Requires admin/manager access.
  */
-export async function getJobsForClient(clientId: string): Promise<({ success: true } & ClientJobsResult) | { success: false; error: string }> {
+export async function getJobsForClient(rawClientId: string): Promise<ActionResult<ClientJobsResult>> {
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
   const { orgId, isManagerOrAbove } = auth.context;
   if (!isManagerOrAbove) return { success: false, error: 'not_authorized' };
-  if (!UUID_PATTERN.test(clientId)) return { success: false, error: 'invalid_client' };
+  const parsedClientId = uuidSchema.safeParse(rawClientId);
+  if (!parsedClientId.success) return { success: false, error: 'invalid_client' };
+  const clientId = parsedClientId.data;
   const admin = createSupabaseAdminClient();
   const [directJobs, clientProjects] = await Promise.all([
-    readCompleteRows((from, to) => admin.from('jobs').select('*').eq('organization_id', orgId).eq('client_id', clientId).order('id').range(from, to), LIST_ROW_CAP),
-    readCompleteRows((from, to) => admin.from('projects').select('*').eq('organization_id', orgId).eq('client_id', clientId).order('id').range(from, to), LIST_ROW_CAP),
+    readCompleteRows(
+      (from, to) =>
+        admin
+          .from('jobs')
+          .select('*')
+          .eq('organization_id', orgId)
+          .eq('client_id', clientId)
+          .order('id')
+          .range(from, to),
+      LIST_ROW_CAP,
+    ),
+    readCompleteRows(
+      (from, to) =>
+        admin
+          .from('projects')
+          .select('*')
+          .eq('organization_id', orgId)
+          .eq('client_id', clientId)
+          .order('id')
+          .range(from, to),
+      LIST_ROW_CAP,
+    ),
   ]);
-  if (directJobs.error || clientProjects.error) return { success: false, error: 'fetch_failed' };
-  const projectIds = [...new Set([...clientProjects.data.map((project) => project.id), ...directJobs.data.flatMap((job) => job.project_id ? [job.project_id] : [])])];
+  if (directJobs.error || clientProjects.error) {
+    logReadErrors('getJobsForClient: read failed', directJobs.error, clientProjects.error);
+    return { success: false, error: 'fetch_failed' };
+  }
+  const projectIds = [
+    ...new Set([
+      ...clientProjects.data.map((project) => project.id),
+      ...directJobs.data.flatMap((job) => (job.project_id ? [job.project_id] : [])),
+    ]),
+  ];
   const [allProjects, projectJobs] = await Promise.all([
-    readInBatches(projectIds, (ids) => admin.from('projects').select('*').eq('organization_id', orgId).in('id', [...ids])),
-    readInBatches(projectIds, (ids) => readCompleteRows((from, to) => admin.from('jobs').select('*').eq('organization_id', orgId).in('project_id', [...ids]).order('id').range(from, to), LIST_ROW_CAP)),
+    readInBatches(projectIds, (ids) =>
+      admin
+        .from('projects')
+        .select('*')
+        .eq('organization_id', orgId)
+        .in('id', [...ids]),
+    ),
+    readInBatches(projectIds, (ids) =>
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('jobs')
+            .select('*')
+            .eq('organization_id', orgId)
+            .in('project_id', [...ids])
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+    ),
   ]);
-  if (allProjects.error || projectJobs.error || projectJobs.data.length > LIST_ROW_CAP) return { success: false, error: 'fetch_failed' };
+  if (allProjects.error || projectJobs.error || projectJobs.data.length > LIST_ROW_CAP) {
+    logReadErrors('getJobsForClient: read failed', allProjects.error, projectJobs.error);
+    return { success: false, error: 'fetch_failed' };
+  }
   const directProjectIds = new Set(clientProjects.data.map((project) => project.id));
   const jobRows = new Map(directJobs.data.map((job) => [job.id, job]));
-  for (const job of projectJobs.data) if (job.project_id && directProjectIds.has(job.project_id)) jobRows.set(job.id, job);
+  for (const job of projectJobs.data)
+    if (job.project_id && directProjectIds.has(job.project_id)) jobRows.set(job.id, job);
   const jobs = [...jobRows.values()].map(toJob);
   if (jobs.length > LIST_ROW_CAP) return { success: false, error: 'fetch_failed' };
-  const clientIds = [...new Set([...allProjects.data, ...jobRows.values()].flatMap((row) => row.client_id ? [row.client_id] : []))];
+  const clientIds = [
+    ...new Set(
+      [...allProjects.data, ...jobRows.values()].flatMap((row) => (row.client_id ? [row.client_id] : [])),
+    ),
+  ];
   const [clients, assignments] = await Promise.all([
-    readInBatches(clientIds, (ids) => admin.from('clients').select('*').eq('organization_id', orgId).in('id', [...ids])),
-    readInBatches(jobs.map((job) => job.id), (ids) => readCompleteRows((from, to) => admin.from('job_assignments').select('job_id,user_id').eq('organization_id', orgId).in('job_id', [...ids]).order('id').range(from, to), LIST_ROW_CAP)),
+    readInBatches(clientIds, (ids) =>
+      admin
+        .from('clients')
+        .select('*')
+        .eq('organization_id', orgId)
+        .in('id', [...ids]),
+    ),
+    readInBatches(
+      jobs.map((job) => job.id),
+      (ids) =>
+        readCompleteRows(
+          (from, to) =>
+            admin
+              .from('job_assignments')
+              .select('job_id,user_id')
+              .eq('organization_id', orgId)
+              .in('job_id', [...ids])
+              .order('id')
+              .range(from, to),
+          LIST_ROW_CAP,
+        ),
+    ),
   ]);
-  if (clients.error || assignments.error || assignments.data.length > LIST_ROW_CAP * 4) return { success: false, error: 'fetch_failed' };
+  if (clients.error || assignments.error || assignments.data.length > LIST_ROW_CAP * 4) {
+    logReadErrors('getJobsForClient: read failed', clients.error, assignments.error);
+    return { success: false, error: 'fetch_failed' };
+  }
   const clientLookup = new Map(clients.data.map((client) => [client.id, toClient(client)]));
   const projects: ProjectWithDetails[] = allProjects.data.map((project) => {
     const children = projectJobs.data.filter((job) => job.project_id === project.id);
-    return { ...toProject(project), client: project.client_id ? clientLookup.get(project.client_id) ?? null : null,
-      jobCount: children.length, completedJobCount: children.filter((job) => job.status === 'fertig').length,
-      inProgressJobCount: children.filter((job) => job.status === 'in_bearbeitung').length, parkedJobCount: children.filter((job) => job.status === 'geparkt').length };
+    return {
+      ...toProject(project),
+      client: project.client_id ? (clientLookup.get(project.client_id) ?? null) : null,
+      jobCount: children.length,
+      completedJobCount: children.filter((job) => job.status === 'fertig').length,
+      inProgressJobCount: children.filter((job) => job.status === 'in_bearbeitung').length,
+      parkedJobCount: children.filter((job) => job.status === 'geparkt').length,
+    };
   });
   const jobAssignmentMap: Record<string, string[]> = {};
-  for (const assignment of assignments.data) (jobAssignmentMap[assignment.job_id] ??= []).push(assignment.user_id);
-  return { success: true, jobs, projects, clientMap: Object.fromEntries(clients.data.map((client) => [client.id, client.name])), jobAssignmentMap };
+  for (const assignment of assignments.data)
+    (jobAssignmentMap[assignment.job_id] ??= []).push(assignment.user_id);
+  return {
+    success: true,
+    jobs,
+    projects,
+    clientMap: Object.fromEntries(clients.data.map((client) => [client.id, client.name])),
+    jobAssignmentMap,
+  };
 }
 // ============================================
 // Member-scoped queries
@@ -1354,11 +875,10 @@ export type MemberJobsResult = {
  * projects, client names, and the full assignment map for those jobs.
  * Requires admin/manager access.
  */
-export async function getJobsForMember(
-  memberId: string
-): Promise<
-  { success: true } & MemberJobsResult | { success: false; error: string }
-> {
+export async function getJobsForMember(rawMemberId: string): Promise<ActionResult<MemberJobsResult>> {
+  const parsedMemberId = uuidSchema.safeParse(rawMemberId);
+  if (!parsedMemberId.success) return { success: false, error: 'invalid_input' };
+  const memberId = parsedMemberId.data;
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
@@ -1370,17 +890,24 @@ export async function getJobsForMember(
 
     const admin = createSupabaseAdminClient();
 
-    const { data: assignments, error: assignError } = await admin
-      .from('job_assignments')
-      .select('job_id')
-      .eq('user_id', memberId);
+    const { data: assignments, error: assignError } = await readCompleteRows(
+      (from, to) =>
+        admin
+          .from('job_assignments')
+          .select('job_id')
+          .eq('organization_id', orgId)
+          .eq('user_id', memberId)
+          .order('id')
+          .range(from, to),
+      LIST_ROW_CAP,
+    );
 
     if (assignError) {
-      console.error('Error fetching member assignments:', assignError);
+      logError('Error fetching member assignments:', assignError);
       return { success: false, error: 'fetch_failed' };
     }
 
-    const assignedJobIds = [...new Set((assignments ?? []).map((a) => a.job_id))];
+    const assignedJobIds = [...new Set(assignments.map((a) => a.job_id))];
 
     if (assignedJobIds.length === 0) {
       return {
@@ -1392,106 +919,106 @@ export async function getJobsForMember(
       };
     }
 
-    const { data: jobRows, error: jobError } = await admin
-      .from('jobs')
-      .select('*')
-      .eq('organization_id', orgId)
-      .in('id', assignedJobIds)
-      .order('planned_date', { ascending: true, nullsFirst: false })
-      .order('created_at', { ascending: false });
+    const { data: jobRows, error: jobError } = await readInBatches(assignedJobIds, (batch) =>
+      admin
+        .from('jobs')
+        .select('*')
+        .eq('organization_id', orgId)
+        .in('id', [...batch]),
+    );
 
     if (jobError) {
-      console.error('Error fetching member jobs:', jobError);
+      logError('Error fetching member jobs:', jobError);
       return { success: false, error: 'fetch_failed' };
     }
 
-    const jobs = (jobRows ?? []).map(toJob);
-
-    const projectIds = [...new Set(
-      jobs.filter((j) => j.projectId).map((j) => j.projectId!)
-    )];
-
-    let projects: ProjectWithDetails[] = [];
-    if (projectIds.length > 0) {
-      const { data: projectRows } = await admin
-        .from('projects')
+    const jobs = jobRows.sort(compareJobRowsByPlan).map(toJob);
+    const projectIds = jobs.flatMap((job) => (job.projectId ? [job.projectId] : []));
+    const [projectRows, projectJobs, allAssignments] = await Promise.all([
+      readInBatches(projectIds, (batch) =>
+        admin
+          .from('projects')
+          .select('*')
+          .eq('organization_id', orgId)
+          .in('id', [...batch]),
+      ),
+      readInBatches(projectIds, (batch) =>
+        readCompleteRows(
+          (from, to) =>
+            admin
+              .from('jobs')
+              .select('id, project_id, status')
+              .eq('organization_id', orgId)
+              .in('project_id', [...batch])
+              .order('id')
+              .range(from, to),
+          LIST_ROW_CAP,
+        ),
+      ),
+      readInBatches(assignedJobIds, (batch) =>
+        readCompleteRows(
+          (from, to) =>
+            admin
+              .from('job_assignments')
+              .select('job_id, user_id')
+              .eq('organization_id', orgId)
+              .in('job_id', [...batch])
+              .order('id')
+              .range(from, to),
+          LIST_ROW_CAP,
+        ),
+      ),
+    ]);
+    const clientIds = [...projectRows.data, ...jobRows].flatMap((row) =>
+      row.client_id ? [row.client_id] : [],
+    );
+    const clientRows = await readInBatches(clientIds, (batch) =>
+      admin
+        .from('clients')
         .select('*')
         .eq('organization_id', orgId)
-        .in('id', projectIds);
-
-      if (projectRows) {
-        const { data: allProjectJobs } = await admin
-          .from('jobs')
-          .select('id, project_id, status')
-          .eq('organization_id', orgId)
-          .in('project_id', projectIds);
-
-        const jobsByProject = new Map<string, { total: number; completed: number; inProgress: number; parked: number }>();
-        for (const j of allProjectJobs ?? []) {
-          const entry = jobsByProject.get(j.project_id!) ?? { total: 0, completed: 0, inProgress: 0, parked: 0 };
-          entry.total++;
-          if (j.status === 'fertig') entry.completed++;
-          if (j.status === 'in_bearbeitung') entry.inProgress++;
-          if (j.status === 'geparkt') entry.parked++;
-          jobsByProject.set(j.project_id!, entry);
-        }
-
-        const clientIds = [...new Set(
-          projectRows.filter((p) => p.client_id).map((p) => p.client_id!)
-        )];
-        const projectClients: Record<string, ReturnType<typeof toClient>> = {};
-        if (clientIds.length > 0) {
-          const { data: clientRows } = await admin
-            .from('clients')
-            .select('*')
-            .in('id', clientIds);
-          if (clientRows) {
-            for (const c of clientRows) {
-              projectClients[c.id] = toClient(c);
-            }
-          }
-        }
-
-        projects = projectRows.map((row) => {
-          const counts = jobsByProject.get(row.id) ?? { total: 0, completed: 0, inProgress: 0, parked: 0 };
-          return {
-            ...toProject(row),
-            client: row.client_id ? (projectClients[row.client_id] ?? null) : null,
-            jobCount: counts.total,
-            completedJobCount: counts.completed,
-            inProgressJobCount: counts.inProgress,
-            parkedJobCount: counts.parked,
-          };
-        });
-      }
+        .in('id', [...batch]),
+    );
+    const relatedError = projectRows.error ?? projectJobs.error ?? allAssignments.error ?? clientRows.error;
+    if (relatedError) {
+      logError('Error fetching member job details:', relatedError);
+      return { success: false, error: 'fetch_failed' };
     }
 
-    const allClientIds = [...new Set(
-      jobs.filter((j) => j.clientId).map((j) => j.clientId!)
-    )];
-    const clientMap: Record<string, string> = {};
-    if (allClientIds.length > 0) {
-      const { data: clientRows } = await admin
-        .from('clients')
-        .select('id, name')
-        .in('id', allClientIds);
-      for (const c of clientRows ?? []) {
-        clientMap[c.id] = c.name;
-      }
+    const jobsByProject = new Map<
+      string,
+      { total: number; completed: number; inProgress: number; parked: number }
+    >();
+    for (const projectJob of projectJobs.data) {
+      if (!projectJob.project_id) continue;
+      const entry = jobsByProject.get(projectJob.project_id) ?? {
+        total: 0,
+        completed: 0,
+        inProgress: 0,
+        parked: 0,
+      };
+      entry.total++;
+      if (projectJob.status === 'fertig') entry.completed++;
+      if (projectJob.status === 'in_bearbeitung') entry.inProgress++;
+      if (projectJob.status === 'geparkt') entry.parked++;
+      jobsByProject.set(projectJob.project_id, entry);
     }
-    for (const p of projects) {
-      if (p.clientId && p.client) {
-        clientMap[p.clientId] = p.client.name;
-      }
-    }
-
-    const { data: allAssignments } = await admin
-      .from('job_assignments')
-      .select('job_id, user_id')
-      .in('job_id', assignedJobIds);
+    const clientLookup = new Map(clientRows.data.map((client) => [client.id, client]));
+    const projects: ProjectWithDetails[] = projectRows.data.map((row) => {
+      const counts = jobsByProject.get(row.id) ?? { total: 0, completed: 0, inProgress: 0, parked: 0 };
+      const client = row.client_id ? clientLookup.get(row.client_id) : undefined;
+      return {
+        ...toProject(row),
+        client: client ? toClient(client) : null,
+        jobCount: counts.total,
+        completedJobCount: counts.completed,
+        inProgressJobCount: counts.inProgress,
+        parkedJobCount: counts.parked,
+      };
+    });
 
     const jobAssignmentMap: Record<string, string[]> = {};
-    for (const a of allAssignments ?? []) {
+    for (const a of allAssignments.data) {
       (jobAssignmentMap[a.job_id] ??= []).push(a.user_id);
     }
 
@@ -1499,11 +1026,11 @@ export async function getJobsForMember(
       success: true,
       jobs,
       projects,
-      clientMap,
+      clientMap: Object.fromEntries(clientRows.data.map((client) => [client.id, client.name])),
       jobAssignmentMap,
     };
   } catch (error) {
-    console.error('Unexpected error in getJobsForMember:', error);
+    logError('Unexpected error in getJobsForMember:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
@@ -1512,9 +1039,7 @@ export async function getJobsForMember(
  * Fetch parked jobs — those with status = 'geparkt'.
  * Admin/manager see all org jobs; others see only their assigned jobs.
  */
-export async function getParkedJobs(): Promise<
-  { success: true; jobs: CalendarJob[] } | { success: false; error: string }
-> {
+export async function getParkedJobs(): Promise<ActionResult<{ jobs: CalendarJob[] }>> {
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
@@ -1522,34 +1047,61 @@ export async function getParkedJobs(): Promise<
 
     const admin = createSupabaseAdminClient();
 
-    let query = admin
-      .from('jobs')
-      .select('id, title, description, job_number, status, priority, planned_date, planned_time, estimated_duration_minutes, planned_working_minutes, location, client_id, project_id, updated_at, execution_version')
-      .eq('organization_id', orgId)
-      .eq('status', 'geparkt')
-      .order('updated_at', { ascending: true });
-
-    if (!isManagerOrAbove) {
-      const { data: assignments } = await admin
-        .from('job_assignments')
-        .select('job_id')
-        .eq('user_id', userId);
-
-      const assignedJobIds = (assignments || []).map((a) => a.job_id);
-      if (assignedJobIds.length === 0) {
-        return { success: true, jobs: [] };
+    const parkedJobColumns =
+      'id, title, description, job_number, status, priority, planned_date, planned_time, estimated_duration_minutes, planned_working_minutes, location, client_id, project_id, updated_at, execution_version, execution_state';
+    let parkedJobs;
+    if (isManagerOrAbove) {
+      parkedJobs = await readCompleteRows(
+        (from, to) =>
+          admin
+            .from('jobs')
+            .select(parkedJobColumns)
+            .eq('organization_id', orgId)
+            .eq('status', 'geparkt')
+            .order('updated_at', { ascending: true })
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      );
+    } else {
+      const assignments = await readCompleteRows(
+        (from, to) =>
+          admin
+            .from('job_assignments')
+            .select('job_id')
+            .eq('organization_id', orgId)
+            .eq('user_id', userId)
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      );
+      if (assignments.error) {
+        logError('Error fetching parked job assignments:', assignments.error);
+        return { success: false, error: 'fetch_failed' };
       }
-      query = query.in('id', assignedJobIds);
+      parkedJobs = await readInBatches(
+        assignments.data.map((a) => a.job_id),
+        (batch) =>
+          admin
+            .from('jobs')
+            .select(parkedJobColumns)
+            .eq('organization_id', orgId)
+            .eq('status', 'geparkt')
+            .in('id', [...batch]),
+      );
+      parkedJobs.data.sort(
+        (left, right) => left.updated_at.localeCompare(right.updated_at) || left.id.localeCompare(right.id),
+      );
     }
 
-    const { data: jobs, error: jobsError } = await query;
+    const { data: jobs, error: jobsError } = parkedJobs;
 
     if (jobsError) {
-      console.error('Error fetching parked jobs:', jobsError);
+      logError('Error fetching parked jobs:', jobsError);
       return { success: false, error: 'fetch_failed' };
     }
 
-    if (!jobs || jobs.length === 0) {
+    if (jobs.length === 0) {
       return { success: true, jobs: [] };
     }
 
@@ -1558,17 +1110,39 @@ export async function getParkedJobs(): Promise<
     const projectIds = jobs.map((j) => j.project_id).filter((id): id is string => id !== null);
 
     const [assignmentsResult, clientsResult, projectsResult] = await Promise.all([
-      admin.from('job_assignments').select('job_id, user_id').in('job_id', jobIds),
-      clientIds.length > 0
-        ? admin.from('clients').select('id, name, address').in('id', clientIds)
-        : Promise.resolve({
-            data: [] as { id: string; name: string; address: string | null }[],
-            error: null
-          }),
-      projectIds.length > 0
-        ? admin.from('projects').select('id, name, project_number').in('id', projectIds)
-        : Promise.resolve({ data: [] as { id: string; name: string; project_number: string | null }[], error: null }),
+      readInBatches(jobIds, (batch) =>
+        readCompleteRows(
+          (from, to) =>
+            admin
+              .from('job_assignments')
+              .select('job_id, user_id')
+              .eq('organization_id', orgId)
+              .in('job_id', [...batch])
+              .order('id')
+              .range(from, to),
+          LIST_ROW_CAP,
+        ),
+      ),
+      readInBatches(clientIds, (batch) =>
+        admin
+          .from('clients')
+          .select('id, name, address')
+          .eq('organization_id', orgId)
+          .in('id', [...batch]),
+      ),
+      readInBatches(projectIds, (batch) =>
+        admin
+          .from('projects')
+          .select('id, name, project_number')
+          .eq('organization_id', orgId)
+          .in('id', [...batch]),
+      ),
     ]);
+    const relatedError = assignmentsResult.error ?? clientsResult.error ?? projectsResult.error;
+    if (relatedError) {
+      logError('Error fetching parked job details:', relatedError);
+      return { success: false, error: 'fetch_failed' };
+    }
 
     const assignmentMap: Record<string, string[]> = {};
     for (const a of assignmentsResult.data || []) {
@@ -1579,7 +1153,7 @@ export async function getParkedJobs(): Promise<
     for (const c of clientsResult.data || []) {
       clientMap[c.id] = {
         name: c.name,
-        address: c.address
+        address: c.address,
       };
     }
 
@@ -1593,10 +1167,11 @@ export async function getParkedJobs(): Promise<
       jobNumber: j.job_number,
       title: getJobDisplayTitle({
         title: j.title,
-        description: j.description
+        description: j.description,
       }),
       status: j.status as JobStatus,
       executionVersion: j.execution_version ?? 0,
+      executionState: j.execution_state,
       priority: j.priority as JobPriority,
       plannedDate: j.planned_date,
       plannedTime: normalizeJobPlannedTime(j.planned_time),
@@ -1612,7 +1187,7 @@ export async function getParkedJobs(): Promise<
 
     return { success: true, jobs: calendarJobs };
   } catch (error) {
-    console.error('Unexpected error in getParkedJobs:', error);
+    logError('Unexpected error in getParkedJobs:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }

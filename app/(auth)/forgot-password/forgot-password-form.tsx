@@ -4,17 +4,18 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
-import { z } from 'zod';
+import { z } from '@/lib/zod';
 
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { logError } from '@/lib/logging';
 import { createSupabaseImplicitClient } from '@/lib/supabase/implicit-client';
 
 const forgotPasswordSchema = z.object({
-  email: z.string().email('Bitte gib eine gültige E-Mail-Adresse ein.')
+  email: z.string().email('Bitte gib eine gültige E-Mail-Adresse ein.'),
 });
 
 type ForgotPasswordValues = z.infer<typeof forgotPasswordSchema>;
@@ -39,8 +40,8 @@ export function ForgotPasswordForm({
   const form = useForm<ForgotPasswordValues>({
     resolver: zodResolver(forgotPasswordSchema),
     defaultValues: {
-      email: initialEmail
-    }
+      email: initialEmail,
+    },
   });
 
   const handleSubmit = form.handleSubmit(async (values) => {
@@ -52,17 +53,16 @@ export function ForgotPasswordForm({
       // it's user-friendly and clearly explains that the user must click
       // the link to reset their password.
 
-      const siteUrl =
-        process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
 
       try {
         // Always succeeds regardless of whether email exists (prevents enumeration)
         await supabase.auth.resetPasswordForEmail(values.email, {
-          redirectTo: `${siteUrl}/reset-password`
+          redirectTo: `${siteUrl}/reset-password`,
         });
       } catch (error) {
-        // Silently handle errors to prevent enumeration
-        console.error('Password reset error:', error);
+        // The page never reveals whether the address exists, so the failure only reaches the log.
+        logError('auth.password_reset.request_failed', error);
       }
 
       const fallbackMessageKey = isKnownAccountReset
@@ -74,14 +74,15 @@ export function ForgotPasswordForm({
         await fetch('/auth/flash', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            message: fallbackMessageKey
-          })
+            message: fallbackMessageKey,
+          }),
         });
       } catch (error) {
-        console.error('Failed to store auth flash message:', error);
+        // The query parameter carries the message instead of the flash cookie.
+        logError('auth.flash.store_failed', error);
         loginRedirectHref = `/login?message=${fallbackMessageKey}`;
       }
 
@@ -102,18 +103,13 @@ export function ForgotPasswordForm({
           name="email"
           render={({ field, fieldState }) => (
             <Field label="E-Mail" required error={fieldState.error?.message}>
-              <Input
-                {...field}
-                type="email"
-                autoComplete="email"
-                placeholder="beispiel@firma.de"
-              />
+              <Input {...field} type="email" autoComplete="email" placeholder="beispiel@firma.de" />
             </Field>
           )}
         />
 
         <Button className="w-full" disabled={isSubmitting} type="submit">
-          {isSubmitting ? 'Wird gesendet...' : 'Link senden'}
+          {isSubmitting ? 'Wird gesendet…' : 'Link senden'}
         </Button>
       </form>
     </Form>

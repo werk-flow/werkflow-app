@@ -1,10 +1,49 @@
-import type { Page, TestInfo } from "@playwright/test";
+import type { CDPSession, Page, TestInfo } from '@playwright/test';
 
-import { expect, test } from "../support/fixtures";
-import { expectButtonTextContrast } from "../support/button-contrast";
-import { DYNAMIC_PHONE_ROUTES, MANAGER_PHONE_ROUTES, PHONE_REDIRECTS, type DynamicPhoneRoute } from "../../../lib/testing/mobile-route-inventory";
-import { layoutNames, prepareLayoutDetails } from "../support/layout-fixtures";
-import type { TestWorld } from "../../golden/support/world";
+import { expect, test } from '../support/fixtures';
+import { expectButtonTextContrast } from '../support/button-contrast';
+import {
+  DYNAMIC_PHONE_ROUTES,
+  MANAGER_PHONE_ROUTES,
+  PHONE_REDIRECTS,
+  type DynamicPhoneRoute,
+} from '../../../lib/testing/selection/mobile-route-inventory';
+import {
+  areaHeaderTitle,
+  areaNavigation,
+  areaSubpageHeading,
+  dateTimeFieldGrid,
+  layoutNames,
+  prepareLayoutDetails,
+} from '../support/layout-fixtures';
+import { pressKey } from '../../golden/support/steps/interaction';
+import {
+  requestCaptureButton,
+  requestCaptureDialog,
+  requestListRefreshButton,
+  requestSearchField,
+} from '../../golden/support/steps/requests';
+import {
+  expandServiceFormSections,
+  serviceCaseCaptureButton,
+  serviceDialogForms,
+  serviceFormCustomerPicker,
+  serviceFormCustomerRequired,
+  serviceFormDialog,
+  serviceFormHeading,
+  serviceFormSave,
+  serviceFormTrigger,
+} from '../../golden/support/steps/service';
+import { pageHeader, SHARED_COPY } from '../../golden/support/steps/shared';
+import {
+  monthlyResultListRow,
+  monthlyResults,
+  periodListHeading,
+  periodOpenLinks,
+  TIME_ACCOUNT_COPY,
+} from '../../golden/support/steps/time-tracking';
+import type { TestWorld } from '../../golden/support/world';
+import { expectDefined } from '../../../lib/testing/spec-support/expect-defined';
 
 // Design canon (werkflow-design, "Density and layout"): no page-level
 // horizontal scroll on any viewport, and the app shell owns the vertical
@@ -16,11 +55,11 @@ import type { TestWorld } from "../../golden/support/world";
 const PHONE = { width: 375, height: 812 };
 
 const EMPLOYEE_ROUTES = [
-  "/dashboard",
-  "/aufgaben",
-  "/zeiterfassung",
-  "/auftraege",
-  "/qualifikationen",
+  '/dashboard',
+  '/aufgaben',
+  '/zeiterfassung',
+  '/auftraege',
+  '/qualifikationen',
 ] as const;
 
 type ViewportReport = {
@@ -36,37 +75,27 @@ type ViewportReport = {
 async function measure(page: Page): Promise<ViewportReport> {
   return page.evaluate(() => {
     const root = document.documentElement;
-    const body = document.querySelector<HTMLElement>("[data-page-body]");
+    const body = document.querySelector<HTMLElement>('[data-page-body]');
     // FullCalendar owns its named, horizontally scrollable calendar grid.
     // Ordinary data tables must switch to cards at this viewport, even when
     // their own overflow container conceals them from document-width checks.
-    const visibleTables = Array.from(document.querySelectorAll("table")).filter(
+    const visibleTables = Array.from(document.querySelectorAll('table')).filter(
       (table) =>
         table.getClientRects().length > 0 &&
-        getComputedStyle(table).visibility !== "hidden" &&
-        !table.closest(".fc"),
+        getComputedStyle(table).visibility !== 'hidden' &&
+        !table.closest('.fc'),
     );
-    const nativeDateTypes = new Set([
-      "date",
-      "time",
-      "datetime-local",
-      "month",
-      "week",
-      "number",
-      "range",
-    ]);
+    const nativeDateTypes = new Set(['date', 'time', 'datetime-local', 'month', 'week', 'number', 'range']);
     return {
       documentOverflowX: Math.max(0, root.scrollWidth - window.innerWidth),
       documentOverflowY: Math.max(0, root.scrollHeight - window.innerHeight),
-      pageBodyOverflowX: body
-        ? Math.max(0, body.scrollWidth - body.clientWidth)
-        : 0,
-      nativeSelects: Array.from(document.querySelectorAll("select")).filter(
-        (element) => element.getAttribute("aria-hidden") !== "true",
+      pageBodyOverflowX: body ? Math.max(0, body.scrollWidth - body.clientWidth) : 0,
+      nativeSelects: Array.from(document.querySelectorAll('select')).filter(
+        (element) => element.getAttribute('aria-hidden') !== 'true',
       ).length,
-      nativeDateLikeInputs: Array.from(
-        document.querySelectorAll("input"),
-      ).filter((input) => nativeDateTypes.has(input.type)).length,
+      nativeDateLikeInputs: Array.from(document.querySelectorAll('input')).filter((input) =>
+        nativeDateTypes.has(input.type),
+      ).length,
       unapprovedVisibleTables: visibleTables.length,
       unapprovedTableScrollRegions: visibleTables.filter((table) => {
         const container = table.parentElement;
@@ -76,138 +105,159 @@ async function measure(page: Page): Promise<ViewportReport> {
   });
 }
 
-async function expectPhoneLayout(page: Page, route: string, testInfo: TestInfo, heading?: string): Promise<void> {
+async function expectPhoneLayout(
+  page: Page,
+  route: string,
+  testInfo: TestInfo,
+  heading?: string,
+): Promise<void> {
   await page.setViewportSize(PHONE);
   await page.goto(route);
-  await expect(page).toHaveURL(url => decodeURIComponent(url.pathname) === route);
-  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-  const content = page.getByRole("main").locator("[data-page-body]");
+  await expect(page).toHaveURL((url) => decodeURIComponent(url.pathname) === route);
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  const content = page.getByRole('main').locator('[data-page-body]');
   await expect(content).toBeVisible();
   // Area/settings headings can arrive before their streamed content.
-  await expect(content.locator(".animate-pulse:visible")).toHaveCount(0);
-  await expect(content).not.toHaveText("");
-  if (heading) await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
-  await testInfo.attach("phone-layout", { body: await page.screenshot(), contentType: "image/png" });
+  await expect(content.locator('[data-slot="skeleton"]:visible')).toHaveCount(0);
+  await expect(content).not.toHaveText('');
+  if (heading) await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
+  await testInfo.attach('phone-layout', { body: await page.screenshot(), contentType: 'image/png' });
   const report = await measure(page);
-  expect(
-    report,
-    `${route}: the document must not scroll sideways`,
-  ).toMatchObject({ documentOverflowX: 0 });
-  expect(
-    report.documentOverflowY,
-    `${route}: the shell owns vertical scroll, not the document`,
-  ).toBe(0);
-  expect(
-    report.pageBodyOverflowX,
-    `${route}: content wider than the page body`,
-  ).toBe(0);
+  expect(report, `${route}: the document must not scroll sideways`).toMatchObject({ documentOverflowX: 0 });
+  expect(report.documentOverflowY, `${route}: the shell owns vertical scroll, not the document`).toBe(0);
+  expect(report.pageBodyOverflowX, `${route}: content wider than the page body`).toBe(0);
   expect(report.nativeSelects, `${route}: native <select> rendered`).toBe(0);
-  expect(
-    report.unapprovedTableScrollRegions,
-    `${route}: nested table scroll hides mobile overflow`,
-  ).toBe(0);
-  expect(
-    report.unapprovedVisibleTables,
-    `${route}: data table has no mobile card layout`,
-  ).toBe(0);
-  expect(
-    report.nativeDateLikeInputs,
-    `${route}: native date/time/number input rendered`,
-  ).toBe(0);
+  expect(report.unapprovedTableScrollRegions, `${route}: nested table scroll hides mobile overflow`).toBe(0);
+  expect(report.unapprovedVisibleTables, `${route}: data table has no mobile card layout`).toBe(0);
+  expect(report.nativeDateLikeInputs, `${route}: native date/time/number input rendered`).toBe(0);
+  expect(await controlsUnderClockAtEnd(page), `${route}: a control stays under the clock button`).toEqual([]);
+  await expectMainThreadSettles(page, route);
+}
+
+// The highest share of the main thread that tasks used in six consecutive
+// windows of ten animation frames, about one second in total.
+async function mainThreadPeakBusyShare(page: Page, cdp: CDPSession): Promise<number> {
+  const taskSeconds = async (): Promise<number> => {
+    const { metrics } = await cdp.send('Performance.getMetrics');
+    return metrics.find((metric) => metric.name === 'TaskDuration')?.value ?? 0;
+  };
+  let peak = 0;
+  for (let window = 0; window < 6; window++) {
+    const before = await taskSeconds();
+    const elapsedMs = await page.evaluate(
+      () =>
+        new Promise<number>((resolve) => {
+          const start = performance.now();
+          let frames = 0;
+          const onFrame = (): void => {
+            frames += 1;
+            if (frames === 10) resolve(performance.now() - start);
+            else requestAnimationFrame(onFrame);
+          };
+          requestAnimationFrame(onFrame);
+        }),
+    );
+    peak = Math.max(peak, (((await taskSeconds()) - before) * 1000) / elapsedMs);
+  }
+  return peak;
+}
+
+// A settled page leaves the main thread idle for a whole second. A commit loop
+// kept the field work pack fully busy, without a network request, for as long
+// as it was open; it began about a second after the load, so one short idle
+// window right after the load did not prove the page settled.
+async function expectMainThreadSettles(page: Page, route: string): Promise<void> {
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    await cdp.send('Performance.enable');
+    await expect
+      .poll(() => mainThreadPeakBusyShare(page, cdp), {
+        message: `${route}: the main thread stays busy after the page settled`,
+        timeout: 8_000,
+      })
+      .toBeLessThan(0.5);
+  } finally {
+    await cdp.detach();
+  }
+}
+
+// The clock button floats over the bottom right of every page. Scrolled to its
+// end, the page body must leave every control clear of it: the service lists'
+// fixed create buttons sat underneath it on phones (rendered review of 2026-10-02).
+async function controlsUnderClockAtEnd(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const body = document.querySelector<HTMLElement>('[data-page-body]');
+    const clock = document.querySelector<HTMLElement>('[data-clock-fab]');
+    if (!body || !clock) return [];
+    body.scrollTop = body.scrollHeight;
+    const cover = clock.getBoundingClientRect();
+    return Array.from(
+      document.querySelectorAll<HTMLElement>('main a, main button, main input, main [role="combobox"]'),
+    )
+      .filter((control) => !clock.contains(control) && control.getClientRects().length > 0)
+      .filter((control) => {
+        const box = control.getBoundingClientRect();
+        const overlapX = Math.min(cover.right, box.right) - Math.max(cover.left, box.left);
+        const overlapY = Math.min(cover.bottom, box.bottom) - Math.max(cover.top, box.top);
+        return overlapX > 2 && overlapY > 2;
+      })
+      .map((control) =>
+        (control.getAttribute('aria-label') ?? control.textContent ?? control.tagName).trim().slice(0, 60),
+      );
+  });
 }
 
 async function expectAreaHeader(page: Page, route: string): Promise<void> {
-  const isTimeArea = route.startsWith("/zeiterfassung");
-  const isServiceArea = route.startsWith("/service/");
+  const isTimeArea = route.startsWith('/zeiterfassung');
+  const isServiceArea = route.startsWith('/service/');
   if (!isTimeArea && !isServiceArea) return;
-  const title = isTimeArea ? "Zeiterfassung" : "Service";
-  const navigationName = isTimeArea
-    ? "Arbeitszeitmanagement"
-    : "Servicebereiche";
+  const area = isTimeArea ? 'time' : 'service';
   const destinations = isTimeArea
     ? [
-        "/zeiterfassung",
-        "/zeiterfassung/zeitkonto",
-        "/zeiterfassung/perioden",
-        "/zeiterfassung/einstellungen",
+        '/zeiterfassung',
+        '/zeiterfassung/zeitkonto',
+        '/zeiterfassung/perioden',
+        '/zeiterfassung/einstellungen',
       ]
-    : ["/service/faelle", "/service/anlagen", "/service/wartung"];
-  const header = page.getByRole("main").locator("[data-page-header]");
+    : ['/service/faelle', '/service/anlagen', '/service/wartung'];
+  const header = pageHeader(page);
   await expect(header).toHaveCount(1);
-  await expect(
-    header.getByRole("heading", { level: 1, name: title, exact: true }),
-  ).toBeVisible();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
-  const navigation = header.getByRole("navigation", {
-    name: navigationName,
-    exact: true,
-  });
+  await expect(areaHeaderTitle(header, area)).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+  const navigation = areaNavigation(header, area);
   await expect(navigation).toBeVisible();
   expect(
-    await navigation
-      .getByRole("link")
-      .evaluateAll((links) => links.map((link) => link.getAttribute("href"))),
+    await navigation.getByRole('link').evaluateAll((links) => links.map((link) => link.getAttribute('href'))),
   ).toEqual(destinations);
   await expect(navigation.locator('[aria-current="page"]')).toHaveCount(1);
-  await expect(navigation.locator('[aria-current="page"]')).toHaveAttribute(
-    "href",
-    route,
-  );
+  await expect(navigation.locator('[aria-current="page"]')).toHaveAttribute('href', route);
 
   // Use client navigation to prove that the layout's real DOM survives a
   // subpage change. A fresh page.goto would only prove its final appearance.
-  if (route !== "/zeiterfassung" && route !== "/service/faelle") return;
+  if (route !== '/zeiterfassung' && route !== '/service/faelle') return;
   const headerNode = await header.elementHandle();
   const navigationNode = await navigation.elementHandle();
-  if (!headerNode || !navigationNode)
-    throw new Error("Area layout is not mounted.");
-  const destination = isTimeArea
-    ? "/zeiterfassung/zeitkonto"
-    : "/service/anlagen";
+  if (!headerNode || !navigationNode) throw new Error('Area layout is not mounted.');
+  const destination = isTimeArea ? '/zeiterfassung/zeitkonto' : '/service/anlagen';
   await navigation.locator(`a[href="${destination}"]`).click();
   await expect(page).toHaveURL(new RegExp(`${destination}$`));
-  await expect(
-    page.getByRole("heading", {
-      level: 2,
-      name: isTimeArea ? "Zeitkonto" : "Anlagen & Geräte",
-      exact: true,
-    }),
-  ).toBeVisible();
-  await expect(navigation.locator('[aria-current="page"]')).toHaveAttribute(
-    "href",
-    destination,
-  );
+  await expect(areaSubpageHeading(page, area)).toBeVisible();
+  await expect(navigation.locator('[aria-current="page"]')).toHaveAttribute('href', destination);
   expect(await headerNode.evaluate((node) => node.isConnected)).toBe(true);
   expect(await navigationNode.evaluate((node) => node.isConnected)).toBe(true);
-  expect(
-    await header.evaluate((node, original) => node === original, headerNode),
-  ).toBe(true);
-  expect(
-    await navigation.evaluate(
-      (node, original) => node === original,
-      navigationNode,
-    ),
-  ).toBe(true);
-  await expect(
-    header.getByRole("heading", { level: 1, name: title, exact: true }),
-  ).toBeVisible();
+  expect(await header.evaluate((node, original) => node === original, headerNode)).toBe(true);
+  expect(await navigation.evaluate((node, original) => node === original, navigationNode)).toBe(true);
+  await expect(areaHeaderTitle(header, area)).toBeVisible();
 }
 
 async function expectRequestControlsOnPhone(page: Page): Promise<void> {
-  const search = page.getByRole("textbox", {
-    name: "Anfragen durchsuchen",
-    exact: true,
-  });
-  const refresh = page.getByRole("button", {
-    name: "Liste aktualisieren",
-    exact: true,
-  });
-  const tabs = page.getByRole("tablist");
+  const search = requestSearchField(page);
+  const refresh = requestListRefreshButton(page);
+  const tabs = page.getByRole('tablist');
   const searchBox = await search.boundingBox();
   const refreshBox = await refresh.boundingBox();
   const tabsBox = await tabs.boundingBox();
-  if (!searchBox || !refreshBox || !tabsBox)
-    throw new Error("Request filter strip is not visible.");
+  if (!searchBox || !refreshBox || !tabsBox) throw new Error('Request filter strip is not visible.');
   expect(searchBox.width).toBeGreaterThan(150);
   expect(searchBox.y).toBeGreaterThanOrEqual(tabsBox.y + tabsBox.height);
   expect(searchBox.x + searchBox.width).toBeLessThanOrEqual(refreshBox.x);
@@ -215,34 +265,30 @@ async function expectRequestControlsOnPhone(page: Page): Promise<void> {
   await expect(search).not.toBeFocused();
   await expect(refresh).toBeEnabled();
 
-  await page.getByRole("button", { name: "Erfassen", exact: true }).click();
-  const dialog = page.getByRole("dialog", {
-    name: "Neue Anfrage erfassen",
-    exact: true,
-  });
+  await requestCaptureButton(page).click();
+  const dialog = requestCaptureDialog(page);
   await expect(dialog).toBeVisible();
-  const date = dialog.locator("#request-received-at-date");
-  const time = dialog.locator("#request-received-at-time");
-  const pair = date.locator("..");
-  expect(
-    await pair.evaluate((grid) => grid.scrollWidth - grid.clientWidth),
-  ).toBeLessThanOrEqual(1);
+  const date = dialog.locator('#request-received-at-date');
+  const time = dialog.locator('#request-received-at-time');
+  // The DateTimeField grid holds exactly the date and the time control.
+  const pair = dateTimeFieldGrid(dialog, 'request-received-at-date');
+  expect(await pair.evaluate((grid) => grid.scrollWidth - grid.clientWidth)).toBeLessThanOrEqual(1);
   await page.setViewportSize({ width: 768, height: PHONE.height });
   await date.scrollIntoViewIfNeeded();
-  const wideContainer = await pair.evaluate((grid) => ({
-    width: grid.parentElement!.getBoundingClientRect().width,
-    threshold:
-      Number.parseFloat(getComputedStyle(document.documentElement).fontSize) *
-      20,
-  }));
+  const wideContainer = await pair.evaluate((grid) => {
+    const container = grid.parentElement;
+    if (!container) throw new Error('expected the date and time pair inside a container');
+    return {
+      width: container.getBoundingClientRect().width,
+      threshold: Number.parseFloat(getComputedStyle(document.documentElement).fontSize) * 20,
+    };
+  });
   expect(wideContainer.width).toBeGreaterThanOrEqual(wideContainer.threshold);
   await expect
     .poll(async () => {
       const dateBox = await date.boundingBox();
       const timeBox = await time.boundingBox();
-      return dateBox && timeBox
-        ? Math.abs(dateBox.y - timeBox.y)
-        : Number.POSITIVE_INFINITY;
+      return dateBox && timeBox ? Math.abs(dateBox.y - timeBox.y) : Number.POSITIVE_INFINITY;
     })
     .toBeLessThanOrEqual(1);
 
@@ -252,7 +298,7 @@ async function expectRequestControlsOnPhone(page: Page): Promise<void> {
     .poll(() =>
       pair.evaluate((grid) => {
         const [dateControl, timeControl] = Array.from(grid.children);
-        if (!dateControl || !timeControl) throw new Error("expected a date and a time control");
+        if (!dateControl || !timeControl) throw new Error('expected a date and a time control');
         const dateBox = dateControl.getBoundingClientRect();
         const timeBox = timeControl.getBoundingClientRect();
         return timeBox.top - dateBox.bottom;
@@ -260,151 +306,73 @@ async function expectRequestControlsOnPhone(page: Page): Promise<void> {
     )
     .toBeGreaterThanOrEqual(0);
   const dimensions = await pair.evaluate((grid) => {
-    const container = grid.parentElement!;
+    const container = grid.parentElement;
+    if (!container) throw new Error('expected the date and time pair inside a container');
     const box = container.getBoundingClientRect();
-    const controls = Array.from(grid.children).map((control) =>
-      control.getBoundingClientRect(),
-    );
+    const controls = Array.from(grid.children).map((control) => control.getBoundingClientRect());
     return {
       width: box.width,
-      threshold:
-        Number.parseFloat(getComputedStyle(document.documentElement).fontSize) *
-        20,
+      threshold: Number.parseFloat(getComputedStyle(document.documentElement).fontSize) * 20,
       overflow: container.scrollWidth - container.clientWidth,
-      contained: controls.every(
-        (control) =>
-          control.left >= box.left - 1 && control.right <= box.right + 1,
-      ),
+      contained: controls.every((control) => control.left >= box.left - 1 && control.right <= box.right + 1),
     };
   });
   expect(dimensions.width).toBeLessThan(dimensions.threshold);
   expect(dimensions.overflow).toBeLessThanOrEqual(1);
   expect(dimensions.contained).toBe(true);
-  await dialog.getByRole("button", { name: "Schließen", exact: true }).click();
+  await dialog.getByRole('button', { name: SHARED_COPY.action.close, exact: true }).click();
   await expect(dialog).not.toBeVisible();
   await page.setViewportSize(PHONE);
 }
 
-async function expectServiceDialogContracts(
-  page: Page,
-  route: string,
-): Promise<void> {
-  const forms =
-    route === "/service/faelle"
-      ? [
-          {
-            open: "Servicefall erfassen",
-            title: "Servicefall erfassen",
-            input: "#service-summary",
-            save: "Speichern",
-          },
-        ]
-      : route === "/service/anlagen"
-        ? [
-            {
-              open: "Anlage erfassen",
-              title: "Anlage erfassen",
-              input: "#equipment-name",
-              save: "Speichern",
-            },
-          ]
-        : route === "/service/wartung"
-          ? [
-              {
-                open: "Abdeckung erfassen",
-                title: "Operative Abdeckung erfassen",
-                input: "#coverage-reference",
-                save: "Abdeckung speichern",
-              },
-              {
-                open: "Wartungsplan anlegen",
-                title: "Wartungsplan anlegen",
-                input: "#maintenance-interval",
-                save: "Wartungsplan anlegen",
-              },
-            ]
-          : [];
-  for (const form of forms) {
-    await page.getByRole("button", { name: form.open, exact: true }).click();
-    const dialog = page.getByRole("dialog", { name: form.title, exact: true });
+async function expectServiceDialogContracts(page: Page, route: string): Promise<void> {
+  for (const form of serviceDialogForms(route)) {
+    await serviceFormTrigger(page, form).click();
+    const dialog = serviceFormDialog(page, form);
     const input = dialog.locator(form.input);
-    await expect(dialog.locator("form")).toHaveCount(1);
-    await expect(
-      dialog.getByRole("button", { name: form.save, exact: true }),
-    ).toBeEnabled();
-    await input.press("Enter");
+    await expect(dialog.locator('form')).toHaveCount(1);
+    await expect(serviceFormSave(dialog, form)).toBeEnabled();
+    await pressKey(dialog, 'Enter', { into: input });
     // Required business context stays empty, so this proves native submit
     // validation without creating a customer, site, equipment or maintenance row.
-    await expect(
-      dialog.getByText("Bitte wähle einen Kunden.", { exact: true }),
-    ).toBeVisible();
-    await expect(
-      dialog.getByRole("combobox", { name: "Kunde", exact: true }),
-    ).toBeFocused();
-    if (form.title === "Anlage erfassen") {
-      await dialog
-        .getByRole("button", {
-          name: "Technische Angaben und Kennungen",
-          exact: true,
-        })
-        .click();
-      await dialog
-        .getByRole("button", {
-          name: "Installation, Inbetriebnahme und Gewährleistung",
-          exact: true,
-        })
-        .click();
-    }
+    await expect(serviceFormCustomerRequired(dialog)).toBeVisible();
+    await expect(serviceFormCustomerPicker(dialog)).toBeFocused();
+    await expandServiceFormSections(dialog, form);
     const body = dialog.locator('[data-slot="dialog-body"]');
-    const heading = dialog.getByRole("heading", {
-      name: form.title,
-      exact: true,
-    });
-    const save = dialog.getByRole("button", { name: form.save, exact: true });
+    const heading = serviceFormHeading(dialog, form);
+    const save = serviceFormSave(dialog, form);
     await expect(heading).toBeInViewport({ ratio: 1 });
     await expect(save).toBeInViewport({ ratio: 1 });
-    const before = await save.boundingBox();
-    expect(before).not.toBeNull();
-    expect(
-      await body.evaluate(
-        (element) => element.scrollHeight > element.clientHeight,
-      ),
-    ).toBe(true);
+    const before = expectDefined(await save.boundingBox(), 'the save button box before scrolling');
+    expect(await body.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
     await body.evaluate((element) => {
       element.scrollTop = element.scrollHeight;
     });
     await expect(heading).toBeInViewport({ ratio: 1 });
     await expect(save).toBeInViewport({ ratio: 1 });
-    const after = await save.boundingBox();
-    expect(after).not.toBeNull();
-    expect(Math.abs(after!.y - before!.y)).toBeLessThanOrEqual(1);
-    await dialog
-      .getByRole("button", { name: "Abbrechen", exact: true })
-      .click();
+    const after = expectDefined(await save.boundingBox(), 'the save button box after scrolling');
+    expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(1);
+    await dialog.getByRole('button', { name: SHARED_COPY.action.cancel, exact: true }).click();
     await expect(dialog).toBeHidden();
   }
 }
 
-test.describe("@AUDIT-LAYOUT phone viewport: no horizontal scroll, shell-owned scroll, no native controls", () => {
+test.describe('@AUDIT-LAYOUT phone viewport: no horizontal scroll, shell-owned scroll, no native controls', () => {
   for (const route of MANAGER_PHONE_ROUTES) {
     test(`admin ${route} fits a 375 px viewport`, async ({ adminPage }, testInfo) => {
       await expectPhoneLayout(adminPage, route, testInfo);
-      if (route === "/service/faelle") {
-        await expectButtonTextContrast(adminPage, adminPage.getByRole("main").getByRole("button", {
-          name: "Servicefall erfassen", exact: true,
-        }));
-        await expect(adminPage.getByRole("dialog")).toHaveCount(0);
+      if (route === '/service/faelle') {
+        await expectButtonTextContrast(adminPage, serviceCaseCaptureButton(adminPage.getByRole('main')));
+        await expect(adminPage.getByRole('dialog')).toHaveCount(0);
       }
       await expectServiceDialogContracts(adminPage, route);
       await expectAreaHeader(adminPage, route);
-      if (route === "/anfragen") await expectRequestControlsOnPhone(adminPage);
+      if (route === '/anfragen') await expectRequestControlsOnPhone(adminPage);
     });
   }
 
   for (const route of EMPLOYEE_ROUTES) {
-    test(`employee ${route} fits a 375 px viewport`, async ({
-      employeePage,
-    }, testInfo) => {
+    test(`employee ${route} fits a 375 px viewport`, async ({ employeePage }, testInfo) => {
       await expectPhoneLayout(employeePage, route, testInfo);
     });
   }
@@ -414,78 +382,129 @@ async function detailDestination(
   pattern: DynamicPhoneRoute,
   page: Page,
   world: TestWorld,
+  businessDate: string,
 ): Promise<{ route: string; heading: string }> {
-  if (pattern === "/zeiterfassung/perioden/[periodId]") {
-    await page.goto("/zeiterfassung/perioden");
-    const content = page.getByRole("main").locator("[data-page-body]");
-    await expect(content.getByRole("heading", { name: "Abrechnungsperioden", exact: true })).toBeVisible();
-    const open = content.getByRole("link", { name: "Öffnen", exact: true });
-    if (await open.count() === 0) {
+  if (pattern === '/zeiterfassung/perioden/[periodId]') {
+    await page.goto('/zeiterfassung/perioden');
+    const content = page.getByRole('main').locator('[data-page-body]');
+    await expect(periodListHeading(content)).toBeVisible();
+    const open = periodOpenLinks(content);
+    if ((await open.count()) === 0) {
       // Use the real preparation boundary to obtain a calculated period with
       // employee rows and findings, rather than fabricating protected snapshots.
-      // Seeded personnel starts this month. The default previous month would
-      // produce an empty result and leave the mobile result cards unobserved.
-      const month = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date()).slice(0, 7);
-      const monthInput = content.getByRole("textbox", { name: "Monat", exact: true });
+      // Seeded personnel starts in the business month. The default previous
+      // month would produce an empty result and leave the mobile result cards unobserved.
+      const month = businessDate.slice(0, 7);
+      const monthInput = content.getByRole('textbox', { name: TIME_ACCOUNT_COPY.month, exact: true });
       await expect(monthInput).toHaveValue(/^\d{2}\.\d{4}$/);
       await monthInput.fill(month);
-      await expect(content.locator('input[name="month"]')).toHaveValue(month);
-      await content.getByRole("button", { name: "Periode vorbereiten", exact: true }).click();
+      // The picker commits a typed month and shows it in German order on blur.
+      await monthInput.blur();
+      await expect(monthInput).toHaveValue(`${month.slice(5)}.${month.slice(0, 4)}`);
+      await content.getByRole('button', { name: TIME_ACCOUNT_COPY.preparePeriod, exact: true }).click();
       // Successful preparation redirects directly to the saved period.
       await expect(page).toHaveURL(/\/zeiterfassung\/perioden\/[0-9a-f-]{36}$/);
-      return { route: new URL(page.url()).pathname, heading: "Monatswerte" };
+      return { route: new URL(page.url()).pathname, heading: TIME_ACCOUNT_COPY.monthlyResults };
     }
     await expect(open).toHaveCount(1);
-    const route = await open.getAttribute("href");
-    if (!route?.startsWith("/zeiterfassung/perioden/")) throw new Error("Period preparation did not expose its exact saved detail route.");
-    return { route, heading: "Monatswerte" };
+    const route = await open.getAttribute('href');
+    if (!route?.startsWith('/zeiterfassung/perioden/'))
+      throw new Error('Period preparation did not expose its exact saved detail route.');
+    return { route, heading: TIME_ACCOUNT_COPY.monthlyResults };
   }
   const details = await prepareLayoutDetails(world);
   const names = layoutNames(world);
   switch (pattern) {
-    case "/kunden/[clientId]": return { route: `/kunden/${details.clientId}`, heading: names.client };
-    case "/anfragen/[requestId]": return { route: `/anfragen/${details.requestId}`, heading: names.request };
-    case "/mitarbeiter/[userId]": return { route: `/mitarbeiter/${world.users.employee.id}`, heading: `${world.users.employee.firstName} ${world.users.employee.lastName}` };
-    case "/service/anlagen/[equipmentNumber]": return { route: `/service/anlagen/${details.equipmentNumber}`, heading: names.equipment };
-    case "/service/faelle/[caseNumber]": return { route: `/service/faelle/${details.caseNumber}`, heading: names.serviceCase };
-    case "/auftraege/[jobNumber]": return { route: `/auftraege/${details.jobNumber}`, heading: names.job };
-    case "/auftraege/[jobNumber]/uebergabe": return { route: `/auftraege/${details.jobNumber}/uebergabe`, heading: names.job };
-    case "/auftraege/projekt/[projectNumber]": return { route: `/auftraege/projekt/${details.projectNumber}`, heading: names.project };
-    case "/auftraege/projekt/[projectNumber]/uebergabe": return { route: `/auftraege/projekt/${details.projectNumber}/uebergabe`, heading: names.project };
-    case "/auftraege/projekt/[projectNumber]/[jobNumber]": return { route: `/auftraege/projekt/${details.projectNumber}/${details.nestedJobNumber}`, heading: names.nestedJob };
-    case "/auftraege/projekt/[projectNumber]/[jobNumber]/uebergabe": return { route: `/auftraege/projekt/${details.projectNumber}/${details.nestedJobNumber}/uebergabe`, heading: names.nestedJob };
-    case "/auftraege/uebergaben/[targetType]/[targetId]": return { route: `/auftraege/uebergaben/auftrag/${details.jobId}`, heading: names.job };
+    case '/kunden/[clientId]':
+      return { route: `/kunden/${details.clientId}`, heading: names.client };
+    case '/anfragen/[requestId]':
+      return { route: `/anfragen/${details.requestId}`, heading: names.request };
+    case '/mitarbeiter/[userId]':
+      return {
+        route: `/mitarbeiter/${world.users.employee.id}`,
+        heading: `${world.users.employee.firstName} ${world.users.employee.lastName}`,
+      };
+    case '/service/anlagen/[equipmentNumber]':
+      return { route: `/service/anlagen/${details.equipmentNumber}`, heading: names.equipment };
+    case '/service/faelle/[caseNumber]':
+      return { route: `/service/faelle/${details.caseNumber}`, heading: names.serviceCase };
+    case '/auftraege/[jobNumber]':
+      return { route: `/auftraege/${details.jobNumber}`, heading: names.job };
+    case '/auftraege/[jobNumber]/uebergabe':
+      return { route: `/auftraege/${details.jobNumber}/uebergabe`, heading: names.job };
+    case '/auftraege/projekt/[projectNumber]':
+      return { route: `/auftraege/projekt/${details.projectNumber}`, heading: names.project };
+    case '/auftraege/projekt/[projectNumber]/uebergabe':
+      return { route: `/auftraege/projekt/${details.projectNumber}/uebergabe`, heading: names.project };
+    case '/auftraege/projekt/[projectNumber]/[jobNumber]':
+      return {
+        route: `/auftraege/projekt/${details.projectNumber}/${details.nestedJobNumber}`,
+        heading: names.nestedJob,
+      };
+    case '/auftraege/projekt/[projectNumber]/[jobNumber]/uebergabe':
+      return {
+        route: `/auftraege/projekt/${details.projectNumber}/${details.nestedJobNumber}/uebergabe`,
+        heading: names.nestedJob,
+      };
+    case '/auftraege/uebergaben/[targetType]/[targetId]':
+      return { route: `/auftraege/uebergaben/auftrag/${details.jobId}`, heading: names.job };
   }
 }
 
-test.describe("@AUDIT-LAYOUT phone details and route aliases", () => {
+test.describe('@AUDIT-LAYOUT phone details and route aliases', () => {
   for (const pattern of DYNAMIC_PHONE_ROUTES) {
-    test(`admin ${pattern} fits a 375 px viewport`, async ({ adminPage, world }, testInfo) => {
-      const destination = await detailDestination(pattern, adminPage, world);
+    test(`admin ${pattern} fits a 375 px viewport`, async ({ adminPage, world, businessDate }, testInfo) => {
+      const destination = await detailDestination(pattern, adminPage, world, businessDate);
       await expectPhoneLayout(adminPage, destination.route, testInfo, destination.heading);
-      if (pattern === "/zeiterfassung/perioden/[periodId]") {
-        const results = adminPage.getByRole("heading", { name: "Monatswerte", exact: true }).locator("..");
-        await expect(results.locator('[data-slot="list-row"]').getByText(`${world.users.employee.firstName} ${world.users.employee.lastName}`, { exact: true })).toBeVisible();
+      if (pattern === '/zeiterfassung/perioden/[periodId]') {
+        const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
+        await expect(
+          monthlyResultListRow(monthlyResults(adminPage), employeeName).getByText(employeeName, {
+            exact: true,
+          }),
+        ).toBeVisible();
       }
     });
   }
 
-  test("admin scoped project handover fits a 375 px viewport", async ({ adminPage, world }, testInfo) => {
+  test('admin scoped project handover fits a 375 px viewport', async ({ adminPage, world }, testInfo) => {
     const details = await prepareLayoutDetails(world);
-    await expectPhoneLayout(adminPage, `/auftraege/uebergaben/projekt/${details.projectId}`, testInfo, layoutNames(world).project);
+    await expectPhoneLayout(
+      adminPage,
+      `/auftraege/uebergaben/projekt/${details.projectId}`,
+      testInfo,
+      layoutNames(world).project,
+    );
   });
 
-  for (const pattern of ["/auftraege/[jobNumber]", "/auftraege/projekt/[projectNumber]/[jobNumber]"] as const) {
-    test(`employee ${pattern} work pack fits a 375 px viewport`, async ({ adminPage, employeePage, world }, testInfo) => {
-      const destination = await detailDestination(pattern, adminPage, world);
+  for (const pattern of [
+    '/auftraege/[jobNumber]',
+    '/auftraege/projekt/[projectNumber]/[jobNumber]',
+  ] as const) {
+    test(`employee ${pattern} work pack fits a 375 px viewport`, async ({
+      adminPage,
+      employeePage,
+      world,
+      businessDate,
+    }, testInfo) => {
+      const destination = await detailDestination(pattern, adminPage, world, businessDate);
       await expectPhoneLayout(employeePage, destination.route, testInfo, destination.heading);
+      // A lifecycle transition reloads the pack with a flash param, which the
+      // page strips with a route transition while hydration work is pending.
+      await employeePage.goto(`${destination.route}?field_transition=updated`);
+      await expect(employeePage).toHaveURL(
+        (url) => decodeURIComponent(url.pathname) === destination.route && url.search === '',
+      );
+      // The URL changes before the replace's server render arrives; the loop began after that render.
+      await employeePage.waitForLoadState('networkidle');
+      await expectMainThreadSettles(employeePage, `${destination.route} after a lifecycle transition`);
     });
   }
 
   for (const alias of PHONE_REDIRECTS) {
     test(`admin ${alias.route} redirects to its audited page`, async ({ adminPage }, testInfo) => {
       await adminPage.goto(alias.route);
-      await expect(adminPage).toHaveURL(url => url.pathname === alias.destination);
+      await expect(adminPage).toHaveURL((url) => url.pathname === alias.destination);
       await expectPhoneLayout(adminPage, alias.destination, testInfo);
     });
   }

@@ -1,253 +1,217 @@
 import { resolve } from 'node:path';
 
+import { workTransitionActionLabel } from '../../lib/work-lifecycle/types';
 import { expect, test } from './support/fixtures';
+import { berlinDateAtOffset } from './support/date-ownership';
+import { seedCustomer } from './support/db/customers';
 import { getInventoryLedgerState } from './support/db/inventory';
-import { getAppliedWorkTemplateState, getJobCountByNumber, getWorkArtifactState, getWorkLifecycleState } from './support/db/work';
-import { closeWorkArtifactDialog, workArtifactsSection } from './support/spec-helpers/work-artifact-dialog';
-import { addContactOnCustomerDetail, addSiteOnCustomerDetail, createCustomer, openCustomerDetail } from './support/steps/customers';
+import {
+  getAppliedWorkTemplateState,
+  getWorkArtifactState,
+  getWorkLifecycleState,
+  seedPublishedWorkTemplate,
+} from './support/db/work';
+import {
+  closeWorkArtifactDialog,
+  newWorkArtifactButton,
+  workArtifactAction,
+  workArtifactDialog,
+  workArtifactField,
+  workArtifactsSection,
+  workArtifactVersion,
+} from './support/spec-helpers/work-artifact-dialog';
 import { uploadDocumentOnJobPage } from './support/steps/documents';
-import { returnMaterialOnJobPage, takeMaterialOnJobPage } from './support/steps/inventory';
-import { loginViaUi } from './support/steps/organization';
-import { changeTimeOnWorkPack, createAndPublishWorkTemplate, createJob, openFieldWorkPack, setInstructionCompletionOnJobPage, transitionWorkOnJobPage } from './support/steps/work';
-import { artifactsDirectory, type TestWorld } from './support/world';
-
-function berlinDateAfter(days: number): string {
-  const today = new Intl.DateTimeFormat('sv-SE', {
-    timeZone: 'Europe/Berlin',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-  const [year, month, day] = today.split('-').map(Number);
-  if (year === undefined || month === undefined || day === undefined) throw new Error(`Invalid ISO date: ${today}`);
-  return new Date(Date.UTC(year, month - 1, day) + days * 86_400_000).toISOString().slice(0, 10);
-}
+import {
+  returnMaterialOnJobPage,
+  takeFromStockButton,
+  takeMaterialOnJobPage,
+} from './support/steps/inventory';
+import { SHARED_COPY, testData } from './support/steps/shared';
+import {
+  changeTimeOnWorkPack,
+  createJob,
+  fieldPackAbsentTerms,
+  fieldPackButton,
+  fieldPackCallLink,
+  fieldPackHeading,
+  fieldPackNavigationLink,
+  fieldPackTimeAction,
+  fieldPrimaryNextAction,
+  lifecycleState,
+  openFieldWorkPack,
+  setInstructionCompletionOnJobPage,
+  transitionWork,
+} from './support/steps/work';
+import { artifactsDirectory } from './support/world';
 
 function dateDigits(value: string): string {
   return value.split('-').reverse().join('');
 }
 
-function names(world: TestWorld) {
-  return {
-    employeeName: `${world.users.employee.firstName} ${world.users.employee.lastName}`,
-    customerName: `P116 Golden Kunde ${world.runId}`,
-    siteName: `P116 Golden Heizzentrale ${world.runId}`,
-    contactName: `P116 Golden Kontakt ${world.runId}`,
-    templateName: `P116 Golden Vorlage ${world.runId}`,
-    instruction: `Anlage prüfen ${world.runId}`,
-    jobNumber: `AUF-${world.runId}-P116-GOLDEN`,
-    unassignedJobNumber: `AUF-${world.runId}-P116-DENIED`,
-    jobTitle: `P116 Golden Einsatz ${world.runId}`,
-  };
-}
-
-async function expectSetupJob(world: TestWorld, jobNumber: string): Promise<void> {
-  const count = await getJobCountByNumber(world.orgId, jobNumber);
-  expect(count, `P1-16 setup prerequisite is missing for ${jobNumber}`).toBe(1);
-}
-
+// Project-child packs, dispatch, interruptions, time switching, own blockers,
+// assignment revocation and the unassigned/outsider denials are edge cases in
+// tests/audit/wave-2/p1-16.spec.ts.
 test.describe('P1-16 focused field work pack @P1-16', () => {
-  test('setup and first viewport expose only the practical field context @P1-16-stage-setup', async ({
+  test('an assigned field worker works through the pack and completes the job', async ({
     adminPage,
     employeePage,
     world,
   }) => {
-    const fixture = names(world);
-    await createCustomer(adminPage, fixture.customerName);
-    await openCustomerDetail(adminPage, fixture.customerName);
-    await addContactOnCustomerDetail(adminPage, {
-      name: fixture.contactName,
-      role: 'Hausmeister/in',
-      phone: '+49 30 5550123',
-      email: `internal-${world.runId}@example.test`,
-      notes: 'Diese interne Kontaktnotiz bleibt im Büro.',
-      isPrimary: true,
-    });
-    await addSiteOnCustomerDetail(adminPage, {
-      name: fixture.siteName,
-      street: 'Werkstraße 16',
-      postalCode: '10115',
-      city: 'Berlin',
-      accessNotes: 'Am Pförtnerhaus melden.',
-      notes: 'Diese interne Standortnotiz bleibt im Büro.',
-      isPrimary: true,
-    });
-    await createAndPublishWorkTemplate(adminPage, {
-      name: fixture.templateName,
-      targetType: 'job',
-      firstItem: fixture.instruction,
-    });
-    await createJob(adminPage, {
-      jobNumber: fixture.jobNumber,
-      title: fixture.jobTitle,
-      description: 'Störung eingrenzen, Anlage prüfen und Ergebnis dokumentieren.',
-      clientName: fixture.customerName,
-      siteName: fixture.siteName,
-      contactName: fixture.contactName,
-      plannedDateDigits: dateDigits(berlinDateAfter(85)),
-      assignEmployeeName: fixture.employeeName,
-      workTemplateName: fixture.templateName,
-    });
-    await createJob(adminPage, {
-      jobNumber: fixture.unassignedJobNumber,
-      title: `P116 nicht zugewiesen ${world.runId}`,
+    const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
+    const customerName = `P116 Golden Kunde ${world.runId}`;
+    const siteName = `P116 Golden Heizzentrale ${world.runId}`;
+    const contactName = `P116 Golden Kontakt ${world.runId}`;
+    const templateName = `P116 Golden Vorlage ${world.runId}`;
+    const instruction = `Anlage prüfen ${world.runId}`;
+    const jobNumber = `AUF-${world.runId}-P116-GOLDEN`;
+    const siteStreet = testData`Werkstraße 16`;
+    const siteAddress = testData`Werkstraße 16, 10115 Berlin`;
+    const accessNotes = testData`Am Pförtnerhaus melden.`;
+    const internalSiteNote = testData`Diese interne Standortnotiz bleibt im Büro.`;
+    const internalSiteNoteStart = testData`Diese interne`;
+    const contactEmailDomain = testData`@example.test`;
+    const jobDescription = testData`Störung eingrenzen, Anlage prüfen und Ergebnis dokumentieren.`;
+
+    const pack = await test.step('The pack opens with only the practical field context', async () => {
+      await seedCustomer({
+        orgId: world.orgId,
+        actorId: world.users.admin.id,
+        name: customerName,
+        contacts: [
+          {
+            name: contactName,
+            role: 'Hausmeister/in',
+            phone: '+49 30 5550123',
+            email: `internal-${world.runId}${contactEmailDomain}`,
+            isPrimary: true,
+          },
+        ],
+        sites: [
+          {
+            name: siteName,
+            street: siteStreet,
+            postalCode: '10115',
+            city: 'Berlin',
+            accessNotes,
+            notes: internalSiteNote,
+            isPrimary: true,
+          },
+        ],
+      });
+      await seedPublishedWorkTemplate({
+        orgId: world.orgId,
+        actorId: world.users.admin.id,
+        name: templateName,
+        targetType: 'job',
+        items: [{ content: instruction }],
+      });
+      await createJob(adminPage, {
+        jobNumber,
+        title: `P116 Golden Einsatz ${world.runId}`,
+        description: jobDescription,
+        clientName: customerName,
+        siteName,
+        contactName,
+        plannedDateDigits: dateDigits(berlinDateAtOffset(85)),
+        assignEmployeeName: employeeName,
+        workTemplateName: templateName,
+      });
+
+      await employeePage.setViewportSize({ width: 390, height: 844 });
+      const fieldPack = await openFieldWorkPack(employeePage, jobNumber);
+      await expect(fieldPackHeading(fieldPack, 'beforeVisit')).toBeVisible();
+      await expect(fieldPack).toContainText(customerName);
+      await expect(fieldPack).toContainText(siteName);
+      await expect(fieldPack).toContainText(siteAddress);
+      await expect(fieldPack).toContainText(accessNotes);
+      await expect(fieldPack).toContainText(jobDescription);
+      await expect(fieldPack).not.toContainText(internalSiteNoteStart);
+      await expect(fieldPack).not.toContainText(contactEmailDomain);
+      await expect(fieldPackCallLink(fieldPack, contactName)).toHaveAttribute('href', /tel:/);
+      await expect(fieldPackNavigationLink(fieldPack, siteStreet)).toHaveAttribute('href', /^geo:/);
+      await expect(fieldPrimaryNextAction(fieldPack)).toHaveText(
+        workTransitionActionLabel('not_started', 'in_progress'),
+      );
+      await expect(
+        fieldPack.getByRole('button', { name: SHARED_COPY.assignment.assign, exact: true }),
+      ).toHaveCount(0);
+      await expect(fieldPackAbsentTerms(fieldPack, 'billing')).toHaveCount(0);
+      return fieldPack;
     });
 
-    await employeePage.setViewportSize({ width: 390, height: 844 });
-    const pack = await openFieldWorkPack(employeePage, fixture.jobNumber);
-    await expect(pack.getByRole('heading', { name: 'Vor dem Einsatz' })).toBeVisible();
-    await expect(pack).toContainText(fixture.customerName);
-    await expect(pack).toContainText(fixture.siteName);
-    await expect(pack).toContainText('Werkstraße 16, 10115 Berlin');
-    await expect(pack).toContainText('Am Pförtnerhaus melden.');
-    await expect(pack).toContainText(
-      'Störung eingrenzen, Anlage prüfen und Ergebnis dokumentieren.'
-    );
-    await expect(pack).not.toContainText('Diese interne');
-    await expect(pack).not.toContainText('@example.test');
-    await expect(
-      pack.getByRole('link', { name: `${fixture.contactName} anrufen` })
-    ).toHaveAttribute('href', /tel:/);
-    await expect(pack.getByRole('link', { name: /Navigation zu Werkstraße 16/ })).toHaveAttribute(
-      'href',
-      /^geo:/
-    );
-    await expect(pack.getByTestId('field-primary-next-action')).toHaveCount(1);
-    await expect(pack.getByTestId('field-primary-next-action')).toHaveText('In Ausführung');
-    await expect(pack.getByRole('button', { name: 'Zuweisen', exact: true })).toHaveCount(0);
-    await expect(pack.getByText(/Abrechenbar/)).toHaveCount(0);
-  });
+    await test.step('Field actions persist through their owning domains', async () => {
+      const inventoryBefore = await getInventoryLedgerState(
+        world.orgId,
+        world.inventory.itemId,
+        world.inventory.locationId,
+      );
+      await transitionWork(employeePage, 'not_started', 'in_progress');
+      await setInstructionCompletionOnJobPage(employeePage, instruction, true);
+      await changeTimeOnWorkPack(employeePage, 'start');
+      await changeTimeOnWorkPack(employeePage, 'stop');
+      await takeMaterialOnJobPage(employeePage, jobNumber, world.inventory.itemName, 2);
+      await returnMaterialOnJobPage(employeePage, jobNumber, world.inventory.itemName, 2);
+      await uploadDocumentOnJobPage(
+        employeePage,
+        jobNumber,
+        resolve(artifactsDirectory(), 'upload-fixture.pdf'),
+        'upload-fixture',
+      );
 
-  test('field actions persist through their owning domains @P1-16-stage-execution', async ({
-    employeePage,
-    world,
-  }) => {
-    const fixture = names(world);
-    await expectSetupJob(world, fixture.jobNumber);
-    await employeePage.setViewportSize({ width: 390, height: 844 });
-    await openFieldWorkPack(employeePage, fixture.jobNumber);
-    const inventoryBefore = await getInventoryLedgerState(
-      world.orgId,
-      world.inventory.itemId,
-      world.inventory.locationId
-    );
-    await transitionWorkOnJobPage(employeePage, 'In Ausführung');
-    await setInstructionCompletionOnJobPage(employeePage, fixture.instruction, true);
-    await changeTimeOnWorkPack(employeePage, 'start');
-    await changeTimeOnWorkPack(employeePage, 'stop');
-    await takeMaterialOnJobPage(employeePage, fixture.jobNumber, world.inventory.itemName, 2);
-    await returnMaterialOnJobPage(employeePage, fixture.jobNumber, world.inventory.itemName, 2);
-    await uploadDocumentOnJobPage(
-      employeePage,
-      fixture.jobNumber,
-      resolve(artifactsDirectory(), 'upload-fixture.pdf'),
-      'upload-fixture'
-    );
+      await newWorkArtifactButton(employeePage).click();
+      const artifactDialog = workArtifactDialog(employeePage);
+      await workArtifactField(artifactDialog, 'title').fill(`P116 Arbeitsbericht ${world.runId}`);
+      await workArtifactField(artifactDialog, 'summary').fill(
+        'Anlage geprüft; Ergebnis ist im Auftrag dokumentiert.',
+      );
+      await workArtifactField(artifactDialog, 'performedWork').fill(
+        'Anlage geprüft und Ergebnis dokumentiert.',
+      );
+      await workArtifactAction(artifactDialog, 'saveDraft').click();
+      await expect(workArtifactVersion(artifactDialog, 1)).toBeVisible({
+        timeout: 20_000,
+      });
+      await closeWorkArtifactDialog(artifactDialog);
 
-    await workArtifactsSection(employeePage)
-      .getByRole('button', { name: 'Neu' })
-      .click();
-    const artifactDialog = employeePage.getByRole('dialog');
-    await artifactDialog.getByLabel('Titel').fill(`P116 Arbeitsbericht ${world.runId}`);
-    await artifactDialog
-      .getByLabel('Zusammenfassung')
-      .fill('Anlage geprüft; Ergebnis ist im Auftrag dokumentiert.');
-    await artifactDialog
-      .getByLabel('Ausgeführte Arbeiten')
-      .fill('Anlage geprüft und Ergebnis dokumentiert.');
-    await artifactDialog.getByRole('button', { name: 'Als Entwurf speichern' }).click();
-    await expect(artifactDialog.getByText(/Version 1/)).toBeVisible({
-      timeout: 20_000,
-    });
-    await closeWorkArtifactDialog(artifactDialog);
-
-    const [applied, artifacts, inventory] = await Promise.all([
-      getAppliedWorkTemplateState(world.orgId, {
-        jobNumber: fixture.jobNumber,
-      }),
-      getWorkArtifactState(world.orgId, { jobNumber: fixture.jobNumber }),
-      getInventoryLedgerState(world.orgId, world.inventory.itemId, world.inventory.locationId),
-    ]);
-    expect(applied.instructions).toHaveLength(1);
-    expect(applied.instructions[0]).toMatchObject({
-      is_completed: true,
-      last_status_changed_by: world.users.employee.id,
-    });
-    expect(applied.timeSegments).toHaveLength(1);
-    expect(applied.timeEntries).toHaveLength(0);
-    expect(applied.inventoryMovements).toHaveLength(2);
-    expect(applied.documentLinks).toHaveLength(1);
-    expect(artifacts.artifacts).toHaveLength(1);
-    expect(artifacts.artifacts[0]).toMatchObject({
-      status: 'draft',
-      created_by: world.users.employee.id,
-    });
-    expect(inventory.quantityOnHand).toBe(inventoryBefore.quantityOnHand);
-    expect(inventory.movementCount).toBe(inventoryBefore.movementCount + 2);
-  });
-
-  test('terminal and cross-role boundaries survive a fresh session @P1-16-stage-boundaries', async ({
-    adminPage,
-    employeePage,
-    outsiderPage,
-    world,
-  }) => {
-    const fixture = names(world);
-    await expectSetupJob(world, fixture.jobNumber);
-    await employeePage.setViewportSize({ width: 390, height: 844 });
-    const pack = await openFieldWorkPack(employeePage, fixture.jobNumber);
-    const lifecycleBefore = await getWorkLifecycleState(world.orgId, {
-      jobNumber: fixture.jobNumber,
-    });
-    const executionState =
-      lifecycleBefore.entity && 'execution_state' in lifecycleBefore.entity
-        ? lifecycleBefore.entity.execution_state
-        : null;
-    if (executionState !== 'execution_complete') {
-      await transitionWorkOnJobPage(employeePage, 'Ausführung abgeschlossen');
-    }
-    await expect(
-      pack
-        .getByTestId('work-lifecycle-card')
-        .locator('[data-slot="badge"]')
-        .getByText('Ausführung abgeschlossen', { exact: true })
-        .filter({ visible: true })
-    ).toBeVisible({ timeout: 20_000 });
-    await expect(pack.getByTestId('field-primary-next-action')).toHaveCount(0);
-    const readOnlyArtifacts = pack.getByTestId('work-artifacts-section');
-    await expect(readOnlyArtifacts).toBeVisible();
-    await expect(readOnlyArtifacts.getByRole('button', { name: 'Neu', exact: true })).toHaveCount(
-      0
-    );
-    await expect(pack.getByRole('button', { name: 'Hochladen' })).toHaveCount(0);
-    await expect(pack.getByRole('button', { name: /Arbeitszeit (starten|beenden)/ })).toHaveCount(
-      0
-    );
-    await expect(pack.getByRole('button', { name: 'Aus Lager entnehmen' })).toHaveCount(0);
-
-    const lifecycle = await getWorkLifecycleState(world.orgId, {
-      jobNumber: fixture.jobNumber,
-    });
-    expect(lifecycle.entity).toMatchObject({
-      execution_state: 'execution_complete',
+      const [applied, artifacts, inventory] = await Promise.all([
+        getAppliedWorkTemplateState(world.orgId, { jobNumber }),
+        getWorkArtifactState(world.orgId, { jobNumber }),
+        getInventoryLedgerState(world.orgId, world.inventory.itemId, world.inventory.locationId),
+      ]);
+      expect(applied.instructions).toEqual([
+        expect.objectContaining({ is_completed: true, last_status_changed_by: world.users.employee.id }),
+      ]);
+      expect(applied.timeSegments).toHaveLength(1);
+      expect(applied.inventoryMovements).toHaveLength(2);
+      expect(applied.documentLinks).toHaveLength(1);
+      expect(artifacts.artifacts).toEqual([
+        expect.objectContaining({ status: 'draft', created_by: world.users.employee.id }),
+      ]);
+      expect(inventory.quantityOnHand).toBe(inventoryBefore.quantityOnHand);
+      expect(inventory.movementCount).toBe(inventoryBefore.movementCount + 2);
     });
 
-    await adminPage.goto(`/auftraege/${fixture.jobNumber}`);
-    await expect(adminPage.getByTestId('field-work-pack')).toHaveCount(0);
-    await expect(adminPage.getByRole('heading', { name: 'Details' })).toBeVisible();
-    await expect(adminPage.getByRole('button', { name: 'Zuweisen', exact: true })).toBeVisible();
+    await test.step('Completion leaves a read-only pack while the office keeps its own view', async () => {
+      await openFieldWorkPack(employeePage, jobNumber);
+      await transitionWork(employeePage, 'in_progress', 'execution_complete');
+      await expect(lifecycleState(employeePage, 'execution_complete').filter({ visible: true })).toBeVisible({
+        timeout: 20_000,
+      });
+      await expect(fieldPrimaryNextAction(pack)).toHaveCount(0);
+      await expect(workArtifactsSection(employeePage)).toBeVisible();
+      await expect(newWorkArtifactButton(employeePage, { exact: true })).toHaveCount(0);
+      await expect(fieldPackButton(pack, 'upload')).toHaveCount(0);
+      await expect(fieldPackTimeAction(pack)).toHaveCount(0);
+      await expect(takeFromStockButton(pack)).toHaveCount(0);
+      const lifecycle = await getWorkLifecycleState(world.orgId, { jobNumber });
+      expect(lifecycle.entity).toMatchObject({ execution_state: 'execution_complete' });
 
-    await employeePage.goto(`/auftraege/${fixture.unassignedJobNumber}`);
-    await employeePage.waitForURL(/\/auftraege\/?$/, { timeout: 20_000 });
-    await expect(employeePage.getByTestId('field-work-pack')).toHaveCount(0);
-    // The isolation assertion must not depend on the outsider context created
-    // minutes earlier surviving whatever earlier specs did to that user's
-    // sessions: establish a freshly authenticated outsider at action time,
-    // then assert the denial.
-    await outsiderPage.context().clearCookies();
-    await loginViaUi(outsiderPage, world.outsider.admin);
-    await outsiderPage.goto(`/auftraege/${fixture.jobNumber}`);
-    await outsiderPage.waitForURL(/\/auftraege\/?$/, { timeout: 20_000 });
-    await expect(outsiderPage.getByTestId('field-work-pack')).toHaveCount(0);
+      await adminPage.goto(`/auftraege/${jobNumber}`);
+      await expect(adminPage.getByTestId('field-work-pack')).toHaveCount(0);
+      await expect(adminPage.getByRole('heading', { name: SHARED_COPY.region.details })).toBeVisible();
+      await expect(
+        adminPage.getByRole('button', { name: SHARED_COPY.assignment.assign, exact: true }),
+      ).toBeVisible();
+    });
   });
 });

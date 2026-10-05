@@ -2,19 +2,17 @@ import { Suspense } from 'react';
 import { readOrganizationClients } from '@/lib/clients/server';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
+import { logError } from '@/lib/logging';
 
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
 import { getProjectDocumentsOverview } from '@/lib/documents/actions';
-import {
-  getInventoryPickerOptions,
-  getProjectMaterialSummary,
-} from '@/lib/inventory/actions';
+import { getInventoryPickerPage, getProjectMaterialSummary } from '@/lib/inventory/actions';
 import { getProjectByNumber } from '@/lib/projects/actions';
 import { UrlFlashBanner } from '@/components/ui/banner';
 import type { OrgRole } from '@/lib/members/actions';
-import { ProjectDetailContent } from '@/components/auftraege/project-detail-content';
+import { ProjectDetailContent } from '@/components/auftraege/project-detail/project-detail-content';
 import { RouteRedirect } from '@/components/shared/route-redirect';
 import ProjectDetailLoading from './loading';
 import { getWorkLifecycleSnapshot } from '@/lib/work-lifecycle/actions';
@@ -27,26 +25,25 @@ interface ProjectDetailPageProps {
   params: Promise<{ projectNumber: string }>;
 }
 
-async function ProjectDetailData({
-  projectNumber,
-}: {
-  projectNumber: string;
-}) {
-  const [{ data: { user } }, cookieStore] = await Promise.all([
-    getCachedUser(),
-    cookies(),
-  ]);
+async function ProjectDetailData({ projectNumber }: { projectNumber: string }) {
+  const [
+    {
+      data: { user },
+    },
+    cookieStore,
+  ] = await Promise.all([getCachedUser(), cookies()]);
 
   if (!user) redirect('/login');
 
-  const activeOrgId = await resolveActiveOrgId(cookieStore, user.id);
+  const [activeOrgId, memberships] = await Promise.all([
+    resolveActiveOrgId(cookieStore, user.id),
+    getCachedMemberships(user.id),
+  ]);
   if (!activeOrgId) redirect('/auftraege');
 
-  const memberships = await getCachedMemberships(user.id);
   const currentMembership = memberships.find((m) => m.orgId === activeOrgId);
   const currentUserRole = currentMembership?.role as OrgRole | undefined;
-  const isAdminOrManager =
-    currentUserRole === 'admin' || currentUserRole === 'buero';
+  const isAdminOrManager = currentUserRole === 'admin' || currentUserRole === 'buero';
   const admin = createSupabaseAdminClient();
 
   const projectResultPromise = getProjectByNumber(decodeURIComponent(projectNumber));
@@ -60,32 +57,44 @@ async function ProjectDetailData({
         return getProjectMaterialSummary(result.details.project.id);
       })
     : Promise.resolve(null);
-  const inventoryOptionsResultPromise = isAdminOrManager
-    ? getInventoryPickerOptions()
-    : Promise.resolve(null);
+  const inventoryOptionsResultPromise = isAdminOrManager ? getInventoryPickerPage() : Promise.resolve(null);
   const lifecycleResultPromise = projectResultPromise.then((result) =>
     result.success
       ? getWorkLifecycleSnapshot({ targetType: 'project', targetId: result.details.project.id })
-      : null
+      : null,
   );
   const artifactsResultPromise = projectResultPromise.then((result) =>
-    result.success ? getWorkArtifacts({ targetType: 'project', targetId: result.details.project.id }) : null
+    result.success ? getWorkArtifacts({ targetType: 'project', targetId: result.details.project.id }) : null,
   );
   const instructionItemsResultPromise = projectResultPromise.then((result) =>
-    result.success ? getProjectInstructionItems(result.details.project.id) : null
+    result.success ? getProjectInstructionItems(result.details.project.id) : null,
   );
   const approvalHolderPromise = getEffectiveResponsibilityHolderForActor({
-    organizationId: activeOrgId, responsibility: 'work_artifact_approval', actorUserId: user.id,
+    organizationId: activeOrgId,
+    responsibility: 'work_artifact_approval',
+    actorUserId: user.id,
   });
   const handoverWorkspacePromise = projectResultPromise.then((result) =>
     result.success
       ? getWorkHandoverWorkspace({
-          targetType: 'project', targetId: result.details.project.id,
+          targetType: 'project',
+          targetId: result.details.project.id,
         })
-      : null
+      : null,
   );
 
-  const [result, clients, documentsResult, materialResult, inventoryOptionsResult, lifecycleResult, artifactsResult, instructionItemsResult, approvalHolder, handoverWorkspaceResult] = await Promise.all([
+  const [
+    result,
+    clients,
+    documentsResult,
+    materialResult,
+    inventoryOptionsResult,
+    lifecycleResult,
+    artifactsResult,
+    instructionItemsResult,
+    approvalHolder,
+    handoverWorkspaceResult,
+  ] = await Promise.all([
     projectResultPromise,
     readOrganizationClients(admin, activeOrgId),
     documentsResultPromise,
@@ -106,41 +115,44 @@ async function ProjectDetailData({
     );
   }
 
-
   const { project, client, jobs, derivedStatus } = result.details;
 
-  const projectDocuments =
-    documentsResult && documentsResult.success ? documentsResult.projectDocuments : [];
-  const jobDocumentGroups =
-    documentsResult && documentsResult.success ? documentsResult.jobDocumentGroups : [];
-  const materialSummary =
-    materialResult && materialResult.success
-      ? materialResult.summary
-      : { directLines: [], jobGroups: [], totals: [] };
-  const inventoryItems =
-    inventoryOptionsResult && inventoryOptionsResult.success
-      ? inventoryOptionsResult.items
+  // A failed read stays null so that its region shows the failure instead of an empty list.
+  // The instruction read is manager-only: an employee's refused read stays empty. The documents
+  // read admits every caller who may open the project, so its failure shows for every role.
+  const projectDocuments = documentsResult?.success ? documentsResult.projectDocuments : null;
+  const instructionItems = instructionItemsResult?.success
+    ? instructionItemsResult.items
+    : isAdminOrManager
+      ? null
       : [];
-  const inventoryLocations =
-    inventoryOptionsResult && inventoryOptionsResult.success
-      ? inventoryOptionsResult.locations
-      : [];
+  const jobDocumentGroups = documentsResult?.success ? documentsResult.jobDocumentGroups : [];
+  const materialSummary = materialResult?.success ? materialResult.summary : null;
+  const inventoryItems = inventoryOptionsResult?.success ? inventoryOptionsResult.items : null;
+  const inventoryLocations = inventoryOptionsResult?.success ? inventoryOptionsResult.locations : null;
+  // Only a holder of the handover review may read the workspace; for everyone else the summary stays hidden.
+  const handoverWorkspace = handoverWorkspaceResult?.success
+    ? handoverWorkspaceResult.workspace
+    : handoverWorkspaceResult?.error === 'work_handover_not_authorized'
+      ? 'not_reviewer'
+      : null;
   // Origin request (P1-02); the banner itself is manager-only in the component.
-  const { data: originRequestRow } = isAdminOrManager
+  const { data: originRequestRow, error: originRequestError } = isAdminOrManager
     ? await admin
         .from('client_requests')
         .select('id, request_number, summary')
         .eq('organization_id', activeOrgId)
         .eq('converted_project_id', project.id)
         .maybeSingle()
-    : { data: null };
+    : { data: null, error: null };
+  if (originRequestError) logError('Project detail: origin request read failed', originRequestError);
 
   return (
     <>
       <Suspense fallback={null}>
         <UrlFlashBanner
           paramKey="deleted_job"
-          messageTemplate='Auftrag „{name}" wurde erfolgreich gelöscht.'
+          messageTemplate="Auftrag „{name}“ wurde erfolgreich gelöscht."
         />
       </Suspense>
       <ProjectDetailContent
@@ -153,35 +165,33 @@ async function ProjectDetailData({
         isAdminOrManager={isAdminOrManager}
         canApproveWorkArtifacts={Boolean(approvalHolder)}
         currentUserId={user.id}
-        instructionItems={instructionItemsResult?.success ? instructionItemsResult.items : []}
-        initialArtifacts={artifactsResult?.success ? artifactsResult.artifacts : []}
+        instructionItems={instructionItems}
+        initialArtifacts={artifactsResult?.success ? artifactsResult.artifacts : null}
         projectDocuments={projectDocuments}
         jobDocumentGroups={jobDocumentGroups}
         materialSummary={materialSummary}
         inventoryItems={inventoryItems}
         inventoryLocations={inventoryLocations}
         originRequest={
-          originRequestRow
-            ? {
-                label: originRequestRow.request_number
-                  ? `Anfrage ${originRequestRow.request_number}`
-                  : `Anfrage „${originRequestRow.summary}“`,
-                href: `/anfragen/${originRequestRow.id}`,
-              }
-            : null
+          originRequestError
+            ? 'failed'
+            : originRequestRow
+              ? {
+                  label: originRequestRow.request_number
+                    ? `Anfrage ${originRequestRow.request_number}`
+                    : `Anfrage „${originRequestRow.summary}“`,
+                  href: `/anfragen/${originRequestRow.id}`,
+                }
+              : null
         }
         lifecycleSnapshot={lifecycleResult?.success ? lifecycleResult.snapshot : null}
-        handoverWorkspace={
-          handoverWorkspaceResult?.success ? handoverWorkspaceResult.workspace : null
-        }
+        handoverWorkspace={handoverWorkspace}
       />
     </>
   );
 }
 
-export default async function ProjectDetailPage({
-  params,
-}: ProjectDetailPageProps) {
+export default async function ProjectDetailPage({ params }: ProjectDetailPageProps) {
   const { projectNumber } = await params;
 
   return <ProjectDetailData projectNumber={projectNumber} />;

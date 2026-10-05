@@ -2,9 +2,12 @@ import { createClient } from '@supabase/supabase-js';
 import type { Database } from '../lib/supabase/database.types';
 import { testSupabaseClientOptions } from '../tests/golden/support/client-options';
 import { requireEnv } from '../tests/golden/support/env';
-import { assertLocalCleanupRelocation, assertRelocatedWorldOwnership } from '../lib/testing/local-cleanup-relocation';
-import { INCIDENT_CLASSES, type IncidentClass } from '../lib/testing/run-policy';
-import { formatRunInventory } from '../lib/testing/run-inventory';
+import {
+  assertLocalCleanupRelocation,
+  assertRelocatedWorldOwnership,
+} from '../lib/testing/runs/local-cleanup-relocation';
+import { INCIDENT_CLASSES, type IncidentClass } from '../lib/testing/runner/run-policy';
+import { formatRunInventory } from '../lib/testing/runs/run-inventory';
 import { loadEnvLocal } from '../tests/golden/support/env';
 import {
   listRunManifests,
@@ -16,16 +19,23 @@ import {
 } from '../tests/golden/support/run-state';
 import { destroyTestWorld } from '../tests/golden/support/seed';
 import { existsSync } from 'node:fs';
-import { readRetainedWorldState } from '../lib/testing/archive-state';
+import { readRetainedWorldState } from '../lib/testing/runs/archive-state';
 import { resolve } from 'node:path';
-import { withWorkspaceTestLock } from '../lib/testing/workspace-test-lock';
+import { withWorkspaceTestLock } from '../lib/testing/runner/workspace-test-lock';
 import { currentBackendProvenance } from '../tests/golden/support/run-state';
-import { runSessionCommand, withLocalStackLease } from '../lib/testing/local-stack-lease';
+import { runSessionCommand, withLocalStackLease } from '../lib/testing/local-stack/local-stack-lease';
 import { localMailpitUrl } from '../lib/testing/local-mailpit';
-import { validateDiagnosticProvenance } from '../lib/testing/test-evidence';
-import { backendIdentity } from '../lib/testing/proof-environment';
-import { citedRunKeys, prunableArchiveBytes, prunableRunKeys, PRUNABLE_RUN_DIRECTORIES } from '../lib/testing/run-retention';
+import { validateDiagnosticProvenance } from '../lib/testing/evidence/test-evidence';
+import { backendIdentity } from '../lib/testing/evidence/proof-environment';
+import {
+  citedRunKeys,
+  prunableArchiveBytes,
+  prunableRunKeys,
+  PRUNABLE_RUN_DIRECTORIES,
+} from '../lib/testing/runs/run-retention';
 import { readPerformanceBaselines } from '../lib/testing/performance-baselines';
+import { recordGroupDiagnosis } from '../lib/testing/evidence/group-diagnosis';
+import { classificationProblem } from '../lib/testing/evidence/browser-group-evidence';
 import { readdirSync, readFileSync, rmSync } from 'node:fs';
 
 function printRuns(): void {
@@ -50,10 +60,13 @@ async function cleanupRun(runKey: string, relocationReason?: string): Promise<vo
   // different backend would silently "succeed" against the wrong project and
   // leave the real rows behind; refuse instead. The identity ignores the WSL
   // address; the exact-origin provenance check below still governs replay.
-  const currentProjectRef = backendIdentity(process.env.NEXT_PUBLIC_SUPABASE_URL, resolve(import.meta.dir, '..'));
+  const currentProjectRef = backendIdentity(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    resolve(import.meta.dir, '..'),
+  );
   if (!relocationReason && manifest.projectRef && manifest.projectRef !== currentProjectRef) {
     throw new Error(
-      `Run ${runKey} was recorded against project ${manifest.projectRef}, but .env.local points at ${currentProjectRef}. Switch env (bun run env:local / env:dev) before cleanup.`
+      `Run ${runKey} was recorded against project ${manifest.projectRef}, but .env.local points at ${currentProjectRef}. Switch env (bun run env:local / env:dev) before cleanup.`,
     );
   }
   const world = readRetainedWorldState(manifest, worldPath);
@@ -63,12 +76,28 @@ async function cleanupRun(runKey: string, relocationReason?: string): Promise<vo
     assertLocalCleanupRelocation(manifest.backendProvenance, requested);
     // A verified cleanup may have removed one organization before another resource failed.
     // Resume only against the exact backend previously verified for that cleanup.
-    if (!manifest.cleanupRelocation || validateDiagnosticProvenance(manifest.cleanupRelocation.backend, requested).length) {
-    const admin = createClient<Database>(requireEnv('NEXT_PUBLIC_SUPABASE_URL'), requireEnv('SUPABASE_SECRET_KEY'), testSupabaseClientOptions);
-    const { data, error } = await admin.from('organizations').select('id,name,admin_id').in('id', [world.orgId, world.outsider.orgId]);
-    if (error) throw new Error('Could not verify relocated test organization ownership.');
-    assertRelocatedWorldOwnership(world, data ?? []);
-    updateRunManifest(runKey, { cleanupRelocation: { verifiedAt: new Date().toISOString(), reason: relocationReason, backend: requested } });
+    if (
+      !manifest.cleanupRelocation ||
+      validateDiagnosticProvenance(manifest.cleanupRelocation.backend, requested).length
+    ) {
+      const admin = createClient<Database>(
+        requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
+        requireEnv('SUPABASE_SECRET_KEY'),
+        testSupabaseClientOptions,
+      );
+      const { data, error } = await admin
+        .from('organizations')
+        .select('id,name,admin_id')
+        .in('id', [world.orgId, world.outsider.orgId]);
+      if (error) throw new Error('Could not verify relocated test organization ownership.');
+      assertRelocatedWorldOwnership(world, data ?? []);
+      updateRunManifest(runKey, {
+        cleanupRelocation: {
+          verifiedAt: new Date().toISOString(),
+          reason: relocationReason,
+          backend: requested,
+        },
+      });
     }
   } else if (manifest.backendProvenance) {
     const requested = currentBackendProvenance(manifest.suite);
@@ -90,9 +119,12 @@ async function main(): Promise<void> {
   }
   if (command === 'recover-interrupted') {
     const [runKey, reason, ...extra] = process.argv.slice(3);
-    if (!runKey || !reason || extra.length) throw new Error('Usage: test:runs recover-interrupted <run-key> "<observed interruption reason>"');
+    if (!runKey || !reason || extra.length)
+      throw new Error('Usage: test:runs recover-interrupted <run-key> "<observed interruption reason>"');
     const recovered = recoverInterruptedRun(runKey, reason);
-    console.log(`[werkflow-test] recovered ${runKey} as interrupted; preserved ${recovered.passed} passes and ${recovered.failed} failures. Run cost remains anchored to the first recovery at ${recovered.interruptionRecovery?.recoveredAt}. ${recovered.retainedAt && !recovered.cleanedAt ? 'Owned world retained; inspect and clean explicitly.' : 'No unclean owned world recorded.'}`);
+    console.log(
+      `[werkflow-test] recovered ${runKey} as interrupted; preserved ${recovered.passed} passes and ${recovered.failed} failures. Run cost remains anchored to the first recovery at ${recovered.interruptionRecovery?.recoveredAt}. ${recovered.retainedAt && !recovered.cleanedAt ? 'Owned world retained; inspect and clean explicitly.' : 'No unclean owned world recorded.'}`,
+    );
     return;
   }
   if (command === 'prune') {
@@ -101,26 +133,44 @@ async function main(): Promise<void> {
     const repositoryRoot = resolve(import.meta.dir, '..');
     const archiveRoot = resolve(repositoryRoot, '.agent-logs/playwright-runs');
     const verificationRoot = resolve(repositoryRoot, '.agent-logs/verification');
-    const reports = existsSync(verificationRoot) ? readdirSync(verificationRoot).flatMap((directory) => {
-      const file = resolve(verificationRoot, directory, 'report.json');
-      return existsSync(file) ? [JSON.parse(readFileSync(file, 'utf8')) as { target: string; results: { groupId: string; status: string; startedAt: string; runKey: string | null }[] }] : [];
-    }) : [];
-    const cited = citedRunKeys({ reports, baselineRunKeys: readPerformanceBaselines().baselines.flatMap((baseline) => baseline.source.runKeys) });
+    const reports = existsSync(verificationRoot)
+      ? readdirSync(verificationRoot).flatMap((directory) => {
+          const file = resolve(verificationRoot, directory, 'report.json');
+          return existsSync(file)
+            ? [
+                JSON.parse(readFileSync(file, 'utf8')) as {
+                  target: string;
+                  results: { groupId: string; status: string; startedAt: string; runKey: string | null }[];
+                },
+              ]
+            : [];
+        })
+      : [];
+    const cited = citedRunKeys({
+      reports,
+      baselineRunKeys: readPerformanceBaselines().baselines.flatMap((baseline) => baseline.source.runKeys),
+    });
     const runKeys = prunableRunKeys({ runs: listRunManifests(), cited, now: Date.now() });
     const bytes = prunableArchiveBytes(archiveRoot, runKeys);
-    console.log(`[werkflow-test] ${runKeys.length} runs hold ${(bytes / 1024 ** 3).toFixed(2)} GB of prunable traces, reports and active state; ${cited.size} cited runs and every retained or unfinished run are kept.`);
+    console.log(
+      `[werkflow-test] ${runKeys.length} runs hold ${(bytes / 1024 ** 3).toFixed(2)} GB of prunable traces, reports and active state; ${cited.size} cited runs and every retained or unfinished run are kept.`,
+    );
     if (planOnly) return;
     const prunedAt = new Date().toISOString();
     for (const runKey of runKeys) {
-      for (const name of PRUNABLE_RUN_DIRECTORIES) rmSync(resolve(runDirectory(runKey), name), { recursive: true, force: true });
+      for (const name of PRUNABLE_RUN_DIRECTORIES)
+        rmSync(resolve(runDirectory(runKey), name), { recursive: true, force: true });
       updateRunManifest(runKey, { prunedAt });
     }
-    console.log(`[werkflow-test] pruned ${runKeys.length} runs; manifests, logs, latency and workload archives and archived state stay.`);
+    console.log(
+      `[werkflow-test] pruned ${runKeys.length} runs; manifests, logs, latency and workload archives and archived state stay.`,
+    );
     return;
   }
   if (command === 'cleanup-local-relocated') {
     const [runKey, reason, ...extra] = process.argv.slice(3);
-    if (!runKey || !reason?.trim() || extra.length) throw new Error('Usage: test:runs cleanup-local-relocated <run-key> "<observed local address change>"');
+    if (!runKey || !reason?.trim() || extra.length)
+      throw new Error('Usage: test:runs cleanup-local-relocated <run-key> "<observed local address change>"');
     await cleanupRun(runKey, reason);
     return;
   }
@@ -131,9 +181,7 @@ async function main(): Promise<void> {
     return;
   }
   if (command === 'cleanup-all') {
-    const retained = listRunManifests().filter(
-      (manifest) => manifest.retainedAt && !manifest.cleanedAt
-    );
+    const retained = listRunManifests().filter((manifest) => manifest.retainedAt && !manifest.cleanedAt);
     const processedOrganizations = new Set<string>();
     const failedRunKeys: string[] = [];
     for (const manifest of retained) {
@@ -147,7 +195,7 @@ async function main(): Promise<void> {
         console.error(
           `[werkflow-test] cleanup failed for ${manifest.runKey}: ${
             error instanceof Error ? error.message : String(error)
-          }`
+          }`,
         );
       }
     }
@@ -157,13 +205,44 @@ async function main(): Promise<void> {
     return;
   }
   if (command === 'classify') {
-    const [runKey, classification, rootCause, prevention] = process.argv.slice(3);
-    if (!runKey || !classification || !rootCause || !prevention) {
-      throw new Error('Usage: ... classify <run-key> <product|harness|environment|transient> <root-cause> <prevention>');
+    const [runKey, classification, rootCause, prevention, ...extra] = process.argv.slice(3);
+    if (!runKey || !classification || !rootCause?.trim() || !prevention?.trim() || extra.length) {
+      throw new Error(
+        `Usage: ... classify <run-key|group-id> <${INCIDENT_CLASSES.join('|')}> "<root-cause>" "<prevention>"`,
+      );
     }
     if (!isIncidentClass(classification)) {
       throw new Error(`Unknown incident class: ${classification}`);
     }
+    // A run key never holds a colon and a group id always does: a group without a browser run
+    // (static, unit, SQL, component) records the diagnosis of its latest failed attempt.
+    if (runKey.includes(':')) {
+      if (classification === 'accepted-change')
+        throw new Error(
+          'accepted-change applies to a failed audit:visual browser run only; give its run key.',
+        );
+      const recorded = recordGroupDiagnosis(resolve(import.meta.dir, '../.agent-logs/verification'), {
+        groupId: runKey,
+        classification,
+        rootCause,
+        prevention,
+        now: new Date(),
+      });
+      console.log(
+        `[werkflow-test] classified ${runKey} attempt ${recorded.diagnosis.startedAt} of report ${recorded.reportId} as ${classification}. ${
+          classification === 'environment'
+            ? 'One retry on unchanged inputs is allowed; a second failure on them needs a change.'
+            : 'The group runs again once its inputs change.'
+        }`,
+      );
+      return;
+    }
+    const refusal = classificationProblem({
+      classification,
+      run: readRunManifest(runKey),
+      runs: listRunManifests(),
+    });
+    if (refusal) throw new Error(refusal);
     updateRunManifest(runKey, {
       classification,
       classifiedAt: new Date().toISOString(),
@@ -179,14 +258,20 @@ async function main(): Promise<void> {
 try {
   const command = process.argv[2] ?? 'list';
   loadEnvLocal();
-  const localCleanup = ['cleanup', 'cleanup-all', 'cleanup-local-relocated'].includes(command)
-    && localMailpitUrl(requireEnv('NEXT_PUBLIC_SUPABASE_URL')) !== null;
+  const localCleanup =
+    ['cleanup', 'cleanup-all', 'cleanup-local-relocated'].includes(command) &&
+    localMailpitUrl(requireEnv('NEXT_PUBLIC_SUPABASE_URL')) !== null;
   if (localCleanup && process.env.WERKFLOW_CLEANUP_STACK_LEASE !== 'owned') {
     // The child owns cleanup/lock; cancellation stops it before releasing WSL.
-    process.exitCode = await withLocalStackLease(true, (signal) => runSessionCommand(
-      [process.execPath, import.meta.filename, ...process.argv.slice(2)],
-      { signal, env: { ...process.env, WERKFLOW_CLEANUP_STACK_LEASE: 'owned' } },
-    ), { signal: AbortSignal.timeout(180_000) });
+    process.exitCode = await withLocalStackLease(
+      true,
+      (signal) =>
+        runSessionCommand([process.execPath, import.meta.filename, ...process.argv.slice(2)], {
+          signal,
+          env: { ...process.env, WERKFLOW_CLEANUP_STACK_LEASE: 'owned' },
+        }),
+      { signal: AbortSignal.timeout(180_000) },
+    );
   } else if (command === 'list') await main();
   else await withWorkspaceTestLock({ operation: `Playwright run management ${command}` }, main);
 } catch (error) {

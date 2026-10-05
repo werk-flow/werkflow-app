@@ -1,53 +1,46 @@
 import Link from 'next/link';
 import { AlertCircle } from 'lucide-react';
 
+import { maskEmail } from '@/components/auth/mask-email';
+import { RegionLoadError } from '@/components/shared/region-load-error';
+import { StandaloneScreen } from '@/components/shared/standalone-screen';
 import { Button } from '@/components/ui/button';
 import { SignOutAndRedirectButton } from './sign-out-redirect-button';
+import { describeFailure } from '@/lib/action-messages';
+import { logError } from '@/lib/logging';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 
-const ERROR_MESSAGES: Record<string, { title: string; description: string }> = {
-  admin_mismatch: {
-    title: 'Einladung nicht möglich',
-    description:
-      'Du kannst dieser Organisation nicht beitreten, da sie einem anderen Administrator gehört als deine bestehenden Organisationen.'
-  },
-  invalid_invite: {
-    title: 'Ungültige Einladung',
-    description: 'Der Einladungslink ist ungültig oder existiert nicht mehr.'
-  },
-  invite_expired: {
-    title: 'Einladung abgelaufen',
-    description:
-      'Diese Einladung ist abgelaufen. Bitte fordere eine neue Einladung an.'
-  },
-  invite_cancelled: {
-    title: 'Einladung zurückgezogen',
-    description:
-      'Diese Einladung wurde vom Administrator zurückgezogen. Bitte fordere eine neue Einladung an.'
-  },
-  invite_already_used: {
-    title: 'Einladung bereits verwendet',
-    description:
-      'Diese Einladung wurde bereits von einem anderen Benutzer verwendet. Bitte fordere eine neue Einladung an.'
-  },
-  email_mismatch: {
-    title: 'Falsche E-Mail-Adresse',
-    description:
-      'Diese Einladung ist für eine andere E-Mail-Adresse bestimmt. Bitte melde dich ab und melde dich mit der richtigen E-Mail-Adresse an.'
-  }
+// The codes of the invite redemption, named by the login and verification flows in the URL.
+const INVITE_ERROR_TITLES: Readonly<Partial<Record<string, string>>> = {
+  admin_mismatch: 'Einladung nicht möglich',
+  invalid_invite: 'Ungültige Einladung',
+  invite_expired: 'Einladung abgelaufen',
+  invite_cancelled: 'Einladung zurückgezogen',
+  invite_already_used: 'Einladung bereits verwendet',
+  too_many_attempts: 'Zu viele Versuche',
+  email_mismatch: 'Falsche E-Mail-Adresse',
+  redeem_failed: 'Einladung nicht eingelöst',
 };
 
-// Helper to mask email for privacy (e.g., "test@example.com" -> "t***@example.com")
-function maskEmail(email: string): string {
-  const [localPart, domain] = email.split('@');
-  if (localPart === undefined || !domain) return email;
-  const maskedLocal =
-    localPart.length > 1 ? localPart[0] + '***' : localPart + '***';
-  return `${maskedLocal}@${domain}`;
-}
+const INVITE_ERROR_DESCRIPTIONS: Readonly<Partial<Record<string, string>>> = {
+  admin_mismatch:
+    'Du kannst dieser Organisation nicht beitreten, da sie einem anderen Administrator gehört als deine bestehenden Organisationen.',
+  invalid_invite: 'Der Einladungslink ist ungültig oder existiert nicht mehr.',
+  invite_expired: 'Diese Einladung ist abgelaufen. Bitte fordere eine neue Einladung an.',
+  invite_cancelled:
+    'Diese Einladung wurde vom Administrator zurückgezogen. Bitte fordere eine neue Einladung an.',
+  invite_already_used:
+    'Diese Einladung wurde bereits von einem anderen Benutzer verwendet. Bitte fordere eine neue Einladung an.',
+  too_many_attempts:
+    'Du hast Einladungen zu oft in kurzer Zeit geöffnet. Bitte warte etwas und öffne den Einladungslink dann erneut.',
+  email_mismatch:
+    'Diese Einladung ist für eine andere E-Mail-Adresse bestimmt. Bitte melde dich ab und melde dich mit der richtigen E-Mail-Adresse an.',
+  redeem_failed:
+    'Du bist angemeldet, aber deine Einladung konnte gerade nicht eingelöst werden. Öffne den Einladungslink in einem Moment erneut.',
+};
 
 export default async function InviteErrorPage({
-  searchParams
+  searchParams,
 }: {
   searchParams: Promise<{
     error?: string;
@@ -62,42 +55,48 @@ export default async function InviteErrorPage({
 
   const isEmailMismatch = error === 'email_mismatch';
 
-  // Check if the invited user already exists (for email mismatch case)
-  // Use RPC function that bypasses RLS to check auth.users
-  let isExistingUser = false;
+  // Whether the invited address already has an account decides between login
+  // and sign-up. The RPC bypasses RLS to check auth.users. Null: the check
+  // failed, the page says so with a retry and offers the login.
+  let isExistingUser: boolean | null = false;
   if (isEmailMismatch && invitedEmail) {
-    const { data: userCheckResult } = await createSupabaseAdminClient().rpc(
+    const { data: userCheckResult, error: userCheckError } = await createSupabaseAdminClient().rpc(
       'check_user_exists_by_email',
-      { p_email: invitedEmail.toLowerCase() }
+      { p_email: invitedEmail.toLowerCase() },
     );
-
-    // The RPC returns an array, get the first result
-    const userCheck = Array.isArray(userCheckResult)
-      ? userCheckResult[0]
-      : userCheckResult;
-    isExistingUser = userCheck?.user_exists === true;
+    if (userCheckError) {
+      logError('invite_error.user_check_failed', userCheckError);
+      isExistingUser = null;
+    } else {
+      // The RPC returns an array, get the first result
+      const userCheck = Array.isArray(userCheckResult) ? userCheckResult[0] : userCheckResult;
+      isExistingUser = userCheck?.user_exists === true;
+    }
   }
 
-  let errorInfo = ERROR_MESSAGES[error] || {
-    title: 'Fehler bei der Einladung',
-    description: 'Ein unbekannter Fehler ist aufgetreten.'
+  let errorInfo = {
+    title:
+      (Object.hasOwn(INVITE_ERROR_TITLES, error) ? INVITE_ERROR_TITLES[error] : undefined) ??
+      'Fehler bei der Einladung',
+    description: describeFailure(error, INVITE_ERROR_DESCRIPTIONS, 'Ein unbekannter Fehler ist aufgetreten.'),
   };
 
   // Customize the description for email mismatch to include the invited email
   if (isEmailMismatch && invitedEmail) {
-    const actionText = isExistingUser
-      ? 'melde dich mit der richtigen E-Mail-Adresse an'
-      : 'erstelle ein Konto mit der richtigen E-Mail-Adresse';
+    const actionText =
+      isExistingUser === false
+        ? 'erstelle ein Konto mit der richtigen E-Mail-Adresse'
+        : 'melde dich mit der richtigen E-Mail-Adresse an';
     errorInfo = {
       ...errorInfo,
       description: `Diese Einladung ist für ${maskEmail(
-        invitedEmail
-      )} bestimmt. Du bist aktuell mit einer anderen E-Mail-Adresse angemeldet. Bitte melde dich ab und ${actionText}.`
+        invitedEmail,
+      )} bestimmt. Du bist aktuell mit einer anderen E-Mail-Adresse angemeldet. Bitte melde dich ab und ${actionText}.`,
     };
   }
 
   return (
-    <main className="flex min-h-dvh flex-col items-center justify-center bg-background px-4">
+    <StandaloneScreen>
       <div className="mx-auto max-w-md text-center">
         <div className="mb-6 flex justify-center">
           <div className="rounded-full bg-destructive/10 p-4">
@@ -106,13 +105,19 @@ export default async function InviteErrorPage({
         </div>
         <h1 className="mb-2 text-2xl font-bold">{errorInfo.title}</h1>
         <p className="mb-8 text-muted-foreground">{errorInfo.description}</p>
+        {isEmailMismatch && isExistingUser === null ? (
+          <RegionLoadError className="mb-6 text-left">
+            Wir konnten gerade nicht prüfen, ob es für diese E-Mail-Adresse schon ein Konto gibt. Hast du noch
+            keins, wähle auf der Anmeldeseite „Registrieren“.
+          </RegionLoadError>
+        ) : null}
 
         {isEmailMismatch ? (
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
             <SignOutAndRedirectButton
               inviteCode={inviteCode}
               invitedEmail={invitedEmail}
-              isExistingUser={isExistingUser}
+              isExistingUser={isExistingUser !== false}
             />
             <Button variant="outline" asChild>
               <Link href="/dashboard">Zum Dashboard</Link>
@@ -124,6 +129,6 @@ export default async function InviteErrorPage({
           </Button>
         )}
       </div>
-    </main>
+    </StandaloneScreen>
   );
 }

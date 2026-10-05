@@ -1,108 +1,128 @@
-"use client";
+'use client';
 
-import { normalizeSearchText } from '@/lib/ui/search';
-import { useEffect, useMemo, useState, type ReactElement } from "react";
-import { CalendarClock, ClipboardList, FileCheck2, MapPin, Pencil, Plus } from "lucide-react";
+import { useState, type ReactElement } from 'react';
+import { FileCheck2, Plus } from 'lucide-react';
 
-import { useBanner } from "@/components/ui/banner";
-import { Button } from "@/components/ui/button";
-import { InlinePending } from "@/components/ui/inline-pending";
-import { Input } from "@/components/ui/input";
-import { ListRow } from "@/components/ui/list-row";
-import { Skeleton } from "@/components/ui/skeleton";
-import type { SkeletonColumn } from "@/components/ui/skeleton-table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useBusyIds } from "@/hooks/use-busy-id";
-import { useLiveView } from "@/hooks/use-live-view";
-import { cn } from "@/lib/utils";
-import { getMaintenanceWorkspace } from "@/lib/maintenance/actions";
-import {
-  MAINTENANCE_COVERAGE_STATUS_LABELS,
-  MAINTENANCE_DUE_STATUS_LABELS,
-  MAINTENANCE_PLAN_STATUS_LABELS,
-  MAINTENANCE_RENEWAL_SIGNAL_LABELS,
-  type MaintenanceDueItem,
-  type MaintenancePlanItem,
-  type MaintenanceWorkspace,
-} from "@/lib/maintenance/types";
-import { MaintenanceCoverageDialog, type MaintenanceCoverageCreateSubmission, type MaintenanceCoveragePendingDraft } from "./maintenance-coverage-dialog";
-import { MaintenanceCoverageDocumentsDialog } from "./maintenance-coverage-documents-dialog";
-import { MaintenanceCoverageFollowUpDialog } from "./maintenance-coverage-follow-up-dialog";
-import { MaintenanceDueActionDialog } from "./maintenance-due-action-dialog";
-import { MaintenancePlanActionDialog } from "./maintenance-plan-action-dialog";
-import { MaintenancePlanDialog, type MaintenancePlanCreateSubmission, type MaintenancePlanPendingDraft } from "./maintenance-plan-dialog";
+import { useOrganization } from '@/components/organization/organization-context';
+import { ListPagination } from '@/components/shared/list-pagination';
+import { useBanner } from '@/components/ui/banner';
+import { SectionError } from '@/components/ui/section-error';
+import { Button } from '@/components/ui/button';
+import { SearchInput } from '@/components/ui/search-input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useBusyIds } from '@/hooks/use-busy-id';
+import { useListNavigation } from '@/hooks/use-list-navigation';
+import { useLiveView } from '@/hooks/use-live-view';
+import { readInBackground } from '@/lib/data/background-read-client';
+import type { MaintenancePlanItem, MaintenanceWorkspace } from '@/lib/maintenance/types';
+import { MAINTENANCE_PAGE_PARAMS, type MaintenanceWorkspaceQuery } from '@/lib/maintenance/workspace-page';
+import { MaintenanceCoverageDialog } from './maintenance-coverage-dialog';
+import { MaintenanceCoverageDocumentsDialog } from './maintenance-coverage-documents-dialog';
+import { MaintenanceCoverageFollowUpDialog } from './maintenance-coverage-follow-up-dialog';
+import { MaintenanceDueActionDialog } from './maintenance-due-action-dialog';
+import { MaintenanceCoverageList, MaintenanceDueList, type DueAction } from './maintenance-lists';
+import { MaintenancePlanActionDialog } from './maintenance-plan-action-dialog';
+import { MaintenancePlanCards, type PlanAction } from './maintenance-plan-cards';
+import { MaintenancePlanDialog } from './maintenance-plan-dialog';
+import { announceSubmission, useMaintenancePendingCreates } from './use-maintenance-pending-creates';
 
-type MaintenanceCreateSubmission = MaintenancePlanCreateSubmission | MaintenanceCoverageCreateSubmission;
-type MaintenancePendingDraft = MaintenancePlanPendingDraft | MaintenanceCoveragePendingDraft;
+type MaintenanceList = keyof typeof MAINTENANCE_PAGE_PARAMS;
 
-// The page mounts the create buttons in their own Suspense tree beside the
-// heading, so a submission reaches the workspace through this module channel
-// instead of props. The workspace is the one listener: it renders the pending
-// card or row, settles through its live read, and shows the failure banner.
-const submissionListeners = new Set<(submission: MaintenanceCreateSubmission) => void>();
-function announceSubmission(submission: MaintenanceCreateSubmission): void {
-  for (const listener of submissionListeners) listener(submission);
+/**
+ * The server selects one page of each list: the search, the counts and the
+ * page boundaries apply in the database, and the URL owns that state. The
+ * typed search stays ahead of the URL while the read is under way; each
+ * committed query remounts the results. The chosen tab survives paging.
+ */
+export function MaintenanceContent({
+  initial,
+  query,
+}: {
+  initial: MaintenanceWorkspace;
+  query: MaintenanceWorkspaceQuery;
+}): ReactElement {
+  const navigation = useListNavigation();
+  const [search, setSearch] = useState(query.search);
+  const [tab, setTab] = useState<MaintenanceList>('due');
+  const shownSearch = navigation.busy ? search : query.search;
+
+  function changeSearch(value: string): void {
+    setSearch(value);
+    navigation.navigate(
+      {
+        q: value,
+        [MAINTENANCE_PAGE_PARAMS.due]: null,
+        [MAINTENANCE_PAGE_PARAMS.plans]: null,
+        [MAINTENANCE_PAGE_PARAMS.coverages]: null,
+      },
+      250,
+    );
+  }
+
+  return (
+    <>
+      <SearchInput
+        value={shownSearch}
+        onValueChange={changeSearch}
+        aria-label="Wartung durchsuchen"
+        placeholder="Plan, Kunde, Einsatzort, Auftrag oder Anlage suchen…"
+      />
+      <MaintenanceWorkspaceView
+        key={`${query.search}|${query.duePage}|${query.planPage}|${query.coveragePage}`}
+        initial={initial}
+        query={query}
+        tab={tab}
+        onTabChange={setTab}
+        busy={navigation.busy}
+        onPageChange={(list, page) => navigation.navigate({ [MAINTENANCE_PAGE_PARAMS[list]]: page })}
+      />
+    </>
+  );
 }
 
-const dateFormatter = new Intl.DateTimeFormat("de-DE");
-function formatDate(value: string | null): string {
-  return value ? dateFormatter.format(new Date(`${value}T12:00:00Z`)) : "Nicht festgelegt";
+function isMaintenanceList(value: string): value is MaintenanceList {
+  return Object.hasOwn(MAINTENANCE_PAGE_PARAMS, value);
 }
 
-// One column definition for the due list header and its skeleton (design canon).
-const TWO_LINE_CELL = <span className="block space-y-1.5"><Skeleton className="h-4 w-40 max-w-full" /><Skeleton className="h-3 w-24 max-w-full" /></span>;
-const MAINTENANCE_DUE_COLUMNS: readonly SkeletonColumn[] = [
-  { id: "due", header: "Fälligkeit", className: "w-32", skeleton: TWO_LINE_CELL },
-  { id: "plan", header: "Plan & Anlage", skeleton: TWO_LINE_CELL },
-  { id: "client", header: "Kunde & Auftrag", skeleton: TWO_LINE_CELL },
-  { id: "action", header: "Aktion", className: "w-40", skeleton: <Skeleton className="h-8 w-28" /> },
-];
-
-// Fixed trailing tracks keep independent row grids aligned. The local 48rem
-// breakpoint leaves sidebar tablets in the card layout until content fits.
-const DUE_GRID_COLUMNS = '@3xl/maintenance:grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)_10rem]';
-const COVERAGE_GRID_COLUMNS = '@3xl/maintenance:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_11rem_10rem]';
-const DUE_ROW_CLASS = cn('grid min-w-0 gap-3 @3xl/maintenance:items-center @3xl/maintenance:gap-4', DUE_GRID_COLUMNS);
-const COVERAGE_ROW_CLASS = cn('grid min-w-0 gap-2 px-4 py-3 @3xl/maintenance:items-center @3xl/maintenance:gap-4', COVERAGE_GRID_COLUMNS);
-
-function MaintenanceDueHeader(): ReactElement {
-  return <div data-testid="maintenance-due-header" className={cn('hidden gap-4 border-b bg-muted/30 px-4 py-2 text-xs font-medium uppercase tracking-wide @3xl/maintenance:grid', DUE_GRID_COLUMNS)}>{MAINTENANCE_DUE_COLUMNS.map((column) => <span key={column.id} className={column.id === 'action' ? 'text-right' : undefined}>{column.header}</span>)}</div>;
-}
-
-export function MaintenanceDueListSkeleton(): ReactElement {
-  return <div aria-hidden="true" className="@container/maintenance overflow-hidden rounded-lg border shadow-xs">
-    <MaintenanceDueHeader />
-    <div className="divide-y">
-      {Array.from({ length: 6 }, (_, index) => <ListRow key={index} variant="plain" skeleton className={DUE_ROW_CLASS}>
-        {MAINTENANCE_DUE_COLUMNS.map((column) => <span key={column.id} className="min-w-0">{column.skeleton}</span>)}
-      </ListRow>)}
-    </div>
-  </div>;
-}
-
-type PlanAction = {
-  plan: MaintenancePlanItem;
-  toStatus?: "active" | "suspended" | "terminated";
-  archived?: boolean;
-};
-
-type DueAction = {
-  due: MaintenanceDueItem;
-  defaultAction: "create_visit" | "schedule" | "complete";
-};
-
-export function MaintenanceContent({ initial }: { initial: MaintenanceWorkspace }): ReactElement {
-  const [search, setSearch] = useState("");
-  const [coverageDocuments, setCoverageDocuments] = useState<MaintenanceWorkspace["coverages"][number] | null>(null);
-  const [coverageFollowUp, setCoverageFollowUp] = useState<MaintenanceWorkspace["coverages"][number] | null>(null);
+/** One committed query: its live read, the three lists with their page controls, and the dialogs. */
+function MaintenanceWorkspaceView({
+  initial,
+  query,
+  tab,
+  onTabChange,
+  busy,
+  onPageChange,
+}: {
+  initial: MaintenanceWorkspace;
+  query: MaintenanceWorkspaceQuery;
+  tab: MaintenanceList;
+  onTabChange: (tab: MaintenanceList) => void;
+  busy: boolean;
+  onPageChange: (list: MaintenanceList, page: number) => void;
+}): ReactElement {
+  const { activeOrgId } = useOrganization();
+  const [coverageDocuments, setCoverageDocuments] = useState<
+    MaintenanceWorkspace['coverages'][number] | null
+  >(null);
+  const [coverageFollowUp, setCoverageFollowUp] = useState<MaintenanceWorkspace['coverages'][number] | null>(
+    null,
+  );
   const [editPlan, setEditPlan] = useState<MaintenancePlanItem | null>(null);
   const [planAction, setPlanAction] = useState<PlanAction | null>(null);
   const [dueAction, setDueAction] = useState<DueAction | null>(null);
+  // Reads over GET, outside the Server Action queue the dialogs' saves use,
+  // through the reader of the first render.
   const live = useLiveView({
-    tables: ["maintenance_coverages", "maintenance_plans", "maintenance_due_work"],
+    tables: ['maintenance_coverages', 'maintenance_plans', 'maintenance_due_work'],
     initialData: initial,
-    read: async () => {
-      const result = await getMaintenanceWorkspace();
+    coalesceWhileReading: true,
+    read: async ({ signal }) => {
+      if (!activeOrgId) return { ok: false as const };
+      const result = await readInBackground(
+        'maintenance-workspace',
+        { ...query, organizationId: activeOrgId },
+        signal,
+      );
       return result.success
         ? { ok: true as const, data: result.workspace }
         : { ok: false as const, error: result.error };
@@ -114,179 +134,189 @@ export function MaintenanceContent({ initial }: { initial: MaintenanceWorkspace 
   // plan or due row shows the indicator until the live read lands.
   const settling = useBusyIds();
   const settleOn = (id: string) => () => void settling.run(id, live.refresh);
-  const [pendingCreates, setPendingCreates] = useState<MaintenancePendingDraft[]>([]);
   const liveRefresh = live.refresh;
   const liveInvalidate = live.invalidate;
-  useEffect(() => {
-    const listener = ({ draft, result }: MaintenanceCreateSubmission) => {
-      liveInvalidate();
-      setPendingCreates((current) => [...current, draft]);
-      void result
-        .then(async (outcome) => {
-          if (outcome.success) await liveRefresh();
-          else showBanner({ variant: "error", message: outcome.message });
-        })
-        .finally(() => setPendingCreates((current) => current.filter((item) => item.id !== draft.id)));
-    };
-    submissionListeners.add(listener);
-    return () => {
-      submissionListeners.delete(listener);
-    };
-  }, [liveInvalidate, liveRefresh, showBanner]);
-  // Both lists are newest first, so a new record leads; a Realtime read that
-  // arrives before the settle read drops the placeholder by id.
-  const pendingPlans = pendingCreates.filter((draft): draft is MaintenancePlanPendingDraft => draft.kind === "plan" && !workspace.plans.some((plan) => plan.id === draft.id));
-  const pendingCoverages = pendingCreates.filter((draft): draft is MaintenanceCoveragePendingDraft => draft.kind === "coverage" && !workspace.coverages.some((coverage) => coverage.id === draft.id));
-  const needle = normalizeSearchText(search);
-  const plans = useMemo(
-    () => workspace.plans.filter((plan) =>
-      !needle || [plan.planNumber, plan.clientName, plan.siteName, plan.templateName, ...plan.equipment.map((item) => `${item.equipmentNumber} ${item.name}`)]
-        .join(" ")
-        .toLocaleLowerCase("de-DE")
-        .includes(needle),
-    ),
-    [needle, workspace.plans],
-  );
-  const dueWork = useMemo(
-    () => workspace.dueWork.filter((due) =>
-      !needle || [due.planNumber, due.clientName, due.siteName, due.jobNumber, ...due.equipment.map((item) => `${item.equipmentNumber} ${item.name}`)]
-        .filter(Boolean)
-        .join(" ")
-        .toLocaleLowerCase("de-DE")
-        .includes(needle),
-    ),
-    [needle, workspace.dueWork],
-  );
-  const openDue = dueWork.filter((due) => ["open", "visit_created"].includes(due.status));
+  const { pendingPlans, pendingCoverages } = useMaintenancePendingCreates({
+    workspace,
+    liveRefresh,
+    liveInvalidate,
+    showBanner,
+  });
+  const { totals } = workspace;
 
   return (
     <>
-      {live.isStale && <p role="status" className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm">Die Wartungsdaten konnten nicht aktualisiert werden.</p>}
-      <Input value={search} onChange={(event) => setSearch(event.target.value)} aria-label="Wartung durchsuchen" placeholder="Plan, Kunde, Einsatzort, Auftrag oder Anlage suchen…" />
-      <Tabs defaultValue="due" className="gap-4">
+      {live.isStale && (
+        <SectionError onRetry={() => void live.refresh()} retryPending={live.isRefreshing}>
+          Die Wartungsdaten konnten nicht aktualisiert werden.
+        </SectionError>
+      )}
+      <Tabs
+        value={tab}
+        onValueChange={(value) => {
+          if (isMaintenanceList(value)) onTabChange(value);
+        }}
+        className="gap-4"
+      >
         <TabsList aria-label="Wartungsbereiche">
-          <TabsTrigger value="due">Fälligkeiten <span className="text-xs text-muted-foreground">{openDue.length}</span></TabsTrigger>
-          <TabsTrigger value="plans">Pläne <span className="text-xs text-muted-foreground">{plans.length}</span></TabsTrigger>
-          <TabsTrigger value="coverages">Abdeckungen <span className="text-xs text-muted-foreground">{workspace.coverages.length}</span></TabsTrigger>
+          <TabsTrigger value="due">
+            Fälligkeiten <span className="text-xs text-muted-foreground">{totals.due.total}</span>
+          </TabsTrigger>
+          <TabsTrigger value="plans">
+            Pläne <span className="text-xs text-muted-foreground">{totals.plans.total}</span>
+          </TabsTrigger>
+          <TabsTrigger value="coverages">
+            Abdeckungen <span className="text-xs text-muted-foreground">{totals.coverages.total}</span>
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="due" className="space-y-3">
-          {openDue.length === 0 ? (
-            <EmptyState icon={<CalendarClock className="size-8" />} title="Keine offenen Wartungsfälligkeiten" description="Aktiviere einen Wartungsplan, damit Fälligkeiten für die nächsten 18 Monate erzeugt werden." />
-          ) : (
-            <div className="@container/maintenance overflow-hidden rounded-lg border shadow-xs">
-              <MaintenanceDueHeader />
-              <div className="divide-y">
-                {openDue.map((due) => {
-                  const plan = workspace.plans.find((item) => item.id === due.planId);
-                  return (
-                    <ListRow key={due.id} variant="plain" data-testid="maintenance-due-row" data-due-date={due.dueDate} className={DUE_ROW_CLASS}>
-                      <span><span className="block font-medium">{formatDate(due.dueDate)}</span><span className="text-xs text-muted-foreground">{MAINTENANCE_DUE_STATUS_LABELS[due.status]}</span></span>
-                      <span className="min-w-0"><span className="block truncate font-medium">{due.planNumber}</span><span className="block truncate text-xs text-muted-foreground">{due.equipment.map((item) => item.name).join(", ")}</span></span>
-                      <span className="min-w-0 text-sm"><span className="block truncate">{due.clientName}</span><span className="flex items-center gap-1 truncate text-xs text-muted-foreground"><MapPin className="size-3 shrink-0" />{due.siteName}{due.jobNumber ? ` · Auftrag ${due.jobNumber}` : ""}</span></span>
-                      <fieldset disabled={settling.isBusy(due.id)} className="flex min-w-0 flex-wrap items-center gap-2 @3xl/maintenance:justify-end">
-                        <InlinePending active={settling.isBusy(due.id)} label="Änderungen werden übernommen" />
-                        {due.status === "open" ? <Button type="button" size="sm" onClick={() => setDueAction({ due, defaultAction: "create_visit" })}>Auftrag anlegen</Button> : !due.planningOccurrenceId ? <Button type="button" size="sm" variant="outline" onClick={() => setDueAction({ due, defaultAction: "schedule" })}>Termin planen</Button> : <Button type="button" size="sm" onClick={() => setDueAction({ due, defaultAction: "complete" })}>Abschließen</Button>}
-                        {plan && due.status === "visit_created" && <Button type="button" size="sm" variant="ghost" onClick={() => setDueAction({ due, defaultAction: "complete" })}>Weitere Aktionen</Button>}
-                      </fieldset>
-                    </ListRow>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          <MaintenanceDueList
+            openDue={workspace.dueWork}
+            hasAnyDue={totals.due.hasAny}
+            isBusy={settling.isBusy}
+            onDueActionClick={setDueAction}
+          />
+          <ListPagination
+            label="Fälligkeiten"
+            page={query.duePage}
+            total={totals.due.total}
+            busy={busy}
+            onPageChange={(page) => onPageChange('due', page)}
+          />
         </TabsContent>
         <TabsContent value="plans" className="space-y-3">
-          {plans.length === 0 && pendingPlans.length === 0 ? (
-            <EmptyState icon={<ClipboardList className="size-8" />} title="Noch keine Wartungspläne" description="Lege den ersten Plan aus Kunde, Einsatzort, Anlagen und einer veröffentlichten Arbeitsvorlage an." />
-          ) : (
-            <div className="grid gap-3 lg:grid-cols-2">
-              {pendingPlans.map((draft) => (
-                <section key={draft.id} role="status" aria-label="Wird gespeichert" data-pending-row="" className="rounded-lg border p-4 opacity-70 shadow-xs">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0"><h2 className="flex items-center gap-2 font-semibold"><InlinePending active />Wartungsplan wird gespeichert</h2><p className="mt-0.5 truncate text-sm text-muted-foreground">{draft.clientName} · {draft.siteName}</p></div>
-                    <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium">{MAINTENANCE_PLAN_STATUS_LABELS[draft.status]}</span>
-                  </div>
-                  <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-                    <div><dt className="text-xs text-muted-foreground">Arbeitsvorlage</dt><dd>{draft.templateName}</dd></div>
-                    <div><dt className="text-xs text-muted-foreground">Rhythmus</dt><dd>Alle {draft.intervalMonths} Monate</dd></div>
-                  </dl>
-                </section>
-              ))}
-              {plans.map((plan) => (
-                <section key={plan.id} data-testid="maintenance-plan-card" className="rounded-lg border p-4 shadow-xs">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0"><h2 className="truncate font-semibold">{plan.planNumber}</h2><p className="mt-0.5 truncate text-sm text-muted-foreground">{plan.clientName} · {plan.siteName}</p></div>
-                    <span className="flex shrink-0 items-center gap-2"><InlinePending active={settling.isBusy(plan.id)} label="Änderungen werden übernommen" /><span className="rounded-md bg-muted px-2 py-1 text-xs font-medium">{plan.archivedAt ? "Archiviert" : MAINTENANCE_PLAN_STATUS_LABELS[plan.status]}</span></span>
-                  </div>
-                  <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-                    <div><dt className="text-xs text-muted-foreground">Arbeitsvorlage</dt><dd>{plan.templateName} · Rev. {plan.revisionNumber}</dd></div>
-                    <div><dt className="text-xs text-muted-foreground">Rhythmus</dt><dd>Alle {plan.intervalMonths} Monate</dd></div>
-                    <div><dt className="text-xs text-muted-foreground">Nächste Fälligkeit</dt><dd>{formatDate(plan.nextDueDate)}</dd></div>
-                    <div><dt className="text-xs text-muted-foreground">Offene Fälligkeiten</dt><dd>{plan.openDueCount}</dd></div>
-                    <div className="col-span-2"><dt className="text-xs text-muted-foreground">Anlagen</dt><dd>{plan.equipment.map((item) => `${item.equipmentNumber} · ${item.name}`).join(", ")}</dd></div>
-                  </dl>
-                  <fieldset disabled={settling.isBusy(plan.id)} className="mt-4 flex flex-wrap gap-2 border-t pt-3">
-                    {!plan.archivedAt && plan.status !== "terminated" && <Button type="button" size="sm" variant="outline" onClick={() => setEditPlan(plan)}><Pencil className="size-3.5" />Überarbeiten</Button>}
-                    {plan.status === "draft" && <Button type="button" size="sm" onClick={() => setPlanAction({ plan, toStatus: "active" })}>Aktivieren</Button>}
-                    {plan.status === "active" && <Button type="button" size="sm" variant="outline" onClick={() => setPlanAction({ plan, toStatus: "suspended" })}>Pausieren</Button>}
-                    {plan.status === "suspended" && <Button type="button" size="sm" onClick={() => setPlanAction({ plan, toStatus: "active" })}>Fortsetzen</Button>}
-                    {plan.status !== "terminated" && <Button type="button" size="sm" variant="ghost" onClick={() => setPlanAction({ plan, toStatus: "terminated" })}>Beenden</Button>}
-                    {plan.status === "terminated" && <Button type="button" size="sm" variant="outline" onClick={() => setPlanAction({ plan, archived: !plan.archivedAt })}>{plan.archivedAt ? "Wiederherstellen" : "Archivieren"}</Button>}
-                  </fieldset>
-                </section>
-              ))}
-            </div>
-          )}
+          <MaintenancePlanCards
+            plans={workspace.plans}
+            hasAnyPlan={totals.plans.hasAny}
+            pendingPlans={pendingPlans}
+            isBusy={settling.isBusy}
+            onEditClick={setEditPlan}
+            onActionClick={setPlanAction}
+          />
+          <ListPagination
+            label="Wartungspläne"
+            page={query.planPage}
+            total={totals.plans.total}
+            busy={busy}
+            onPageChange={(page) => onPageChange('plans', page)}
+          />
         </TabsContent>
         <TabsContent value="coverages" className="space-y-3">
-          {workspace.coverages.length === 0 && pendingCoverages.length === 0 ? (
-            <EmptyState icon={<FileCheck2 className="size-8" />} title="Keine operativen Abdeckungen" description="Erfasse bestätigte Vertrags- und Fristdaten, wenn ein Plan darauf Bezug nehmen soll." />
-          ) : (
-            <div className="@container/maintenance overflow-hidden rounded-lg border shadow-xs">
-              <div data-testid="maintenance-coverage-header" className={cn('hidden gap-4 border-b bg-muted/30 px-4 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground @3xl/maintenance:grid', COVERAGE_GRID_COLUMNS)}><span>Abdeckung</span><span>Kunde & Einsatzort</span><span>Wiedervorlage</span><span className="text-right">Aktion</span></div>
-              <div className="divide-y">
-                {pendingCoverages.map((draft) => (
-                  <div key={draft.id} role="status" aria-label="Wird gespeichert" data-pending-row="" className={cn(COVERAGE_ROW_CLASS, 'opacity-70')}>
-                    <span className="flex min-w-0 items-center gap-2 break-words"><InlinePending active /><span className="min-w-0"><span className="block font-medium">Abdeckung wird gespeichert</span><span className="text-xs text-muted-foreground">{draft.reference ?? "Keine Referenz"}</span></span></span>
-                    <span className="min-w-0 break-words text-sm"><span className="block">{draft.clientName}</span><span className="text-xs text-muted-foreground">{draft.siteName}</span></span>
-                  </div>
-                ))}
-                {workspace.coverages.map((coverage) => (
-                  <div key={coverage.id} data-testid="maintenance-coverage-row" className={COVERAGE_ROW_CLASS}>
-                    <span className="min-w-0 break-words"><span className="block font-medium">{coverage.coverageNumber}</span><span className="text-xs text-muted-foreground">{coverage.reference ?? "Keine Referenz"} · {MAINTENANCE_COVERAGE_STATUS_LABELS[coverage.status]}</span></span>
-                    <span className="min-w-0 break-words text-sm"><span className="block">{coverage.clientName}</span><span className="text-xs text-muted-foreground">{coverage.siteName}</span></span>
-                    <span className="min-w-0 break-words text-sm"><span className="block">{MAINTENANCE_RENEWAL_SIGNAL_LABELS[coverage.renewalSignal]}</span><span className="text-xs text-muted-foreground">{formatDate(coverage.reviewDueDate)}</span></span>
-                    <span className="flex min-w-0 flex-wrap gap-2 @3xl/maintenance:justify-end"><Button type="button" size="sm" variant="outline" onClick={() => setCoverageFollowUp(coverage)}>Wiedervorlage</Button><Button type="button" size="sm" variant="outline" onClick={() => setCoverageDocuments(coverage)}>Dokumente</Button></span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          <MaintenanceCoverageList
+            coverages={workspace.coverages}
+            hasAnyCoverage={totals.coverages.hasAny}
+            pendingCoverages={pendingCoverages}
+            onFollowUpClick={setCoverageFollowUp}
+            onDocumentsClick={setCoverageDocuments}
+          />
+          <ListPagination
+            label="Abdeckungen"
+            page={query.coveragePage}
+            total={totals.coverages.total}
+            busy={busy}
+            onPageChange={(page) => onPageChange('coverages', page)}
+          />
         </TabsContent>
       </Tabs>
-      {coverageDocuments && <MaintenanceCoverageDocumentsDialog open onOpenChange={(open) => { if (!open) setCoverageDocuments(null); }} coverage={coverageDocuments} />}
-      {coverageFollowUp && <MaintenanceCoverageFollowUpDialog open onOpenChange={(open) => { if (!open) setCoverageFollowUp(null); }} coverage={coverageFollowUp} currentActorId={workspace.currentActorId} owners={workspace.followUpOwners} />}
-      {editPlan && <MaintenancePlanDialog open onOpenChange={(open) => { if (!open) setEditPlan(null); }} clients={workspace.clients} templates={workspace.templates} coverages={workspace.coverages} initial={editPlan} onSaved={settleOn(editPlan.id)} />}
-      {planAction && <MaintenancePlanActionDialog open onOpenChange={(open) => { if (!open) setPlanAction(null); }} {...planAction} onSaved={settleOn(planAction.plan.id)} />}
-      {dueAction && <MaintenanceDueActionDialog open onOpenChange={(open) => { if (!open) setDueAction(null); }} due={dueAction.due} defaultAction={dueAction.defaultAction} plannedDurationMinutes={workspace.plans.find((plan) => plan.id === dueAction.due.planId)?.plannedDurationMinutes ?? 120} serviceCases={workspace.serviceCases.filter((serviceCase) => serviceCase.clientId === dueAction.due.clientId && serviceCase.siteId === dueAction.due.siteId)} onSaved={settleOn(dueAction.due.id)} />}
+      {coverageDocuments && (
+        <MaintenanceCoverageDocumentsDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setCoverageDocuments(null);
+          }}
+          coverage={coverageDocuments}
+        />
+      )}
+      {coverageFollowUp && (
+        <MaintenanceCoverageFollowUpDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setCoverageFollowUp(null);
+          }}
+          coverage={coverageFollowUp}
+          currentActorId={workspace.currentActorId}
+          owners={workspace.followUpOwners}
+        />
+      )}
+      {editPlan && (
+        <MaintenancePlanDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setEditPlan(null);
+          }}
+          clients={workspace.clients}
+          templates={workspace.templates}
+          coverages={workspace.coverageOptions}
+          initial={editPlan}
+          onSaved={settleOn(editPlan.id)}
+        />
+      )}
+      {planAction && (
+        <MaintenancePlanActionDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setPlanAction(null);
+          }}
+          {...planAction}
+          onSaved={settleOn(planAction.plan.id)}
+        />
+      )}
+      {dueAction && (
+        <MaintenanceDueActionDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setDueAction(null);
+          }}
+          due={dueAction.due}
+          defaultAction={dueAction.defaultAction}
+          plannedDurationMinutes={dueAction.due.plannedDurationMinutes}
+          serviceCases={workspace.serviceCases.filter(
+            (serviceCase) =>
+              serviceCase.clientId === dueAction.due.clientId && serviceCase.siteId === dueAction.due.siteId,
+          )}
+          onSaved={settleOn(dueAction.due.id)}
+        />
+      )}
     </>
   );
 }
 
 /** The toolbar actions; the page renders them beside the h2, ahead of the workspace. */
-export function MaintenanceCreateButtons({ clients, templates, coverages }: Pick<MaintenanceWorkspace, "clients" | "templates" | "coverages">): ReactElement {
+export function MaintenanceCreateButtons({
+  clients,
+  templates,
+  coverageOptions,
+}: Pick<MaintenanceWorkspace, 'clients' | 'templates' | 'coverageOptions'>): ReactElement {
   const [planDialogOpen, setPlanDialogOpen] = useState(false);
   const [coverageDialogOpen, setCoverageDialogOpen] = useState(false);
   return (
     <div className="flex flex-wrap gap-2">
-      <Button type="button" variant="outline" onClick={() => setCoverageDialogOpen(true)}><FileCheck2 className="size-4" />Abdeckung erfassen</Button>
-      <Button type="button" onClick={() => setPlanDialogOpen(true)}><Plus className="size-4" />Wartungsplan anlegen</Button>
-      {planDialogOpen && <MaintenancePlanDialog open onOpenChange={setPlanDialogOpen} clients={clients} templates={templates} coverages={coverages} onSubmitted={announceSubmission} />}
-      {coverageDialogOpen && <MaintenanceCoverageDialog open onOpenChange={setCoverageDialogOpen} clients={clients} onSubmitted={announceSubmission} />}
+      <Button type="button" variant="outline" onClick={() => setCoverageDialogOpen(true)}>
+        <FileCheck2 className="size-4" />
+        Abdeckung erfassen
+      </Button>
+      <Button type="button" onClick={() => setPlanDialogOpen(true)}>
+        <Plus className="size-4" />
+        Wartungsplan anlegen
+      </Button>
+      {planDialogOpen && (
+        <MaintenancePlanDialog
+          open
+          onOpenChange={setPlanDialogOpen}
+          clients={clients}
+          templates={templates}
+          coverages={coverageOptions}
+          onSubmitted={announceSubmission}
+        />
+      )}
+      {coverageDialogOpen && (
+        <MaintenanceCoverageDialog
+          open
+          onOpenChange={setCoverageDialogOpen}
+          clients={clients}
+          onSubmitted={announceSubmission}
+        />
+      )}
     </div>
   );
-}
-
-function EmptyState({ icon, title, description }: { icon: ReactElement; title: string; description: string }): ReactElement {
-  return <div className="rounded-lg border border-dashed px-6 py-12 text-center"><span className="mx-auto block w-fit text-muted-foreground">{icon}</span><h2 className="mt-3 text-lg font-semibold">{title}</h2><p className="mx-auto mt-1 max-w-xl text-sm text-muted-foreground">{description}</p></div>;
 }

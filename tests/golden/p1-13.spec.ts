@@ -1,159 +1,117 @@
 import { expect, test } from './support/fixtures';
 import { getAppliedWorkTemplateState, getWorkTemplateStateByName } from './support/db/work';
-import { inputByValue, visibleText } from './support/steps/shared';
-import { createAndPublishWorkTemplate, createJob, createProject, setInstructionCompletionOnJobPage } from './support/steps/work';
+import { inputByValue, SHARED_COPY, testData, visibleText } from './support/steps/shared';
+import {
+  createAndPublishWorkTemplate,
+  createJob,
+  instructionEvidenceExpectation,
+  jobInstructionItem,
+  jobInstructionLabel,
+  jobInstructionToggle,
+  setInstructionCompletionOnJobPage,
+  workTemplateEditorAction,
+  workTemplateOpenButton,
+  workTemplateSearch,
+} from './support/steps/work';
 
+// supabase/tests/p1_13_work_templates.sql owns immutability, snapshot side
+// effects, retired references and the read boundaries; this journey proves
+// what the manager and the field worker see.
 test.describe('P1-13 versioned work templates @P1-13', () => {
-  test('a manager publishes an immutable job template with unified checklist metadata', async ({
-    adminPage,
-    world,
-  }) => {
-    const name = `Wartung ${world.runId}`;
-    await createAndPublishWorkTemplate(adminPage, {
-      name,
-      targetType: 'job',
-      firstItem: 'Anlage prüfen',
-      secondItem: 'Messwerte notieren',
-      evidenceDescription: 'Foto der Messwerte',
-    });
-    const state = await getWorkTemplateStateByName(world.orgId, name);
-    expect(state.template.target_type).toBe('job');
-    expect(state.template.draft_version_id).toBeNull();
-    expect(state.versions).toHaveLength(1);
-    expect(state.versions[0]?.status).toBe('published');
-    expect(state.items.map((item) => item.content)).toEqual([
-      'Anlage prüfen',
-      'Messwerte notieren',
-    ]);
-    expect(state.items[1]?.requirement_state).toBe('optional');
-    expect(state.evidence.map((item) => item.description)).toEqual(['Foto der Messwerte']);
-    expect(state.dependencies).toHaveLength(1);
-    expect(state.events.map((event) => event.event_type)).toEqual(
-      expect.arrayContaining(['created', 'draft_saved', 'published'])
-    );
-  });
-
-  test('creation materializes editable existing primitives without stock or schedule side effects', async ({
+  test('a manager publishes a template, creates work from it, and a new version reaches only future work', async ({
     adminPage,
     employeePage,
     world,
   }) => {
-    const templateName = `Wartung ${world.runId}`;
-    const jobNumber = `AUF-${world.runId}-P113-A`;
+    const name = `Wartung ${world.runId}`;
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
-    await createJob(adminPage, {
-      jobNumber,
-      title: `Vorlagenauftrag ${world.runId}`,
-      assignEmployeeName: employeeName,
-      workTemplateName: templateName,
-    });
-    const state = await getAppliedWorkTemplateState(world.orgId, { jobNumber });
-    expect(state.applications).toHaveLength(1);
-    expect(state.instructions.map((item) => item.content)).toEqual([
-      'Anlage prüfen',
-      'Messwerte notieren',
-    ]);
-    expect(state.instructions.every((item) => item.work_template_application_id)).toBe(true);
-    expect(state.inventoryMovements).toHaveLength(0);
-    expect(state.planningOccurrences).toHaveLength(0);
+    const firstJobNumber = `AUF-${world.runId}-P113-A`;
+    const nextJobNumber = `AUF-${world.runId}-P113-B`;
+    const checkPoint = testData`Anlage prüfen`;
+    const changedCheckPoint = testData`Anlage vollständig prüfen`;
+    const evidenceDescription = testData`Foto der Messwerte`;
 
-    await employeePage.goto(`/auftraege/${jobNumber}`);
-    const instructionItem = employeePage.getByRole('main').getByTestId('job-instruction-item')
-      .filter({ hasText: 'Anlage prüfen' });
-    await expect(instructionItem.getByText('Anlage prüfen', { exact: true })).toBeVisible();
-    await expect(visibleText(employeePage, 'Nachweis erwartet: Foto der Messwerte')).toBeVisible();
-    await setInstructionCompletionOnJobPage(employeePage, 'Anlage prüfen', true);
-    await expect
-      .poll(
-        async () =>
-          (await getAppliedWorkTemplateState(world.orgId, { jobNumber })).instructions[0]
-            ?.is_completed,
-        { timeout: 20_000 }
-      )
-      .toBe(true);
-    await employeePage.reload();
-    const completedInstruction = employeePage.getByRole('main').getByTestId('job-instruction-item')
-      .filter({ hasText: 'Anlage prüfen' });
-    await expect(
-      completedInstruction.getByRole('button', {
-        name: 'Punkt als offen markieren',
-      })
-    ).toBeVisible();
-  });
+    await test.step('Publish a job template with an optional checklist point and an evidence expectation', async () => {
+      await createAndPublishWorkTemplate(adminPage, {
+        name,
+        targetType: 'job',
+        firstItem: checkPoint,
+        secondItem: 'Messwerte notieren',
+        evidenceDescription,
+      });
+      const state = await getWorkTemplateStateByName(world.orgId, name);
+      expect(state.versions.map((version) => version.status)).toEqual(['published']);
+      expect(state.items.map((item) => [item.content, item.requirement_state])).toEqual([
+        ['Anlage prüfen', 'required'],
+        ['Messwerte notieren', 'optional'],
+      ]);
+    });
 
-  test('a newer template version changes only future applications', async ({
-    adminPage,
-    world,
-  }) => {
-    const name = `Wartung ${world.runId}`;
-    await adminPage.goto('/arbeitsvorlagen');
-    await adminPage.getByRole('textbox', { name: 'Arbeitsvorlagen suchen' }).fill(name);
-    await adminPage.getByRole('button', { name: 'Öffnen', exact: true }).click();
-    let editor = adminPage.getByRole('dialog');
-    await editor.getByRole('button', { name: 'Neue Version' }).click();
-    await expect(editor).toHaveCount(0, { timeout: 15_000 });
-    await adminPage.getByRole('button', { name: 'Öffnen', exact: true }).click();
-    editor = adminPage.getByRole('dialog');
-    await (
-      await inputByValue(editor, 'Bezeichnung', 'Anlage prüfen')
-    ).fill('Anlage vollständig prüfen');
-    await editor.getByRole('button', { name: 'Veröffentlichen' }).click();
-    await expect(editor).toHaveCount(0, { timeout: 20_000 });
+    await test.step('Create an assigned job from the template', async () => {
+      await createJob(adminPage, {
+        jobNumber: firstJobNumber,
+        title: `Vorlagenauftrag ${world.runId}`,
+        assignEmployeeName: employeeName,
+        workTemplateName: name,
+      });
+      const state = await getAppliedWorkTemplateState(world.orgId, { jobNumber: firstJobNumber });
+      expect(state.applications).toHaveLength(1);
+      expect(state.instructions.map((item) => item.content)).toEqual(['Anlage prüfen', 'Messwerte notieren']);
+    });
 
-    const templateState = await getWorkTemplateStateByName(world.orgId, name);
-    expect(templateState.versions.map((version) => version.version_number)).toEqual([1, 2]);
-    const firstJob = await getAppliedWorkTemplateState(world.orgId, {
-      jobNumber: `AUF-${world.runId}-P113-A`,
+    await test.step('The field worker sees the snapshot and completes a point', async () => {
+      await employeePage.goto(`/auftraege/${firstJobNumber}`);
+      const instructionItem = jobInstructionItem(employeePage, checkPoint);
+      await expect(jobInstructionLabel(instructionItem, checkPoint)).toBeVisible();
+      await expect(instructionEvidenceExpectation(employeePage, evidenceDescription)).toBeVisible();
+      await setInstructionCompletionOnJobPage(employeePage, checkPoint, true);
+      await expect
+        .poll(
+          async () =>
+            (await getAppliedWorkTemplateState(world.orgId, { jobNumber: firstJobNumber })).instructions.find(
+              (item) => item.content === 'Anlage prüfen',
+            )?.is_completed,
+          { timeout: 20_000 },
+        )
+        .toBe(true);
+      await employeePage.reload();
+      await expect(jobInstructionToggle(jobInstructionItem(employeePage, checkPoint), 'open')).toBeVisible();
     });
-    expect(firstJob.instructions.map((item) => item.content)).toContain('Anlage prüfen');
-    expect(firstJob.instructions.map((item) => item.content)).not.toContain(
-      'Anlage vollständig prüfen'
-    );
 
-    const nextNumber = `AUF-${world.runId}-P113-B`;
-    await createJob(adminPage, {
-      jobNumber: nextNumber,
-      title: `Neue Version ${world.runId}`,
-      workTemplateName: name,
+    await test.step('Publish version 2 with a changed point', async () => {
+      await adminPage.goto('/arbeitsvorlagen');
+      await workTemplateSearch(adminPage).fill(name);
+      await workTemplateOpenButton(adminPage).click();
+      let editor = adminPage.getByRole('dialog');
+      await workTemplateEditorAction(editor, 'newVersion').click();
+      await expect(editor).toHaveCount(0, { timeout: 15_000 });
+      await workTemplateOpenButton(adminPage).click();
+      editor = adminPage.getByRole('dialog');
+      await (await inputByValue(editor, SHARED_COPY.field.name, checkPoint)).fill(changedCheckPoint);
+      await workTemplateEditorAction(editor, 'publish').click();
+      await expect(editor).toHaveCount(0, { timeout: 20_000 });
+      const state = await getWorkTemplateStateByName(world.orgId, name);
+      expect(state.versions.map((version) => [version.version_number, version.status])).toEqual([
+        [1, 'published'],
+        [2, 'published'],
+      ]);
     });
-    const nextJob = await getAppliedWorkTemplateState(world.orgId, {
-      jobNumber: nextNumber,
-    });
-    expect(nextJob.instructions.map((item) => item.content)).toContain('Anlage vollständig prüfen');
-  });
 
-  test('project templates create direct project planning and employees cannot manage templates', async ({
-    adminPage,
-    employeePage,
-    outsiderPage,
-    world,
-  }) => {
-    const name = `Sanierung ${world.runId}`;
-    await createAndPublishWorkTemplate(adminPage, {
-      name,
-      targetType: 'project',
-      firstItem: 'Baustelle vorbereiten',
-    });
-    const projectNumber = `PRJ-${world.runId}-P113`;
-    await createProject(adminPage, {
-      projectNumber,
-      title: `Vorlagenprojekt ${world.runId}`,
-      workTemplateName: name,
-    });
-    const state = await getAppliedWorkTemplateState(world.orgId, {
-      projectNumber,
-    });
-    expect(state.applications).toHaveLength(1);
-    expect(state.instructions.map((item) => item.content)).toEqual(['Baustelle vorbereiten']);
-    expect(state.instructions[0]?.work_template_application_id).not.toBeNull();
+    await test.step('Existing work keeps version 1 and new work receives version 2', async () => {
+      await employeePage.goto(`/auftraege/${firstJobNumber}`);
+      await expect(visibleText(employeePage, checkPoint, true)).toBeVisible();
+      await expect(employeePage.getByRole('main').getByText(changedCheckPoint)).toHaveCount(0);
 
-    await employeePage.goto('/arbeitsvorlagen');
-    await expect(employeePage).toHaveURL(/\/dashboard/);
-    await outsiderPage.goto('/arbeitsvorlagen');
-    const outsiderMain = outsiderPage.getByRole('main');
-    await expect(
-      outsiderMain.getByText('Erste Arbeitsvorlage anlegen', { exact: true })
-    ).toBeVisible();
-    await expect(outsiderMain.getByText(name, { exact: true })).toHaveCount(0);
+      await createJob(adminPage, {
+        jobNumber: nextJobNumber,
+        title: `Neue Version ${world.runId}`,
+        workTemplateName: name,
+      });
+      const nextJob = await getAppliedWorkTemplateState(world.orgId, { jobNumber: nextJobNumber });
+      expect(nextJob.instructions.map((item) => item.content)).toEqual([
+        'Anlage vollständig prüfen',
+        'Messwerte notieren',
+      ]);
+    });
   });
 });

@@ -1,41 +1,90 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { Locator, Page } from '@playwright/test';
-
-import { expect, test } from "../support/fixtures";
-import { requireEnv } from '../../golden/support/env';
+import { expect, test } from '../support/fixtures';
+import {
+  jobPopover,
+  LOCKED_CARD_NAME,
+  lockedOccurrenceNotice,
+  startedOccurrenceMessage,
+} from '../../golden/support/plantafel';
 import { getPlanningState } from '../../golden/support/db/calendar';
-import { getOrganizationTimeEntryCount } from '../../golden/support/db/time-tracking';
-import { openAufgaben } from '../../golden/support/steps/attention';
-import { createPlannedCalendarEntry, plannedCalendarEvent, showPlanningMonth } from '../../golden/support/steps/calendar';
-import { addClosureDayViaSettings, createPersonnelRecordViaDialog, removeClosureDayViaSettings, setHolidayRegionViaSettings } from '../../golden/support/steps/personnel';
-import { typeIntoDatePickerById, typeIntoTimeInput, visibleText } from '../../golden/support/steps/shared';
-import { openOwnSicknessSection, reportOwnSicknessViaDialog } from '../../golden/support/steps/sickness';
-import { approveVacationRequestFor, cancelApprovedVacationFor, createOwnVacationRequestViaDialog, openOwnVacationSection } from '../../golden/support/steps/vacation';
+import { createAdminClient } from '../../golden/support/db/shared';
+import {
+  closeOccurrenceOverviewButton,
+  createPlannedCalendarEntry,
+  extendSeriesButton,
+  noAppAccessBadge,
+  occurrenceEditButton,
+  occurrenceEditConfirmation,
+  occurrenceEditHeading,
+  occurrenceInDateCell,
+  occurrenceStatusAction,
+  occurrenceStatusConfirmation,
+  occurrenceStatusSave,
+  openOccurrenceEditDialogByDate,
+  openPlanningCreationDialog,
+  PLANNING_EDIT_SCOPE_LABELS,
+  PLANNING_INTERNAL_TYPE_LABELS,
+  plannedCalendarEvent,
+  plannedEntriesConfirmation,
+  planningCheckAndSave,
+  planningEmployeeSearch,
+  planningFrequencyOption,
+  planningInternalEntryToggle,
+  planningOverrideTooShort,
+  planningRepeatToggle,
+  planningWarningPanel,
+  planWithReasonButton,
+  seriesExtendedConfirmation,
+  showPlanningMonth,
+  staleAssessmentNotice,
+} from '../../golden/support/steps/calendar';
+import { dismissDialog } from '../../golden/support/steps/interaction';
+import {
+  addClosureDayViaSettings,
+  createPersonnelRecordViaDialog,
+  PERSONNEL_COPY,
+  removeClosureDayViaSettings,
+  setHolidayRegionViaSettings,
+} from '../../golden/support/steps/personnel';
+import { SHARED_COPY, employeeAssignmentPicker, typeIntoTimeInput } from '../../golden/support/steps/shared';
+import { cancelOwnSicknessReport, reportOwnSicknessViaDialog } from '../../golden/support/steps/sickness';
+import {
+  approveVacationRequestFor,
+  cancelApprovedVacationFor,
+  createOwnVacationRequestViaDialog,
+} from '../../golden/support/steps/vacation';
 import { createJob } from '../../golden/support/steps/work';
-import { requireChainedValue, requireChainedPrecondition } from '../../golden/support/preconditions';
 import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
 import {
+  capacityWarningLine,
+  capacityWarningText,
   closePlanningDialogWithNamedControl,
-  markAllUnreadNotificationsRead,
-  pendingVacationWithdrawButton,
+  fillInternalPlanningDraft,
+  formatGermanDate,
+  markAllOwnNotificationsRead,
+  openEndedSicknessRangeText,
   planningDateCellStatus,
-  planningOccurrenceInDateCell,
+  probePlanningWarningLine,
+  withdrawOwnPendingVacationRequestByDate,
 } from '../support/a6-steps';
+import { expectDefined } from '../../../lib/testing/spec-support/expect-defined';
 import { addLocalMonthsClamped, formatBerlinLocalDateTime } from '../../../lib/planning/date-time';
-import { getPublicHolidaysForYear } from '../../../lib/personnel/holidays';
+import { getPublicHolidaysForYear, HOLIDAY_REGION_LABELS } from '../../../lib/personnel/holidays';
 
-// A6 — Planung (P1-11). Serial journeys over the shared audit world; every
-// business mutation runs through the real UI and database access below is
-// read-only assertion state. Owned uniqueness-constrained run-day offsets:
-// +45 … +54 (vacation/sickness/closure fixtures). Planning occurrence dates
-// themselves are not uniqueness-constrained; series fixtures use run-scoped
-// titles on far-future dates so inherited state can never collide.
+// A6 — Planung (P1-11): edge cases, role variants and capacity sources around
+// the golden planning journey. Every test prepares its own records in the
+// shared audit world and runs alone; every business mutation runs through the
+// real UI and database access below is read-only assertion state. Owned
+// uniqueness-constrained run-day offsets: +45 … +54 (vacation/sickness/closure
+// fixtures). Recurrence materialization is unit-tested in
+// lib/planning/recurrence.test.ts; identity, exception, past-protection,
+// plan-versus-actual and visibility rules in supabase/tests/planning_occurrences.sql.
 
 const WEEKDAY_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'] as const;
 
 function shiftIsoDate(dateIso: string, days: number): string {
   const [year, month, day] = dateIso.split('-').map(Number);
-  if (year === undefined || month === undefined || day === undefined) throw new Error(`Invalid ISO date: ${dateIso}`);
+  if (year === undefined || month === undefined || day === undefined)
+    throw new Error(`Invalid ISO date: ${dateIso}`);
   const shifted = new Date(Date.UTC(year, month - 1, day) + days * 86_400_000);
   return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, '0')}-${String(shifted.getUTCDate()).padStart(2, '0')}`;
 }
@@ -45,21 +94,16 @@ function toDatePickerDigits(dateIso: string): string {
   return `${day}${month}${year}`;
 }
 
-function formatGermanDate(dateIso: string): string {
-  const [year, month, day] = dateIso.split('-');
-  return `${day}.${month}.${year}`;
-}
-
 // Stored original_start_local values carry seconds ('T06:00:00'); minute
 // precision is the honest comparison unit for series identities.
-function originalStartMinute(occurrence: { originalStartLocal: string | null;
-}): string {
+function originalStartMinute(occurrence: { originalStartLocal: string | null }): string {
   return occurrence.originalStartLocal?.slice(0, 16) ?? '';
 }
 
 function isWeekday(dateIso: string): boolean {
   const [year, month, day] = dateIso.split('-').map(Number);
-  if (year === undefined || month === undefined || day === undefined) throw new Error(`Invalid ISO date: ${dateIso}`);
+  if (year === undefined || month === undefined || day === undefined)
+    throw new Error(`Invalid ISO date: ${dateIso}`);
   const jsWeekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
   return jsWeekday !== 0 && jsWeekday !== 6;
 }
@@ -67,7 +111,8 @@ function isWeekday(dateIso: string): boolean {
 // Monday-based weekday index (0 = Monday … 6 = Sunday), matching the form.
 function mondayWeekdayIndex(dateIso: string): number {
   const [year, month, day] = dateIso.split('-').map(Number);
-  if (year === undefined || month === undefined || day === undefined) throw new Error(`Invalid ISO date: ${dateIso}`);
+  if (year === undefined || month === undefined || day === undefined)
+    throw new Error(`Invalid ISO date: ${dateIso}`);
   const jsWeekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
   return jsWeekday === 0 ? 6 : jsWeekday - 1;
 }
@@ -87,19 +132,12 @@ function a6WeekdayOffsets(): {
       weekdayOffsets.push(offset);
     }
   }
-  let pairOffsets: [number, number] | null = null;
-  for (const offset of weekdayOffsets) {
-    if (weekdayOffsets.includes(offset + 1)) {
-      pairOffsets = [offset, offset + 1];
-      break;
-    }
-  }
-  if (!pairOffsets) {
-    throw new Error('A6: no consecutive weekday pair inside +45…+54');
-  }
-  const remaining = weekdayOffsets.filter(
-    (offset) => offset !== pairOffsets![0] && offset !== pairOffsets![1]
+  const pairStart = expectDefined(
+    weekdayOffsets.find((offset) => weekdayOffsets.includes(offset + 1)),
+    'a consecutive weekday pair inside +45…+54',
   );
+  const pairOffsets: [number, number] = [pairStart, pairStart + 1];
+  const remaining = weekdayOffsets.filter((offset) => offset !== pairStart && offset !== pairStart + 1);
   const [pendingOffset, closureOffset, vacationOffset] = remaining;
   if (pendingOffset === undefined || closureOffset === undefined || vacationOffset === undefined) {
     throw new Error('A6: not enough distinct weekdays inside +45…+54');
@@ -117,19 +155,8 @@ function a6WeekdayOffsets(): {
 // the golden harness). Service-role SELECTs used exclusively for assertions.
 // ---------------------------------------------------------------------------
 
-let readOnlyAdminClient: SupabaseClient | null = null;
-
-function createReadOnlyAdminClient(): SupabaseClient {
-  readOnlyAdminClient ??= createClient(
-    requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
-    requireEnv('SUPABASE_SECRET_KEY'),
-    { auth: { persistSession: false, autoRefreshToken: false } }
-  );
-  return readOnlyAdminClient;
-}
-
 async function getInternalOccurrenceTypes(orgId: string, internalTitle: string): Promise<string[]> {
-  const admin = createReadOnlyAdminClient();
+  const admin = createAdminClient();
   const { data, error } = await admin
     .from('planning_occurrences')
     .select('internal_type')
@@ -139,14 +166,11 @@ async function getInternalOccurrenceTypes(orgId: string, internalTitle: string):
   if (error) {
     throw new Error(`Internal occurrence lookup failed: ${error.message}`);
   }
-  return (data ?? []).map((row) => row.internal_type as string);
+  return (data ?? []).map((row) => row.internal_type ?? '');
 }
 
-async function getOccurrenceAssignmentRecordIds(
-  orgId: string,
-  occurrenceId: string
-): Promise<string[]> {
-  const admin = createReadOnlyAdminClient();
+async function getOccurrenceAssignmentRecordIds(orgId: string, occurrenceId: string): Promise<string[]> {
+  const admin = createAdminClient();
   const { data, error } = await admin
     .from('planning_occurrence_assignments')
     .select('employee_record_id')
@@ -155,151 +179,36 @@ async function getOccurrenceAssignmentRecordIds(
   if (error) {
     throw new Error(`Occurrence assignment lookup failed: ${error.message}`);
   }
-  return (data ?? []).map((row) => row.employee_record_id as string).sort();
+  return (data ?? []).map((row) => row.employee_record_id).sort();
 }
 
-// ---------------------------------------------------------------------------
-// Audit-local UI helpers. Date-cell scoped locators are used instead of the
+// Date-cell scoped locators (occurrenceInDateCell) are used instead of the
 // shared index-based event helpers because A6 series span month boundaries
 // and (since P1-11-F03) skipped/cancelled occurrences stay visible.
-// ---------------------------------------------------------------------------
-
-async function openPlanningCreationDialog(page: Page): Promise<Locator> {
-  await page.goto('/kalender');
-  await page.getByRole('button', { name: 'Kalendereintrag' }).click();
-  const dialog = page.getByRole('dialog').filter({
-    has: page.getByRole('heading', { name: 'Kalendereintrag erstellen' }),
-  });
-  await expect(dialog.getByRole('tab', { name: 'Termin planen' })).toBeVisible({
-    timeout: 15_000,
-  });
-  await dialog.getByRole('tab', { name: 'Termin planen' }).click();
-  await expect(dialog.locator('#planning-date')).toBeVisible({
-    timeout: 15_000,
-  });
-  return dialog;
-}
-
-async function fillInternalPlanningDraft(
-  page: Page,
-  dialog: Locator,
-  options: { title: string; dateIso: string; assignEmployeeName?: string }
-): Promise<void> {
-  await dialog.getByRole('button', { name: 'Interner Termin' }).click();
-  await dialog.locator('#planning-title').fill(options.title);
-  await typeIntoDatePickerById(dialog, 'planning-date', options.dateIso);
-  if (options.assignEmployeeName) {
-    await dialog.getByRole('combobox').filter({ hasText: 'Mitarbeiter zuweisen' }).click();
-    await page.getByPlaceholder(/Mitarbeiter suchen/).fill(options.assignEmployeeName);
-    await page
-      .getByRole('listbox')
-      .getByRole("option")
-      .filter({ hasText: options.assignEmployeeName })
-      .click();
-    await dialog.getByRole('heading', { name: 'Kalendereintrag erstellen' }).click();
-  }
-}
-
-// Opens the creation dialog, provokes the capacity check, asserts the exact
-// warning line (person AND date), and leaves WITHOUT saving anything.
-async function probePlanningWarningLine(
-  page: Page,
-  options: {
-    title: string;
-    dateIso: string;
-    employeeName: string;
-    expectedLine: string;
-  }
-): Promise<void> {
-  const dialog = await openPlanningCreationDialog(page);
-  await fillInternalPlanningDraft(page, dialog, {
-    title: options.title,
-    dateIso: options.dateIso,
-    assignEmployeeName: options.employeeName,
-  });
-  await dialog.getByRole('button', { name: /Planung pr.fen und speichern/ }).click();
-  const warning = dialog.locator('[data-planning-warning]');
-  await expect(warning).toBeVisible({ timeout: 30_000 });
-  await expect(warning.getByText(options.expectedLine)).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
-}
-
-function occurrenceEventInCell(page: Page, dateIso: string, title: string): Locator {
-  return planningOccurrenceInDateCell(page, dateIso, title);
-}
-
-async function openOccurrenceEditDialogByDate(
-  page: Page,
-  title: string,
-  dateIso: string
-): Promise<Locator> {
-  await showPlanningMonth(page, dateIso);
-  const event = occurrenceEventInCell(page, dateIso, title);
-  await expect(event).toBeVisible({ timeout: 20_000 });
-  await event.click();
-  await page.getByRole('button', { name: 'Termin bearbeiten' }).click();
-  const dialog = page.getByRole('dialog').filter({
-    has: page.getByRole('heading', { name: 'Geplanten Termin bearbeiten' }),
-  });
-  await expect(dialog).toBeVisible({ timeout: 15_000 });
-  return dialog;
-}
-
-async function withdrawOwnPendingVacationRequestByDate(
-  page: Page,
-  germanDate: string
-): Promise<void> {
-  await openOwnVacationSection(page);
-  const withdrawButton = pendingVacationWithdrawButton(page, germanDate);
-  await withdrawButton.click();
-  await expect(withdrawButton).toHaveCount(0, { timeout: 15_000 });
-}
-
-async function markAllOwnNotificationsRead(page: Page): Promise<void> {
-  await openAufgaben(page);
-  await markAllUnreadNotificationsRead(page);
-}
-
-// Shared across the serial A6 tests: the organization-wide actual-time count
-// captured before any A6 planning exists (planning must never create time).
-import { auditCheckpoint, saveAuditCheckpoint } from "../support/checkpoints";
-
-// The Berlin base date and the weekday allocation are frozen at module load so
-// every serial test shares identical dates even when a battery run crosses
-// midnight (T7 relocates fixtures created by T5).
-const A6_TODAY_ISO = berlinDateAtOffset(0);
-const A6_OFFSETS = a6WeekdayOffsets();
 
 test.describe('A6 Planung @AUDIT-W1-A6', () => {
-  test('A6-T1: Ganztägige Besuche und alle vier internen Terminarten, auch durch das Büro geplant [P1-11-F01]', async ({
+  test('A6-T1: Interne Terminarten, Büro als Planer, Nachtarbeit über Mitternacht und ganztägige Mehrtagesbesuche [P1-11-F01]', async ({
     adminPage,
     bueroPage,
     world,
   }) => {
-    if (auditCheckpoint("a6.organizationTimeBaseline") === undefined) {
-      saveAuditCheckpoint(
-        "a6.organizationTimeBaseline",
-        await getOrganizationTimeEntryCount(world.orgId),
-      );
-    }
-
     // The four internal entry types are offered with their exact German labels.
     const labelDialog = await openPlanningCreationDialog(adminPage);
-    await labelDialog.getByRole('button', { name: 'Interner Termin' }).click();
+    await planningInternalEntryToggle(labelDialog).click();
     await labelDialog.locator('#planning-internal-type').click();
     const typeOptions = adminPage.getByRole('option');
     await expect(typeOptions).toHaveCount(4);
-    for (const label of ['Interne Arbeit', 'Besprechung', 'Schulung', 'Sonstiges']) {
+    for (const label of Object.values(PLANNING_INTERNAL_TYPE_LABELS)) {
       await expect(adminPage.getByRole('option', { name: label, exact: true })).toBeVisible();
     }
-    await adminPage.keyboard.press('Escape');
-    await adminPage.keyboard.press('Escape');
+    // The open select list is the top layer: the first Escape closes it, the second the dialog.
+    await dismissDialog(adminPage.getByRole('listbox'));
+    await dismissDialog(labelDialog);
     await expect(labelDialog).toHaveCount(0, { timeout: 15_000 });
 
     // Büro plans a Besprechung (the default type) — the planner role includes
     // Büro, not only Admin.
-    const besprechungTitle = `A6 Baustellenrunde ${world.runId}`;
+    const besprechungTitle = `A6-T1 Baustellenrunde ${world.runId}`;
     const besprechungDate = berlinDateAtOffset(48);
     await createPlannedCalendarEntry(bueroPage, {
       kind: 'internal',
@@ -315,21 +224,28 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     });
     expect(await getInternalOccurrenceTypes(world.orgId, besprechungTitle)).toEqual(['meeting']);
 
-    // Admin plans a Sonstiges entry through the visible label.
-    const sonstigesTitle = `A6 Werkstatttag ${world.runId}`;
+    // Internal work across midnight needs neither a job nor a second entry.
+    const nightTitle = `A6-T1 Nachtarbeit ${world.runId}`;
     await createPlannedCalendarEntry(adminPage, {
       kind: 'internal',
-      internalTitle: sonstigesTitle,
-      internalType: 'other',
+      internalTitle: nightTitle,
+      internalType: 'internal_work',
       date: berlinDateAtOffset(49),
-      time: '08:00',
-      durationHours: 2,
+      time: '22:00',
+      durationHours: 4,
     });
-    expect(await getInternalOccurrenceTypes(world.orgId, sonstigesTitle)).toEqual(['other']);
+    await expect(plannedEntriesConfirmation(adminPage, 1)).toBeVisible({ timeout: 15_000 });
+    const night = await getPlanningState(world.orgId, { internalTitle: nightTitle });
+    expect(night.jobId).toBeNull();
+    const nightOccurrence = expectDefined(night.occurrences[0], 'the night occurrence');
+    const nightStart = expectDefined(nightOccurrence.startAt, 'the night start');
+    const nightEnd = expectDefined(nightOccurrence.endAt, 'the night end');
+    expect(formatBerlinLocalDateTime(nightStart).slice(11, 16)).toBe('22:00');
+    expect(new Date(nightEnd).getTime() - new Date(nightStart).getTime()).toBe(4 * 60 * 60 * 1000);
 
     // A JOB visit can be all-day and multi-day, not only internal entries.
-    const visitJobNumber = `A6-VISIT-${world.runId}`;
-    const visitTitle = `A6 Ganztagsbesuch ${world.runId}`;
+    const visitJobNumber = `A6-T1-VISIT-${world.runId}`;
+    const visitTitle = `A6-T1 Ganztagsbesuch ${world.runId}`;
     const visitDate = berlinDateAtOffset(47);
     await createJob(adminPage, {
       jobNumber: visitJobNumber,
@@ -354,19 +270,15 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     });
   });
 
-  test('A6-T2: Wochen- und Monatsserien — ungültige Monatstermine fallen aus statt zu verrutschen [P1-11-F01/P1-11-F02]', async ({
+  test('A6-T2: Eine Wochenserie mit zusätzlich gewähltem Wochentag wird genau an diesen Tagen geplant [P1-11-F01]', async ({
     adminPage,
     world,
   }) => {
-    const todayIso = A6_TODAY_ISO;
-    // Weekly series across two explicit weekdays: the materialized dates use
-    // exactly the selected weekdays in calendar order.
-    const weeklyTitle = `A6 Wochenserie ${world.runId}`;
+    const weeklyTitle = `A6-T2 Wochenserie ${world.runId}`;
     const weeklyStart = berlinDateAtOffset(70);
     const startWeekdayIndex = mondayWeekdayIndex(weeklyStart);
     const secondWeekdayIndex = (startWeekdayIndex + 1) % 7;
-    const secondWeekdayLabel = WEEKDAY_LABELS[secondWeekdayIndex];
-    if (!secondWeekdayLabel) throw new Error(`A6: no weekday label at index ${secondWeekdayIndex}`);
+    const secondWeekdayLabel = expectDefined(WEEKDAY_LABELS[secondWeekdayIndex], 'the second weekday label');
     await createPlannedCalendarEntry(adminPage, {
       kind: 'internal',
       internalTitle: weeklyTitle,
@@ -380,6 +292,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
         weekdayLabels: [secondWeekdayLabel],
       },
     });
+    await expect(plannedEntriesConfirmation(adminPage, 6)).toBeVisible({ timeout: 15_000 });
     const expectedWeeklyDates: string[] = [];
     for (let date = weeklyStart; expectedWeeklyDates.length < 6; date = shiftIsoDate(date, 1)) {
       const weekday = mondayWeekdayIndex(date);
@@ -392,57 +305,15 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     });
     expect(weeklyState.seriesCount).toBe(1);
     expect(weeklyState.occurrences.map(originalStartMinute)).toEqual(
-      expectedWeeklyDates.map((date) => `${date}T06:00`)
+      expectedWeeklyDates.map((date) => `${date}T06:00`),
     );
-
-    // Monthly series anchored on a 31st: months without a 31st DROP OUT and
-    // never shift to the 30th (or 28th/29th).
-    let monthlyStart: string | null = null;
-    for (let monthOffset = 2; monthOffset <= 14 && !monthlyStart; monthOffset++) {
-      const [year, month] = todayIso.split('-').map(Number);
-      if (year === undefined || month === undefined) throw new Error(`Invalid ISO date: ${todayIso}`);
-      const anchor = new Date(Date.UTC(year, month - 1 + monthOffset, 31));
-      if (anchor.getUTCDate() !== 31) continue;
-      const candidate = `${anchor.getUTCFullYear()}-${String(anchor.getUTCMonth() + 1).padStart(2, '0')}-31`;
-      if (candidate > shiftIsoDate(todayIso, 40)) monthlyStart = candidate;
-    }
-    if (!monthlyStart) throw new Error('A6: no month with a 31st found');
-    const expectedMonthlyDates: string[] = [];
-    const [startYear, startMonth] = monthlyStart.split('-').map(Number);
-    if (startYear === undefined || startMonth === undefined) throw new Error(`Invalid ISO date: ${monthlyStart}`);
-    for (let monthOffset = 0; expectedMonthlyDates.length < 4; monthOffset += 1) {
-      const candidate = new Date(Date.UTC(startYear, startMonth - 1 + monthOffset, 31));
-      if (candidate.getUTCDate() !== 31) continue;
-      expectedMonthlyDates.push(
-        `${candidate.getUTCFullYear()}-${String(candidate.getUTCMonth() + 1).padStart(2, '0')}-31`
-      );
-    }
-    const monthlyTitle = `A6 Monatsserie ${world.runId}`;
-    await createPlannedCalendarEntry(adminPage, {
-      kind: 'internal',
-      internalTitle: monthlyTitle,
-      internalType: 'internal_work',
-      date: monthlyStart,
-      time: '06:00',
-      durationHours: 1,
-      recurrence: { frequency: 'monthly', count: 4 },
-    });
-    const monthlyState = await getPlanningState(world.orgId, {
-      internalTitle: monthlyTitle,
-    });
-    expect(monthlyState.seriesCount).toBe(1);
-    const monthlyDates = monthlyState.occurrences.map(
-      (occurrence) => occurrence.originalStartLocal?.slice(0, 10) ?? ''
-    );
-    expect(monthlyDates).toEqual(expectedMonthlyDates);
-    for (const date of monthlyDates) expect(date.endsWith('-31')).toBe(true);
   });
 
   test('A6-T3: Serien reichen 18 Monate in die Zukunft und wachsen per Klick um je sechs Monate ohne Duplikate [P1-11-F02]', async ({
     adminPage,
     world,
   }) => {
-    const horizonTitle = `A6 Horizontserie ${world.runId}`;
+    const horizonTitle = `A6-T3 Horizontserie ${world.runId}`;
     const horizonStart = berlinDateAtOffset(77);
 
     // 730 requested weekly occurrences must clamp at the 18-month horizon.
@@ -464,14 +335,14 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       durationHours: 1,
       recurrence: { frequency: 'weekly', count: 730 },
     });
-    await expect(
-      visibleText(adminPage, `${expectedInitialDates.length} Termine wurden geplant.`)
-    ).toBeVisible({ timeout: 20_000 });
+    await expect(plannedEntriesConfirmation(adminPage, expectedInitialDates.length)).toBeVisible({
+      timeout: 20_000,
+    });
     const initialState = await getPlanningState(world.orgId, {
       internalTitle: horizonTitle,
     });
     expect(initialState.occurrences.map(originalStartMinute)).toEqual(
-      expectedInitialDates.map((date) => `${date}T06:00`)
+      expectedInitialDates.map((date) => `${date}T06:00`),
     );
 
     // One click adds exactly the next six months of occurrences — twice, and
@@ -496,13 +367,8 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       const addedDates = computeExtension(expectedDates);
       expect(addedDates.length).toBeGreaterThan(0);
       const dialog = await openOccurrenceEditDialogByDate(adminPage, horizonTitle, horizonStart);
-      await dialog.getByRole('button', { name: 'Serie um sechs Monate verlängern' }).click();
-      await expect(
-        visibleText(
-          adminPage,
-          `Serie wurde um sechs Monate verlängert (${addedDates.length} neue Termine).`
-        )
-      ).toBeVisible({ timeout: 30_000 });
+      await extendSeriesButton(dialog).click();
+      await expect(seriesExtendedConfirmation(adminPage, addedDates.length)).toBeVisible({ timeout: 30_000 });
       expectedDates = [...expectedDates, ...addedDates];
       const extendedState = await getPlanningState(world.orgId, {
         internalTitle: horizonTitle,
@@ -518,10 +384,12 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     world,
   }) => {
     const yesterdayIso = berlinDateAtOffset(-1);
-    const title = `A6 Rückblick ${world.runId}`;
+    const cancelDate = berlinDateAtOffset(1);
+    const skipDate = berlinDateAtOffset(2);
+    const title = `A6-T4 Rückblick ${world.runId}`;
 
     // Daily series starting YESTERDAY: the first occurrence is irrevocably in
-    // the past when the edits below run.
+    // the past when the edits below run; tomorrow and the day after are not.
     await createPlannedCalendarEntry(adminPage, {
       kind: 'internal',
       internalTitle: title,
@@ -535,134 +403,108 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       internalTitle: title,
     });
     expect(createdState.occurrenceCount).toBe(4);
-    const pastStartAt = createdState.occurrences.find(
-      (occurrence) => originalStartMinute(occurrence) === `${yesterdayIso}T06:00`
-    )?.startAt;
-    expect(pastStartAt).toBeTruthy();
+    const pastStartAt = expectDefined(
+      createdState.occurrences.find(
+        (occurrence) => originalStartMinute(occurrence) === `${yesterdayIso}T06:00`,
+      )?.startAt,
+      'the past occurrence start',
+    );
 
-    // Editing the past occurrence directly is refused understandably; the
-    // dialog offers exactly the three documented scopes.
-    const pastDialog = await openOccurrenceEditDialogByDate(adminPage, title, yesterdayIso);
-    await pastDialog.locator('#planning-edit-scope').click();
-    for (const scopeLabel of [
-      'Nur dieser Termin',
-      'Dieser und zukünftige',
-      'Ganze Serie ab frühestem änderbaren Termin',
-    ]) {
+    // P1-24a prevents edits before opening the dialog. History stays readable.
+    await showPlanningMonth(adminPage, yesterdayIso);
+    const pastCard = occurrenceInDateCell(adminPage, yesterdayIso, title);
+    await expect(pastCard).toHaveAttribute('data-locked', '');
+    await expect(pastCard).toHaveAccessibleName(LOCKED_CARD_NAME);
+    await pastCard.click();
+    await expect(jobPopover(adminPage)).toBeVisible();
+    await expect(lockedOccurrenceNotice(adminPage)).toContainText(startedOccurrenceMessage());
+    await expect(occurrenceEditButton(adminPage)).toHaveCount(0);
+    await dismissDialog(jobPopover(adminPage));
+
+    // Whole-series edit from a future visit: the three scopes are offered, the
+    // future visits move, the past one keeps its start.
+    const seriesDialog = await openOccurrenceEditDialogByDate(adminPage, title, skipDate);
+    await seriesDialog.locator('#planning-edit-scope').click();
+    for (const scopeLabel of Object.values(PLANNING_EDIT_SCOPE_LABELS)) {
       await expect(adminPage.getByRole('option', { name: scopeLabel, exact: true })).toBeVisible();
     }
-    await adminPage.getByRole('option', { name: 'Nur dieser Termin', exact: true }).click();
-    await typeIntoTimeInput(pastDialog, 'planning-edit-time', '0930');
-    await pastDialog.getByRole('button', { name: 'Änderung speichern', exact: true }).click();
-    await expect(
-      visibleText(adminPage, 'Begonnene oder vergangene Termine bleiben unverändert.')
-    ).toBeVisible({ timeout: 20_000 });
-    await expect(pastDialog).toBeVisible();
-    // Both the footer button and the dialog X are named "Schließen".
-    await closePlanningDialogWithNamedControl(pastDialog);
-    await expect(pastDialog).toHaveCount(0, { timeout: 15_000 });
-
-    // Whole-series edit: only future occurrences move; the past occurrence is
-    // byte-identical afterwards.
-    const preEditState = await getPlanningState(world.orgId, {
-      internalTitle: title,
-    });
-    const nowMs = Date.now();
-    const seriesDialog = await openOccurrenceEditDialogByDate(
-      adminPage,
-      title,
-      berlinDateAtOffset(2)
-    );
-    await seriesDialog.locator('#planning-edit-scope').click();
     await adminPage
       .getByRole('option', {
-        name: 'Ganze Serie ab frühestem änderbaren Termin',
+        name: PLANNING_EDIT_SCOPE_LABELS.series,
       })
       .click();
     await typeIntoTimeInput(seriesDialog, 'planning-edit-time', '1000');
-    await seriesDialog.getByRole('button', { name: 'Änderung speichern', exact: true }).click();
+    await seriesDialog.getByRole('button', { name: SHARED_COPY.action.saveChange, exact: true }).click();
     await expect(seriesDialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(occurrenceEditConfirmation(adminPage, 'series')).toBeVisible({
+      timeout: 15_000,
+    });
     const postEditState = await getPlanningState(world.orgId, {
       internalTitle: title,
     });
-    for (const before of preEditState.occurrences) {
-      const after = postEditState.occurrences.find(
-        (occurrence) => occurrence.originalStartLocal === before.originalStartLocal
+    const startAtFor = (dateIso: string): string =>
+      expectDefined(
+        postEditState.occurrences.find((occurrence) => originalStartMinute(occurrence) === `${dateIso}T06:00`)
+          ?.startAt,
+        `the occurrence start of ${dateIso}`,
       );
-      expect(after).toBeTruthy();
-      const beforeMs = new Date(before.startAt!).getTime();
-      const afterTime = formatBerlinLocalDateTime(after!.startAt!).slice(11, 16);
-      if (beforeMs < nowMs - 120_000) {
-        // Past/already-begun: never rewritten.
-        expect(after!.startAt).toBe(before.startAt);
-      } else if (beforeMs > nowMs + 120_000) {
-        // Clearly future: moved to the new time.
-        expect(afterTime).toBe('10:00');
-      }
-    }
-    expect(
-      postEditState.occurrences.find(
-        (occurrence) => originalStartMinute(occurrence) === `${yesterdayIso}T06:00`
-      )?.startAt
-    ).toBe(pastStartAt);
+    expect(startAtFor(yesterdayIso)).toBe(pastStartAt);
+    expect(formatBerlinLocalDateTime(startAtFor(cancelDate)).slice(11, 16)).toBe('10:00');
+    expect(formatBerlinLocalDateTime(startAtFor(skipDate)).slice(11, 16)).toBe('10:00');
 
     // Cancel tomorrow's occurrence and skip the day after: both keep a
     // traceably VISIBLE calendar presence instead of disappearing.
-    const cancelDate = berlinDateAtOffset(1);
-    const skipDate = berlinDateAtOffset(2);
     const cancelDialog = await openOccurrenceEditDialogByDate(adminPage, title, cancelDate);
-    await cancelDialog.getByRole('button', { name: 'Termin absagen', exact: true }).click();
+    await occurrenceStatusAction(cancelDialog, 'cancelled').click();
     await cancelDialog
       .locator('#planning-status-reason')
       .fill('A6 Termin bewusst abgesagt und dokumentiert.');
-    await cancelDialog.getByRole('button', { name: 'Status speichern', exact: true }).click();
+    await occurrenceStatusSave(cancelDialog).click();
     await expect(cancelDialog).toHaveCount(0, { timeout: 20_000 });
-    await expect(visibleText(adminPage, 'Termin wurde abgesagt.')).toBeVisible({
+    await expect(occurrenceStatusConfirmation(adminPage, 'cancelled')).toBeVisible({
       timeout: 15_000,
     });
 
     const skipDialog = await openOccurrenceEditDialogByDate(adminPage, title, skipDate);
-    await skipDialog.getByRole('button', { name: 'Auslassen', exact: true }).click();
-    await skipDialog
-      .locator('#planning-status-reason')
-      .fill('A6 Termin betrieblich nicht benötigt.');
-    await skipDialog.getByRole('button', { name: 'Status speichern', exact: true }).click();
+    await occurrenceStatusAction(skipDialog, 'skipped').click();
+    await skipDialog.locator('#planning-status-reason').fill('A6 Termin betrieblich nicht benötigt.');
+    await occurrenceStatusSave(skipDialog).click();
     await expect(skipDialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(occurrenceStatusConfirmation(adminPage, 'skipped')).toBeVisible({
+      timeout: 15_000,
+    });
 
     await showPlanningMonth(adminPage, cancelDate);
-    const cancelledEvent = occurrenceEventInCell(adminPage, cancelDate, title);
+    const cancelledEvent = occurrenceInDateCell(adminPage, cancelDate, title);
     await expect(cancelledEvent).toBeVisible({ timeout: 20_000 });
-    await expect(planningDateCellStatus(adminPage, cancelDate, 'Abgesagt')).toBeVisible();
+    await expect(planningDateCellStatus(adminPage, cancelDate, 'cancelled')).toBeVisible();
     await showPlanningMonth(adminPage, skipDate);
-    await expect(occurrenceEventInCell(adminPage, skipDate, title)).toBeVisible({
+    await expect(occurrenceInDateCell(adminPage, skipDate, title)).toBeVisible({
       timeout: 20_000,
     });
-    await expect(planningDateCellStatus(adminPage, skipDate, 'Ausgelassen')).toBeVisible();
+    await expect(planningDateCellStatus(adminPage, skipDate, 'skipped')).toBeVisible();
 
     // The cancelled occurrence is read-only: its popover explains the status
     // and offers no editing.
     await showPlanningMonth(adminPage, cancelDate);
-    await occurrenceEventInCell(adminPage, cancelDate, title).click();
-    await expect(adminPage.getByRole('button', { name: 'Terminübersicht schließen' })).toBeVisible({
+    await occurrenceInDateCell(adminPage, cancelDate, title).click();
+    await expect(closeOccurrenceOverviewButton(adminPage)).toBeVisible({
       timeout: 15_000,
     });
-    await expect(adminPage.getByRole('button', { name: 'Termin bearbeiten' })).toHaveCount(0);
-    await adminPage.getByRole('button', { name: 'Terminübersicht schließen' }).click();
+    await expect(occurrenceEditButton(adminPage)).toHaveCount(0);
+    await closeOccurrenceOverviewButton(adminPage).click();
 
     const finalState = await getPlanningState(world.orgId, {
       internalTitle: title,
     });
     expect(
-      finalState.occurrences.find(
-        (occurrence) => originalStartMinute(occurrence) === `${cancelDate}T06:00`
-      )?.status
+      finalState.occurrences.find((occurrence) => originalStartMinute(occurrence) === `${cancelDate}T06:00`)
+        ?.status,
     ).toBe('cancelled');
     expect(
-      finalState.occurrences.find(
-        (occurrence) => originalStartMinute(occurrence) === `${skipDate}T06:00`
-      )?.status
+      finalState.occurrences.find((occurrence) => originalStartMinute(occurrence) === `${skipDate}T06:00`)
+        ?.status,
     ).toBe('skipped');
-    expect(finalState.eventTypes).toEqual(expect.arrayContaining(['cancelled', 'skipped']));
   });
 
   test('A6-T5: Schwebende Urlaubsanträge warnen mit Person und Datum; geänderte Fakten erzwingen eine neue Entscheidung [P1-11-F04]', async ({
@@ -670,12 +512,9 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     employeePage,
     world,
   }) => {
-    const { pendingOffset, pairOffsets } = A6_OFFSETS;
+    const { pendingOffset, pairOffsets } = a6WeekdayOffsets();
     const pendingDate = ownedBerlinDateAtOffset('a6-planung', pendingOffset);
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
-    const fallbackMessage =
-      'Für diese Person gilt nur der gekennzeichnete Standardwert, weil kein Arbeitszeitmodell hinterlegt ist.';
-    const pendingMessage = 'Für diesen Tag liegt ein noch offener Abwesenheitsantrag vor.';
 
     // A pending (undecided) vacation request is a capacity source: the warning
     // names the person and the date, and saving requires a reason.
@@ -691,40 +530,36 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       dateIso: pendingDate,
       assignEmployeeName: employeeName,
     });
-    await pendingDialog.getByRole('button', { name: /Planung pr.fen und speichern/ }).click();
-    const pendingWarning = pendingDialog.locator('[data-planning-warning]');
+    await planningCheckAndSave(pendingDialog).click();
+    const pendingWarning = planningWarningPanel(pendingDialog);
     await expect(pendingWarning).toBeVisible({ timeout: 30_000 });
     await expect(
-      pendingWarning.getByText(`${employeeName}: ${pendingMessage} (${pendingDate})`)
+      capacityWarningLine(pendingWarning, { employeeName, kind: 'pendingAbsence', dateIso: pendingDate }),
     ).toBeVisible();
     await expect(
-      pendingWarning.getByText(`${employeeName}: ${fallbackMessage} (${pendingDate})`)
+      capacityWarningLine(pendingWarning, { employeeName, kind: 'scheduleFallback', dateIso: pendingDate }),
     ).toBeVisible();
-    const planWithReasonButton = pendingDialog.getByRole('button', {
-      name: 'Mit Begründung planen',
-    });
+    const planWithReason = planWithReasonButton(pendingDialog);
     const overrideReason = pendingDialog.locator('#planning-override');
-    await expect(planWithReasonButton).toBeEnabled();
-    await planWithReasonButton.click();
-    await expect(
-      pendingDialog.getByText('Bitte begründe die Abweichung mit mindestens 8 Zeichen.')
-    ).toBeVisible();
+    await expect(planWithReason).toBeEnabled();
+    await planWithReason.click();
+    await expect(planningOverrideTooShort(pendingDialog)).toBeVisible();
     await expect(overrideReason).toHaveAttribute('aria-invalid', 'true');
     await expect(overrideReason).toBeFocused();
     await overrideReason.fill(`A6 Einsatz trotz offenen Antrags abgestimmt ${world.runId}`);
-    await planWithReasonButton.click();
+    await planWithReason.click();
     await expect(pendingDialog).toHaveCount(0, { timeout: 30_000 });
-    await expect(visibleText(adminPage, 'Termin wurde geplant.')).toBeVisible({
+    await expect(plannedEntriesConfirmation(adminPage, 1)).toBeVisible({
       timeout: 15_000,
     });
     const pendingState = await getPlanningState(world.orgId, {
       internalTitle: pendingTitle,
     });
     expect(pendingState.capacityConflictKinds).toEqual(
-      expect.arrayContaining(['no_schedule', 'pending_absence'])
+      expect.arrayContaining(['no_schedule', 'pending_absence']),
     );
     expect(pendingState.overrideReasons).toContain(
-      `A6 Einsatz trotz offenen Antrags abgestimmt ${world.runId}`
+      `A6 Einsatz trotz offenen Antrags abgestimmt ${world.runId}`,
     );
 
     // Changed facts force a NEW decision: while the warning is on screen, a
@@ -740,21 +575,21 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       dateIso: staleDateFirst,
       assignEmployeeName: employeeName,
     });
-    await staleDialog.getByText('Wiederholen', { exact: true }).click();
+    await planningRepeatToggle(staleDialog).click();
     // The Rhythmus Field wires its id onto the select trigger.
     await staleDialog.locator('#planning-frequency').click();
-    await adminPage.getByRole('option', { name: /T.glich/ }).click();
+    await planningFrequencyOption(adminPage, 'daily').click();
     await staleDialog.locator('#planning-count').fill('2');
-    await staleDialog.getByRole('button', { name: /Planung pr.fen und speichern/ }).click();
-    const staleWarning = staleDialog.locator('[data-planning-warning]');
+    await planningCheckAndSave(staleDialog).click();
+    const staleWarning = planningWarningPanel(staleDialog);
     await expect(staleWarning).toBeVisible({ timeout: 30_000 });
     await expect(
-      staleWarning.getByText(`${employeeName}: ${fallbackMessage} (${staleDateFirst})`)
+      capacityWarningLine(staleWarning, { employeeName, kind: 'scheduleFallback', dateIso: staleDateFirst }),
     ).toBeVisible();
     await expect(
-      staleWarning.getByText(`${employeeName}: ${fallbackMessage} (${staleDateSecond})`)
+      capacityWarningLine(staleWarning, { employeeName, kind: 'scheduleFallback', dateIso: staleDateSecond }),
     ).toBeVisible();
-    await expect(staleWarning.getByText(pendingMessage)).toHaveCount(0);
+    await expect(capacityWarningText(staleWarning, 'pendingAbsence')).toHaveCount(0);
 
     // The fact changes AFTER the warning was shown.
     await createOwnVacationRequestViaDialog(employeePage, {
@@ -762,20 +597,16 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       endDigits: toDatePickerDigits(staleDateFirst),
       comment: `A6 Faktenänderung ${world.runId}`,
     });
-    await staleDialog
-      .locator('#planning-override')
-      .fill(`A6 Einsatz bewusst bestätigt ${world.runId}`);
-    await staleDialog.getByRole('button', { name: 'Mit Begründung planen' }).click();
-    await expect(
-      visibleText(adminPage, 'Die Planungslage hat sich geändert. Bitte Hinweise erneut prüfen.')
-    ).toBeVisible({ timeout: 30_000 });
+    await staleDialog.locator('#planning-override').fill(`A6 Einsatz bewusst bestätigt ${world.runId}`);
+    await planWithReasonButton(staleDialog).click();
+    await expect(staleAssessmentNotice(adminPage)).toBeVisible({ timeout: 30_000 });
     await expect(staleDialog).toBeVisible();
     await expect(
-      staleWarning.getByText(`${employeeName}: ${pendingMessage} (${staleDateFirst})`)
+      capacityWarningLine(staleWarning, { employeeName, kind: 'pendingAbsence', dateIso: staleDateFirst }),
     ).toBeVisible({ timeout: 15_000 });
-    await staleDialog.getByRole('button', { name: 'Mit Begründung planen' }).click();
+    await planWithReasonButton(staleDialog).click();
     await expect(staleDialog).toHaveCount(0, { timeout: 30_000 });
-    await expect(visibleText(adminPage, '2 Termine wurden geplant.')).toBeVisible({
+    await expect(plannedEntriesConfirmation(adminPage, 2)).toBeVisible({
       timeout: 15_000,
     });
     const staleState = await getPlanningState(world.orgId, {
@@ -783,7 +614,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     });
     expect(staleState.occurrenceCount).toBe(2);
     expect(staleState.capacityConflictKinds).toEqual(
-      expect.arrayContaining(['no_schedule', 'pending_absence'])
+      expect.arrayContaining(['no_schedule', 'pending_absence']),
     );
     expect(staleState.overrideReasons).toContain(`A6 Einsatz bewusst bestätigt ${world.runId}`);
 
@@ -791,7 +622,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     // self-action without decision notifications).
     await withdrawOwnPendingVacationRequestByDate(
       employeePage,
-      formatGermanDate(ownedBerlinDateAtOffset('a6-planung', pairOffsets[0]))
+      formatGermanDate(ownedBerlinDateAtOffset('a6-planung', pairOffsets[0])),
     );
     await withdrawOwnPendingVacationRequestByDate(employeePage, formatGermanDate(pendingDate));
   });
@@ -801,13 +632,11 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     employeePage,
     world,
   }) => {
-    const todayIso = A6_TODAY_ISO;
-    const { closureOffset, vacationOffset } = A6_OFFSETS;
+    const todayIso = berlinDateAtOffset(0);
+    const { closureOffset, vacationOffset } = a6WeekdayOffsets();
     const closureDate = ownedBerlinDateAtOffset('a6-planung', closureOffset);
     const vacationDate = ownedBerlinDateAtOffset('a6-planung', vacationOffset);
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
-    const freeDayMessage = 'Der Termin liegt auf einem arbeitsfreien Tag.';
-    const absenceMessage = 'Für diesen Zeitraum liegt eine genehmigte Abwesenheit vor.';
 
     // Betriebsruhe: a closure day is a capacity source.
     await addClosureDayViaSettings(adminPage, {
@@ -818,14 +647,14 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       title: `A6 Ruheprobe ${world.runId}`,
       dateIso: closureDate,
       employeeName,
-      expectedLine: `${employeeName}: ${freeDayMessage} (${closureDate})`,
+      kind: 'freeDay',
     });
     await removeClosureDayViaSettings(adminPage, formatGermanDate(closureDate));
 
     // Feiertag: with a temporary Berlin holiday calendar, the next public
     // holiday raises the same understandable warning. The region is reset
     // immediately afterwards (the audit world deliberately runs without one).
-    await setHolidayRegionViaSettings(adminPage, 'Berlin');
+    await setHolidayRegionViaSettings(adminPage, HOLIDAY_REGION_LABELS.BE);
     const currentYear = Number(todayIso.slice(0, 4));
     const nextHoliday = [
       ...getPublicHolidaysForYear('BE', currentYear),
@@ -838,9 +667,9 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       title: `A6 Feiertagsprobe ${world.runId}`,
       dateIso: nextHoliday,
       employeeName,
-      expectedLine: `${employeeName}: ${freeDayMessage} (${nextHoliday})`,
+      kind: 'freeDay',
     });
-    await setHolidayRegionViaSettings(adminPage, 'Kein Feiertagskalender');
+    await setHolidayRegionViaSettings(adminPage, PERSONNEL_COPY.noHolidayRegion);
 
     // Genehmigter Urlaub: an approved absence is a capacity source.
     await createOwnVacationRequestViaDialog(employeePage, {
@@ -853,12 +682,12 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       title: `A6 Urlaubskonfliktprobe ${world.runId}`,
       dateIso: vacationDate,
       employeeName,
-      expectedLine: `${employeeName}: ${absenceMessage} (${vacationDate})`,
+      kind: 'approvedAbsence',
     });
     await cancelApprovedVacationFor(
       adminPage,
       employeeName,
-      `A6 Probe abgeschlossen, Urlaub wieder storniert ${world.runId}`
+      `A6 Probe abgeschlossen, Urlaub wieder storniert ${world.runId}`,
     );
 
     // Krankheit: an active sickness report is a capacity source. The employee
@@ -877,71 +706,42 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       title: `A6 Krankheitsprobe ${world.runId}`,
       dateIso: sicknessProbeDate,
       employeeName,
-      expectedLine: `${employeeName}: ${absenceMessage} (${sicknessProbeDate})`,
+      kind: 'approvedAbsence',
     });
-    await openOwnSicknessSection(employeePage);
-    await employeePage
-      .getByRole('button', {
-        name: `Krankmeldung vom ${formatGermanDate(todayIso)} – bis auf Weiteres stornieren`,
-      })
-      .click();
-    const cancelSicknessDialog = employeePage.getByRole('dialog');
-    await expect(
-      cancelSicknessDialog.getByRole('heading', {
-        name: 'Krankmeldung stornieren',
-      })
-    ).toBeVisible();
-    await cancelSicknessDialog.getByRole('button', { name: 'Stornieren', exact: true }).click();
-    await expect(cancelSicknessDialog).toHaveCount(0, { timeout: 15_000 });
+    // Opens the own section, cancels the open-ended report and waits until the dialog closed.
+    await cancelOwnSicknessReport(employeePage, openEndedSicknessRangeText(formatGermanDate(todayIso)));
 
     // The employee reads the decision notifications produced by the approval
     // and cancellation above: A6 leaves no unread employee notification.
     await markAllOwnNotificationsRead(employeePage);
   });
 
-  test('A6-T7: Personal ohne Login ist manager-sichtbar verplant; Handwerker sehen genau ihre Termine ohne Ist-Zeit [P1-11-F05]',
-    {
-      annotation: [
-        {
-          type: "requires-test",
-          description:
-            "A6-T1: Ganztägige Besuche und alle vier internen Terminarten, auch durch das Büro geplant [P1-11-F01]",
-        },
-        {
-          type: "requires-test",
-          description:
-            "A6-T5: Schwebende Urlaubsanträge warnen mit Person und Datum; geänderte Fakten erzwingen eine neue Entscheidung [P1-11-F04]",
-        },
-      ],
-    },
-    async ({
+  test('A6-T7: Personal ohne Login ist manager-sichtbar verplant; Handwerker sehen genau ihre Termine [P1-11-F05]', async ({
     adminPage,
     employeePage,
     world,
   }) => {
-    const { pendingOffset } = A6_OFFSETS;
-    const organizationTimeStart = requireChainedValue(
-        auditCheckpoint("a6.organizationTimeBaseline"), {
-      test: 'A6-T7',
-      needs: 'the organization time-entry baseline captured before A6 planning',
-      grep: 'A6-T1|A6-T5|A6-T7',
-      suite: 'audit',
-    });
-    const inheritedEmployeeOccurrence = await getPlanningState(world.orgId, {
-      internalTitle: `A6 Kapazität ${world.runId}`,
-    });
-    requireChainedPrecondition(inheritedEmployeeOccurrence.occurrenceCount > 0, {
-      test: 'A6-T7',
-      needs: 'the employee planning occurrence created by A6-T5',
-      grep: 'A6-T1|A6-T5|A6-T7',
-      suite: 'audit',
-    });
+    const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
+    const ownTitle = `A6-T7 Eigener Termin ${world.runId}`;
+    const ownDate = berlinDateAtOffset(51);
     const noLoginName = `Nora Nachweis-${world.runId}`;
-    const noLoginTitle = `A6 Ohne Login ${world.runId}`;
+    const noLoginTitle = `A6-T7 Ohne Login ${world.runId}`;
     const noLoginDate = berlinDateAtOffset(50);
 
-    // A6 creates its own no-login personnel record (never an earlier
-    // session's fixture) and plans ONLY that record.
+    // The field worker's own visit, planned with the reason the missing work
+    // schedule demands.
+    await createPlannedCalendarEntry(adminPage, {
+      kind: 'internal',
+      internalTitle: ownTitle,
+      internalType: 'internal_work',
+      date: ownDate,
+      time: '06:00',
+      durationHours: 1,
+      employeeNames: [employeeName],
+      overrideReason: `A6 Einsatz für den Handwerker abgestimmt ${world.runId}`,
+    });
+
+    // A6 creates its own no-login personnel record and plans ONLY that record.
     const noLoginRecordId = await createPersonnelRecordViaDialog(adminPage, {
       firstName: 'Nora',
       lastName: `Nachweis-${world.runId}`,
@@ -960,44 +760,33 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       internalTitle: noLoginTitle,
     });
     expect(noLoginState.occurrenceCount).toBe(1);
-    const [noLoginOccurrence] = noLoginState.occurrences;
-    if (!noLoginOccurrence) throw new Error('A6: expected the no-login occurrence');
-    expect(
-      await getOccurrenceAssignmentRecordIds(world.orgId, noLoginOccurrence.id)
-    ).toEqual([noLoginRecordId]);
+    const noLoginOccurrence = expectDefined(noLoginState.occurrences[0], 'the no-login occurrence');
+    expect(await getOccurrenceAssignmentRecordIds(world.orgId, noLoginOccurrence.id)).toEqual([
+      noLoginRecordId,
+    ]);
 
     // Managers SEE the planned no-login person: the occurrence renders on the
     // manager calendar and the edit dialog carries the assignment visibly.
     const editDialog = await openOccurrenceEditDialogByDate(adminPage, noLoginTitle, noLoginDate);
-    await expect(editDialog.getByRole('combobox').filter({ hasText: '1 Mitarbeiter' })).toBeVisible(
-      { timeout: 15_000 }
-    );
-    await editDialog.getByRole('combobox').filter({ hasText: '1 Mitarbeiter' }).click();
-    await adminPage.getByPlaceholder(/Mitarbeiter suchen/).fill('Nora');
-    const noLoginOption = adminPage
-      .getByRole('listbox')
-      .getByRole("option")
-      .filter({ hasText: noLoginName });
+    await expect(employeeAssignmentPicker(editDialog, 1)).toBeVisible({
+      timeout: 15_000,
+    });
+    await employeeAssignmentPicker(editDialog, 1).click();
+    await planningEmployeeSearch(adminPage).fill('Nora');
+    const noLoginOption = adminPage.getByRole('listbox').getByRole('option').filter({ hasText: noLoginName });
     await expect(noLoginOption).toBeVisible({ timeout: 15_000 });
-    await expect(noLoginOption.getByText('Ohne App-Zugang')).toBeVisible();
-    await editDialog.getByRole('heading', { name: 'Geplanten Termin bearbeiten' }).click();
+    await expect(noAppAccessBadge(noLoginOption)).toBeVisible();
+    await occurrenceEditHeading(editDialog).click();
     await closePlanningDialogWithNamedControl(editDialog);
     await expect(editDialog).toHaveCount(0, { timeout: 15_000 });
 
-    // Field workers see EXACTLY their assigned occurrences: their own A6
-    // entry is visible, the no-login-only entry is not.
-    const ownDate = ownedBerlinDateAtOffset('a6-planung', pendingOffset);
+    // Field workers see EXACTLY their assigned occurrences: their own entry is
+    // visible, the no-login-only entry is not.
     await showPlanningMonth(employeePage, ownDate);
-    await expect(
-      occurrenceEventInCell(employeePage, ownDate, `A6 Kapazität ${world.runId}`)
-    ).toBeVisible({ timeout: 20_000 });
+    await expect(occurrenceInDateCell(employeePage, ownDate, ownTitle)).toBeVisible({
+      timeout: 20_000,
+    });
     await showPlanningMonth(employeePage, noLoginDate);
-    await expect(planningOccurrenceInDateCell(employeePage, noLoginDate, noLoginTitle)).toHaveCount(
-      0
-    );
-
-    // Planned occurrences never create actual work time: the organization-wide
-    // time-entry count is unchanged since before any A6 planning existed.
-    expect(await getOrganizationTimeEntryCount(world.orgId)).toBe(organizationTimeStart);
+    await expect(occurrenceInDateCell(employeePage, noLoginDate, noLoginTitle)).toHaveCount(0);
   });
 });

@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^(apply_patch|Edit|Write|Bash)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun scripts/guard-edits-during-verification.ts",
+            "timeout": 20,
+            "statusMessage": "Checking for a running verification"
+          }
+        ]
+      }
+    ]
+  }
+}

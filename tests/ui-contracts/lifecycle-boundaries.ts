@@ -1,8 +1,9 @@
-import type { WorkLifecycleSnapshot } from "@/lib/work-lifecycle/types";
+import type { WorkLifecycleSnapshot } from '@/lib/work-lifecycle/types';
+import type { FeedbackFixtureName } from './feedback-boundaries';
 
-type LifecycleActions = typeof import("@/lib/work-lifecycle/actions");
+type LifecycleActions = typeof import('@/lib/work-lifecycle/actions');
 
-export const ROUTE_REFRESH_EVENT = "ui-contract:route-refresh";
+export const ROUTE_REFRESH_EVENT = 'ui-contract:route-refresh';
 
 type LifecycleBoundaryState = {
   snapshot: WorkLifecycleSnapshot;
@@ -12,7 +13,30 @@ type LifecycleBoundaryState = {
 
 declare global {
   interface Window {
-    uiContractFixture: "default" | "lifecycle" | "personnel" | "own-personnel" | "calendar" | "options" | "list-navigation" | "calendar-board" | "calendar-day" | "calendar-month" | "organization" | "sidebar" | "clock" | "live-view" | "route-refresh" | "customer";
+    uiContractFixture:
+      | 'planning-options'
+      | 'presentation'
+      | 'default'
+      | 'dialog-pending'
+      | 'lifecycle'
+      | 'approvals'
+      | 'personnel'
+      | 'join-requests'
+      | 'own-personnel'
+      | 'calendar'
+      | 'options'
+      | 'list-navigation'
+      | 'document-search'
+      | 'calendar-board'
+      | 'calendar-day'
+      | 'calendar-month'
+      | 'organization'
+      | 'sidebar'
+      | 'clock'
+      | 'live-view'
+      | 'route-refresh'
+      | 'customer'
+      | FeedbackFixtureName;
     uiContractLifecycle: LifecycleBoundaryState;
   }
 }
@@ -22,9 +46,9 @@ export function initializeLifecycleBoundary(): void {
     rejectTransition: false,
     transitions: 0,
     snapshot: {
-      targetType: "job",
-      targetId: "contract-job",
-      executionState: "not_started",
+      targetType: 'job',
+      targetId: 'contract-job',
+      executionState: 'not_started',
       executionVersion: 0,
       isLegacy: false,
       isPlanned: true,
@@ -72,7 +96,7 @@ export async function getWorkLifecycleSnapshot(): Promise<{
   success: true;
   snapshot: WorkLifecycleSnapshot;
 }> {
-  window.uiContractServices.navigation.push("read-work-lifecycle");
+  window.uiContractServices.navigation.push('read-work-lifecycle');
   return {
     success: true,
     snapshot: structuredClone(window.uiContractLifecycle.snapshot),
@@ -80,17 +104,16 @@ export async function getWorkLifecycleSnapshot(): Promise<{
 }
 
 export async function transitionWorkExecution(
-  input: Parameters<LifecycleActions["transitionWorkExecution"]>[0],
-): ReturnType<LifecycleActions["transitionWorkExecution"]> {
+  input: Parameters<LifecycleActions['transitionWorkExecution']>[0],
+): ReturnType<LifecycleActions['transitionWorkExecution']> {
   const state = window.uiContractLifecycle;
-  if (state.rejectTransition)
-    return { success: false, error: "work_transition_not_authorized" };
+  if (state.rejectTransition) return { success: false, error: 'work_transition_not_authorized' };
   if (
     input.targetType !== state.snapshot.targetType ||
     input.targetId !== state.snapshot.targetId ||
     input.expectedVersion !== state.snapshot.executionVersion
   ) {
-    return { success: false, error: "work_transition_stale_version" };
+    return { success: false, error: 'work_transition_stale_version' };
   }
   state.transitions += 1;
   state.snapshot = {
@@ -102,17 +125,17 @@ export async function transitionWorkExecution(
   return {
     success: true,
     transition: {
-      event_id: "contract-transition",
+      event_id: 'contract-transition',
       execution_state: state.snapshot.executionState,
       execution_version: state.snapshot.executionVersion,
-      gate_fingerprint: "contract-gates",
+      gate_fingerprint: 'contract-gates',
       gate_snapshot: {},
     },
   };
 }
 
 async function unexpectedLifecycleAction(): Promise<never> {
-  throw new Error("Unexpected lifecycle operation in isolated UI contracts.");
+  throw new Error('Unexpected lifecycle operation in isolated UI contracts.');
 }
 
 export const clearProjectWorkExecutionOverride = unexpectedLifecycleAction;

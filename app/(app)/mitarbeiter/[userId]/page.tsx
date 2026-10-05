@@ -4,44 +4,39 @@ import { cookies } from 'next/headers';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
-import {
-  getEmployeeDocuments,
-} from '@/lib/documents/actions';
-import type { OrganizationDocument } from '@/lib/documents/types';
+import { getEmployeeDocuments } from '@/lib/documents/actions';
 import {
   getCachedMemberships,
   getCachedOrganizationSettings,
-  getCachedOrganizationUserPreferences,
   getCachedUser,
+  getOrganizationUserPreferencesForView,
 } from '@/lib/data/cached';
 import { getMemberDetail, getProfilesByIds, type OrgRole } from '@/lib/members/actions';
 import { getOrgMembersForUser } from '@/lib/members/queries';
 import { getPersonnelDetail, type PersonnelDetail } from '@/lib/personnel/actions';
 import { getJobsForMember } from '@/lib/jobs/actions';
 import { toProject, type ProjectWithDetails } from '@/lib/jobs/types';
-import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
+import type { OrgMemberOption } from '@/components/auftraege/shared/employee-multi-select';
 import { MitarbeiterDetailContent } from '@/components/mitarbeiter/mitarbeiter-detail-content';
 import { PersonnelRecordDetailContent } from '@/components/mitarbeiter/personnel-record-detail-content';
+import { RegionLoadError } from '@/components/shared/region-load-error';
 import { RouteRedirect } from '@/components/shared/route-redirect';
 import { getResponsibilitySettingsData } from '@/lib/responsibilities/server';
 import { getPersonnelQualificationSummary } from '@/lib/qualifications/actions';
 import { getPersonnelLifecycle } from '@/lib/personnel/lifecycle-actions';
+import { logError } from '@/lib/logging';
 import MitarbeiterDetailLoading from './loading';
 
-async function resolveActorNames(
-  detail: PersonnelDetail | null
-): Promise<Record<string, string>> {
+/** Names of the people in the personnel history; null when the read failed. */
+async function resolveActorNames(detail: PersonnelDetail | null): Promise<Record<string, string> | null> {
   if (!detail) return {};
   const actorIds = Array.from(
-    new Set(
-      detail.events
-        .map((event) => event.createdBy)
-        .filter((id): id is string => Boolean(id))
-    )
+    new Set(detail.events.map((event) => event.createdBy).filter((id): id is string => Boolean(id))),
   );
   const profiles = await getProfilesByIds(actorIds);
+  if (!profiles.success) return null;
   const names: Record<string, string> = {};
-  for (const [id, profile] of Object.entries(profiles)) {
+  for (const [id, profile] of Object.entries(profiles.profiles)) {
     const name = [profile.firstName, profile.lastName].filter(Boolean).join(' ');
     if (name) names[id] = name;
   }
@@ -52,26 +47,25 @@ interface MitarbeiterDetailPageProps {
   params: Promise<{ userId: string }>;
 }
 
-async function MitarbeiterDetailData({
-  targetUserId,
-}: {
-  targetUserId: string;
-}) {
-  const [{ data: { user } }, cookieStore] = await Promise.all([
-    getCachedUser(),
-    cookies(),
-  ]);
+async function MitarbeiterDetailData({ targetUserId }: { targetUserId: string }) {
+  const [
+    {
+      data: { user },
+    },
+    cookieStore,
+  ] = await Promise.all([getCachedUser(), cookies()]);
 
   if (!user) redirect('/login');
 
-  const activeOrgId = await resolveActiveOrgId(cookieStore, user.id);
+  const [activeOrgId, memberships] = await Promise.all([
+    resolveActiveOrgId(cookieStore, user.id),
+    getCachedMemberships(user.id),
+  ]);
   if (!activeOrgId) redirect('/mitarbeiter');
 
-  const memberships = await getCachedMemberships(user.id);
   const currentMembership = memberships.find((m) => m.orgId === activeOrgId);
   const currentUserRole = currentMembership?.role as OrgRole | undefined;
-  const isAdminOrManager =
-    currentUserRole === 'admin' || currentUserRole === 'buero';
+  const isAdminOrManager = currentUserRole === 'admin' || currentUserRole === 'buero';
 
   if (!isAdminOrManager) {
     redirect('/dashboard');
@@ -103,40 +97,46 @@ async function MitarbeiterDetailData({
       .select('*')
       .eq('organization_id', activeOrgId)
       .order('created_at', { ascending: false }),
-    admin
-      .from('jobs')
-      .select('id, project_id, status')
-      .eq('organization_id', activeOrgId),
+    admin.from('jobs').select('id, project_id, status').eq('organization_id', activeOrgId),
     getEmployeeDocuments(targetUserId),
     getCachedOrganizationSettings(activeOrgId),
-    getCachedOrganizationUserPreferences(activeOrgId, user.id),
+    getOrganizationUserPreferencesForView(activeOrgId, user.id),
     getResponsibilitySettingsData(),
     getPersonnelQualificationSummary(targetUserId),
   ]);
-  const qualificationSummary = qualificationSummaryResult.success
-    ? qualificationSummaryResult.data
-    : null;
+  const qualificationSummary = qualificationSummaryResult.success ? qualificationSummaryResult.data : null;
   if (!qualificationSummaryResult.success) {
-    console.error(
-      'Failed to load personnel qualification summary:',
-      qualificationSummaryResult.error
-    );
+    logError('Mitarbeiter detail: qualification summary read failed', qualificationSummaryResult.error);
   }
-  const lifecycleResult = personnelResult.success
-    ? await getPersonnelLifecycle(personnelResult.detail.record.id)
-    : null;
+  const personnelDetail = personnelResult.success ? personnelResult.detail : null;
+  // A missing record keeps the member-only view; a failed read must not look like one.
+  // getPersonnelDetail logs both failures with their cause.
+  const personnelLoadFailed =
+    !personnelResult.success &&
+    (personnelResult.error === 'load_failed' || personnelResult.error === 'unexpected_error');
+  // Both follow-up reads need only the personnel detail, so they run together.
+  const [lifecycleResult, actorNames] = await Promise.all([
+    personnelDetail ? getPersonnelLifecycle(personnelDetail.record.id) : null,
+    resolveActorNames(personnelDetail),
+  ]);
   if (lifecycleResult && !lifecycleResult.success) {
-    console.error('Failed to load personnel lifecycle:', lifecycleResult.error);
+    logError('Mitarbeiter detail: lifecycle read failed', lifecycleResult.error);
   }
 
   if (!memberResult.success) {
     // No active membership: personnel records without a login and exited
     // people get the personnel-only detail surface.
-    if (personnelResult.success) {
-      const actorNames = await resolveActorNames(personnelResult.detail);
+    if (personnelLoadFailed) {
+      return (
+        <RegionLoadError title="Der Mitarbeiter konnte nicht geladen werden">
+          Die Personalakte ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
+        </RegionLoadError>
+      );
+    }
+    if (personnelDetail) {
       return (
         <PersonnelRecordDetailContent
-          detail={personnelResult.detail}
+          detail={personnelDetail}
           actorNames={actorNames}
           canEdit={isAdminOrManager}
           qualificationSummary={qualificationSummary}
@@ -152,36 +152,48 @@ async function MitarbeiterDetailData({
     );
   }
 
-  const { member } = memberResult;
-  const personnelDetail = personnelResult.success
-    ? personnelResult.detail
-    : null;
-  const actorNames = await resolveActorNames(personnelDetail);
-  if (!personnelResult.success) {
-    console.error('Failed to load personnel detail:', personnelResult.error);
+  if (!membersResult.success) {
+    return (
+      <RegionLoadError title="Der Mitarbeiter konnte nicht geladen werden">
+        Die Mitarbeiterliste ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
+      </RegionLoadError>
+    );
   }
 
-  const jobsData = jobsResult.success
-    ? {
-        jobs: jobsResult.jobs,
-        projects: jobsResult.projects,
-        clientMap: jobsResult.clientMap,
-        jobAssignmentMap: jobsResult.jobAssignmentMap,
-      }
-    : { jobs: [], projects: [], clientMap: {}, jobAssignmentMap: {} };
+  const { member } = memberResult;
 
-  const members: OrgMemberOption[] = membersResult.map(
-    (m) => ({
-      userId: m.user_id,
-      firstName: m.first_name,
-      lastName: m.last_name,
-      role: m.role,
-    })
-  );
+  // The project choices and counts feed the jobs region, so any of the three
+  // reads failing shows that region as failed instead of an empty one.
+  if (allProjectsResult.error) {
+    logError('Mitarbeiter detail: project read failed', allProjectsResult.error);
+  }
+  if (allJobsResult.error) {
+    logError('Mitarbeiter detail: job count read failed', allJobsResult.error);
+  }
+  const projectGraphFailed = Boolean(allProjectsResult.error || allJobsResult.error);
+  const jobsData =
+    jobsResult.success && !projectGraphFailed
+      ? {
+          jobs: jobsResult.jobs,
+          projects: jobsResult.projects,
+          clientMap: jobsResult.clientMap,
+          jobAssignmentMap: jobsResult.jobAssignmentMap,
+        }
+      : null;
+
+  const members: OrgMemberOption[] = membersResult.members.map((m) => ({
+    userId: m.user_id,
+    firstName: m.first_name,
+    lastName: m.last_name,
+    role: m.role,
+  }));
 
   const clientLookup = new Map(clients.map((c) => [c.id, c]));
-  const projectJobCounts = new Map<string, { total: number; completed: number; inProgress: number; parked: number }>();
-  for (const j of allJobsResult.data ?? []) {
+  const projectJobCounts = new Map<
+    string,
+    { total: number; completed: number; inProgress: number; parked: number }
+  >();
+  for (const j of projectGraphFailed ? [] : (allJobsResult.data ?? [])) {
     if (!j.project_id) continue;
     const counts = projectJobCounts.get(j.project_id) ?? { total: 0, completed: 0, inProgress: 0, parked: 0 };
     counts.total++;
@@ -191,60 +203,54 @@ async function MitarbeiterDetailData({
     projectJobCounts.set(j.project_id, counts);
   }
 
-  const allProjects: ProjectWithDetails[] = (allProjectsResult.data ?? []).map((row) => {
-    const project = toProject(row);
-    const counts = projectJobCounts.get(project.id) ?? { total: 0, completed: 0, inProgress: 0, parked: 0 };
-    return {
-      ...project,
-      client: project.clientId ? clientLookup.get(project.clientId) ?? null : null,
-      jobCount: counts.total,
-      completedJobCount: counts.completed,
-      inProgressJobCount: counts.inProgress,
-      parkedJobCount: counts.parked,
-    };
-  });
+  // Without both reads the jobs region shows its failure, so the graph stays empty.
+  const allProjects: ProjectWithDetails[] = (projectGraphFailed ? [] : (allProjectsResult.data ?? [])).map(
+    (row) => {
+      const project = toProject(row);
+      const counts = projectJobCounts.get(project.id) ?? { total: 0, completed: 0, inProgress: 0, parked: 0 };
+      return {
+        ...project,
+        client: project.clientId ? (clientLookup.get(project.clientId) ?? null) : null,
+        jobCount: counts.total,
+        completedJobCount: counts.completed,
+        inProgressJobCount: counts.inProgress,
+        parkedJobCount: counts.parked,
+      };
+    },
+  );
 
   const employeeProjectGraph = Array.from(
-    new Map(
-      [...allProjects, ...jobsData.projects].map((project) => [project.id, project])
-    ).values()
+    new Map([...allProjects, ...(jobsData?.projects ?? [])].map((project) => [project.id, project])).values(),
   );
   const { visibleColumns } = organizationUserPreferences;
   if (!documentsResult.success) {
-    console.error('Failed to load employee documents:', documentsResult.error);
+    logError('Mitarbeiter detail: document read failed', documentsResult.error);
   }
-
-  const documents: OrganizationDocument[] = documentsResult.success
-    ? documentsResult.documents
-    : [];
 
   return (
     <MitarbeiterDetailContent
       member={member}
       personnel={personnelDetail}
+      personnelLoadFailed={personnelLoadFailed}
       actorNames={actorNames}
-      jobs={jobsData.jobs}
-      projects={jobsData.projects}
+      jobs={jobsData?.jobs ?? null}
+      projects={jobsData?.projects ?? []}
       projectGraphProjects={employeeProjectGraph}
-      clientMap={jobsData.clientMap}
-      jobAssignmentMap={jobsData.jobAssignmentMap}
+      clientMap={jobsData?.clientMap ?? {}}
+      jobAssignmentMap={jobsData?.jobAssignmentMap ?? {}}
       clients={clients}
       members={members}
       allProjects={allProjects}
       organizationId={activeOrgId}
       currentUserId={user.id}
-      currentUserRole={currentUserRole!}
+      currentUserRole={currentUserRole}
       isAdminOrManager={isAdminOrManager}
       visibleColumns={visibleColumns}
-      documents={documents}
+      documents={documentsResult.success ? documentsResult.documents : null}
       breakMode={organizationSettings.breakMode}
       autoBreakThresholdMinutes={organizationSettings.autoBreakThresholdMinutes}
       autoBreakDurationMinutes={organizationSettings.autoBreakDurationMinutes}
-      responsibilitySettings={
-        responsibilitySettingsResult.success
-          ? responsibilitySettingsResult.data
-          : null
-      }
+      responsibilitySettings={responsibilitySettingsResult.success ? responsibilitySettingsResult.data : null}
       qualificationSummary={qualificationSummary}
       lifecycle={lifecycleResult?.success ? lifecycleResult.data : null}
       canAdministerAccess={currentUserRole === 'admin'}
@@ -252,9 +258,7 @@ async function MitarbeiterDetailData({
   );
 }
 
-export default async function MitarbeiterDetailPage({
-  params,
-}: MitarbeiterDetailPageProps) {
+export default async function MitarbeiterDetailPage({ params }: MitarbeiterDetailPageProps) {
   const { userId: targetUserId } = await params;
 
   return <MitarbeiterDetailData targetUserId={targetUserId} />;

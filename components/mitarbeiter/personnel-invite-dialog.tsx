@@ -18,29 +18,20 @@ import {
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { describeFailure } from '@/lib/action-messages';
 import { sendPersonnelInvite } from '@/lib/personnel/actions';
 import type { InviteRole } from '@/lib/invites/actions';
+import { SEND_INVITE_MESSAGES } from './invite-messages';
 
-const ERROR_MESSAGES = {
-  invalid_email: 'Bitte gib eine gültige E-Mail-Adresse ein.',
-  already_member: 'Diese Person ist bereits Mitglied dieser Organisation.',
+/** `sendPersonnelInvite` returns the organization invite's codes and its own. */
+const PERSONNEL_INVITE_MESSAGES: Readonly<Record<string, string>> = {
+  ...SEND_INVITE_MESSAGES,
   already_has_login: 'Diese Personalakte ist bereits mit einem Zugang verknüpft.',
-  invite_already_pending:
-    'Es gibt bereits eine ausstehende Einladung für diese E-Mail-Adresse.',
-  email_send_failed: 'Fehler beim Senden der Einladungs-E-Mail.',
-  invite_connect_failed:
-    'Die Einladung wurde gesendet, konnte aber nicht mit der Personalakte verknüpft werden.',
-  not_authorized: 'Du bist nicht berechtigt, Einladungen zu senden.',
   record_not_found: 'Die Personalakte wurde nicht gefunden.',
-} satisfies Record<string, string>;
-const ERROR_MESSAGE_BY_CODE: Record<string, string> = ERROR_MESSAGES;
+};
+const PERSONNEL_INVITE_FALLBACK = 'Die Einladung konnte nicht gesendet werden.';
+const INVALID_EMAIL_MESSAGE = 'Bitte gib eine gültige E-Mail-Adresse ein.';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -54,10 +45,7 @@ interface PersonnelInviteDialogProps {
  * regular organization invite and remembers it on the record, so redeeming the
  * invite links the login instead of creating a duplicate record.
  */
-export function PersonnelInviteDialog({
-  recordId,
-  personName,
-}: PersonnelInviteDialogProps) {
+export function PersonnelInviteDialog({ recordId, personName }: PersonnelInviteDialogProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState('');
@@ -68,7 +56,6 @@ export function PersonnelInviteDialog({
   const [success, setSuccess] = useState(false);
 
   const handleOpenChange = (nextOpen: boolean) => {
-    if (isSending) return;
     setOpen(nextOpen);
     if (!nextOpen) {
       setEmail('');
@@ -85,14 +72,21 @@ export function PersonnelInviteDialog({
     setError(null);
 
     if (!EMAIL_REGEX.test(email)) {
-      setEmailError(ERROR_MESSAGES.invalid_email);
+      setEmailError(INVALID_EMAIL_MESSAGE);
       document.getElementById('personnel-invite-email')?.focus();
       return;
     }
 
     setIsSending(true);
-    const result = await sendPersonnelInvite(recordId, email, role);
-    setIsSending(false);
+    let result: Awaited<ReturnType<typeof sendPersonnelInvite>>;
+    try {
+      result = await sendPersonnelInvite(recordId, email, role);
+    } catch {
+      setError(PERSONNEL_INVITE_FALLBACK);
+      return;
+    } finally {
+      setIsSending(false);
+    }
 
     if (result.success) {
       setSuccess(true);
@@ -104,40 +98,28 @@ export function PersonnelInviteDialog({
         router.refresh();
       }, 1500);
     } else {
-      setError(
-        ERROR_MESSAGE_BY_CODE[result.error ?? ''] ??
-          'Die Einladung konnte nicht gesendet werden.'
-      );
+      setError(describeFailure(result.error ?? '', PERSONNEL_INVITE_MESSAGES, PERSONNEL_INVITE_FALLBACK));
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange} pending={isSending}>
       <DialogTrigger asChild>
         <Button size="sm" className="gap-1.5">
           <MailPlus className="size-4" />
           Zugang einladen
         </Button>
       </DialogTrigger>
-      <DialogContent
-        className="sm:max-w-[425px]"
-        onOpenAutoFocus={(e) => e.preventDefault()}
-      >
+      <DialogContent size="md" onOpenAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>Zugang für {personName} einladen</DialogTitle>
           <DialogDescription>
-            Nach Annahme der Einladung wird der neue Zugang automatisch mit
-            dieser Personalakte verknüpft.
+            Nach Annahme der Einladung wird der neue Zugang automatisch mit dieser Personalakte verknüpft.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} noValidate>
           <div className="grid gap-4 py-4">
-            <Field
-              label="E-Mail-Adresse"
-              htmlFor="personnel-invite-email"
-              required
-              error={emailError}
-            >
+            <Field label="E-Mail-Adresse" htmlFor="personnel-invite-email" required error={emailError}>
               <Input
                 type="text"
                 inputMode="email"
@@ -171,16 +153,16 @@ export function PersonnelInviteDialog({
               </Select>
             </Field>
             <ErrorText>{error}</ErrorText>
-            {success && (
-              <p className="text-sm text-success-text">
-                Einladung erfolgreich gesendet!
-              </p>
-            )}
+            {success && <p className="text-sm text-success-text">Einladung erfolgreich gesendet!</p>}
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={isSending || success}>
+            <Button
+              type="submit"
+              // eslint-disable-next-line ui/submit-disabled-only-while-pending -- the invitation is sent; the dialog confirms it and closes
+              disabled={isSending || success}
+            >
               {isSending && <Loader2 className="size-4 animate-spin" />}
-              {isSending ? 'Wird gesendet...' : 'Einladung senden'}
+              {isSending ? 'Wird gesendet…' : 'Einladung senden'}
             </Button>
           </DialogFooter>
         </form>

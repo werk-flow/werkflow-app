@@ -1,12 +1,9 @@
-"use client";
+'use client';
 
-import { useMemo, useState, type ReactElement } from "react";
-import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import type { ReactElement } from 'react';
+import { Loader2 } from 'lucide-react';
 
-import { ClientSelectWithCreate } from "@/components/auftraege/client-select-with-create";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -15,168 +12,27 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { ErrorText } from "@/components/ui/error-text";
-import { Field } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { SearchableSelect } from "@/components/ui/searchable-select";
+} from '@/components/ui/dialog';
+import { ErrorText } from '@/components/ui/error-text';
+import type {
+  ServiceCaseClientOption,
+  ServiceCaseDetail,
+  ServiceCaseJobOption,
+} from '@/lib/service-cases/types';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { useServerAction } from "@/hooks/use-server-action";
-import { createServiceCase, updateServiceCase } from "@/lib/service-cases/actions";
-import {
-  SERVICE_CASE_CHARGE_CONTEXTS,
-  SERVICE_CASE_CHARGE_CONTEXT_LABELS,
-  SERVICE_CASE_STATUSES,
-  SERVICE_CASE_STATUS_LABELS,
-  SERVICE_CASE_URGENCY_LABELS,
-  type ServiceCaseChargeContext,
-  type ServiceCaseClientOption,
-  type ServiceCaseDetail,
-  type ServiceCaseJobOption,
-  type ServiceCaseListItem,
-  type ServiceCaseStatus,
-} from "@/lib/service-cases/types";
+  ServiceCaseClosingFields,
+  ServiceCaseIntakeFields,
+  ServiceCaseSiteFields,
+  ServiceCaseTriageFields,
+} from './service-case-form-sections';
+import { useServiceCaseForm, type ServiceCaseCreateSubmission } from './use-service-case-form';
 
-/** The values a list can show for a record before the server confirms it. */
-export type ServiceCasePendingDraft = Pick<
-  ServiceCaseListItem,
-  "id" | "summary" | "urgency" | "status" | "clientName" | "siteName"
->;
-
-export type ServiceCaseCreateSubmission = {
-  draft: ServiceCasePendingDraft;
-  /** Never rejects; a failure carries the German message for the caller's banner. */
-  result: Promise<{ success: true } | { success: false; message: string }>;
-};
-
-type FormState = {
-  clientId: string;
-  siteId: string;
-  contactId: string;
-  originalStatement: string;
-  originalDetails: string;
-  summary: string;
-  urgency: "niedrig" | "normal" | "hoch" | "notfall";
-  status: ServiceCaseStatus;
-  chargeContext: ServiceCaseChargeContext;
-  accessInstructions: string;
-  triageNote: string;
-  resolutionNote: string;
-  jobId: string;
-  equipmentIds: string[];
-  reason: string;
-};
-
-const EMPTY_FORM: FormState = {
-  clientId: "",
-  siteId: "",
-  contactId: "",
-  originalStatement: "",
-  originalDetails: "",
-  summary: "",
-  urgency: "normal",
-  status: "new",
-  chargeContext: "unknown",
-  accessInstructions: "",
-  triageNote: "",
-  resolutionNote: "",
-  jobId: "",
-  equipmentIds: [],
-  reason: "",
-};
-
-const GENERIC_ERROR = "Der Servicefall konnte nicht gespeichert werden.";
-
-const ERRORS: Record<string, string> = {
-  invalid_input: "Bitte prüfe die Angaben.",
-  service_case_stale_version:
-    "Der Servicefall wurde inzwischen geändert. Bitte lade die Seite neu.",
-  service_case_job_mismatch:
-    "Der Auftrag gehört nicht zu diesem Kunden und Einsatzort.",
-  service_case_equipment_mismatch:
-    "Mindestens eine Anlage gehört nicht zu diesem Einsatzort.",
-  service_case_duplicate_relation_required:
-    "Verknüpfe zuerst den ursprünglichen Servicefall als Duplikat.",
-  service_case_request_mismatch:
-    "Die Anfrage passt nicht mehr zum zugeordneten Kunden oder Einsatzort.",
-};
-
-type RequiredField =
-  | "clientId"
-  | "siteId"
-  | "originalStatement"
-  | "summary"
-  | "resolutionNote"
-  | "reason";
-
-// Focus order on a failed submit; the ids double as the spec selectors.
-const REQUIRED_FIELD_IDS: Array<[RequiredField, string]> = [
-  ["clientId", "service-client"],
-  ["siteId", "service-site"],
-  ["originalStatement", "service-statement"],
-  ["summary", "service-summary"],
-  ["resolutionNote", "service-resolution"],
-  ["reason", "service-reason"],
-];
-
-// Mirrors the server schema (serviceCaseCreateSchema / serviceCaseUpdateSchema)
-// so the user sees the missing field instead of a generic "Bitte prüfe".
-function missingFields(
-  form: FormState,
-  isUpdate: boolean,
-  terminal: boolean,
-): Partial<Record<RequiredField, string>> {
-  const errors: Partial<Record<RequiredField, string>> = {};
-  if (!isUpdate) {
-    if (!form.clientId) errors.clientId = "Bitte wähle einen Kunden.";
-    if (!form.siteId) errors.siteId = "Bitte wähle einen Einsatzort.";
-    if (form.originalStatement.trim().length < 2) {
-      errors.originalStatement = "Bitte erfasse die Kundenaussage.";
-    }
-  }
-  if (form.summary.trim().length < 2) {
-    errors.summary = "Bitte gib eine Kurzbeschreibung ein.";
-  }
-  if (isUpdate && terminal && form.resolutionNote.trim().length < 3) {
-    errors.resolutionNote = "Für den Abschluss ist eine Begründung erforderlich.";
-  }
-  if (isUpdate && form.reason.trim().length < 3) {
-    errors.reason = "Bitte gib einen Grund mit mindestens 3 Zeichen an.";
-  }
-  return errors;
-}
-
-function fromDetail(item: ServiceCaseDetail): FormState {
-  return {
-    clientId: item.clientId,
-    siteId: item.siteId,
-    contactId: item.contactId ?? "",
-    originalStatement: item.originalStatement,
-    originalDetails: item.originalDetails ?? "",
-    summary: item.summary,
-    urgency: item.urgency,
-    status: item.status,
-    chargeContext: item.chargeContext,
-    accessInstructions: item.accessInstructions ?? "",
-    triageNote: item.triageNote ?? "",
-    resolutionNote: item.resolutionNote ?? "",
-    jobId: item.jobId ?? "",
-    equipmentIds: item.equipment.map((equipment) => equipment.id),
-    reason: "",
-  };
-}
+export type { ServiceCaseCreateSubmission, ServiceCasePendingDraft } from './use-service-case-form';
 
 export function ServiceCaseFormDialog({
   open,
   onOpenChange,
-  clients,
+  client: preloadedClient,
   initial,
   jobs = [],
   onSubmitted,
@@ -184,7 +40,8 @@ export function ServiceCaseFormDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  clients: ServiceCaseClientOption[];
+  /** The case's customer, already loaded by the detail page. */
+  client?: ServiceCaseClientOption | null;
   initial?: ServiceCaseDetail;
   jobs?: ServiceCaseJobOption[];
   /**
@@ -196,115 +53,25 @@ export function ServiceCaseFormDialog({
   /** Edit settled by the caller (a live-view refresh) instead of a route refresh. */
   onSaved?: () => void;
 }): ReactElement {
-  const router = useRouter();
-  const [form, setForm] = useState<FormState>(() =>
-    initial ? fromDetail(initial) : EMPTY_FORM,
-  );
-  const [error, setError] = useState<string | null>(null);
-  const [attempted, setAttempted] = useState(false);
-  function createInput(serviceCaseId: string) {
-    return {
-      serviceCaseId,
-      idempotencyKey: crypto.randomUUID(),
-      clientId: form.clientId,
-      siteId: form.siteId,
-      contactId: form.contactId || null,
-      originalStatement: form.originalStatement,
-      originalDetails: form.originalDetails,
-      summary: form.summary,
-      urgency: form.urgency,
-      chargeContext: form.chargeContext,
-      accessInstructions: form.accessInstructions,
-      triageNote: form.triageNote,
-      equipmentIds: form.equipmentIds,
-    };
-  }
-  const { run, isPending } = useServerAction(async () => {
-    const result = initial
-      ? await updateServiceCase({
-          serviceCaseId: initial.id,
-          expectedVersion: initial.version,
-          summary: form.summary,
-          urgency: form.urgency,
-          status: form.status,
-          chargeContext: form.chargeContext,
-          accessInstructions: form.accessInstructions,
-          triageNote: form.triageNote,
-          resolutionNote: form.resolutionNote,
-          jobId: form.jobId || null,
-          equipmentIds: form.equipmentIds,
-          reason: form.reason,
-          idempotencyKey: crypto.randomUUID(),
-        })
-      : await createServiceCase(createInput(crypto.randomUUID()));
-    if (!result.success) {
-      setError(ERRORS[result.error] ?? GENERIC_ERROR);
-      return;
-    }
-    onOpenChange(false);
-    if (!initial) {
-      router.push(`/service/faelle/${result.serviceCase.case_number}`);
-    } else if (onSaved) {
-      onSaved();
-    } else {
-      router.refresh();
-    }
+  const controller = useServiceCaseForm({
+    onOpenChange,
+    preloadedClient,
+    initial,
+    jobs,
+    onSubmitted,
+    onSaved,
   });
-  const client = clients.find((item) => item.id === form.clientId);
-  const site = client?.sites.find((item) => item.id === form.siteId);
-  const availableJobs = useMemo(
-    () => jobs.filter((job) => job.clientId === form.clientId && job.siteId === form.siteId),
-    [form.clientId, form.siteId, jobs],
-  );
-  const terminal = ["resolved", "closed_without_visit", "duplicate"].includes(
-    form.status,
-  );
-  const fieldErrors = attempted ? missingFields(form, Boolean(initial), terminal) : {};
-
-  function submit(): void {
-    setError(null);
-    setAttempted(true);
-    const errors = missingFields(form, Boolean(initial), terminal);
-    const firstInvalid = REQUIRED_FIELD_IDS.find(([key]) => errors[key]);
-    if (firstInvalid) {
-      document.getElementById(firstInvalid[1])?.focus();
-      return;
-    }
-    if (!initial && onSubmitted) {
-      const serviceCaseId = crypto.randomUUID();
-      onSubmitted({
-        draft: {
-          id: serviceCaseId,
-          summary: form.summary.trim(),
-          urgency: form.urgency,
-          status: "new",
-          clientName: client?.name ?? "",
-          siteName: site?.name ?? "",
-        },
-        result: createServiceCase(createInput(serviceCaseId)).then(
-          (created) =>
-            created.success
-              ? { success: true as const }
-              : { success: false as const, message: ERRORS[created.error] ?? GENERIC_ERROR },
-          () => ({ success: false as const, message: GENERIC_ERROR }),
-        ),
-      });
-      onOpenChange(false);
-      return;
-    }
-    void run();
-  }
+  const { isPending, submit } = controller;
+  const isUpdate = Boolean(initial);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+    <Dialog open={open} onOpenChange={onOpenChange} pending={isPending}>
+      <DialogContent size="2xl">
         <DialogHeader>
-          <DialogTitle>
-            {initial ? "Servicefall bearbeiten" : "Servicefall erfassen"}
-          </DialogTitle>
+          <DialogTitle>{initial ? 'Servicefall bearbeiten' : 'Servicefall erfassen'}</DialogTitle>
           <DialogDescription>
-            Erfasse die technische Nachfrage. Gewährleistung und Berechnung
-            bleiben bis zur späteren Prüfung ausdrücklich vorläufig.
+            Erfasse die technische Nachfrage. Gewährleistung und Berechnung bleiben bis zur späteren Prüfung
+            ausdrücklich vorläufig.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -318,307 +85,15 @@ export function ServiceCaseFormDialog({
         >
           <DialogBody>
             <div className="grid gap-4 py-2 sm:grid-cols-2">
-              {!initial && (
-                <>
-                  <Field
-                    label="Kunde"
-                    htmlFor="service-client"
-                    required
-                    error={fieldErrors.clientId}
-                  >
-                    <ClientSelectWithCreate
-                      clients={clients}
-                      value={form.clientId}
-                      onValueChange={(clientId) =>
-                        setForm((value) => ({
-                          ...value,
-                          clientId,
-                          siteId: "",
-                          contactId: "",
-                          equipmentIds: [],
-                        }))
-                      }
-                    />
-                  </Field>
-                  <Field
-                    label="Einsatzort"
-                    htmlFor="service-site"
-                    required
-                    error={fieldErrors.siteId}
-                  >
-                    <SearchableSelect
-                      value={form.siteId}
-                      onChange={(siteId) =>
-                        setForm((value) => ({ ...value, siteId, equipmentIds: [] }))
-                      }
-                      options={(client?.sites ?? []).map((item) => ({
-                        value: item.id,
-                        label: item.name,
-                        description: item.address,
-                      }))}
-                      disabled={!client}
-                      placeholder="Einsatzort wählen"
-                      searchPlaceholder="Einsatzort suchen…"
-                      emptyMessage="Kein Einsatzort gefunden"
-                    />
-                  </Field>
-                  <Field
-                    label="Ansprechpartner (optional)"
-                    htmlFor="service-contact"
-                    className="sm:col-span-2"
-                  >
-                    <SearchableSelect
-                      value={form.contactId}
-                      onChange={(contactId) =>
-                        setForm((value) => ({ ...value, contactId }))
-                      }
-                      options={(client?.contacts ?? []).map((item) => ({
-                        value: item.id,
-                        label: item.name,
-                      }))}
-                      disabled={!client}
-                      placeholder="Kein Ansprechpartner"
-                      searchPlaceholder="Ansprechpartner suchen…"
-                      emptyMessage="Kein Ansprechpartner gefunden"
-                      allowNone
-                      noneLabel="Kein Ansprechpartner"
-                    />
-                  </Field>
-                  <Field
-                    label="Kundenaussage"
-                    htmlFor="service-statement"
-                    required
-                    error={fieldErrors.originalStatement}
-                    className="sm:col-span-2"
-                  >
-                    <Textarea
-                      value={form.originalStatement}
-                      onChange={(event) =>
-                        setForm((value) => ({
-                          ...value,
-                          originalStatement: event.target.value,
-                        }))
-                      }
-                      placeholder="Möglichst nah an der ursprünglichen Aussage erfassen"
-                    />
-                  </Field>
-                </>
-              )}
-              <Field
-                label="Kurzbeschreibung"
-                htmlFor="service-summary"
-                required
-                error={fieldErrors.summary}
-                className="sm:col-span-2"
-              >
-                <Input
-                  value={form.summary}
-                  onChange={(event) =>
-                    setForm((value) => ({ ...value, summary: event.target.value }))
-                  }
-                />
-              </Field>
-              <Field label="Dringlichkeit" htmlFor="service-urgency">
-                <Select
-                  value={form.urgency}
-                  onValueChange={(urgency) =>
-                    setForm((value) => ({
-                      ...value,
-                      urgency: urgency as FormState["urgency"],
-                    }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(SERVICE_CASE_URGENCY_LABELS).map(
-                      ([value, label]) => (
-                        <SelectItem key={value} value={value}>
-                          {label}
-                        </SelectItem>
-                      ),
-                    )}
-                  </SelectContent>
-                </Select>
-              </Field>
-              {initial && (
-                <Field label="Status" htmlFor="service-status">
-                  <Select
-                    value={form.status}
-                    onValueChange={(status) =>
-                      setForm((value) => ({
-                        ...value,
-                        status: status as ServiceCaseStatus,
-                      }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {SERVICE_CASE_STATUSES.map((value) => (
-                        <SelectItem key={value} value={value}>
-                          {SERVICE_CASE_STATUS_LABELS[value]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-              )}
-              <Field
-                label="Vorläufiger Kostenkontext"
-                htmlFor="service-charge"
-                className="sm:col-span-2"
-              >
-                <Select
-                  value={form.chargeContext}
-                  onValueChange={(chargeContext) =>
-                    setForm((value) => ({
-                      ...value,
-                      chargeContext: chargeContext as ServiceCaseChargeContext,
-                    }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SERVICE_CASE_CHARGE_CONTEXTS.map((value) => (
-                      <SelectItem key={value} value={value}>
-                        {SERVICE_CASE_CHARGE_CONTEXT_LABELS[value]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-              {initial && (
-                <Field
-                  label="Operativer Auftrag (optional)"
-                  htmlFor="service-job"
-                  className="sm:col-span-2"
-                >
-                  <SearchableSelect
-                    value={form.jobId}
-                    onChange={(jobId) => setForm((value) => ({ ...value, jobId }))}
-                    options={availableJobs.map((job) => ({
-                      value: job.id,
-                      label: `${job.jobNumber ? `${job.jobNumber} · ` : ""}${job.title}`,
-                    }))}
-                    placeholder="Noch kein Auftrag"
-                    searchPlaceholder="Auftrag suchen…"
-                    emptyMessage="Kein passender Auftrag gefunden"
-                    allowNone
-                    noneLabel="Noch kein Auftrag"
-                  />
-                </Field>
-              )}
-              <Field
-                label="Zugang und Hinweise vor Ort"
-                htmlFor="service-access"
-                className="sm:col-span-2"
-              >
-                <Textarea
-                  value={form.accessInstructions}
-                  onChange={(event) =>
-                    setForm((value) => ({
-                      ...value,
-                      accessInstructions: event.target.value,
-                    }))
-                  }
-                  placeholder="Zum Beispiel Zugang, Ansprechpartner oder Sicherheitsbesonderheiten"
-                />
-              </Field>
-              <Field
-                label="Interne Einschätzung"
-                htmlFor="service-triage"
-                className="sm:col-span-2"
-              >
-                <Textarea
-                  value={form.triageNote}
-                  onChange={(event) =>
-                    setForm((value) => ({ ...value, triageNote: event.target.value }))
-                  }
-                />
-              </Field>
-              {site?.equipment.length ? (
-                <fieldset className="space-y-2 sm:col-span-2">
-                  <legend className="text-sm font-medium">Betroffene Anlagen</legend>
-                  <div className="grid gap-2 rounded-md border p-3 sm:grid-cols-2">
-                    {site.equipment.map((equipment) => (
-                      <label
-                        key={equipment.id}
-                        className="flex items-start gap-2 text-sm"
-                      >
-                        <Checkbox
-                          checked={form.equipmentIds.includes(equipment.id)}
-                          onCheckedChange={(checked) =>
-                            setForm((value) => ({
-                              ...value,
-                              equipmentIds: checked
-                                ? [...value.equipmentIds, equipment.id]
-                                : value.equipmentIds.filter(
-                                    (id) => id !== equipment.id,
-                                  ),
-                            }))
-                          }
-                        />
-                        <span>
-                          <span className="block font-medium">{equipment.name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {equipment.equipmentNumber}
-                          </span>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
-              ) : null}
-              {terminal && (
-                <Field
-                  label="Abschlussbegründung"
-                  htmlFor="service-resolution"
-                  required
-                  error={fieldErrors.resolutionNote}
-                  className="sm:col-span-2"
-                >
-                  <Textarea
-                    value={form.resolutionNote}
-                    onChange={(event) =>
-                      setForm((value) => ({
-                        ...value,
-                        resolutionNote: event.target.value,
-                      }))
-                    }
-                  />
-                </Field>
-              )}
-              {initial && (
-                <Field
-                  label="Grund der Änderung"
-                  htmlFor="service-reason"
-                  required
-                  error={fieldErrors.reason}
-                  className="sm:col-span-2"
-                >
-                  <Input
-                    value={form.reason}
-                    onChange={(event) =>
-                      setForm((value) => ({ ...value, reason: event.target.value }))
-                    }
-                  />
-                </Field>
-              )}
+              {!initial && <ServiceCaseIntakeFields controller={controller} />}
+              <ServiceCaseTriageFields controller={controller} isUpdate={isUpdate} />
+              <ServiceCaseSiteFields controller={controller} />
+              <ServiceCaseClosingFields controller={controller} isUpdate={isUpdate} />
             </div>
-            <ErrorText>{error}</ErrorText>
+            <ErrorText>{controller.error}</ErrorText>
           </DialogBody>
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={isPending}
-            >
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
               Abbrechen
             </Button>
             <Button type="submit" disabled={isPending}>

@@ -28,17 +28,22 @@ export async function waitForFixturePublication(options: {
         settled = true;
         resolve();
       };
-      timer = setTimeout(() => failed(new Error("Fixture Realtime publication did not complete before its setup deadline.")), options.timeoutMs ?? 60_000);
+      timer = setTimeout(
+        () => failed(new Error('Fixture Realtime publication did not complete before its setup deadline.')),
+        options.timeoutMs ?? 60_000,
+      );
       dispose = options.subscribe({
         ready: () => {
           if (settled || started) return;
           started = true;
-          void Promise.resolve().then(async () => {
-            if (settled) return;
-            await options.write();
-            committed = true;
-            finish();
-          }).catch(failed);
+          void Promise.resolve()
+            .then(async () => {
+              if (settled) return;
+              await options.write();
+              committed = true;
+              finish();
+            })
+            .catch(failed);
         },
         marker: () => {
           if (!started) return;

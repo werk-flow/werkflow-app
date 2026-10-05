@@ -1,34 +1,72 @@
-import { resolve } from 'node:path';
-
-import { expect, test } from "../support/fixtures";
+import { WORK_EXECUTION_LABELS } from '../../../lib/work-lifecycle/types';
+import { expect, test } from '../support/fixtures';
 import { getDispatchState } from '../../golden/support/db/dispatch';
 import { getInventoryLedgerState } from '../../golden/support/db/inventory';
-import { getAppliedWorkTemplateState, getWorkArtifactState, getWorkLifecycleState } from '../../golden/support/db/work';
+import { getAppliedWorkTemplateState, getWorkLifecycleState } from '../../golden/support/db/work';
 import { createPlannedCalendarEntry } from '../../golden/support/steps/calendar';
-import { addContactOnCustomerDetail, addSiteOnCustomerDetail, createCustomer, openCustomerDetail } from '../../golden/support/steps/customers';
-import { acknowledgeDispatchOnJobPage, challengeDispatchOnJobPage, dispatchParkedJobFromParkplatz, openParkplatzPanel } from '../../golden/support/steps/dispatch';
-import { uploadDocumentOnJobPage } from '../../golden/support/steps/documents';
-import { planMaterialOnJobPage, returnMaterialOnJobPage, takeMaterialOnJobPage } from '../../golden/support/steps/inventory';
-import { visibleText } from '../../golden/support/steps/shared';
-import { changeTimeOnWorkPack, createAndPublishWorkTemplate, createJob, createProject, openFieldWorkPack, parkJobOnJobPage, removeJobAssignment, reportOwnBlockerOnJobPage, resolveOwnBlockerOnJobPage, setInstructionCompletionOnJobPage, transitionWorkOnJobPage } from '../../golden/support/steps/work';
+import {
+  addContactOnCustomerDetail,
+  addSiteOnCustomerDetail,
+  createCustomer,
+  openCustomerDetail,
+} from '../../golden/support/steps/customers';
+import {
+  acknowledgeDispatchOnJobPage,
+  challengeDispatchOnJobPage,
+  DISPATCH_ACKNOWLEDGE_ACTION,
+  dispatchParkedJobFromParkplatz,
+  openParkplatzPanel,
+} from '../../golden/support/steps/dispatch';
+import {
+  planMaterialOnJobPage,
+  returnMaterialOnJobPage,
+  takeMaterialOnJobPage,
+} from '../../golden/support/steps/inventory';
+import { SHARED_COPY, testData, visibleText } from '../../golden/support/steps/shared';
+import {
+  changeTimeOnWorkPack,
+  createAndPublishWorkTemplate,
+  createJob,
+  createProject,
+  CUSTOMER_PACKAGE_TERM,
+  FIELD_PACK_SECTION_ORDER,
+  fieldPackAbsentTerms,
+  fieldPackButton,
+  fieldPackCallLink,
+  fieldPackLink,
+  fieldPackMoreJobDetails,
+  fieldPackNavigationLink,
+  fieldPrimaryNextAction,
+  instructionPrerequisite,
+  lifecycleSavedBanner,
+  openFieldWorkPack,
+  parkJobOnJobPage,
+  removeJobAssignment,
+  reportOwnBlockerOnJobPage,
+  resolveOwnBlockerOnJobPage,
+  setInstructionCompletionOnJobPage,
+  transitionWork,
+} from '../../golden/support/steps/work';
 import { ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
-import { artifactsDirectory } from '../../golden/support/world';
-import { closeWorkArtifactDialog, workArtifactsSection } from '../../golden/support/spec-helpers/work-artifact-dialog';
+import {
+  closeWorkArtifactDialog,
+  newWorkArtifactButton,
+  workArtifactAction,
+  workArtifactDialog,
+  workArtifactField,
+  workArtifactVersion,
+} from '../../golden/support/spec-helpers/work-artifact-dialog';
+import { expectDefined } from '../../../lib/testing/spec-support/expect-defined';
 import { representativeFieldWorkPackState } from '../support/p1-16-steps';
 
 function dateDigits(dateIso: string): string {
   return dateIso.split('-').reverse().join('');
 }
 
-const DATES = [
-  ownedBerlinDateAtOffset('p1-16', 85),
-  ownedBerlinDateAtOffset('p1-16', 86),
-  ownedBerlinDateAtOffset('p1-16', 87),
-  ownedBerlinDateAtOffset('p1-16', 88),
-  ownedBerlinDateAtOffset('p1-16', 89),
-] as const;
 const FIELD_VIEWPORT = { width: 390, height: 844 } as const;
 
+// The standalone journey (first viewport, field actions, terminal read-only
+// pack, office view) lives in tests/golden/p1-16.spec.ts.
 test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2', () => {
   test('role-aware standalone and project-child packs expose only practical field context', async ({
     adminPage,
@@ -52,6 +90,17 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     const childJobNumber = `${projectNumber}-1`;
     const siblingJobNumber = `${projectNumber}-2`;
     const unassignedJobNumber = `AUF-${world.runId}-P116-UNASSIGNED`;
+    const siblingJobTitle = `P116 Vertraulicher Geschwisterauftrag ${world.runId}`;
+    const visitDate = ownedBerlinDateAtOffset('p1-16', 85);
+    const emailDomain = testData`@example.test`;
+    const contactNote = testData`Interne Kontaktnotiz für das Büro.`;
+    const contactNoteStart = testData`Interne Kontakt`;
+    const siteStreet = testData`Feldstraße 16`;
+    const siteAddress = testData`Feldstraße 16, 10115 Berlin`;
+    const accessNotes = testData`Schlüssel an der Pforte abholen.`;
+    const siteNote = testData`Interne Standortbewertung für die Einsatzleitung.`;
+    const siteNoteStart = testData`Interne Standort`;
+    const jobDescription = testData`Störung prüfen und Ergebnis dokumentieren.`;
 
     await createCustomer(adminPage, customerName);
     await openCustomerDetail(adminPage, customerName);
@@ -59,17 +108,17 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
       name: contactName,
       role: 'Objektleitung',
       phone: '+49 30 5550160',
-      email: `office-only-${world.runId}@example.test`,
-      notes: 'Interne Kontaktnotiz für das Büro.',
+      email: `office-only-${world.runId}${emailDomain}`,
+      notes: contactNote,
       isPrimary: true,
     });
     await addSiteOnCustomerDetail(adminPage, {
       name: siteName,
-      street: 'Feldstraße 16',
+      street: siteStreet,
       postalCode: '10115',
       city: 'Berlin',
-      accessNotes: 'Schlüssel an der Pforte abholen.',
-      notes: 'Interne Standortbewertung für die Einsatzleitung.',
+      accessNotes,
+      notes: siteNote,
       isPrimary: true,
     });
     await createProject(adminPage, {
@@ -82,41 +131,35 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     await createJob(adminPage, {
       jobNumber: childJobNumber,
       title: `P116 Kindauftrag ${fixtureTag}`,
-      description: 'Störung prüfen und Ergebnis dokumentieren.',
+      description: jobDescription,
       projectNumber,
       clientName: customerName,
       siteName,
       contactName,
       assignEmployeeName: employeeName,
-      plannedDateDigits: dateDigits(DATES[0]),
+      plannedDateDigits: dateDigits(visitDate),
     });
     await createJob(adminPage, {
       jobNumber: siblingJobNumber,
-      title: `P116 Vertraulicher Geschwisterauftrag ${world.runId}`,
+      title: siblingJobTitle,
       projectNumber,
       clientName: customerName,
     });
     await createJob(adminPage, {
       jobNumber: unassignedJobNumber,
       title: `P116 Nicht zugewiesen ${world.runId}`,
-      plannedDateDigits: dateDigits(DATES[0]),
+      plannedDateDigits: dateDigits(visitDate),
     });
 
     const officeDraftTitle = `P116 interner Büroentwurf ${world.runId}`;
     await bueroPage.goto(`/auftraege/projekt/${projectNumber}/${childJobNumber}`);
-    await workArtifactsSection(bueroPage)
-      .getByRole('button', { name: 'Neu' })
-      .click();
-    const officeDraftDialog = bueroPage.getByRole('dialog');
-    await officeDraftDialog.getByLabel('Titel').fill(officeDraftTitle);
-    await officeDraftDialog
-      .getByLabel('Zusammenfassung')
-      .fill('Interner Entwurf für die Einsatzleitung.');
-    await officeDraftDialog
-      .getByLabel('Ausgeführte Arbeiten')
-      .fill('Noch nicht für das Feld freigegeben.');
-    await officeDraftDialog.getByRole('button', { name: 'Als Entwurf speichern' }).click();
-    await expect(officeDraftDialog.getByText(/Version 1/)).toBeVisible({
+    await newWorkArtifactButton(bueroPage).click();
+    const officeDraftDialog = workArtifactDialog(bueroPage);
+    await workArtifactField(officeDraftDialog, 'title').fill(officeDraftTitle);
+    await workArtifactField(officeDraftDialog, 'summary').fill('Interner Entwurf für die Einsatzleitung.');
+    await workArtifactField(officeDraftDialog, 'performedWork').fill('Noch nicht für das Feld freigegeben.');
+    await workArtifactAction(officeDraftDialog, 'saveDraft').click();
+    await expect(workArtifactVersion(officeDraftDialog, 1)).toBeVisible({
       timeout: 20_000,
     });
     await closeWorkArtifactDialog(officeDraftDialog);
@@ -126,63 +169,47 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     });
     await employeePage.setViewportSize(FIELD_VIEWPORT);
     const pack = await openFieldWorkPack(employeePage, childJobNumber, projectNumber);
-    await expect(employeePage.getByRole('navigation', { name: 'Pfad' })).toContainText(
-      projectTitle
+    await expect(employeePage.getByRole('navigation', { name: SHARED_COPY.region.breadcrumb })).toContainText(
+      projectTitle,
     );
     await expect(pack).toContainText(customerName);
     await expect(pack).toContainText(contactName);
     await expect(pack).toContainText(siteName);
-    await expect(pack).toContainText('Feldstraße 16, 10115 Berlin');
-    await expect(pack).toContainText('Schlüssel an der Pforte abholen.');
-    await expect(pack).toContainText('Störung prüfen und Ergebnis dokumentieren.');
-    await expect(pack).not.toContainText(`P116 Vertraulicher Geschwisterauftrag ${world.runId}`);
-    await expect(pack).not.toContainText('@example.test');
-    await expect(pack).not.toContainText('Interne Kontakt');
-    await expect(pack).not.toContainText('Interne Standort');
+    await expect(pack).toContainText(siteAddress);
+    await expect(pack).toContainText(accessNotes);
+    await expect(pack).toContainText(jobDescription);
+    await expect(pack).not.toContainText(siblingJobTitle);
+    await expect(pack).not.toContainText(emailDomain);
+    await expect(pack).not.toContainText(contactNoteStart);
+    await expect(pack).not.toContainText(siteNoteStart);
     await expect(pack).not.toContainText(officeDraftTitle);
-    await expect(pack.getByRole('button', { name: 'Zuweisen', exact: true })).toHaveCount(0);
-    await expect(pack.getByText(/Abrechenbar|Einkaufspreis|Verkaufspreis|Marge/)).toHaveCount(0);
-    await expect(pack.getByRole('link', { name: `${contactName} anrufen` })).toHaveAttribute(
-      'href',
-      'tel:+49305550160'
+    await expect(pack.getByRole('button', { name: SHARED_COPY.assignment.assign, exact: true })).toHaveCount(
+      0,
     );
-    await expect(pack.getByRole('link', { name: /Navigation zu Feldstraße 16/ })).toHaveAttribute(
-      'href',
-      /^geo:/
-    );
-    await expect(pack.getByRole('button', { name: 'Adresse kopieren' })).toBeVisible();
+    await expect(fieldPackAbsentTerms(pack, 'prices')).toHaveCount(0);
+    await expect(fieldPackCallLink(pack, contactName)).toHaveAttribute('href', 'tel:+49305550160');
+    await expect(fieldPackNavigationLink(pack, siteStreet)).toHaveAttribute('href', /^geo:/);
+    await expect(fieldPackButton(pack, 'copyAddress')).toBeVisible();
 
     const headingOrder = await pack.locator('h2, h3').allTextContents();
-    for (const heading of [
-      'Vor dem Einsatz',
-      'Arbeitsstand',
-      'Arbeitsanweisungen & Notizen',
-      'Arbeitsnachweise',
-    ]) {
+    for (const heading of FIELD_PACK_SECTION_ORDER) {
       expect(headingOrder).toContain(heading);
     }
-    expect(headingOrder.indexOf('Vor dem Einsatz')).toBeLessThan(
-      headingOrder.indexOf('Arbeitsstand')
-    );
-    expect(headingOrder.indexOf('Arbeitsstand')).toBeLessThan(
-      headingOrder.indexOf('Arbeitsanweisungen & Notizen')
-    );
-    expect(headingOrder.indexOf('Arbeitsanweisungen & Notizen')).toBeLessThan(
-      headingOrder.indexOf('Arbeitsnachweise')
-    );
-    const primaryAction = pack.getByTestId('field-primary-next-action');
+    const [beforeVisit, lifecycleHeading, instructions, artifacts] = FIELD_PACK_SECTION_ORDER;
+    expect(headingOrder.indexOf(beforeVisit)).toBeLessThan(headingOrder.indexOf(lifecycleHeading));
+    expect(headingOrder.indexOf(lifecycleHeading)).toBeLessThan(headingOrder.indexOf(instructions));
+    expect(headingOrder.indexOf(instructions)).toBeLessThan(headingOrder.indexOf(artifacts));
+    const primaryAction = fieldPrimaryNextAction(pack);
     await expect(primaryAction).toHaveCount(1);
-    const primaryBox = await primaryAction.boundingBox();
-    expect(primaryBox).not.toBeNull();
-    expect(primaryBox!.y + primaryBox!.height).toBeLessThanOrEqual(FIELD_VIEWPORT.height);
+    const primaryBox = expectDefined(await primaryAction.boundingBox(), 'the primary action box');
+    expect(primaryBox.y + primaryBox.height).toBeLessThanOrEqual(FIELD_VIEWPORT.height);
     for (const action of [
-      pack.getByRole('link', { name: `${contactName} anrufen` }),
-      pack.getByRole('link', { name: /Navigation zu Feldstraße 16/ }),
+      fieldPackCallLink(pack, contactName),
+      fieldPackNavigationLink(pack, siteStreet),
       primaryAction,
     ]) {
-      const box = await action.boundingBox();
-      expect(box).not.toBeNull();
-      expect(box!.height).toBeGreaterThanOrEqual(44);
+      const box = expectDefined(await action.boundingBox(), 'a field action box');
+      expect(box.height).toBeGreaterThanOrEqual(44);
     }
 
     const stateAfterOpen = await getAppliedWorkTemplateState(world.orgId, {
@@ -192,10 +219,12 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
 
     await adminPage.goto(`/auftraege/projekt/${projectNumber}/${childJobNumber}`);
     await expect(adminPage.getByTestId('field-work-pack')).toHaveCount(0);
-    await expect(adminPage.getByRole('button', { name: 'Zuweisen', exact: true })).toBeVisible();
+    await expect(
+      adminPage.getByRole('button', { name: SHARED_COPY.assignment.assign, exact: true }),
+    ).toBeVisible();
     await bueroPage.goto(`/auftraege/projekt/${projectNumber}/${childJobNumber}`);
     await expect(bueroPage.getByTestId('field-work-pack')).toHaveCount(0);
-    await expect(bueroPage.getByRole('heading', { name: 'Details' })).toBeVisible();
+    await expect(bueroPage.getByRole('heading', { name: SHARED_COPY.region.details })).toBeVisible();
 
     await employeePage.goto(`/auftraege/${unassignedJobNumber}`);
     await employeePage.waitForURL(/\/auftraege\/?$/, { timeout: 20_000 });
@@ -218,6 +247,7 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     const challengeNumber = `AUF-${world.runId}-P116-DISPATCH-QUESTION`;
     const acknowledgeTitle = `P116 Einsatzbestätigung ${world.runId}`;
     const challengeTitle = `P116 Einsatzrückfrage ${world.runId}`;
+    const visitDate = ownedBerlinDateAtOffset('p1-16', 86);
     for (const job of [
       { number: acknowledgeNumber, title: acknowledgeTitle },
       { number: challengeNumber, title: challengeTitle },
@@ -226,7 +256,7 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
         jobNumber: job.number,
         title: job.title,
         assignEmployeeName: employeeName,
-        plannedDateDigits: dateDigits(DATES[1]),
+        plannedDateDigits: dateDigits(visitDate),
       });
     }
     await parkJobOnJobPage(
@@ -234,20 +264,18 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
       acknowledgeNumber,
       'Einsatz wird bis zur Disposition bereitgehalten.',
       world.users.admin.firstName,
-      DATES[1]
+      visitDate,
     );
     await parkJobOnJobPage(
       adminPage,
       challengeNumber,
       'Einsatz wird bis zur Disposition bereitgehalten.',
       world.users.admin.firstName,
-      DATES[1]
+      visitDate,
     );
     const pack = await openFieldWorkPack(employeePage, acknowledgeNumber);
-    await expect(pack.getByTestId('field-primary-next-action')).toHaveCount(1);
-    await expect(pack.getByTestId('field-primary-next-action')).not.toHaveText(
-      'Einsatz bestätigen'
-    );
+    await expect(fieldPrimaryNextAction(pack)).toHaveCount(1);
+    await expect(fieldPrimaryNextAction(pack)).not.toHaveText(DISPATCH_ACKNOWLEDGE_ACTION);
     await openParkplatzPanel(adminPage);
     await dispatchParkedJobFromParkplatz(adminPage, {
       jobTitle: acknowledgeTitle,
@@ -255,10 +283,10 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     });
     await employeePage.bringToFront();
     await employeePage.evaluate(() => window.dispatchEvent(new Event('focus')));
-    await expect(pack.getByTestId('field-primary-next-action')).toHaveText('Einsatz bestätigen', {
+    await expect(fieldPrimaryNextAction(pack)).toHaveText(DISPATCH_ACKNOWLEDGE_ACTION, {
       timeout: 30_000,
     });
-    await expect(pack.getByTestId('field-primary-next-action')).toHaveCount(1);
+    await expect(fieldPrimaryNextAction(pack)).toHaveCount(1);
     await adminPage.bringToFront();
     await dispatchParkedJobFromParkplatz(adminPage, {
       jobTitle: challengeTitle,
@@ -271,7 +299,7 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
       await createPlannedCalendarEntry(adminPage, {
         kind: 'job_visit',
         jobSearch: job.number,
-        date: DATES[1],
+        date: visitDate,
         time: '06:00',
         employeeNames: [employeeName],
         overrideReason: 'P1-16 reservierter Prüftermin.',
@@ -282,11 +310,11 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
       jobNumber: acknowledgeNumber,
     });
     await employeePage.bringToFront();
-    await expect(representativeFieldWorkPackState(pack, 'Nicht bewertet')).toBeVisible();
+    await expect(representativeFieldWorkPackState(pack, 'unknown')).toBeVisible();
     await acknowledgeDispatchOnJobPage(employeePage, acknowledgeNumber);
     const acknowledged = await getDispatchState(world.orgId, acknowledgeNumber);
     expect(
-      acknowledged.dispatches[0]?.acknowledgements.filter((entry) => entry.state === 'acknowledged')
+      acknowledged.dispatches[0]?.acknowledgements.filter((entry) => entry.state === 'acknowledged'),
     ).toHaveLength(1);
     const lifecycleAfter = await getWorkLifecycleState(world.orgId, {
       jobNumber: acknowledgeNumber,
@@ -294,25 +322,25 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     expect(lifecycleAfter.entity).toEqual(lifecycleBefore.entity);
     expect(lifecycleAfter.executionEvents).toEqual(lifecycleBefore.executionEvents);
 
-    const challengeReason = 'Zugang ist zum geplanten Zeitpunkt noch nicht bestätigt.';
+    const challengeReason = testData`Zugang ist zum geplanten Zeitpunkt noch nicht bestätigt.`;
     await challengeDispatchOnJobPage(employeePage, challengeNumber, challengeReason);
     const challenged = await getDispatchState(world.orgId, challengeNumber);
     expect(
-      challenged.dispatches[0]?.acknowledgements.filter((entry) => entry.state === 'challenged')
+      challenged.dispatches[0]?.acknowledgements.filter((entry) => entry.state === 'challenged'),
     ).toHaveLength(1);
     await employeePage.reload();
     await expect(visibleText(employeePage, challengeReason)).toBeVisible();
   });
 
-  test('instructions, lifecycle, evidence, documents, and artifacts remain authoritative', async ({
+  test('ordered instructions, interruption, reopening, and completion feedback remain authoritative', async ({
     adminPage,
     employeePage,
     world,
   }) => {
     // P1-16-F36…F61: execution transitions and gates, ordered/dependent
-    // instructions, reopen, evidence expectations, existing artifact ownership,
-    // direct contextual upload, persisted recovery, terminal read-only behavior,
-    // and the explicit P1-17 handover boundary.
+    // instructions, reopen, completion feedback and the explicit P1-17 handover
+    // boundary. Contextual upload, artifact drafts and the terminal read-only
+    // pack are the golden journey.
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
     const templateName = `P116 Ausführungsvorlage ${world.runId}`;
     const firstInstruction = `Anlage absichern ${world.runId}`;
@@ -328,81 +356,35 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
       jobNumber,
       title: `P116 Ausführung ${world.runId}`,
       assignEmployeeName: employeeName,
-      plannedDateDigits: dateDigits(DATES[2]),
+      plannedDateDigits: dateDigits(ownedBerlinDateAtOffset('p1-16', 87)),
       workTemplateName: templateName,
     });
     const pack = await openFieldWorkPack(employeePage, jobNumber);
     await expect(pack.getByText(firstInstruction, { exact: true })).toBeVisible();
     await expect(pack.getByText(secondInstruction, { exact: true })).toBeVisible();
-    await expect(
-      pack.getByText(`Voraussetzung: ${firstInstruction}`, { exact: true })
-    ).toBeVisible();
+    await expect(instructionPrerequisite(pack, firstInstruction)).toBeVisible();
 
-    await transitionWorkOnJobPage(employeePage, 'In Ausführung');
-    await transitionWorkOnJobPage(
-      employeePage,
-      'Unterbrochen',
-      'Werkzeug wird aus dem Fahrzeug geholt.'
-    );
-    await transitionWorkOnJobPage(employeePage, 'In Ausführung');
+    await transitionWork(employeePage, 'not_started', 'in_progress');
+    await transitionWork(employeePage, 'in_progress', 'interrupted', {
+      reason: 'Werkzeug wird aus dem Fahrzeug geholt.',
+    });
+    await transitionWork(employeePage, 'interrupted', 'in_progress');
     await setInstructionCompletionOnJobPage(employeePage, firstInstruction, true);
     await setInstructionCompletionOnJobPage(employeePage, firstInstruction, false);
     await setInstructionCompletionOnJobPage(employeePage, firstInstruction, true);
 
-    await uploadDocumentOnJobPage(
-      employeePage,
-      jobNumber,
-      resolve(artifactsDirectory(), 'upload-fixture.pdf'),
-      'upload-fixture'
-    );
-    const artifacts = workArtifactsSection(employeePage);
-    await artifacts.getByRole('button', { name: 'Neu', exact: true }).click();
-    const dialog = employeePage.getByRole('dialog');
-    const artifactTitle = `P116 Feldbericht ${world.runId}`;
-    await dialog.getByLabel('Titel').fill(artifactTitle);
-    await dialog.getByLabel('Zusammenfassung').fill('Ausführung und Ergebnis sind dokumentiert.');
-    await dialog
-      .getByLabel('Ausgeführte Arbeiten')
-      .fill('Ausführung geprüft und Ergebnis dokumentiert.');
-    await dialog.getByRole('button', { name: 'Als Entwurf speichern' }).click();
-    await expect(dialog.getByText(/Version 1/)).toBeVisible({
-      timeout: 20_000,
-    });
-    await closeWorkArtifactDialog(dialog);
-    await employeePage.reload();
-    await expect(
-      workArtifactsSection(employeePage).getByText(artifactTitle, { exact: true })
-    ).toBeVisible();
+    await transitionWork(employeePage, 'in_progress', 'execution_complete');
+    await expect(lifecycleSavedBanner(employeePage)).toBeVisible({ timeout: 20_000 });
+    await expect(pack).toContainText(WORK_EXECUTION_LABELS.execution_complete);
+    await expect(pack).not.toContainText(CUSTOMER_PACKAGE_TERM);
 
-    await transitionWorkOnJobPage(employeePage, 'Ausführung abgeschlossen');
-    await expect(
-      employeePage.getByRole('alert').filter({
-        hasText: 'Arbeitsstand wurde aktualisiert.',
-      })
-    ).toBeVisible({ timeout: 20_000 });
-    await expect(pack.getByTestId('field-primary-next-action')).toHaveCount(0);
-    await expect(artifacts.getByRole('button', { name: 'Neu', exact: true })).toHaveCount(0);
-    await expect(pack.getByRole('button', { name: 'Hochladen' })).toHaveCount(0);
-    await expect(
-      pack.getByRole('button', {
-        name: /Arbeitszeit starten|Arbeitszeit beenden/,
-      })
-    ).toHaveCount(0);
-    await expect(pack).toContainText('Ausführung abgeschlossen');
-    await expect(pack).not.toContainText('Kundenpaket');
-
-    const [applied, lifecycle, artifactState] = await Promise.all([
+    const [applied, lifecycle] = await Promise.all([
       getAppliedWorkTemplateState(world.orgId, { jobNumber }),
       getWorkLifecycleState(world.orgId, { jobNumber }),
-      getWorkArtifactState(world.orgId, { jobNumber }),
     ]);
-    expect(applied.instructions[0]).toMatchObject({
+    expect(applied.instructions.find((item) => item.content === firstInstruction)).toMatchObject({
       is_completed: true,
       last_status_changed_by: world.users.employee.id,
-    });
-    expect(applied.documentLinks).toHaveLength(1);
-    expect(lifecycle.entity).toMatchObject({
-      execution_state: 'execution_complete',
     });
     expect(lifecycle.executionEvents.map((event) => event.to_state)).toEqual([
       'in_progress',
@@ -410,14 +392,6 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
       'in_progress',
       'execution_complete',
     ]);
-    expect(artifactState.artifacts[0]).toMatchObject({
-      status: 'draft',
-      created_by: world.users.employee.id,
-    });
-
-    await adminPage.goto(`/auftraege/${jobNumber}`);
-    await expect(adminPage.getByTestId('field-work-pack')).toHaveCount(0);
-    await expect(adminPage.getByRole('button', { name: 'Zuweisen', exact: true })).toBeVisible();
   });
 
   test('time and material context stay separate from planning, valuation, and consumption', async ({
@@ -441,25 +415,25 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
         jobNumber: job.number,
         title: job.title,
         assignEmployeeName: employeeName,
-        plannedDateDigits: dateDigits(DATES[3]),
+        plannedDateDigits: dateDigits(ownedBerlinDateAtOffset('p1-16', 88)),
       });
     }
     const ledgerBeforePlanning = await getInventoryLedgerState(
       world.orgId,
       world.inventory.itemId,
-      world.inventory.locationId
+      world.inventory.locationId,
     );
     await planMaterialOnJobPage(
       adminPage,
       mainNumber,
       world.inventory.itemName,
       world.inventory.locationName,
-      3
+      3,
     );
     const ledgerBefore = await getInventoryLedgerState(
       world.orgId,
       world.inventory.itemId,
-      world.inventory.locationId
+      world.inventory.locationId,
     );
     expect(ledgerBefore).toEqual(ledgerBeforePlanning);
 
@@ -471,12 +445,12 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
       mainNumber,
       world.inventory.itemName,
       world.inventory.locationName,
-      1
+      1,
     );
     const ledgerAfterSecondPlan = await getInventoryLedgerState(
       world.orgId,
       world.inventory.itemId,
-      world.inventory.locationId
+      world.inventory.locationId,
     );
     expect(ledgerAfterSecondPlan).toEqual(ledgerBefore);
     await employeePage.bringToFront();
@@ -488,13 +462,9 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     });
     await changeTimeOnWorkPack(employeePage, 'switch');
     await changeTimeOnWorkPack(employeePage, 'stop');
-    await expect(contextPack.getByText(world.users.employee.email, { exact: false })).toHaveCount(
-      0
-    );
-    await expect(
-      contextPack.getByText(/Abrechenbar|Bewertung|Einkaufspreis|Verkaufspreis/)
-    ).toHaveCount(0);
-    await expect(contextPack.getByRole('link', { name: 'Inventar' })).toHaveCount(0);
+    await expect(contextPack.getByText(world.users.employee.email, { exact: false })).toHaveCount(0);
+    await expect(fieldPackAbsentTerms(contextPack, 'valuation')).toHaveCount(0);
+    await expect(fieldPackLink(contextPack, 'inventory')).toHaveCount(0);
 
     await takeMaterialOnJobPage(employeePage, mainNumber, world.inventory.itemName, 2);
     await returnMaterialOnJobPage(employeePage, mainNumber, world.inventory.itemName, 1);
@@ -509,8 +479,8 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     expect(applied.materials.some((line) => Number(line.planned_quantity) === 3)).toBe(true);
     expect(
       applied.materials.some(
-        (line) => Number(line.taken_quantity) === 2 && Number(line.returned_quantity) === 1
-      )
+        (line) => Number(line.taken_quantity) === 2 && Number(line.returned_quantity) === 1,
+      ),
     ).toBe(true);
     expect(ledgerAfter.quantityOnHand).toBe(ledgerBefore.quantityOnHand - 1);
     expect(ledgerAfter.movementCount).toBe(ledgerBefore.movementCount + 2);
@@ -534,37 +504,30 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
       jobNumber,
       title: `P116 Blocker und Entzug ${world.runId}`,
       assignEmployeeName: employeeName,
-      plannedDateDigits: dateDigits(DATES[4]),
+      plannedDateDigits: dateDigits(ownedBerlinDateAtOffset('p1-16', 89)),
     });
     const pack = await openFieldWorkPack(employeePage, jobNumber);
-    await transitionWorkOnJobPage(employeePage, 'In Ausführung');
+    await transitionWork(employeePage, 'not_started', 'in_progress');
     await reportOwnBlockerOnJobPage(employeePage, blockerDetails);
     await expect(pack.getByText(blockerDetails, { exact: true })).toBeVisible({
       timeout: 20_000,
     });
-    await expect(pack.getByRole('link', { name: 'Offene Punkte prüfen' })).toBeVisible();
+    await expect(fieldPackLink(pack, 'reviewOpenPoints')).toBeVisible();
     let lifecycle = await getWorkLifecycleState(world.orgId, { jobNumber });
     expect(lifecycle.blockers[0]).toMatchObject({
       details: blockerDetails,
       state: 'open',
     });
-    await resolveOwnBlockerOnJobPage(
-      employeePage,
-      'Zugang wurde durch die Objektleitung freigegeben.'
-    );
+    await resolveOwnBlockerOnJobPage(employeePage, 'Zugang wurde durch die Objektleitung freigegeben.');
     lifecycle = await getWorkLifecycleState(world.orgId, { jobNumber });
     expect(lifecycle.blockers[0]).toMatchObject({
       state: 'resolved',
       resolution_note: 'Zugang wurde durch die Objektleitung freigegeben.',
     });
 
-    await expect(pack.getByText(/offline/i)).toHaveCount(0);
-    await expect(
-      pack.getByText(
-        /\bGPS\b|\bGoogle Maps\b|\bNachricht senden\b|\bKundenpaket\b|\bRechnung\b|\bServicehistorie\b/i
-      )
-    ).toHaveCount(0);
-    await expect(pack.getByText('Weitere Auftragsangaben')).toBeVisible();
+    await expect(fieldPackAbsentTerms(pack, 'offline')).toHaveCount(0);
+    await expect(fieldPackAbsentTerms(pack, 'laterSlices')).toHaveCount(0);
+    await expect(fieldPackMoreJobDetails(pack)).toBeVisible();
     await removeJobAssignment(adminPage, jobNumber, employeeName);
     await employeePage.bringToFront();
     await employeePage.evaluate(() => window.dispatchEvent(new Event('focus')));

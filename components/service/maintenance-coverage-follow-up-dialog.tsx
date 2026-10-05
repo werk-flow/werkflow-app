@@ -1,11 +1,11 @@
-"use client";
+'use client';
 
-import { useState, type ReactElement } from "react";
-import { Loader2 } from "lucide-react";
+import { useState, type ReactElement } from 'react';
+import { Loader2 } from 'lucide-react';
 
-import { useBanner } from "@/components/ui/banner";
-import { Button } from "@/components/ui/button";
-import { DateTimeField } from "@/components/ui/date-time-field";
+import { useBanner } from '@/components/ui/banner';
+import { Button } from '@/components/ui/button';
+import { DateTimeField } from '@/components/ui/date-time-field';
 import {
   Dialog,
   DialogContent,
@@ -13,22 +13,16 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { ErrorText } from "@/components/ui/error-text";
-import { Field } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { SearchableSelect } from "@/components/ui/searchable-select";
-import { Textarea } from "@/components/ui/textarea";
-import { useServerAction } from "@/hooks/use-server-action";
-import { createCustomerFollowUp } from "@/lib/customer-relationships/actions";
-import {
-  parseBerlinDateTimeInput,
-  tomorrowMorningInBerlin,
-} from "@/lib/customer-relationships/date-time";
-import type {
-  MaintenanceCoverageItem,
-  MaintenanceWorkspace,
-} from "@/lib/maintenance/types";
+} from '@/components/ui/dialog';
+import { ErrorText } from '@/components/ui/error-text';
+import { Field } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { SearchableSelect } from '@/components/ui/searchable-select';
+import { Textarea } from '@/components/ui/textarea';
+import { useServerAction } from '@/hooks/use-server-action';
+import { createCustomerFollowUp } from '@/lib/customer-relationships/actions';
+import { parseBerlinDateTimeInput, tomorrowMorningInBerlin } from '@/lib/customer-relationships/date-time';
+import type { MaintenanceCoverageItem, MaintenanceWorkspace } from '@/lib/maintenance/types';
 
 export function MaintenanceCoverageFollowUpDialog({
   open,
@@ -41,16 +35,12 @@ export function MaintenanceCoverageFollowUpDialog({
   onOpenChange: (open: boolean) => void;
   coverage: MaintenanceCoverageItem;
   currentActorId: string;
-  owners: MaintenanceWorkspace["followUpOwners"];
+  owners: MaintenanceWorkspace['followUpOwners'];
 }): ReactElement {
-  const [title, setTitle] = useState(
-    `Abdeckung ${coverage.coverageNumber} prüfen`,
-  );
-  const [note, setNote] = useState(coverage.operationalNote ?? "");
+  const [title, setTitle] = useState(`Abdeckung ${coverage.coverageNumber} prüfen`);
+  const [note, setNote] = useState(coverage.operationalNote ?? '');
   const [ownerUserId, setOwnerUserId] = useState(
-    owners.find((owner) => owner.userId === currentActorId)?.userId ??
-      owners[0]?.userId ??
-      "",
+    owners.find((owner) => owner.userId === currentActorId)?.userId ?? owners[0]?.userId ?? '',
   );
   const [dueAt, setDueAt] = useState(() => tomorrowMorningInBerlin());
   const [error, setError] = useState<string | null>(null);
@@ -64,36 +54,32 @@ export function MaintenanceCoverageFollowUpDialog({
       note,
       ownerUserId,
       dueAt: dueDate.toISOString(),
-      sourceType: "maintenance_coverage",
+      sourceType: 'maintenance_coverage',
       sourceId: coverage.id,
     });
     if (!result.success) {
-      setError("Die Nachfassaktion konnte nicht angelegt werden.");
+      setError('Die Nachfassaktion konnte nicht angelegt werden.');
       return;
     }
     onOpenChange(false);
     // The follow-up lives under Aufgaben, not on this page: the banner is the
     // only confirmation the user gets here.
-    showBanner({ variant: "success", message: "Nachfassaktion wurde angelegt." });
+    showBanner({ variant: 'success', message: 'Nachfassaktion wurde angelegt.' });
   });
-  const titleError =
-    attempted && !title.trim() ? "Bitte gib einen Titel ein." : undefined;
-  const ownerError =
-    attempted && !ownerUserId ? "Bitte wähle eine zuständige Person." : undefined;
+  const titleError = attempted && !title.trim() ? 'Bitte gib einen Titel ein.' : undefined;
+  const ownerError = attempted && !ownerUserId ? 'Bitte wähle eine zuständige Person.' : undefined;
   const dueError =
-    attempted && !parseBerlinDateTimeInput(dueAt)
-      ? "Bitte gib eine Fälligkeit an."
-      : undefined;
+    attempted && !parseBerlinDateTimeInput(dueAt) ? 'Bitte gib eine Fälligkeit an.' : undefined;
 
   function submit(): void {
     setError(null);
     setAttempted(true);
     const firstInvalidId = !title.trim()
-      ? "coverage-follow-up-title"
+      ? 'coverage-follow-up-title'
       : !ownerUserId
-        ? "coverage-follow-up-owner"
+        ? 'coverage-follow-up-owner'
         : !parseBerlinDateTimeInput(dueAt)
-          ? "coverage-follow-up-due-date"
+          ? 'coverage-follow-up-due-date'
           : null;
     if (firstInvalidId) {
       document.getElementById(firstInvalidId)?.focus();
@@ -103,13 +89,13 @@ export function MaintenanceCoverageFollowUpDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange} pending={isPending}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Nachfassaktion anlegen</DialogTitle>
           <DialogDescription>
-            Die Wiedervorlage bleibt eine bestehende Kunden-Nachfassaktion und
-            verweist exakt auf diese operative Abdeckung.
+            Die Wiedervorlage bleibt eine bestehende Kunden-Nachfassaktion und verweist exakt auf diese
+            operative Abdeckung.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -119,15 +105,8 @@ export function MaintenanceCoverageFollowUpDialog({
             submit();
           }}
         >
-          <p className="rounded-md bg-muted px-3 py-2 text-sm">
-            Quelle: {coverage.coverageNumber}
-          </p>
-          <Field
-            label="Titel"
-            htmlFor="coverage-follow-up-title"
-            required
-            error={titleError}
-          >
+          <p className="rounded-md bg-muted px-3 py-2 text-sm">Quelle: {coverage.coverageNumber}</p>
+          <Field label="Titel" htmlFor="coverage-follow-up-title" required error={titleError}>
             <Input
               value={title}
               onChange={(event) => setTitle(event.target.value)}
@@ -135,12 +114,7 @@ export function MaintenanceCoverageFollowUpDialog({
               autoFocus
             />
           </Field>
-          <Field
-            label="Zuständig"
-            htmlFor="coverage-follow-up-owner"
-            required
-            error={ownerError}
-          >
+          <Field label="Zuständig" htmlFor="coverage-follow-up-owner" required error={ownerError}>
             <SearchableSelect
               value={ownerUserId}
               onChange={setOwnerUserId}
@@ -153,12 +127,7 @@ export function MaintenanceCoverageFollowUpDialog({
               emptyMessage="Keine Person gefunden"
             />
           </Field>
-          <Field
-            label="Fällig am"
-            htmlFor="coverage-follow-up-due-date"
-            required
-            error={dueError}
-          >
+          <Field label="Fällig am" htmlFor="coverage-follow-up-due-date" required error={dueError}>
             <DateTimeField
               idPrefix="coverage-follow-up-due"
               value={dueAt}
@@ -168,20 +137,11 @@ export function MaintenanceCoverageFollowUpDialog({
             />
           </Field>
           <Field label="Notiz" htmlFor="coverage-follow-up-note">
-            <Textarea
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-              maxLength={2000}
-            />
+            <Textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={2000} />
           </Field>
           <ErrorText>{error}</ErrorText>
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={isPending}
-            >
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
               Abbrechen
             </Button>
             <Button type="submit" disabled={isPending}>

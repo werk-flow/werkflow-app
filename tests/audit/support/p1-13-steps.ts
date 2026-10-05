@@ -1,6 +1,66 @@
 import type { Locator, Page } from '@playwright/test';
-import { inputByValue, visibleText } from '../../golden/support/steps/shared';
-export { visibleMatchingText } from '../../golden/support/steps/shared';
+import { plannedQualificationsRegion } from '../../golden/support/steps/qualifications';
+import { inputByValue, SHARED_COPY, visibleText } from '../../golden/support/steps/shared';
+
+/**
+ * Copy of the work template surfaces that only the P1-13 audit checks: list
+ * filters, quick-create dialogs, the after-creation apply dialog and the other
+ * creation contexts. The editor controls that the Golden journey shares live
+ * in tests/golden/support/steps/work.ts.
+ */
+export const TEMPLATE_AUDIT_COPY = {
+  list: {
+    empty: 'Noch keine Arbeitsvorlagen',
+    noMatch: 'Keine Arbeitsvorlage passt zu Suche und Filtern.',
+    targetFilter: 'Ziel filtern',
+    statusFilter: 'Status filtern',
+    archive: 'Arbeitsvorlage archivieren',
+    reactivate: 'Arbeitsvorlage reaktivieren',
+  },
+  filterOption: {
+    onlyProjects: 'Nur Projekte',
+    drafts: 'Entwürfe',
+    archive: 'Archiv',
+    active: 'Aktive Vorlagen',
+  },
+  createDialog: { nameRequired: 'Bitte gib einen Namen an.' },
+  editor: { draftSaved: 'Entwurf gespeichert.' },
+  material: { notes: 'Notiz' },
+  quickCreate: {
+    newItem: 'Neuen Artikel erstellen',
+    itemDialog: 'Artikel erstellen',
+    newLocation: 'Neues Lager erstellen',
+    locationDialog: 'Lager erstellen',
+    newCapability: 'Neue Qualifikation erstellen',
+    capabilityDialog: 'Qualifikation erstellen',
+    capabilityKind: 'Art der Qualifikation',
+  },
+  apply: {
+    open: 'Vorlage anwenden',
+    dialog: 'Arbeitsvorlage anwenden',
+    submit: 'Anwenden',
+    preview: /Aufgaben\/Checklistenpunkte/,
+    alreadyApplied: 'Diese Version wurde bereits angewendet.',
+    additional: 'Weitere Vorlage ergänzen. Vorhandene Planung bleibt bestehen.',
+    confirmAdditional: 'Bestätige zuerst, dass du eine weitere Vorlage ergänzen möchtest.',
+  },
+  jobPlanning: {
+    editMaterial: 'Position bearbeiten',
+    materialDialog: 'Materialposition bearbeiten',
+  },
+  instructionMeta: { optionalTask: /Aufgabe · Optional/, evidenceExpected: /Nachweis erwartet:/ },
+  picker: {
+    noTemplate: /Noch keine passende Vorlage veröffentlicht\./,
+    manage: 'Arbeitsvorlagen verwalten',
+  },
+  context: {
+    employeeCreateJob: 'Auftrag erstellen',
+    projectAddJob: 'Auftrag hinzufügen',
+  },
+  conversion: {
+    referenceUnavailable: 'Die Arbeitsvorlage verweist auf nicht mehr aktive Stammdaten.',
+  },
+} as const;
 
 export function visibleExactText(page: Page, text: string): Locator {
   return visibleText(page, text, true);
@@ -10,26 +70,62 @@ export function exactText(page: Page, text: string): Locator {
   return page.getByText(text, { exact: true });
 }
 
-export async function templateItemCard(editor: Locator, itemName: string): Promise<Locator> {
-  // The editor exposes item fields through labels, but no semantic group owns the whole item.
-  const nameInput = await inputByValue(editor, 'Bezeichnung', itemName);
-  const inputId = await nameInput.getAttribute('id');
-  if (!inputId) {
-    throw new Error(`Template item "${itemName}" has no stable input id.`);
-  }
-  // Capture the generated item identity. A positional input locator would
-  // silently follow another card after the editor reorders its items.
-  return editor.locator(`[data-slot="card"]:has(input#${inputId})`);
+/** A dialog named by its heading. */
+function dialogWithHeading(page: Page, heading: string): Locator {
+  return page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: heading }) });
 }
 
+export function templateQuickCreateDialog(page: Page, kind: 'item' | 'location' | 'capability'): Locator {
+  const headings = TEMPLATE_AUDIT_COPY.quickCreate;
+  const heading =
+    kind === 'item'
+      ? headings.itemDialog
+      : kind === 'location'
+        ? headings.locationDialog
+        : headings.capabilityDialog;
+  return dialogWithHeading(page, heading);
+}
+
+export function applyTemplateDialog(page: Page): Locator {
+  return dialogWithHeading(page, TEMPLATE_AUDIT_COPY.apply.dialog);
+}
+
+export function materialPositionDialog(page: Page): Locator {
+  return dialogWithHeading(page, TEMPLATE_AUDIT_COPY.jobPlanning.materialDialog);
+}
+
+/** The job's button that removes this capability requirement. */
+export function removeCapabilityRequirementButton(page: Page, capabilityName: string): Locator {
+  return page.getByRole('button', { name: `${capabilityName} als Anforderung entfernen` });
+}
+
+/** The apply dialog's refusal that names the retired capability. */
+export function retiredCapabilityRefusal(dialog: Locator, capabilityName: string): Locator {
+  return dialog.getByText(
+    `„${capabilityName}“ ist nicht mehr aktiv. Korrigiere die Vorlage und versuche es erneut.`,
+  );
+}
+
+/** The editor item card whose name field holds exactly this text. */
+export async function templateItemCard(editor: Locator, itemName: string): Promise<Locator> {
+  const nameInput = await inputByValue(editor, SHARED_COPY.field.name, itemName);
+  const inputId = await nameInput.getAttribute('id');
+  if (!inputId?.startsWith('item-')) {
+    throw new Error(`Template item "${itemName}" has no stable input id.`);
+  }
+  // The name field's id carries the generated item id; the card keeps it in
+  // data-row-id, so the locator follows this item when the editor reorders.
+  const rowId = inputId.slice('item-'.length);
+  return editor.getByTestId('work-template-item').and(editor.locator(`[data-row-id="${rowId}"]`));
+}
+
+/** The item card the editor appended last; it has no name until the test fills it. */
 export function appendedTemplateItemCard(editor: Locator): Locator {
-  // New editor items are appended without a stable ID or name until the test fills the field.
-  return editor.getByLabel('Bezeichnung').last().locator('xpath=ancestor::*[@data-slot="card"][1]');
+  return editor.getByTestId('work-template-item').last();
 }
 
 export function templateMaterialCard(editor: Locator): Locator {
-  // Material cards have generated IDs, so the labelled quantity field is their stable anchor.
-  return editor.getByLabel('Geplante Menge').locator('xpath=ancestor::*[@data-slot="card"][1]');
+  return editor.getByTestId('work-template-material');
 }
 
 export function materialArticlePicker(materialCard: Locator): Locator {
@@ -42,25 +138,7 @@ export function materialLocationPicker(materialCard: Locator): Locator {
   return materialCard.getByRole('combobox').nth(1);
 }
 
+/** The capability row the editor appended last, inside „Geplante Qualifikationen“. */
 export function templateQualificationRow(editor: Locator): Locator {
-  // Capability rows have no semantic group role or stable ID; scope the raw row to its section.
-  return editor
-    .getByRole('heading', { name: 'Geplante Qualifikationen', exact: true })
-    .locator('xpath=ancestor::section[1]')
-    .locator('.rounded-lg.border')
-    .last();
-}
-
-export function instructionCard(page: Page, itemName: string): Locator {
-  // Job instruction cards have no semantic container; the completion button distinguishes them.
-  return page
-    .getByText(itemName, { exact: true })
-    .filter({ visible: true })
-    .first()
-    .locator('xpath=ancestor::div[.//button[contains(@aria-label,"Punkt als")]][1]');
-}
-
-export function lastInstructionDetailsButton(page: Page): Locator {
-  // The flow intentionally edits the second persisted item after asserting there are exactly two.
-  return page.getByRole('button', { name: 'Eintragsdetails bearbeiten' }).last();
+  return plannedQualificationsRegion(editor).getByTestId('work-template-capability').last();
 }

@@ -2,109 +2,145 @@ import { resolve } from 'node:path';
 
 import type { Page } from '@playwright/test';
 
-import { expect, test } from "../support/fixtures";
-import { getJobCountByNumber, getVisibleWorkHandoverCountsAs, getWorkHandoverState, getWorkLifecycleState } from '../../golden/support/db/work';
+import { expect, test } from '../support/fixtures';
+import { seedCustomer } from '../../golden/support/db/customers';
+import {
+  getWorkHandoverState,
+  getWorkLifecycleState,
+  seedJob,
+  seedJobAssignment,
+  seedProject,
+} from '../../golden/support/db/work';
 import { createPlannedCalendarEntry } from '../../golden/support/steps/calendar';
-import { addContactOnCustomerDetail, addSiteOnCustomerDetail, createCustomer, openCustomerDetail } from '../../golden/support/steps/customers';
 import { uploadIntoDocumentsSection } from '../../golden/support/steps/documents';
-import { workLifecycleCard, createJob, createProject, selectAllHandoverSources, workHandoverSection, transitionWorkOnJobPage } from '../../golden/support/steps/work';
+import {
+  completeExecutionAsManager,
+  handoverAction,
+  handoverField,
+  handoverMessage,
+  handoverStateLabel,
+  HANDOVER_TEXT,
+  lifecycleAction,
+  lifecycleIntoExecutionAction,
+  moveWorkIntoExecution,
+  selectAllHandoverSources,
+  workHandoverSection,
+} from '../../golden/support/steps/work';
 import { ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
-import { requireChainedPrecondition } from '../../golden/support/preconditions';
 import { artifactsDirectory, type TestWorld } from '../../golden/support/world';
+import { expectDefined } from '../../../lib/testing/spec-support/expect-defined';
 
-const DATES = [
-  ownedBerlinDateAtOffset('p1-17', 90),
-  ownedBerlinDateAtOffset('p1-17', 91),
-  ownedBerlinDateAtOffset('p1-17', 92),
-  ownedBerlinDateAtOffset('p1-17', 93),
-  ownedBerlinDateAtOffset('p1-17', 94),
-] as const;
+type SeededProjectScope = {
+  projectNumber: string;
+  jobNumbers: readonly string[];
+};
 
-function names(world: TestWorld) {
-  const projectNumber = `PRJ-${world.runId}-P117-AUDIT`;
-  return {
-    customerName: `P117 Audit Kunde ${world.runId}`,
-    contactName: `P117 Audit Kontakt ${world.runId}`,
-    siteName: `P117 Audit Werk ${world.runId}`,
+/**
+ * Seeds a customer project with assigned child jobs. The tests below claim
+ * the handover flows, not the creation dialogs that P1-01 and P1-12 prove.
+ */
+async function seedProjectWithChildren(world: TestWorld, tag: string, childCount: number) {
+  const customerName = `P117 ${tag} Kunde ${world.runId}`;
+  const contactName = `P117 ${tag} Kontakt ${world.runId}`;
+  const siteName = `P117 ${tag} Werk ${world.runId}`;
+  const customer = await seedCustomer({
+    orgId: world.orgId,
+    actorId: world.users.admin.id,
+    name: customerName,
+    contacts: [{ name: contactName, role: 'Projektleitung', phone: '+49 30 5551170', isPrimary: true }],
+    sites: [
+      {
+        name: siteName,
+        street: 'Auditstraße 17',
+        postalCode: '10115',
+        city: 'Berlin',
+        notes: 'Interne Standortbewertung.',
+        isPrimary: true,
+      },
+    ],
+  });
+  const clientId = customer.clientId;
+  const siteId = expectDefined(customer.siteIds.get(siteName), 'the seeded site');
+  const contactId = expectDefined(customer.contactIds.get(contactName), 'the seeded contact');
+  const projectNumber = `PRJ-${world.runId}-P117-${tag}`;
+  const projectId = await seedProject({
+    orgId: world.orgId,
+    actorId: world.users.admin.id,
     projectNumber,
-    projectTitle: `P117 Audit Projekt ${world.runId}`,
-    firstJobNumber: `${projectNumber}-1`,
-    secondJobNumber: `${projectNumber}-2`,
-    firstJobTitle: `P117 Audit Auftrag eins ${world.runId}`,
-    secondJobTitle: `P117 Audit Auftrag zwei ${world.runId}`,
-    unassignedJobNumber: `AUF-${world.runId}-P117-UNASSIGNED`,
-    employeeName: `${world.users.employee.firstName} ${world.users.employee.lastName}`,
-  };
+    name: `P117 ${tag} Projekt ${world.runId}`,
+    clientId,
+    siteId,
+    contactId,
+  });
+  const jobNumbers: string[] = [];
+  for (let index = 1; index <= childCount; index += 1) {
+    const jobNumber = `${projectNumber}-${index}`;
+    const jobId = await seedJob({
+      orgId: world.orgId,
+      actorId: world.users.admin.id,
+      jobNumber,
+      title: `P117 ${tag} Auftrag ${index} ${world.runId}`,
+      clientId,
+      siteId,
+      contactId,
+      projectId,
+    });
+    await seedJobAssignment({
+      orgId: world.orgId,
+      actorId: world.users.admin.id,
+      jobId,
+      userId: world.users.employee.id,
+    });
+    jobNumbers.push(jobNumber);
+  }
+  return { projectNumber, jobNumbers } satisfies SeededProjectScope;
 }
 
-async function completeManagerWork(
-  page: Page,
-  path: string,
-  override = false,
-  startNeedsReason = false
-): Promise<void> {
+async function completeManagerWork(page: Page, path: string, startNeedsReason = false): Promise<void> {
   await page.goto(path);
-  const lifecycle = workLifecycleCard(page);
-  const completeButton = lifecycle.getByRole('button', {
-    name: 'Ausführung abgeschlossen',
-    exact: true,
-  });
-  const startButton = lifecycle.getByRole('button', {
-    name: 'In Ausführung',
-    exact: true,
-  });
+  const completeButton = lifecycleAction(page, 'in_progress', 'execution_complete');
+  // The step into execution names where it comes from: a fresh start, a
+  // resumption after an interruption, or reopening finished work.
+  const startButton = lifecycleIntoExecutionAction(page);
   await expect(completeButton.or(startButton)).toBeVisible({ timeout: 20_000 });
   if (await startButton.isVisible()) {
-    await transitionWorkOnJobPage(
+    await moveWorkIntoExecution(
       page,
-      'In Ausführung',
-      startNeedsReason ? 'Ausführung für die Auditprüfung gestartet.' : undefined
+      startNeedsReason ? 'Ausführung für die Auditprüfung gestartet.' : undefined,
     );
   }
-  await completeButton.click();
-  const dialog = page.getByRole('dialog');
-  const overrideCheckbox = dialog.getByRole('checkbox', {
-    name: /Manager-Ausnahme/,
+  await completeExecutionAsManager(page, {
+    reason: 'Ausführung wurde für die nachgelagerte Übergabeprüfung abgeschlossen.',
+    managerException: 'unused',
   });
-  if (override) {
-    await expect(overrideCheckbox).toBeVisible();
-    await overrideCheckbox.check();
-  } else if (await overrideCheckbox.isVisible().catch(() => false)) {
-    await expect(overrideCheckbox).not.toBeChecked();
-  }
-  const reason = dialog.locator('#work-transition-reason');
-  if (await reason.isVisible().catch(() => false)) {
-    await reason.fill('Ausführung wurde für die nachgelagerte Übergabeprüfung abgeschlossen.');
-  }
-  await dialog.getByRole('button', { name: 'Änderung speichern' }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
 }
 
 async function releaseHandover(page: Page, path: string): Promise<void> {
   await page.goto(path);
   const section = workHandoverSection(page);
   await selectAllHandoverSources(section);
-  await section.getByRole('button', { name: 'Entwurf speichern' }).click();
-  await expect(section.getByText('Entwurf gespeichert.')).toBeVisible({
+  await handoverAction(section, 'saveDraft').click();
+  await expect(handoverMessage(section, 'draftSaved')).toBeVisible({
     timeout: 20_000,
   });
-  const overrideReason = section.getByLabel('Begründung der Ausnahme');
+  const overrideReason = handoverField(section, 'exceptionReason');
   if (await overrideReason.isVisible().catch(() => false)) {
-    await overrideReason.fill(
-      'Die Ausnahme ist im Auditfall fachlich geprüft und vollständig dokumentiert.'
-    );
+    await overrideReason.fill('Die Ausnahme ist im Auditfall fachlich geprüft und vollständig dokumentiert.');
   }
   const popupPromise = page.waitForEvent('popup');
-  await section.getByRole('button', { name: 'Vorschau öffnen' }).click();
+  await handoverAction(section, 'openPreview').click();
   const preview = await popupPromise;
   await preview.waitForLoadState('domcontentloaded');
-  await section.getByRole('button', { name: 'Freigeben und übergeben' }).click();
-  await expect(section.getByText('Übergabepaket freigegeben', { exact: false })).toBeVisible({
+  await handoverAction(section, 'release').click();
+  await expect(handoverMessage(section, 'released')).toBeVisible({
     timeout: 30_000,
   });
   await preview.close();
 }
 
+// The standalone job journey (execution, evidence, release, withdrawal and
+// re-release) lives in tests/golden/p1-17.spec.ts; the organization boundary
+// is in supabase/tests/work_execution_boundaries.sql.
 test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2', () => {
   test('establishes job/project scope, exact routes, warning facts, and role boundaries', async ({
     adminPage,
@@ -114,342 +150,173 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
     world,
   }) => {
     // P1-17-F01…F22, F31…F39 and F102…F109: job/project ownership,
-    // confirmed routes, contact snapshots, defaults, warning classification,
-    // office responsibility, assigned-field minimalism and org isolation.
-    const fixture = names(world);
-    await createCustomer(adminPage, fixture.customerName);
-    await openCustomerDetail(adminPage, fixture.customerName);
-    await addContactOnCustomerDetail(adminPage, {
-      name: fixture.contactName,
-      role: 'Projektleitung',
-      email: `p117-audit-${world.runId}@example.test`,
-      phone: '+49 30 5551170',
-      notes: 'Interne P1-17 Auditnotiz.',
-      isPrimary: true,
-    });
-    await addSiteOnCustomerDetail(adminPage, {
-      name: fixture.siteName,
-      street: 'Auditstraße 17',
-      postalCode: '10115',
-      city: 'Berlin',
-      notes: 'Interne Standortbewertung.',
-      isPrimary: true,
-    });
-    await createProject(adminPage, {
-      projectNumber: fixture.projectNumber,
-      title: fixture.projectTitle,
-      clientName: fixture.customerName,
-      siteName: fixture.siteName,
-      contactName: fixture.contactName,
-    });
-    for (const [visitDate, job] of [
-      [DATES[1], { number: fixture.firstJobNumber, title: fixture.firstJobTitle }],
-      [DATES[2], { number: fixture.secondJobNumber, title: fixture.secondJobTitle }],
-    ] as const) {
-      await createJob(adminPage, {
-        jobNumber: job.number,
-        title: job.title,
-        projectNumber: fixture.projectNumber,
-        clientName: fixture.customerName,
-        siteName: fixture.siteName,
-        contactName: fixture.contactName,
-        assignEmployeeName: fixture.employeeName,
-      });
+    // confirmed routes, side-effect-free empty state, office responsibility,
+    // assigned-field minimalism and outsider route denial.
+    const scope = await seedProjectWithChildren(world, 'SCOPE', 1);
+    const childJobNumber = expectDefined(scope.jobNumbers[0], 'the child job number');
+    const childRoute = `/auftraege/projekt/${scope.projectNumber}/${childJobNumber}/uebergabe`;
+    const projectRoute = `/auftraege/projekt/${scope.projectNumber}/uebergabe`;
+
+    const before = await getWorkHandoverState(world.orgId, { jobNumber: childJobNumber });
+    await Promise.all([adminPage.goto(childRoute), bueroPage.goto(projectRoute)]);
+    await expect(workHandoverSection(adminPage)).toContainText(handoverStateLabel('missing'));
+    await expect(workHandoverSection(adminPage)).toContainText(HANDOVER_TEXT.executionMustBeComplete);
+    await expect(workHandoverSection(bueroPage)).toBeVisible();
+    expect(await getWorkHandoverState(world.orgId, { jobNumber: childJobNumber })).toEqual(before);
+
+    await employeePage.goto(childRoute);
+    await employeePage.waitForURL(/\/auftraege\/?$/, { timeout: 20_000 });
+    await outsiderPage.goto(projectRoute);
+    await outsiderPage.waitForURL(/\/auftraege\/?$/, { timeout: 20_000 });
+  });
+
+  test('composes a project package from immutable child releases and keeps it through a successor', async ({
+    adminPage,
+    bueroPage,
+    world,
+  }) => {
+    const scope = await seedProjectWithChildren(world, 'PAKET', 2);
+    const projectRoute = `/auftraege/projekt/${scope.projectNumber}/uebergabe`;
+    const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
+    const visitDates = [ownedBerlinDateAtOffset('p1-17', 91), ownedBerlinDateAtOffset('p1-17', 92)];
+    for (const [index, jobNumber] of scope.jobNumbers.entries()) {
       await createPlannedCalendarEntry(adminPage, {
         kind: 'job_visit',
-        jobSearch: job.number,
-        date: visitDate,
+        jobSearch: jobNumber,
+        date: expectDefined(visitDates[index], 'a child visit date'),
         time: '06:00',
-        employeeNames: [fixture.employeeName],
+        employeeNames: [employeeName],
         overrideReason: 'P1-17 Audit-Termin.',
       });
     }
-    await createJob(adminPage, {
-      jobNumber: fixture.unassignedJobNumber,
-      title: `P117 Audit nicht zugewiesen ${world.runId}`,
-    });
 
-    const before = await getWorkHandoverState(world.orgId, {
-      jobNumber: fixture.firstJobNumber,
-    });
-    await Promise.all([
-      adminPage.goto(
-        `/auftraege/projekt/${fixture.projectNumber}/${fixture.firstJobNumber}/uebergabe`
-      ),
-      bueroPage.goto(`/auftraege/projekt/${fixture.projectNumber}/uebergabe`),
-    ]);
-    await expect(workHandoverSection(adminPage)).toContainText(
-      'Noch kein Übergabepaket'
-    );
-    await expect(workHandoverSection(adminPage)).toContainText(
-      'Die Ausführung muss abgeschlossen sein'
-    );
-    await expect(workHandoverSection(bueroPage)).toBeVisible();
-    expect(
-      await getWorkHandoverState(world.orgId, {
-        jobNumber: fixture.firstJobNumber,
-      })
-    ).toEqual(before);
+    const childReleaseIds =
+      await test.step('The office releases each child job with its exact document version', async () => {
+        // P1-17-F23…F30 and F40…F71: execution-complete boundary, exact
+        // document-version membership, preview, warnings, immutable release,
+        // attention resolution and lifecycle/package atomicity.
+        const releaseIds: string[] = [];
+        for (const jobNumber of scope.jobNumbers) {
+          const jobPath = `/auftraege/projekt/${scope.projectNumber}/${jobNumber}`;
+          await adminPage.goto(jobPath);
+          await uploadIntoDocumentsSection(
+            adminPage,
+            resolve(artifactsDirectory(), 'upload-fixture.pdf'),
+            'upload-fixture',
+          );
+          await adminPage.goto('/aufgaben');
+          await expect(adminPage.getByRole('main').getByTestId('aufgaben-content')).toHaveAttribute(
+            'data-loaded',
+            'true',
+          );
+          await completeManagerWork(bueroPage, jobPath);
+          await expect(
+            adminPage.getByRole('main').getByTestId('attention-work-handover-tasks'),
+          ).toContainText(jobNumber, { timeout: 30_000 });
+          await releaseHandover(bueroPage, `${jobPath}/uebergabe`);
+          await expect(
+            adminPage.getByTestId('attention-work-handover-tasks').getByText(jobNumber),
+          ).toHaveCount(0, {
+            timeout: 30_000,
+          });
+          const state = await getWorkHandoverState(world.orgId, { jobNumber });
+          expect(state.target).toMatchObject({ execution_state: 'handed_over' });
+          expect(state.package).toMatchObject({ state: 'released' });
+          const release = expectDefined(state.releases[0], 'the child release');
+          expect(state.releases).toHaveLength(1);
+          const releasedItems = state.releaseItems.filter((item) => item.release_id === release.id);
+          expect(releasedItems.length).toBeGreaterThan(0);
+          expect(
+            releasedItems.every(
+              (item) => item.source_kind === 'document_version' && item.document_version_number === 1,
+            ),
+          ).toBe(true);
+          expect(state.documents[0]?.storage_path).toContain('/work-handover-packages/');
+          releaseIds.push(release.id);
+        }
+        return releaseIds;
+      });
 
-    await employeePage.goto(
-      `/auftraege/projekt/${fixture.projectNumber}/${fixture.firstJobNumber}/uebergabe`
-    );
-    await employeePage.waitForURL(/\/auftraege\/?$/, { timeout: 20_000 });
-    await outsiderPage.goto(`/auftraege/projekt/${fixture.projectNumber}/uebergabe`);
-    await outsiderPage.waitForURL(/\/auftraege\/?$/, { timeout: 20_000 });
-    expect(
-      Object.values(await getVisibleWorkHandoverCountsAs(world.outsider.admin, world.orgId)).every(
-        (count) => count === 0
-      )
-    ).toBe(true);
-  });
+    await test.step('The project composes the child releases and rejects a stale office draft', async () => {
+      // P1-17-F72…F88: child integrity, one mutable root, stale-write recovery,
+      // exact child release IDs, project readiness and lifecycle registration.
+      await completeManagerWork(adminPage, `/auftraege/projekt/${scope.projectNumber}`, true);
+      await Promise.all([adminPage.goto(projectRoute), bueroPage.goto(projectRoute)]);
+      const adminSection = workHandoverSection(adminPage);
+      await selectAllHandoverSources(adminSection);
+      await handoverAction(adminSection, 'saveDraft').click();
+      await expect(handoverMessage(adminSection, 'draftSaved')).toBeVisible({
+        timeout: 20_000,
+      });
+      const bueroSection = workHandoverSection(bueroPage);
+      await handoverAction(bueroSection, 'saveDraft').click();
+      await expect(bueroSection).toContainText(HANDOVER_TEXT.staleDraft);
 
-  test('releases child jobs with exact document versions and no cross-domain mutations', async ({
-    adminPage,
-    bueroPage,
-    world,
-  }) => {
-    // P1-17-F23…F30 and F40…F71: execution-complete boundary, exact
-    // document-version membership, preview, warnings, immutable release,
-    // deterministic identity and lifecycle/package atomicity.
-    const fixture = names(world);
-    const setupJobCounts = await Promise.all([
-      getJobCountByNumber(world.orgId, fixture.firstJobNumber),
-      getJobCountByNumber(world.orgId, fixture.secondJobNumber),
-    ]);
-    requireChainedPrecondition(
-      setupJobCounts.every((count) => count === 1),
-      {
-        test: 'P1-17-F23',
-        needs: 'the two project-child jobs created by the scope and role-boundary test',
-        grep: 'establishes job/project scope|releases child jobs',
-        suite: 'audit',
-      }
-    );
-    for (const jobNumber of [fixture.firstJobNumber, fixture.secondJobNumber]) {
-      let state = await getWorkHandoverState(world.orgId, { jobNumber });
-      if (state.package?.state !== 'released') {
-        await adminPage.goto(`/auftraege/projekt/${fixture.projectNumber}/${jobNumber}`);
-        await uploadIntoDocumentsSection(
-          adminPage,
-          resolve(artifactsDirectory(), 'upload-fixture.pdf'),
-          'upload-fixture'
-        );
-        await adminPage.goto('/aufgaben');
-        await expect(adminPage.getByRole('main').getByTestId('aufgaben-content')).toHaveAttribute(
-          'data-loaded',
-          'true'
-        );
-        await completeManagerWork(
-          bueroPage,
-          `/auftraege/projekt/${fixture.projectNumber}/${jobNumber}`
-        );
-        await expect(adminPage.getByRole('main').getByTestId('attention-work-handover-tasks')).toContainText(
-          jobNumber,
-          { timeout: 30_000 }
-        );
-        await releaseHandover(
-          bueroPage,
-          `/auftraege/projekt/${fixture.projectNumber}/${jobNumber}/uebergabe`
-        );
-        await expect(
-          adminPage.getByTestId('attention-work-handover-tasks').getByText(jobNumber)
-        ).toHaveCount(0, { timeout: 30_000 });
-        state = await getWorkHandoverState(world.orgId, { jobNumber });
-      }
-      expect(state.target).toMatchObject({ execution_state: 'handed_over' });
-      expect(state.package).toMatchObject({ state: 'released' });
-      expect(state.releases).toHaveLength(1);
-      const [release] = state.releases;
-      if (!release) throw new Error('P1-17: expected a released handover');
-      const releaseId = release.id;
-      const releasedItems = state.releaseItems.filter((item) => item.release_id === releaseId);
-      expect(
-        releasedItems.map((item) => ({
-          sourceKind: item.source_kind,
-          documentId: item.document_id,
-          documentVersionNumber: item.document_version_number,
-        }))
-      ).toEqual(
-        state.draftItems.map((item) => ({
-          sourceKind: item.source_kind,
-          documentId: item.document_id,
-          documentVersionNumber: item.document_version_number,
-        }))
+      await adminPage.reload();
+      const refreshed = workHandoverSection(adminPage);
+      const popupPromise = adminPage.waitForEvent('popup');
+      await handoverAction(refreshed, 'openPreview').click();
+      const preview = await popupPromise;
+      await preview.waitForLoadState('domcontentloaded');
+      await handoverAction(refreshed, 'release').click();
+      await expect(handoverMessage(refreshed, 'released')).toBeVisible({
+        timeout: 30_000,
+      });
+      await preview.close();
+
+      const state = await getWorkHandoverState(world.orgId, { projectNumber: scope.projectNumber });
+      expect(state.releaseItems.map((item) => item.child_handover_release_id).sort()).toEqual(
+        [...childReleaseIds].sort(),
       );
-      expect(releasedItems.length).toBeGreaterThan(0);
-      expect(
-        releasedItems.every(
-          (item) => item.source_kind === 'document_version' && item.document_version_number === 1
-        )
-      ).toBe(true);
-      expect(state.documents[0]?.storage_path).toContain('/work-handover-packages/');
-    }
-  });
+      expect(state.releases[0]).toMatchObject({
+        commercial_readiness: 'ready_for_commercial_review',
+      });
+      expect(state.target).toMatchObject({
+        execution_state_override: 'handed_over',
+      });
+    });
 
-  test('composes a project from immutable child releases and rejects a stale office draft', async ({
-    adminPage,
-    bueroPage,
-    world,
-  }) => {
-    // P1-17-F72…F88: child integrity, no child-worker widening, one mutable
-    // root, stale-write recovery, exact child release IDs, project readiness,
-    // Realtime root signaling and customer-package registration.
-    const fixture = names(world);
-    const setupJobCounts = await Promise.all([
-      getJobCountByNumber(world.orgId, fixture.firstJobNumber),
-      getJobCountByNumber(world.orgId, fixture.secondJobNumber),
-    ]);
-    requireChainedPrecondition(
-      setupJobCounts.every((count) => count === 1),
-      {
-        test: 'P1-17-F72',
-        needs: 'the two project-child jobs created by the scope and role-boundary test',
-        grep: 'establishes job/project scope|releases child jobs|composes a project',
-        suite: 'audit',
-      }
-    );
-    const childStatesBeforeProjectRelease = await Promise.all([
-      getWorkHandoverState(world.orgId, { jobNumber: fixture.firstJobNumber }),
-      getWorkHandoverState(world.orgId, { jobNumber: fixture.secondJobNumber }),
-    ]);
-    requireChainedPrecondition(
-      childStatesBeforeProjectRelease.every(
-        (child) => child.package?.state === 'released' && child.releases.length === 1
-      ),
-      {
-        test: 'P1-17-F72',
-        needs: 'both immutable child handover releases created by the child-release test',
-        grep: 'establishes job/project scope|releases child jobs|composes a project',
-        suite: 'audit',
-      }
-    );
-    await completeManagerWork(
-      adminPage,
-      `/auftraege/projekt/${fixture.projectNumber}`,
-      false,
-      true
-    );
-    const route = `/auftraege/projekt/${fixture.projectNumber}/uebergabe`;
-    await Promise.all([adminPage.goto(route), bueroPage.goto(route)]);
-    const projectBefore = await getWorkHandoverState(world.orgId, {
-      projectNumber: fixture.projectNumber,
-    });
-    expect(projectBefore.package?.state).not.toBe('released');
-    const adminSection = workHandoverSection(adminPage);
-    await selectAllHandoverSources(adminSection);
-    await adminSection.getByRole('button', { name: 'Entwurf speichern' }).click();
-    await expect(adminSection.getByText('Entwurf gespeichert.')).toBeVisible({
-      timeout: 20_000,
-    });
-    const bueroSection = workHandoverSection(bueroPage);
-    await bueroSection.getByRole('button', { name: 'Entwurf speichern' }).click();
-    await expect(bueroSection).toContainText('Die Übergabe wurde inzwischen geändert');
-
-    await adminPage.reload();
-    const refreshed = workHandoverSection(adminPage);
-    const popupPromise = adminPage.waitForEvent('popup');
-    await refreshed.getByRole('button', { name: 'Vorschau öffnen' }).click();
-    const preview = await popupPromise;
-    await preview.waitForLoadState('domcontentloaded');
-    await refreshed.getByRole('button', { name: 'Freigeben und übergeben' }).click();
-    await expect(refreshed.getByText('Übergabepaket freigegeben', { exact: false })).toBeVisible({
-      timeout: 30_000,
-    });
-    await preview.close();
-
-    const state = await getWorkHandoverState(world.orgId, {
-      projectNumber: fixture.projectNumber,
-    });
-    const childStates = await Promise.all([
-      getWorkHandoverState(world.orgId, { jobNumber: fixture.firstJobNumber }),
-      getWorkHandoverState(world.orgId, { jobNumber: fixture.secondJobNumber }),
-    ]);
-    expect(state.releaseItems.map((item) => item.child_handover_release_id).sort()).toEqual(
-      childStates.map((child) => child.releases[0]?.id).sort()
-    );
-    expect(state.releases[0]).toMatchObject({
-      commercial_readiness: 'ready_for_commercial_review',
-    });
-    expect(state.target).toMatchObject({
-      execution_state_override: 'handed_over',
-    });
-  });
-
-  test('preserves predecessor releases through withdrawal, correction, and successor release', async ({
-    adminPage,
-    world,
-  }) => {
-    // P1-17-F89…F101: attributed withdrawal and correction, append-only
-    // events, successor draft, previous-release linkage, re-handover and
-    // preserved package documents.
-    const fixture = names(world);
-    const route = `/auftraege/projekt/${fixture.projectNumber}/uebergabe`;
-    const setupJobCount = await getJobCountByNumber(world.orgId, fixture.firstJobNumber);
-    requireChainedPrecondition(setupJobCount === 1, {
-      test: 'P1-17-F89',
-      needs: 'the project and child jobs created by the scope and role-boundary test',
-      grep: 'establishes job/project scope|releases child jobs|composes a project|preserves predecessor releases',
-      suite: 'audit',
-    });
-    const initialState = await getWorkHandoverState(world.orgId, {
-      projectNumber: fixture.projectNumber,
-    });
-    requireChainedPrecondition(initialState.package !== null && initialState.releases.length >= 1, {
-      test: 'P1-17-F89',
-      needs: 'the released project handover package created by the project-composition test',
-      grep: 'establishes job/project scope|releases child jobs|composes a project|preserves predecessor releases',
-      suite: 'audit',
-    });
-    if (initialState.package?.state !== 'reopened') {
-      await adminPage.goto(route);
+    await test.step('Withdrawal and correction lead to a successor that keeps its predecessor', async () => {
+      // P1-17-F89…F101: attributed withdrawal and correction, append-only
+      // events, successor draft, previous-release linkage, re-handover and
+      // preserved package documents.
+      await adminPage.goto(projectRoute);
       let section = workHandoverSection(adminPage);
-      await section
-        .getByLabel('Grund für die Rücknahme')
-        .fill('Projektpaket benötigt eine ergänzende Abschlussprüfung.');
-      await section.getByRole('button', { name: 'Übergabe zurücknehmen' }).click();
-      await expect(section.getByText('Übergabe zurückgenommen.', { exact: false })).toBeVisible({
+      await handoverField(section, 'withdrawReason').fill(
+        'Projektpaket benötigt eine ergänzende Abschlussprüfung.',
+      );
+      await handoverAction(section, 'withdraw').click();
+      await expect(handoverMessage(section, 'withdrawn')).toBeVisible({
         timeout: 20_000,
       });
       await adminPage.reload();
       section = workHandoverSection(adminPage);
-      await section
-        .getByLabel('Ausführung erneut öffnen')
-        .fill('Projektprüfung wird mit dem Büro erneut durchgeführt.');
-      await section.getByRole('button', { name: 'Zur Korrektur in Ausführung geben' }).click();
-      await expect(section.getByText('Ausführung zur Korrektur geöffnet.')).toBeVisible({
+      await handoverField(section, 'reopenReason').fill(
+        'Projektprüfung wird mit dem Büro erneut durchgeführt.',
+      );
+      await handoverAction(section, 'reopenForCorrection').click();
+      await expect(handoverMessage(section, 'reopened')).toBeVisible({
         timeout: 20_000,
       });
-    }
 
-    await completeManagerWork(
-      adminPage,
-      `/auftraege/projekt/${fixture.projectNumber}`,
-      false,
-      true
-    );
-    await releaseHandover(adminPage, route);
-    const state = await getWorkHandoverState(world.orgId, {
-      projectNumber: fixture.projectNumber,
+      await completeManagerWork(adminPage, `/auftraege/projekt/${scope.projectNumber}`, true);
+      await releaseHandover(adminPage, projectRoute);
+      const state = await getWorkHandoverState(world.orgId, { projectNumber: scope.projectNumber });
+      expect(state.releases).toHaveLength(2);
+      expect(state.releases[1]?.previous_release_id).toBe(state.releases[0]?.id);
+      expect(state.documents).toHaveLength(2);
+      expect(state.events.map((event) => event.event_type)).toEqual(
+        expect.arrayContaining([
+          'handover_withdrawn',
+          'review_returned',
+          'execution_reopened',
+          'successor_created',
+        ]),
+      );
+      const lifecycle = await getWorkLifecycleState(world.orgId, { projectNumber: scope.projectNumber });
+      expect(lifecycle.executionEvents.map((event) => event.event_type)).toEqual(
+        expect.arrayContaining(['handed_over', 'handover_withdrawn', 'reopened']),
+      );
     });
-    expect(state.releases).toHaveLength(2);
-    const [firstRelease, secondRelease] = state.releases;
-    if (!firstRelease || !secondRelease) throw new Error('P1-17: expected two project releases');
-    expect(secondRelease.previous_release_id).toBe(firstRelease.id);
-    expect(state.documents).toHaveLength(2);
-    expect(state.events.map((event) => event.event_type)).toEqual(
-      expect.arrayContaining([
-        'handover_withdrawn',
-        'review_returned',
-        'execution_reopened',
-        'successor_created',
-      ])
-    );
-    const lifecycle = await getWorkLifecycleState(world.orgId, {
-      projectNumber: fixture.projectNumber,
-    });
-    expect(lifecycle.executionEvents.map((event) => event.event_type)).toEqual(
-      expect.arrayContaining(['handed_over', 'handover_withdrawn', 'reopened', 'handed_over'])
-    );
   });
 });

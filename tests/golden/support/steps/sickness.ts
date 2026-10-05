@@ -1,13 +1,98 @@
-import { expect, type Page } from "@playwright/test";
-import { typeIntoDatePicker, visibleText } from './shared';
+import { expect, type Locator, type Page } from '@playwright/test';
+import { SICKNESS_EVIDENCE_LABELS, SICKNESS_TYPE_LABELS } from '../../../../lib/sickness/types';
+import type { SicknessAbsenceType, SicknessEvidenceStatus } from '../../../../lib/sickness/types';
+import { VACATION_PORTION_LABELS } from '../../../../lib/vacation/types';
+import { SHARED_COPY, typeIntoDatePicker, visibleText } from './shared';
+import {
+  clockInConfirmationButton,
+  clockInLauncher,
+  clockInSheetHeading,
+  runningClockLauncher,
+} from './time-tracking';
 
 // P1-08: sickness / privacy-sensitive absence. A report is a fact, not a
 // request — every step asserts the resulting state transition, never a
 // transient flash (inherited rows could satisfy texts alone).
 
+/** Copy of the sickness surfaces that no pure product module owns. */
+export const SICKNESS_COPY = {
+  reportSickness: 'Krank melden',
+  recordSickness: 'Krankmeldung erfassen',
+  ownNoDiagnosisHint: 'bitte gib keine Diagnose an.',
+  managerNoDetailsHint: 'Es werden keine Krankheitsdetails erfasst.',
+  correctionReasonRequired: 'Bitte gib einen Grund für die Korrektur an.',
+  recordedForYouNotice: 'Für dich wurde eine Krankmeldung erfasst',
+  cancelledNoticePrefix: 'Krankmeldung storniert:',
+  ownCancelledNoticeStart: 'Deine Krankmeldung',
+  ownCancelledNoticeEnd: 'wurde storniert',
+} as const;
+
+/** Anything that would ask for a diagnosis; the privacy contract allows none. */
+const DIAGNOSIS = /Diagnose/i;
+
+/** The neutral calendar label of an absence: „Abwesend – Name“, with its open end or half day. */
+export function absenceCalendarLabel(
+  personName: string,
+  options: { openEnded?: boolean; halfDay?: boolean } = {},
+): string {
+  const suffix = options.openEnded ? ' (bis auf Weiteres)' : options.halfDay ? ' (halber Tag)' : '';
+  return `Abwesend – ${personName}${suffix}`;
+}
+
+/** A typed sickness label the shared calendar must never show. */
+export function typedSicknessCalendarLabel(personName: string): string {
+  return `Krank – ${personName}`;
+}
+
+/** The manager notice title of a self-report: „Krankmeldung: Name“. */
+export function sicknessNoticeText(personName: string): string {
+  return `Krankmeldung: ${personName}`;
+}
+
+/** The manager section's report summary: „Kind krank · Halbtägig · Nachweis ausstehend“. */
+export function sicknessReportSummaryText(options: {
+  type: SicknessAbsenceType;
+  halfDay?: boolean;
+  evidence: SicknessEvidenceStatus;
+}): string {
+  return [
+    SICKNESS_TYPE_LABELS[options.type],
+    ...(options.halfDay ? [VACATION_PORTION_LABELS.half_day] : []),
+    SICKNESS_EVIDENCE_LABELS[options.evidence],
+  ].join(' · ');
+}
+
+/** The own section's action that opens the self-report dialog. */
+export function reportSicknessButton(page: Page): Locator {
+  return page.getByRole('button', { name: SICKNESS_COPY.reportSickness });
+}
+
+/** The member detail's action that opens the office entry dialog. */
+export function recordSicknessButton(page: Page): Locator {
+  return page.getByRole('button', { name: SICKNESS_COPY.recordSickness });
+}
+
+/** The actions menu trigger of one report row on the member detail. */
+function sicknessReportActionsButton(page: Page, rangeText: string): Locator {
+  return page.getByRole('button', { name: `Aktionen für die Krankmeldung vom ${rangeText}` });
+}
+
+/** The save button of the correction dialog. */
+export function saveSicknessCorrectionButton(dialog: Locator): Locator {
+  return dialog.getByRole('button', { name: 'Korrektur speichern' });
+}
+
+/** A sickness dialog offers no field that could take a diagnosis. */
+export async function expectNoDiagnosisControl(dialog: Locator): Promise<void> {
+  await expect(dialog.getByLabel(DIAGNOSIS)).toHaveCount(0);
+  await expect(dialog.getByRole('textbox', { name: DIAGNOSIS })).toHaveCount(0);
+  await expect(dialog.getByRole('combobox', { name: DIAGNOSIS })).toHaveCount(0);
+  await expect(dialog.getByPlaceholder(DIAGNOSIS)).toHaveCount(0);
+}
+
 export async function openOwnSicknessSection(page: Page): Promise<void> {
-  await page.goto("/zeiterfassung");
-  await expect(visibleText(page, "Krankmeldung")).toBeVisible({
+  await page.goto('/zeiterfassung');
+  await expect(visibleText(page, 'Krankmeldung')).toBeVisible({
     timeout: 15_000,
   });
 }
@@ -21,42 +106,36 @@ export async function reportOwnSicknessViaDialog(
     startDigits: string;
     endDigits?: string;
     halfDay?: boolean;
-    typeLabel?: "Krankheit" | "Kind krank" | "Sonstige Abwesenheit";
+    type?: SicknessAbsenceType;
     expectVacationOverlapHint?: boolean;
   },
 ): Promise<void> {
   await openOwnSicknessSection(page);
-  await page.getByRole("button", { name: "Krank melden" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Krank melden" }),
-  ).toBeVisible();
+  await reportSicknessButton(page).click();
+  await expect(page.getByRole('heading', { name: SICKNESS_COPY.reportSickness })).toBeVisible();
 
-  const dialog = page.getByRole("dialog");
-  if (options.typeLabel) {
-    await dialog.locator("#sickness-type").click();
-    await page
-      .getByRole("option", { name: options.typeLabel, exact: true })
-      .click();
+  const dialog = page.getByRole('dialog');
+  if (options.type) {
+    await dialog.locator('#sickness-type').click();
+    await page.getByRole('option', { name: SICKNESS_TYPE_LABELS[options.type], exact: true }).click();
   }
-  await typeIntoDatePicker(dialog, "Ab", options.startDigits);
+  await typeIntoDatePicker(dialog, 'Ab', options.startDigits);
   if (options.endDigits !== undefined) {
-    await dialog.locator("#sickness-end-known").click();
-    await typeIntoDatePicker(dialog, "Bis", options.endDigits);
+    await dialog.locator('#sickness-end-known').click();
+    await typeIntoDatePicker(dialog, SHARED_COPY.field.rangeEnd, options.endDigits);
     if (options.halfDay) {
-      await dialog.locator("#sickness-half-day").click();
+      await dialog.locator('#sickness-half-day').click();
     }
   }
-  await dialog.getByRole("button", { name: "Krank melden" }).click();
+  await dialog.getByRole('button', { name: SICKNESS_COPY.reportSickness }).click();
   if (options.expectVacationOverlapHint) {
     // The saved report shows the overlap hint until explicitly acknowledged.
-    await expect(
-      dialog.getByText("überschneidet sich mit genehmigtem Urlaub"),
-    ).toBeVisible({
+    await expect(dialog.getByText('überschneidet sich mit genehmigtem Urlaub')).toBeVisible({
       timeout: 15_000,
     });
-    await dialog.getByRole("button", { name: "Verstanden" }).click();
+    await dialog.getByRole('button', { name: 'Verstanden' }).click();
   }
-  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
 }
 
 // Overlapping own active sickness is impossible (gist exclusion constraint);
@@ -66,21 +145,19 @@ export async function expectSicknessOverlapRejectedViaDialog(
   options: { startDigits: string; endDigits?: string },
 ): Promise<void> {
   await openOwnSicknessSection(page);
-  await page.getByRole("button", { name: "Krank melden" }).click();
-  const dialog = page.getByRole("dialog");
-  await typeIntoDatePicker(dialog, "Ab", options.startDigits);
+  await reportSicknessButton(page).click();
+  const dialog = page.getByRole('dialog');
+  await typeIntoDatePicker(dialog, 'Ab', options.startDigits);
   if (options.endDigits !== undefined) {
-    await dialog.locator("#sickness-end-known").click();
-    await typeIntoDatePicker(dialog, "Bis", options.endDigits);
+    await dialog.locator('#sickness-end-known').click();
+    await typeIntoDatePicker(dialog, SHARED_COPY.field.rangeEnd, options.endDigits);
   }
-  await dialog.getByRole("button", { name: "Krank melden" }).click();
-  await expect(
-    dialog.getByText(
-      "Für diesen Zeitraum ist bereits eine Krankmeldung erfasst.",
-    ),
-  ).toBeVisible({ timeout: 15_000 });
-  await dialog.getByRole("button", { name: "Abbrechen" }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 15_000 });
+  await dialog.getByRole('button', { name: SICKNESS_COPY.reportSickness }).click();
+  await expect(dialog.getByText('Für diesen Zeitraum ist bereits eine Krankmeldung erfasst.')).toBeVisible({
+    timeout: 15_000,
+  });
+  await dialog.getByRole('button', { name: SHARED_COPY.action.cancel }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
 }
 
 // Own close-out: set the end date on an active report identified by its
@@ -92,18 +169,33 @@ export async function setOwnSicknessEndDateViaDialog(
 ): Promise<void> {
   await openOwnSicknessSection(page);
   await page
-    .getByRole("button", {
+    .getByRole('button', {
       name: `Enddatum für die Krankmeldung vom ${options.rangeText} setzen`,
     })
     .click();
-  const dialog = page.getByRole("dialog");
+  const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
-  await typeIntoDatePicker(dialog, "Letzter Tag", options.endDigits);
-  await dialog.getByRole("button", { name: "Enddatum speichern" }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 15_000 });
+  await typeIntoDatePicker(dialog, 'Letzter Tag', options.endDigits);
+  await dialog.getByRole('button', { name: 'Enddatum speichern' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
   await expect(visibleText(page, options.expectedRangeText)).toBeVisible({
     timeout: 15_000,
   });
+}
+
+// Own cancellation of an active report from the own section, identified by
+// its range text (aria-label).
+export async function cancelOwnSicknessReport(page: Page, rangeText: string): Promise<void> {
+  await openOwnSicknessSection(page);
+  await page
+    .getByRole('button', {
+      name: `Krankmeldung vom ${rangeText} stornieren`,
+    })
+    .click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('heading', { name: 'Krankmeldung stornieren' })).toBeVisible();
+  await dialog.getByRole('button', { name: SHARED_COPY.action.cancelRecord, exact: true }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 }
 
 // Office entry on the currently open member/personnel detail (the 7:00
@@ -114,80 +206,71 @@ export async function recordSicknessForMemberViaSection(
     startDigits: string;
     endDigits?: string;
     halfDay?: boolean;
-    typeLabel?: "Krankheit" | "Kind krank" | "Sonstige Abwesenheit";
+    type?: SicknessAbsenceType;
     evidenceRequired?: boolean;
     expectVacationOverlapHint?: boolean;
   },
 ): Promise<void> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     await page.waitForTimeout(300);
-    await page.getByRole("button", { name: "Krankmeldung erfassen" }).click();
-    await expect(
-      page.getByRole("heading", { name: "Krankmeldung erfassen" }),
-    ).toBeVisible();
-    const dialog = page.getByRole("dialog");
+    await recordSicknessButton(page).click();
+    await expect(page.getByRole('heading', { name: SICKNESS_COPY.recordSickness })).toBeVisible();
+    const dialog = page.getByRole('dialog');
     let submitted = false;
     try {
-      if (options.typeLabel) {
-        await dialog.locator("#record-sickness-type").click();
-        await page
-          .getByRole("option", { name: options.typeLabel, exact: true })
-          .click();
+      if (options.type) {
+        await dialog.locator('#record-sickness-type').click();
+        await page.getByRole('option', { name: SICKNESS_TYPE_LABELS[options.type], exact: true }).click();
       }
-      await typeIntoDatePicker(dialog, "Ab", options.startDigits);
+      await typeIntoDatePicker(dialog, 'Ab', options.startDigits);
       if (options.endDigits !== undefined) {
-        await dialog.locator("#record-sickness-end-known").click();
-        await typeIntoDatePicker(dialog, "Bis", options.endDigits);
+        await dialog.locator('#record-sickness-end-known').click();
+        await typeIntoDatePicker(dialog, SHARED_COPY.field.rangeEnd, options.endDigits);
         if (options.halfDay) {
-          await dialog.locator("#record-sickness-half-day").click();
+          await dialog.locator('#record-sickness-half-day').click();
         }
       }
       if (options.evidenceRequired) {
-        await dialog.locator("#record-sickness-evidence").click();
+        await dialog.locator('#record-sickness-evidence').click();
       }
       submitted = true;
-      await dialog
-        .getByRole("button", { name: "Krankmeldung erfassen" })
-        .click();
+      await dialog.getByRole('button', { name: SICKNESS_COPY.recordSickness }).click();
       if (options.expectVacationOverlapHint) {
         // The saved report shows the overlap hint until explicitly acknowledged.
-        await expect(
-          dialog.getByText("überschneidet sich mit genehmigtem Urlaub"),
-        ).toBeVisible({
+        await expect(dialog.getByText('überschneidet sich mit genehmigtem Urlaub')).toBeVisible({
           timeout: 15_000,
         });
-        await dialog.getByRole("button", { name: "Verstanden" }).click();
+        await dialog.getByRole('button', { name: 'Verstanden' }).click();
       }
-      await expect(page.getByRole("dialog")).toHaveCount(0, {
+      await expect(page.getByRole('dialog')).toHaveCount(0, {
         timeout: 15_000,
       });
       return;
     } catch (error) {
-      const interruptedBeforeSubmit =
-        !submitted && !(await dialog.isVisible().catch(() => false));
+      const interruptedBeforeSubmit = !submitted && !(await dialog.isVisible().catch(() => false));
       if (attempt === 0 && interruptedBeforeSubmit) continue;
       throw error;
     }
   }
 
-  throw new Error(
-    "recordSicknessForMemberViaSection: dialog remained interrupted",
-  );
+  throw new Error('recordSicknessForMemberViaSection: dialog remained interrupted');
 }
+
+const SICKNESS_REPORT_MENU_ITEMS = {
+  correct: 'Korrigieren',
+  evidence: 'Nachweis verwalten',
+  cancel: SHARED_COPY.action.cancelRecord,
+} as const;
 
 // Manager actions on one report row of the member-detail section, addressed
 // by the report's range text (the per-item aria-label disambiguates).
-async function openSicknessReportMenu(
+export async function openSicknessReportMenu(
   page: Page,
   rangeText: string,
-  itemName: string | RegExp,
+  item: keyof typeof SICKNESS_REPORT_MENU_ITEMS,
 ): Promise<void> {
-  await page
-    .getByRole("button", {
-      name: `Aktionen für die Krankmeldung vom ${rangeText}`,
-    })
-    .click();
-  await page.getByRole("menuitem", { name: itemName }).click();
+  await sicknessReportActionsButton(page, rangeText).click();
+  await page.getByRole('menuitem', { name: SICKNESS_REPORT_MENU_ITEMS[item] }).click();
 }
 
 export async function setSicknessEvidenceViaMenu(
@@ -195,25 +278,23 @@ export async function setSicknessEvidenceViaMenu(
   rangeText: string,
   options: { required: boolean; received?: boolean },
 ): Promise<void> {
-  await openSicknessReportMenu(page, rangeText, "Nachweis verwalten");
-  const dialog = page.getByRole("dialog");
+  await openSicknessReportMenu(page, rangeText, 'evidence');
+  const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
-  const requiredBox = dialog.locator("#evidence-required");
-  const isChecked =
-    (await requiredBox.getAttribute("data-state")) === "checked";
+  const requiredBox = dialog.locator('#evidence-required');
+  const isChecked = (await requiredBox.getAttribute('data-state')) === 'checked';
   if (isChecked !== options.required) {
     await requiredBox.click();
   }
   if (options.required) {
-    const receivedBox = dialog.locator("#evidence-received");
-    const receivedChecked =
-      (await receivedBox.getAttribute("data-state")) === "checked";
+    const receivedBox = dialog.locator('#evidence-received');
+    const receivedChecked = (await receivedBox.getAttribute('data-state')) === 'checked';
     if (receivedChecked !== (options.received ?? false)) {
       await receivedBox.click();
     }
   }
-  await dialog.getByRole("button", { name: "Speichern", exact: true }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 15_000 });
+  await dialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
 }
 
 export async function cancelSicknessReportViaMenuWithReason(
@@ -221,40 +302,30 @@ export async function cancelSicknessReportViaMenuWithReason(
   rangeText: string,
   reason: string,
 ): Promise<void> {
-  await openSicknessReportMenu(page, rangeText, "Stornieren");
-  const dialog = page.getByRole("dialog");
+  await openSicknessReportMenu(page, rangeText, 'cancel');
+  const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
-  await dialog.locator("#cancel-sickness-reason").fill(reason);
-  await dialog.getByRole("button", { name: "Stornieren", exact: true }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 15_000 });
+  await dialog.locator('#cancel-sickness-reason').fill(reason);
+  await dialog.getByRole('button', { name: SHARED_COPY.action.cancelRecord, exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
   // The row flips to the terminal state — the precise transition, not a text
   // an inherited row could already satisfy.
   await expect(
-    page
-      .locator("[data-sickness-report]")
-      .filter({ hasText: rangeText })
-      .getByText("Storniert")
-      .first(),
+    page.locator('[data-sickness-report]').filter({ hasText: rangeText }).getByText('Storniert').first(),
   ).toBeVisible({ timeout: 15_000 });
 }
 
 // Clock-in on a sick day succeeds with a visible notice (warn, never block).
-export async function expectClockInNoticeForSickness(
-  page: Page,
-): Promise<void> {
-  await page.goto("/dashboard");
-  await page.getByRole("button", { name: "Zeiterfassung starten" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Zeiterfassung starten" }),
-  ).toBeVisible();
-  await page.getByRole("dialog").getByRole("button", { name: "Arbeit starten", exact: true }).click();
-  await expect(
-    visibleText(page, "Für heute liegt eine Krankmeldung vor"),
-  ).toBeVisible({
+export async function expectClockInNoticeForSickness(page: Page): Promise<void> {
+  await page.goto('/dashboard');
+  await clockInLauncher(page).click();
+  await expect(clockInSheetHeading(page)).toBeVisible();
+  await clockInConfirmationButton(page).click();
+  await expect(visibleText(page, 'Für heute liegt eine Krankmeldung vor')).toBeVisible({
     timeout: 15_000,
   });
   // Clocked IN despite the notice — the warn-not-block contract.
-  await expect(page.getByRole("button", { name: "Laufende Zeiterfassung öffnen" })).toBeVisible({
+  await expect(runningClockLauncher(page)).toBeVisible({
     timeout: 15_000,
   });
 }

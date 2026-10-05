@@ -1,9 +1,10 @@
-import { z } from 'zod';
+import type { ActionResult } from '@/lib/action-result';
+import { z } from '@/lib/zod';
 import { uuidSchema } from '@/lib/validation/uuid';
 
 export const jobOptionRequestSchema = z.object({
   organizationId: uuidSchema,
-  kind: z.enum(['clients', 'projects', 'jobs']),
+  kind: z.enum(['clients', 'projects', 'jobs', 'equipment']),
   query: z.string().trim().max(120).default(''),
   offset: z.number().int().min(0).max(1_000_000).default(0),
   selectedIds: z.array(uuidSchema).max(10_000).default([]),
@@ -21,6 +22,8 @@ export type JobEntityOption = {
   projectId?: string | null;
   status?: string;
 };
-export type JobOptionResult =
-  | { success: true; options: JobEntityOption[]; selected: JobEntityOption[]; hasMore: boolean }
-  | { success: false; error: string };
+export type JobOptionResult = ActionResult<{
+  options: JobEntityOption[];
+  selected: JobEntityOption[];
+  hasMore: boolean;
+}>;

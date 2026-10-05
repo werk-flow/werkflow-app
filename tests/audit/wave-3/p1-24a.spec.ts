@@ -1,25 +1,49 @@
-import { expect, test } from "../support/fixtures";
-import { getCalendarPreferencesFor, getPlanningState, occurrenceLocalDate } from "../../golden/support/db/calendar";
-import { getParkingState, getVisibleDispatchStateAs } from "../../golden/support/db/dispatch";
-import { getEmployeeRecordStateByUser, giveEmployeesWorkSchedules } from "../../golden/support/db/personnel";
-import { getOrganizationTimeEntryCount } from "../../golden/support/db/time-tracking";
-import { ownedBerlinDateAtOffset } from "../../golden/support/date-ownership";
+import { resolveBerlinWallTime } from '../../../lib/planning/date-time';
+import { expectDefined } from '../../../lib/testing/spec-support/expect-defined';
+import { expect, test } from '../support/fixtures';
+import {
+  getJobOccurrenceAssigneeRecordIds,
+  getPlanningState,
+  occurrenceLocalDate,
+  seedClosureDay,
+  getCalendarPreferencesFor,
+} from '../../golden/support/db/calendar';
+import { getDispatchState, getParkingState } from '../../golden/support/db/dispatch';
+import { getEmployeeRecordStateByUser, giveEmployeesWorkSchedules } from '../../golden/support/db/personnel';
+import { seedSicknessReport } from '../../golden/support/db/sickness';
+import { getOrganizationTimeEntryCount } from '../../golden/support/db/time-tracking';
+import { ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
 import {
   banners,
   beginCardDragToPoint,
   boardAbsenceBar,
   boardCard,
   boardCell,
+  boardCellEntryAction,
   boardColumn,
-  boardRows,
+  boardFilterButton,
+  boardFilterPopover,
+  boardRowCards,
+  boardSearch,
   boardTeamHeader,
+  boardWeekNumber,
   calendarAbsenceBarStarting,
+  calendarBanner,
   calendarHolidayLabel,
+  calendarPageHeading,
   calendarViewReady,
+  calendarViewTab,
+  cardDispatchChip,
+  cardPopoverAction,
+  cardSeriesMark,
+  chooseBoardHorizon,
   closeBanners,
+  conflictsOnlyFilter,
   dayCard,
   dayRow,
   dayTimeline,
+  densityToggle,
+  DRAG_REFUSALS,
   dragCardTo,
   dragGhost,
   dragHandleBy,
@@ -27,320 +51,559 @@ import {
   dragToCreateOnDayRow,
   inMonthCells,
   jobPopover,
+  mondayOf,
   monthCards,
   monthCell,
   monthDay,
   monthDayPopover,
+  monthMoreButton,
   openCalendarView,
   openPlantafel,
   parkplatzButton,
   parkplatzCardOf,
   plantafel,
-  successBanner,
+  reassignedBanner,
+  shiftIsoDate,
+  shortcutsButton,
+  shortcutsDialog,
   trailingResizeHandle,
-} from "../../golden/support/plantafel";
-import { createPlannedCalendarEntry } from "../../golden/support/steps/calendar";
-import { addClosureDayViaSettings, removeClosureDayViaSettings } from "../../golden/support/steps/personnel";
-import { addTeamMemberViaManagement, createTeamViaManagement } from "../../golden/support/steps/qualifications";
-import { selectFromSearchable, textInDom, typeIntoDatePickerById } from "../../golden/support/steps/shared";
-import { reportOwnSicknessViaDialog } from "../../golden/support/steps/sickness";
-import { createJob } from "../../golden/support/steps/work";
+  unassignedRowHeader,
+} from '../../golden/support/plantafel';
+import { seedPlanningVisit } from '../../golden/support/planning-fixture';
+import {
+  calendarEntryDialog,
+  createPlannedCalendarEntry,
+  occurrenceEditButton,
+  planningAllDayOption,
+  planningCheckAndSave,
+  planningEmployeePicker,
+  planningInternalEntryToggle,
+  planningInternalTypeOption,
+} from '../../golden/support/steps/calendar';
+import { fillParkingContext, parkingContextSave } from '../../golden/support/steps/dispatch';
+import { dismissDialog, pressKey } from '../../golden/support/steps/interaction';
+import { addClosureDayViaSettings } from '../../golden/support/steps/personnel';
+import {
+  addTeamMemberViaManagement,
+  createTeamViaManagement,
+} from '../../golden/support/steps/qualifications';
+import {
+  employeeSelectionSummary,
+  SHARED_COPY,
+  selectFromSearchable,
+  testData,
+} from '../../golden/support/steps/shared';
+import { createJob } from '../../golden/support/steps/work';
 
 // P1-24a audit: the Plantafel, the day and the month view flow by flow
-// (docs/product/user-flow-catalog.md, P1-24a-F01 to F35). The world is this
-// group's own; dates are run-day +131 to +140 (date-ownership registry).
+// (docs/product/user-flow-catalog.md, P1-24a-F01 to F35). Golden P1-24a owns
+// the reassignment with Undo, the live date move, the park dialog with
+// „Einplanen am …“, the horizon memory and the employee's own row. Every test
+// seeds its own visits; the weeks keep the tests apart: AUDIT-01, 03, 04 and 06
+// the first week, AUDIT-02 the second, AUDIT-05 the third.
 
-const MONDAY = mondayOf(ownedBerlinDateAtOffset("p1-24a", 134));
-const DAY_A = MONDAY;
-const DAY_B = shiftIsoDate(MONDAY, 1);
-const DAY_D = shiftIsoDate(MONDAY, 3);
-const CLOSURE = shiftIsoDate(MONDAY, 4);
-/** A free weekday of the second week: no visit, no absence, no closure. */
-const NOTE_DAY = shiftIsoDate(MONDAY, 7);
-/** The month move's target: the free weekday after the note's day. */
-const MOVE_DAY = shiftIsoDate(MONDAY, 8);
-const SATURDAY = shiftIsoDate(MONDAY, 5);
-const ABSENCE_START = shiftIsoDate(MONDAY, 2);
-const ABSENCE_END = shiftIsoDate(MONDAY, 3);
-const OVERRIDE_REASON = "Betrieblich abgestimmter P1-24a Audit-Einsatz.";
+const OVERRIDE_REASON = 'Betrieblich abgestimmter P1-24a Audit-Einsatz.';
 
-function shiftIsoDate(dateIso: string, days: number): string {
-  const [year, month, day] = dateIso.split("-").map(Number);
-  if (year === undefined || month === undefined || day === undefined) throw new Error(`Invalid ISO date: ${dateIso}`);
-  return new Date(Date.UTC(year, month - 1, day) + days * 86_400_000).toISOString().slice(0, 10);
-}
-function mondayOf(dateIso: string): string {
-  return shiftIsoDate(dateIso, -((new Date(`${dateIso}T00:00:00Z`).getUTCDay() + 6) % 7));
+/** The Monday of the first audit week, anchored in the group's owned date window. */
+function firstAuditMonday(): string {
+  return mondayOf(ownedBerlinDateAtOffset('p1-24a', 134));
 }
 function dateDigits(dateIso: string): string {
   return `${dateIso.slice(8, 10)}${dateIso.slice(5, 7)}${dateIso.slice(0, 4)}`;
-}
-function germanDate(dateIso: string): string {
-  return `${dateIso.slice(8, 10)}.${dateIso.slice(5, 7)}.${dateIso.slice(0, 4)}`;
 }
 function jobNumber(runId: string, suffix: string): string {
   return `AUF-${runId}-P124A-${suffix}`;
 }
 
-test.describe("P1-24a Plantafel, day and month audit @AUDIT-W3-P1-24A @AUDIT-W3", () => {
-  test("AUDIT-01 the board opens at each horizon with today, weekends, closure and team grouping @P1-24A-01", async ({ adminPage, world }) => {
+test.describe('P1-24a Plantafel, day and month audit @AUDIT-W3-P1-24A @AUDIT-W3', () => {
+  test('AUDIT-01 the board opens at each horizon with weekends, closure and team grouping @P1-24A-01', async ({
+    adminPage,
+    world,
+  }) => {
+    const monday = firstAuditMonday();
+    const closure = shiftIsoDate(monday, 4);
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
+    const titleA = `P1-24a Besuch A ${world.runId}`;
+    const titleB = `P1-24a Besuch B ${world.runId}`;
+    const titleSeries = `P1-24a Serie ${world.runId}`;
+    const internalTitle = `Teamrunde ${world.runId}`;
+    const closureLabel = testData`Brückentag P1-24a`;
     // Persons with a schedule plan without the "no schedule" warning; the closure day still zeroes its target.
-    await giveEmployeesWorkSchedules({ organizationId: world.orgId, actorUserId: world.users.admin.id, validFrom: "2026-01-01", weekdayMinutes: 480, weekendMinutes: 0, note: "P1-24a audit" });
+    await giveEmployeesWorkSchedules({
+      organizationId: world.orgId,
+      actorUserId: world.users.admin.id,
+      validFrom: '2026-01-01',
+      weekdayMinutes: 480,
+      weekendMinutes: 0,
+      note: 'P1-24a audit',
+    });
     await createTeamViaManagement(adminPage, `Team Plantafel ${world.runId}`);
     await addTeamMemberViaManagement(adminPage, { teamName: `Team Plantafel ${world.runId}`, employeeName });
-    await addClosureDayViaSettings(adminPage, { dateDigits: dateDigits(CLOSURE), label: "Brückentag P1-24a" });
-    await createJob(adminPage, { jobNumber: jobNumber(world.runId, "A"), title: `P1-24a Besuch A ${world.runId}` });
-    await createJob(adminPage, { jobNumber: jobNumber(world.runId, "B"), title: `P1-24a Besuch B ${world.runId}` });
-    await createJob(adminPage, { jobNumber: jobNumber(world.runId, "C"), title: `P1-24a Serie ${world.runId}` });
-    await createPlannedCalendarEntry(adminPage, { kind: "job_visit", jobSearch: jobNumber(world.runId, "A"), date: DAY_A, time: "08:00", employeeNames: [employeeName], overrideReason: OVERRIDE_REASON });
+    await addClosureDayViaSettings(adminPage, {
+      dateDigits: dateDigits(closure),
+      label: closureLabel,
+    });
+    await createJob(adminPage, { jobNumber: jobNumber(world.runId, 'A'), title: titleA });
+    await createJob(adminPage, { jobNumber: jobNumber(world.runId, 'B'), title: titleB });
+    await createJob(adminPage, { jobNumber: jobNumber(world.runId, 'C'), title: titleSeries });
+    await createPlannedCalendarEntry(adminPage, {
+      kind: 'job_visit',
+      jobSearch: jobNumber(world.runId, 'A'),
+      date: monday,
+      time: '08:00',
+      employeeNames: [employeeName],
+      overrideReason: OVERRIDE_REASON,
+    });
     // A multi-day all-day visit without a person lands in „Ohne Zuweisung“.
-    await createPlannedCalendarEntry(adminPage, { kind: "job_visit", jobSearch: jobNumber(world.runId, "B"), date: DAY_B, durationDays: 2, overrideReason: OVERRIDE_REASON });
-    await createPlannedCalendarEntry(adminPage, { kind: "job_visit", jobSearch: jobNumber(world.runId, "C"), date: DAY_A, time: "13:00", employeeNames: [employeeName], recurrence: { frequency: "daily", count: 3 }, overrideReason: OVERRIDE_REASON });
-    await createPlannedCalendarEntry(adminPage, { kind: "internal", internalTitle: `Teamrunde ${world.runId}`, internalType: "meeting", date: DAY_D, time: "10:00", employeeNames: [employeeName] });
+    await createPlannedCalendarEntry(adminPage, {
+      kind: 'job_visit',
+      jobSearch: jobNumber(world.runId, 'B'),
+      date: shiftIsoDate(monday, 1),
+      durationDays: 2,
+      overrideReason: OVERRIDE_REASON,
+    });
+    await createPlannedCalendarEntry(adminPage, {
+      kind: 'job_visit',
+      jobSearch: jobNumber(world.runId, 'C'),
+      date: monday,
+      time: '13:00',
+      employeeNames: [employeeName],
+      recurrence: { frequency: 'daily', count: 3 },
+      overrideReason: OVERRIDE_REASON,
+    });
+    await createPlannedCalendarEntry(adminPage, {
+      kind: 'internal',
+      internalTitle,
+      internalType: 'meeting',
+      date: shiftIsoDate(monday, 3),
+      time: '10:00',
+      employeeNames: [employeeName],
+    });
 
-    await openPlantafel(adminPage, DAY_A);
-    await expect(adminPage.getByRole("tab", { name: "Plantafel", exact: true })).toHaveAttribute("data-state", "active");
+    await openPlantafel(adminPage, monday);
+    await expect(calendarViewTab(adminPage, 'board')).toHaveAttribute('data-state', 'active');
     await expect(boardTeamHeader(adminPage, `Team Plantafel ${world.runId}`)).toBeVisible();
-    await expect(plantafel(adminPage).getByRole("rowheader", { name: "Ohne Zuweisung" })).toBeVisible();
-    await expect(boardCard(adminPage, "unassigned", `P1-24a Besuch B ${world.runId}`)).toBeVisible();
+    await expect(unassignedRowHeader(adminPage)).toBeVisible();
+    await expect(boardCard(adminPage, 'unassigned', titleB)).toBeVisible();
     // The closure day carries its label in the header; the weekend is shaded.
-    await expect(boardColumn(adminPage, CLOSURE)).toContainText("Brückentag P1-24a");
-    await expect(boardColumn(adminPage, SATURDAY)).toHaveClass(/bg-calendar-cell-off/);
+    await expect(boardColumn(adminPage, closure)).toContainText(closureLabel);
+    await expect(boardColumn(adminPage, shiftIsoDate(monday, 5))).toHaveClass(/bg-calendar-cell-off/);
     const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
-    await expect(boardCell(adminPage, employeeRecord.id, CLOSURE)).toHaveAttribute("aria-label", /Brückentag P1-24a|Betriebsruhe/);
+    await expect(boardCell(adminPage, employeeRecord.id, closure)).toHaveAttribute(
+      'aria-label',
+      /Brückentag P1-24a|Betriebsruhe/,
+    );
     // Series marks, the internal entry, and capacity on the planned day.
-    await expect(boardCard(adminPage, employeeRecord.id, `P1-24a Serie ${world.runId}`, DAY_A).getByRole("img", { name: "Serientermin" })).toBeVisible();
-    await expect(boardCard(adminPage, employeeRecord.id, `Teamrunde ${world.runId}`)).toBeVisible();
-    await expect(boardCell(adminPage, employeeRecord.id, DAY_A)).toHaveAttribute("data-capacity", /partial|full|overbooked/);
+    await expect(cardSeriesMark(boardCard(adminPage, employeeRecord.id, titleSeries, monday))).toBeVisible();
+    await expect(boardCard(adminPage, employeeRecord.id, internalTitle)).toBeVisible();
+    await expect(boardCell(adminPage, employeeRecord.id, monday)).toHaveAttribute(
+      'data-capacity',
+      /partial|full|overbooked/,
+    );
 
-    for (const [option, weeks] of [["2 Wochen", "2"], ["4 Wochen", "4"], ["6 Wochen", "6"], ["1 Woche", "1"]] as const) {
-      await adminPage.getByLabel("Horizont").click();
-      await adminPage.getByRole("option", { name: option }).click();
-      await expect(calendarViewReady(adminPage, "week")).toHaveAttribute("data-calendar-horizon", weeks, { timeout: 20_000 });
+    for (const weeks of [2, 4, 6, 1] as const) {
+      await chooseBoardHorizon(adminPage, weeks);
+      await expect(calendarViewReady(adminPage, 'week')).toHaveAttribute(
+        'data-calendar-horizon',
+        String(weeks),
+        {
+          timeout: 20_000,
+        },
+      );
     }
-    await expect(adminPage.getByRole("main").getByText(/KW \d+/)).toBeVisible();
+    await expect(boardWeekNumber(adminPage)).toBeVisible();
   });
 
-  test("AUDIT-02 every drop kind: reassign with refusal on an absence day, date move, bar edge, copy, park, unpark, note @P1-24A-02", async ({ adminPage, employeePage, world }) => {
+  test('AUDIT-02 every other drop kind: refusal on an absence day, date move, copy, bar edge, note, park and unpark by drag @P1-24A-02', async ({
+    adminPage,
+    world,
+  }) => {
+    const monday = shiftIsoDate(firstAuditMonday(), 7);
+    const tuesday = shiftIsoDate(monday, 1);
+    const absenceStart = shiftIsoDate(monday, 2);
+    const thursday = shiftIsoDate(monday, 3);
+    const friday = shiftIsoDate(monday, 4);
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
-    const bueroName = `${world.users.buero.firstName} ${world.users.buero.lastName}`;
     const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
     const bueroRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.buero.id);
-    const titleA = `P1-24a Besuch A ${world.runId}`;
-    // The employee reports sick for two days: a drop there is refused at the pointer.
-    await reportOwnSicknessViaDialog(employeePage, { startDigits: dateDigits(ABSENCE_START), endDigits: dateDigits(ABSENCE_END) });
+    const visit = await seedPlanningVisit(world, { date: monday, hour: 8, assignee: 'buero' });
+    const bar = await seedPlanningVisit(world, { date: tuesday, allDayDays: 2, assigned: false });
+    await seedSicknessReport({
+      organizationId: world.orgId,
+      employeeRecordId: employeeRecord.id,
+      reportedBy: world.users.employee.id,
+      startDate: absenceStart,
+      endDate: thursday,
+    });
     const entriesBefore = await getOrganizationTimeEntryCount(world.orgId);
 
-    await openPlantafel(adminPage, DAY_A);
-    await expect(boardAbsenceBar(adminPage, employeeRecord.id, "Abwesend")).toBeVisible({ timeout: 20_000 });
+    await openPlantafel(adminPage, monday);
+    await expect(boardAbsenceBar(adminPage, employeeRecord.id, 'Abwesend')).toBeVisible({ timeout: 20_000 });
 
-    // Refusal at the pointer: the ghost turns red with the sentence, the release writes nothing.
-    await dragCardTo(adminPage, boardCard(adminPage, employeeRecord.id, titleA), boardCell(adminPage, employeeRecord.id, ABSENCE_START), { release: false });
-    await expect(dragGhost(adminPage)).toHaveAttribute("data-state", "refused");
-    await expect(dragGhost(adminPage)).toContainText("abwesend");
-    await adminPage.mouse.up();
-    await expect(boardCard(adminPage, employeeRecord.id, titleA)).toBeVisible();
-    expect(occurrenceLocalDate((await getPlanningState(world.orgId, { jobNumber: jobNumber(world.runId, "A") })).occurrences[0])).toBe(DAY_A);
+    await test.step('A drop onto an absence day is refused at the pointer and writes nothing', async () => {
+      await dragCardTo(
+        adminPage,
+        boardCard(adminPage, bueroRecord.id, visit.title),
+        boardCell(adminPage, employeeRecord.id, absenceStart),
+        { release: false },
+      );
+      await expect(dragGhost(adminPage)).toHaveAttribute('data-state', 'refused');
+      await expect(dragGhost(adminPage)).toContainText(DRAG_REFUSALS.absent);
+      await adminPage.mouse.up();
+      await expect(boardCard(adminPage, bueroRecord.id, visit.title)).toBeVisible();
+      expect(
+        occurrenceLocalDate(
+          (await getPlanningState(world.orgId, { jobNumber: visit.jobNumber })).occurrences[0],
+        ),
+      ).toBe(monday);
+    });
 
-    // Reassign to the Büro member, then move the date; the visit keeps 08:00.
-    await dragCardTo(adminPage, boardCard(adminPage, employeeRecord.id, titleA), boardCell(adminPage, bueroRecord.id, DAY_A));
-    await expect(successBanner(adminPage, `Termin wurde zu ${bueroName} verschoben.`)).toBeVisible({ timeout: 20_000 });
-    await closeBanners(adminPage);
-    await dragCardTo(adminPage, boardCard(adminPage, bueroRecord.id, titleA), boardCell(adminPage, bueroRecord.id, DAY_B));
-    await expect(successBanner(adminPage, "verschoben")).toBeVisible({ timeout: 20_000 });
-    await closeBanners(adminPage);
-    await expect.poll(async () => occurrenceLocalDate((await getPlanningState(world.orgId, { jobNumber: jobNumber(world.runId, "A") })).occurrences[0]), { timeout: 20_000 }).toBe(DAY_B);
-    await expect(boardCard(adminPage, bueroRecord.id, titleA)).toContainText("08:00");
+    await test.step('A date move in the same row keeps the time', async () => {
+      await dragCardTo(
+        adminPage,
+        boardCard(adminPage, bueroRecord.id, visit.title),
+        boardCell(adminPage, bueroRecord.id, tuesday),
+      );
+      await expect(calendarBanner(adminPage, 'moved')).toBeVisible({ timeout: 20_000 });
+      await closeBanners(adminPage);
+      await expect
+        .poll(
+          async () =>
+            occurrenceLocalDate(
+              (await getPlanningState(world.orgId, { jobNumber: visit.jobNumber })).occurrences[0],
+            ),
+          { timeout: 20_000 },
+        )
+        .toBe(tuesday);
+      await expect(boardCard(adminPage, bueroRecord.id, visit.title)).toContainText('08:00');
+    });
 
-    // Alt-copy onto the employee's Monday: a second occurrence of the same job.
-    await dragCardTo(adminPage, boardCard(adminPage, bueroRecord.id, titleA), boardCell(adminPage, employeeRecord.id, DAY_A), { alt: true });
-    await expect(successBanner(adminPage, "Kopie")).toBeVisible({ timeout: 20_000 });
-    await closeBanners(adminPage);
-    await expect.poll(async () => (await getPlanningState(world.orgId, { jobNumber: jobNumber(world.runId, "A") })).occurrenceCount, { timeout: 20_000 }).toBe(2);
+    await test.step('An Alt drop copies the visit into another row', async () => {
+      await dragCardTo(
+        adminPage,
+        boardCard(adminPage, bueroRecord.id, visit.title),
+        boardCell(adminPage, employeeRecord.id, monday),
+        { alt: true },
+      );
+      await expect(calendarBanner(adminPage, 'copied')).toBeVisible({ timeout: 20_000 });
+      await closeBanners(adminPage);
+      await expect
+        .poll(
+          async () => (await getPlanningState(world.orgId, { jobNumber: visit.jobNumber })).occurrenceCount,
+          { timeout: 20_000 },
+        )
+        .toBe(2);
+    });
 
-    // The unassigned two-day bar grows by one day at its right edge.
-    const bar = boardCard(adminPage, "unassigned", `P1-24a Besuch B ${world.runId}`);
-    await dragHandleTo(adminPage, trailingResizeHandle(bar), boardCell(adminPage, "unassigned", DAY_D));
-    await expect(successBanner(adminPage, "dauert jetzt bis")).toBeVisible({ timeout: 20_000 });
-    await closeBanners(adminPage);
-    await expect.poll(async () => (await getPlanningState(world.orgId, { jobNumber: jobNumber(world.runId, "B") })).occurrences[0]?.endDateExclusive, { timeout: 20_000 }).toBe(shiftIsoDate(DAY_D, 1));
+    await test.step('The bar edge extends an all-day visit by a day', async () => {
+      await dragHandleTo(
+        adminPage,
+        trailingResizeHandle(boardCard(adminPage, 'unassigned', bar.title)),
+        boardCell(adminPage, 'unassigned', thursday),
+      );
+      await expect(calendarBanner(adminPage, 'extendedUntil')).toBeVisible({ timeout: 20_000 });
+      await closeBanners(adminPage);
+      await expect
+        .poll(
+          async () =>
+            (await getPlanningState(world.orgId, { jobNumber: bar.jobNumber })).occurrences[0]
+              ?.endDateExclusive,
+          { timeout: 20_000 },
+        )
+        .toBe(friday);
+    });
 
-    // A note in two clicks: the dialog opens preset as an all-day „Sonstiges“ entry.
-    // Two weeks bring a free weekday into view; the action sits in the cell's corner above the card lanes.
-    await adminPage.getByLabel("Horizont").click();
-    await adminPage.getByRole("option", { name: "2 Wochen" }).click();
-    await expect(calendarViewReady(adminPage, "week")).toHaveAttribute("data-calendar-horizon", "2", { timeout: 20_000 });
-    const noteAction = boardCell(adminPage, employeeRecord.id, NOTE_DAY).getByRole("button", { name: new RegExp(`Notiz am .* für ${employeeName} anlegen`) });
-    await noteAction.hover();
-    await noteAction.click();
-    const noteDialog = adminPage.getByRole("dialog").filter({ has: adminPage.getByRole("heading", { name: "Kalendereintrag erstellen" }) });
-    await expect(noteDialog.getByRole("button", { name: "Interner Termin", pressed: true })).toBeVisible({ timeout: 20_000 });
-    await noteDialog.getByLabel("Titel").fill(`Schlüssel abholen ${world.runId}`);
-    await noteDialog.getByRole("button", { name: "Planung prüfen und speichern" }).click();
-    await expect(noteDialog).toHaveCount(0, { timeout: 20_000 });
-    await expect(boardCard(adminPage, employeeRecord.id, `Schlüssel abholen ${world.runId}`)).toBeVisible({ timeout: 20_000 });
-    await expect(boardCard(adminPage, employeeRecord.id, `Schlüssel abholen ${world.runId}`).getByText("nicht gesendet", { exact: true })).toHaveCount(0);
+    await test.step('The person-day action creates an all-day note without a dispatch chip', async () => {
+      const noteTitle = `Schlüssel abholen ${world.runId}`;
+      // The action sits in the cell's corner above the card lanes.
+      const noteAction = boardCellEntryAction(adminPage, employeeRecord.id, friday, employeeName);
+      await noteAction.hover();
+      await noteAction.click();
+      const noteDialog = calendarEntryDialog(adminPage);
+      await planningInternalEntryToggle(noteDialog).click();
+      await noteDialog.locator('#planning-internal-type').click();
+      await planningInternalTypeOption(adminPage, 'other').click();
+      await noteDialog.locator('#planning-time-kind').click();
+      await planningAllDayOption(adminPage).click();
+      await noteDialog.getByLabel(SHARED_COPY.field.title).fill(noteTitle);
+      await planningCheckAndSave(noteDialog).click();
+      await expect(noteDialog).toHaveCount(0, { timeout: 20_000 });
+      const noteCard = boardCard(adminPage, employeeRecord.id, noteTitle, friday);
+      await expect(noteCard).toBeVisible({ timeout: 20_000 });
+      await expect(cardDispatchChip(noteCard, 'nicht_gesendet')).toHaveCount(0);
+      expect(
+        occurrenceLocalDate(
+          (await getPlanningState(world.orgId, { internalTitle: noteTitle })).occurrences[0],
+        ),
+      ).toBe(friday);
+    });
 
-    // Park by drag and unpark by drag: the card leaves, the dialog saves, the Parkplatz card returns onto a cell.
-    await dragCardTo(adminPage, boardCard(adminPage, employeeRecord.id, titleA), parkplatzButton(adminPage));
-    const parkDialog = adminPage.getByRole("dialog");
-    await expect(parkDialog).toBeVisible({ timeout: 20_000 });
-    await selectFromSearchable(adminPage, parkDialog.locator("#parking-reason"), "Kapazität");
-    await selectFromSearchable(adminPage, parkDialog.locator("#parking-responsible"), world.users.admin.firstName);
-    await typeIntoDatePickerById(parkDialog, "parking-review-date", CLOSURE);
-    await parkDialog.getByRole("button", { name: "Kontext speichern", exact: true }).click();
-    await expect(parkDialog).toHaveCount(0, { timeout: 20_000 });
-    await closeBanners(adminPage);
-    expect((await getParkingState(world.orgId, jobNumber(world.runId, "A"))).context?.reason).toBe("capacity");
-    await parkplatzButton(adminPage).click();
-    const parkedCard = parkplatzCardOf(adminPage, titleA);
-    await expect(parkedCard).toBeVisible({ timeout: 20_000 });
-    await dragCardTo(adminPage, parkedCard, boardCell(adminPage, employeeRecord.id, DAY_B));
-    await expect(successBanner(adminPage, "eingeplant")).toBeVisible({ timeout: 20_000 });
-    await closeBanners(adminPage);
-    await expect.poll(async () => (await getParkingState(world.orgId, jobNumber(world.runId, "A"))).eventTypes, { timeout: 20_000 }).toContain("unparked");
+    await test.step('Park by drag, then unpark the Parkplatz card by drag', async () => {
+      await dragCardTo(
+        adminPage,
+        boardCard(adminPage, employeeRecord.id, visit.title),
+        parkplatzButton(adminPage),
+      );
+      const parkDialog = adminPage.getByRole('dialog');
+      await expect(parkDialog).toBeVisible({ timeout: 20_000 });
+      await fillParkingContext(adminPage, parkDialog, {
+        reason: 'capacity',
+        responsibleName: world.users.admin.firstName,
+        reviewDate: friday,
+      });
+      await parkingContextSave(parkDialog).click();
+      await expect(parkDialog).toHaveCount(0, { timeout: 20_000 });
+      await closeBanners(adminPage);
+      expect((await getParkingState(world.orgId, visit.jobNumber)).context?.reason).toBe('capacity');
+      await parkplatzButton(adminPage).click();
+      const parkedCard = parkplatzCardOf(adminPage, visit.title);
+      await expect(parkedCard).toBeVisible({ timeout: 20_000 });
+      await dragCardTo(adminPage, parkedCard, boardCell(adminPage, employeeRecord.id, tuesday));
+      await expect(calendarBanner(adminPage, 'scheduled')).toBeVisible({ timeout: 20_000 });
+      await closeBanners(adminPage);
+      await expect
+        .poll(async () => (await getParkingState(world.orgId, visit.jobNumber)).eventTypes, {
+          timeout: 20_000,
+        })
+        .toContain('unparked');
+    });
 
-    // No side effect: no time entry and no dispatch came from the board.
+    // No side effect: the board wrote no time entry and no dispatch.
     expect(await getOrganizationTimeEntryCount(world.orgId)).toBe(entriesBefore);
-    expect((await getVisibleDispatchStateAs(world.users.employee, world.orgId)).planning_dispatches).toBe(0);
+    expect((await getDispatchState(world.orgId, visit.jobNumber)).dispatches).toHaveLength(0);
   });
 
-  test("AUDIT-03 keyboard and form paths, filters, search and persistence @P1-24A-03", async ({ adminPage, world }) => {
+  test('AUDIT-03 keyboard and form paths, filters, search and persistence @P1-24A-03', async ({
+    adminPage,
+    world,
+  }) => {
+    const monday = firstAuditMonday();
     const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
+    const bueroRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.buero.id);
     const bueroName = `${world.users.buero.firstName} ${world.users.buero.lastName}`;
-    const titleSeries = `P1-24a Serie ${world.runId}`;
-    await openPlantafel(adminPage, DAY_A);
-    await boardCard(adminPage, employeeRecord.id, titleSeries, DAY_A).focus();
-    await adminPage.keyboard.press("Enter");
-    const popover = jobPopover(adminPage);
-    await expect(popover).toBeVisible();
-    await expect(popover.getByRole("button", { name: "Termin bearbeiten" })).toBeVisible();
-    await popover.getByRole("button", { name: "Verschieben …" }).click();
-    await selectFromSearchable(adminPage, popover.locator("#popover-move-person"), bueroName);
-    await popover.getByRole("button", { name: "Verschieben", exact: true }).click();
-    await expect(successBanner(adminPage, `Termin wurde zu ${bueroName} verschoben.`)).toBeVisible({ timeout: 20_000 });
-    await closeBanners(adminPage);
+    const moved = await seedPlanningVisit(world, { date: monday, hour: 9 });
+    const searched = await seedPlanningVisit(world, { date: shiftIsoDate(monday, 1), hour: 9 });
+    await openPlantafel(adminPage, monday);
 
-    // Search narrows the cards; the filter popover holds the team, dispatch and conflict filters.
-    await adminPage.getByLabel("Plantafel durchsuchen").fill("Teamrunde");
-    await expect(boardRows(adminPage).locator("[data-calendar-card]").filter({ hasText: titleSeries })).toHaveCount(0);
-    await expect(boardRows(adminPage).locator("[data-calendar-card]").filter({ hasText: "Teamrunde" })).toHaveCount(1);
-    await adminPage.getByLabel("Plantafel durchsuchen").fill("");
-    await adminPage.getByRole("button", { name: /^Filter/ }).click();
-    await adminPage.getByRole("checkbox", { name: "Nur Konflikte" }).check();
-    await adminPage.keyboard.press("Escape");
-    await expect(adminPage.getByRole("button", { name: /^Filter, 1 aktiv/ })).toBeVisible();
-    await adminPage.getByRole("button", { name: /^Filter/ }).click();
-    await adminPage.getByRole("checkbox", { name: "Nur Konflikte" }).uncheck();
-    await adminPage.keyboard.press("Escape");
+    await test.step('Enter opens the popover; its move form reassigns the visit', async () => {
+      const movedCard = boardCard(adminPage, employeeRecord.id, moved.title, monday);
+      await movedCard.focus();
+      await pressKey(adminPage, 'Enter', { into: movedCard });
+      const popover = jobPopover(adminPage);
+      await expect(popover).toBeVisible();
+      await expect(occurrenceEditButton(popover)).toBeVisible();
+      await cardPopoverAction(popover, 'openMoveForm').click();
+      await selectFromSearchable(adminPage, popover.locator('#popover-move-person'), bueroName);
+      await cardPopoverAction(popover, 'move').click();
+      await expect(reassignedBanner(adminPage, bueroName)).toBeVisible({
+        timeout: 20_000,
+      });
+      await closeBanners(adminPage);
+      await expect
+        .poll(async () => getJobOccurrenceAssigneeRecordIds(world.orgId, moved.jobNumber), {
+          timeout: 20_000,
+        })
+        .toEqual([bueroRecord.id]);
+    });
 
-    // Density persists across a reload; keyboard shortcuts move the window and switch views.
-    await adminPage.getByRole("button", { name: /Kompakt anzeigen/ }).click();
-    await adminPage.getByRole("button", { name: "Tastenkürzel anzeigen" }).click();
-    await expect(adminPage.getByRole("dialog", { name: "Tastenkürzel" })).toBeVisible();
-    await adminPage.keyboard.press("Escape");
-    // The save is debounced; the stored row is the proof of persistence before the reload.
-    await expect.poll(async () => {
-      const stored = await getCalendarPreferencesFor(world.orgId, world.users.admin.id);
-      return stored?.density;
-    }, { timeout: 10_000 }).toBe("compact");
-    await openPlantafel(adminPage, DAY_A);
-    await expect(plantafel(adminPage)).toHaveAttribute("data-density", "compact");
-    await adminPage.getByRole("button", { name: /Komfortabel anzeigen/ }).click();
-    // The shortcuts move by the horizon; the persisted two weeks become one for a one-week step.
-    await adminPage.getByLabel("Horizont").click();
-    await adminPage.getByRole("option", { name: "1 Woche" }).click();
-    await expect(calendarViewReady(adminPage, "week")).toHaveAttribute("data-calendar-horizon", "1", { timeout: 20_000 });
-    await adminPage.keyboard.press("j");
-    await expect(boardColumn(adminPage, shiftIsoDate(MONDAY, 7))).toBeVisible({ timeout: 20_000 });
-    await adminPage.keyboard.press("k");
-    await expect(boardColumn(adminPage, MONDAY)).toBeVisible({ timeout: 20_000 });
-    await adminPage.keyboard.press("d");
-    await expect(calendarViewReady(adminPage, "day")).toBeVisible({ timeout: 20_000 });
-    await adminPage.keyboard.press("w");
-    await expect(calendarViewReady(adminPage, "week")).toBeVisible({ timeout: 20_000 });
-    // The last preference burst (comfortable, one week, week view) must land before the next test navigates.
-    await expect.poll(async () => { const stored = await getCalendarPreferencesFor(world.orgId, world.users.admin.id); return `${stored?.readOnly}/${stored?.view}`; }, { timeout: 10_000 }).toBe("false/week");
+    await test.step('Search narrows the cards; the filter popover holds the conflict filter', async () => {
+      await boardSearch(adminPage).fill(searched.title);
+      await expect(boardRowCards(adminPage, moved.title)).toHaveCount(0);
+      await expect(boardRowCards(adminPage, searched.title)).toHaveCount(1);
+      await boardSearch(adminPage).fill('');
+      await boardFilterButton(adminPage).click();
+      await conflictsOnlyFilter(adminPage).check();
+      await dismissDialog(boardFilterPopover(adminPage));
+      await expect(boardFilterButton(adminPage, 1)).toBeVisible();
+      await boardFilterButton(adminPage).click();
+      await conflictsOnlyFilter(adminPage).uncheck();
+      await dismissDialog(boardFilterPopover(adminPage));
+    });
+
+    await test.step('Density persists across a reload; shortcuts move the window and switch views', async () => {
+      await densityToggle(adminPage, 'compact').click();
+      await shortcutsButton(adminPage).click();
+      await expect(shortcutsDialog(adminPage)).toBeVisible();
+      await dismissDialog(shortcutsDialog(adminPage));
+      // Confirm the stored outcome before reloading, independent of action wire encoding.
+      await expect
+        .poll(async () => (await getCalendarPreferencesFor(world.orgId, world.users.admin.id))?.density, {
+          timeout: 10_000,
+        })
+        .toBe('compact');
+      await openPlantafel(adminPage, monday);
+      await expect(plantafel(adminPage)).toHaveAttribute('data-density', 'compact');
+      await densityToggle(adminPage, 'comfortable').click();
+      // The shortcuts move by the horizon; a one-week horizon makes each step one week.
+      await chooseBoardHorizon(adminPage, 1);
+      await expect(calendarViewReady(adminPage, 'week')).toHaveAttribute('data-calendar-horizon', '1', {
+        timeout: 20_000,
+      });
+      // The closed select keeps focus on its combobox trigger, where a key belongs
+      // to the control and never to the calendar; leave it as a user would.
+      // pressKey refuses a shortcut while focus still sits in a field.
+      await calendarPageHeading(adminPage).click();
+      await pressKey(adminPage, 'j');
+      await expect(boardColumn(adminPage, shiftIsoDate(monday, 7))).toBeVisible({ timeout: 20_000 });
+      await pressKey(adminPage, 'k');
+      await expect(boardColumn(adminPage, monday)).toBeVisible({ timeout: 20_000 });
+      await pressKey(adminPage, 'd');
+      await expect(calendarViewReady(adminPage, 'day')).toBeVisible({ timeout: 20_000 });
+      await pressKey(adminPage, 'w');
+      await expect(calendarViewReady(adminPage, 'week')).toBeVisible({ timeout: 20_000 });
+      await expect
+        .poll(
+          async () => {
+            const stored = await getCalendarPreferencesFor(world.orgId, world.users.admin.id);
+            return `${stored?.density}/${stored?.horizonWeeks}/${stored?.view}`;
+          },
+          { timeout: 10_000 },
+        )
+        .toBe('comfortable/1/week');
+    });
   });
 
-  test("AUDIT-04 the day view: lanes, drag-to-create, resize, and the refusal past midnight @P1-24A-04", async ({ adminPage, world }) => {
+  test('AUDIT-04 the day view: lanes, drag-to-create, resize, and the refusal past midnight @P1-24A-04', async ({
+    adminPage,
+    world,
+  }) => {
+    const thursday = shiftIsoDate(firstAuditMonday(), 3);
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
-    await openCalendarView(adminPage, DAY_A, "day", "Tag");
+    const visit = await seedPlanningVisit(world, { date: thursday, hour: 13 });
+    const seededEnd = expectDefined(
+      resolveBerlinWallTime(`${thursday}T14:00`),
+      'the seeded visit end',
+    ).instant.getTime();
+    await openCalendarView(adminPage, thursday, 'day');
     const row = dayRow(adminPage, world.users.employee.id);
     await expect(row).toBeVisible();
-    // AUDIT-02 moved and copied visits between rows; the series card is addressed wherever it sits.
-    const seriesCard = dayCard(adminPage.getByRole("main").locator("[data-day-view]"), `P1-24a Serie ${world.runId}`);
-    await expect(seriesCard).toBeVisible();
-    // Drag-to-create on empty time opens the dialog with the person preset.
-    await dragToCreateOnDayRow(adminPage, dayTimeline(row), 15.1, 16.6);
-    const dialog = adminPage.getByRole("dialog").filter({ has: adminPage.getByRole("heading", { name: "Kalendereintrag erstellen" }) });
-    await expect(dialog).toBeVisible({ timeout: 20_000 });
-    await expect(dialog.locator("#planning-date")).toBeVisible({ timeout: 15_000 });
-    // The multi-select summarises its selection; the opened list (a body portal) names the preset person.
-    await expect(dialog.getByRole("combobox", { name: "Mitarbeiter" })).toHaveText("1 Mitarbeiter");
-    await dialog.getByRole("combobox", { name: "Mitarbeiter" }).click();
-    await expect(adminPage.getByRole("option", { name: employeeName, selected: true })).toBeVisible({ timeout: 10_000 });
-    await adminPage.keyboard.press("Escape");
-    await expect(adminPage.getByRole("listbox")).toHaveCount(0);
-    await adminPage.keyboard.press("Escape");
-    await expect(dialog).toHaveCount(0);
+    const visitCard = dayCard(row, visit.title);
+    await expect(visitCard).toBeVisible();
 
-    // Resize the series visit by its end handle: the write settles with the sentence.
-    const timelineBox = await dayTimeline(row).boundingBox();
-    if (!timelineBox) throw new Error("The day timeline has no layout.");
-    await dragHandleBy(adminPage, trailingResizeHandle(seriesCard), timelineBox.width / 24);
-    await expect(successBanner(adminPage, "Termin dauert jetzt")).toBeVisible({ timeout: 20_000 });
-    await closeBanners(adminPage);
+    await test.step('Drag-to-create on empty time opens the dialog with the person preset', async () => {
+      await dragToCreateOnDayRow(adminPage, dayTimeline(row), 15.1, 16.6);
+      const dialog = calendarEntryDialog(adminPage);
+      await expect(dialog).toBeVisible({ timeout: 20_000 });
+      await expect(dialog.locator('#planning-date')).toBeVisible({ timeout: 15_000 });
+      // The multi-select summarises its selection; the opened list (a body portal) names the preset person.
+      await expect(planningEmployeePicker(dialog)).toHaveText(employeeSelectionSummary(1));
+      await planningEmployeePicker(dialog).click();
+      await expect(adminPage.getByRole('option', { name: employeeName, selected: true })).toBeVisible({
+        timeout: 10_000,
+      });
+      // The open list is the top layer: the first Escape closes it, the second the dialog.
+      await dismissDialog(adminPage.getByRole('listbox'));
+      await expect(adminPage.getByRole('listbox')).toHaveCount(0);
+      await dismissDialog(dialog);
+      await expect(dialog).toHaveCount(0);
+    });
 
-    // A drop that would end past midnight is refused at the pointer and writes nothing.
-    const cardBox = await seriesCard.boundingBox();
-    if (!cardBox) throw new Error("The visit card has no layout.");
-    await beginCardDragToPoint(adminPage, seriesCard, { x: timelineBox.x + timelineBox.width - 4, y: cardBox.y + cardBox.height / 2 });
-    await expect(dragGhost(adminPage)).toContainText("über Mitternacht");
-    await adminPage.mouse.up();
-    await expect(banners(adminPage)).toHaveCount(0);
+    const timelineBox = expectDefined(await dayTimeline(row).boundingBox(), 'the day timeline layout');
+    await test.step('The end handle lengthens the visit', async () => {
+      await dragHandleBy(adminPage, trailingResizeHandle(visitCard), timelineBox.width / 24);
+      await expect(calendarBanner(adminPage, 'lengthened')).toBeVisible({ timeout: 20_000 });
+      await closeBanners(adminPage);
+      await expect
+        .poll(
+          async () => {
+            const endAt = (await getPlanningState(world.orgId, { jobNumber: visit.jobNumber })).occurrences[0]
+              ?.endAt;
+            return endAt ? Date.parse(endAt) : null;
+          },
+          { timeout: 20_000 },
+        )
+        .toBeGreaterThan(seededEnd);
+    });
+
+    await test.step('A drop that would end past midnight is refused at the pointer', async () => {
+      const cardBox = expectDefined(await visitCard.boundingBox(), 'the visit card layout');
+      await beginCardDragToPoint(adminPage, visitCard, {
+        x: timelineBox.x + timelineBox.width - 4,
+        y: cardBox.y + cardBox.height / 2,
+      });
+      await expect(dragGhost(adminPage)).toContainText(DRAG_REFUSALS.pastMidnight);
+      await adminPage.mouse.up();
+      await expect(banners(adminPage)).toHaveCount(0);
+    });
   });
 
-  test("AUDIT-05 the month view: bars, „+n mehr“, past days, a date move and the popover @P1-24A-05", async ({ adminPage, world }) => {
+  test('AUDIT-05 the month view: closure label, absence bar, „+n mehr“, a date move and the popover @P1-24A-05', async ({
+    adminPage,
+    world,
+  }) => {
+    const monday = shiftIsoDate(firstAuditMonday(), 14);
+    const closure = shiftIsoDate(monday, 1);
+    const absenceStart = shiftIsoDate(monday, 2);
+    const moveDay = shiftIsoDate(monday, 4);
+    const closureLabel = testData`Monatsruhe P1-24a`;
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
-    for (const index of [1, 2, 3, 4]) {
-      await createJob(adminPage, { jobNumber: jobNumber(world.runId, `M${index}`), title: `P1-24a Monat ${index} ${world.runId}` });
-      await createPlannedCalendarEntry(adminPage, { kind: "job_visit", jobSearch: jobNumber(world.runId, `M${index}`), date: CLOSURE, time: `${String(8 + index).padStart(2, "0")}:00`, employeeNames: [employeeName], overrideReason: OVERRIDE_REASON });
-    }
-    await openCalendarView(adminPage, DAY_A, "month", "Monat");
-    await expect(calendarHolidayLabel(adminPage, "Brückentag P1-24a")).toBeVisible();
-    await expect(calendarAbsenceBarStarting(adminPage, ABSENCE_START, employeeName)).toBeVisible();
-    await expect(monthCards(monthDay(adminPage, CLOSURE))).toHaveCount(3);
-    await monthDay(adminPage, CLOSURE).getByRole("button", { name: /\+\d+ mehr/ }).click();
-    await expect(monthCards(monthDayPopover(adminPage, CLOSURE), "P1-24a Monat")).toHaveCount(4);
-    await adminPage.keyboard.press("Escape");
-    await expect(inMonthCells(adminPage)).toHaveCount(new Date(Date.UTC(Number(CLOSURE.slice(0, 4)), Number(CLOSURE.slice(5, 7)), 0)).getUTCDate());
+    const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
+    const visits: Array<{ jobNumber: string; title: string }> = [];
+    for (const hour of [9, 10, 11, 12]) visits.push(await seedPlanningVisit(world, { date: monday, hour }));
+    const movedVisit = expectDefined(visits[0], 'the first month visit');
+    await seedClosureDay({
+      organizationId: world.orgId,
+      actorUserId: world.users.admin.id,
+      date: closure,
+      label: closureLabel,
+    });
+    await seedSicknessReport({
+      organizationId: world.orgId,
+      employeeRecordId: employeeRecord.id,
+      reportedBy: world.users.employee.id,
+      startDate: absenceStart,
+      endDate: shiftIsoDate(monday, 3),
+    });
 
-    // Move one visit to a free day of the next week by drag; the card lands at once and the state follows.
-    await dragCardTo(adminPage, monthCards(monthDay(adminPage, CLOSURE), `P1-24a Monat 1 ${world.runId}`), monthCell(adminPage, MOVE_DAY));
-    await expect(monthCards(monthDay(adminPage, MOVE_DAY), `P1-24a Monat 1 ${world.runId}`)).toBeVisible({ timeout: 1_000 });
-    await expect(successBanner(adminPage, "verschoben")).toBeVisible({ timeout: 20_000 });
+    await openCalendarView(adminPage, monday, 'month');
+    await expect(calendarHolidayLabel(adminPage, closureLabel)).toBeVisible();
+    await expect(calendarAbsenceBarStarting(adminPage, absenceStart, employeeName)).toBeVisible();
+    await expect(monthCards(monthDay(adminPage, monday))).toHaveCount(3);
+    await monthMoreButton(monthDay(adminPage, monday)).click();
+    await expect(monthCards(monthDayPopover(adminPage, monday))).toHaveCount(4);
+    await dismissDialog(monthDayPopover(adminPage, monday));
+    await expect(inMonthCells(adminPage)).toHaveCount(
+      new Date(Date.UTC(Number(monday.slice(0, 4)), Number(monday.slice(5, 7)), 0)).getUTCDate(),
+    );
+
+    // Move one visit to a free weekday by drag; the card lands at once and the state follows.
+    await dragCardTo(
+      adminPage,
+      monthCards(monthDay(adminPage, monday), movedVisit.title),
+      monthCell(adminPage, moveDay),
+    );
+    await expect(monthCards(monthDay(adminPage, moveDay), movedVisit.title)).toBeVisible({
+      timeout: 1_000,
+    });
+    await expect(calendarBanner(adminPage, 'moved')).toBeVisible({ timeout: 20_000 });
     await closeBanners(adminPage);
-    await expect.poll(async () => occurrenceLocalDate((await getPlanningState(world.orgId, { jobNumber: jobNumber(world.runId, "M1") })).occurrences[0]), { timeout: 20_000 }).toBe(MOVE_DAY);
+    await expect
+      .poll(
+        async () =>
+          occurrenceLocalDate(
+            (await getPlanningState(world.orgId, { jobNumber: movedVisit.jobNumber })).occurrences[0],
+          ),
+        { timeout: 20_000 },
+      )
+      .toBe(moveDay);
     // The card popover opens beside the card in the month too.
-    await monthCards(monthDay(adminPage, MOVE_DAY), `P1-24a Monat 1 ${world.runId}`).click();
-    await expect(jobPopover(adminPage).getByRole("button", { name: "Details anzeigen" })).toBeVisible();
-    await adminPage.keyboard.press("Escape");
-    await removeClosureDayViaSettings(adminPage, germanDate(CLOSURE));
+    await monthCards(monthDay(adminPage, moveDay), movedVisit.title).click();
+    await expect(cardPopoverAction(jobPopover(adminPage), 'showDetails')).toBeVisible();
+    await dismissDialog(jobPopover(adminPage));
   });
 
-  test("AUDIT-06 the employee's week, organization isolation of the board read, and the outsider @P1-24A-06", async ({ employeePage, outsiderPage, world }) => {
-    await employeePage.goto(`/kalender?date=${DAY_A}`);
-    await employeePage.getByRole("tab", { name: "Woche", exact: true }).click();
-    await expect(calendarViewReady(employeePage, "week")).toBeVisible({ timeout: 30_000 });
-    await expect(boardRows(employeePage)).toHaveCount(1);
-    await expect(textInDom(employeePage, `${world.users.buero.firstName} ${world.users.buero.lastName}`)).toHaveCount(0);
-    const own = await employeePage.request.get(`/api/calendar-board?organizationId=${world.orgId}&fromDate=${DAY_A}&toDate=${SATURDAY}`);
+  test('AUDIT-06 the board read narrows the employee to their own row and denies the outsider @P1-24A-06', async ({
+    employeePage,
+    outsiderPage,
+    world,
+  }) => {
+    const monday = firstAuditMonday();
+    const boardRead = `/api/calendar-board?organizationId=${world.orgId}&fromDate=${monday}&toDate=${shiftIsoDate(monday, 5)}`;
+    const own = await employeePage.request.get(boardRead);
     expect(own.status()).toBe(200);
-    const ownBody = await own.json() as { rows: Array<{ userId: string | null }> };
+    const ownBody = (await own.json()) as { rows: Array<{ userId: string | null }> };
     expect(ownBody.rows.map((row) => row.userId)).toEqual([world.users.employee.id]);
-    const foreign = await outsiderPage.request.get(`/api/calendar-board?organizationId=${world.orgId}&fromDate=${DAY_A}&toDate=${SATURDAY}`);
+    const foreign = await outsiderPage.request.get(boardRead);
     expect(foreign.status()).toBe(403);
   });
 });

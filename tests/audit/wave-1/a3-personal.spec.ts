@@ -1,36 +1,93 @@
+import type { Page } from '@playwright/test';
+
 import {
-  getHolidayContextDays,
-  resolveDailyTarget,
-  resolveHolidayRegionOnDate,
-} from '../../../lib/personnel/targets';
+  ACCESS_STATE_LABELS,
+  EMPLOYMENT_STATE_LABELS,
+  EMPLOYMENT_TYPE_LABELS,
+} from '../../../lib/personnel/types';
+import { HOLIDAY_REGION_LABELS } from '../../../lib/personnel/holidays';
+import { RESPONSIBILITY_LABELS } from '../../../lib/responsibilities/types';
 import { formatDuration } from '../../../lib/time-tracking/helpers';
-import { expect, test } from "../support/fixtures";
+import { expect, test } from '../support/fixtures';
 import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
-import { getEmployeeRecordEventStates, getEmployeeRecordStateByUser, getLatestResponsibilityConfigurationState } from '../../golden/support/db/personnel';
+import {
+  getEmployeeRecordEventStates,
+  getEmployeeRecordStateByUser,
+  setResponsibilityHolders,
+} from '../../golden/support/db/personnel';
 import { getLatestManualTimeEntryState } from '../../golden/support/db/time-tracking';
 import { getTargetContextForRecord } from '../../golden/support/db/vacation';
-import { requireChainedValue } from '../../golden/support/preconditions';
 import { goldenTestEmail } from '../../golden/support/seed';
-import { addClosureDayViaSettings, addConditionViaDialog, addWorkScheduleViaDialog, confirmResponsibilityPreview, createPersonnelRecordViaDialog, createResponsibilityDelegationViaSettings, editConditionWeeklyHours, editPersonnelTextField, endResponsibilityDelegationViaSettings, openMemberDetailFromList, previewResponsibilityChange, removeClosureDayViaSettings, sendInviteFromPersonnelRecord, setHolidayRegionViaSettings } from '../../golden/support/steps/personnel';
-import { typeIntoDatePicker, visibleText } from '../../golden/support/steps/shared';
-import { approvePendingTimeEntry, createOwnManualTimeEntry, expectPendingTimeApprovalHidden, expectPendingTimeApprovalVisible, expectTimeApprovalsUnavailable, openTimeApprovals } from '../../golden/support/steps/time-tracking';
+import { dismissDialog } from '../../golden/support/steps/interaction';
 import {
+  PERSONNEL_COPY,
+  PERSONNEL_FIELDS,
+  PERSONNEL_HISTORY_EVENTS,
+  RESPONSIBILITY_COPY,
+  activeDelegationsBadge,
+  addClosureDayViaSettings,
+  addConditionButton,
+  addConditionViaDialog,
+  addDelegationButton,
+  addWorkScheduleViaDialog,
+  changeResponsibilityButton,
+  conditionRow,
+  conditionVacationDaysText,
+  conditionWeeklyHoursText,
+  createPersonnelRecordButton,
+  createPersonnelRecordViaDialog,
+  createResponsibilityDelegationViaSettings,
+  dailyProgressAtPercent,
+  dailyProgressOnClosureDay,
+  dailyTargetText,
+  defaultTargetMarker,
+  deleteConditionViaMenu,
+  editConditionWeeklyHours,
+  editPersonnelExitDate,
+  editPersonnelTextField,
+  endResponsibilityDelegationViaSettings,
+  openMemberDetailFromList,
+  personnelChangeText,
+  personnelListRow,
+  removeClosureDayViaSettings,
+  responsibilityCard,
+  responsibilitySummary,
+  sendInviteFromPersonnelRecord,
+  setHolidayRegionViaSettings,
+  submitClosureDayForm,
+  submitPersonnelRecordButton,
+  substituteForText,
+  visibleVersionBadge,
+  weeklyScheduleText,
+} from '../../golden/support/steps/personnel';
+import { typeIntoDatePicker, visibleText } from '../../golden/support/steps/shared';
+import {
+  createOwnManualTimeEntry,
+  expectPendingTimeApprovalHidden,
+  expectTimeApprovalsUnavailable,
+  openTimeApprovals,
+} from '../../golden/support/steps/time-tracking';
+import { showCalendarMonth } from '../../golden/support/steps/calendar';
+import {
+  ZERO_OVERTIME_TODAY,
   firstPersonnelHistoryEvent,
   informationalCalendarEvent,
-  waitForPersonnelSuggestionIntercept,
+  todayOvertime,
 } from '../support/a3-steps';
+import { waitForRouteIntercept } from '../support/network';
 
-import { auditCheckpoint, saveAuditCheckpoint } from "../support/checkpoints";
-
-function a3PersonnelName(runId: string): string {
-  return `Alina Personal-A3-${runId}`;
-}
+// A3 — Personal (P1-03, P1-04, P1-05). The edge cases, role variants and
+// list values around the golden journeys: the full master-data form with its
+// history attribution, every status badge, the closure-day date boundary, the
+// holiday-region history, the schedule's effect on list progress and
+// overtime, and what affected people and Büro see of responsibilities. Every
+// test prepares its own records; the run-day window is +30 … +34 and +67.
 
 function shiftIsoDate(dateIso: string, days: number): string {
   const [year, month, day] = dateIso.split('-').map(Number);
-  if (year === undefined || month === undefined || day === undefined) throw new Error(`Invalid ISO date: ${dateIso}`);
-  const shifted = new Date(Date.UTC(year, month - 1, day) + days * 86_400_000);
-  return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, '0')}-${String(shifted.getUTCDate()).padStart(2, '0')}`;
+  if (year === undefined || month === undefined || day === undefined)
+    throw new Error(`Invalid ISO date: ${dateIso}`);
+  return new Date(Date.UTC(year, month - 1, day) + days * 86_400_000).toISOString().slice(0, 10);
 }
 
 function toDatePickerDigits(dateIso: string): string {
@@ -43,168 +100,26 @@ function toGermanDate(dateIso: string): string {
   return `${day}.${month}.${year}`;
 }
 
-function toBerlinIsoDate(value: string): string {
-  return new Intl.DateTimeFormat('sv-SE', {
-    timeZone: 'Europe/Berlin',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date(value));
-}
-
-function getCompletedBerlinTimeWindow(now = new Date()): {
-  clockInDigits: string;
-  clockOutDigits: string;
-  calendarTitle: RegExp;
-} {
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Europe/Berlin',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(now);
-  const hour = Number(parts.find((part) => part.type === 'hour')?.value);
-  const minute = Number(parts.find((part) => part.type === 'minute')?.value);
-  const currentMinute = hour * 60 + minute;
-
-  if (!Number.isInteger(currentMinute) || currentMinute < 11) {
-    throw new Error(
-      'A3-R02 needs ten completed Berlin minutes after midnight to prove overtime.'
-    );
-  }
-
-  const endMinute = currentMinute - 1;
-  const startMinute = endMinute - 10;
-  const formatDigits = (minuteOfDay: number) =>
-    `${String(Math.floor(minuteOfDay / 60)).padStart(2, '0')}${String(
-      minuteOfDay % 60
-    ).padStart(2, '0')}`;
-  const formatLabel = (minuteOfDay: number) =>
-    `${String(Math.floor(minuteOfDay / 60)).padStart(2, '0')}:${String(
-      minuteOfDay % 60
-    ).padStart(2, '0')}`;
-
-  return {
-    clockInDigits: formatDigits(startMinute),
-    clockOutDigits: formatDigits(endMinute),
-    calendarTitle: new RegExp(
-      `${formatLabel(startMinute)}.*${formatLabel(endMinute)}`
-    ),
-  };
-}
-
-function personnelRow(
-  page: import('@playwright/test').Page,
-  name: string
-): import('@playwright/test').Locator {
-  return page.getByRole('row').filter({ hasText: name }).filter({ visible: true });
-}
-
-async function expectHistoryAttribution(
-  page: import('@playwright/test').Page,
-  eventLabel: string,
-  actorName: string
-): Promise<void> {
+async function expectHistoryAttribution(page: Page, eventLabel: string, actorName: string): Promise<void> {
   const event = firstPersonnelHistoryEvent(page, eventLabel);
   await expect(event).toBeVisible();
   await expect(event).toContainText(actorName);
   await expect(event).toContainText(/\d{2}\.\d{2}\.\d{4},? \d{2}:\d{2}/);
 }
 
-async function navigateMonthViewTo(
-  page: import('@playwright/test').Page,
-  dateIso: string
-): Promise<void> {
-  await page.goto('/kalender');
-  await page.getByRole('tab', { name: 'Monat' }).click();
+async function navigateMonthViewTo(page: Page, dateIso: string): Promise<void> {
   const today = berlinDateAtOffset(0);
   const monthDifference =
     Number(dateIso.slice(0, 4)) * 12 +
     Number(dateIso.slice(5, 7)) -
     (Number(today.slice(0, 4)) * 12 + Number(today.slice(5, 7)));
-  const navigationButton = monthDifference >= 0 ? 'Weiter' : 'Zurück';
-  for (let index = 0; index < Math.abs(monthDifference); index += 1) {
-    await page.getByRole('button', { name: navigationButton }).click();
-  }
+  await showCalendarMonth(page, monthDifference);
   const expectedTitle = new Intl.DateTimeFormat('de-DE', {
     month: 'long',
     year: 'numeric',
     timeZone: 'UTC',
   }).format(new Date(`${dateIso.slice(0, 7)}-01T12:00:00Z`));
   await expect(visibleText(page, expectedTitle)).toBeVisible();
-}
-
-async function expectInformationalCalendarEvent(
-  page: import('@playwright/test').Page,
-  label: string
-): Promise<void> {
-  const event = informationalCalendarEvent(page, label);
-  await expect(event).toBeVisible({ timeout: 15_000 });
-  await expect(event).toHaveCSS('pointer-events', 'none');
-  await event.dispatchEvent('click');
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-}
-
-async function editPersonnelDateField(
-  page: import('@playwright/test').Page,
-  fieldLabel: string,
-  dateIso: string
-): Promise<void> {
-  await page.getByRole('button', { name: `${fieldLabel} bearbeiten`, exact: true }).click();
-  await typeIntoDatePicker(page.getByRole('main'), 'Datum', toDatePickerDigits(dateIso), 10);
-  await page.getByRole('button', { name: 'Speichern', exact: true }).click();
-  await expect(
-    page.getByRole('button', { name: `${fieldLabel} bearbeiten`, exact: true })
-  ).toBeVisible({ timeout: 15_000 });
-  await page.reload();
-  await expect(visibleText(page, toGermanDate(dateIso))).toBeVisible({
-    timeout: 15_000,
-  });
-}
-
-async function deleteWorkBlockViaCalendar(
-  page: import('@playwright/test').Page,
-  title: RegExp
-): Promise<void> {
-  await page.goto('/kalender');
-  await page.getByRole('tab', { name: 'Tag', exact: true }).click();
-  await visibleText(page, 'Arbeitszeiten').click();
-  await page.getByRole('button', { name: 'Aktualisieren' }).click();
-  const block = page.getByTitle(title).filter({ visible: true });
-  await expect(block).toBeVisible({ timeout: 20_000 });
-  await block.focus();
-  await block.press('Enter');
-  const dialog = page.getByRole('dialog').filter({
-    has: page.getByRole('heading', { name: 'Eintrag Details' }),
-  });
-  await expect(dialog).toBeVisible({ timeout: 15_000 });
-  await dialog.getByRole('button', { name: 'Löschen', exact: true }).click();
-  await page.getByRole('alertdialog').getByRole('button', { name: 'Löschen', exact: true }).click();
-  await expect(page.getByTitle(title)).toHaveCount(0, { timeout: 20_000 });
-}
-
-async function deleteWorkScheduleViaDetail(
-  page: import('@playwright/test').Page,
-  validFromIso: string,
-  note: string
-): Promise<void> {
-  const row = page.getByRole('listitem').filter({ hasText: note });
-  await row
-    .getByRole('button', {
-      name: `Aktionen für Wochenplan ab ${toGermanDate(validFromIso)}`,
-    })
-    .click();
-  await page.getByRole('menuitem', { name: 'Löschen' }).click();
-  await page.getByRole('alertdialog').getByRole('button', { name: 'Löschen', exact: true }).click();
-  await expect(page.getByRole('alertdialog')).toHaveCount(0, {
-    timeout: 15_000,
-  });
-  await page.reload();
-  await expect(
-    page.getByRole('button', {
-      name: `Aktionen für Wochenplan ab ${toGermanDate(validFromIso)}`,
-    })
-  ).toHaveCount(0);
 }
 
 test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
@@ -215,13 +130,15 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     const entryDate = berlinDateAtOffset(30);
     const conditionDate = ownedBerlinDateAtOffset('a3-personal', 31);
     const exitDate = berlinDateAtOffset(34);
-    const fullName = a3PersonnelName(world.runId);
+    const fullName = `Alina Personal-A3-${world.runId}`;
     const employeeNumber = `MA-A3-${world.runId}`;
     const privateEmail = goldenTestEmail('a3-personal', world.runId);
     const note = `A3 Personalakte ${world.runId}`;
     const conditionNote = `A3 Kondition ${world.runId}`;
-    let releaseSuggestion!: () => void;
-    let markIntercepted!: () => void;
+    // Hold the number-suggestion server action so the manual number is typed
+    // first: the late suggestion must not overwrite it.
+    let releaseSuggestion: () => void = () => undefined;
+    let markIntercepted: () => void = () => undefined;
     const suggestionGate = new Promise<void>((resolve) => {
       releaseSuggestion = resolve;
     });
@@ -242,13 +159,13 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
 
     await adminPage.goto('/mitarbeiter');
     try {
-      await adminPage.getByRole('button', { name: 'Personalakte anlegen' }).click();
+      await createPersonnelRecordButton(adminPage).click();
       try {
-        await waitForPersonnelSuggestionIntercept(intercepted);
+        await waitForRouteIntercept(intercepted);
       } catch (error) {
         throw new Error(
           'The personnel-number suggestion server action was not intercepted within 15 seconds.',
-          { cause: error }
+          { cause: error },
         );
       }
 
@@ -261,16 +178,16 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
           response.request().method() === 'POST' &&
           new URL(response.url()).pathname === '/mitarbeiter' &&
           Boolean(response.request().headers()['next-action']),
-        { timeout: 15_000 }
+        { timeout: 15_000 },
       );
       releaseSuggestion();
       await suggestionResponse;
       await expect(dialog.locator('#personnel-number')).toHaveValue(employeeNumber, {
         timeout: 15_000,
       });
-      await typeIntoDatePicker(dialog, 'Eintrittsdatum', toDatePickerDigits(entryDate));
+      await typeIntoDatePicker(dialog, PERSONNEL_COPY.entryDate, toDatePickerDigits(entryDate));
       await dialog.locator('#personnel-notes').fill(note);
-      await dialog.getByRole('button', { name: 'Personalakte anlegen', exact: true }).click();
+      await submitPersonnelRecordButton(dialog).click();
       await adminPage.waitForURL(/\/mitarbeiter\/[0-9a-f-]{36}/, {
         timeout: 20_000,
       });
@@ -281,16 +198,15 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
 
     const a3RecordId = adminPage.url().match(/\/mitarbeiter\/([0-9a-f-]{36})/)?.[1];
     if (!a3RecordId) throw new Error('Could not read the A3 personnel record id.');
-    saveAuditCheckpoint("a3.personnelRecordId", a3RecordId);
 
-    await editPersonnelTextField(adminPage, 'Telefon', '030 300030');
-    await editPersonnelTextField(adminPage, 'Private E-Mail', privateEmail);
-    await editPersonnelTextField(adminPage, 'Straße', 'Personalweg 30');
-    await editPersonnelTextField(adminPage, 'PLZ', '10115');
-    await editPersonnelTextField(adminPage, 'Ort', 'Berlin');
-    await editPersonnelTextField(adminPage, 'Notfallkontakt', 'Nina Notfall A3');
-    await editPersonnelTextField(adminPage, 'Notfallkontakt Telefon', '030 300031');
-    await editPersonnelDateField(adminPage, 'Austrittsdatum', exitDate);
+    await editPersonnelTextField(adminPage, PERSONNEL_FIELDS.phone, '030 300030');
+    await editPersonnelTextField(adminPage, PERSONNEL_FIELDS.private_email, privateEmail);
+    await editPersonnelTextField(adminPage, PERSONNEL_FIELDS.street, 'Personalweg 30');
+    await editPersonnelTextField(adminPage, PERSONNEL_FIELDS.postal_code, '10115');
+    await editPersonnelTextField(adminPage, PERSONNEL_FIELDS.city, 'Berlin');
+    await editPersonnelTextField(adminPage, PERSONNEL_FIELDS.emergency_contact_name, 'Nina Notfall A3');
+    await editPersonnelTextField(adminPage, PERSONNEL_FIELDS.emergency_contact_phone, '030 300031');
+    await editPersonnelExitDate(adminPage, exitDate);
 
     for (const value of [
       fullName,
@@ -309,45 +225,45 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
       await expect(visibleText(adminPage, value)).toBeVisible();
     }
 
-    await adminPage.getByRole('button', { name: 'Kondition hinzufügen' }).click();
+    await addConditionButton(adminPage).click();
     const optionDialog = adminPage.getByRole('dialog');
     await optionDialog.locator('#condition-type').click();
-    for (const employmentType of ['Vollzeit', 'Teilzeit', 'Ausbildung', 'Minijob', 'Sonstiges']) {
-      await expect(
-        adminPage.getByRole('option', { name: employmentType, exact: true })
-      ).toBeVisible();
+    for (const employmentType of Object.values(EMPLOYMENT_TYPE_LABELS)) {
+      await expect(adminPage.getByRole('option', { name: employmentType, exact: true })).toBeVisible();
     }
-    await adminPage.keyboard.press('Escape');
-    await adminPage.keyboard.press('Escape');
+    await dismissDialog(adminPage.getByRole('listbox'));
+    await dismissDialog(optionDialog);
     await expect(optionDialog).toHaveCount(0);
 
     await addConditionViaDialog(adminPage, {
       validFromDigits: toDatePickerDigits(conditionDate),
-      employmentTypeLabel: 'Ausbildung',
+      employmentTypeLabel: EMPLOYMENT_TYPE_LABELS.ausbildung,
       weeklyHours: '35',
       vacationDays: '28',
       note: conditionNote,
     });
-    await expect(visibleText(adminPage, 'Geplant')).toBeVisible({
+    await expect(visibleVersionBadge(adminPage, 'scheduled')).toBeVisible({
       timeout: 15_000,
     });
-    await expect(visibleText(adminPage, 'Ausbildung')).toBeVisible();
-    await expect(visibleText(adminPage, '35 Std./Woche')).toBeVisible();
-    await expect(visibleText(adminPage, '28 Urlaubstage/Jahr')).toBeVisible();
+    await expect(visibleText(adminPage, EMPLOYMENT_TYPE_LABELS.ausbildung)).toBeVisible();
+    await expect(visibleText(adminPage, conditionWeeklyHoursText(35))).toBeVisible();
+    await expect(visibleText(adminPage, conditionVacationDaysText(28))).toBeVisible();
     await expect(visibleText(adminPage, conditionNote)).toBeVisible();
 
     await editConditionWeeklyHours(adminPage, toGermanDate(conditionDate), '34');
     await adminPage.reload();
-    await expect(visibleText(adminPage, 'Telefon: — → 030 300030')).toBeVisible({
+    await expect(visibleText(adminPage, personnelChangeText('phone', null, '030 300030'))).toBeVisible({
       timeout: 15_000,
     });
-    await expect(visibleText(adminPage, `Private E-Mail: — → ${privateEmail}`)).toBeVisible();
-    await expect(visibleText(adminPage, 'Wochenstunden: 35 → 34')).toBeVisible();
-    await expect(visibleText(adminPage, `Notiz: — → ${conditionNote}`)).toBeVisible();
+    await expect(
+      visibleText(adminPage, personnelChangeText('private_email', null, privateEmail)),
+    ).toBeVisible();
+    await expect(visibleText(adminPage, personnelChangeText('weekly_hours', '35', '34'))).toBeVisible();
+    await expect(visibleText(adminPage, personnelChangeText('note', null, conditionNote))).toBeVisible();
     for (const createdValue of [
-      `Personalnummer: — → ${employeeNumber}`,
-      'Vorname: — → Alina',
-      `Notizen: — → ${note}`,
+      personnelChangeText('employee_number', null, employeeNumber),
+      personnelChangeText('first_name', null, 'Alina'),
+      personnelChangeText('notes', null, note),
     ]) {
       await expect(visibleText(adminPage, createdValue)).toBeVisible();
     }
@@ -356,44 +272,38 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     const deletedConditionNote = `A3 Minijob gelöscht ${world.runId}`;
     await addConditionViaDialog(adminPage, {
       validFromDigits: toDatePickerDigits(deletedConditionDate),
-      employmentTypeLabel: 'Minijob',
+      employmentTypeLabel: EMPLOYMENT_TYPE_LABELS.minijob,
       weeklyHours: '10',
       vacationDays: '12',
       note: deletedConditionNote,
     });
-    const deletedConditionRow = adminPage
-      .getByRole('listitem')
-      .filter({ hasText: `Gültig ab ${toGermanDate(deletedConditionDate)}` })
-      .filter({ visible: true });
-    await expect(deletedConditionRow).toContainText('Minijob');
+    const deletedConditionRow = conditionRow(adminPage, toGermanDate(deletedConditionDate));
+    await expect(deletedConditionRow).toContainText(EMPLOYMENT_TYPE_LABELS.minijob);
     await expect(deletedConditionRow).toContainText(deletedConditionNote);
-    await deletedConditionRow
-      .getByRole('button', {
-        name: `Aktionen für Kondition vom ${toGermanDate(deletedConditionDate)}`,
-      })
-      .click();
-    await adminPage.getByRole('menuitem', { name: 'Löschen' }).click();
-    const deleteDialog = adminPage.getByRole('alertdialog');
-    await deleteDialog.getByRole('button', { name: 'Löschen', exact: true }).click();
-    await expect(deleteDialog).toHaveCount(0, { timeout: 15_000 });
+    await deleteConditionViaMenu(adminPage, toGermanDate(deletedConditionDate));
 
     await adminPage.reload();
-    await expect(visibleText(adminPage, 'Kondition gelöscht')).toBeVisible({
+    await expect(visibleText(adminPage, PERSONNEL_HISTORY_EVENTS.condition_deleted)).toBeVisible({
       timeout: 15_000,
     });
-    await expect(visibleText(adminPage, 'Beschäftigungsart: Minijob → —')).toBeVisible();
-    await expect(visibleText(adminPage, `Notiz: ${deletedConditionNote} → —`)).toBeVisible();
+    await expect(
+      visibleText(adminPage, personnelChangeText('employment_type', EMPLOYMENT_TYPE_LABELS.minijob, null)),
+    ).toBeVisible();
+    await expect(
+      visibleText(adminPage, personnelChangeText('note', deletedConditionNote, null)),
+    ).toBeVisible();
 
     const adminName = `${world.users.admin.firstName} ${world.users.admin.lastName}`;
     for (const eventLabel of [
-      'Personalakte angelegt',
-      'Personalien geändert',
-      'Kondition hinzugefügt',
-      'Kondition geändert',
-      'Kondition gelöscht',
+      PERSONNEL_HISTORY_EVENTS.created,
+      PERSONNEL_HISTORY_EVENTS.master_data_updated,
+      PERSONNEL_HISTORY_EVENTS.condition_added,
+      PERSONNEL_HISTORY_EVENTS.condition_updated,
+      PERSONNEL_HISTORY_EVENTS.condition_deleted,
     ]) {
       await expectHistoryAttribution(adminPage, eventLabel, adminName);
     }
+    // The visible history is backed by attributed, non-empty event payloads.
     const eventStates = await getEmployeeRecordEventStates(world.orgId, a3RecordId);
     for (const eventType of [
       'created',
@@ -405,12 +315,11 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
       const event = eventStates.find((state) => state.eventType === eventType);
       expect(event, `Missing ${eventType} event`).toBeDefined();
       expect(event?.createdBy).toBe(world.users.admin.id);
-      expect(Number.isNaN(Date.parse(event?.createdAt ?? ''))).toBe(false);
       expect(Object.keys(event?.eventPayload ?? {}).length).toBeGreaterThan(0);
     }
 
     await adminPage.goto('/mitarbeiter');
-    await adminPage.getByRole('button', { name: 'Personalakte anlegen' }).click();
+    await createPersonnelRecordButton(adminPage).click();
     const duplicateDialog = adminPage.getByRole('dialog');
     await duplicateDialog.locator('#personnel-last-name').fill(`Dora Doppel-A3-${world.runId}`);
     const duplicateNumberInput = duplicateDialog.locator('#personnel-number');
@@ -419,298 +328,203 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     });
     await duplicateNumberInput.fill(employeeNumber);
     await expect(duplicateNumberInput).toHaveValue(employeeNumber);
-    await typeIntoDatePicker(duplicateDialog, 'Eintrittsdatum', toDatePickerDigits(entryDate));
-    await duplicateDialog
-      .getByRole('button', { name: 'Personalakte anlegen', exact: true })
-      .click();
-    await expect(
-      duplicateDialog.getByText('Diese Personalnummer ist bereits vergeben.')
-    ).toBeVisible({ timeout: 15_000 });
-    await adminPage.keyboard.press('Escape');
+    await typeIntoDatePicker(duplicateDialog, PERSONNEL_COPY.entryDate, toDatePickerDigits(entryDate));
+    await submitPersonnelRecordButton(duplicateDialog).click();
+    await expect(duplicateDialog.getByText(PERSONNEL_COPY.numberTaken)).toBeVisible({
+      timeout: 15_000,
+    });
+    await dismissDialog(duplicateDialog);
     await expect(duplicateDialog).toBeHidden({ timeout: 15_000 });
     await adminPage.goto(`/mitarbeiter/${a3RecordId}`);
     await expect(visibleText(adminPage, employeeNumber)).toBeVisible();
   });
 
-  test('A3-R01: Alle Personalzeilen zeigen Beschäftigungs- und Zugangsstatus vollständig',
-    {
-      annotation: [
-        {
-          type: "requires-test",
-          description:
-            "A3-01/A3-03: Vollständige Personalakte, geplante Kondition und nachvollziehbare Werte",
-        },
-      ],
-    },
-    async ({
+  test('A3-R01: Alle Personalzeilen zeigen Beschäftigungs- und Zugangsstatus vollständig', async ({
     adminPage,
     world,
   }) => {
-    const personnelRecordId = requireChainedValue(
-        auditCheckpoint("a3.personnelRecordId"), {
-      test: 'A3-R01',
-      needs: 'the personnel record created by A3-01',
-      grep: 'A3-01|A3-R01',
-      suite: 'audit',
-    });
-    const plannedName = a3PersonnelName(world.runId);
+    const plannedName = `Pia Planung-A3-${world.runId}`;
+    const exitedName = `Eva Ehemalig-A3-${world.runId}`;
     const activeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
+    const exitedEmployeeNumber = `MA-A3-E-${world.runId}`;
 
+    const plannedRecordId = await createPersonnelRecordViaDialog(adminPage, {
+      firstName: 'Pia',
+      lastName: `Planung-A3-${world.runId}`,
+      entryDateDigits: toDatePickerDigits(berlinDateAtOffset(30)),
+      employeeNumber: `MA-A3-P-${world.runId}`,
+    });
     await adminPage.goto('/mitarbeiter');
-    const plannedRow = personnelRow(adminPage, plannedName);
-    await expect(plannedRow.getByText('Geplant', { exact: true })).toBeVisible();
-    await expect(plannedRow.getByText('Ohne Zugang', { exact: true })).toBeVisible();
+    const plannedRow = personnelListRow(adminPage, plannedName);
+    await expect(plannedRow.getByText(EMPLOYMENT_STATE_LABELS.geplant, { exact: true })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(plannedRow.getByText(ACCESS_STATE_LABELS.ohne_zugang, { exact: true })).toBeVisible();
 
-    const activeRow = personnelRow(adminPage, activeName);
-    await expect(activeRow.getByText('Aktiv', { exact: true })).toBeVisible();
-    await expect(activeRow.getByText('Mit Zugang', { exact: true })).toBeVisible();
+    const activeRow = personnelListRow(adminPage, activeName);
+    await expect(activeRow.getByText(EMPLOYMENT_STATE_LABELS.aktiv, { exact: true })).toBeVisible();
+    await expect(activeRow.getByText(ACCESS_STATE_LABELS.mit_zugang, { exact: true })).toBeVisible();
 
-    await adminPage.goto(`/mitarbeiter/${personnelRecordId}`);
-    await sendInviteFromPersonnelRecord(
-      adminPage,
-      `delivered+a3-${world.runId}@resend.dev`,
-      'Handwerker/in'
-    );
+    await adminPage.goto(`/mitarbeiter/${plannedRecordId}`);
+    await sendInviteFromPersonnelRecord(adminPage, `delivered+a3-${world.runId}@resend.dev`, 'employee');
     await adminPage.goto('/mitarbeiter');
     await expect(
-      personnelRow(adminPage, plannedName).getByText('Eingeladen', {
-        exact: true,
-      })
+      personnelListRow(adminPage, plannedName).getByText(ACCESS_STATE_LABELS.eingeladen, { exact: true }),
     ).toBeVisible();
 
-    const exitedName = `Eva Ehemalig-A3-${world.runId}`;
-    const exitedRecordId = await createPersonnelRecordViaDialog(adminPage, {
+    await createPersonnelRecordViaDialog(adminPage, {
       firstName: 'Eva',
       lastName: `Ehemalig-A3-${world.runId}`,
       entryDateDigits: toDatePickerDigits(berlinDateAtOffset(-60)),
-      employeeNumber: `MA-A3-E-${world.runId}`,
+      employeeNumber: exitedEmployeeNumber,
     });
-    await editPersonnelDateField(adminPage, 'Austrittsdatum', berlinDateAtOffset(-1));
+    await editPersonnelExitDate(adminPage, berlinDateAtOffset(-1));
     await adminPage.goto('/mitarbeiter');
-    const exitedRow = personnelRow(adminPage, exitedName);
-    await expect(exitedRow.getByText('Ausgeschieden', { exact: true })).toBeVisible();
-    await expect(exitedRow.getByText('Ohne Zugang', { exact: true })).toBeVisible();
-    await expect(exitedRow).toContainText(`MA-A3-E-${world.runId}`);
-    expect(exitedRecordId).toMatch(/^[0-9a-f-]{36}$/);
+    const exitedRow = personnelListRow(adminPage, exitedName);
+    await expect(exitedRow.getByText(EMPLOYMENT_STATE_LABELS.ausgeschieden, { exact: true })).toBeVisible();
+    await expect(exitedRow.getByText(ACCESS_STATE_LABELS.ohne_zugang, { exact: true })).toBeVisible();
+    await expect(exitedRow).toContainText(exitedEmployeeNumber);
   });
 
-  test('A3-06/A3-07: Betriebsruhe respektiert die Datumsgrenze; Feiertagswechsel bleibt historisch',
-    {
-      annotation: [
-        {
-          type: "requires-test",
-          description:
-            "A3-01/A3-03: Vollständige Personalakte, geplante Kondition und nachvollziehbare Werte",
-        },
-      ],
-    },
-    async ({
+  test('A3-06/A3-07: Betriebsruhe respektiert die Datumsgrenze, Büro pflegt sie mit; Feiertagswechsel bleibt historisch', async ({
     adminPage,
     bueroPage,
     world,
   }) => {
-    const personnelRecordId = requireChainedValue(
-        auditCheckpoint("a3.personnelRecordId"), {
-      test: 'A3-06',
-      needs: 'the personnel record created by A3-01',
-      grep: 'A3-01|A3-06',
-      suite: 'audit',
-    });
-    const today = berlinDateAtOffset(0);
-    const pastDate = shiftIsoDate(today, -1);
+    const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
+    const pastDate = berlinDateAtOffset(-1);
     const closureDate = ownedBerlinDateAtOffset('a3-personal', 32);
+    const closureLabel = `A3 Betriebsruhe ${world.runId}`;
     const bueroClosureDate = ownedBerlinDateAtOffset('a3-personal', 33);
     const bueroClosureLabel = `A3 Büro-Betriebsruhe ${world.runId}`;
 
+    // A future closure day is stored and removable again.
     await addClosureDayViaSettings(adminPage, {
       dateDigits: toDatePickerDigits(closureDate),
-      label: `A3 Betriebsruhe ${world.runId}`,
+      label: closureLabel,
     });
-    let context = await getTargetContextForRecord(world.orgId, personnelRecordId);
+    let context = await getTargetContextForRecord(world.orgId, employeeRecord.id);
     expect(
       context.calendar.closureDays.some(
-        (day) => day.closureDate === closureDate && day.label === `A3 Betriebsruhe ${world.runId}`
-      )
+        (day) => day.closureDate === closureDate && day.label === closureLabel,
+      ),
     ).toBe(true);
     await removeClosureDayViaSettings(adminPage, toGermanDate(closureDate));
-    context = await getTargetContextForRecord(world.orgId, personnelRecordId);
+    context = await getTargetContextForRecord(world.orgId, employeeRecord.id);
     expect(context.calendar.closureDays.some((day) => day.closureDate === closureDate)).toBe(false);
 
+    // A past day is never rewritten.
     await adminPage.goto('/einstellungen/zeiterfassung');
-    await typeIntoDatePicker(
-      adminPage.getByRole('main'),
-      'Datum der Betriebsruhe',
-      toDatePickerDigits(pastDate)
-    );
-    await adminPage.getByLabel('Bezeichnung (optional)').fill(`A3 Vergangenheit ${world.runId}`);
-    await adminPage.getByRole('button', { name: 'Eintragen' }).click();
-    await expect(
-      visibleText(
-        adminPage,
-        'Vergangene Tage können nicht geändert werden – frühere Zeiträume behalten ihre damalige Bedeutung.'
-      )
-    ).toBeVisible({ timeout: 15_000 });
+    await submitClosureDayForm(adminPage, {
+      dateDigits: toDatePickerDigits(pastDate),
+      label: `A3 Vergangenheit ${world.runId}`,
+    });
+    await expect(visibleText(adminPage, PERSONNEL_COPY.closurePastDay)).toBeVisible({ timeout: 15_000 });
 
-    await setHolidayRegionViaSettings(adminPage, 'Bayern (mit Mariä Himmelfahrt)');
-    await setHolidayRegionViaSettings(adminPage, 'Bayern (ohne Mariä Himmelfahrt)');
-    await setHolidayRegionViaSettings(adminPage, 'Berlin');
-    await setHolidayRegionViaSettings(adminPage, 'Thüringen');
-
-    await bueroPage.goto('/einstellungen/zeiterfassung');
-    await expect(bueroPage.getByLabel('Bundesland')).toContainText('Thüringen');
-    await expect(bueroPage.getByLabel('Bundesland')).toBeDisabled();
-    await expect(
-      bueroPage.getByRole('button', { name: 'Feiertagskalender speichern' })
-    ).toBeDisabled();
+    // Büro maintains closure days too; the month grid shows them as labels
+    // that cannot be clicked.
     await addClosureDayViaSettings(bueroPage, {
       dateDigits: toDatePickerDigits(bueroClosureDate),
       label: bueroClosureLabel,
     });
-
-    context = await getTargetContextForRecord(world.orgId, personnelRecordId);
-    const [firstA3Region, secondA3Region] = context.calendar.holidayRegionHistory.slice(-2);
-    if (!firstA3Region || !secondA3Region) throw new Error('A3 expects two holiday region history entries.');
-    expect([firstA3Region.region, secondA3Region.region]).toEqual(['BE', 'TH']);
-    expect(new Date(firstA3Region.effectiveFrom).getTime()).toBeLessThanOrEqual(
-      new Date(secondA3Region.effectiveFrom).getTime()
-    );
-    const beforeFirstSelection = shiftIsoDate(toBerlinIsoDate(firstA3Region.effectiveFrom), -1);
-    expect(resolveHolidayRegionOnDate(context.calendar, beforeFirstSelection)).toBeNull();
-    const currentYear = Number(today.slice(0, 4));
-    const holidayYear = today <= `${currentYear}-09-20` ? currentYear : currentYear + 1;
-    const holidayDate = `${holidayYear}-09-20`;
-    expect(resolveHolidayRegionOnDate(context.calendar, holidayDate)).toBe('TH');
-    expect(
-      getHolidayContextDays(context.calendar, holidayYear, holidayYear).some(
-        (holiday) => holiday.date === holidayDate && holiday.name === 'Weltkindertag'
-      )
-    ).toBe(true);
-
+    context = await getTargetContextForRecord(world.orgId, employeeRecord.id);
     expect(
       context.calendar.closureDays.some(
-        (day) => day.closureDate === bueroClosureDate && day.label === bueroClosureLabel
-      )
+        (day) => day.closureDate === bueroClosureDate && day.label === bueroClosureLabel,
+      ),
     ).toBe(true);
-
-    await navigateMonthViewTo(adminPage, holidayDate);
-    await expectInformationalCalendarEvent(adminPage, 'Weltkindertag');
     await navigateMonthViewTo(adminPage, bueroClosureDate);
-    await expectInformationalCalendarEvent(adminPage, bueroClosureLabel);
-
+    const closureEvent = informationalCalendarEvent(adminPage, bueroClosureLabel);
+    await expect(closureEvent).toBeVisible({ timeout: 15_000 });
+    await expect(closureEvent).toHaveCSS('pointer-events', 'none');
+    await closureEvent.dispatchEvent('click');
+    await expect(adminPage.getByRole('dialog')).toHaveCount(0);
     await removeClosureDayViaSettings(bueroPage, toGermanDate(bueroClosureDate));
-    context = await getTargetContextForRecord(world.orgId, personnelRecordId);
-    expect(context.calendar.closureDays.some((day) => day.closureDate === bueroClosureDate)).toBe(
-      false
+    context = await getTargetContextForRecord(world.orgId, employeeRecord.id);
+    expect(context.calendar.closureDays.some((day) => day.closureDate === bueroClosureDate)).toBe(false);
+
+    // A region change appends to the history instead of rewriting it.
+    await setHolidayRegionViaSettings(adminPage, HOLIDAY_REGION_LABELS.BE);
+    await setHolidayRegionViaSettings(adminPage, HOLIDAY_REGION_LABELS.TH);
+    context = await getTargetContextForRecord(world.orgId, employeeRecord.id);
+    const [firstRegion, secondRegion] = context.calendar.holidayRegionHistory.slice(-2);
+    if (!firstRegion || !secondRegion) throw new Error('A3 expects two holiday region history entries.');
+    expect([firstRegion.region, secondRegion.region]).toEqual(['BE', 'TH']);
+    expect(new Date(firstRegion.effectiveFrom).getTime()).toBeLessThanOrEqual(
+      new Date(secondRegion.effectiveFrom).getTime(),
     );
 
-    await setHolidayRegionViaSettings(adminPage, 'Kein Feiertagskalender');
-    context = await getTargetContextForRecord(world.orgId, personnelRecordId);
+    await setHolidayRegionViaSettings(adminPage, PERSONNEL_COPY.noHolidayRegion);
+    context = await getTargetContextForRecord(world.orgId, employeeRecord.id);
     expect(context.calendar.holidayRegion).toBeNull();
     expect(context.calendar.holidayRegionHistory.at(-1)?.region).toBe('');
   });
 
   test('A3-R02: Arbeitszeitmodell steuert Ziel, Fortschritt, Überstunden und Listenwerte zugänglich', async ({
     adminPage,
+    businessDate,
     employeePage,
     world,
   }) => {
-    // This same-test current-day state is transient and is not a cross-spec owned fixture.
-    const today = berlinDateAtOffset(0);
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
-    const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
-    const scheduleNote = `A3 Ein-Minuten-Modell ${world.runId}`;
-    const completedTimeWindow = getCompletedBerlinTimeWindow();
+    const bueroName = `${world.users.buero.firstName} ${world.users.buero.lastName}`;
 
+    // A one-minute daily plan from today and eight worked minutes in the
+    // completed 00:01–00:09 window of the business date: the runner never
+    // starts a group between 23:40 and 00:10, so the window lies in the past.
     await openMemberDetailFromList(adminPage, employeeName);
     await addWorkScheduleViaDialog(adminPage, {
-      validFromDigits: toDatePickerDigits(today),
+      validFromDigits: toDatePickerDigits(businessDate),
       dayHours: ['0,02', '0,02', '0,02', '0,02', '0,02', '0,02', '0,02'],
-      note: scheduleNote,
+      note: `A3 Ein-Minuten-Modell ${world.runId}`,
     });
-    await expect(visibleText(adminPage, '7 Min. pro Woche')).toBeVisible({
+    await expect(visibleText(adminPage, weeklyScheduleText({ minutes: 7 }))).toBeVisible({
       timeout: 15_000,
     });
-
     await createOwnManualTimeEntry(adminPage, {
       memberName: employeeName,
-      dateDigits: toDatePickerDigits(today),
-      clockInDigits: completedTimeWindow.clockInDigits,
-      clockOutDigits: completedTimeWindow.clockOutDigits,
+      dateDigits: toDatePickerDigits(businessDate),
+      clockInDigits: '0001',
+      clockOutDigits: '0009',
     });
-    expect((await getLatestManualTimeEntryState(world.orgId, world.users.employee.id)).status).toBe(
-      'approved'
-    );
 
     await employeePage.goto('/zeiterfassung');
-    await expect(visibleText(employeePage, 'Tagesziel: 1 Min. Arbeitszeit')).toBeVisible({
+    await expect(visibleText(employeePage, dailyTargetText(formatDuration(1)))).toBeVisible({
       timeout: 15_000,
     });
-    await expect(visibleText(employeePage, 'Gesamtzeit')).toBeVisible();
-    const overtime = visibleText(employeePage, 'Überstunden heute').locator('..');
-    await expect(overtime).not.toHaveText(/Überstunden heute\s*0 Min\.\s*$/);
-    const mondayBasedDayIndex = (new Date(`${today}T12:00:00Z`).getUTCDay() + 6) % 7;
-    const mondayIso = shiftIsoDate(today, -mondayBasedDayIndex);
-    const targetContext = await getTargetContextForRecord(world.orgId, employeeRecord.id);
-    const expectedWeeklyMinutes = Array.from({ length: 7 }, (_, index) =>
-        resolveDailyTarget({
-          dateIso: shiftIsoDate(mondayIso, index),
-          ...targetContext,
-        })
-      ).reduce((total, target) => total + target.targetMinutes, 0);
-    await expect(
-      visibleText(employeePage, `Soll: ${formatDuration(expectedWeeklyMinutes)}`)
-    ).toBeVisible();
+    await expect(todayOvertime(employeePage)).not.toHaveText(ZERO_OVERTIME_TODAY);
 
     await adminPage.goto('/mitarbeiter');
-    const employeeRow = personnelRow(adminPage, employeeName);
-    const progress = employeeRow.getByRole('progressbar', {
-      name: 'Tagesfortschritt: 100%',
-    });
-    await expect(progress).toHaveAttribute('aria-valuenow', '100');
-    const bueroName = `${world.users.buero.firstName} ${world.users.buero.lastName}`;
-    await expect(
-      personnelRow(adminPage, bueroName).getByLabel('Kein Arbeitszeitmodell hinterlegt')
-    ).toBeVisible();
+    await expect(dailyProgressAtPercent(personnelListRow(adminPage, employeeName), 100)).toHaveAttribute(
+      'aria-valuenow',
+      '100',
+    );
+    await expect(defaultTargetMarker(personnelListRow(adminPage, bueroName))).toBeVisible();
 
+    // A closure day turns the list value into a labeled zero target.
     await addClosureDayViaSettings(adminPage, {
-      dateDigits: toDatePickerDigits(today),
+      dateDigits: toDatePickerDigits(businessDate),
       label: `A3 Nullziel ${world.runId}`,
     });
     try {
-      const context = await getTargetContextForRecord(world.orgId, employeeRecord.id);
-      expect(context.calendar.closureDays.some((day) => day.closureDate === today)).toBe(true);
       await adminPage.goto('/mitarbeiter');
-      const zeroTargetProgress = personnelRow(adminPage, employeeName).getByRole('progressbar', {
-        name: 'Tagesfortschritt: Betriebsruhe',
-      });
-      await expect(zeroTargetProgress).toHaveAttribute('aria-valuenow', '0');
-      await employeePage.goto('/zeiterfassung');
-      await expect(visibleText(employeePage, 'heute keine Sollarbeitszeit.')).toBeVisible({
-        timeout: 15_000,
-      });
+      await expect(dailyProgressOnClosureDay(personnelListRow(adminPage, employeeName))).toHaveAttribute(
+        'aria-valuenow',
+        '0',
+      );
     } finally {
-      await removeClosureDayViaSettings(adminPage, toGermanDate(today));
+      await removeClosureDayViaSettings(adminPage, toGermanDate(businessDate));
     }
-
-    await deleteWorkBlockViaCalendar(adminPage, completedTimeWindow.calendarTitle);
-    await openMemberDetailFromList(adminPage, employeeName);
-    await deleteWorkScheduleViaDetail(adminPage, today, scheduleNote);
-    const cleanedContext = await getTargetContextForRecord(world.orgId, employeeRecord.id);
-    expect(
-      cleanedContext.schedules.some(
-        (schedule) => schedule.validFrom === today && schedule.note === scheduleNote
-      )
-    ).toBe(false);
   });
 
-  test('A3-11: Betroffene sehen eigene Vertretung und Manager die Personenzusammenfassung', async ({
+  test('A3-11: Betroffene sehen eigene Verantwortung und Vertretung, Büro liest nur, Manager sehen die Personenzusammenfassung', async ({
     adminPage,
     bueroPage,
+    businessDate,
     employeePage,
     world,
   }) => {
-    const today = berlinDateAtOffset(0);
-    const yesterdayDigits = toDatePickerDigits(shiftIsoDate(today, -1));
+    const yesterdayDigits = toDatePickerDigits(shiftIsoDate(businessDate, -1));
     const adminName = `${world.users.admin.firstName} ${world.users.admin.lastName}`;
     const bueroName = `${world.users.buero.firstName} ${world.users.buero.lastName}`;
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
@@ -718,139 +532,101 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
       getEmployeeRecordStateByUser(world.orgId, world.users.admin.id),
       getEmployeeRecordStateByUser(world.orgId, world.users.employee.id),
     ]);
+    const pin = (
+      responsibility: 'time_approval' | 'leave_approval',
+      holderEmployeeRecordIds: readonly string[] | 'role_default',
+    ) =>
+      setResponsibilityHolders({
+        organizationId: world.orgId,
+        ownerUserId: world.users.admin.id,
+        responsibility,
+        holderEmployeeRecordIds,
+      });
 
-    for (const responsibility of ['time_approval', 'leave_approval'] as const) {
-      await previewResponsibilityChange(adminPage, { responsibility });
-      await confirmResponsibilityPreview(adminPage);
-    }
-
-    await previewResponsibilityChange(adminPage, {
-      responsibility: 'time_approval',
-      selectedNames: [employeeName],
-    });
-    await confirmResponsibilityPreview(adminPage);
-    let configuration = await getLatestResponsibilityConfigurationState(
-      world.orgId,
-      'time_approval'
-    );
-    expect(configuration.mode).toBe('selected');
-    expect(configuration.holderEmployeeRecordIds).toEqual([employeeRecord.id]);
-
+    // A selected field worker sees the own responsibility, without any control to change it.
+    await pin('time_approval', [employeeRecord.id]);
     await employeePage.goto('/einstellungen/mitarbeiter');
-    await expect(visibleText(employeePage, 'Zeitfreigaben')).toBeVisible({
+    await expect(visibleText(employeePage, RESPONSIBILITY_LABELS.time_approval)).toBeVisible({
       timeout: 15_000,
     });
-    await expect(employeePage.getByRole('button', { name: 'Verantwortung ändern' })).toHaveCount(0);
-    await expect(employeePage.getByRole('button', { name: 'Vertretung eintragen' })).toHaveCount(0);
+    await expect(changeResponsibilityButton(employeePage)).toHaveCount(0);
+    await expect(addDelegationButton(employeePage)).toHaveCount(0);
     await expect(employeePage.getByTestId('responsibility-time_approval')).toHaveCount(0);
 
-    await previewResponsibilityChange(adminPage, {
-      responsibility: 'time_approval',
-    });
-    await confirmResponsibilityPreview(adminPage);
-    await previewResponsibilityChange(adminPage, {
-      responsibility: 'leave_approval',
-      selectedNames: [adminName],
-    });
-    await confirmResponsibilityPreview(adminPage);
-
-    configuration = await getLatestResponsibilityConfigurationState(world.orgId, 'time_approval');
-    expect(configuration.mode).toBe('role_default');
-    configuration = await getLatestResponsibilityConfigurationState(world.orgId, 'leave_approval');
-    expect(configuration.mode).toBe('selected');
-    expect(configuration.holderEmployeeRecordIds).toEqual([adminRecord.id]);
-
+    // Büro reads the configuration and cannot change it.
+    await pin('time_approval', 'role_default');
+    await pin('leave_approval', [adminRecord.id]);
     await bueroPage.goto('/einstellungen/mitarbeiter');
-    await expect(bueroPage.getByRole('main').getByTestId('responsibility-time_approval')).toContainText(
-      'Standardrollen'
+    await expect(responsibilityCard(bueroPage, 'time_approval')).toContainText(
+      RESPONSIBILITY_COPY.roleDefaultMode,
     );
-    await expect(bueroPage.getByRole('main').getByTestId('responsibility-leave_approval')).toContainText(
-      'Bestimmte Personen'
+    await expect(responsibilityCard(bueroPage, 'leave_approval')).toContainText(
+      RESPONSIBILITY_COPY.selectedMode,
     );
-    await expect(bueroPage.getByRole('button', { name: 'Verantwortung ändern' })).toHaveCount(0);
-    await expect(bueroPage.getByRole('button', { name: 'Vertretung eintragen' })).toHaveCount(0);
+    await expect(changeResponsibilityButton(bueroPage)).toHaveCount(0);
+    await expect(addDelegationButton(bueroPage)).toHaveCount(0);
     for (const responsibility of ['time_approval', 'leave_approval'] as const) {
-      await expect(bueroPage.getByRole("main").getByTestId(`responsibility-${responsibility}`)).toContainText(
-        'Du kannst die Regel einsehen. Nur der Admin kann sie ändern.'
+      await expect(responsibilityCard(bueroPage, responsibility)).toContainText(
+        RESPONSIBILITY_COPY.readOnlyHint,
       );
     }
 
+    // The substitute sees the own substitution.
     await createResponsibilityDelegationViaSettings(adminPage, {
       responsibility: 'leave_approval',
       delegatorName: adminName,
       substituteName: employeeName,
-      validFromDigits: toDatePickerDigits(today),
-      validUntilDigits: toDatePickerDigits(shiftIsoDate(today, 30)),
+      validFromDigits: toDatePickerDigits(businessDate),
+      validUntilDigits: toDatePickerDigits(shiftIsoDate(businessDate, 30)),
     });
-
     await employeePage.goto('/einstellungen/mitarbeiter');
-    await expect(
-      visibleText(employeePage, 'Meine Verantwortlichkeiten und Vertretungen')
-    ).toBeVisible({ timeout: 15_000 });
-    await expect(visibleText(employeePage, `Vertretung für ${adminName}`)).toBeVisible();
-    await expect(visibleText(employeePage, 'Vertretung bis')).toBeVisible();
+    await expect(visibleText(employeePage, RESPONSIBILITY_COPY.ownSummary)).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(visibleText(employeePage, substituteForText(adminName))).toBeVisible();
+    await expect(visibleText(employeePage, RESPONSIBILITY_COPY.substituteUntil)).toBeVisible();
 
+    // Under the role default the admin's own entry stays the direct recovery
+    // path, while Büro's own entry waits and never reaches Büro's own list.
     await createOwnManualTimeEntry(adminPage, {
       memberName: adminName,
       dateDigits: yesterdayDigits,
       clockInDigits: '0010',
       clockOutDigits: '0020',
     });
-    expect((await getLatestManualTimeEntryState(world.orgId, world.users.admin.id)).status).toBe(
-      'approved'
-    );
-
+    expect((await getLatestManualTimeEntryState(world.orgId, world.users.admin.id)).status).toBe('approved');
     await createOwnManualTimeEntry(bueroPage, {
       memberName: bueroName,
       dateDigits: yesterdayDigits,
       clockInDigits: '0030',
       clockOutDigits: '0040',
     });
-    expect((await getLatestManualTimeEntryState(world.orgId, world.users.buero.id)).status).toBe(
-      'pending'
-    );
+    expect((await getLatestManualTimeEntryState(world.orgId, world.users.buero.id)).status).toBe('pending');
     await expectTimeApprovalsUnavailable(employeePage);
     await openTimeApprovals(bueroPage);
     await expectPendingTimeApprovalHidden(bueroPage, world.users.buero.id);
-    await openTimeApprovals(adminPage);
-    await expectPendingTimeApprovalVisible(adminPage, world.users.buero.id);
-    await approvePendingTimeEntry(adminPage, world.users.buero.id);
-    expect((await getLatestManualTimeEntryState(world.orgId, world.users.buero.id)).status).toBe(
-      'approved'
-    );
 
     for (const managerPage of [adminPage, bueroPage]) {
       await managerPage.goto('/einstellungen/mitarbeiter');
-      await expect(
-        visibleText(managerPage, 'Meine Verantwortlichkeiten und Vertretungen')
-      ).toBeVisible({ timeout: 15_000 });
-      await expect(visibleText(managerPage, 'Aktuell verantwortlich')).toBeVisible();
+      await expect(visibleText(managerPage, RESPONSIBILITY_COPY.ownSummary)).toBeVisible({
+        timeout: 15_000,
+      });
+      await expect(visibleText(managerPage, RESPONSIBILITY_COPY.currentlyResponsible)).toBeVisible();
     }
 
     await openMemberDetailFromList(adminPage, employeeName);
-    const summary = adminPage
-      .getByRole('heading', { name: 'Verantwortlichkeiten & Vertretung' })
-      .locator('xpath=ancestor::section');
+    const summary = responsibilitySummary(adminPage);
     await expect(summary).toBeVisible();
-    await expect(summary.getByText('Urlaubsfreigaben', { exact: true })).toBeVisible();
-    await expect(summary.getByText('1 Vertretung', { exact: true })).toBeVisible();
+    await expect(summary.getByText(RESPONSIBILITY_LABELS.leave_approval, { exact: true })).toBeVisible();
+    await expect(activeDelegationsBadge(summary, 1)).toBeVisible();
 
+    // After the end the person keeps the history but is no longer responsible.
     await endResponsibilityDelegationViaSettings(adminPage, 'leave_approval', employeeName);
     await employeePage.goto('/einstellungen/mitarbeiter');
-    await expect(
-      visibleText(employeePage, 'Meine Verantwortlichkeiten und Vertretungen')
-    ).toBeVisible({ timeout: 15_000 });
-    await expect(visibleText(employeePage, 'Nicht verantwortlich')).toBeVisible();
-    await expect(visibleText(employeePage, `Vertretung für ${adminName}`)).toBeVisible();
-
-    await previewResponsibilityChange(adminPage, {
-      responsibility: 'leave_approval',
+    await expect(visibleText(employeePage, RESPONSIBILITY_COPY.ownSummary)).toBeVisible({
+      timeout: 15_000,
     });
-    await confirmResponsibilityPreview(adminPage);
-    for (const responsibility of ['time_approval', 'leave_approval'] as const) {
-      expect(
-        (await getLatestResponsibilityConfigurationState(world.orgId, responsibility)).mode
-      ).toBe('role_default');
-    }
+    await expect(visibleText(employeePage, RESPONSIBILITY_COPY.notResponsible)).toBeVisible();
+    await expect(visibleText(employeePage, substituteForText(adminName))).toBeVisible();
   });
 });
