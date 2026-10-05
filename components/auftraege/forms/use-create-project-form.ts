@@ -1,5 +1,6 @@
 'use client';
 
+import { usePendingTask } from '@/hooks/use-server-action';
 import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
 import { useState, useMemo, useEffect } from 'react';
 import { getNextProjectNumber } from '@/lib/projects/actions';
@@ -31,7 +32,7 @@ export function useCreateProjectForm({
   const [plannedStartDate, setPlannedStartDate] = useState<Date | undefined>();
   const [plannedEndDate, setPlannedEndDate] = useState<Date | undefined>();
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const { run: runSubmit, isPending: isLoading } = usePendingTask();
   const [error, setError] = useState<string | null>(null);
   const [contentError, setContentError] = useState<string | null>(null);
   const [projectNumberError, setProjectNumberError] = useState<string | null>(null);
@@ -142,7 +143,7 @@ export function useCreateProjectForm({
     jobSearch,
     unlinkedJobs,
     isLoading,
-    setIsLoading,
+    runSubmit,
     error,
     setError,
     contentError,

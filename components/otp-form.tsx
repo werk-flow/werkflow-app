@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
+import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { redeemOtpInvite } from '@/components/otp-form-invite';
 import { useOtpResend } from '@/components/use-otp-form-resend';
@@ -23,7 +24,7 @@ export function OTPForm({ email, inviteCode, className, ...props }: OTPFormProps
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [code, setCode] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { run: runSubmit, isPending: isSubmitting } = usePendingTask();
   const { resendCooldown, isResending, handleResend } = useOtpResend({
     supabase,
     email,
@@ -50,55 +51,54 @@ export function OTPForm({ email, inviteCode, className, ...props }: OTPFormProps
       return;
     }
 
-    setIsSubmitting(true);
+    await runSubmit(async () => {
+      try {
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.verifyOtp({
+          email,
+          token: sanitizedCode,
+          type: 'email',
+        });
 
-    try {
-      const {
-        data: { session },
-        error,
-      } = await supabase.auth.verifyOtp({
-        email,
-        token: sanitizedCode,
-        type: 'email',
-      });
+        if (error || !session) {
+          setFormError('Der Code ist ungültig oder abgelaufen. Bitte versuche es erneut.');
+          return;
+        }
 
-      if (error || !session) {
-        setFormError('Der Code ist ungültig oder abgelaufen. Bitte versuche es erneut.');
-        setIsSubmitting(false);
-        return;
+        await fetch('/auth/callback', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            event: 'SIGNED_IN',
+            session,
+          }),
+        });
+
+        // Note: Profile is automatically created by database trigger on auth.users INSERT
+        // The trigger extracts first_name and last_name from user_metadata
+
+        // Determine the invite code to use:
+        // 1. If inviteCode prop is passed (user came from invite link), use that
+        // 2. Otherwise, check user metadata for pending_invite_code (user signed up via invite but logged in elsewhere)
+        const effectiveInviteCode =
+          inviteCode || (session.user.user_metadata?.pending_invite_code as string | undefined);
+
+        // If there's an invite code, redeem it via server action to ensure proper auth context
+        if (effectiveInviteCode) {
+          if (await redeemOtpInvite(supabase, effectiveInviteCode)) return untilPageLeaves();
+        }
+
+        router.replace('/');
+        router.refresh();
+        return untilPageLeaves();
+      } catch {
+        setFormError('Es ist ein unerwarteter Fehler aufgetreten. Bitte versuche es erneut.');
       }
-
-      await fetch('/auth/callback', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          event: 'SIGNED_IN',
-          session,
-        }),
-      });
-
-      // Note: Profile is automatically created by database trigger on auth.users INSERT
-      // The trigger extracts first_name and last_name from user_metadata
-
-      // Determine the invite code to use:
-      // 1. If inviteCode prop is passed (user came from invite link), use that
-      // 2. Otherwise, check user metadata for pending_invite_code (user signed up via invite but logged in elsewhere)
-      const effectiveInviteCode =
-        inviteCode || (session.user.user_metadata?.pending_invite_code as string | undefined);
-
-      // If there's an invite code, redeem it via server action to ensure proper auth context
-      if (effectiveInviteCode) {
-        if (await redeemOtpInvite(supabase, effectiveInviteCode)) return;
-      }
-
-      router.replace('/');
-      router.refresh();
-    } catch {
-      setFormError('Es ist ein unerwarteter Fehler aufgetreten. Bitte versuche es erneut.');
-      setIsSubmitting(false);
-    }
+    });
   }
   return (
     <Card className={className} {...props}>

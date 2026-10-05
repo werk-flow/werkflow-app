@@ -73,7 +73,7 @@ Wrong turn: leaving the measurement to the release run. By then other changes si
 
 A `[judgment]` item is a Tier 3 default: diverge only with the note that `AGENTS.md` describes under "How to read the virtues".
 
-- An action shows pending feedback in its first frame, bound to the awaited server call through `useServerAction`. The field worker's clock tap is measured. [code `hooks/use-server-action.ts`, test `lib/conventions/server-action-feedback.test.ts`, group `ui:contracts`, group `audit:performance:field`]
+- An action shows pending feedback in its first frame through an owner hook: `useServerAction` for one action, `usePendingTask` for several steps, `useBusyIds` for a row, `untilPageLeaves()` when the page leaves. The field worker's clock tap is measured. [code `hooks/use-server-action.ts`, code `hooks/use-busy-id.ts`, test `lib/conventions/server-action-feedback.test.ts`, test `lib/ui/until-page-leaves.test.ts`, group `ui:contracts`, group `audit:performance:field`]
 - A list edit appears at once through `useOptimisticList` and leaves the list only after an authoritative read confirms it. [code `hooks/use-optimistic-list.ts`, test `lib/ui/optimistic-overlay.test.ts`, test `lib/ui/change-settlement.test.ts`]
 - Success shows only after the write is accepted. Failure keeps the user's input and offers retry. [group `ui:contracts`, judgment]
 - A saved result reaches every view that shows it, and another signed-in session within the live target. The measured scenarios cover the calendar and the time approval; for any other flow the reviewer checks a second session in the browser. [group `audit:performance:calendar-live`, group `audit:performance:field`, judgment]
@@ -94,7 +94,7 @@ A `[judgment]` item is a Tier 3 default: diverge only with the note that `AGENTS
 
 ## Never
 
-- Wait for the network before you acknowledge an action. The shared hooks show feedback at once, and a held-write contract proves it for each mutation that has one. A client write outside an owner hook, a pending flag or an optimistic change fails a convention test. [code `hooks/use-server-action.ts`, code `hooks/use-optimistic-list.ts`, test `lib/conventions/server-action-feedback.test.ts`, group `ui:contracts`]
+- Wait for the network before you acknowledge an action, or write pending state by hand. The shared hooks show feedback at once, and a held-write contract proves it for each mutation that has one. A client write outside an owner hook or an optimistic change fails a convention test, and so does a hand-raised pending flag outside `HAND_PENDING_STATE`. [code `hooks/use-server-action.ts`, code `hooks/use-optimistic-list.ts`, test `lib/conventions/server-action-feedback.test.ts`, group `ui:contracts`]
 - Bind pending state to a router transition: no `useTransition` and no async `startTransition` callback in product code. [lint `transitionSelectors`, lint `asyncTransitionSelectors`]
 - Poll. `setInterval` is banned in product code. [lint `pollingSelectors`]
 - Show a toast. Feedback goes through `Banner` and the inline states. [lint `sonnerImportPath`]
@@ -141,7 +141,7 @@ The caller establishes identity and current permission before it uses the data. 
 
 ### Sidebar prefetch
 
-Sidebar and logo links prefetch only the destination under hover or keyboard focus. Do not re-enable viewport prefetch. Cache invalidation would then schedule every visible sidebar route again, and those reads compete with live updates.
+Sidebar and logo links prefetch only the destination under hover or keyboard focus. Viewport prefetch would re-read every visible sidebar route on each cache invalidation, competing with live updates.
 
 ### Backend request capacity
 
@@ -222,7 +222,7 @@ The contract is the behavior of the two live-view hooks. A surface does not re-i
 3. **Server props are mount-time data for live components.** `initialData` seeds the first paint. After mount, the reader is authoritative. Key a live component by entity id, or pass `resetKey` where a remount is not an option.
 4. **Mutations refresh route-first, then refetch.** Start `router.refresh()` and finish with `view.refresh()`. In the reverse order a stale server payload overwrites the fresh read.
 5. **Refetches use generation guards and keep the last known data.** An older success never commits over a newer one. A failed read keeps the data and sets `isStale`. Render dependent actions non-interactive while the view is stale.
-6. **Dialogs suspend, then catch up once.** Open dialogs, sheets and dropdown menus suspend reads and route refreshes through `components/ui/open-dialog-context.tsx`, and one catch-up fires after close. Render `RegisterOpenDialog` inside the presence-gated content, never in a wrapper body, or every closed dialog counts as open and suspends every refresh. Pending state binds to the server call through `useServerAction`, never to a router transition.
+6. **Dialogs suspend, then catch up once.** Open dialogs, sheets and dropdown menus suspend reads and route refreshes through `components/ui/open-dialog-context.tsx`, and one catch-up fires after close. Render `RegisterOpenDialog` inside the presence-gated content, never in a wrapper body, or every closed dialog counts as open and suspends every refresh.
 
 An `eventFilter` that inspects payload columns treats a missing column as relevant, because a deletion notification carries only `id` and `organization_id`. Synthetic catch-up events bypass every filter.
 

@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
+import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import { deleteAccount } from '@/lib/auth/actions';
 import { loadDocument } from '@/lib/navigation/document-load';
@@ -29,30 +30,30 @@ const ERROR_MESSAGES: Readonly<Record<string, string>> = {
 export function DeleteAccountButton() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [isOpen, setIsOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const { run: runDelete, isPending: isDeleting } = usePendingTask();
   const [error, setError] = useState<string | null>(null);
 
   const handleDelete = async () => {
-    setIsDeleting(true);
     setError(null);
 
-    try {
-      const result = await deleteAccount();
+    await runDelete(async () => {
+      try {
+        const result = await deleteAccount();
 
-      if (!result.success) {
-        setError(describeFailure(result.error, ERROR_MESSAGES, SHARED_FAILURE_MESSAGES.unexpected_error));
-        setIsDeleting(false);
-        return;
+        if (!result.success) {
+          setError(describeFailure(result.error, ERROR_MESSAGES, SHARED_FAILURE_MESSAGES.unexpected_error));
+          return;
+        }
+
+        // Sign out locally and load the login page fresh — the deleted account's
+        // other sessions are already gone server-side.
+        await supabase.auth.signOut({ scope: 'local' });
+        loadDocument('/login?message=account_deleted');
+        return untilPageLeaves();
+      } catch {
+        setError(SHARED_FAILURE_MESSAGES.unexpected_error);
       }
-
-      // Sign out locally and load the login page fresh — the deleted account's
-      // other sessions are already gone server-side.
-      await supabase.auth.signOut({ scope: 'local' });
-      loadDocument('/login?message=account_deleted');
-    } catch {
-      setError(SHARED_FAILURE_MESSAGES.unexpected_error);
-      setIsDeleting(false);
-    }
+    });
   };
 
   return (

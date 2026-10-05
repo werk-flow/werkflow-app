@@ -24,11 +24,12 @@ export function TeamManagementDissolveDialog({ management }: TeamManagementDisso
     setTeamToDissolve,
     dissolveError,
     setDissolveError,
-    pendingAction,
+    anyBusy,
+    isBusy,
     handleDissolve,
   } = management;
   // The dialog stays until the dissolve settles, so its outcome shows at the point of action.
-  const isDissolving = pendingAction?.startsWith('dissolve:') ?? false;
+  const isDissolving = teamToDissolve !== null && isBusy(`dissolve:${teamToDissolve.id}`);
   return (
     <AlertDialog
       open={Boolean(teamToDissolve)}
@@ -50,7 +51,7 @@ export function TeamManagementDissolveDialog({ management }: TeamManagementDisso
         <ErrorText>{dissolveError}</ErrorText>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isDissolving}>Abbrechen</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" disabled={pendingAction !== null} onClick={handleDissolve}>
+          <AlertDialogAction variant="destructive" disabled={anyBusy} onClick={handleDissolve}>
             Team auflösen
             <InlinePending active={isDissolving} label="Team wird aufgelöst" />
           </AlertDialogAction>

@@ -94,7 +94,7 @@ function useCreateProjectSubmit(
     plannedStartDate,
     plannedEndDate,
     selectedJobIds,
-    setIsLoading,
+    runSubmit,
     setError,
     setContentError,
     setProjectNumberError,
@@ -142,35 +142,33 @@ function useCreateProjectSubmit(
       return;
     }
 
-    setIsLoading(true);
+    await runSubmit(async () => {
+      try {
+        const result = await createProject(input);
 
-    try {
-      const result = await createProject(input);
-
-      if (!result.success) {
-        const message = describeFailure(result.error, CREATE_PROJECT_ERROR_MESSAGES, 'Unbekannter Fehler');
-        if (result.error === 'project_number_required' || result.error === 'project_number_taken') {
-          setProjectNumberError(message);
-        } else if (result.error === 'name_or_description_required') {
-          setContentError(message);
-        } else {
-          setError(message);
+        if (!result.success) {
+          const message = describeFailure(result.error, CREATE_PROJECT_ERROR_MESSAGES, 'Unbekannter Fehler');
+          if (result.error === 'project_number_required' || result.error === 'project_number_taken') {
+            setProjectNumberError(message);
+          } else if (result.error === 'name_or_description_required') {
+            setContentError(message);
+          } else {
+            setError(message);
+          }
+          return;
         }
-        return;
-      }
 
-      const failedLinkCount = await linkJobsToProject(result.project.id, selectedJobIds);
-      showBanner(projectCreatedBanner(failedLinkCount));
-      resetForm();
-      await onSuccess?.({
-        project: result.project,
-        linkedJobIds: selectedJobIds,
-      });
-    } catch {
-      setError('Ein unerwarteter Fehler ist aufgetreten.');
-    } finally {
-      setIsLoading(false);
-    }
+        const failedLinkCount = await linkJobsToProject(result.project.id, selectedJobIds);
+        showBanner(projectCreatedBanner(failedLinkCount));
+        resetForm();
+        await onSuccess?.({
+          project: result.project,
+          linkedJobIds: selectedJobIds,
+        });
+      } catch {
+        setError('Ein unerwarteter Fehler ist aufgetreten.');
+      }
+    });
   };
 
   return handleSubmit;

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
+import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { recordSicknessForMember } from '@/lib/sickness/actions';
 import { SICKNESS_ERROR_MESSAGES, type SicknessAbsenceType } from '@/lib/sickness/types';
@@ -20,7 +21,7 @@ export function useSicknessReportRecordForm(recordId: string, onClose: (saved: b
   const [endDate, setEndDate] = useState<string>(todayIso);
   const [halfDay, setHalfDay] = useState(false);
   const [evidenceRequired, setEvidenceRequired] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const { run: runSave, isPending: isSaving } = useServerAction(recordSicknessForMember);
   const [error, setError] = useState<string | null>(null);
   const [overlapHint, setOverlapHint] = useState(false);
   const [dateErrors, setDateErrors] = useState<{ start?: string | undefined; end?: string | undefined }>({});
@@ -49,9 +50,8 @@ export function useSicknessReportRecordForm(recordId: string, onClose: (saved: b
       return;
     }
 
-    setIsSaving(true);
     try {
-      const result = await recordSicknessForMember({
+      const result = await runSave({
         employeeRecordId: recordId,
         absenceType,
         startDate,
@@ -82,8 +82,6 @@ export function useSicknessReportRecordForm(recordId: string, onClose: (saved: b
     } catch (submitError) {
       logError('Error recording sickness:', submitError);
       setError('Die Meldung konnte nicht gespeichert werden.');
-    } finally {
-      setIsSaving(false);
     }
   };
 

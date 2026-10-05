@@ -10,6 +10,7 @@ import {
   type NewEmailValues,
 } from '@/components/settings/email-change-wizard-state';
 import { type useBanner } from '@/components/ui/banner';
+import { type usePendingTask } from '@/hooks/use-server-action';
 import {
   savePendingNewEmailVerification,
   touchPendingNewEmailVerification,
@@ -17,6 +18,9 @@ import {
 } from '@/lib/settings/email-change-actions';
 import { type EmailChangeWizardState } from '@/lib/settings/email-change.types';
 import { type createSupabaseBrowserClient } from '@/lib/supabase/client';
+
+/** The `run` of one `usePendingTask` owned by the wizard hook. */
+type PendingTaskRunner = ReturnType<typeof usePendingTask>['run'];
 
 type NewEmailStepContext = {
   emailForm: UseFormReturn<NewEmailValues>;
@@ -32,9 +36,9 @@ type NewEmailStepContext = {
   setCompletionState: (completionState: CompletionState | null) => void;
   setCurrentOtpCode: (value: string) => void;
   setNewEmailOtpCode: (value: string) => void;
-  setIsSavingNewEmail: (isSaving: boolean) => void;
-  setIsNewEmailOtpResending: (isResending: boolean) => void;
-  setIsNewEmailOtpSubmitting: (isSubmitting: boolean) => void;
+  runSaveNewEmail: PendingTaskRunner;
+  runResendNewEmailOtp: PendingTaskRunner;
+  runVerifyNewEmailOtp: PendingTaskRunner;
   reportUnexpectedError: () => void;
 };
 
@@ -63,9 +67,9 @@ export function createNewEmailStepHandlers({
   setCompletionState,
   setCurrentOtpCode,
   setNewEmailOtpCode,
-  setIsSavingNewEmail,
-  setIsNewEmailOtpResending,
-  setIsNewEmailOtpSubmitting,
+  runSaveNewEmail,
+  runResendNewEmailOtp,
+  runVerifyNewEmailOtp,
   reportUnexpectedError,
 }: NewEmailStepContext): NewEmailStepHandlers {
   const handleSubmitNewEmail = emailForm.handleSubmit(async (values) => {
@@ -81,20 +85,19 @@ export function createNewEmailStepHandlers({
     }
 
     setFormError(null);
-    setIsSavingNewEmail(true);
 
-    try {
-      const result = await savePendingNewEmailVerification(nextEmail);
-      applyResultError(result, setWizardState, setFormError);
+    await runSaveNewEmail(async () => {
+      try {
+        const result = await savePendingNewEmailVerification(nextEmail);
+        applyResultError(result, setWizardState, setFormError);
 
-      if (result.success) {
-        emailForm.reset({ email: nextEmail });
+        if (result.success) {
+          emailForm.reset({ email: nextEmail });
+        }
+      } catch {
+        reportUnexpectedError();
       }
-    } catch {
-      reportUnexpectedError();
-    } finally {
-      setIsSavingNewEmail(false);
-    }
+    });
   });
 
   async function handleResendNewEmailCode(): Promise<void> {
@@ -103,16 +106,15 @@ export function createNewEmailStepHandlers({
     }
 
     setFormError(null);
-    setIsNewEmailOtpResending(true);
 
-    try {
-      const result = await touchPendingNewEmailVerification(pendingNewEmail);
-      applyResultError(result, setWizardState, setFormError);
-    } catch {
-      reportUnexpectedError();
-    } finally {
-      setIsNewEmailOtpResending(false);
-    }
+    await runResendNewEmailOtp(async () => {
+      try {
+        const result = await touchPendingNewEmailVerification(pendingNewEmail);
+        applyResultError(result, setWizardState, setFormError);
+      } catch {
+        reportUnexpectedError();
+      }
+    });
   }
 
   async function handleVerifyNewEmailCode(): Promise<void> {
@@ -128,53 +130,52 @@ export function createNewEmailStepHandlers({
     }
 
     setFormError(null);
-    setIsNewEmailOtpSubmitting(true);
 
-    try {
-      const previousEmail = currentEmail;
-      const result = await verifyNewEmailChangeOtp(sanitizedCode);
-      applyResultError(result, setWizardState, setFormError);
+    await runVerifyNewEmailOtp(async () => {
+      try {
+        const previousEmail = currentEmail;
+        const result = await verifyNewEmailChangeOtp(sanitizedCode);
+        applyResultError(result, setWizardState, setFormError);
 
-      if (!result.success) {
-        return;
-      }
+        if (!result.success) {
+          return;
+        }
 
-      const { data, error } = await supabase.auth.refreshSession();
-      if (error) {
-        setFormError(
-          'Die E-Mail-Adresse wurde aktualisiert, aber die Sitzung konnte nicht sofort aktualisiert werden. Bitte lade die Seite neu.',
-        );
-      }
+        const { data, error } = await supabase.auth.refreshSession();
+        if (error) {
+          setFormError(
+            'Die E-Mail-Adresse wurde aktualisiert, aber die Sitzung konnte nicht sofort aktualisiert werden. Bitte lade die Seite neu.',
+          );
+        }
 
-      if (data.session) {
-        await fetch('/auth/callback', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            event: 'TOKEN_REFRESHED',
-            session: data.session,
-          }),
+        if (data.session) {
+          await fetch('/auth/callback', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              event: 'TOKEN_REFRESHED',
+              session: data.session,
+            }),
+          });
+        }
+        await refreshProfile();
+        router.refresh();
+        setCompletionState({
+          previousEmail,
+          newEmail: pendingNewEmail,
         });
+        setCurrentOtpCode('');
+        setNewEmailOtpCode('');
+        showBanner({
+          message: 'Deine E-Mail-Adresse wurde erfolgreich aktualisiert.',
+          variant: 'success',
+        });
+      } catch {
+        reportUnexpectedError();
       }
-      await refreshProfile();
-      router.refresh();
-      setCompletionState({
-        previousEmail,
-        newEmail: pendingNewEmail,
-      });
-      setCurrentOtpCode('');
-      setNewEmailOtpCode('');
-      showBanner({
-        message: 'Deine E-Mail-Adresse wurde erfolgreich aktualisiert.',
-        variant: 'success',
-      });
-    } catch {
-      reportUnexpectedError();
-    } finally {
-      setIsNewEmailOtpSubmitting(false);
-    }
+    });
   }
 
   return { handleSubmitNewEmail, handleResendNewEmailCode, handleVerifyNewEmailCode };

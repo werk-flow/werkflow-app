@@ -15,6 +15,7 @@ import { Field } from '@/components/ui/field';
 import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
+import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { invalidateProfileCache } from '@/lib/auth/actions';
 import {
@@ -132,7 +133,7 @@ export function SignupForm({ prefillEmail = '', inviteCode = '', invitedEmail = 
   const router = useRouter();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [formError, setFormError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { run: runSubmit, isPending: isSubmitting } = usePendingTask();
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
 
   const form = useForm<SignupValues>({
@@ -175,89 +176,87 @@ export function SignupForm({ prefillEmail = '', inviteCode = '', invitedEmail = 
       return;
     }
 
-    setIsSubmitting(true);
-
-    try {
-      // Store invite_code in user metadata if this is an invite-based signup
-      // This allows us to redeem the invite even if the user closes the window
-      // and logs in elsewhere (as long as they signed up via the invite link)
-      const { data, error } = await supabase.auth.signUp({
-        email: values.email,
-        password: values.password,
-        options: {
-          data: {
-            first_name: values.firstName,
-            last_name: values.lastName,
-            // Only store invite_code if this is an invite-based signup
-            ...(isInviteSignup && inviteCode ? { pending_invite_code: inviteCode } : {}),
+    await runSubmit(async () => {
+      try {
+        // Store invite_code in user metadata if this is an invite-based signup
+        // This allows us to redeem the invite even if the user closes the window
+        // and logs in elsewhere (as long as they signed up via the invite link)
+        const { data, error } = await supabase.auth.signUp({
+          email: values.email,
+          password: values.password,
+          options: {
+            data: {
+              first_name: values.firstName,
+              last_name: values.lastName,
+              // Only store invite_code if this is an invite-based signup
+              ...(isInviteSignup && inviteCode ? { pending_invite_code: inviteCode } : {}),
+            },
           },
-        },
-      });
+        });
 
-      if (error) {
-        const normalizedMessage = error.message?.toLowerCase() ?? '';
-        const isPasswordError = normalizedMessage.includes('password');
+        if (error) {
+          const normalizedMessage = error.message?.toLowerCase() ?? '';
+          const isPasswordError = normalizedMessage.includes('password');
 
-        if (isPasswordError) {
-          const friendly = translateSupabasePasswordError(error);
-          form.setError('password', { type: 'server', message: friendly });
-          form.resetField('password', {
-            keepDirty: false,
-            keepError: true,
-            defaultValue: '',
-          });
-          setFormError(null);
-        } else {
-          setFormError('Registrierung fehlgeschlagen. Bitte überprüfe deine Angaben.');
-        }
-        setIsSubmitting(false);
-        return;
-      }
-
-      if (data.session && data.user) {
-        const { error: profileError } = await supabase.from('profiles').upsert(
-          {
-            id: data.user.id,
-            first_name: values.firstName,
-            last_name: values.lastName,
-          },
-          { onConflict: 'id' },
-        );
-
-        if (profileError) {
-          setFormError('Dein Profil konnte nicht gespeichert werden. Bitte versuche es erneut.');
-          setIsSubmitting(false);
+          if (isPasswordError) {
+            const friendly = translateSupabasePasswordError(error);
+            form.setError('password', { type: 'server', message: friendly });
+            form.resetField('password', {
+              keepDirty: false,
+              keepError: true,
+              defaultValue: '',
+            });
+            setFormError(null);
+          } else {
+            setFormError('Registrierung fehlgeschlagen. Bitte überprüfe deine Angaben.');
+          }
           return;
         }
-      }
 
-      if (data.session) {
-        await fetch('/auth/callback', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            event: 'SIGNED_IN',
-            session: data.session,
-          }),
-        });
-        // The action identifies the caller from the server session, so it can
-        // only invalidate the profile once the callback has set the cookies.
-        await invalidateProfileCache();
-      }
+        if (data.session && data.user) {
+          const { error: profileError } = await supabase.from('profiles').upsert(
+            {
+              id: data.user.id,
+              first_name: values.firstName,
+              last_name: values.lastName,
+            },
+            { onConflict: 'id' },
+          );
 
-      // Include invite_code in the verify redirect if present
-      const verifyUrl = inviteCode
-        ? `/verify?email=${encodeURIComponent(values.email)}&invite_code=${encodeURIComponent(inviteCode)}`
-        : `/verify?email=${encodeURIComponent(values.email)}`;
-      router.replace(verifyUrl);
-      router.refresh();
-    } catch {
-      // A rejected request (network) must not leave the button spinning.
-      setFormError('Registrierung fehlgeschlagen. Bitte versuche es erneut.');
-      setIsSubmitting(false);
-    }
+          if (profileError) {
+            setFormError('Dein Profil konnte nicht gespeichert werden. Bitte versuche es erneut.');
+            return;
+          }
+        }
+
+        if (data.session) {
+          await fetch('/auth/callback', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              event: 'SIGNED_IN',
+              session: data.session,
+            }),
+          });
+          // The action identifies the caller from the server session, so it can
+          // only invalidate the profile once the callback has set the cookies.
+          await invalidateProfileCache();
+        }
+
+        // Include invite_code in the verify redirect if present
+        const verifyUrl = inviteCode
+          ? `/verify?email=${encodeURIComponent(values.email)}&invite_code=${encodeURIComponent(inviteCode)}`
+          : `/verify?email=${encodeURIComponent(values.email)}`;
+        router.replace(verifyUrl);
+        router.refresh();
+        return untilPageLeaves();
+      } catch {
+        // A rejected request (network) must not leave the button spinning.
+        setFormError('Registrierung fehlgeschlagen. Bitte versuche es erneut.');
+      }
+    });
   };
 
   return (

@@ -21,6 +21,7 @@ import { cancelSicknessReport, type OwnSicknessOverview } from '@/lib/sickness/a
 import { readInBackground } from '@/lib/data/background-read-client';
 import { formatSicknessRange, SICKNESS_ERROR_MESSAGES, type SicknessReport } from '@/lib/sickness/types';
 import { useBusyIds } from '@/hooks/use-busy-id';
+import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { OwnSicknessEndDialog } from './sickness-section-end-dialog';
@@ -159,15 +160,14 @@ function SicknessCancelDialog({
   report: SicknessReport;
   onClose: (saved: boolean) => void;
 }) {
-  const [isSaving, setIsSaving] = useState(false);
+  const { run: runCancel, isPending: isSaving } = useServerAction(cancelSicknessReport);
   const [error, setError] = useState<string | null>(null);
 
   const handleConfirm = async () => {
     if (isSaving) return;
     setError(null);
-    setIsSaving(true);
     try {
-      const result = await cancelSicknessReport({ reportId: report.id });
+      const result = await runCancel({ reportId: report.id });
       if (result.success) {
         onClose(true);
       } else {
@@ -181,8 +181,6 @@ function SicknessCancelDialog({
       }
     } catch {
       setError('Die Meldung konnte nicht storniert werden.');
-    } finally {
-      setIsSaving(false);
     }
   };
 

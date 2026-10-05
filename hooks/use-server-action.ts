@@ -19,6 +19,15 @@ export function usePendingTask(): {
 }
 
 /**
+ * The last step of a task that leaves the page (`loadDocument`, a
+ * `router.push` to another route): it never settles, so the owner hook stays
+ * pending until the page unmounts and the control cannot be used twice.
+ */
+export function untilPageLeaves(): Promise<never> {
+  return new Promise<never>(() => undefined);
+}
+
+/**
  * Pending-state helper for server actions (client freshness contract rule 6).
  * `isPending` binds to the awaited server call and nothing else — never to a
  * router transition: a router-entangled `useTransition` keeps controls

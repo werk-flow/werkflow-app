@@ -95,12 +95,6 @@ begin
 end;
 $$;
 
--- Parking the planned job 052 marked this transaction as a planning write,
--- which mutes the job-to-plan sync until the transaction ends. The app runs
--- each call in its own transaction; this file runs in one, so the marker is
--- cleared before the calls under test.
-select set_config('app.planning_projection_write', '', true);
-
 -- Runs one statement and requires the named refusal.
 create function pg_temp.expect_refusal(p_label text, p_statement text, p_refusal text) returns void
 language plpgsql as $$

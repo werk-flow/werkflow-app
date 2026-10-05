@@ -75,6 +75,7 @@ The calendar reduces telephone coordination, paper schedules, duplicate entry, a
 - Route and travel-time providers, tool and vehicle reservation, material reservation, external calendar sync and outbound customer messages are not implemented. Readiness signals say so and do not guess.
 - On-call coverage, training absence and other absence types are not planned yet.
 - There is no dedicated overdue-work view.
+- A schedule edit in the job form changes the job's legacy visit only ([the rules](../technical/data-model.md#job-team-and-visit-plan)). On a job with several visits that visit need not be the first, so the form can show a date that differs from the first visit until the next planning action, and clearing the date cancels only that visit. The edit also moves a legacy visit that has already started. Owner decision open.
 - The calendar's "today" is the Berlin business date on every device, and the calendar moves to a new day at the Berlin date change. Times still show in the browser's time zone, so on a browser outside Europe/Berlin the now line of the day view sits at the edge of the day while the two dates differ.
 - The day view shades a person's whole non-working days and absences. It does not shade the hours outside a person's schedule (`P1-24a` decision).
 - The board's readiness chip covers planned material only: „Material nicht reserviert“ when the job has planned material lines. A tools chip is not shown, because no tool assessment exists before Wave 3.

@@ -23,7 +23,6 @@ This list holds the open candidates for moving a prose rule or a known gap up th
 | Attention count reads | Several readers derive the attention counts again on every debounced event and catch-up. | Measure with the typical profile first. Tier 2: a query-count test over a count-only or coalesced read. |
 | Unpaged organization reads | PostgREST stops at its row cap without an error. A reader without `.range`, `.limit`, `.single`, or `.maybeSingle` truncates silently. | Tier 2: a unit scan over `lib/` and `app/` with a reviewed allowlist for reads bounded by a small parent set. |
 | One route render per mutation | A dialog can call `router.refresh()` twice for one save. No check counts the renders. | Tier 2: count the `_rsc` route requests per save in the customer browser journey. |
-| Hand-rolled pending flags | `lib/conventions/server-action-feedback.test.ts` accepts about 85 writes in 62 client files whose only first-frame feedback is a local pending flag set before the await (`setIsSaving(true)`). A review of ten of them found each correct: the flag is set before the await and reset in a `finally` or on every failure path, and a success that navigates away keeps it on purpose. `ui/pending-reset-on-failure` rejects a reset that comes only after an await that can reject. It does not see a reset in a different function than the one that set the flag, or an early return between the set and the await. | Tier 2: move those writes to `useServerAction` when their file is next opened, then drop the pending-flag acceptance from the test. |
 
 ## Security
 

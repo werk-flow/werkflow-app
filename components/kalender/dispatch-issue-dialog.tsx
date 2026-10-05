@@ -10,6 +10,7 @@ import { AlertTriangle, CircleCheck, CircleHelp, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SearchableMultiSelect } from '@/components/ui/searchable-select';
 import { usePlanningOptions } from '@/hooks/use-planning-options';
+import { useServerAction } from '@/hooks/use-server-action';
 import {
   Dialog,
   DialogContent,
@@ -55,7 +56,7 @@ export function DispatchIssueDialog({
     isJobTarget,
   );
   const selectedRecordIds = employeeSearch.selectedIds;
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { run: runIssue, isPending: isSubmitting } = useServerAction(issueDispatch);
   const [requestId] = useState(() => crypto.randomUUID());
 
   useEffect(() => {
@@ -95,9 +96,8 @@ export function DispatchIssueDialog({
       document.querySelector<HTMLElement>('#dispatch-recipients')?.focus();
       return;
     }
-    setIsSubmitting(true);
     try {
-      const result = await issueDispatch({
+      const result = await runIssue({
         occurrenceId,
         jobId,
         recipientEmployeeRecordIds: isJobTarget ? selectedRecordIds : null,
@@ -111,8 +111,6 @@ export function DispatchIssueDialog({
       onIssued();
     } catch {
       setSubmitError(dispatchErrorMessage('unexpected_error'));
-    } finally {
-      setIsSubmitting(false);
     }
   };
 

@@ -16,6 +16,7 @@ import {
 } from '@/components/settings/email-change-wizard-state';
 import { useBanner } from '@/components/ui/banner';
 import { useUserProfile } from '@/components/user/user-profile-context';
+import { usePendingTask, useServerAction } from '@/hooks/use-server-action';
 import {
   requestCurrentEmailChangeOtp,
   resetEmailChangeWizard,
@@ -67,14 +68,17 @@ export function useEmailChangeWizard(initialState: EmailChangeWizardState): Emai
   const [formError, setFormError] = useState<string | null>(null);
   const [currentOtpCode, setCurrentOtpCode] = useState('');
   const [newEmailOtpCode, setNewEmailOtpCode] = useState('');
-  const [isStarting, setIsStarting] = useState(false);
-  const [isCurrentOtpSubmitting, setIsCurrentOtpSubmitting] = useState(false);
-  const [isCurrentOtpResending, setIsCurrentOtpResending] = useState(false);
-  const [isSavingNewEmail, setIsSavingNewEmail] = useState(false);
-  const [isNewEmailOtpSubmitting, setIsNewEmailOtpSubmitting] = useState(false);
-  const [isNewEmailOtpResending, setIsNewEmailOtpResending] = useState(false);
-  const [isResetting, setIsResetting] = useState(false);
-  const [now, setNow] = useState(Date.now());
+  const { run: runStart, isPending: isStarting } = useServerAction(requestCurrentEmailChangeOtp);
+  const { run: runVerifyCurrentOtp, isPending: isCurrentOtpSubmitting } =
+    useServerAction(verifyCurrentEmailChangeOtp);
+  const { run: runResendCurrentOtp, isPending: isCurrentOtpResending } = useServerAction(
+    requestCurrentEmailChangeOtp,
+  );
+  const { run: runSaveNewEmail, isPending: isSavingNewEmail } = usePendingTask();
+  const { run: runVerifyNewEmailOtp, isPending: isNewEmailOtpSubmitting } = usePendingTask();
+  const { run: runResendNewEmailOtp, isPending: isNewEmailOtpResending } = usePendingTask();
+  const { run: runReset, isPending: isResetting } = useServerAction(resetEmailChangeWizard);
+  const [now, setNow] = useState(() => Date.now());
 
   const emailForm = useForm<NewEmailValues>({
     resolver: zodResolver(newEmailSchema),
@@ -123,15 +127,12 @@ export function useEmailChangeWizard(initialState: EmailChangeWizardState): Emai
     setFormError(null);
     setCompletionState(null);
     setCurrentOtpCode('');
-    setIsStarting(true);
 
     try {
-      const result = await requestCurrentEmailChangeOtp();
+      const result = await runStart();
       applyResultError(result, setWizardState, setFormError);
     } catch {
       reportUnexpectedError();
-    } finally {
-      setIsStarting(false);
     }
   }
 
@@ -143,10 +144,8 @@ export function useEmailChangeWizard(initialState: EmailChangeWizardState): Emai
       return;
     }
 
-    setIsCurrentOtpSubmitting(true);
-
     try {
-      const result = await verifyCurrentEmailChangeOtp(currentOtpCode);
+      const result = await runVerifyCurrentOtp(currentOtpCode);
       applyResultError(result, setWizardState, setFormError);
 
       if (result.success) {
@@ -154,22 +153,17 @@ export function useEmailChangeWizard(initialState: EmailChangeWizardState): Emai
       }
     } catch {
       reportUnexpectedError();
-    } finally {
-      setIsCurrentOtpSubmitting(false);
     }
   }
 
   async function handleResendCurrentEmailCode(): Promise<void> {
     setFormError(null);
-    setIsCurrentOtpResending(true);
 
     try {
-      const result = await requestCurrentEmailChangeOtp();
+      const result = await runResendCurrentOtp();
       applyResultError(result, setWizardState, setFormError);
     } catch {
       reportUnexpectedError();
-    } finally {
-      setIsCurrentOtpResending(false);
     }
   }
 
@@ -188,18 +182,17 @@ export function useEmailChangeWizard(initialState: EmailChangeWizardState): Emai
       setCompletionState,
       setCurrentOtpCode,
       setNewEmailOtpCode,
-      setIsSavingNewEmail,
-      setIsNewEmailOtpResending,
-      setIsNewEmailOtpSubmitting,
+      runSaveNewEmail,
+      runResendNewEmailOtp,
+      runVerifyNewEmailOtp,
       reportUnexpectedError,
     });
 
   async function handleResetFlow(): Promise<void> {
     setFormError(null);
-    setIsResetting(true);
 
     try {
-      const result = await resetEmailChangeWizard();
+      const result = await runReset();
       applyResultError(result, setWizardState, setFormError);
 
       if (result.success) {
@@ -215,8 +208,6 @@ export function useEmailChangeWizard(initialState: EmailChangeWizardState): Emai
       }
     } catch {
       reportUnexpectedError();
-    } finally {
-      setIsResetting(false);
     }
   }
 

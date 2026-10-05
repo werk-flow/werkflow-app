@@ -18,6 +18,7 @@ import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { useServerAction } from '@/hooks/use-server-action';
 import { createVacationRequest } from '@/lib/vacation/actions';
 import { formatVacationDays } from '@/lib/vacation/balance';
 import { cn, toLocalDateString } from '@/lib/utils';
@@ -177,7 +178,7 @@ export function OwnVacationRequestDialog({
   const [endDate, setEndDate] = useState<string>(todayIso);
   const [halfDay, setHalfDay] = useState(false);
   const [comment, setComment] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
+  const { run: runSave, isPending: isSaving } = useServerAction(createVacationRequest);
   const [error, setError] = useState<string | null>(null);
   const [dateErrors, setDateErrors] = useState<VacationRequestDateErrors>({});
 
@@ -210,9 +211,8 @@ export function OwnVacationRequestDialog({
     }
 
     const saveFailedMessage = 'Der Antrag konnte nicht gespeichert werden.';
-    setIsSaving(true);
     try {
-      const result = await createVacationRequest({
+      const result = await runSave({
         startDate,
         endDate,
         dayPortion,
@@ -225,8 +225,6 @@ export function OwnVacationRequestDialog({
       }
     } catch {
       setError(saveFailedMessage);
-    } finally {
-      setIsSaving(false);
     }
   };
 

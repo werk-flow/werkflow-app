@@ -22,14 +22,14 @@ type QualificationManagementGrantFormProps = {
   form: QualificationManagementGrantFormState;
   employeeOptions: QualificationManagementSelectOptions;
   capabilityOptions: QualificationManagementSelectOptions;
-  pendingAction: string | null;
+  anyBusy: boolean;
 };
 
 export function QualificationManagementGrantForm({
   form,
   employeeOptions,
   capabilityOptions,
-  pendingAction,
+  anyBusy,
 }: QualificationManagementGrantFormProps) {
   const {
     employeeRecordId,
@@ -153,7 +153,7 @@ export function QualificationManagementGrantForm({
               Abbrechen
             </Button>
           )}
-          <Button disabled={pendingAction !== null} onClick={saveGrant}>
+          <Button disabled={anyBusy} onClick={saveGrant}>
             {editingRecordId
               ? 'Änderungen speichern'
               : supersedesId

@@ -14,7 +14,7 @@ type TeamManagementCreateFormProps = {
 };
 
 export function TeamManagementCreateForm({ management }: TeamManagementCreateFormProps) {
-  const { name, setName, description, setDescription, nameError, createError, pendingAction, handleCreate } =
+  const { name, setName, description, setDescription, nameError, createError, anyBusy, handleCreate } =
     management;
   return (
     <section className="space-y-3" aria-labelledby="team-create-heading">
@@ -44,12 +44,7 @@ export function TeamManagementCreateForm({ management }: TeamManagementCreateFor
             maxLength={1000}
           />
         </Field>
-        <Button
-          type="button"
-          className="self-end"
-          onClick={() => void handleCreate()}
-          disabled={pendingAction !== null}
-        >
+        <Button type="button" className="self-end" onClick={() => void handleCreate()} disabled={anyBusy}>
           <Plus className="size-4" />
           Team anlegen
         </Button>

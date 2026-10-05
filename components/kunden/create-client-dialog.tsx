@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ErrorText } from '@/components/ui/error-text';
 import { useBanner } from '@/components/ui/banner';
 import { createOptimisticChannel } from '@/hooks/use-optimistic-channel';
+import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { createClient, type CreateClientInput } from '@/lib/clients/actions';
 import { CLIENT_TYPE_LABELS, type Client, type ClientType } from '@/lib/jobs/types';
@@ -86,7 +87,7 @@ export function CreateClientDialog({
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const { run: runCreate, isPending: isLoading } = useServerAction(createClient);
   const [error, setError] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
@@ -118,9 +119,8 @@ export function CreateClientDialog({
     if (onClientCreated) {
       // Select-with-create: the caller needs the confirmed record to select
       // it, so the button spins until the server answers.
-      setIsLoading(true);
       try {
-        const result = await createClient(input);
+        const result = await runCreate(input);
         if (!result.success) {
           setError(describeCreateFailure(result.error));
           return;
@@ -132,8 +132,6 @@ export function CreateClientDialog({
         router.refresh();
       } catch {
         setError('Ein unerwarteter Fehler ist aufgetreten.');
-      } finally {
-        setIsLoading(false);
       }
       return;
     }

@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { DatePicker } from '@/components/ui/date-picker';
 import { useBusyIds } from '@/hooks/use-busy-id';
+import { useServerAction } from '@/hooks/use-server-action';
 import { addClosureDay, removeClosureDay } from '@/lib/org/calendar-actions';
 import type { ClosureDay } from '@/lib/personnel/targets';
 import { toLocalDateString } from '@/lib/utils';
@@ -107,7 +108,7 @@ export function ClosureDaysCard({
 
   const [closureDate, setClosureDate] = useState<string>('');
   const [closureLabel, setClosureLabel] = useState<string>('');
-  const [isAddingClosure, setIsAddingClosure] = useState(false);
+  const { run: runAddClosure, isPending: isAddingClosure } = useServerAction(addClosureDay);
   const [closureDateError, setClosureDateError] = useState<string | null>(null);
   const removingClosure = useBusyIds();
 
@@ -121,9 +122,8 @@ export function ClosureDaysCard({
       document.getElementById('closure-date')?.focus();
       return;
     }
-    setIsAddingClosure(true);
     try {
-      const result = await addClosureDay({
+      const result = await runAddClosure({
         closureDate,
         label: closureLabel,
       });
@@ -147,8 +147,6 @@ export function ClosureDaysCard({
       });
     } catch {
       showBanner({ message: CLOSURE_ERROR_MESSAGES.create_failed, variant: 'error' });
-    } finally {
-      setIsAddingClosure(false);
     }
   };
 

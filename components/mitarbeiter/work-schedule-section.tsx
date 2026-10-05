@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CalendarClock, Plus } from 'lucide-react';
 
+import { useServerAction } from '@/hooks/use-server-action';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { deleteWorkSchedule } from '@/lib/personnel/actions';
@@ -30,7 +31,7 @@ export function WorkScheduleSection({ recordId, schedules, conditions, canEdit }
   const { showBanner } = useBanner();
   const [dialogState, setDialogState] = useState<DialogState>({ mode: 'closed' });
   const [deleteTarget, setDeleteTarget] = useState<WorkSchedule | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const { run: runDelete, isPending: isDeleting } = useServerAction(deleteWorkSchedule);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const todayIso = getBusinessTodayIso();
@@ -46,11 +47,11 @@ export function WorkScheduleSection({ recordId, schedules, conditions, canEdit }
 
   const handleDelete = async () => {
     if (!deleteTarget || isDeleting) return;
-    setIsDeleting(true);
     setDeleteError(null);
-    const result = await deleteWorkSchedule(deleteTarget.id)
-      .catch(() => ({ success: false as const, error: undefined }))
-      .finally(() => setIsDeleting(false));
+    const result = await runDelete(deleteTarget.id).catch(() => ({
+      success: false as const,
+      error: undefined,
+    }));
     if (result.success) {
       setDeleteTarget(null);
       showBanner({

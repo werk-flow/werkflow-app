@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
+import { usePendingTask } from '@/hooks/use-server-action';
 import type { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
 const RESEND_COOLDOWN_SECONDS = 60;
@@ -20,7 +21,7 @@ export function useOtpResend({
   isResending: boolean;
   handleResend: () => Promise<void>;
 } {
-  const [isResending, setIsResending] = useState(false);
+  const { run: runResend, isPending: isResending } = usePendingTask();
   const [resendCooldown, setResendCooldown] = useState(RESEND_COOLDOWN_SECONDS);
 
   useEffect(() => {
@@ -43,25 +44,24 @@ export function useOtpResend({
     }
 
     setFormError(null);
-    setIsResending(true);
 
-    try {
-      // Use resend method to resend the signup confirmation email (OTP)
-      const { error } = await supabase.auth.resend({
-        type: 'signup',
-        email,
-      });
+    await runResend(async () => {
+      try {
+        // Use resend method to resend the signup confirmation email (OTP)
+        const { error } = await supabase.auth.resend({
+          type: 'signup',
+          email,
+        });
 
-      if (error) {
-        setFormError('Der Code konnte nicht erneut gesendet werden. Bitte versuche es später erneut.');
-      } else {
-        setResendCooldown(RESEND_COOLDOWN_SECONDS);
+        if (error) {
+          setFormError('Der Code konnte nicht erneut gesendet werden. Bitte versuche es später erneut.');
+        } else {
+          setResendCooldown(RESEND_COOLDOWN_SECONDS);
+        }
+      } catch {
+        setFormError('Es ist ein unerwarteter Fehler aufgetreten. Bitte versuche es später erneut.');
       }
-    } catch {
-      setFormError('Es ist ein unerwarteter Fehler aufgetreten. Bitte versuche es später erneut.');
-    } finally {
-      setIsResending(false);
-    }
+    });
   }
 
   return { resendCooldown, isResending, handleResend };

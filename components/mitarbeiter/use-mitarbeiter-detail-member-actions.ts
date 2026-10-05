@@ -10,6 +10,7 @@ import type { ResponsibilitySettingsData } from '@/lib/responsibilities/server';
 import { getResponsibilitiesStrandedByEmployeeRemoval } from '@/lib/responsibilities/resolution';
 import { getMemberActionErrorMessage, getResponsibilityRemovalBlockMessage } from '@/lib/members/errors';
 import { loadDocument } from '@/lib/navigation/document-load';
+import { untilPageLeaves, usePendingTask, useServerAction } from '@/hooks/use-server-action';
 
 const ROLE_HIERARCHY: Record<OrgRole, number> = {
   admin: 1,
@@ -51,8 +52,8 @@ export function useMitarbeiterDetailMemberActions({
 }: MitarbeiterDetailMemberActionsInput) {
   const router = useRouter();
   const [showRemoveDialog, setShowRemoveDialog] = useState(false);
-  const [isRemoving, setIsRemoving] = useState(false);
-  const [isUpdatingRole, setIsUpdatingRole] = useState(false);
+  const { run: runRemove, isPending: isRemoving } = usePendingTask();
+  const { run: runRoleUpdate, isPending: isUpdatingRole } = useServerAction(updateMemberRole);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const isOwnRow = member.userId === currentUserId;
@@ -84,10 +85,9 @@ export function useMitarbeiterDetailMemberActions({
 
   const handleRoleChange = async (newRole: OrgRole) => {
     if (isUpdatingRole) return;
-    setIsUpdatingRole(true);
     setActionError(null);
     // A thrown action (network loss) reads as the generic failure instead of a stuck control.
-    const result = await updateMemberRole(member.userId, newRole).catch(() => ({
+    const result = await runRoleUpdate(member.userId, newRole).catch(() => ({
       success: false as const,
       error: undefined,
     }));
@@ -96,26 +96,26 @@ export function useMitarbeiterDetailMemberActions({
     } else {
       setActionError(getMemberActionErrorMessage(result.error));
     }
-    setIsUpdatingRole(false);
   };
 
   const handleRemove = async () => {
     if (isRemoving) return;
-    setIsRemoving(true);
     setActionError(null);
-    const result = await removeMember(member.userId).catch(() => ({
-      success: false as const,
-      error: undefined,
-    }));
-    if (result.success) {
-      // Hard navigation: the refresh of this now-removed member's detail
-      // redirects to plain /mitarbeiter and can land after a soft push,
-      // dropping the banner param (documented post-delete race).
-      loadDocument(`/mitarbeiter?removed_member=${encodeURIComponent(fullName)}`);
-    } else {
+    await runRemove(async () => {
+      const result = await removeMember(member.userId).catch(() => ({
+        success: false as const,
+        error: undefined,
+      }));
+      if (result.success) {
+        // Hard navigation: the refresh of this now-removed member's detail
+        // redirects to plain /mitarbeiter and can land after a soft push,
+        // dropping the banner param (documented post-delete race). Removal
+        // stays pending until the page leaves.
+        loadDocument(`/mitarbeiter?removed_member=${encodeURIComponent(fullName)}`);
+        return untilPageLeaves();
+      }
       setActionError(getMemberActionErrorMessage(result.error));
-      setIsRemoving(false);
-    }
+    });
   };
 
   return {

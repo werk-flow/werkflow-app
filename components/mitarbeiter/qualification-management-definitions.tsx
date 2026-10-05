@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
+import type { useBusyIds } from '@/hooks/use-busy-id';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -20,14 +21,14 @@ import { parseDecimalInput } from '@/lib/ui/decimal';
 import { describeFailure } from '@/lib/action-messages';
 
 type QualificationManagementDefinitionFormProps = {
-  pendingAction: string | null;
-  setPendingAction: (action: string | null) => void;
+  anyBusy: boolean;
+  runAction: ReturnType<typeof useBusyIds>['run'];
   refresh: () => void;
 };
 
 export function QualificationManagementDefinitionForm({
-  pendingAction,
-  setPendingAction,
+  anyBusy,
+  runAction,
   refresh,
 }: QualificationManagementDefinitionFormProps) {
   const { showBanner } = useBanner();
@@ -82,7 +83,7 @@ export function QualificationManagementDefinitionForm({
       </Field>
       <Button
         className="self-end"
-        disabled={pendingAction !== null}
+        disabled={anyBusy}
         onClick={async () => {
           setDefinitionError(null);
           const expiryWarningDays = kind === 'certification' ? parseDecimalInput(warningDays) : 0;
@@ -100,34 +101,33 @@ export function QualificationManagementDefinitionForm({
               ?.focus();
             return;
           }
-          setPendingAction('create-definition');
-          try {
-            const result = await createCapability({
-              kind,
-              name: definitionName,
-              expiryWarningDays,
-            });
-            if (!result.success) {
-              setDefinitionError(
-                describeFailure(
-                  result.error,
-                  { duplicate_name: 'Dieser Begriff ist bereits vorhanden.' },
-                  'Der Begriff konnte nicht angelegt werden.',
-                ),
-              );
-              return;
+          await runAction('create-definition', async () => {
+            try {
+              const result = await createCapability({
+                kind,
+                name: definitionName,
+                expiryWarningDays,
+              });
+              if (!result.success) {
+                setDefinitionError(
+                  describeFailure(
+                    result.error,
+                    { duplicate_name: 'Dieser Begriff ist bereits vorhanden.' },
+                    'Der Begriff konnte nicht angelegt werden.',
+                  ),
+                );
+                return;
+              }
+              setDefinitionName('');
+              showBanner({
+                variant: 'success',
+                message: 'Der Begriff wurde angelegt.',
+              });
+              refresh();
+            } catch {
+              setDefinitionError('Der Begriff konnte nicht angelegt werden.');
             }
-            setDefinitionName('');
-            showBanner({
-              variant: 'success',
-              message: 'Der Begriff wurde angelegt.',
-            });
-            refresh();
-          } catch {
-            setDefinitionError('Der Begriff konnte nicht angelegt werden.');
-          } finally {
-            setPendingAction(null);
-          }
+          });
         }}
       >
         <Plus className="size-4" />
@@ -146,8 +146,8 @@ type QualificationManagementDefinitionListProps = QualificationManagementDefinit
 
 export function QualificationManagementDefinitionList({
   activeCapabilities,
-  pendingAction,
-  setPendingAction,
+  anyBusy,
+  runAction,
   refresh,
 }: QualificationManagementDefinitionListProps) {
   const { showBanner } = useBanner();
@@ -178,31 +178,30 @@ export function QualificationManagementDefinitionList({
             <Button
               variant="ghost"
               size="sm"
-              disabled={pendingAction !== null}
+              disabled={anyBusy}
               onClick={async () => {
-                setPendingAction(`retire:${capability.id}`);
-                try {
-                  const result = await retireCapabilityDefinition(capability.id);
-                  if (!result.success) {
+                await runAction(`retire:${capability.id}`, async () => {
+                  try {
+                    const result = await retireCapabilityDefinition(capability.id);
+                    if (!result.success) {
+                      showBanner({
+                        variant: 'error',
+                        message: 'Der Begriff konnte nicht archiviert werden.',
+                      });
+                      return;
+                    }
+                    showBanner({
+                      variant: 'success',
+                      message: 'Der Begriff wurde archiviert.',
+                    });
+                    refresh();
+                  } catch {
                     showBanner({
                       variant: 'error',
                       message: 'Der Begriff konnte nicht archiviert werden.',
                     });
-                    return;
                   }
-                  showBanner({
-                    variant: 'success',
-                    message: 'Der Begriff wurde archiviert.',
-                  });
-                  refresh();
-                } catch {
-                  showBanner({
-                    variant: 'error',
-                    message: 'Der Begriff konnte nicht archiviert werden.',
-                  });
-                } finally {
-                  setPendingAction(null);
-                }
+                });
               }}
             >
               Archivieren

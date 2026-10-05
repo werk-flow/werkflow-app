@@ -6,6 +6,7 @@ import { ExternalLink, Loader2, Trash2, Pencil } from 'lucide-react';
 
 import { ErrorText } from '@/components/ui/error-text';
 import { RowActionsMenu } from '@/components/ui/row-actions-menu';
+import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -63,7 +64,7 @@ export function JobActionsMenu({
   const displayTitle = getJobDisplayTitle(job);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const { run: runDelete, isPending: isDeleting } = usePendingTask();
   const [error, setError] = useState<string | null>(null);
 
   const handleDelete = async () => {
@@ -73,30 +74,29 @@ export function JobActionsMenu({
       onDeleteRequested(job.id);
       return;
     }
-    setIsDeleting(true);
     setError(null);
 
-    try {
-      const result = await deleteJob(job.id);
+    await runDelete(async () => {
+      try {
+        const result = await deleteJob(job.id);
 
-      if (!result.success) {
-        setError(describeJobDeleteError(result.error));
-        setIsDeleting(false);
-        return;
-      }
+        if (!result.success) {
+          setError(describeJobDeleteError(result.error));
+          return;
+        }
 
-      setShowDeleteDialog(false);
-      if (onJobDeleted) {
-        await onJobDeleted(job.id);
-        // The row may stay mounted; release its menu and a later dialog.
-        setIsDeleting(false);
-      } else {
-        router.push(`/auftraege?deleted_job=${encodeURIComponent(displayTitle)}`);
+        setShowDeleteDialog(false);
+        if (onJobDeleted) {
+          // The row may stay mounted; the task ends here and releases its menu and a later dialog.
+          await onJobDeleted(job.id);
+        } else {
+          router.push(`/auftraege?deleted_job=${encodeURIComponent(displayTitle)}`);
+          return untilPageLeaves();
+        }
+      } catch {
+        setError(JOB_DELETE_FAILED_MESSAGE);
       }
-    } catch {
-      setError(JOB_DELETE_FAILED_MESSAGE);
-      setIsDeleting(false);
-    }
+    });
   };
 
   const isLoading = isDeleting;

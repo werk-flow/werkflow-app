@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { useBanner } from '@/components/ui/banner';
+import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { formatBerlinDateTimeInput, parseBerlinDateTimeInput } from '@/lib/customer-relationships/date-time';
 import { updateClientRequest } from '@/lib/requests/actions';
@@ -79,7 +80,7 @@ export function useEditRequestForm({
   const [source, setSource] = useState<RequestSource>(request.source);
   const [receivedAt, setReceivedAt] = useState(formatBerlinDateTimeInput(request.receivedAt));
   const [assignedTo, setAssignedTo] = useState(request.assignedTo ?? '');
-  const [isLoading, setIsLoading] = useState(false);
+  const { run: runUpdate, isPending: isLoading } = useServerAction(updateClientRequest);
   const [error, setError] = useState<string | null>(null);
 
   // Refilled during render, never in an effect. Keyed on open and request.id
@@ -123,9 +124,8 @@ export function useEditRequestForm({
       return;
     }
 
-    setIsLoading(true);
     try {
-      const result = await updateClientRequest(request.id, {
+      const result = await runUpdate(request.id, {
         summary: summary.trim(),
         details,
         requestNumber,
@@ -151,8 +151,6 @@ export function useEditRequestForm({
       router.refresh();
     } catch {
       setError('Ein unerwarteter Fehler ist aufgetreten.');
-    } finally {
-      setIsLoading(false);
     }
   };
 

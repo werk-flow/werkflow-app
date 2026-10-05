@@ -32,7 +32,7 @@ function TeamManagementCardHeader({
     editingTeamName,
     setEditingTeamName,
     renameError,
-    pendingAction,
+    anyBusy,
     handleRename,
     setTeamToDissolve,
   } = management;
@@ -70,7 +70,7 @@ function TeamManagementCardHeader({
             <Button
               variant="ghost"
               size="sm"
-              disabled={pendingAction !== null}
+              disabled={anyBusy}
               onClick={() => void handleRename(team, editingTeamName)}
             >
               Speichern
@@ -95,7 +95,7 @@ function TeamManagementCardHeader({
           variant="ghost"
           size="sm"
           className="text-destructive hover:text-destructive"
-          disabled={pendingAction !== null}
+          disabled={anyBusy}
           onClick={() => setTeamToDissolve(team)}
         >
           Auflösen
@@ -110,7 +110,7 @@ function TeamManagementCardMembers({
   memberships,
   management,
 }: TeamManagementCardPartProps & { memberships: TeamMembershipRows }) {
-  const { employeeById, pendingAction, handleEndMembership } = management;
+  const { employeeById, anyBusy, isBusy, handleEndMembership } = management;
   return (
     <div className="space-y-2">
       {memberships.length === 0 ? (
@@ -125,7 +125,7 @@ function TeamManagementCardMembers({
             <span className="flex items-center gap-2">
               {employeeById.get(membership.employeeRecordId)?.displayName ?? 'Unbekannt'}
               <InlinePending
-                active={isPendingMember || pendingAction === `end:${membership.id}`}
+                active={isPendingMember || isBusy(`end:${membership.id}`)}
                 label="Teamzugehörigkeit wird gespeichert"
               />
             </span>
@@ -136,7 +136,7 @@ function TeamManagementCardMembers({
               aria-label={`${
                 employeeById.get(membership.employeeRecordId)?.displayName ?? 'Teammitglied'
               } zum Tagesende aus ${team.name} entfernen`}
-              disabled={pendingAction !== null || isPendingMember}
+              disabled={anyBusy || isPendingMember}
               onClick={() => handleEndMembership(membership)}
             >
               <X className="size-3.5" />
@@ -157,7 +157,7 @@ function TeamManagementCardAddMemberForm({
 }) {
   const {
     today,
-    pendingAction,
+    anyBusy,
     selectedEmployeeByTeam,
     setSelectedEmployeeByTeam,
     membershipWindowByTeam,
@@ -228,7 +228,7 @@ function TeamManagementCardAddMemberForm({
           }
         />
       </Field>
-      <Button variant="outline" disabled={pendingAction !== null} onClick={() => handleAddMembership(team)}>
+      <Button variant="outline" disabled={anyBusy} onClick={() => handleAddMembership(team)}>
         Hinzufügen
       </Button>
       <div className="sm:col-span-2">

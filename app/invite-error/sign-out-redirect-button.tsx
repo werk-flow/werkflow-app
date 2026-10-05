@@ -5,6 +5,7 @@ import { LogOut } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
+import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { clearEmailChangeChallengeQuietly } from '@/hooks/use-sign-out';
 import { loadDocument } from '@/lib/navigation/document-load';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
@@ -21,36 +22,37 @@ export function SignOutAndRedirectButton({
   isExistingUser,
 }: SignOutAndRedirectButtonProps) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
-  const [isLoading, setIsLoading] = useState(false);
+  const { run: runSignOut, isPending: isLoading } = usePendingTask();
   const [error, setError] = useState<string | null>(null);
 
   const handleSignOutAndRedirect = async () => {
-    setIsLoading(true);
     setError(null);
 
-    try {
-      await clearEmailChangeChallengeQuietly();
+    await runSignOut(async () => {
+      try {
+        await clearEmailChangeChallengeQuietly();
 
-      // Sign out the current user (explicit global preserves the pre-existing
-      // default behavior of this flow).
-      const { error: signOutError } = await supabase.auth.signOut({ scope: 'global' });
-      if (signOutError) throw signOutError;
+        // Sign out the current user (explicit global preserves the pre-existing
+        // default behavior of this flow).
+        const { error: signOutError } = await supabase.auth.signOut({ scope: 'global' });
+        if (signOutError) throw signOutError;
 
-      // A full load so the next page starts without the old session in client state.
-      // The code comes from the URL unvalidated; encoding keeps it one parameter.
-      const encodedInviteCode = encodeURIComponent(inviteCode);
-      if (isExistingUser) {
-        loadDocument(`/login?invite_code=${encodedInviteCode}`);
-      } else {
-        const signupUrl = invitedEmail
-          ? `/signup?email=${encodeURIComponent(invitedEmail)}&invite_code=${encodedInviteCode}`
-          : `/signup?invite_code=${encodedInviteCode}`;
-        loadDocument(signupUrl);
+        // A full load so the next page starts without the old session in client state.
+        // The code comes from the URL unvalidated; encoding keeps it one parameter.
+        const encodedInviteCode = encodeURIComponent(inviteCode);
+        if (isExistingUser) {
+          loadDocument(`/login?invite_code=${encodedInviteCode}`);
+        } else {
+          const signupUrl = invitedEmail
+            ? `/signup?email=${encodeURIComponent(invitedEmail)}&invite_code=${encodedInviteCode}`
+            : `/signup?invite_code=${encodedInviteCode}`;
+          loadDocument(signupUrl);
+        }
+        return untilPageLeaves();
+      } catch {
+        setError('Die Abmeldung konnte nicht abgeschlossen werden. Bitte versuche es erneut.');
       }
-    } catch {
-      setError('Die Abmeldung konnte nicht abgeschlossen werden. Bitte versuche es erneut.');
-      setIsLoading(false);
-    }
+    });
   };
 
   // Button text changes based on whether user needs to log in or sign up

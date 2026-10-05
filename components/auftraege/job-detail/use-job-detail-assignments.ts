@@ -3,7 +3,7 @@
 import { useState, type Dispatch, type SetStateAction } from 'react';
 import { useRouter } from 'next/navigation';
 import { useBusyIds } from '@/hooks/use-busy-id';
-import { usePendingTask } from '@/hooks/use-server-action';
+import { usePendingTask, useServerAction } from '@/hooks/use-server-action';
 import { useBanner } from '@/components/ui/banner';
 import { updateJobAssignments } from '@/lib/jobs/actions';
 import type { Job, JobWithDetails } from '@/lib/jobs/types';
@@ -31,7 +31,8 @@ function useJobDetailQualificationOverride({
   const [qualificationOverrideError, setQualificationOverrideError] = useState<string | null>(null);
   const [qualificationWarning, setQualificationWarning] = useState<AssignmentEvaluation | null>(null);
   const [pendingAssignmentIds, setPendingAssignmentIds] = useState<string[]>([]);
-  const [isQualificationOverrideSaving, setIsQualificationOverrideSaving] = useState(false);
+  const { run: runOverride, isPending: isQualificationOverrideSaving } =
+    useServerAction(updateJobAssignments);
 
   const requestQualificationOverride = (nextIds: string[], evaluation: AssignmentEvaluation) => {
     setPendingAssignmentIds(nextIds);
@@ -39,15 +40,9 @@ function useJobDetailQualificationOverride({
   };
 
   const handleQualificationOverride = async (approval: AssignmentApproval) => {
-    setIsQualificationOverrideSaving(true);
     setQualificationOverrideError(null);
     try {
-      const result = await updateJobAssignments(
-        jobId,
-        pendingAssignmentIds,
-        approval,
-        assignmentTeamSourceId,
-      );
+      const result = await runOverride(jobId, pendingAssignmentIds, approval, assignmentTeamSourceId);
       if (!result.success) {
         if (
           (result.error === 'qualification_warning' || result.error === 'stale_evaluation') &&
@@ -65,8 +60,6 @@ function useJobDetailQualificationOverride({
       router.refresh();
     } catch {
       setQualificationOverrideError('Die begründete Zuweisung konnte nicht gespeichert werden.');
-    } finally {
-      setIsQualificationOverrideSaving(false);
     }
   };
 

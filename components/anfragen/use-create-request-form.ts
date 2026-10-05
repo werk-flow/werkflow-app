@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { useBanner } from '@/components/ui/banner';
+import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { formatBerlinDateTimeInput, parseBerlinDateTimeInput } from '@/lib/customer-relationships/date-time';
 import {
@@ -85,7 +86,7 @@ export function useCreateRequestForm(): CreateRequestForm {
   const [source, setSource] = useState<RequestSource>('telefon');
   const [receivedAt, setReceivedAt] = useState(() => formatBerlinDateTimeInput(new Date()));
   const [assignedTo, setAssignedTo] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const { run: runCreate, isPending: isLoading } = useServerAction(createClientRequest);
   const [error, setError] = useState<string | null>(null);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
 
@@ -167,7 +168,6 @@ export function useCreateRequestForm(): CreateRequestForm {
       return;
     }
 
-    setIsLoading(true);
     try {
       const input: CreateClientRequestInput = {
         summary: summary.trim(),
@@ -187,7 +187,7 @@ export function useCreateRequestForm(): CreateRequestForm {
         ...(assignedTo ? { assignedTo } : {}),
       };
 
-      const result = await createClientRequest(input);
+      const result = await runCreate(input);
       if (!result.success) {
         setError(describeFailure(result.error, ERROR_MESSAGES, 'Unbekannter Fehler'));
         return;
@@ -199,8 +199,6 @@ export function useCreateRequestForm(): CreateRequestForm {
       router.refresh();
     } catch {
       setError('Ein unerwarteter Fehler ist aufgetreten.');
-    } finally {
-      setIsLoading(false);
     }
   };
 

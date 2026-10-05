@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { createCroppedAvatarBlob } from '@/components/settings/profile-avatar-crop';
 import { useBanner } from '@/components/ui/banner';
 import { useUserProfile, type UserProfile } from '@/components/user/user-profile-context';
+import { usePendingTask } from '@/hooks/use-server-action';
 import {
   PROFILE_AVATAR_ALLOWED_MIME_TYPES,
   PROFILE_AVATAR_BUCKET,
@@ -50,8 +51,8 @@ export function useProfileAvatarUpload(): ProfileAvatarUpload {
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [isRemoving, setIsRemoving] = useState(false);
+  const { run: runUpload, isPending: isUploading } = usePendingTask();
+  const { run: runRemove, isPending: isRemoving } = usePendingTask();
 
   const initials = useMemo(
     () => `${profile?.firstName?.[0] ?? ''}${profile?.lastName?.[0] ?? ''}`.trim(),
@@ -127,56 +128,55 @@ export function useProfileAvatarUpload(): ProfileAvatarUpload {
       return;
     }
 
-    setIsUploading(true);
     const nextAvatarPath = `${profile.id}/${Date.now()}-${crypto.randomUUID()}.jpg`;
 
-    try {
-      const croppedBlob = await createCroppedAvatarBlob(cropSource, croppedAreaPixels);
+    await runUpload(async () => {
+      try {
+        const croppedBlob = await createCroppedAvatarBlob(cropSource, croppedAreaPixels);
 
-      const { error: uploadError } = await supabase.storage
-        .from(PROFILE_AVATAR_BUCKET)
-        .upload(nextAvatarPath, croppedBlob, {
-          contentType: 'image/jpeg',
-          cacheControl: '3600',
+        const { error: uploadError } = await supabase.storage
+          .from(PROFILE_AVATAR_BUCKET)
+          .upload(nextAvatarPath, croppedBlob, {
+            contentType: 'image/jpeg',
+            cacheControl: '3600',
+          });
+
+        if (uploadError) {
+          showBanner({
+            message: 'Das Profilbild konnte nicht hochgeladen werden.',
+            variant: 'error',
+          });
+          return;
+        }
+
+        const result = await updateProfileAvatar({
+          avatarPath: nextAvatarPath,
+          previousAvatarPath: profile.avatarPath,
         });
 
-      if (uploadError) {
+        if (!result.success) {
+          await supabase.storage.from(PROFILE_AVATAR_BUCKET).remove([nextAvatarPath]);
+          showBanner({
+            message: 'Das Profilbild konnte nicht gespeichert werden.',
+            variant: 'error',
+          });
+          return;
+        }
+
+        await refreshProfile();
+        router.refresh();
+        resetCropState();
         showBanner({
-          message: 'Das Profilbild konnte nicht hochgeladen werden.',
+          message: 'Dein Profilbild wurde aktualisiert.',
+          variant: 'success',
+        });
+      } catch {
+        showBanner({
+          message: 'Das Profilbild konnte nicht verarbeitet werden.',
           variant: 'error',
         });
-        return;
       }
-
-      const result = await updateProfileAvatar({
-        avatarPath: nextAvatarPath,
-        previousAvatarPath: profile.avatarPath,
-      });
-
-      if (!result.success) {
-        await supabase.storage.from(PROFILE_AVATAR_BUCKET).remove([nextAvatarPath]);
-        showBanner({
-          message: 'Das Profilbild konnte nicht gespeichert werden.',
-          variant: 'error',
-        });
-        return;
-      }
-
-      await refreshProfile();
-      router.refresh();
-      resetCropState();
-      showBanner({
-        message: 'Dein Profilbild wurde aktualisiert.',
-        variant: 'success',
-      });
-    } catch {
-      showBanner({
-        message: 'Das Profilbild konnte nicht verarbeitet werden.',
-        variant: 'error',
-      });
-    } finally {
-      setIsUploading(false);
-    }
+    });
   };
 
   const handleRemoveAvatar = async () => {
@@ -184,32 +184,30 @@ export function useProfileAvatarUpload(): ProfileAvatarUpload {
       return;
     }
 
-    setIsRemoving(true);
+    await runRemove(async () => {
+      try {
+        const result = await removeProfileAvatar();
+        if (!result.success) {
+          showBanner({
+            message: 'Das Profilbild konnte nicht entfernt werden.',
+            variant: 'error',
+          });
+          return;
+        }
 
-    try {
-      const result = await removeProfileAvatar();
-      if (!result.success) {
+        await refreshProfile();
+        router.refresh();
+        showBanner({
+          message: 'Dein Profilbild wurde entfernt.',
+          variant: 'success',
+        });
+      } catch {
         showBanner({
           message: 'Das Profilbild konnte nicht entfernt werden.',
           variant: 'error',
         });
-        return;
       }
-
-      await refreshProfile();
-      router.refresh();
-      showBanner({
-        message: 'Dein Profilbild wurde entfernt.',
-        variant: 'success',
-      });
-    } catch {
-      showBanner({
-        message: 'Das Profilbild konnte nicht entfernt werden.',
-        variant: 'error',
-      });
-    } finally {
-      setIsRemoving(false);
-    }
+    });
   };
 
   return {

@@ -15,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import { logError } from '@/lib/logging';
 import { loadDocument } from '@/lib/navigation/document-load';
@@ -38,16 +39,15 @@ interface CreateOrgDialogProps {
 
 export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
   const [name, setName] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const { run: runCreate, isPending: isLoading } = useServerAction(createOrganization);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
     setError(null);
 
     try {
-      const result = await createOrganization(name);
+      const result = await runCreate(name);
 
       if (result.success && result.organizationId) {
         // A full load: the new organization is the active one, and the shell starts from its cookie.
@@ -58,8 +58,6 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
     } catch (submitError) {
       logError('CreateOrgDialog: organization creation failed', submitError);
       setError(UNEXPECTED_MESSAGE);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -69,7 +67,6 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
       // Reset form when closing
       setName('');
       setError(null);
-      setIsLoading(false);
     }
     onOpenChange(newOpen);
   };

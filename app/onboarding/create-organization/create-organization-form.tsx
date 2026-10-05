@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import { loadDocument } from '@/lib/navigation/document-load';
 import { createOrganization } from '@/lib/org/actions';
@@ -23,21 +24,22 @@ const ERROR_MESSAGES: Readonly<Record<string, string>> = {
 
 export function CreateOrganizationForm() {
   const [name, setName] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const { run: runCreate, isPending: isLoading } = usePendingTask();
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
     setError(null);
 
-    try {
-      const result = await createOrganization(name);
+    await runCreate(async () => {
+      try {
+        const result = await createOrganization(name);
 
-      if (result.success && result.organizationId) {
-        // A full load so the new page reads the new active-organization cookie.
-        loadDocument(`/dashboard?created=${result.organizationId}`);
-      } else {
+        if (result.success && result.organizationId) {
+          // A full load so the new page reads the new active-organization cookie.
+          loadDocument(`/dashboard?created=${result.organizationId}`);
+          return untilPageLeaves();
+        }
         setError(
           describeFailure(
             result.error ?? 'unexpected_error',
@@ -45,12 +47,10 @@ export function CreateOrganizationForm() {
             SHARED_FAILURE_MESSAGES.unexpected_error,
           ),
         );
-        setIsLoading(false);
+      } catch {
+        setError(SHARED_FAILURE_MESSAGES.unexpected_error);
       }
-    } catch {
-      setError(SHARED_FAILURE_MESSAGES.unexpected_error);
-      setIsLoading(false);
-    }
+    });
   };
 
   const isValid = name.trim().length >= 2;

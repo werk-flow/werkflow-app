@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 
 import { ERROR_MESSAGES, responsibilityErrorMessage } from '@/components/settings/responsibility-display';
 import { useBanner } from '@/components/ui/banner';
+import { useServerAction } from '@/hooks/use-server-action';
 import {
   applyResponsibilityConfiguration,
   previewResponsibilityConfiguration,
@@ -54,7 +55,7 @@ export function useResponsibilityConfigurationForm({
   const [selectedIds, setSelectedIds] = useState<string[]>(baseHolderIds);
   const [preview, setPreview] = useState<ResponsibilityPreview | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const { run: runSave, isPending: isSaving } = useServerAction(applyResponsibilityConfiguration);
 
   const reset = () => {
     setMode(current.mode);
@@ -103,9 +104,8 @@ export function useResponsibilityConfigurationForm({
 
   const handleSave = async () => {
     if (!preview) return;
-    setIsSaving(true);
     try {
-      const result = await applyResponsibilityConfiguration({
+      const result = await runSave({
         responsibility,
         mode,
         employeeRecordIds: mode === 'selected' ? selectedIds : [],
@@ -126,8 +126,6 @@ export function useResponsibilityConfigurationForm({
       });
     } catch {
       showBanner({ message: ERROR_MESSAGES.save_failed, variant: 'error' });
-    } finally {
-      setIsSaving(false);
     }
   };
 

@@ -126,7 +126,6 @@ Planning coordinates work. It is no second job, employee, absence or time system
 - A planning assignment references the personnel record and controls planning visibility. The job assignment remains the authority for job responsibility and field access.
 - Capacity, qualification and team membership are resolved at action time for the occurrence date. Each assessment is stored as an attributable snapshot with any override reason. No capacity balance is stored.
 - Planning never changes recorded time.
-- The legacy planning columns on the job are a compatibility projection that planning operations update in the same transaction.
 
 Dispatch (`Einsatz`) turns a plan into an issued work instruction that the recipient confirms. It is no second schedule, inbox or messaging system.
 
@@ -134,6 +133,20 @@ Dispatch (`Einsatz`) turns a plan into an issued work instruction that the recip
 - A revision is the append-only record of the instruction as issued. A schedule change supersedes the current revision in the same transaction. Parking a job cancels its dispatches.
 - An acknowledgement belongs to one revision and one personnel record, and the latest row wins. A recipient without an active login shows the labeled state "nicht möglich".
 - A customer commitment records an explicit agreement for an occurrence. A schedule move never rewrites a commitment. A mismatch is a derived, visible state. Nothing in this domain represents message delivery or consent.
+
+### Job team and visit plan
+
+A job's assignees (its job team) and the people on each of its visits are two records of one plan, and writes cross between them in both directions. A job scheduled through the job form has one legacy visit, the visit its schedule columns describe. These rules hold after every committed call:
+
+- Every person with a login on a visit of the job that has not started is on the job team, because the job team grants the field access the visit needs. A personnel record without a login can be on a visit and is never on a job team.
+- A planning write adds the people of the visits it writes to the job team and removes nobody. Only a job team edit takes a person off the job, and it takes them off every visit of the job that has not started, whatever the visit's status.
+- A job team edit that adds a person reaches the legacy visit only, because the job form describes only that visit. A planning write for one visit never changes the people of another visit.
+- A started visit is history. A job team edit does not change its people.
+- The job's schedule columns are a projection of its first scheduled visit: date, time and, for a timed visit, duration. Without a scheduled visit they are empty. A schedule edit in the job form moves the legacy visit.
+- Parking cancels the job's scheduled visits and empties its schedule. The cancelled visits keep their people and the job keeps its team. Unparking into the schedule revives the legacy visit at the new time for the whole selection.
+- A series change sets the people of every occurrence it rewrites. The people it replaces stay on the job team.
+
+`app_private.project_plan_onto_job` is the only writer of the plan onto the job. It sets the transaction-local marker `app.planning_projection_write` for its own writes and then restores the earlier value, so the two job-to-plan triggers stay quiet for exactly that write. A marker that outlives its write would disconnect every later job edit in the same transaction from its visit. `sql:job-plan-bridge` (`supabase/tests/job_plan_bridge.sql`) drives every write path and fails on a broken rule, a marker left set, or a second function that sets the marker.
 
 ## Time
 

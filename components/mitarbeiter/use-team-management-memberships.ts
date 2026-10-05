@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import type { useBusyIds } from '@/hooks/use-busy-id';
 import { useBanner } from '@/components/ui/banner';
 import { addTeamMembership, endTeamMembership } from '@/lib/qualifications/actions';
 import type { QualificationWorkspace, Team } from '@/lib/qualifications/types';
@@ -17,7 +18,7 @@ type TeamMembershipOptimisticList = Pick<
 type TeamManagementMembershipsInput = {
   membershipList: TeamMembershipOptimisticList;
   today: string;
-  setPendingAction: (action: string | null) => void;
+  runAction: ReturnType<typeof useBusyIds>['run'];
   refresh: () => void;
   settle: (list: { settle: (id: string) => void }, id: string) => void;
 };
@@ -26,7 +27,7 @@ type TeamManagementMembershipsInput = {
 export function useTeamManagementMemberships({
   membershipList,
   today,
-  setPendingAction,
+  runAction,
   refresh,
   settle,
 }: TeamManagementMembershipsInput) {
@@ -41,32 +42,31 @@ export function useTeamManagementMemberships({
   >({});
 
   const handleEndMembership = async (membership: TeamMembership) => {
-    setPendingAction(`end:${membership.id}`);
-    try {
-      const result = await endTeamMembership({
-        membershipId: membership.id,
-        validUntil: today,
-      });
-      if (!result.success) {
+    await runAction(`end:${membership.id}`, async () => {
+      try {
+        const result = await endTeamMembership({
+          membershipId: membership.id,
+          validUntil: today,
+        });
+        if (!result.success) {
+          showBanner({
+            variant: 'error',
+            message: 'Die Teamzugehörigkeit konnte nicht beendet werden.',
+          });
+          return;
+        }
+        showBanner({
+          variant: 'success',
+          message: 'Die Teamzugehörigkeit wurde zum Tagesende beendet.',
+        });
+        refresh();
+      } catch {
         showBanner({
           variant: 'error',
           message: 'Die Teamzugehörigkeit konnte nicht beendet werden.',
         });
-        return;
       }
-      showBanner({
-        variant: 'success',
-        message: 'Die Teamzugehörigkeit wurde zum Tagesende beendet.',
-      });
-      refresh();
-    } catch {
-      showBanner({
-        variant: 'error',
-        message: 'Die Teamzugehörigkeit konnte nicht beendet werden.',
-      });
-    } finally {
-      setPendingAction(null);
-    }
+    });
   };
 
   const handleAddMembership = async (team: Team) => {
@@ -97,55 +97,54 @@ export function useTeamManagementMemberships({
         ?.focus();
       return;
     }
-    setPendingAction(`add:${team.id}`);
-    const draftId = crypto.randomUUID();
-    membershipList.insert(draftId, {
-      id: draftId,
-      organizationId: team.organizationId,
-      teamId: team.id,
-      employeeRecordId,
-      validFrom,
-      validUntil,
-      createdAt: '',
-      updatedAt: '',
-    });
-    try {
-      const result = await addTeamMembership({
+    await runAction(`add:${team.id}`, async () => {
+      const draftId = crypto.randomUUID();
+      membershipList.insert(draftId, {
+        id: draftId,
+        organizationId: team.organizationId,
         teamId: team.id,
         employeeRecordId,
         validFrom,
         validUntil,
+        createdAt: '',
+        updatedAt: '',
       });
-      if (!result.success) {
+      try {
+        const result = await addTeamMembership({
+          teamId: team.id,
+          employeeRecordId,
+          validFrom,
+          validUntil,
+        });
+        if (!result.success) {
+          membershipList.rollback(draftId);
+          setAddError(
+            describeFailure(
+              result.error,
+              { overlap: 'Diese Teamzugehörigkeit besteht bereits.' },
+              'Das Teammitglied konnte nicht hinzugefügt werden.',
+            ),
+          );
+          return;
+        }
+        setSelectedEmployeeByTeam((current) => ({
+          ...current,
+          [team.id]: '',
+        }));
+        setMembershipWindowByTeam((current) => ({
+          ...current,
+          [team.id]: { validFrom: today, validUntil: '' },
+        }));
+        showBanner({
+          variant: 'success',
+          message: 'Das Teammitglied wurde hinzugefügt.',
+        });
+        settle(membershipList, draftId);
+      } catch {
         membershipList.rollback(draftId);
-        setAddError(
-          describeFailure(
-            result.error,
-            { overlap: 'Diese Teamzugehörigkeit besteht bereits.' },
-            'Das Teammitglied konnte nicht hinzugefügt werden.',
-          ),
-        );
-        return;
+        setAddError('Das Teammitglied konnte nicht hinzugefügt werden.');
       }
-      setSelectedEmployeeByTeam((current) => ({
-        ...current,
-        [team.id]: '',
-      }));
-      setMembershipWindowByTeam((current) => ({
-        ...current,
-        [team.id]: { validFrom: today, validUntil: '' },
-      }));
-      showBanner({
-        variant: 'success',
-        message: 'Das Teammitglied wurde hinzugefügt.',
-      });
-      settle(membershipList, draftId);
-    } catch {
-      membershipList.rollback(draftId);
-      setAddError('Das Teammitglied konnte nicht hinzugefügt werden.');
-    } finally {
-      setPendingAction(null);
-    }
+    });
   };
 
   return {

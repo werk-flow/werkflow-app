@@ -14,6 +14,7 @@ import { Field } from '@/components/ui/field';
 import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
+import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
 const loginSchema = z.object({
@@ -32,7 +33,7 @@ export function LoginForm({ successMessage, inviteCode = '' }: LoginFormProps) {
   const router = useRouter();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [formError, setFormError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { run: runSubmit, isPending: isSubmitting } = usePendingTask();
 
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -44,64 +45,64 @@ export function LoginForm({ successMessage, inviteCode = '' }: LoginFormProps) {
 
   const handleSubmit = form.handleSubmit(async (values) => {
     setFormError(null);
-    setIsSubmitting(true);
 
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: values.email,
-        password: values.password,
-      });
+    await runSubmit(async () => {
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: values.email,
+          password: values.password,
+        });
 
-      if (error) {
-        const errorMessage = error.message?.toLowerCase() ?? '';
-        if (errorMessage.includes('email not confirmed') || errorMessage.includes('email_not_confirmed')) {
-          const { error: resendError } = await supabase.auth.resend({
-            type: 'signup',
-            email: values.email,
-          });
+        if (error) {
+          const errorMessage = error.message?.toLowerCase() ?? '';
+          if (errorMessage.includes('email not confirmed') || errorMessage.includes('email_not_confirmed')) {
+            const { error: resendError } = await supabase.auth.resend({
+              type: 'signup',
+              email: values.email,
+            });
 
-          if (resendError) {
-            setFormError('E-Mail nicht verifiziert. Bitte überprüfe dein Postfach oder versuche es erneut.');
-            setIsSubmitting(false);
-            return;
+            if (resendError) {
+              setFormError(
+                'E-Mail nicht verifiziert. Bitte überprüfe dein Postfach oder versuche es erneut.',
+              );
+              return;
+            }
+
+            const verifyUrl = inviteCode
+              ? `/verify?email=${encodeURIComponent(values.email)}&invite_code=${encodeURIComponent(inviteCode)}`
+              : `/verify?email=${encodeURIComponent(values.email)}`;
+            router.replace(verifyUrl);
+            router.refresh();
+            return untilPageLeaves();
           }
 
-          const verifyUrl = inviteCode
-            ? `/verify?email=${encodeURIComponent(values.email)}&invite_code=${encodeURIComponent(inviteCode)}`
-            : `/verify?email=${encodeURIComponent(values.email)}`;
-          router.replace(verifyUrl);
-          router.refresh();
+          setFormError('Anmeldung fehlgeschlagen. Bitte überprüfe deine Zugangsdaten.');
           return;
         }
 
-        setFormError('Anmeldung fehlgeschlagen. Bitte überprüfe deine Zugangsdaten.');
-        setIsSubmitting(false);
-        return;
+        if (data.session) {
+          await fetch('/auth/callback', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              event: 'SIGNED_IN',
+              session: data.session,
+            }),
+          });
+
+          if (inviteCode && (await redeemOtpInvite(supabase, inviteCode))) return untilPageLeaves();
+        }
+
+        router.replace('/');
+        router.refresh();
+        return untilPageLeaves();
+      } catch {
+        // A rejected request (network) must not leave the button spinning.
+        setFormError('Anmeldung fehlgeschlagen. Bitte versuche es erneut.');
       }
-
-      if (data.session) {
-        await fetch('/auth/callback', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            event: 'SIGNED_IN',
-            session: data.session,
-          }),
-        });
-
-        if (inviteCode && (await redeemOtpInvite(supabase, inviteCode))) return;
-      }
-
-      // Keep isSubmitting=true — the component unmounts on navigation
-      router.replace('/');
-      router.refresh();
-    } catch {
-      // A rejected request (network) must not leave the button spinning.
-      setFormError('Anmeldung fehlgeschlagen. Bitte versuche es erneut.');
-      setIsSubmitting(false);
-    }
+    });
   });
 
   return (

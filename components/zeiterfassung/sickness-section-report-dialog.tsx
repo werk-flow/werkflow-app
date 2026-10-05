@@ -18,6 +18,7 @@ import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useServerAction } from '@/hooks/use-server-action';
 import { reportOwnSickness } from '@/lib/sickness/actions';
 import {
   SICKNESS_ERROR_MESSAGES,
@@ -155,7 +156,7 @@ export function OwnSicknessReportDialog({ onClose }: { onClose: (saved: boolean)
   const [endKnown, setEndKnown] = useState(false);
   const [endDate, setEndDate] = useState<string>(todayIso);
   const [halfDay, setHalfDay] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const { run: runSave, isPending: isSaving } = useServerAction(reportOwnSickness);
   const [error, setError] = useState<string | null>(null);
   const [overlapHint, setOverlapHint] = useState(false);
   const [dateErrors, setDateErrors] = useState<OwnSicknessReportDateErrors>({});
@@ -182,9 +183,8 @@ export function OwnSicknessReportDialog({ onClose }: { onClose: (saved: boolean)
       return;
     }
 
-    setIsSaving(true);
     try {
-      const result = await reportOwnSickness({
+      const result = await runSave({
         absenceType,
         startDate,
         endDate: endKnown ? endDate : null,
@@ -209,8 +209,6 @@ export function OwnSicknessReportDialog({ onClose }: { onClose: (saved: boolean)
       }
     } catch {
       setError('Die Meldung konnte nicht gespeichert werden.');
-    } finally {
-      setIsSaving(false);
     }
   };
 

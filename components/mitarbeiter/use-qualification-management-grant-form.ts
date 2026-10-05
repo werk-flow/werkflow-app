@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useBanner } from '@/components/ui/banner';
+import type { useBusyIds } from '@/hooks/use-busy-id';
 import type { useOptimisticList } from '@/hooks/use-optimistic-list';
 import { addEmployeeCapability, updateEmployeeCapability } from '@/lib/qualifications/actions';
 import { getBusinessTodayIso } from '@/lib/personnel/types';
@@ -88,7 +89,7 @@ type QualificationManagementGrantFormOptions = {
   definitionById: Map<string, QualificationWorkspace['capabilities'][number]>;
   recordList: QualificationManagementRecordListState;
   settleRecord: (recordId: string) => void;
-  setPendingAction: (action: string | null) => void;
+  runAction: ReturnType<typeof useBusyIds>['run'];
 };
 
 /**
@@ -99,7 +100,7 @@ export function useQualificationManagementGrantForm({
   definitionById,
   recordList,
   settleRecord,
-  setPendingAction,
+  runAction,
 }: QualificationManagementGrantFormOptions) {
   const { showBanner } = useBanner();
   const fields = useQualificationManagementGrantFields();
@@ -171,45 +172,44 @@ export function useQualificationManagementGrantForm({
     };
     if (editingRecordId) recordList.update(draft.id, draft);
     else recordList.insert(draft.id, draft);
-    setPendingAction('save-record');
-    try {
-      const result = editingRecordId
-        ? await updateEmployeeCapability({
-            recordId: editingRecordId,
-            ...sharedInput,
-          })
-        : await addEmployeeCapability({
-            employeeRecordId,
-            capabilityId,
-            ...sharedInput,
-            supersedesId,
-          });
-      if (!result.success) {
+    await runAction('save-record', async () => {
+      try {
+        const result = editingRecordId
+          ? await updateEmployeeCapability({
+              recordId: editingRecordId,
+              ...sharedInput,
+            })
+          : await addEmployeeCapability({
+              employeeRecordId,
+              capabilityId,
+              ...sharedInput,
+              supersedesId,
+            });
+        if (!result.success) {
+          recordList.rollback(draft.id);
+          setGrantError(
+            describeFailure(
+              result.error,
+              { overlap: 'Der Zeitraum überschneidet sich mit einem bestehenden Eintrag.' },
+              'Der Eintrag konnte nicht gespeichert werden.',
+            ),
+          );
+          return;
+        }
+        const savedId =
+          'recordId' in result && typeof result.recordId === 'string' ? result.recordId : draft.id;
+        if (savedId !== draft.id) recordList.commit(draft.id, { ...draft, id: savedId });
+        resetGrantForm();
+        showBanner({
+          variant: 'success',
+          message: 'Der Eintrag wurde gespeichert.',
+        });
+        settleRecord(savedId);
+      } catch {
         recordList.rollback(draft.id);
-        setGrantError(
-          describeFailure(
-            result.error,
-            { overlap: 'Der Zeitraum überschneidet sich mit einem bestehenden Eintrag.' },
-            'Der Eintrag konnte nicht gespeichert werden.',
-          ),
-        );
-        return;
+        setGrantError('Der Eintrag konnte nicht gespeichert werden.');
       }
-      const savedId =
-        'recordId' in result && typeof result.recordId === 'string' ? result.recordId : draft.id;
-      if (savedId !== draft.id) recordList.commit(draft.id, { ...draft, id: savedId });
-      resetGrantForm();
-      showBanner({
-        variant: 'success',
-        message: 'Der Eintrag wurde gespeichert.',
-      });
-      settleRecord(savedId);
-    } catch {
-      recordList.rollback(draft.id);
-      setGrantError('Der Eintrag konnte nicht gespeichert werden.');
-    } finally {
-      setPendingAction(null);
-    }
+    });
   };
 
   return { ...fields, selectedDefinition, isRecordIdentityLocked, saveGrant };

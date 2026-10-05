@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { MoreHorizontal, UserCog, UserMinus, Loader2, ExternalLink } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -63,7 +64,7 @@ export function MemberActionsMenu({
   onRoleChange,
 }: MemberActionsMenuProps) {
   const router = useRouter();
-  const [isRemoving, setIsRemoving] = useState(false);
+  const { run: runRemove, isPending: isRemoving } = usePendingTask();
   const [showRemoveDialog, setShowRemoveDialog] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,29 +87,28 @@ export function MemberActionsMenu({
 
   const handleRemove = async () => {
     if (isRemoving) return;
-    setIsRemoving(true);
     setError(null);
 
-    try {
-      const result = await removeMember(memberId);
+    await runRemove(async () => {
+      try {
+        const result = await removeMember(memberId);
 
-      if (result.success) {
-        setShowRemoveDialog(false);
-        // Keep isRemoving true - component unmounts after navigation
-        // and the destination page shows the success banner.
-        // Hard navigation: a Realtime-triggered refresh of the removed
-        // member's surface can redirect to plain /mitarbeiter and land after a
-        // soft push, dropping the banner param (the documented post-delete
-        // race; same remedy as the customer delete).
-        loadDocument(`/mitarbeiter?removed_member=${encodeURIComponent(memberName || 'Mitglied')}`);
-      } else {
+        if (result.success) {
+          setShowRemoveDialog(false);
+          // Stay pending: the component unmounts after navigation and the
+          // destination page shows the success banner.
+          // Hard navigation: a Realtime-triggered refresh of the removed
+          // member's surface can redirect to plain /mitarbeiter and land after a
+          // soft push, dropping the banner param (the documented post-delete
+          // race; same remedy as the customer delete).
+          loadDocument(`/mitarbeiter?removed_member=${encodeURIComponent(memberName || 'Mitglied')}`);
+          return untilPageLeaves();
+        }
         setError(getMemberActionErrorMessage(result.error));
-        setIsRemoving(false);
+      } catch {
+        setError(getMemberActionErrorMessage(undefined));
       }
-    } catch {
-      setError(getMemberActionErrorMessage(undefined));
-      setIsRemoving(false);
-    }
+    });
   };
 
   // Don't render anything if user can't manage this member

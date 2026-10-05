@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 
 import { ERROR_MESSAGES, responsibilityErrorMessage } from '@/components/settings/responsibility-display';
 import { useBanner } from '@/components/ui/banner';
+import { useServerAction } from '@/hooks/use-server-action';
 import { createResponsibilityDelegation } from '@/lib/responsibilities/actions';
 import type { EffectiveResponsibilityHolder } from '@/lib/responsibilities/resolution';
 import type { ResponsibilitySettingsData } from '@/lib/responsibilities/server';
@@ -56,7 +57,7 @@ export function useResponsibilityDelegationForm({
   const [validFrom, setValidFrom] = useState(data.businessDate);
   const [validUntil, setValidUntil] = useState(data.businessDate);
   const [note, setNote] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
+  const { run: runSave, isPending: isSaving } = useServerAction(createResponsibilityDelegation);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [personErrors, setPersonErrors] = useState<DelegationPersonErrors>({});
   const hasInvalidDateRange = validUntil < validFrom;
@@ -105,10 +106,9 @@ export function useResponsibilityDelegationForm({
       document.getElementById(firstInvalidId)?.focus();
       return;
     }
-    setIsSaving(true);
     setSaveError(null);
     try {
-      const result = await createResponsibilityDelegation({
+      const result = await runSave({
         responsibility,
         delegatorEmployeeRecordId: delegatorId,
         substituteEmployeeRecordId: substituteId,
@@ -125,8 +125,6 @@ export function useResponsibilityDelegationForm({
       showBanner({ message: 'Die Vertretung wurde eingetragen.', variant: 'success' });
     } catch {
       setSaveError(ERROR_MESSAGES.save_failed);
-    } finally {
-      setIsSaving(false);
     }
   };
 

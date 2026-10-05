@@ -2,7 +2,7 @@
 
 import { describeFailure } from '@/lib/action-messages';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 
@@ -13,6 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ErrorText } from '@/components/ui/error-text';
 import { Form, FormField } from '@/components/ui/form';
 import { InlinePending } from '@/components/ui/inline-pending';
+import { useServerAction } from '@/hooks/use-server-action';
 import { saveAuftraegeColumnPreferences } from '@/lib/jobs/auftraege-column-preferences-actions';
 import {
   AUFTRAEGE_TABLE_COLUMNS,
@@ -37,7 +38,7 @@ export function AuftraegeColumnSettingsForm({
 }: AuftraegeColumnSettingsFormProps) {
   const router = useRouter();
   const { showBanner } = useBanner();
-  const [isSaving, setIsSaving] = useState(false);
+  const { run: runSave, isPending: isSaving } = useServerAction(saveAuftraegeColumnPreferences);
 
   const form = useForm<AuftraegeColumnPreferencesValues>({
     resolver: zodResolver(auftraegeColumnPreferencesSchema),
@@ -65,10 +66,8 @@ export function AuftraegeColumnSettingsForm({
   };
 
   const onSubmit = form.handleSubmit(async (values) => {
-    setIsSaving(true);
-
     try {
-      const result = await saveAuftraegeColumnPreferences(values);
+      const result = await runSave(values);
 
       if (!result.success) {
         showBanner({
@@ -88,8 +87,6 @@ export function AuftraegeColumnSettingsForm({
       });
     } catch {
       showBanner({ message: ERROR_MESSAGES.update_failed, variant: 'error' });
-    } finally {
-      setIsSaving(false);
     }
   });
 
@@ -111,7 +108,7 @@ export function AuftraegeColumnSettingsForm({
               <FormField
                 control={form.control}
                 name="visibleColumns"
-                render={({ fieldState }) => (
+                render={({ field, fieldState }) => (
                   <fieldset className="space-y-2">
                     <legend className="text-sm font-medium">Tabellenspalten</legend>
                     <p className="text-sm text-muted-foreground">
@@ -119,7 +116,7 @@ export function AuftraegeColumnSettingsForm({
                     </p>
                     <div className="grid gap-3 sm:grid-cols-2">
                       {AUFTRAEGE_TABLE_COLUMNS.map((column) => {
-                        const isChecked = form.watch('visibleColumns').includes(column.id);
+                        const isChecked = field.value.includes(column.id);
 
                         return (
                           <label

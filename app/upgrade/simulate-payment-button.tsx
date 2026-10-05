@@ -6,6 +6,7 @@ import { unstable_rethrow } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { simulatePayment } from '@/lib/subscription/actions';
 
@@ -14,15 +15,14 @@ const PAYMENT_ERROR_MESSAGES: Readonly<Record<string, string>> = {
 };
 
 export function SimulatePaymentButton() {
-  const [isLoading, setIsLoading] = useState(false);
+  const { run: runPayment, isPending: isLoading } = useServerAction(simulatePayment);
   const [error, setError] = useState<string | null>(null);
 
   const handleClick = async () => {
-    setIsLoading(true);
     setError(null);
 
     try {
-      const result = await simulatePayment();
+      const result = await runPayment();
 
       // If we get here without redirect, there was an error
       if (!result.success) {
@@ -37,8 +37,6 @@ export function SimulatePaymentButton() {
     } catch (error) {
       unstable_rethrow(error);
       setError('Die Zahlung konnte nicht verarbeitet werden. Bitte versuche es erneut.');
-    } finally {
-      setIsLoading(false);
     }
   };
 

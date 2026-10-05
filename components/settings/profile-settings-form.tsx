@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 
@@ -16,12 +16,13 @@ import { Field } from '@/components/ui/field';
 import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { InlinePending } from '@/components/ui/inline-pending';
+import { usePendingTask } from '@/hooks/use-server-action';
 
 export function ProfileSettingsForm() {
   const router = useRouter();
   const { profile, refreshProfile } = useUserProfile();
   const { showBanner } = useBanner();
-  const [isSaving, setIsSaving] = useState(false);
+  const { run: runSave, isPending: isSaving } = usePendingTask();
 
   const form = useForm<ProfileSettingsValues>({
     resolver: zodResolver(profileSettingsSchema),
@@ -39,33 +40,31 @@ export function ProfileSettingsForm() {
   }, [form, profile?.firstName, profile?.lastName]);
 
   const onSubmit = form.handleSubmit(async (values) => {
-    setIsSaving(true);
+    await runSave(async () => {
+      try {
+        const result = await updateProfileSettings(values);
 
-    try {
-      const result = await updateProfileSettings(values);
+        if (!result.success) {
+          showBanner({
+            message: 'Dein Profil konnte nicht gespeichert werden.',
+            variant: 'error',
+          });
+          return;
+        }
 
-      if (!result.success) {
+        await refreshProfile();
+        router.refresh();
+        showBanner({
+          message: 'Dein Profil wurde gespeichert.',
+          variant: 'success',
+        });
+      } catch {
         showBanner({
           message: 'Dein Profil konnte nicht gespeichert werden.',
           variant: 'error',
         });
-        return;
       }
-
-      await refreshProfile();
-      router.refresh();
-      showBanner({
-        message: 'Dein Profil wurde gespeichert.',
-        variant: 'success',
-      });
-    } catch {
-      showBanner({
-        message: 'Dein Profil konnte nicht gespeichert werden.',
-        variant: 'error',
-      });
-    } finally {
-      setIsSaving(false);
-    }
+    });
   });
 
   return (

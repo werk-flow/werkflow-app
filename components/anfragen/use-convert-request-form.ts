@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { useBanner } from '@/components/ui/banner';
+import { usePendingTask } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { getNextJobNumber } from '@/lib/jobs/actions';
 import { getNextProjectNumber } from '@/lib/projects/actions';
@@ -135,7 +136,7 @@ export function useConvertRequestForm({
   const [location, setLocation] = useState('');
   const [templateVersionId, setTemplateVersionId] = useState('');
   const [qualificationWarning, setQualificationWarning] = useState<AssignmentEvaluation | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const { run: runConvert, isPending: isLoading } = usePendingTask();
   const [error, setError] = useState<string | null>(null);
 
   // Prefill from the request each time the dialog opens, during render and
@@ -162,9 +163,12 @@ export function useConvertRequestForm({
 
   const { number, setNumber } = useSuggestedConversionNumber(open, target);
 
-  useEffect(() => {
+  // A template belongs to one target kind, so switching the target clears it.
+  const changeTarget = (nextTarget: ConversionTarget) => {
+    if (nextTarget === target) return;
+    setTarget(nextTarget);
     setTemplateVersionId('');
-  }, [target]);
+  };
 
   const submitConversion = async (approval?: AssignmentApproval) => {
     setError(null);
@@ -192,69 +196,68 @@ export function useConvertRequestForm({
       return;
     }
 
-    setIsLoading(true);
-    try {
-      if (target === 'job') {
-        const result = await convertRequestToJob(request.id, {
-          title: title.trim(),
-          ...(description.trim() ? { description: description.trim() } : {}),
-          clientId,
-          ...(siteId ? { siteId } : {}),
-          ...(contactId ? { contactId } : {}),
-          jobNumber: number.trim(),
-          priority,
-          ...(plannedDate ? { plannedDate } : {}),
-          // The time field hides without a date; a parked job carries no time.
-          ...(plannedDate && plannedTime ? { plannedTime } : {}),
-          ...(location.trim() ? { location: location.trim() } : {}),
-          ...(templateVersionId ? { templateVersionId } : {}),
-          assignmentApproval: approval ?? null,
-        });
-        if (!result.success) {
-          if (
-            (result.error === 'qualification_warning' || result.error === 'stale_evaluation') &&
-            'evaluation' in result
-          ) {
-            setQualificationWarning(result.evaluation);
+    await runConvert(async () => {
+      try {
+        if (target === 'job') {
+          const result = await convertRequestToJob(request.id, {
+            title: title.trim(),
+            ...(description.trim() ? { description: description.trim() } : {}),
+            clientId,
+            ...(siteId ? { siteId } : {}),
+            ...(contactId ? { contactId } : {}),
+            jobNumber: number.trim(),
+            priority,
+            ...(plannedDate ? { plannedDate } : {}),
+            // The time field hides without a date; a parked job carries no time.
+            ...(plannedDate && plannedTime ? { plannedTime } : {}),
+            ...(location.trim() ? { location: location.trim() } : {}),
+            ...(templateVersionId ? { templateVersionId } : {}),
+            assignmentApproval: approval ?? null,
+          });
+          if (!result.success) {
+            if (
+              (result.error === 'qualification_warning' || result.error === 'stale_evaluation') &&
+              'evaluation' in result
+            ) {
+              setQualificationWarning(result.evaluation);
+              return;
+            }
+            setError(describeFailure(result.error, ERROR_MESSAGES, 'Unbekannter Fehler'));
             return;
           }
-          setError(describeFailure(result.error, ERROR_MESSAGES, 'Unbekannter Fehler'));
-          return;
+          onOpenChange(false);
+          onSaved?.();
+          showBanner({
+            variant: 'success',
+            message: 'Anfrage wurde in einen Auftrag umgewandelt.',
+          });
+          router.refresh();
+        } else {
+          const result = await convertRequestToProject(request.id, {
+            name: title.trim(),
+            ...(description.trim() ? { description: description.trim() } : {}),
+            clientId,
+            ...(siteId ? { siteId } : {}),
+            ...(contactId ? { contactId } : {}),
+            ...(number.trim() ? { projectNumber: number.trim() } : {}),
+            ...(templateVersionId ? { templateVersionId } : {}),
+          });
+          if (!result.success) {
+            setError(describeFailure(result.error, ERROR_MESSAGES, 'Unbekannter Fehler'));
+            return;
+          }
+          onOpenChange(false);
+          onSaved?.();
+          showBanner({
+            variant: 'success',
+            message: 'Anfrage wurde in ein Projekt umgewandelt.',
+          });
+          router.refresh();
         }
-        onOpenChange(false);
-        onSaved?.();
-        showBanner({
-          variant: 'success',
-          message: 'Anfrage wurde in einen Auftrag umgewandelt.',
-        });
-        router.refresh();
-      } else {
-        const result = await convertRequestToProject(request.id, {
-          name: title.trim(),
-          ...(description.trim() ? { description: description.trim() } : {}),
-          clientId,
-          ...(siteId ? { siteId } : {}),
-          ...(contactId ? { contactId } : {}),
-          ...(number.trim() ? { projectNumber: number.trim() } : {}),
-          ...(templateVersionId ? { templateVersionId } : {}),
-        });
-        if (!result.success) {
-          setError(describeFailure(result.error, ERROR_MESSAGES, 'Unbekannter Fehler'));
-          return;
-        }
-        onOpenChange(false);
-        onSaved?.();
-        showBanner({
-          variant: 'success',
-          message: 'Anfrage wurde in ein Projekt umgewandelt.',
-        });
-        router.refresh();
+      } catch {
+        setError('Ein unerwarteter Fehler ist aufgetreten.');
       }
-    } catch {
-      setError('Ein unerwarteter Fehler ist aufgetreten.');
-    } finally {
-      setIsLoading(false);
-    }
+    });
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -277,7 +280,7 @@ export function useConvertRequestForm({
 
   return {
     target,
-    setTarget,
+    setTarget: changeTarget,
     title,
     setTitle,
     description,

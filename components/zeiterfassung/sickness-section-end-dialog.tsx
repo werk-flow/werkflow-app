@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
+import { useServerAction } from '@/hooks/use-server-action';
 import { endSicknessReport } from '@/lib/sickness/actions';
 import { SICKNESS_ERROR_MESSAGES, type SicknessReport } from '@/lib/sickness/types';
 import { describeFailure } from '@/lib/action-messages';
@@ -32,7 +33,7 @@ export function OwnSicknessEndDialog({
   const [endDate, setEndDate] = useState<string>(
     report.endDate ?? (todayIso >= report.startDate ? todayIso : report.startDate),
   );
-  const [isSaving, setIsSaving] = useState(false);
+  const { run: runSave, isPending: isSaving } = useServerAction(endSicknessReport);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -45,9 +46,8 @@ export function OwnSicknessEndDialog({
       return;
     }
 
-    setIsSaving(true);
     try {
-      const result = await endSicknessReport({
+      const result = await runSave({
         reportId: report.id,
         endDate,
       });
@@ -64,8 +64,6 @@ export function OwnSicknessEndDialog({
       }
     } catch {
       setError('Das Enddatum konnte nicht gespeichert werden.');
-    } finally {
-      setIsSaving(false);
     }
   };
 

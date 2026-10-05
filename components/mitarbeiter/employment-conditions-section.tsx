@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { BriefcaseBusiness, Plus } from 'lucide-react';
 
+import { useServerAction } from '@/hooks/use-server-action';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { describeFailure } from '@/lib/action-messages';
@@ -32,7 +33,7 @@ export function EmploymentConditionsSection({
   const { showBanner } = useBanner();
   const [dialogState, setDialogState] = useState<DialogState>({ mode: 'closed' });
   const [deleteTarget, setDeleteTarget] = useState<EmploymentCondition | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const { run: runDelete, isPending: isDeleting } = useServerAction(deleteEmploymentCondition);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const current = getEffectiveCondition(conditions);
@@ -41,11 +42,11 @@ export function EmploymentConditionsSection({
 
   const handleDelete = async () => {
     if (!deleteTarget || isDeleting) return;
-    setIsDeleting(true);
     setDeleteError(null);
-    const result = await deleteEmploymentCondition(deleteTarget.id)
-      .catch(() => ({ success: false as const, error: undefined }))
-      .finally(() => setIsDeleting(false));
+    const result = await runDelete(deleteTarget.id).catch(() => ({
+      success: false as const,
+      error: undefined,
+    }));
     if (result.success) {
       setDeleteTarget(null);
       showBanner({

@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { getBusinessTodayIso } from '@/lib/personnel/types';
 import type { QualificationWorkspace, Team } from '@/lib/qualifications/types';
+import { useBusyIds } from '@/hooks/use-busy-id';
 import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
 import { useOptimisticList } from '@/hooks/use-optimistic-list';
 import { useTeamManagementDissolve } from './use-team-management-dissolve';
@@ -17,12 +18,13 @@ export type TeamManagementInput = Pick<QualificationWorkspace, 'teams' | 'teamMe
 export type TeamManagementController = ReturnType<typeof useTeamManagement>;
 
 /**
- * State and mutations of the team tab. One `pendingAction` serializes create,
- * rename, dissolve and the membership changes.
+ * State and mutations of the team tab. One `useBusyIds` serializes create,
+ * rename, dissolve and the membership changes: every control is disabled while
+ * any of them runs.
  */
 export function useTeamManagement({ teams, teamMemberships, employees }: TeamManagementInput) {
   const router = useRouter();
-  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const busy = useBusyIds();
   const today = getBusinessTodayIso();
   // A created team, a rename and a new member show in the first frame. The
   // echo ends when the refreshed workspace arrives; a refusal removes it and
@@ -60,12 +62,12 @@ export function useTeamManagement({ teams, teamMemberships, employees }: TeamMan
     refresh();
   };
 
-  const teamEdits = useTeamManagementTeamEdits({ teamList, setPendingAction, settle });
-  const dissolve = useTeamManagementDissolve({ setPendingAction, refresh });
+  const teamEdits = useTeamManagementTeamEdits({ teamList, runAction: busy.run, settle });
+  const dissolve = useTeamManagementDissolve({ runAction: busy.run, refresh });
   const memberships = useTeamManagementMemberships({
     membershipList,
     today,
-    setPendingAction,
+    runAction: busy.run,
     refresh,
     settle,
   });
@@ -77,7 +79,8 @@ export function useTeamManagement({ teams, teamMemberships, employees }: TeamMan
     activeTeams,
     dissolvedTeams,
     activeMembershipsByTeam,
-    pendingAction,
+    anyBusy: busy.anyBusy,
+    isBusy: busy.isBusy,
     ...teamEdits,
     ...dissolve,
     ...memberships,

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 
+import { useServerAction } from '@/hooks/use-server-action';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { Button } from '@/components/ui/button';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -46,7 +47,7 @@ export function CommitmentDialog({
   const [windowEnd, setWindowEnd] = useState('');
   const [source, setSource] = useState<CustomerCommitmentSource>('telefonisch');
   const [error, setError] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
+  const { run: runSave, isPending: isSaving } = useServerAction(recordCustomerCommitment);
 
   const [attempted, setAttempted] = useState(false);
   const fieldErrors = {
@@ -61,11 +62,10 @@ export function CommitmentDialog({
     event.preventDefault();
     setAttempted(true);
     if (focusFirstInvalidField(fieldErrors) || !committedDate) return;
-    setIsSaving(true);
     setError(null);
     const dateIso = `${committedDate.getFullYear()}-${String(committedDate.getMonth() + 1).padStart(2, '0')}-${String(committedDate.getDate()).padStart(2, '0')}`;
     try {
-      const result = await recordCustomerCommitment({
+      const result = await runSave({
         occurrenceId: entry.occurrenceId,
         committedDate: dateIso,
         windowStartTime: windowStart || null,
@@ -80,8 +80,6 @@ export function CommitmentDialog({
       onSaved();
     } catch {
       setError(commitmentErrorMessage('unexpected_error'));
-    } finally {
-      setIsSaving(false);
     }
   };
 

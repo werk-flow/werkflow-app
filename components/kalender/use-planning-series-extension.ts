@@ -3,6 +3,7 @@
 import { useCallback, useState } from 'react';
 
 import type { useBanner } from '@/components/ui/banner';
+import { useServerAction } from '@/hooks/use-server-action';
 import { calendarRefusalMessage } from '@/lib/calendar/messages';
 import { extendPlanningSeriesHorizon } from '@/lib/planning/actions';
 import type { PlanningConflict } from '@/lib/planning/types';
@@ -26,7 +27,7 @@ export function usePlanningSeriesExtension({
   showBanner,
   onSuccess,
 }: PlanningSeriesExtensionOptions) {
-  const [extending, setExtending] = useState(false);
+  const { run: runExtend, isPending: extending } = useServerAction(extendPlanningSeriesHorizon);
   const [extendError, setExtendError] = useState<string | null>(null);
   const [extendConflicts, setExtendConflicts] = useState<PlanningConflict[]>([]);
   const [extendFingerprint, setExtendFingerprint] = useState<string | null>(null);
@@ -52,10 +53,9 @@ export function usePlanningSeriesExtension({
       focusFirstInvalidField({ [EXTEND_REASON_FIELD_ID]: REASON_MIN_8_MESSAGE });
       return;
     }
-    setExtending(true);
     setExtendError(null);
     try {
-      const result = await extendPlanningSeriesHorizon(
+      const result = await runExtend(
         seriesId,
         extendConflicts.length > 0
           ? {
@@ -101,8 +101,6 @@ export function usePlanningSeriesExtension({
       setExtendError(calendarRefusalMessage(result.error) ?? 'Die Serie konnte nicht verlängert werden.');
     } catch {
       setExtendError('Die Serie konnte nicht verlängert werden.');
-    } finally {
-      setExtending(false);
     }
   }
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { usePendingTask } from '@/hooks/use-server-action';
 import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { describeFailure } from '@/lib/action-messages';
@@ -33,7 +34,7 @@ export function useEditProjectForm({ project, open, jobs }: EditProjectFormInput
   const [plannedEndDate, setPlannedEndDate] = useState<Date | undefined>();
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
   const [originalJobIds, setOriginalJobIds] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const { run: runSubmit, isPending: isLoading } = usePendingTask();
   const [isLoadingJobs, setIsLoadingJobs] = useState(false);
   const [jobsLoadError, setJobsLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -180,7 +181,7 @@ export function useEditProjectForm({ project, open, jobs }: EditProjectFormInput
     jobSearch,
     availableJobs,
     isLoading,
-    setIsLoading,
+    runSubmit,
     isLoadingJobs,
     jobsLoadError,
     retryJobs: () => loadProjectJobs(project.id),

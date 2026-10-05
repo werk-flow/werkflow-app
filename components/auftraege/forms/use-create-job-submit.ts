@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
+import { usePendingTask } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { createJob } from '@/lib/jobs/actions';
 import type { AssignmentApproval, AssignmentEvaluation } from '@/lib/qualifications/types';
@@ -33,7 +34,7 @@ export function useCreateJobSubmit({
 }: CreateJobSubmitOptions) {
   const { jobNumber, title, description, selectedEmployees } = values;
   const [qualificationWarning, setQualificationWarning] = useState<AssignmentEvaluation | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const { run: runSubmit, isPending: isLoading } = usePendingTask();
   const [contentError, setContentError] = useState<string | null>(null);
   const [jobNumberError, setJobNumberError] = useState<string | null>(null);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
@@ -67,41 +68,39 @@ export function useCreateJobSubmit({
       return;
     }
 
-    setIsLoading(true);
+    await runSubmit(async () => {
+      try {
+        const result = await createJob(input);
 
-    try {
-      const result = await createJob(input);
-
-      if (!result.success) {
-        if (
-          (result.error === 'qualification_warning' || result.error === 'stale_evaluation') &&
-          'evaluation' in result
-        ) {
-          setQualificationWarning(result.evaluation);
+        if (!result.success) {
+          if (
+            (result.error === 'qualification_warning' || result.error === 'stale_evaluation') &&
+            'evaluation' in result
+          ) {
+            setQualificationWarning(result.evaluation);
+            return;
+          }
+          const message = describeFailure(result.error, CREATE_JOB_ERROR_MESSAGES, 'Unbekannter Fehler');
+          if (result.error === 'job_number_required' || result.error === 'job_number_taken') {
+            setJobNumberError(message);
+          } else if (result.error === 'title_or_description_required') {
+            setContentError(message);
+          } else {
+            setError(message);
+          }
           return;
         }
-        const message = describeFailure(result.error, CREATE_JOB_ERROR_MESSAGES, 'Unbekannter Fehler');
-        if (result.error === 'job_number_required' || result.error === 'job_number_taken') {
-          setJobNumberError(message);
-        } else if (result.error === 'title_or_description_required') {
-          setContentError(message);
-        } else {
-          setError(message);
-        }
-        return;
-      }
 
-      setQualificationWarning(null);
-      showBanner({ variant: 'success', message: 'Auftrag erfolgreich erstellt!' });
-      await onSuccess?.({
-        job: result.job,
-        assignedUserIds: selectedEmployees,
-      });
-    } catch {
-      setError('Ein unerwarteter Fehler ist aufgetreten.');
-    } finally {
-      setIsLoading(false);
-    }
+        setQualificationWarning(null);
+        showBanner({ variant: 'success', message: 'Auftrag erfolgreich erstellt!' });
+        await onSuccess?.({
+          job: result.job,
+          assignedUserIds: selectedEmployees,
+        });
+      } catch {
+        setError('Ein unerwarteter Fehler ist aufgetreten.');
+      }
+    });
   };
 
   const handleSubmit = async (event: React.FormEvent) => {

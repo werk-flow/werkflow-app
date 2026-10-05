@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { useServerAction } from '@/hooks/use-server-action';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DatePicker } from '@/components/ui/date-picker';
 import { useBanner } from '@/components/ui/banner';
@@ -39,7 +40,7 @@ export function ManagerEndDialog({
   const [endDate, setEndDate] = useState<string>(
     report.endDate ?? (todayIso >= report.startDate ? todayIso : report.startDate),
   );
-  const [isSaving, setIsSaving] = useState(false);
+  const { run: runSave, isPending: isSaving } = useServerAction(endSicknessReport);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -52,9 +53,8 @@ export function ManagerEndDialog({
       return;
     }
 
-    setIsSaving(true);
     try {
-      const result = await endSicknessReport({ reportId: report.id, endDate });
+      const result = await runSave({ reportId: report.id, endDate });
       if (result.success) {
         showBanner({
           variant: 'success',
@@ -73,8 +73,6 @@ export function ManagerEndDialog({
     } catch (submitError) {
       logError('Error ending sickness report:', submitError);
       setError('Das Enddatum konnte nicht gespeichert werden.');
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -122,16 +120,15 @@ export function EvidenceDialog({
   const { showBanner } = useBanner();
   const [evidenceRequired, setEvidenceRequired] = useState(report.evidenceRequired);
   const [received, setReceived] = useState(report.evidenceStatus === 'received');
-  const [isSaving, setIsSaving] = useState(false);
+  const { run: runSave, isPending: isSaving } = useServerAction(setSicknessEvidence);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSaving) return;
     setError(null);
-    setIsSaving(true);
     try {
-      const result = await setSicknessEvidence({
+      const result = await runSave({
         reportId: report.id,
         evidenceRequired,
         evidenceStatus: evidenceRequired ? (received ? 'received' : 'pending') : 'not_required',
@@ -154,8 +151,6 @@ export function EvidenceDialog({
     } catch (submitError) {
       logError('Error updating sickness evidence:', submitError);
       setError('Der Nachweis-Status konnte nicht gespeichert werden.');
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -223,7 +218,7 @@ export function ManagerCancelDialog({
 }) {
   const { showBanner } = useBanner();
   const [reason, setReason] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
+  const { run: runSave, isPending: isSaving } = useServerAction(cancelSicknessReport);
   const [error, setError] = useState<string | null>(null);
   const [reasonError, setReasonError] = useState<string | null>(null);
 
@@ -236,9 +231,8 @@ export function ManagerCancelDialog({
       document.getElementById('cancel-sickness-reason')?.focus();
       return;
     }
-    setIsSaving(true);
     try {
-      const result = await cancelSicknessReport({
+      const result = await runSave({
         reportId: report.id,
         reason: reason.trim(),
       });
@@ -260,8 +254,6 @@ export function ManagerCancelDialog({
     } catch (submitError) {
       logError('Error cancelling sickness report:', submitError);
       setError('Die Meldung konnte nicht storniert werden.');
-    } finally {
-      setIsSaving(false);
     }
   };
 

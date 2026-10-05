@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { usePlanningOptions } from '@/hooks/use-planning-options';
+import { usePendingTask } from '@/hooks/use-server-action';
 
 import { Loader2 } from 'lucide-react';
 
@@ -69,7 +70,7 @@ export function PlanningOccurrenceEditDialog({
   const [conflicts, setConflicts] = useState<PlanningConflict[]>([]);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
   const [reason, setReason] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const { run: runSubmit, isPending: submitting } = usePendingTask();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [statusIntent, setStatusIntent] = useState<PlanningStatusIntent | null>(null);
   const [statusReasonError, setStatusReasonError] = useState<string | undefined>();
@@ -78,6 +79,7 @@ export function PlanningOccurrenceEditDialog({
 
   useEffect(() => {
     if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the form is refilled from the occurrence each time the dialog opens
     setDate(job.plannedDate ?? '');
     setTime(job.plannedTime ?? '09:00');
     setDurationHours(formatMinutesAsHoursInput(job.estimatedDurationMinutes ?? 60));
@@ -101,9 +103,10 @@ export function PlanningOccurrenceEditDialog({
   ]);
 
   const [fieldErrors, setFieldErrors] = useState<PlanningOccurrenceFieldErrors>({});
+  const { occurrenceId } = job;
 
   async function handleSubmit() {
-    if (!job.occurrenceId) return;
+    if (!occurrenceId) return;
     setFieldErrors({});
     const editCheck = checkPlanningOccurrenceEdit({
       date,
@@ -120,64 +123,64 @@ export function PlanningOccurrenceEditDialog({
       document.getElementById(editCheck.inputs[0].elementId)?.focus();
       return;
     }
-    setSubmitting(true);
     setSubmitError(null);
     const { input } = editCheck;
-    try {
-      const result =
-        scope === 'one'
-          ? await updatePlanningCalendarEntry(job.occurrenceId, input)
-          : await reschedulePlanningSeries(job.occurrenceId, scope, input);
-      if (result.success) {
-        onOpenChange(false);
-        showBanner({ variant: 'success', message: planningEditSuccessMessage(scope) });
-        onSuccess?.();
-        return;
-      }
-      if (
-        (result.error === 'planning_warning' || result.error === 'stale_assessment') &&
-        result.conflicts !== undefined &&
-        result.fingerprint !== undefined
-      ) {
-        setConflicts(result.conflicts);
-        setFingerprint(result.fingerprint);
-        if (result.error === 'stale_assessment') {
-          showBanner({
-            variant: 'info',
-            message: 'Die Planungslage hat sich geändert. Bitte erneut prüfen.',
-          });
+    await runSubmit(async () => {
+      try {
+        const result =
+          scope === 'one'
+            ? await updatePlanningCalendarEntry(occurrenceId, input)
+            : await reschedulePlanningSeries(occurrenceId, scope, input);
+        if (result.success) {
+          onOpenChange(false);
+          showBanner({ variant: 'success', message: planningEditSuccessMessage(scope) });
+          onSuccess?.();
+          return;
         }
-        return;
+        if (
+          (result.error === 'planning_warning' || result.error === 'stale_assessment') &&
+          result.conflicts !== undefined &&
+          result.fingerprint !== undefined
+        ) {
+          setConflicts(result.conflicts);
+          setFingerprint(result.fingerprint);
+          if (result.error === 'stale_assessment') {
+            showBanner({
+              variant: 'info',
+              message: 'Die Planungslage hat sich geändert. Bitte erneut prüfen.',
+            });
+          }
+          return;
+        }
+        setSubmitError(
+          calendarRefusalMessage(result.error) ?? 'Die Änderung konnte nicht gespeichert werden.',
+        );
+      } catch {
+        setSubmitError('Die Änderung konnte nicht gespeichert werden.');
       }
-      setSubmitError(calendarRefusalMessage(result.error) ?? 'Die Änderung konnte nicht gespeichert werden.');
-    } catch {
-      setSubmitError('Die Änderung konnte nicht gespeichert werden.');
-    } finally {
-      setSubmitting(false);
-    }
+    });
   }
 
   async function handleStatusChange() {
-    if (!job.occurrenceId || !statusIntent) return;
+    if (!occurrenceId || !statusIntent) return;
     const reasonError = reason.trim().length < 8 ? REASON_MIN_8_MESSAGE : undefined;
     setStatusReasonError(reasonError);
     if (focusFirstInvalidField({ 'planning-status-reason': reasonError })) return;
-    setSubmitting(true);
     setSubmitError(null);
-    try {
-      const result = await setPlanningOccurrenceStatus(job.occurrenceId, statusIntent, reason);
-      if (!result.success) {
+    await runSubmit(async () => {
+      try {
+        const result = await setPlanningOccurrenceStatus(occurrenceId, statusIntent, reason);
+        if (!result.success) {
+          setSubmitError('Der Terminstatus konnte nicht geändert werden.');
+          return;
+        }
+        onOpenChange(false);
+        showBanner({ variant: 'success', message: planningStatusChangeMessage(statusIntent) });
+        onSuccess?.();
+      } catch {
         setSubmitError('Der Terminstatus konnte nicht geändert werden.');
-        return;
       }
-      onOpenChange(false);
-      showBanner({ variant: 'success', message: planningStatusChangeMessage(statusIntent) });
-      onSuccess?.();
-    } catch {
-      setSubmitError('Der Terminstatus konnte nicht geändert werden.');
-    } finally {
-      setSubmitting(false);
-    }
+    });
   }
 
   return (

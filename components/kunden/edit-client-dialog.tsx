@@ -19,6 +19,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ErrorText } from '@/components/ui/error-text';
 import { useBanner } from '@/components/ui/banner';
+import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { updateClient, type UpdateClientInput } from '@/lib/clients/actions';
 import { CLIENT_TYPE_LABELS, type Client, type ClientType } from '@/lib/jobs/types';
@@ -51,7 +52,7 @@ export function EditClientDialog({ client, open, onOpenChange, onSaved }: EditCl
   const [phone, setPhone] = useState(client.phone ?? '');
   const [address, setAddress] = useState(client.address ?? '');
   const [notes, setNotes] = useState(client.notes ?? '');
-  const [isLoading, setIsLoading] = useState(false);
+  const { run: runUpdate, isPending: isLoading } = useServerAction(updateClient);
   const [error, setError] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
@@ -89,8 +90,6 @@ export function EditClientDialog({ client, open, onOpenChange, onSaved }: EditCl
       return;
     }
 
-    setIsLoading(true);
-
     try {
       const input: UpdateClientInput = {
         name: name.trim(),
@@ -101,7 +100,7 @@ export function EditClientDialog({ client, open, onOpenChange, onSaved }: EditCl
         ...(notes.trim() ? { notes: notes.trim() } : {}),
       };
 
-      const result = await updateClient(client.id, input);
+      const result = await runUpdate(client.id, input);
 
       if (result.success) {
         onOpenChange(false);
@@ -113,8 +112,6 @@ export function EditClientDialog({ client, open, onOpenChange, onSaved }: EditCl
       }
     } catch {
       setError('Ein unerwarteter Fehler ist aufgetreten.');
-    } finally {
-      setIsLoading(false);
     }
   };
 

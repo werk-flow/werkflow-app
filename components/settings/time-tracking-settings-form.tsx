@@ -2,9 +2,9 @@
 
 import { describeFailure } from '@/lib/action-messages';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { z } from '@/lib/zod';
 
 import { useBanner } from '@/components/ui/banner';
@@ -15,6 +15,7 @@ import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useServerAction } from '@/hooks/use-server-action';
 import { updateTimeTrackingSettings } from '@/lib/time-tracking/settings-actions';
 import {
   BREAK_MODE_OPTIONS,
@@ -41,7 +42,7 @@ type TimeTrackingSettingsFormOutput = z.output<typeof timeTrackingSettingsSchema
 export function TimeTrackingSettingsForm({ initialSettings, role }: TimeTrackingSettingsFormProps) {
   const router = useRouter();
   const { showBanner } = useBanner();
-  const [isSaving, setIsSaving] = useState(false);
+  const { run: runSave, isPending: isSaving } = useServerAction(updateTimeTrackingSettings);
   const canEdit = role === 'admin';
   const {
     breakMode: initialBreakMode,
@@ -54,7 +55,7 @@ export function TimeTrackingSettingsForm({ initialSettings, role }: TimeTracking
     defaultValues: initialSettings,
   });
 
-  const selectedBreakMode = form.watch('breakMode');
+  const selectedBreakMode = useWatch({ control: form.control, name: 'breakMode' });
   const { reset } = form;
 
   useEffect(() => {
@@ -70,10 +71,8 @@ export function TimeTrackingSettingsForm({ initialSettings, role }: TimeTracking
       return;
     }
 
-    setIsSaving(true);
-
     try {
-      const result = await updateTimeTrackingSettings(values);
+      const result = await runSave(values);
 
       if (!result.success) {
         showBanner({
@@ -95,8 +94,6 @@ export function TimeTrackingSettingsForm({ initialSettings, role }: TimeTracking
       });
     } catch {
       showBanner({ message: ERROR_MESSAGES.update_failed, variant: 'error' });
-    } finally {
-      setIsSaving(false);
     }
   });
 

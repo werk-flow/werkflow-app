@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Loader2, MailPlus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { useServerAction } from '@/hooks/use-server-action';
 import {
   Dialog,
   DialogContent,
@@ -50,7 +51,7 @@ export function PersonnelInviteDialog({ recordId, personName }: PersonnelInviteD
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<InviteRole>('employee');
-  const [isSending, setIsSending] = useState(false);
+  const { run: runSend, isPending: isSending } = useServerAction(sendPersonnelInvite);
   const [error, setError] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -77,15 +78,12 @@ export function PersonnelInviteDialog({ recordId, personName }: PersonnelInviteD
       return;
     }
 
-    setIsSending(true);
     let result: Awaited<ReturnType<typeof sendPersonnelInvite>>;
     try {
-      result = await sendPersonnelInvite(recordId, email, role);
+      result = await runSend(recordId, email, role);
     } catch {
       setError(PERSONNEL_INVITE_FALLBACK);
       return;
-    } finally {
-      setIsSending(false);
     }
 
     if (result.success) {

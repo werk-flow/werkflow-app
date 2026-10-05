@@ -2,7 +2,7 @@
 
 import { describeFailure } from '@/lib/action-messages';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 
@@ -14,6 +14,7 @@ import { Field } from '@/components/ui/field';
 import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { InlinePending } from '@/components/ui/inline-pending';
+import { useServerAction } from '@/hooks/use-server-action';
 import { updateOrganizationSettings } from '@/lib/org/settings-actions';
 import {
   ORGANIZATION_CODE_LENGTH,
@@ -49,7 +50,7 @@ type OrganizationSettingsFormProps = {
 export function OrganizationSettingsForm({ initialOrganization }: OrganizationSettingsFormProps) {
   const router = useRouter();
   const { showBanner } = useBanner();
-  const [isSaving, setIsSaving] = useState(false);
+  const { run: runSave, isPending: isSaving } = useServerAction(updateOrganizationSettings);
   const canEdit = initialOrganization.role === 'admin';
 
   const form = useForm<OrganizationSettingsValues>({
@@ -72,10 +73,8 @@ export function OrganizationSettingsForm({ initialOrganization }: OrganizationSe
       return;
     }
 
-    setIsSaving(true);
-
     try {
-      const result = await updateOrganizationSettings(values);
+      const result = await runSave(values);
 
       if (!result.success) {
         if (result.error === 'name_taken') {
@@ -128,8 +127,6 @@ export function OrganizationSettingsForm({ initialOrganization }: OrganizationSe
       });
     } catch {
       showBanner({ message: ERROR_MESSAGES.update_failed, variant: 'error' });
-    } finally {
-      setIsSaving(false);
     }
   });
 

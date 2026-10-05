@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
+import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import {
@@ -239,7 +240,7 @@ export function useTimeCorrectionDialogForm({
   });
   const { operationIdRef, ...sessionState } = session;
   const { setOpen, subjectEmployeeRecordId, targetEmployeeRecordId, jobId, setSubmitError } = sessionState;
-  const [submitting, setSubmitting] = useState(false);
+  const { run: runSubmit, isPending: submitting } = useServerAction(submitTimeCorrection);
   const [kind, setKind] = useState<TimeCorrectionKind>(entry ? 'edit' : 'missed_clock');
   const initialStart = toLocalDateTime(entry?.timestamp ?? new Date().toISOString());
   const [startAt, setStartAt] = useState(initialStart);
@@ -290,10 +291,9 @@ export function useTimeCorrectionDialogForm({
       endAt,
     });
 
-    setSubmitting(true);
     setSubmitError(null);
     try {
-      const result = await submitTimeCorrection({
+      const result = await runSubmit({
         organizationId,
         subjectEmployeeRecordId,
         kind,
@@ -324,8 +324,6 @@ export function useTimeCorrectionDialogForm({
       onSubmitted?.();
     } catch {
       setSubmitError('Die Korrektur konnte nicht gespeichert werden.');
-    } finally {
-      setSubmitting(false);
     }
   };
 

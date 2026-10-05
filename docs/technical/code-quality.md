@@ -40,6 +40,7 @@ A user action that changes more than one row, or one row plus its history, audit
 2. Call it through `rpcArgs` from `lib/supabase/rpc-args.ts`, and map its codes to the action's existing failure codes.
 3. Keep every side effect of the old sequence: history and audit rows, writes to published tables for live signals, and the cache tags the action revalidates.
 4. Prove it in SQL as `supabase/tests/closed_period_writes.sql` does: a refused later step changes nothing, the success path works, a foreign organization is refused, and the grants hold. Register the file in `sqlDefinitions` and run its group.
+5. A function that writes a job's visits or its team keeps the [job team and visit plan](data-model.md#job-team-and-visit-plan) rules: it writes the plan onto the job through `app_private.project_plan_onto_job` and never sets `app.planning_projection_write` itself. Add the new path to `supabase/tests/job_plan_bridge.sql` and run `sql:job-plan-bridge`.
 
 Wrong turn: consecutive writes with a compensating delete on failure. The delete can be refused too, by an append-only history or an `on delete restrict` reference, and the half-applied state stays.
 
@@ -66,6 +67,7 @@ A `[judgment]` item is a Tier 3 default: diverge only with the note that `AGENTS
 - A Server Action or reader returns `ActionResult` or `ActionFailure` from `lib/action-result.ts` with a stable error code. A richer failure intersects `ActionFailure<Code>` with its extra fields instead of declaring its own `success: false` type. [code `lib/action-result.ts`, test `lib/conventions/action-failure-shape.test.ts`]
 - A surface turns a failure code into German through `describeFailure` from `lib/action-messages.ts`. A code in `SHARED_FAILURE_CODES` has its one sentence there; a surface lists only the codes its area owns. A message map drops a code that no action, client check or database function names any more. [test `lib/action-messages.test.ts`, test `lib/conventions/failure-messages.test.ts`]
 - Rows that one action changes together change in one database function call, all or nothing, as [write related rows](#write-related-rows) describes. [test `lib/conventions/related-writes.test.ts`]
+- A write between a job's team and its visit plan keeps the [job team and visit plan](data-model.md#job-team-and-visit-plan) rules, and only `app_private.project_plan_onto_job` writes the plan onto the job. [group `sql:job-plan-bridge`]
 - An internal navigation goes through the router. A deliberate full document load, after a session, account or organization change or to a non-page target, goes through `loadDocument`. [code `lib/navigation/document-load.ts`, lint `@next/next/no-location-assign-relative-destination`]
 - A failure reaches the user or the log. A `.catch` that ends in nothing handles its null on the next lines or logs. [lint `swallowedRejectionSelectors`]
 - A failed Supabase read becomes a failure that the page shows with a retry, never `[]`, `{}` or a missing row. A deliberate best-effort read has a reviewed reason. [test `lib/conventions/read-error-visibility.test.ts`]

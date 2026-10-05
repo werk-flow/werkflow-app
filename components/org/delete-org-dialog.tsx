@@ -18,6 +18,7 @@ import {
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import { loadDocument } from '@/lib/navigation/document-load';
 import { deleteOrganization } from '@/lib/org/delete-action';
@@ -37,15 +38,14 @@ interface DeleteOrgDialogProps {
 export function DeleteOrgDialog({ orgName, disabled = false }: DeleteOrgDialogProps) {
   const [open, setOpen] = useState(false);
   const [confirmationName, setConfirmationName] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const { run: runDelete, isPending: isLoading } = useServerAction(deleteOrganization);
   const [error, setError] = useState<string | null>(null);
 
   const handleDelete = async () => {
     setError(null);
-    setIsLoading(true);
 
     try {
-      const result = await deleteOrganization(confirmationName);
+      const result = await runDelete(confirmationName);
 
       if (result.success) {
         setOpen(false);
@@ -63,8 +63,6 @@ export function DeleteOrgDialog({ orgName, disabled = false }: DeleteOrgDialogPr
       }
     } catch {
       setError(SHARED_FAILURE_MESSAGES.unexpected_error);
-    } finally {
-      setIsLoading(false);
     }
   };
 

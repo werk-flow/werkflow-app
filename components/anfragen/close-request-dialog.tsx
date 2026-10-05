@@ -17,6 +17,7 @@ import { ErrorText } from '@/components/ui/error-text';
 import { useBanner } from '@/components/ui/banner';
 import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
+import { useServerAction } from '@/hooks/use-server-action';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { describeFailure } from '@/lib/action-messages';
 import { closeClientRequest } from '@/lib/requests/actions';
@@ -49,7 +50,7 @@ export function CloseRequestDialog({ requestId, open, onOpenChange, onSaved }: C
   const { showBanner } = useBanner();
   const [reason, setReason] = useState<RequestCloseReason>('kein_bedarf');
   const [note, setNote] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const { run: runClose, isPending: isLoading } = useServerAction(closeClientRequest);
   const [error, setError] = useState<string | null>(null);
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -64,9 +65,8 @@ export function CloseRequestDialog({ requestId, open, onOpenChange, onSaved }: C
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
-    setIsLoading(true);
     try {
-      const result = await closeClientRequest(requestId, {
+      const result = await runClose(requestId, {
         reason,
         ...(note.trim() ? { note: note.trim() } : {}),
       });
@@ -80,8 +80,6 @@ export function CloseRequestDialog({ requestId, open, onOpenChange, onSaved }: C
       router.refresh();
     } catch {
       setError('Ein unerwarteter Fehler ist aufgetreten.');
-    } finally {
-      setIsLoading(false);
     }
   };
 

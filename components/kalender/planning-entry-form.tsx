@@ -28,7 +28,8 @@ import {
   PlanningEntrySubmitFooter,
 } from './planning-entry-fields';
 import { PlanningEntryRecurrenceFields, PlanningEntryScheduleFields } from './planning-entry-schedule-fields';
-import { useReportedPendingState } from '@/hooks/use-report-pending';
+import { useReportPending } from '@/hooks/use-report-pending';
+import { usePendingTask } from '@/hooks/use-server-action';
 import { useRequestIdempotencyKey } from './use-request-idempotency-key';
 
 interface PlanningEntryFormProps {
@@ -51,7 +52,8 @@ export function PlanningEntryForm({
   const initialDate = defaultDate ? toLocalDateString(defaultDate) : getBusinessTodayIso();
   const { showBanner } = useBanner();
   const idempotencyKeyFor = useRequestIdempotencyKey();
-  const [submitting, setSubmitting] = useReportedPendingState(onPendingChange);
+  const { run: runSubmit, isPending: submitting } = usePendingTask();
+  useReportPending(submitting, onPendingChange);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<PlanningEntryFieldErrors>({});
   const [entryKind, setEntryKind] = useState<PlanningEntryKind>('job_visit');
@@ -125,7 +127,6 @@ export function PlanningEntryForm({
       setSubmitError(draftCheck.message);
       return;
     }
-    setSubmitting(true);
     const { request } = draftCheck;
     const payload = {
       ...request,
@@ -133,34 +134,34 @@ export function PlanningEntryForm({
       overrideReason: conflicts.length > 0 ? overrideReason || null : null,
       assessmentFingerprint: conflicts.length > 0 ? fingerprint : null,
     };
-    try {
-      const result = await createPlanningEntry(payload);
-      if (result.success) {
-        showBanner({ variant: 'success', message: plannedEntriesMessage(result.occurrenceIds.length) });
-        await onSuccess();
-        return;
-      }
-      if (
-        (result.error === 'planning_warning' || result.error === 'stale_assessment') &&
-        result.conflicts &&
-        result.fingerprint
-      ) {
-        setConflicts(result.conflicts);
-        setFingerprint(result.fingerprint);
-        if (result.error === 'stale_assessment') {
-          showBanner({
-            variant: 'info',
-            message: 'Die Planungslage hat sich geändert. Bitte Hinweise erneut prüfen.',
-          });
+    await runSubmit(async () => {
+      try {
+        const result = await createPlanningEntry(payload);
+        if (result.success) {
+          showBanner({ variant: 'success', message: plannedEntriesMessage(result.occurrenceIds.length) });
+          await onSuccess();
+          return;
         }
-        return;
+        if (
+          (result.error === 'planning_warning' || result.error === 'stale_assessment') &&
+          result.conflicts &&
+          result.fingerprint
+        ) {
+          setConflicts(result.conflicts);
+          setFingerprint(result.fingerprint);
+          if (result.error === 'stale_assessment') {
+            showBanner({
+              variant: 'info',
+              message: 'Die Planungslage hat sich geändert. Bitte Hinweise erneut prüfen.',
+            });
+          }
+          return;
+        }
+        setSubmitError(calendarRefusalMessage(result.error) ?? 'Der Termin konnte nicht geplant werden.');
+      } catch {
+        setSubmitError('Der Termin konnte nicht geplant werden.');
       }
-      setSubmitError(calendarRefusalMessage(result.error) ?? 'Der Termin konnte nicht geplant werden.');
-    } catch {
-      setSubmitError('Der Termin konnte nicht geplant werden.');
-    } finally {
-      setSubmitting(false);
-    }
+    });
   }
 
   return (

@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
 import { z } from '@/lib/zod';
@@ -11,6 +11,7 @@ import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { logError } from '@/lib/logging';
 import { createSupabaseImplicitClient } from '@/lib/supabase/implicit-client';
 
@@ -35,7 +36,7 @@ export function ForgotPasswordForm({
   // Use implicit client for password reset to enable cross-browser links
   // The flow type is determined by which client sends the email request
   const supabase = useMemo(() => createSupabaseImplicitClient(), []);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { run: runSubmit, isPending: isSubmitting } = usePendingTask();
 
   const form = useForm<ForgotPasswordValues>({
     resolver: zodResolver(forgotPasswordSchema),
@@ -45,9 +46,7 @@ export function ForgotPasswordForm({
   });
 
   const handleSubmit = form.handleSubmit(async (values) => {
-    setIsSubmitting(true);
-
-    try {
+    await runSubmit(async () => {
       // Note: Configure the Supabase email template in the Supabase dashboard
       // under Authentication > Email Templates > Reset Password to ensure
       // it's user-friendly and clearly explains that the user must click
@@ -88,10 +87,9 @@ export function ForgotPasswordForm({
 
       // Always redirect with neutral message, never reveal if email exists
       router.push(loginRedirectHref);
-    } finally {
-      // Reset submitting state in case redirect fails or is delayed
-      setIsSubmitting(false);
-    }
+      // The submit stays pending until the login page replaces this one.
+      await untilPageLeaves();
+    });
   });
 
   return (

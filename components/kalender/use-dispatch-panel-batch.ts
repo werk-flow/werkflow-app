@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 
+import { usePendingTask } from '@/hooks/use-server-action';
 import { REASON_MIN_8_MESSAGE } from '@/lib/ui/field-validation';
 import type { useBanner } from '@/components/ui/banner';
 import { batchReschedule, previewBatchReschedule, type BatchPreviewItem } from '@/lib/dispatch/actions';
@@ -69,7 +70,7 @@ export function useDispatchPanelBatch({
   const [newTime, setNewTime] = useState('');
   const [batchReason, setBatchReason] = useState('');
   const [batchPreview, setBatchPreview] = useState<DispatchPanelBatchPreview | null>(null);
-  const [isBatchWorking, setIsBatchWorking] = useState(false);
+  const { run: runBatchWork, isPending: isBatchWorking } = usePendingTask();
   const [batchError, setBatchError] = useState<string | null>(null);
 
   const eligibleForBatch = useMemo(
@@ -96,30 +97,29 @@ export function useDispatchPanelBatch({
   const runBatchPreview = useCallback(async () => {
     const dayShift = Number(dayShiftText);
     setBatchError(null);
-    setIsBatchWorking(true);
-    try {
-      const result = await previewBatchReschedule({
-        occurrenceIds: [...selectedIds],
-        dayShift,
-        newTime: newTime || null,
-      });
-      if (!result.success) {
-        setBatchError(dispatchErrorMessage(result.error));
-        return;
+    await runBatchWork(async () => {
+      try {
+        const result = await previewBatchReschedule({
+          occurrenceIds: [...selectedIds],
+          dayShift,
+          newTime: newTime || null,
+        });
+        if (!result.success) {
+          setBatchError(dispatchErrorMessage(result.error));
+          return;
+        }
+        setBatchPreview({
+          itemCount: result.itemCount,
+          items: result.items,
+          commitmentMismatchTitles: result.commitmentMismatchTitles,
+          invalidatedAcknowledgementCount: result.invalidatedAcknowledgementCount,
+          conflictCount: result.conflicts.length,
+        });
+      } catch {
+        setBatchError(dispatchErrorMessage('unexpected_error'));
       }
-      setBatchPreview({
-        itemCount: result.itemCount,
-        items: result.items,
-        commitmentMismatchTitles: result.commitmentMismatchTitles,
-        invalidatedAcknowledgementCount: result.invalidatedAcknowledgementCount,
-        conflictCount: result.conflicts.length,
-      });
-    } catch {
-      setBatchError(dispatchErrorMessage('unexpected_error'));
-    } finally {
-      setIsBatchWorking(false);
-    }
-  }, [dayShiftText, newTime, selectedIds]);
+    });
+  }, [dayShiftText, newTime, selectedIds, runBatchWork]);
 
   const commitBatch = useCallback(async (): Promise<boolean> => {
     const baseInput = {
@@ -158,16 +158,15 @@ export function useDispatchPanelBatch({
   }, [dayShiftText, newTime, selectedIds, batchReason, requestApproval]);
 
   const runBatchCommit = useCallback(async () => {
-    setIsBatchWorking(true);
     setBatchError(null);
     let committed = false;
-    try {
-      committed = await commitBatch();
-    } catch {
-      setBatchError(dispatchErrorMessage('unexpected_error'));
-    } finally {
-      setIsBatchWorking(false);
-    }
+    await runBatchWork(async () => {
+      try {
+        committed = await commitBatch();
+      } catch {
+        setBatchError(dispatchErrorMessage('unexpected_error'));
+      }
+    });
     if (!committed) return;
     const movedCount = selectedIds.size;
     setBatchPreview(null);
@@ -179,7 +178,7 @@ export function useDispatchPanelBatch({
       message: movedCount === 1 ? 'Der Besuch wurde verschoben.' : `${movedCount} Besuche wurden verschoben.`,
     });
     await afterMutation();
-  }, [commitBatch, selectedIds, afterMutation, showBanner]);
+  }, [commitBatch, selectedIds, afterMutation, showBanner, runBatchWork]);
 
   const toggleBatchMode = () => {
     setBatchNow(Date.now());

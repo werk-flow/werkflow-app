@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Field } from '@/components/ui/field';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { SearchableSelect } from '@/components/ui/searchable-select';
+import { useServerAction } from '@/hooks/use-server-action';
 import { setHolidayRegion } from '@/lib/org/calendar-actions';
 import { HOLIDAY_REGIONS, HOLIDAY_REGION_LABELS, isHolidayRegion } from '@/lib/personnel/holidays';
 
@@ -35,16 +36,15 @@ export function HolidayRegionCard({
   const [selectedRegion, setSelectedRegion] = useState<string>(
     holidayRegion && isHolidayRegion(holidayRegion) ? holidayRegion : NO_REGION_VALUE,
   );
-  const [isSavingRegion, setIsSavingRegion] = useState(false);
+  const { run: runSaveRegion, isPending: isSavingRegion } = useServerAction(setHolidayRegion);
 
   const regionDirty =
     selectedRegion !== (holidayRegion && isHolidayRegion(holidayRegion) ? holidayRegion : NO_REGION_VALUE);
 
   const handleSaveRegion = async () => {
     if (!canEditRegion || isSavingRegion) return;
-    setIsSavingRegion(true);
     try {
-      const result = await setHolidayRegion(selectedRegion === NO_REGION_VALUE ? null : selectedRegion);
+      const result = await runSaveRegion(selectedRegion === NO_REGION_VALUE ? null : selectedRegion);
       if (!result.success) {
         showBanner({
           message: describeFailure(result.error, REGION_ERROR_MESSAGES, REGION_ERROR_MESSAGES.update_failed),
@@ -59,8 +59,6 @@ export function HolidayRegionCard({
       });
     } catch {
       showBanner({ message: REGION_ERROR_MESSAGES.update_failed, variant: 'error' });
-    } finally {
-      setIsSavingRegion(false);
     }
   };
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { Award } from 'lucide-react';
+import type { useBusyIds } from '@/hooks/use-busy-id';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { InlinePending } from '@/components/ui/inline-pending';
@@ -22,8 +23,8 @@ type QualificationManagementRecordListProps = {
   definitionById: Map<string, QualificationManagementCapability>;
   employeeById: Map<string, QualificationManagementEmployee>;
   form: QualificationManagementGrantFormState;
-  pendingAction: string | null;
-  setPendingAction: (action: string | null) => void;
+  anyBusy: boolean;
+  runAction: ReturnType<typeof useBusyIds>['run'];
   settleRecord: (recordId: string) => void;
 };
 
@@ -32,8 +33,8 @@ export function QualificationManagementRecordList({
   definitionById,
   employeeById,
   form,
-  pendingAction,
-  setPendingAction,
+  anyBusy,
+  runAction,
   settleRecord,
 }: QualificationManagementRecordListProps) {
   return (
@@ -56,8 +57,8 @@ export function QualificationManagementRecordList({
                 isOptimistic={isOptimistic}
                 recordList={recordList}
                 form={form}
-                pendingAction={pendingAction}
-                setPendingAction={setPendingAction}
+                anyBusy={anyBusy}
+                runAction={runAction}
                 settleRecord={settleRecord}
               />
             );
@@ -74,8 +75,8 @@ type QualificationManagementRecordActionsProps = {
   isOptimistic: boolean;
   recordList: QualificationManagementRecordListState;
   form: QualificationManagementGrantFormState;
-  pendingAction: string | null;
-  setPendingAction: (action: string | null) => void;
+  anyBusy: boolean;
+  runAction: ReturnType<typeof useBusyIds>['run'];
   settleRecord: (recordId: string) => void;
 };
 
@@ -128,8 +129,8 @@ function QualificationManagementRecordActions({
   isOptimistic,
   recordList,
   form,
-  pendingAction,
-  setPendingAction,
+  anyBusy,
+  runAction,
   settleRecord,
 }: QualificationManagementRecordActionsProps) {
   const { showBanner } = useBanner();
@@ -153,7 +154,7 @@ function QualificationManagementRecordActions({
       <Button
         variant="ghost"
         size="sm"
-        disabled={pendingAction !== null || isOptimistic}
+        disabled={anyBusy || isOptimistic}
         onClick={() => {
           setEmployeeRecordId(record.employeeRecordId);
           setCapabilityId(record.capabilityId);
@@ -176,45 +177,44 @@ function QualificationManagementRecordActions({
           <Button
             variant="ghost"
             size="sm"
-            disabled={pendingAction !== null || isOptimistic}
+            disabled={anyBusy || isOptimistic}
             onClick={async () => {
               const confirmationStatus =
                 record.confirmationStatus === 'confirmed' ? 'unconfirmed' : 'confirmed';
               recordList.update(record.id, { ...record, confirmationStatus });
-              setPendingAction(`confirm:${record.id}`);
-              try {
-                const result = await updateEmployeeCapability({
-                  recordId: record.id,
-                  validFrom: record.validFrom,
-                  validUntil: record.validUntil,
-                  issuer: record.issuer,
-                  renewalDueDate: record.renewalDueDate,
-                  confirmationStatus,
-                  evidenceState: record.evidenceState,
-                  operationalNote: record.operationalNote,
-                });
-                if (!result.success) {
+              await runAction(`confirm:${record.id}`, async () => {
+                try {
+                  const result = await updateEmployeeCapability({
+                    recordId: record.id,
+                    validFrom: record.validFrom,
+                    validUntil: record.validUntil,
+                    issuer: record.issuer,
+                    renewalDueDate: record.renewalDueDate,
+                    confirmationStatus,
+                    evidenceState: record.evidenceState,
+                    operationalNote: record.operationalNote,
+                  });
+                  if (!result.success) {
+                    recordList.rollback(record.id);
+                    showBanner({
+                      variant: 'error',
+                      message: 'Die Bestätigung konnte nicht geändert werden.',
+                    });
+                    return;
+                  }
+                  showBanner({
+                    variant: 'success',
+                    message: 'Die Bestätigung wurde geändert.',
+                  });
+                  settleRecord(record.id);
+                } catch {
                   recordList.rollback(record.id);
                   showBanner({
                     variant: 'error',
                     message: 'Die Bestätigung konnte nicht geändert werden.',
                   });
-                  return;
                 }
-                showBanner({
-                  variant: 'success',
-                  message: 'Die Bestätigung wurde geändert.',
-                });
-                settleRecord(record.id);
-              } catch {
-                recordList.rollback(record.id);
-                showBanner({
-                  variant: 'error',
-                  message: 'Die Bestätigung konnte nicht geändert werden.',
-                });
-              } finally {
-                setPendingAction(null);
-              }
+              });
             }}
           >
             {record.confirmationStatus === 'confirmed' ? 'Bestätigung aufheben' : 'Bestätigen'}
@@ -222,7 +222,7 @@ function QualificationManagementRecordActions({
           <Button
             variant="outline"
             size="sm"
-            disabled={pendingAction !== null || isOptimistic}
+            disabled={anyBusy || isOptimistic}
             onClick={() => {
               setEmployeeRecordId(record.employeeRecordId);
               setCapabilityId(record.capabilityId);

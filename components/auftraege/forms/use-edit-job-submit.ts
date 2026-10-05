@@ -38,7 +38,7 @@ export function useEditJobSubmit({ job, form, onOpenChange, onSuccess }: EditJob
     setError,
     setContentError,
     setShowAutoParkDialog,
-    setIsLoading,
+    runSubmit,
     setConfirmedDateRemovalForWarning,
     setQualificationWarning,
   } = form;
@@ -59,54 +59,52 @@ export function useEditJobSubmit({ job, form, onOpenChange, onSuccess }: EditJob
       return;
     }
 
-    setIsLoading(true);
+    await runSubmit(async () => {
+      try {
+        const input = buildEditJobInput(job, form, approval);
 
-    try {
-      const input = buildEditJobInput(job, form, approval);
+        const result = await updateJob(job.id, input);
 
-      const result = await updateJob(job.id, input);
-
-      if (!result.success && result.error !== 'no_changes') {
-        if (
-          (result.error === 'qualification_warning' || result.error === 'stale_evaluation') &&
-          'evaluation' in result
-        ) {
-          setConfirmedDateRemovalForWarning(confirmedDateRemoval);
-          setQualificationWarning(result.evaluation);
+        if (!result.success && result.error !== 'no_changes') {
+          if (
+            (result.error === 'qualification_warning' || result.error === 'stale_evaluation') &&
+            'evaluation' in result
+          ) {
+            setConfirmedDateRemovalForWarning(confirmedDateRemoval);
+            setQualificationWarning(result.evaluation);
+            return;
+          }
+          setQualificationWarning(null);
+          setConfirmedDateRemovalForWarning(false);
+          const message = describeFailure(
+            result.error,
+            ERROR_MESSAGES,
+            'Der Auftrag konnte nicht gespeichert werden.',
+          );
+          if (result.error === 'title_or_description_required') {
+            setContentError(message);
+          } else {
+            setError(message);
+          }
           return;
         }
+
         setQualificationWarning(null);
         setConfirmedDateRemovalForWarning(false);
-        const message = describeFailure(
-          result.error,
-          ERROR_MESSAGES,
-          'Der Auftrag konnte nicht gespeichert werden.',
-        );
-        if (result.error === 'title_or_description_required') {
-          setContentError(message);
+        onOpenChange(false);
+        showBanner({ variant: 'success', message: 'Auftrag gespeichert.' });
+        if (onSuccess) {
+          await onSuccess({
+            job: result.success ? result.job : job,
+            selectedEmployeeIds: selectedEmployees,
+          });
         } else {
-          setError(message);
+          router.refresh();
         }
-        return;
+      } catch {
+        setError('Ein unerwarteter Fehler ist aufgetreten.');
       }
-
-      setQualificationWarning(null);
-      setConfirmedDateRemovalForWarning(false);
-      onOpenChange(false);
-      showBanner({ variant: 'success', message: 'Auftrag gespeichert.' });
-      if (onSuccess) {
-        await onSuccess({
-          job: result.success ? result.job : job,
-          selectedEmployeeIds: selectedEmployees,
-        });
-      } else {
-        router.refresh();
-      }
-    } catch {
-      setError('Ein unerwarteter Fehler ist aufgetreten.');
-    } finally {
-      setIsLoading(false);
-    }
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

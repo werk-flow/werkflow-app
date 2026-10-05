@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
+import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { correctSicknessReport } from '@/lib/sickness/actions';
 import { SICKNESS_ERROR_MESSAGES, type SicknessAbsenceType, type SicknessReport } from '@/lib/sickness/types';
@@ -18,7 +19,7 @@ export function useSicknessReportCorrectionForm(report: SicknessReport, onClose:
   const [endDate, setEndDate] = useState<string>(report.endDate ?? report.startDate);
   const [halfDay, setHalfDay] = useState(report.dayPortion === 'half_day');
   const [reason, setReason] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
+  const { run: runSave, isPending: isSaving } = useServerAction(correctSicknessReport);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{
     start?: string | undefined;
@@ -51,9 +52,8 @@ export function useSicknessReportCorrectionForm(report: SicknessReport, onClose:
       return;
     }
 
-    setIsSaving(true);
     try {
-      const result = await correctSicknessReport({
+      const result = await runSave({
         reportId: report.id,
         absenceType,
         startDate,
@@ -79,8 +79,6 @@ export function useSicknessReportCorrectionForm(report: SicknessReport, onClose:
     } catch (submitError) {
       logError('Error correcting sickness report:', submitError);
       setError('Die Korrektur konnte nicht gespeichert werden.');
-    } finally {
-      setIsSaving(false);
     }
   };
 

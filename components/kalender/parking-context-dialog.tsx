@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 
 import { OptionsLoadError } from '@/components/auftraege/shared/options-load-error';
+import { usePendingTask } from '@/hooks/use-server-action';
 import { Button } from '@/components/ui/button';
 import { DatePicker } from '@/components/ui/date-picker';
 import {
@@ -109,7 +110,7 @@ export function ParkingContextDialog({
     responsible?: string;
     reviewDate?: string;
   }>({});
-  const [isSaving, setIsSaving] = useState(false);
+  const { run: runSave, isPending: isSaving } = usePendingTask();
 
   // A stored responsible person must remain selectable even when the option
   // list fails to load or no longer contains them.
@@ -138,49 +139,53 @@ export function ParkingContextDialog({
       return;
     }
     setFieldErrors({});
-    setIsSaving(true);
-    const releaseOperation = onSaveStart?.();
-    try {
-      const result = existingContext
-        ? await setJobParkingContext({
-            jobId,
-            reason,
-            note: note.trim() || null,
-            responsibleEmployeeRecordId: responsibleId,
-            nextReviewDate: reviewDate ? toLocalDateString(reviewDate) : '',
-          })
-        : await parkWorkTarget({
-            targetType: 'job',
-            targetId: jobId,
-            expectedExecutionVersion,
-            reason,
-            ...(note.trim() ? { details: note.trim() } : {}),
-            responsibleEmployeeRecordId: responsibleId,
-            nextReviewDate: reviewDate ? toLocalDateString(reviewDate) : '',
-          });
-      if (!result.success) {
+    await runSave(async () => {
+      const releaseOperation = onSaveStart?.();
+      try {
+        const result = existingContext
+          ? await setJobParkingContext({
+              jobId,
+              reason,
+              note: note.trim() || null,
+              responsibleEmployeeRecordId: responsibleId,
+              nextReviewDate: reviewDate ? toLocalDateString(reviewDate) : '',
+            })
+          : await parkWorkTarget({
+              targetType: 'job',
+              targetId: jobId,
+              expectedExecutionVersion,
+              reason,
+              ...(note.trim() ? { details: note.trim() } : {}),
+              responsibleEmployeeRecordId: responsibleId,
+              nextReviewDate: reviewDate ? toLocalDateString(reviewDate) : '',
+            });
+        if (!result.success) {
+          onSaveFailed?.();
+          // Parking codes first, then the shared sentences; a work-lifecycle code
+          // from parkWorkTarget takes the calendar's sentence.
+          setError(
+            describeFailure(
+              result.error,
+              PARKING_ERROR_MESSAGES,
+              calendarRefusalMessage(result.error) ?? SHARED_FAILURE_MESSAGES.unexpected_error,
+            ),
+          );
+          return;
+        }
+        onSaved();
+      } catch {
         onSaveFailed?.();
-        // Parking codes first, then the shared sentences; a work-lifecycle code
-        // from parkWorkTarget takes the calendar's sentence.
         setError(
           describeFailure(
-            result.error,
+            'unexpected_error',
             PARKING_ERROR_MESSAGES,
-            calendarRefusalMessage(result.error) ?? SHARED_FAILURE_MESSAGES.unexpected_error,
+            SHARED_FAILURE_MESSAGES.unexpected_error,
           ),
         );
-        return;
+      } finally {
+        releaseOperation?.();
       }
-      onSaved();
-    } catch {
-      onSaveFailed?.();
-      setError(
-        describeFailure('unexpected_error', PARKING_ERROR_MESSAGES, SHARED_FAILURE_MESSAGES.unexpected_error),
-      );
-    } finally {
-      releaseOperation?.();
-      setIsSaving(false);
-    }
+    });
   };
 
   return (

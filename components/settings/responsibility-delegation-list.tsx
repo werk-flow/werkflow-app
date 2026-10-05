@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import {
@@ -12,6 +11,7 @@ import {
 import { useBanner } from '@/components/ui/banner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useBusyIds } from '@/hooks/use-busy-id';
 import { endResponsibilityDelegation } from '@/lib/responsibilities/actions';
 import type { ResponsibilityDelegation } from '@/lib/responsibilities/resolution';
 import type { ResponsibilitySettingsData } from '@/lib/responsibilities/server';
@@ -27,26 +27,25 @@ export function DelegationList({
 }) {
   const router = useRouter();
   const { showBanner } = useBanner();
-  const [endingId, setEndingId] = useState<string | null>(null);
+  const ending = useBusyIds();
 
   const handleEnd = async (delegationId: string) => {
-    setEndingId(delegationId);
-    try {
-      const result = await endResponsibilityDelegation(delegationId);
-      if (!result.success) {
-        showBanner({
-          message: responsibilityErrorMessage(result.error),
-          variant: 'error',
-        });
-        return;
+    await ending.run(delegationId, async () => {
+      try {
+        const result = await endResponsibilityDelegation(delegationId);
+        if (!result.success) {
+          showBanner({
+            message: responsibilityErrorMessage(result.error),
+            variant: 'error',
+          });
+          return;
+        }
+        router.refresh();
+        showBanner({ message: 'Die Vertretung wurde beendet.', variant: 'success' });
+      } catch {
+        showBanner({ message: ERROR_MESSAGES.save_failed, variant: 'error' });
       }
-      router.refresh();
-      showBanner({ message: 'Die Vertretung wurde beendet.', variant: 'success' });
-    } catch {
-      showBanner({ message: ERROR_MESSAGES.save_failed, variant: 'error' });
-    } finally {
-      setEndingId(null);
-    }
+    });
   };
 
   return (
@@ -75,10 +74,10 @@ export function DelegationList({
                   type="button"
                   size="sm"
                   variant="ghost"
-                  disabled={endingId !== null}
+                  disabled={ending.anyBusy}
                   onClick={() => void handleEnd(delegation.id)}
                 >
-                  {endingId === delegation.id ? 'Wird beendet…' : 'Heute beenden'}
+                  {ending.isBusy(delegation.id) ? 'Wird beendet…' : 'Heute beenden'}
                 </Button>
               ) : null}
             </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import type { useBusyIds } from '@/hooks/use-busy-id';
 import { useBanner } from '@/components/ui/banner';
 import { createTeam, updateTeam } from '@/lib/qualifications/actions';
 import type { Team } from '@/lib/qualifications/types';
@@ -14,7 +15,7 @@ type TeamOptimisticList = Pick<
 
 type TeamManagementTeamEditsInput = {
   teamList: TeamOptimisticList;
-  setPendingAction: (action: string | null) => void;
+  runAction: ReturnType<typeof useBusyIds>['run'];
   settle: (list: { settle: (id: string) => void }, id: string) => void;
 };
 
@@ -24,11 +25,7 @@ export function teamNameFieldId(teamId: string): string {
 }
 
 /** Create and rename a team, each echoed in the optimistic team list. */
-export function useTeamManagementTeamEdits({
-  teamList,
-  setPendingAction,
-  settle,
-}: TeamManagementTeamEditsInput) {
+export function useTeamManagementTeamEdits({ teamList, runAction, settle }: TeamManagementTeamEditsInput) {
   const { showBanner } = useBanner();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -45,42 +42,41 @@ export function useTeamManagementTeamEdits({
       return;
     }
     setNameError(null);
-    setPendingAction('create');
-    setCreateError(null);
-    const draftId = crypto.randomUUID();
-    const now = new Date().toISOString();
-    teamList.insert(draftId, {
-      id: draftId,
-      organizationId: '',
-      name: name.trim(),
-      description: description.trim() || null,
-      dissolvedAt: null,
-      createdAt: now,
-      updatedAt: now,
-    });
-    try {
-      const result = await createTeam({ name, description });
-      if (!result.success) {
+    await runAction('create', async () => {
+      setCreateError(null);
+      const draftId = crypto.randomUUID();
+      const now = new Date().toISOString();
+      teamList.insert(draftId, {
+        id: draftId,
+        organizationId: '',
+        name: name.trim(),
+        description: description.trim() || null,
+        dissolvedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+      try {
+        const result = await createTeam({ name, description });
+        if (!result.success) {
+          teamList.rollback(draftId);
+          setCreateError(
+            describeFailure(
+              result.error,
+              { duplicate_name: 'Ein aktives Team mit diesem Namen besteht bereits.' },
+              'Das Team konnte nicht angelegt werden.',
+            ),
+          );
+          return;
+        }
+        setName('');
+        setDescription('');
+        showBanner({ variant: 'success', message: 'Das Team wurde angelegt.' });
+        settle(teamList, draftId);
+      } catch {
         teamList.rollback(draftId);
-        setCreateError(
-          describeFailure(
-            result.error,
-            { duplicate_name: 'Ein aktives Team mit diesem Namen besteht bereits.' },
-            'Das Team konnte nicht angelegt werden.',
-          ),
-        );
-        return;
+        setCreateError('Das Team konnte nicht angelegt werden.');
       }
-      setName('');
-      setDescription('');
-      showBanner({ variant: 'success', message: 'Das Team wurde angelegt.' });
-      settle(teamList, draftId);
-    } catch {
-      teamList.rollback(draftId);
-      setCreateError('Das Team konnte nicht angelegt werden.');
-    } finally {
-      setPendingAction(null);
-    }
+    });
   };
 
   const handleRename = async (team: Team, value: string) => {
@@ -95,42 +91,41 @@ export function useTeamManagementTeamEdits({
       setEditingTeamId(null);
       return;
     }
-    setPendingAction(`rename:${team.id}`);
-    setEditingTeamId(null);
-    teamList.update(team.id, { ...team, name: nextName });
-    const restore = () => {
-      teamList.rollback(team.id);
-      setEditingTeamId(team.id);
-    };
-    try {
-      const result = await updateTeam({
-        teamId: team.id,
-        name: nextName,
-        description: team.description,
-      });
-      if (!result.success) {
+    await runAction(`rename:${team.id}`, async () => {
+      setEditingTeamId(null);
+      teamList.update(team.id, { ...team, name: nextName });
+      const restore = () => {
+        teamList.rollback(team.id);
+        setEditingTeamId(team.id);
+      };
+      try {
+        const result = await updateTeam({
+          teamId: team.id,
+          name: nextName,
+          description: team.description,
+        });
+        if (!result.success) {
+          restore();
+          showBanner({
+            variant: 'error',
+            message: 'Der Teamname konnte nicht geändert werden.',
+          });
+          return;
+        }
+        setEditingTeamName('');
+        showBanner({
+          variant: 'success',
+          message: 'Der Teamname wurde geändert.',
+        });
+        settle(teamList, team.id);
+      } catch {
         restore();
         showBanner({
           variant: 'error',
           message: 'Der Teamname konnte nicht geändert werden.',
         });
-        return;
       }
-      setEditingTeamName('');
-      showBanner({
-        variant: 'success',
-        message: 'Der Teamname wurde geändert.',
-      });
-      settle(teamList, team.id);
-    } catch {
-      restore();
-      showBanner({
-        variant: 'error',
-        message: 'Der Teamname konnte nicht geändert werden.',
-      });
-    } finally {
-      setPendingAction(null);
-    }
+    });
   };
 
   return {

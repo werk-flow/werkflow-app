@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect } from 'react';
 
 /**
  * Reports a form's running request to the dialog that hosts it, so the
@@ -17,13 +17,4 @@ export function useReportPending(
     onPendingChange?.(true);
     return () => onPendingChange?.(false);
   }, [pending, onPendingChange]);
-}
-
-/** A form's own pending state, reported to its hosting dialog like `useReportPending`. */
-export function useReportedPendingState(
-  onPendingChange: ((pending: boolean) => void) | undefined,
-): [boolean, Dispatch<SetStateAction<boolean>>] {
-  const [pending, setPending] = useState(false);
-  useReportPending(pending, onPendingChange);
-  return [pending, setPending];
 }

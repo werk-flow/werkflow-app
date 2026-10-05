@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { useBanner } from '@/components/ui/banner';
+import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { createPersonnelRecord, suggestPersonnelNumber } from '@/lib/personnel/actions';
 
@@ -25,7 +26,7 @@ export function useCreatePersonnelDialogForm() {
   const [employeeNumber, setEmployeeNumber] = useState('');
   const [entryDate, setEntryDate] = useState('');
   const [notes, setNotes] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
+  const { run: runSave, isPending: isSaving } = useServerAction(createPersonnelRecord);
   const [error, setError] = useState<string | null>(null);
   const [lastNameError, setLastNameError] = useState<string | null>(null);
 
@@ -80,16 +81,14 @@ export function useCreatePersonnelDialogForm() {
       return;
     }
 
-    setIsSaving(true);
     // A rejected Server Action shows the fallback and releases the dialog.
-    const result = await createPersonnelRecord({
+    const result = await runSave({
       ...(firstName.trim() ? { firstName: firstName.trim() } : {}),
       lastName: lastName.trim(),
       ...(employeeNumber.trim() ? { employeeNumber: employeeNumber.trim() } : {}),
       ...(entryDate ? { entryDate } : {}),
       ...(notes.trim() ? { notes: notes.trim() } : {}),
     }).catch(() => null);
-    setIsSaving(false);
     if (!result) {
       setError(CREATE_FAILURE_FALLBACK);
       return;

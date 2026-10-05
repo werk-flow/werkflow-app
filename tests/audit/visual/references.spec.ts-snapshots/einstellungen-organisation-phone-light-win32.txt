@@ -1,8 +1,8 @@
 Menü öffnen
 Einstellungen
-Profil
-Konto & Sicherheit
 Abonnement & Abrechnung
+Dashboard
+Organisation
 Organisation
 Organisationweite Grundeinstellungen und Standardwerte.
 Gilt für Haustechnik Krämer GmbH

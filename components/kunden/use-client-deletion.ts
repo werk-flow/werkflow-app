@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react';
 
+import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { deleteClient } from '@/lib/clients/actions';
 import { loadDocument } from '@/lib/navigation/document-load';
@@ -26,36 +27,35 @@ interface ClientDeletion {
 /** Confirm-dialog state and the delete action of the customer detail page. */
 export function useClientDeletion(client: { id: string; name: string }): ClientDeletion {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const { run: runDelete, isPending: isDeleting } = usePendingTask();
   const isDeletingRef = useRef(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const handleDelete = async () => {
     if (isDeleting) return;
     isDeletingRef.current = true;
-    setIsDeleting(true);
     setDeleteError(null);
-    try {
-      const result = await deleteClient(client.id);
-      if (result.success) {
-        // Full document load: a soft router.push after this server action can
-        // fail to commit (the deletion stall: DELETE succeeds, the URL never
-        // changes), and the deleted record's page would redirect first and drop
-        // the banner parameter. Leaving it loses no state worth keeping.
-        loadDocument(`/kunden?deleted_client=${encodeURIComponent(client.name)}`);
-        return;
-      }
+    await runDelete(async () => {
+      try {
+        const result = await deleteClient(client.id);
+        if (result.success) {
+          // Full document load: a soft router.push after this server action can
+          // fail to commit (the deletion stall: DELETE succeeds, the URL never
+          // changes), and the deleted record's page would redirect first and drop
+          // the banner parameter. Leaving it loses no state worth keeping.
+          loadDocument(`/kunden?deleted_client=${encodeURIComponent(client.name)}`);
+          return untilPageLeaves();
+        }
 
-      isDeletingRef.current = false;
-      setDeleteError(
-        describeFailure(result.error, CLIENT_DELETE_ERROR_MESSAGES, CLIENT_DELETE_FAILED_MESSAGE),
-      );
-      setIsDeleting(false);
-    } catch {
-      isDeletingRef.current = false;
-      setIsDeleting(false);
-      setDeleteError(CLIENT_DELETE_FAILED_MESSAGE);
-    }
+        isDeletingRef.current = false;
+        setDeleteError(
+          describeFailure(result.error, CLIENT_DELETE_ERROR_MESSAGES, CLIENT_DELETE_FAILED_MESSAGE),
+        );
+      } catch {
+        isDeletingRef.current = false;
+        setDeleteError(CLIENT_DELETE_FAILED_MESSAGE);
+      }
+    });
   };
 
   return {

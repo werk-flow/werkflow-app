@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { usePendingTask } from '@/hooks/use-server-action';
 import {
   Dialog,
   DialogContent,
@@ -34,7 +35,7 @@ export function ReasonDialog({
 }) {
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
+  const { run: runConfirm, isPending: isSaving } = usePendingTask();
 
   const [reasonError, setReasonError] = useState<string | null>(null);
 
@@ -46,15 +47,14 @@ export function ReasonDialog({
       return;
     }
     setReasonError(null);
-    setIsSaving(true);
-    try {
-      const failure = await onConfirm(reason.trim());
-      if (failure) setError(failure);
-    } catch {
-      setError(dispatchErrorMessage('unexpected_error'));
-    } finally {
-      setIsSaving(false);
-    }
+    await runConfirm(async () => {
+      try {
+        const failure = await onConfirm(reason.trim());
+        if (failure) setError(failure);
+      } catch {
+        setError(dispatchErrorMessage('unexpected_error'));
+      }
+    });
   };
 
   return (

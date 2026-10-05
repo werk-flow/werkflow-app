@@ -6,6 +6,7 @@ import { ExternalLink, Loader2, Trash2, Pencil } from 'lucide-react';
 
 import { ErrorText } from '@/components/ui/error-text';
 import { RowActionsMenu } from '@/components/ui/row-actions-menu';
+import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -51,7 +52,7 @@ export function ProjectActionsMenu({
   const router = useRouter();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const { run: runDelete, isPending: isDeleting } = usePendingTask();
   const [error, setError] = useState<string | null>(null);
 
   const handleDelete = async () => {
@@ -61,30 +62,29 @@ export function ProjectActionsMenu({
       onDeleteRequested(project.id);
       return;
     }
-    setIsDeleting(true);
     setError(null);
 
-    try {
-      const result = await deleteProject(project.id);
+    await runDelete(async () => {
+      try {
+        const result = await deleteProject(project.id);
 
-      if (!result.success) {
+        if (!result.success) {
+          setError(PROJECT_DELETE_FAILED_MESSAGE);
+          return;
+        }
+
+        setShowDeleteDialog(false);
+        if (onProjectDeleted) {
+          // The row may stay mounted; the task ends here and releases its menu and a later dialog.
+          await onProjectDeleted(project.id);
+        } else {
+          router.push(`/auftraege?deleted_project=${encodeURIComponent(project.name)}`);
+          return untilPageLeaves();
+        }
+      } catch {
         setError(PROJECT_DELETE_FAILED_MESSAGE);
-        setIsDeleting(false);
-        return;
       }
-
-      setShowDeleteDialog(false);
-      if (onProjectDeleted) {
-        await onProjectDeleted(project.id);
-        // The row may stay mounted; release its menu and a later dialog.
-        setIsDeleting(false);
-      } else {
-        router.push(`/auftraege?deleted_project=${encodeURIComponent(project.name)}`);
-      }
-    } catch {
-      setError(PROJECT_DELETE_FAILED_MESSAGE);
-      setIsDeleting(false);
-    }
+    });
   };
 
   const isLoading = isDeleting;

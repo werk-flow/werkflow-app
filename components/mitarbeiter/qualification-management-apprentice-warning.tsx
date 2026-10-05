@@ -1,5 +1,6 @@
 'use client';
 
+import type { useBusyIds } from '@/hooks/use-busy-id';
 import { useBanner } from '@/components/ui/banner';
 import { Checkbox } from '@/components/ui/checkbox';
 import { setApprenticeWarningEnabled } from '@/lib/qualifications/actions';
@@ -7,16 +8,16 @@ import { setApprenticeWarningEnabled } from '@/lib/qualifications/actions';
 type QualificationManagementApprenticeWarningProps = {
   apprenticeWarningEnabled: boolean;
   isAdmin: boolean;
-  pendingAction: string | null;
-  setPendingAction: (action: string | null) => void;
+  anyBusy: boolean;
+  runAction: ReturnType<typeof useBusyIds>['run'];
   refresh: () => void;
 };
 
 export function QualificationManagementApprenticeWarning({
   apprenticeWarningEnabled,
   isAdmin,
-  pendingAction,
-  setPendingAction,
+  anyBusy,
+  runAction,
   refresh,
 }: QualificationManagementApprenticeWarningProps) {
   const { showBanner } = useBanner();
@@ -32,33 +33,32 @@ export function QualificationManagementApprenticeWarning({
       </div>
       <Checkbox
         checked={apprenticeWarningEnabled}
-        disabled={!isAdmin || pendingAction !== null}
+        disabled={!isAdmin || anyBusy}
         aria-label="Ausbildungs-Hinweis aktivieren"
         onCheckedChange={async (checked) => {
           const enabled = checked === true;
-          setPendingAction('apprentice-warning');
-          try {
-            const result = await setApprenticeWarningEnabled(enabled);
-            if (!result.success) {
+          await runAction('apprentice-warning', async () => {
+            try {
+              const result = await setApprenticeWarningEnabled(enabled);
+              if (!result.success) {
+                showBanner({
+                  variant: 'error',
+                  message: 'Die Einstellung konnte nicht gespeichert werden.',
+                });
+                return;
+              }
+              showBanner({
+                variant: 'success',
+                message: 'Einstellung gespeichert.',
+              });
+              refresh();
+            } catch {
               showBanner({
                 variant: 'error',
                 message: 'Die Einstellung konnte nicht gespeichert werden.',
               });
-              return;
             }
-            showBanner({
-              variant: 'success',
-              message: 'Einstellung gespeichert.',
-            });
-            refresh();
-          } catch {
-            showBanner({
-              variant: 'error',
-              message: 'Die Einstellung konnte nicht gespeichert werden.',
-            });
-          } finally {
-            setPendingAction(null);
-          }
+          });
         }}
       />
     </section>

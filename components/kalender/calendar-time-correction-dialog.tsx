@@ -18,6 +18,7 @@ import { describeFailure } from '@/lib/action-messages';
 import type { CalendarBoardRow } from '@/lib/calendar/board';
 import { ErrorText } from '@/components/ui/error-text';
 import { useBanner } from '@/components/ui/banner';
+import { useServerAction } from '@/hooks/use-server-action';
 import { submitTimeCorrection } from '@/lib/time-corrections/actions';
 import {
   calendarCorrectionBoundaries,
@@ -64,7 +65,7 @@ export function CalendarTimeCorrectionDialog({
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [reasonError, setReasonError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const { run: runSubmit, isPending: submitting } = useServerAction(submitTimeCorrection);
   const [uncertain, setUncertain] = useState(false);
   const [operationId] = useState(() => crypto.randomUUID());
   const first = draft.sourceEntries[0];
@@ -86,10 +87,9 @@ export function CalendarTimeCorrectionDialog({
       );
       return;
     }
-    setSubmitting(true);
     setError(null);
     try {
-      const result = await submitTimeCorrection({
+      const result = await runSubmit({
         organizationId,
         subjectEmployeeRecordId: subject.employeeRecordId,
         kind: targetUserId === first?.userId ? 'edit' : 'reassign',
@@ -122,8 +122,6 @@ export function CalendarTimeCorrectionDialog({
     } catch {
       setUncertain(true);
       setError('Die Antwort ist ausgeblieben. Du kannst denselben Antrag erneut senden.');
-    } finally {
-      setSubmitting(false);
     }
   };
   return (

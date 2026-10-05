@@ -1,6 +1,6 @@
 # AI Automations
 
-Status: living — last reviewed 2026-10-02
+Status: living — last reviewed 2026-10-05
 
 AI automations are WerkFlow's second product phase: assistants, recommendations, workflows and bounded agents that use the operational context of the business to reduce repetitive work inside and outside the app.
 
@@ -231,6 +231,69 @@ Task-embedded generation with a review step comes first: an offer draft in the p
 Both surfaces share one harness, so the chat invokes the same task tools and shows the same review steps. Generated content lands in an existing draft object, and the product's ordinary save or send is the commit. WerkFlow never adds a separate approval interface.
 
 Documents get a structured editor for manual and for AI creation. An AI draft goes into the positions editor, never into a PDF editor.
+
+### The chat workspace: direction and required study
+
+This subsection records the owner's direction for the global chat. It is not planned scope. A deep study and a decision record come before any slice.
+
+**The direction.** The chat is a full AI workspace in the form people know from ChatGPT and claude.ai, leaning towards a chat product and away from a code editor:
+
+- every user has their own threads in a sidebar;
+- the composer offers attachments and dictation, and possibly a model picker and a reasoning-effort setting;
+- an answer streams in and shows what the agent does while it works: reasoning, tool calls, calls to outside services and the confirmations it asks for;
+- a reload or a second device picks up a running answer where it is.
+
+The quality bar is T3 Chat and T3 Code by Ping Labs: moving between threads never waits for the server, a long answer never stalls the page, and nothing is lost on a reload. The performance rules of [realtime and caching](../technical/realtime-and-caching.md) apply to the chat as to every other surface. The chat adds measured scenarios of its own: the client's share of send to first token, a thread switch, the frame budget while an answer streams, and resume after a reload.
+
+**What a first reading of the T3 Code source showed.** T3 Code is open source (`github.com/pingdotgg/t3code`, read at commit `3e6b450`). It is single-user software for one machine, with no tenant, role or row-level model, so its code does not carry over. Its patterns do:
+
+1. One ordered list of typed turn items is the only render model: user message, assistant message, reasoning, each kind of tool call, approval request, plan, notice and error. Each item carries a streaming flag or a status. Reasoning and tool calls are items of their own, not fields of a message.
+2. The conversation is an append-only event log with a rising sequence number per thread. The screen reads projections of it. A command is acknowledged when its intent is committed, and side effects run afterwards from an outbox, each with an idempotent command id.
+3. Resume is a snapshot plus a cursor. The client keeps the snapshot and the last sequence number and drops duplicates. After a reconnect the server replays a small gap or sends a fresh snapshot.
+4. The thread list is a separate, light stream of summaries with deltas. It does not depend on thread detail.
+5. Opening a thread loads a bounded number of recent rows, pages older history on demand and leaves heavy tool output on the server until someone opens it.
+6. The server merges updates in a short window, keeps only the latest unfinished update per tool call, never drops a final update and gives each subscription a budget in items and bytes.
+7. Streamed text is parsed incrementally. A finished block is never parsed again, and code highlighting waits until its block is complete.
+8. The timeline is virtualized and has named scroll states: following the end, anchoring a new turn at the top, and free scrolling while the user reads.
+9. Models and their options are data. Reasoning effort is one option descriptor among others, a provider states its capabilities as flags, and a failure has a class, a retry flag and a reset time.
+10. The composer keeps a draft per thread across reloads, starts an upload when a file is attached, and is replaced by the approval or question while one is pending, so that it cannot scroll out of view.
+
+Two of its engineering habits fit WerkFlow's testing rules: payload budgets are pinned as tests, and server tests replay recorded provider transcripts and never wait on a timer.
+
+**What public sources report about T3 Chat.** T3 Chat is closed source. The following comes from posts, talks and third-party summaries and is not verified:
+
+- It began local-first, with threads in the browser's database and navigation on the client. It moved its data and sync layer to Convex when users with thousands of threads became slow.
+- A streamed token re-renders only the message it belongs to, and a new thread appears before the server answers.
+- Its longest outage came from live queries over a search index and from reconnects without backoff. Both are warnings for any design with live subscriptions over large lists.
+
+**Lessons from a public performance overhaul of a chat product.** Anthropic described how it made claude.ai about three times faster, and Theo Browne of Ping Labs published a critical walk-through of that account. Both are input for the chat's design. The chat adopts these points as starting rules, each to be confirmed by measurement in its slice:
+
+- A new thread is saved before the screen moves to it. A reload one second after sending must not lose it.
+- A cached thread list may paint at once, but it is checked against the server on every load and after every change in another session. A thread deleted elsewhere disappears, and opening it never ends in an error. Content that is not yet confirmed is shown as unconfirmed, for example dimmed.
+- Text streams in finished blocks: a paragraph, a list item, a code block, a table. A half-written code block or table is not shown, and there is no word-by-word fade.
+- Syntax highlighting and other heavy parsing run off the main thread and never block typing or scrolling. A highlighted block fades in when it is ready.
+- The composer stays mounted when the thread changes, and hovering a thread starts loading it.
+- A long thread opens as fast as a short one, because the first load is bounded.
+- A measurement covers what the user feels: from the action to the usable result. A count of renders or requests is a tool for finding waste and never a reason to remove a read that keeps the screen current.
+
+**The data store is an open decision.** The owner's working assumption is that the operational core stays on Postgres and that the chat's threads, messages and streams may fit Convex better, which would give the product two databases that must work together. [Decision 0001](../decisions/0001-infrastructure-stack.md) settles the stack, so this needs a superseding decision record before anything is built. That record weighs at least:
+
+- **What stays in Postgres either way.** The run ledger, approvals, budgets, audit rows, memory and every business record a tool reads or writes stay under RLS, as this spec already requires.
+- **Identity and the tenant boundary in a second store.** Supabase Auth sessions would have to be accepted there, and organization and role checks would exist a second time, without RLS.
+- **Consistency between two stores.** A confirmation shown in a thread and the business write it releases must not drift apart. This needs idempotency keys and an outbox on one side.
+- **Privacy.** A second store is a new sub-processor with its own `Auftragsverarbeitungsvertrag`, its own EU region, and its own retention, export and deletion paths per organization and per member.
+- **Operations and cost.** Reconnect backoff, live queries over large lists, pricing at the expected message volume, the React Native client and the way out if the provider changes terms.
+- **The alternative to measure against.** T3 Code reaches its quality on SQLite with an event log, so a sync engine is one way to get there and not a precondition. The comparison case is Postgres tables with a sequence number per thread, delivered through the existing Realtime transport or a streamed response.
+- **Where the agent loop runs.** A run outlives a request. The record names the durable runtime and how a client that reconnects in the middle of a run catches up.
+
+The decision is made on a spike of both options against the same measured scenarios, not on preference.
+
+**Study required before the plan.**
+
+- Read T3 Code in depth for the points above: the event store and its sequence numbers under concurrent writers, the resume decision, optimistic send and its failure cases, approvals as durable objects, the attachment pipeline, the rules for what leaves the server, and the scroll and streaming-render code with its tests. Find the measurement behind each of its numeric budgets before adopting a number.
+- Verify the T3 Chat points from primary sources, and use the product hands-on to record its interaction details: thread list, model picker, retry and branching, search, keyboard shortcuts, sharing.
+- Check the T3 Code license before reusing anything beyond ideas.
+- Translate the result into WerkFlow's terms: organization scoping on every row and every subscription, confirmations that also appear on `/aufgaben`, German copy, and the component registry.
 
 ### Write authority
 
@@ -468,6 +531,8 @@ The organization may configure narrower permissions. It cannot weaken security, 
 ## Open Product Decisions
 
 - The product name of the agent.
+- Where the chat's threads, messages and streams live: Postgres alone, or a second store such as Convex beside it (see "The chat workspace: direction and required study").
+- Whether users choose the model and the reasoning effort in the composer, and what that means for cost and the fair-use line.
 - Which speech provider the German field test selects, and whether a Wispr Flow enterprise agreement ever becomes worth pursuing.
 - Whether GPT-5.6 Luna passes the German trade-prose evaluation or Sonnet 5 becomes the default.
 - Which durable-execution engine runs the templates: Vercel Workflows in an EU region, or pgmq in Supabase with cron.

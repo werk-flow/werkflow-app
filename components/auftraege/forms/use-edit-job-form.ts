@@ -1,5 +1,6 @@
 'use client';
 
+import { usePendingTask } from '@/hooks/use-server-action';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { getJobDetails } from '@/lib/jobs/actions';
 import type { AssignmentEvaluation } from '@/lib/qualifications/types';
@@ -36,7 +37,7 @@ export function useEditJobForm({ job, open, clients, projects }: EditJobFormInpu
   const [autoSyncPlannedWorking, setAutoSyncPlannedWorking] = useState(false);
   const [location, setLocation] = useState('');
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const { run: runSubmit, isPending: isLoading } = usePendingTask();
   const [qualificationWarning, setQualificationWarning] = useState<AssignmentEvaluation | null>(null);
   const [confirmedDateRemovalForWarning, setConfirmedDateRemovalForWarning] = useState(false);
   const [assignmentTeamSourceId, setAssignmentTeamSourceId] = useState<string | null>(null);
@@ -183,7 +184,7 @@ export function useEditJobForm({ job, open, clients, projects }: EditJobFormInpu
     assignmentsLoadFailed,
     retryAssignments: () => loadAssignments(job.id),
     isLoading,
-    setIsLoading,
+    runSubmit,
     error,
     setError,
     contentError,

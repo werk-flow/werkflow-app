@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { useBusyIds } from '@/hooks/use-busy-id';
 import { useOptimisticList } from '@/hooks/use-optimistic-list';
 import {
   getCapabilityKindLabel,
@@ -31,7 +32,7 @@ export function QualificationManagementSection({
   'capabilities' | 'employeeCapabilities' | 'employees' | 'apprenticeWarningEnabled' | 'isAdmin'
 >) {
   const router = useRouter();
-  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const busy = useBusyIds();
 
   const definitionById = useMemo(
     () => new Map(capabilities.map((capability) => [capability.id, capability])),
@@ -78,7 +79,7 @@ export function QualificationManagementSection({
     definitionById,
     recordList,
     settleRecord,
-    setPendingAction,
+    runAction: busy.run,
   });
 
   return (
@@ -92,15 +93,15 @@ export function QualificationManagementSection({
           </p>
         </div>
         <QualificationManagementDefinitionForm
-          pendingAction={pendingAction}
-          setPendingAction={setPendingAction}
+          anyBusy={busy.anyBusy}
+          runAction={busy.run}
           refresh={refresh}
         />
 
         <QualificationManagementDefinitionList
           activeCapabilities={activeCapabilities}
-          pendingAction={pendingAction}
-          setPendingAction={setPendingAction}
+          anyBusy={busy.anyBusy}
+          runAction={busy.run}
           refresh={refresh}
         />
       </section>
@@ -109,7 +110,7 @@ export function QualificationManagementSection({
         form={grantForm}
         employeeOptions={employeeOptions}
         capabilityOptions={capabilityOptions}
-        pendingAction={pendingAction}
+        anyBusy={busy.anyBusy}
       />
 
       <QualificationManagementRecordList
@@ -117,16 +118,16 @@ export function QualificationManagementSection({
         definitionById={definitionById}
         employeeById={employeeById}
         form={grantForm}
-        pendingAction={pendingAction}
-        setPendingAction={setPendingAction}
+        anyBusy={busy.anyBusy}
+        runAction={busy.run}
         settleRecord={settleRecord}
       />
 
       <QualificationManagementApprenticeWarning
         apprenticeWarningEnabled={apprenticeWarningEnabled}
         isAdmin={isAdmin}
-        pendingAction={pendingAction}
-        setPendingAction={setPendingAction}
+        anyBusy={busy.anyBusy}
+        runAction={busy.run}
         refresh={refresh}
       />
     </div>
