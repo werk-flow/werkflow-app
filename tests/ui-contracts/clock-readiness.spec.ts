@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { assertWorkspaceTestLock } from '@/lib/testing/workspace-test-lock';
+import { assertWorkspaceTestLock } from '@/lib/testing/runner/workspace-test-lock';
 import type { LiveClockState } from '@/lib/time-tracking/types';
 import { CLOCK_ORGANIZATION_ID, RUNNING_CLOCK_STATE } from './clock-state-fixture';
 
@@ -18,10 +18,12 @@ async function mountClock(page: Page, options: { withStyles?: boolean } = {}): P
   const bundle = process.env.WERKFLOW_UI_CONTRACT_BUNDLE;
   const css = process.env.WERKFLOW_UI_CONTRACT_CSS;
   if (!bundle || !css) throw new Error('Run through bun tests/ui-contracts/run.ts.');
-  await page.route('http://localhost/ui-contracts**', (route) => route.fulfill({
-    contentType: 'text/html',
-    body: '<html lang="de"><body><div id="root"></div></body></html>',
-  }));
+  await page.route('http://localhost/ui-contracts**', (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      body: '<html lang="de"><body><div id="root"></div></body></html>',
+    }),
+  );
   await page.goto('http://localhost/ui-contracts');
   if (options.withStyles) await page.addStyleTag({ path: css });
   await page.evaluate(() => {
@@ -59,26 +61,41 @@ const RESUMED_CLOCK_STATE: LiveClockState = {
   resumeJobInfo: RESUME_JOB,
 };
 
-test('a break resumes its job from the hot key and the sheet, and hot keys wait for readiness', async ({ page }) => {
-  let releaseRead: () => void = () => { throw new Error('Read barrier was not initialized.'); };
-  const heldRead = new Promise<void>((resolve) => { releaseRead = resolve; });
+test('a break resumes its job from the hot key and the sheet, and hot keys wait for readiness', async ({
+  page,
+}) => {
+  let releaseRead: () => void = () => {
+    throw new Error('Read barrier was not initialized.');
+  };
+  const heldRead = new Promise<void>((resolve) => {
+    releaseRead = resolve;
+  });
   let resumed = false;
   await page.route('**/api/time-tracking-state?**', async (route) => {
     await heldRead;
-    await route.fulfill({ json: { success: true, state: resumed ? RESUMED_CLOCK_STATE : BREAK_CLOCK_STATE } });
+    await route.fulfill({
+      json: { success: true, state: resumed ? RESUMED_CLOCK_STATE : BREAK_CLOCK_STATE },
+    });
   });
   await mountClock(page);
   await expect(page.getByRole('button', { name: 'Zeiterfassung starten', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: /^Weiter: Arbeit/ })).toHaveCount(0);
   releaseRead();
-  const resumeHotKey = page.getByRole('button', { name: 'Weiter: Arbeit · Heizungswartung Müller', exact: true });
+  const resumeHotKey = page.getByRole('button', {
+    name: 'Weiter: Arbeit · Heizungswartung Müller',
+    exact: true,
+  });
   await expect(resumeHotKey).toBeEnabled();
   await expect(page.getByRole('button', { name: 'Weiter ohne Auftrag', exact: true })).toBeEnabled();
   await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Laufende Zeiterfassung öffnen', exact: true }).click();
-  const sheet = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: 'Laufende Zeiterfassung' }) });
-  await expect(sheet.getByRole('button', { name: 'Weiter: Arbeit · Heizungswartung Müller', exact: true })).toBeVisible();
+  const sheet = page
+    .getByRole('dialog')
+    .filter({ has: page.getByRole('heading', { name: 'Laufende Zeiterfassung' }) });
+  await expect(
+    sheet.getByRole('button', { name: 'Weiter: Arbeit · Heizungswartung Müller', exact: true }),
+  ).toBeVisible();
   await expect(sheet.getByRole('button', { name: 'Anderer Auftrag …', exact: true })).toBeVisible();
   await expect(sheet.getByRole('button', { name: 'Erfassung beenden', exact: true })).toBeVisible();
   await expect(sheet.getByRole('button', { name: 'Weitere Aktivitäten …', exact: true })).toBeVisible();
@@ -95,14 +112,20 @@ test('a break resumes its job from the hot key and the sheet, and hot keys wait 
   });
   await expect(resumeHotKey).toBeDisabled();
   resumed = true;
-  await page.evaluate(() => { window.clockContract.resolveTransition?.(); });
+  await page.evaluate(() => {
+    window.clockContract.resolveTransition?.();
+  });
   await expect(page.getByRole('button', { name: /^Arbeit · Heizungswartung Müller/ })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeEnabled();
 });
 
-test('with the app stylesheet at phone width every clock action is a 44 px target and the selected tile is not clipped', async ({ page }) => {
+test('with the app stylesheet at phone width every clock action is a 44 px target and the selected tile is not clipped', async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.route('**/api/time-tracking-state?**', (route) => route.fulfill({ json: { success: true, state: BREAK_CLOCK_STATE } }));
+  await page.route('**/api/time-tracking-state?**', (route) =>
+    route.fulfill({ json: { success: true, state: BREAK_CLOCK_STATE } }),
+  );
   await mountClock(page, { withStyles: true });
   const hotKey = page.getByRole('button', { name: 'Weiter: Arbeit · Heizungswartung Müller', exact: true });
   await expect(hotKey).toBeEnabled();
@@ -110,15 +133,20 @@ test('with the app stylesheet at phone width every clock action is a 44 px targe
   expect(hotKeyHeight).toBeGreaterThanOrEqual(44);
 
   await page.getByRole('button', { name: 'Laufende Zeiterfassung öffnen', exact: true }).click();
-  const sheet = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: 'Laufende Zeiterfassung' }) });
-  const actionHeights = await sheet.getByRole('group', { name: 'Nächste Aktion' }).getByRole('button').evaluateAll(
-    (elements) => elements.map((element) => element.getBoundingClientRect().height)
-  );
+  const sheet = page
+    .getByRole('dialog')
+    .filter({ has: page.getByRole('heading', { name: 'Laufende Zeiterfassung' }) });
+  const actionHeights = await sheet
+    .getByRole('group', { name: 'Nächste Aktion' })
+    .getByRole('button')
+    .evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().height));
   expect(actionHeights.length).toBeGreaterThan(0);
   for (const height of actionHeights) expect(height).toBeGreaterThanOrEqual(44);
 
   await sheet.getByRole('button', { name: 'Weitere Aktivitäten …', exact: true }).click();
-  const dialog = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: 'Aktivität wechseln' }) });
+  const dialog = page
+    .getByRole('dialog')
+    .filter({ has: page.getByRole('heading', { name: 'Aktivität wechseln' }) });
   const selectedTile = dialog.getByRole('button', { name: 'Pause', exact: true });
   await expect(selectedTile).toHaveAttribute('aria-pressed', 'true');
   const geometry = await selectedTile.evaluate((element) => {
@@ -127,7 +155,14 @@ test('with the app stylesheet at phone width every clock action is a 44 px targe
     const tile = element.getBoundingClientRect();
     const scroller = body.getBoundingClientRect();
     const style = getComputedStyle(element);
-    return { tileTop: tile.top, tileBottom: tile.bottom, scrollerTop: scroller.top, scrollerBottom: scroller.bottom, borderColor: style.borderTopColor, boxShadow: style.boxShadow };
+    return {
+      tileTop: tile.top,
+      tileBottom: tile.bottom,
+      scrollerTop: scroller.top,
+      scrollerBottom: scroller.bottom,
+      borderColor: style.borderTopColor,
+      boxShadow: style.boxShadow,
+    };
   });
   // Selection is drawn inside the tile's box (an orange border), never as an
   // outer ring the scroll container would clip on the first row. The border
@@ -138,9 +173,15 @@ test('with the app stylesheet at phone width every clock action is a 44 px targe
   expect(geometry.boxShadow).not.toContain('rgb(255, 121, 0)');
 });
 
-test('unknown clock state blocks real controls and direct calls until the canonical session loads', async ({ page }) => {
-  let releaseRead: () => void = () => { throw new Error('Read barrier was not initialized.'); };
-  const heldRead = new Promise<void>((resolve) => { releaseRead = resolve; });
+test('unknown clock state blocks real controls and direct calls until the canonical session loads', async ({
+  page,
+}) => {
+  let releaseRead: () => void = () => {
+    throw new Error('Read barrier was not initialized.');
+  };
+  const heldRead = new Promise<void>((resolve) => {
+    releaseRead = resolve;
+  });
   let reads = 0;
   await page.route('**/api/time-tracking-state?**', async (route) => {
     expect(route.request().method()).toBe('GET');
@@ -149,13 +190,17 @@ test('unknown clock state blocks real controls and direct calls until the canoni
     expect(url.searchParams.get('kind')).toBe('clock');
     reads += 1;
     await heldRead;
-    await route.fulfill({ json: { success: true, state: { ...RUNNING_CLOCK_STATE, sessionVersion: reads > 1 ? 8 : 7 } } });
+    await route.fulfill({
+      json: { success: true, state: { ...RUNNING_CLOCK_STATE, sessionVersion: reads > 1 ? 8 : 7 } },
+    });
   });
   await mountClock(page);
   await expect.poll(() => reads).toBe(1);
   await expect(page.getByRole('button', { name: 'Zeiterfassung starten', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Direkter Startversuch' }).click();
-  await expect.poll(() => page.evaluate(() => window.clockContract.directResult)).toEqual({ success: false, error: 'time_transition_failed' });
+  await expect
+    .poll(() => page.evaluate(() => window.clockContract.directResult))
+    .toEqual({ success: false, error: 'time_transition_failed' });
   expect(await page.evaluate(() => window.clockContract.transitions)).toEqual([]);
   await page.getByRole('button', { name: 'Aktivitätsdialog prüfen' }).click();
   const dialog = page.getByRole('dialog');
@@ -175,11 +220,19 @@ test('unknown clock state blocks real controls and direct calls until the canoni
     action: 'switch',
     expectedSessionId: RUNNING_CLOCK_STATE.sessionId,
     expectedVersion: 7,
-    selection: { kind: 'travel', allocationKind: 'unallocated', jobId: null, travelRoute: 'unspecified', travelRole: 'unspecified' },
+    selection: {
+      kind: 'travel',
+      allocationKind: 'unallocated',
+      jobId: null,
+      travelRoute: 'unspecified',
+      travelRole: 'unspecified',
+    },
   });
   await expect(dialog.getByRole('button', { name: 'Aktivität wechseln', exact: true })).toBeDisabled();
   await expect(dialog.getByRole('button', { name: 'Erfassung beenden', exact: true })).toBeDisabled();
-  await page.evaluate(() => { window.clockContract.resolveTransition?.(); });
+  await page.evaluate(() => {
+    window.clockContract.resolveTransition?.();
+  });
   await expect(dialog).toHaveCount(0);
   await expect(page.getByLabel('Zeitstatus', { exact: true })).toHaveText('Bereit: 8');
 });
@@ -188,41 +241,64 @@ test('clock refresh aborts its obsolete GET and rejects a late response from tha
   await page.addInitScript((runningState) => {
     window.clockReadCancellation = { signals: [], abortEvents: 0, releaseOldRead: null };
     // The fixture's service boundary captures this fetch and forwards clock GETs.
-    window.fetch = Object.assign(async (input: Parameters<typeof fetch>[0], init?: RequestInit): Promise<Response> => {
-      const request = new Request(input instanceof Request ? input : new URL(String(input), location.href), init);
-      const url = new URL(request.url);
-      if (request.method !== 'GET' || url.pathname !== '/api/time-tracking-state'
-        || url.searchParams.get('kind') !== 'clock'
-        || url.searchParams.get('organizationId') !== runningState.organizationId) {
-        throw new Error('Unexpected request in the clock cancellation contract.');
-      }
-      const observation = window.clockReadCancellation;
-      observation.signals.push(request.signal);
-      request.signal.addEventListener('abort', () => { observation.abortEvents += 1; }, { once: true });
-      if (observation.signals.length === 1) {
-        // Deliberately allow late completion despite abort, exercising both safeguards.
-        return new Promise<Response>((resolve) => {
-          observation.releaseOldRead = () => resolve(Response.json({ success: true, state: runningState }));
-        });
-      }
-      return Response.json({ success: true, state: { ...runningState, sessionVersion: 8 } });
-    }, {
-      preconnect: () => { throw new Error('Unexpected preconnect in the clock cancellation contract.'); },
-    });
+    window.fetch = Object.assign(
+      async (input: Parameters<typeof fetch>[0], init?: RequestInit): Promise<Response> => {
+        const request = new Request(
+          input instanceof Request ? input : new URL(String(input), location.href),
+          init,
+        );
+        const url = new URL(request.url);
+        if (
+          request.method !== 'GET' ||
+          url.pathname !== '/api/time-tracking-state' ||
+          url.searchParams.get('kind') !== 'clock' ||
+          url.searchParams.get('organizationId') !== runningState.organizationId
+        ) {
+          throw new Error('Unexpected request in the clock cancellation contract.');
+        }
+        const observation = window.clockReadCancellation;
+        observation.signals.push(request.signal);
+        request.signal.addEventListener(
+          'abort',
+          () => {
+            observation.abortEvents += 1;
+          },
+          { once: true },
+        );
+        if (observation.signals.length === 1) {
+          // Deliberately allow late completion despite abort, exercising both safeguards.
+          return new Promise<Response>((resolve) => {
+            observation.releaseOldRead = () => resolve(Response.json({ success: true, state: runningState }));
+          });
+        }
+        return Response.json({ success: true, state: { ...runningState, sessionVersion: 8 } });
+      },
+      {
+        preconnect: () => {
+          throw new Error('Unexpected preconnect in the clock cancellation contract.');
+        },
+      },
+    );
   }, RUNNING_CLOCK_STATE);
   await mountClock(page);
   await expect.poll(() => page.evaluate(() => window.clockReadCancellation.signals.length)).toBe(1);
   await expect(page.getByRole('button', { name: 'Zeiterfassung starten', exact: true })).toBeDisabled();
   expect(await page.evaluate(() => window.clockReadCancellation.signals[0]?.aborted)).toBe(false);
   await page.getByRole('button', { name: 'Zeitstatus aktualisieren', exact: true }).click();
-  await expect.poll(() => page.evaluate(() => ({
-    requests: window.clockReadCancellation.signals.length,
-    oldAborted: window.clockReadCancellation.signals[0]?.aborted,
-    currentAborted: window.clockReadCancellation.signals[1]?.aborted,
-    abortEvents: window.clockReadCancellation.abortEvents,
-  }))).toEqual({ requests: 2, oldAborted: true, currentAborted: false, abortEvents: 1 });
+  await expect
+    .poll(() =>
+      page.evaluate(() => ({
+        requests: window.clockReadCancellation.signals.length,
+        oldAborted: window.clockReadCancellation.signals[0]?.aborted,
+        currentAborted: window.clockReadCancellation.signals[1]?.aborted,
+        abortEvents: window.clockReadCancellation.abortEvents,
+      })),
+    )
+    .toEqual({ requests: 2, oldAborted: true, currentAborted: false, abortEvents: 1 });
   await expect(page.getByLabel('Zeitstatus', { exact: true })).toHaveText('Bereit: 8');
-  await expect(page.getByRole('button', { name: 'Laufende Zeiterfassung öffnen', exact: true })).toBeEnabled();
+  await expect(
+    page.getByRole('button', { name: 'Laufende Zeiterfassung öffnen', exact: true }),
+  ).toBeEnabled();
   await page.evaluate(async () => {
     window.clockReadCancellation.releaseOldRead?.();
     // Flush the response's promise chain and React's next paint before checking state.
@@ -235,16 +311,31 @@ test('clock refresh aborts its obsolete GET and rejects a late response from tha
 for (const failure of ['http-error', 'wrong-organization'] as const) {
   test(`clock ${failure} keeps controls disabled and retries through the real dialog`, async ({ page }) => {
     let recover = false;
-    await page.route('**/api/time-tracking-state?**', (route) => route.fulfill(recover
-      ? { json: { success: true, state: RUNNING_CLOCK_STATE } }
-      : failure === 'http-error'
-        ? { status: 503, json: { success: false, error: 'time_state_read_failed' } }
-        : { json: { success: true, state: { ...RUNNING_CLOCK_STATE, organizationId: '10000000-0000-4000-8000-000000000002' } } }));
+    await page.route('**/api/time-tracking-state?**', (route) =>
+      route.fulfill(
+        recover
+          ? { json: { success: true, state: RUNNING_CLOCK_STATE } }
+          : failure === 'http-error'
+            ? { status: 503, json: { success: false, error: 'time_state_read_failed' } }
+            : {
+                json: {
+                  success: true,
+                  state: { ...RUNNING_CLOCK_STATE, organizationId: '10000000-0000-4000-8000-000000000002' },
+                },
+              },
+      ),
+    );
     await mountClock(page);
-    await expect(page.getByRole('alert').getByText('Der Zeitstatus konnte nicht sicher geladen werden.', { exact: true })).toBeVisible();
+    await expect(
+      page
+        .getByRole('alert')
+        .getByText('Der Zeitstatus konnte nicht sicher geladen werden.', { exact: true }),
+    ).toBeVisible();
     await expect(page.getByRole('button', { name: 'Zeiterfassung starten', exact: true })).toBeDisabled();
     await page.getByRole('button', { name: 'Direkter Startversuch' }).click();
-    await expect.poll(() => page.evaluate(() => window.clockContract.directResult)).toEqual({ success: false, error: 'time_transition_failed' });
+    await expect
+      .poll(() => page.evaluate(() => window.clockContract.directResult))
+      .toEqual({ success: false, error: 'time_transition_failed' });
     expect(await page.evaluate(() => window.clockContract.transitions)).toEqual([]);
     await page.getByRole('button', { name: 'Aktivitätsdialog prüfen' }).click();
     const dialog = page.getByRole('dialog');

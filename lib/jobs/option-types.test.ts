@@ -12,11 +12,15 @@ test('option requests validate search, pagination, and all scope identities befo
     { organizationId, kind: 'jobs', projectId: 'invalid' },
     { organizationId: 'invalid', kind: 'clients' },
     { organizationId, kind: 'arbitrary-table' },
-  ]) expect(jobOptionRequestSchema.safeParse(input).success).toBe(false);
+  ])
+    expect(jobOptionRequestSchema.safeParse(input).success).toBe(false);
 });
 
 test('option paging does not truncate selected identities to the fifty visible choices', () => {
-  const selectedIds = Array.from({ length: 1200 }, (_, index) => `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`);
+  const selectedIds = Array.from(
+    { length: 1200 },
+    (_, index) => `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+  );
   const parsed = jobOptionRequestSchema.parse({ organizationId, kind: 'jobs', offset: 1050, selectedIds });
   expect(parsed.selectedIds).toEqual(selectedIds);
   expect(parsed.offset).toBe(1050);

@@ -2,14 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { getSupabaseServerSession } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { getCachedUser } from '@/lib/data/cached';
@@ -18,7 +11,7 @@ import { getAuthenticatedRedirectPath } from '@/lib/auth/redirects';
 import { SignupForm } from './signup-form';
 
 export const metadata: Metadata = {
-  title: 'Registrieren'
+  title: 'Registrieren',
 };
 
 type SignupPageProps = {
@@ -34,11 +27,13 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
   // If user is already logged in and there's an invite code,
   // redirect to auth/callback to process the invite
   if (session && inviteCode) {
-    redirect(`/auth/callback?invite_code=${inviteCode}`);
+    redirect(`/auth/callback?invite_code=${encodeURIComponent(inviteCode)}`);
   }
 
   if (session) {
-    const { data: { user } } = await getCachedUser();
+    const {
+      data: { user },
+    } = await getCachedUser();
     if (user) {
       redirect(await getAuthenticatedRedirectPath(user.id));
     }
@@ -52,7 +47,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
     // Use the RPC function to look up invite by code (bypasses RLS)
     const { data: inviteData, error: inviteError } = await createSupabaseAdminClient().rpc(
       'get_invite_by_code',
-      { p_invite_code: inviteCode }
+      { p_invite_code: inviteCode },
     );
 
     // The RPC returns an array, get the first result
@@ -95,9 +90,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
     <Card>
       <CardHeader>
         <CardTitle className="text-2xl font-semibold tracking-tight">
-          {organizationName
-            ? `Tritt ${organizationName} bei`
-            : 'Erstelle dein Konto'}
+          {organizationName ? `Tritt ${organizationName} bei` : 'Erstelle dein Konto'}
         </CardTitle>
         <CardDescription>
           {organizationName
@@ -106,17 +99,13 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <SignupForm
-          prefillEmail={prefillEmail}
-          inviteCode={inviteCode}
-          invitedEmail={invitedEmail}
-        />
+        <SignupForm prefillEmail={prefillEmail} inviteCode={inviteCode} invitedEmail={invitedEmail} />
       </CardContent>
       <CardFooter className="flex justify-center">
         <p className="text-sm text-muted-foreground">
           Bereits ein Konto?{' '}
           <Link
-            href={inviteCode ? `/login?invite_code=${inviteCode}` : '/login'}
+            href={inviteCode ? `/login?invite_code=${encodeURIComponent(inviteCode)}` : '/login'}
             className="text-primary-text underline-offset-4 hover:underline"
           >
             Anmelden

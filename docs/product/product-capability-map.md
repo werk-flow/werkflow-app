@@ -1,6 +1,6 @@
 # Product Capability Map
 
-Status: living — last reviewed 2026-09-05
+Status: living — last reviewed 2026-10-01
 
 This document defines how WerkFlow should grow from its current operational foundation into a complete, coherent operating system for German SHK businesses and, later, an intelligent automation platform.
 
@@ -13,7 +13,6 @@ It answers four questions:
 
 This is a **product capability and dependency map**, not a release schedule, sprint plan, schema design, or promise that every listed capability must be built natively.
 
-> **Product direction confirmed:** 23 July 2026  
 > **Primary market:** German SHK businesses, with later applicability to adjacent construction trades  
 > **Research input:** [`competitive-landscape.md`](./competitive-landscape.md)
 
@@ -47,7 +46,7 @@ Feature specs should describe **what outcome and product behavior are needed**. 
 
 ## Phase Model
 
-The phase labels express dependency and product maturity, not dates.
+The phase labels express dependency and product maturity, not dates or permission to start public selling. The [business offer](../../../werkflow-business/docs/offer.md#next-public-offer) owns the later public-launch condition; beta development continues independently.
 
 ### Phase 1 — Complete Operational Core
 
@@ -234,13 +233,13 @@ The complete operational core should meet all of the following product-level cri
 
 This is a dependency sequence, not a release commitment.
 
-### Done As Of 2026-09-02
+### Done
 
-The accepted Wave 2 checkpoint establishes the foundation below. Slice counts and certification status live only in the [roadmap checkpoint](../plans/phase-1/roadmap.md#current-checkpoint). That closes the operational graph this section once listed as next: customer contacts, sites, requests and the relationship timeline; employee records, schedules, responsibilities, vacation, sickness, teams and qualifications; recurring planning and dispatch; work templates, the execution lifecycle, structured evidence, the field work pack and office handover; installed equipment, reactive service and maintenance plans; explicit time segments, corrections, time accounts with period close and payroll export; and the controlled people lifecycle. The shared attention pattern on `/aufgaben` carries approvals and notifications for all of them. Cross-domain search remains Wave 5 scope; feature-local search already exists. Native mobile and offline workflows also remain Wave 5 scope.
+The accepted Wave 2 checkpoint establishes this foundation. Slice counts and certification status live only in the [roadmap checkpoint](../plans/phase-1/roadmap.md#current-checkpoint). The foundation covers customer contacts, sites, requests and the relationship timeline; employee records, schedules, responsibilities, vacation, sickness, teams and qualifications; recurring planning and dispatch; work templates, the execution lifecycle, structured evidence, the field work pack and office handover; installed equipment, reactive service and maintenance plans; explicit time segments, corrections, time accounts with period close and payroll export; and the controlled people lifecycle. The shared attention pattern on `/aufgaben` carries approvals and notifications for all of them. Cross-domain search remains Wave 5 scope; feature-local search already exists. Native mobile and offline workflows also remain Wave 5 scope.
 
 ### Remaining
 
-Waves 3 to 6 have not started. In dependency order they cover material, procurement, inventory control and assets; the commercial and finance loop; evidence, communication, portability, mobile and interoperability; and Phase 1 closure with Phase 2 readiness. The next two subsections describe the first of those in product terms; the roadmap owns the slice list.
+In dependency order, Waves 3 to 6 cover material, procurement, inventory control and assets; the commercial and finance loop; evidence, communication, portability, mobile and interoperability; and Phase 1 closure with Phase 2 readiness. The next two subsections describe the first of those in product terms; the roadmap owns the slice list.
 
 ### Close The Commercial And Material Loop
 
@@ -278,7 +277,7 @@ Phase 2 should advance through controlled levels:
 
 Skipping directly to a generic agent builder would increase complexity and risk before the product has stable actions or understandable failure handling.
 
-The owner decided on 2026-09-17 that a bounded pilot lane for two Level 1 assist slices opens after Wave 4, before Phase 1 closes; the [AI spec](../features/ai-automations.md#the-pilot-lane-after-wave-4) defines it and the roadmap carries it as the one exception to its Phase 2 rule.
+The owner decided that a bounded pilot lane for two Level 1 assist slices opens after Wave 4, before Phase 1 closes; the [AI spec](../features/ai-automations.md#the-pilot-lane-after-wave-4) defines it and the roadmap carries it as the one exception to its Phase 2 rule.
 
 ## What WerkFlow Should Learn, Not Copy
 
@@ -338,7 +337,7 @@ Every feature spec should keep these sections current:
 8. **Open Product Decisions**
 9. **Related Docs**
 
-One spec carries extra sections by design. [document-management.md](../features/document-management.md) keeps the nine standard sections since 2026-09-03; its implementation reference lives in [document-storage-and-access.md](../technical/document-storage-and-access.md). [ai-automations.md](../features/ai-automations.md) has foundations rather than features as its Phase 1 scope, so its Phase 1 section is titled "Phase 1 — Complete Operational Core Enabling Foundations" and it adds In-App And External Automation, Human-Control Levels, and Trust, Security, And Operational Requirements.
+One spec carries extra sections by design. [document-management.md](../features/document-management.md) keeps the nine standard sections; its implementation reference lives in [document-storage-and-access.md](../technical/document-storage-and-access.md). [ai-automations.md](../features/ai-automations.md) has foundations rather than features as its Phase 1 scope, so its Phase 1 section is titled "Phase 1 — Complete Operational Core Enabling Foundations" and it adds In-App And External Automation, Human-Control Levels, and Trust, Security, And Operational Requirements.
 
 When behavior is implemented:
 

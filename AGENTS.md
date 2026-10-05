@@ -1,216 +1,140 @@
 # AGENTS.md
 
-## Purpose Of This File
+Read this file at the start of every task. It gives the product context, the six virtues that define quality in this repository, and the rules that apply to every change. Everything else is reached through [the docs index](docs/README.md). Do not glob the docs tree.
 
-This file gives coding agents product context before they change WerkFlow. It should help agents understand what the app is for, who it serves, what problems matter most, and which product principles should guide feature work.
+## Workspace
 
-Keep this file focused on broad product direction and the always-on repository rules. Technical setup lives under `docs/technical/`, routed through `docs/README.md`. Deeper business context, such as offer design and acquisition strategy, lives in `docs/product/`.
+The parent `Code` directory holds three independent Git repositories. It is not a monorepo.
 
-## App Summary
+| Repository | Owns | Read when |
+| --- | --- | --- |
+| [werkflow-app](docs/README.md) | The product: web app, future mobile app, implementation, tests, infrastructure, release evidence | Building or checking app behavior |
+| [werkflow-business](../werkflow-business/docs/README.md) | Avatar, offer, acquisition, beta relationship, customer research, Hormozi library | Making business decisions or checking commercial promises |
+| [werkflow-website](../werkflow-website/AGENTS.md) | Public website, campaign pages and their integrations | Building or checking marketing pages |
 
-WerkFlow is intended to become the digital operations backbone for German HVAC / SHK businesses (`Sanitär-Heizungs-Klima`) first. Adjacent trades such as roofing or tiling may become relevant later because they often share similar operational patterns, but the current product focus is SHK.
+Open the repository that owns the task. Read a sibling's AGENTS.md and index before you use its context. Reading a sibling does not authorize editing or synchronizing it. Report missing sibling context instead of inventing facts. The business [workspace workflow](../werkflow-business/docs/workflow.md) owns source freshness and new-machine setup.
 
-It is a TypeScript web app today and is expected to have an associated React Native mobile app in the future.
+For substantive business work, use the [Hormozi advisor](../werkflow-business/.agents/skills/hormozi-advisor/SKILL.md) and its [reasoning baseline](../werkflow-business/docs/library/baseline.md). For customer-facing sales or marketing copy, also use [copywriting](../werkflow-business/.agents/skills/copywriting/SKILL.md) and its [fifth-grade standard](../werkflow-business/docs/copy-standard.md). Routine engineering does not load the business library.
 
-The app should help SHK business owners and their teams save time, reduce paperwork, organize work digitally, and replace slow, outdated software with a fast, modern system tailored to their daily operations. Core product areas include customers/CRM, employee and working-time management, calendar/resource planning, project/job and service management, document management, inventory/procurement, commercial/finance workflows, and later AI-assisted automations.
+## Product
 
-WerkFlow has two broad product phases. First, build a complete operational core with the depth expected from serious Handwerkersoftware; this is not a bare-minimum MVP. Then use that trustworthy operational data and workflow foundation for differentiated AI assistance, configurable automation, and bounded agents inside and outside the app. The product-wide capability and dependency map lives in `docs/product/product-capability-map.md`. The living implementation order, slice dependencies, and current checkpoint live in `docs/plans/phase-1/roadmap.md` (the entry file; the execution protocol, gate definitions, progress log, and per-slice acceptance records live beside it under `docs/plans/phase-1/`); agents doing Phase 1 feature work must read and update it. The annotated index of every doc — one line each with a read-when hint and status — is `docs/README.md`; route through it instead of globbing the docs tree.
+WerkFlow is the digital operations backbone for German SHK businesses (`Sanitär-Heizungs-Klima`). Adjacent trades may follow later. It is a TypeScript web app today, with a React Native app planned.
 
-## Target User / Avatar
+The buyer is the business owner. The users are the whole company: owners, office staff, project leads, field workers (`Handwerker/in`) and apprentices. The commercial target is medium-to-large SHK businesses whose leadership wants to modernize. Nobody needs technical knowledge. The bar for field workers is the lowest: clear, forgiving, hard to misuse.
 
-WerkFlow is a B2B product for German SHK businesses first, with possible future expansion into adjacent trade businesses. The direct customer is usually the business owner, but the whole company becomes the user base: owners, office staff, secretaries, project managers, technicians, workers, apprentices, and other employees.
+These businesses lose time to paperwork, scattered information, slow legacy software and physical folders. The owner ends up holding it all together. WerkFlow is the one place that answers: what work is due, for which customer or project, who is assigned, when, in which state, how much time was recorded, and which documents and materials belong to it.
 
-The buyer is likely an experienced SHK business owner in their late 30s or 40s. They may be familiar with computers and smartphones, but they should not be expected to have technical knowledge about apps, software, or data systems. The same is true for their employees, and the bar for field workers must be especially low: the app should be extremely clear, forgiving, and hard to misuse in practical day-to-day work.
+The product has two phases. Phase 1 builds a complete operational core with the depth of serious Handwerkersoftware. Phase 2 builds AI assistance and automation on that data. [The capability map](docs/product/product-capability-map.md) owns the dependency model. [The roadmap](docs/plans/phase-1/roadmap.md) owns the order of work and the current checkpoint. Each feature spec's **Current Product Baseline** owns implemented behavior. A planned capability is not an implemented feature.
 
-The common denominator is that these businesses often rely on slow legacy software, paper notes, physical folders, scattered documents, and manual coordination. Switching to WerkFlow should feel accessible, fast, and obviously useful rather than like adopting a complicated new software system.
+Before you design or add a feature, ask three questions. Does it reduce paperwork? Does it make the work more organized? Does it save time for employees or the owner? If all three answers are no, the feature is probably bloat. Raise it with the owner.
 
-Important user groups include:
+## The six virtues
 
-- Business owners who buy the app, need oversight, and want to reduce the amount of operational work and stress on their plate.
-- Office staff and secretaries who coordinate customers, documents, appointments, projects, workers, and communication.
-- Managers or project leads who plan jobs, assign employees, track progress, and need reliable project information.
-- Field workers / `Handwerker/in` who need a simple mobile-friendly way to see assigned work, document what happened, track time, and use inventory without friction.
-- Apprentices and less experienced employees who need guided workflows with minimal room for mistakes.
+These six virtues define quality in WerkFlow. They apply to every change, whatever its size. Each rule names its mechanism by tier ([decision 0005](docs/decisions/0005-enforcement-ladder.md)): Tier 1 makes the mistake unwritable, Tier 2 is an automated check that fails on it, Tier 3 is judgment that a reviewer exercises and records.
 
-## Core Problem
+### How to read the virtues
 
-The core problem is that many SHK businesses lose time, focus, and sanity because their operations are buried in unnecessary paperwork, disconnected information, slow legacy tools, and physical notes, documents, and folders.
+**The owner docs.** Each virtue's owner doc holds five sections: "How to work" (a procedure per recurring task, with the fast check at each step and the wrong turn it prevents), "Checklist" (every item a new implementation ticks, with its mechanism), "Never" (the prohibitions and what catches each), "Verify your work" (the commands at the end) and "Examples" (real files to copy).
 
-This creates avoidable work for employees and especially for the business owner, who often becomes the person responsible for keeping everything organized. WerkFlow should become the central digital place where the business can organize its operations instead of relying on scattered tools and paper-based processes.
+**Order of use.** Before you write, read the "How to work", "Checklist" and "Never" sections of every virtue your task touches, and build from the defaults it names. While you work, run the fast check each step names. At the end, run the Verify commands.
 
-The app should help answer practical operational questions quickly:
+**Hard rules and defaults.** A Tier 1 or Tier 2 rule is a hard rule. A mechanism enforces it, and you never break it. To change one, change its mechanism in the same change, with the owner. Every security rule is hard, even where only review enforces it, except the two defaults of virtue 3. Every other Tier 3 rule and every procedure step is a verified default, not a law. Diverge when it clearly does not fit, for example in a Phase 2 AI feature whose interface is unlike the rest of the app. Record every divergence in one place: a `Divergences` note in the slice record, or outside a slice, in the commit message body. The note names the default, why it does not fit here, what you did instead, and whether the default should change. If it should, change the owner doc in the same change.
 
-- What work needs to be done?
-- Which project or customer does it belong to?
-- Who is assigned?
-- When is it planned?
-- What is planned, in progress, parked, blocked, complete, or still undocumented?
-- How much work time was recorded?
-- Which documents, photos, offers, contracts, invoices, or parts belong to the work?
-- Which inventory items are available, needed, used, or should be reordered?
+**Improve the virtues.** The virtues evolve, the testing system and the docs rules included. When a rule is missing, wrong, outdated or costs more than it protects, raise it with the owner and change the rule with its mechanism in the same change. A new rule comes with its mechanism at the highest reachable tier and with a plan for the existing code: fix it now, or add a row to the [enforcement-ladder backlog](docs/technical/enforcement-ladder-backlog.md). When you fix a diagnosed defect or keep a review finding, name the tier where its prevention landed.
 
-## Product Purpose
+A change is done when its Verify commands pass and its Tier 3 points have a recorded answer.
 
-WerkFlow should be powerful but easy to use, work straight out of the box, and feel tailored to SHK businesses. It should reduce paperwork, centralize operational information, and reduce the clutter and stress caused by bad software and unorganized work.
+### 1. UI and UX
 
-Before designing or adding a feature, agents should ask:
+- **Good.** Build from the component registry: a page is `PageShell`, `PageHeader`, `PageBody`, a field is a `Field`, an empty list is `EmptyState`. Every route has its own `loading.tsx` skeleton, and a region that fails shows a retry. A submit button stays enabled, and a submit with missing input marks the fields and focuses the first (`focusFirstInvalidField`). German copy uses real umlauts, addresses the user with "du", and reads naturally.
+- **Never.** Hardcode a hex value, a radius or a numbered palette class. Write a raw `<button>`, a raw text `<input>`, a native date, time or select control, a raw `<h1>`, or a `max-w-*` class on `DialogContent`. Use orange as decoration, or purple as a loud accent. Disable a submit or an action button to express validation. Keep a design the owner rejected as a test baseline.
+- **Enforced by.** Tier 1: the registry in `components/ui/` and `components/shared/` and the tokens in `app/globals.css`. Tier 2: `static:lint` (`ui/no-raw-controls`, `ui/submit-disabled-only-while-pending`, `ui/action-disabled-only-while-pending`, `ui/pending-reset-on-failure`, `ui/dialog-pending-while-waiting`, `ui/global-key-handler-respects-consumed`, `ui/icon-button-needs-name`, `ui/label-in-spaced-container`, `ui/no-lucide-stroke-width`, `ui/no-block-in-paragraph`, and the selector sets in `eslint.config.mjs`), the contracts under `lib/ui/`, `lib/conventions/german-copy.test.ts`, `lib/conventions/route-loading.test.ts`, `lib/conventions/status-colors.test.ts`, `ui:contracts`, `audit:layout`, `audit:visual` (release, image and text references).
+- **Defaults (Tier 3).** Hierarchy, density, shadows, natural German and fit for the role, through [rendered design acceptance](docs/technical/standards-audit.md#rendered-design-acceptance).
+- **Verify.** `bun run lint`, `bun run test:unit`, `bun run test:ui`. Then look at the screen: both themes, 375 px and desktop, keyboard path, empty, loading and error states.
+- **Owner doc.** The `werkflow-design` skill (`.claude/skills/werkflow-design/SKILL.md`). Start from its [How to work](.claude/skills/werkflow-design/SKILL.md#how-to-work).
 
-- Does this reduce paperwork inside the business?
-- Does this make the business's work more organized?
-- Does this save time for employees or the business owner?
+### 2. Performance and immediate feedback
 
-If the answer to all three questions is no, think carefully before adding the feature because it may be unnecessary bloat.
+- **Good.** Every action shows feedback in its first frame, before the network answers (`useServerAction`, `useOptimisticList`). Saved results reach every affected view, and other sessions within the live target. A list reads completely in pages and reports an overflow instead of truncating (`readAllRows`). An organization-sized id list goes through `readInBatches`.
+- **Never.** Wait for the network before you acknowledge an action. Truncate a list silently. Pass an organization-sized list to `.in()`. Call `updateTag` or `revalidateTag` on a tag that no cached reader carries. Use `useTransition`, polling or a toast in product code. Raise a budget, a reference or a timeout to make a slow build pass.
+- **Enforced by.** Tier 1: `hooks/use-server-action.ts`, `hooks/use-optimistic-list.ts`, `lib/supabase/query-batches.ts`. Tier 2: `lib/conventions/server-action-feedback.test.ts`, `ui/no-derived-state-effect`, `lib/conventions/id-list-batches.test.ts`, `lib/conventions/id-list-string-filters.test.ts`, `lib/conventions/cache-tags.test.ts`, `sql:list-pagination`, `ui:contracts` and `audit:layout` (a loaded page settles), `bun run realtime:check`, the Realtime, transition and polling selector sets in `eslint.config.mjs`, and in release mode the `audit:performance:*` groups and the latency deadlines.
+- **Defaults (Tier 3).** Whether a new flow needs a measured scenario, and whether a new reader may be cached across requests.
+- **Verify.** `bun run test:unit`, `bun run test:ui`. To prove a performance repair: `bun run test:verify --group audit:performance:<name>`.
+- **Owner doc.** [Realtime and caching](docs/technical/realtime-and-caching.md). Start from its [How to work](docs/technical/realtime-and-caching.md#how-to-work).
 
-## Key Use Cases And Product Scope
+### 3. Security
 
-Implementation status is owned by each feature spec's **Current Product Baseline** section and by the slice index in `docs/plans/phase-1/roadmap.md`. Read those before making a status claim; this list only orients. As of 2026-09-02, Waves 0 to 2 of Phase 1 (`P1-00` through `P1-24`) are accepted and Wave 3 has not started.
+- **Good.** The server establishes identity, organization, role and object permission before every protected operation, and a test drives the real action with a foreign id. The migration that creates a table enables RLS, adds policies and grants explicitly. An identity check that cannot complete is a failure, never a sign-out and never access.
+- **Never.** Restrict only in the UI. Trust an id, an organization or a role that the client sent. Grant to `anon`. Export a helper from a `'use server'` module. Log personal data, codes or provider bodies. Send file bytes through a Server Action. Write to PROD outside a release the owner requested.
+- **Enforced by.** Tier 1: RLS, revoked default grants, `server-only` modules, `lib/storage/r2.ts`, `lib/logging.ts`. Tier 2: the tests under `lib/security/`, `lib/conventions/tenant-scope.test.ts`, `lib/conventions/server-action-input.test.ts`, `lib/conventions/zod-entry.test.ts`, the auth-scope, production-ref and `console` rules in `eslint.config.mjs`, `sql:security`, `sql:closed-period-writes`, `canary:security`, `static:dependencies`.
+- **Defaults (Tier 3).** Whether the permission check is the right one for the operation, and every accepted residual exposure.
+- **Verify.** `bun run test:unit`, `bun run test:verify --group sql:security`.
+- **Owner doc.** [Security](docs/technical/security.md). Start from its [How to work](docs/technical/security.md#how-to-work).
 
-- Working-time and employee management: personnel records with date-effective employment conditions, work schedules and holiday calendars, scoped responsibilities with delegation, vacation, sickness, teams and qualifications, explicit time segments, one correction and approval flow, time accounts with period close and payroll-ready export, and a controlled onboarding, access, and employment lifecycle with protected personnel documents. Full offboarding closure with asset return is `P1-33`.
-- Customers and CRM: customer identity with contacts and work sites, operational requests (`Anfragen`) converted exactly once into work, a relationship timeline with owned follow-ups and communication preferences, and installed-equipment context per site. Duplicate control and outbound messaging are later slices. It must not become a generic sales CRM.
-- Calendar and resource planning: day/week/month scheduling, recurring and multi-visit planning occurrences, capacity and qualification checks, dispatch with acknowledgement, parked work, and customer commitments kept distinct from internal plans. Tools, vehicles, and routes are Wave 3 and later.
-- Project and job management: projects and jobs with assignment, versioned work templates, an explicit execution lifecycle with blockers and dependencies, structured site evidence (reports, measurements, defects, signatures), a focused field work pack, and office-reviewed handover packages. Offers, contracts, and invoices are not separate modules yet.
-- Service and maintenance: installed equipment per customer site, reactive service cases with triage and dispatch, and maintenance plans with operational coverage that generate due work. On-call planning, customer messaging, and telemetry are later scope or decision gates.
-- Commercial and finance workflows: not implemented yet (Wave 4). Structured offers, contracts, invoices, incoming bills, payments, dunning, and accounting-ready handoffs must connect to approved work, material, measurements, customer context, and post-calculation. Native double-entry accounting, payroll, or tax filing remain separate strategic decision gates rather than automatic scope.
-- Inventory management: a substantial V1 is implemented. The app should continue toward a connected material lifecycle covering catalog, locations, stock movements, job planning and consumption, tools/assets, suppliers, procurement, billability, and reordering without conflating these states. See `docs/features/inventory.md`.
-- Mobile inventory workflows: the future mobile app should build on inventory V1 with barcode scanning so employees can quickly identify an item and complete permitted take, return, transfer, count, or receipt actions.
-- Inventory onboarding service: part of the surrounding product/service offer may include an initial inventory audit so a customer starts with a usable baseline inventory in WerkFlow from day one.
-- Supplier and ordering workflows: the app should extend inventory V1 with demand, approvals, supplier orders, receipts, returns, invoice matching, and reviewed reorder proposals, ideally through relevant German wholesaler standards and APIs where possible.
-- Document management: a substantial first implementation exists. Managers (`admin`, `buero`) use a central `/dokumente` library with manual folders, a Drive-like file table, search/filtering by category and linked targets, trash, versioning for business documents, and audit history. File bytes live in private Cloudflare R2 buckets (EU jurisdiction) with direct signed uploads/downloads; Postgres keeps all metadata (see `docs/decisions/0001-infrastructure-stack.md`). Field workers (`employee`) do not see the library sidebar page; they upload, view, and download documents from assigned job detail pages. Documents are metadata-linked to jobs, projects, customers, employees, requests, installed equipment, service cases, or maintenance coverage rather than auto-creating physical folders when operational records are created. Protected personnel documents (`P1-24`) are a separate access class outside the ordinary library. See `docs/features/document-management.md` for the full current model and open decisions.
-- AI automations: this is the second broad product phase after the complete operational core is trustworthy. Future capabilities may include assistance, recommendations, product-owned templates, configurable workflows, and bounded agents acting inside WerkFlow or through authorized external email, SMS, calendar, accounting, or supplier connections. Human control, source visibility, permissions, audit, cost limits, and safe failure behavior are required. See `docs/features/ai-automations.md`.
+### 4. Code quality and maintainability
 
-Treat generated Supabase types and live Supabase inspection as more reliable than older architecture documentation when schema details matter. WerkFlow runs a production and a dev Supabase project plus a local test stack; the project IDs, the dev-first migration rule, and which tool reaches which backend live in `docs/technical/environments.md`.
+- **Good.** Write the smallest amount of clear code that delivers the confirmed outcome. A domain rule has one owner module with precise types and focused tests. Rows that change together change in one database function call. Use descriptive full-word names and guard clauses. Type every exported signature under `lib/`. End each task with a deletion pass.
+- **Never.** Use `any`, a `!` assertion, a double cast through `unknown`, or `undefined` in an optional property. Declare a helper name that another product file already declares. Write related rows in separate statements. Leave dead code, an unused export or an unused dependency. Suppress a rule without a reason. Add an abstraction for possible future scope. Remove authorization, validation, audit history or failure visibility to save lines. Rename existing short identifiers in passing (owner decision).
+- **Enforced by.** Tier 1: the strict compiler flags in `tsconfig.json`. Tier 2: `static:typecheck`, `static:lint` (type, cast, size-limit, layering, escape and suppression rules), `static:unused`, `static:format`, `lib/conventions/duplicate-helpers.test.ts`, `lib/conventions/module-caps.test.ts`, `lib/conventions/business-date.test.ts`, `lib/conventions/collection-keys.test.ts`, `lib/conventions/action-failure-shape.test.ts`, `lib/conventions/failure-messages.test.ts`, `lib/action-messages.test.ts`, `lib/conventions/read-error-visibility.test.ts`.
+- **Defaults (Tier 3).** Whether an abstraction earns its place, naming, and the deletion pass with its independent review.
+- **Verify.** `bun run typecheck`, `bun run lint`, `bun run unused:check`, `bun run test:unit`.
+- **Owner doc.** [Code quality](docs/technical/code-quality.md), with the `typescript-best-practices` skill for types. Start from its [How to work](docs/technical/code-quality.md#how-to-work).
 
-## Product Principles For Agents
+### 5. Testing and review
 
-- Optimize for speed, simplicity, and operational clarity. The app should feel fast, modern, and much easier than the legacy tools and paper processes it replaces.
-- Keep field-worker (`Handwerker/in`) workflows extremely simple, clear, mobile-friendly, and hard to misuse.
-- Keep owner, office, and manager workflows efficient. These users need fast overview, filtering, planning, assignment, document access, and correction flows.
-- Preserve organization boundaries. Data and preferences are organization-scoped unless there is a clear reason otherwise.
-- Respect role differences. `admin`, `buero`, and `employee` experiences should differ intentionally, not accidentally.
-- Prefer German user-facing language that is natural, neutral, and practical. Keep code, identifiers, comments, and developer artifacts in English.
-- Favor simple defaults over heavy configuration. The product should work well out of the box.
-- Avoid bloat. New features should reduce paperwork, improve organization, or save time.
-- Prioritize fast loading and fresh operational data. The app uses Next.js Cache Components, Suspense streaming, cache tags, and Supabase Realtime to balance speed with non-stale data (`docs/technical/realtime-and-caching.md`).
-- Design for excellent UI/UX, not just feature coverage. The app should feel slick, modern, and trustworthy.
-- When business context is uncertain, leave a clear TODO or ask the product owner instead of inventing strategy.
+- **Good.** Put each rule at the cheapest boundary that can expose its failure: a unit test for a calculation, SQL for permissions, a component contract for a shared control, a browser journey for a connected outcome. A test fails when the behavior breaks and names the broken invariant. Diagnose a failure before you run again. Review every change through `bun run review` and record a disposition for each finding.
+- **Never.** Retry until green. Weaken an assertion, skip a test, add a fixed sleep or raise a timeout to pass. Treat a review score or an old report as acceptance. Call the CodeRabbit CLI directly, or install it. Push without the publication gate.
+- **Enforced by.** Tier 1: `.githooks/pre-push` refuses a push without a passing verification report and review records whose per-file digests cover the tree, and `scripts/guard-edits-during-verification.ts` refuses edits to proof inputs during a run. Tier 2: the selection and proof rules in `scripts/verify.ts`, `static:coverage`, `lib/testing/spec-support/spec-conventions.test.ts`, the rules in `eslint-rules/playwright-spec-rules.mjs` (a spec passes data; its area module owns copy, structure hooks and key presses) and the spec selector set in `eslint.config.mjs`.
+- **Defaults (Tier 3).** Whether an assertion proves its catalog clause, the classification of a failure, and the disposition of each review finding.
+- **Verify.** `bun run test:plan`, `bun run test:verify`, `bun run review`. A wave end or a release adds `bun run test:verify --mode release` and the cloud canary.
+- **Owner doc.** [Testing](docs/technical/testing.md), with [CodeRabbit](docs/technical/coderabbit.md) for reviews. Start from its [How to work](docs/technical/testing.md#how-to-work).
 
-## What This App Is Not
+### 6. Documentation
 
-WerkFlow should not become a bloated generic business suite where features are added just because similar software has them. It should stay focused on the operational reality of German SHK businesses.
+- **Good.** A doc holds what the code and the database cannot say: intent, decisions, rules, reasons, procedures, and a pointer to the mechanism that enforces a rule. Every fact has one home, and other places link to it. Change the owning doc in the same change as the behavior.
+- **Never.** Restate a schema, a file list, a handler list, a function inventory, a count or a current value. Write dated narrative, report ids or build ids into a living doc. Copy a rule into a second doc. Create a report or summary file that nobody asked for. Store repository facts in agent memory.
+- **Enforced by.** Tier 2: `bun run docs:check` (`scripts/check-docs.ts`, rules in `lib/docs/`), including the required sections of every owner doc and the mechanisms they name.
+- **Defaults (Tier 3).** Whether a sentence is derivable from code, whether a fact has a second home, and whether undated narrative or a counter sits in a living doc.
+- **Verify.** `bun run docs:check`.
+- **Owner doc.** [The docs index](docs/README.md), with the `writing-for-agents`, `technical-writing` and `unslop` skills for the prose. Start from its [How to work](docs/README.md#how-to-work).
 
-Before adding anything substantial, apply the three product-purpose questions above. If none of them holds, the feature probably does not belong in the product yet.
+### Keep the blocks and the owner docs in step
 
-Do not encode acquisition strategy, offer structure, or sales positioning directly into feature logic unless those concepts are explicitly represented in product docs and requirements.
+When an owner doc's checklist gains, loses or renames a mechanism, change the block's "Enforced by" line in the same change.
 
-## Domain Language
+## How to work
 
-Use German product language for anything visible to end users. Keep code, database names, identifiers, comments, commits, and developer-facing artifacts in English unless an existing technical convention requires otherwise.
+A rule below without a named mechanism is a Tier 3 default.
 
-- `SHK`: `Sanitär-Heizungs-Klima`, the target business category.
-- `Auftrag`: a work order or job.
-- `Projekt`: a larger body of work that can contain multiple jobs.
-- `Kunde`: a private or commercial client.
-- `Mitarbeiter`: an employee or organization member.
-- `Handwerker/in`: the field-worker employee role label used in the UI.
-- `Organisation`: the workspace/company boundary.
-- `Anfrage`: an operational customer request captured at intake (`/anfragen`), converted exactly once into work.
-- `Ansprechpartner` / `Einsatzort`: a customer's contact person / a customer's durable work site.
-- `Kalender`: scheduling view for planning occurrences, dispatch, absences, and time context.
-- `Einsatz`: a dispatched work instruction; `Mein Einsatz` is the field worker's view.
-- `Arbeitsvorlage`: a versioned work template (`/arbeitsvorlagen`).
-- `Arbeitsnachweis`: a structured site-evidence artifact (report, measurement, defect, signature).
-- `Übergabe`: the office-reviewed handover package (`/auftraege/<jobNumber>/uebergabe`, `/auftraege/uebergaben/<targetType>/<targetId>`).
-- `Aufgaben`: the one role-aware task, approval, and notification surface (`/aufgaben`).
-- `Qualifikationen`: teams, skills, and certifications (`/qualifikationen`).
-- `Anlage`, `Servicefall`, `Wartungsplan`: installed equipment, reactive service case, maintenance plan (`/service/...`).
-- `Dokumente`: manager-facing document library at `/dokumente`.
-- `Dokumente & Bilder`: contextual document section on job, project, customer, and employee detail pages.
-- `Zeiterfassung`: time tracking, activity segments, corrections, and approvals.
-- `Zeitkonto` / `Perioden`: time accounts and balances / period close and payroll export.
-- `Urlaub`: vacation/leave management.
-- `Krankheit` / `Krankmeldung`: sick leave and absence management.
-- `Arbeitszeitmanagement`: management of working hours, breaks, vacation, sick leave, and related approvals.
-- `Lager` / `Inventar`: inventory, materials, parts, and stock.
-- `geparkt`: parked work that is intentionally unscheduled or paused.
-- `buero`: office/manager role with more permissions than an employee and fewer than an admin.
+- Route every task through the matching skill. [The docs index](docs/README.md) lists all skills. The fixed pairings: prose of any kind uses `unslop`; anything an agent consumes uses `writing-for-agents`; developer documentation uses `technical-writing`; types and validation use `typescript-best-practices`; a non-trivial defect uses `diagnosing-bugs`; open decisions with the owner use `grilling`; UI uses `werkflow-design`; Supabase uses `supabase-live-workflow`.
+- Ask a short clarifying question before you code when scope, acceptance or an edge case is ambiguous. When business context is uncertain, ask the owner or leave a clear TODO. Do not invent strategy.
+- Phase 1 feature work follows [the protocol](docs/plans/phase-1/protocol.md) and updates the roadmap and the affected feature spec in the same change. Mechanism: `docs:check` validates the roadmap and the slice records.
+- Generated types (`lib/supabase/database.types.ts`) and live Supabase inspection outrank any description of the schema. Mechanism: `bun run types:check`.
+- Preserve organization boundaries and intentional role differences (`admin`, `buero`, `employee`). Keep field-worker flows simple and mobile-friendly. Favor defaults over configuration. Mechanism: virtue 3 for the boundaries.
 
-Keep route names, database enum values, and identifiers aligned with the existing codebase. The route name is the German term; the owning feature spec defines it.
+## Language
 
-## Future Product Context
+- Everything a user sees is natural German with real umlauts and `ß`: labels, messages, tooltips, aria labels. Mechanism: `lib/conventions/german-copy.test.ts` for spelling, address and ellipsis.
+- Code, identifiers, comments, commits and developer documents are English. Route names and database values keep the German domain terms of the codebase.
+- Keep user-facing strings out of deep logic where practical.
 
-These topics live in separate docs so this file stays small. All three exist today as thin placeholders that will grow as the business decisions are made:
+Domain terms: `Auftrag` (work order), `Projekt` (contains several jobs), `Kunde`, `Mitarbeiter`, `Handwerker/in` (field-worker role label), `Organisation` (the company boundary), `Anfrage` (customer request, converted once into work), `Ansprechpartner` and `Einsatzort` (a customer's contact and work site), `Kalender`, `Einsatz` (dispatched work; `Mein Einsatz` is the worker's view), `Arbeitsvorlage`, `Arbeitsnachweis` (site evidence), `Übergabe` (office-reviewed handover), `Aufgaben` (the one task and approval list), `Qualifikationen`, `Anlage`, `Servicefall`, `Wartungsplan`, `Dokumente`, `Zeiterfassung`, `Zeitkonto`, `Perioden`, `Urlaub`, `Krankmeldung`, `Lager`, `geparkt` (intentionally unscheduled work), `buero` (office role between employee and admin). The owning feature spec defines each term.
 
-- `docs/product/offer.md`: product offer, packaging, pricing assumptions, guarantees, and buying objections.
-- `docs/product/acquisition.md`: target channels, funnel, onboarding path, and lead/customer acquisition process.
-- `docs/product/avatar.md`: a deeper description of the ideal customer profile and user personas if this outgrows the summary above.
+## Tools, branches and releases
 
-Agents should read them for tasks that touch positioning, onboarding, monetization, growth, or sales-driven product changes, and should still ask or leave TODOs instead of inventing details the placeholders do not yet contain.
+- Use Bun: `bun install`, `bun run <script>`, `bunx <tool>`. Keep `bun.lock`. Keep `package-lock.json` as it is. Add no other lockfile. Mechanism: `vercel.json` installs from the frozen `bun.lock`.
+- On Windows, quote paths: the repository path has spaces and route folders have parentheses. Prefer Bash for path-heavy commands.
+- The infrastructure stack is settled ([decision 0001](docs/decisions/0001-infrastructure-stack.md)). Do not propose a provider migration without a superseding decision.
+- Work on local `main`. There are no feature branches, pull requests or CI ([decision 0008](docs/decisions/0008-development-workflow.md)). Commit and push only when the owner asks. Publish with `git push origin main:partner-preview`. `origin/main` is production and advances only on the owner's explicit release request. Mechanism: `.githooks/pre-push` for the gate.
+- Schema changes follow [the migration rule](docs/technical/environments.md#the-migration-rule). Mechanism: `bun run migrations:check`, `bun run types:check`, `sql:security`.
 
-## Always-On Repository Rules
+## Brand
 
-These rules apply to every task in this repository. They originated as Cursor rules; the `.cursor` folder was removed on 2026-08-20 (Cursor is no longer used), and this file is now their sole source for all agents (Claude reads it via `CLAUDE.md`, Codex reads it directly).
+The `werkflow-design` skill owns the design language: tokens, the orange and purple rules, the logo per theme and the component canon.
+## Business context
 
-### Language And Coding Standards
+Tamay owns product and offer. John owns leads, marketing, sales and customer work. The business repository owns the [offer](../werkflow-business/docs/offer.md), the [avatar](../werkflow-business/docs/avatar.md), [acquisition](../werkflow-business/docs/acquisition.md) and the [beta partnership](../werkflow-business/docs/beta-partnership.md) with Willert Haustechnik. A business ambition never adds a feature, an entitlement or analytics by itself. Resolve scope changes with Tamay. Do not encode sales positioning into feature logic.
 
-- Apply these standards across the Next.js and TypeScript app.
-- Use natural, neutral German for all user-facing UI text, examples, labels, aria labels, tooltips, and error messages.
-- Use proper German characters such as umlauts and `ß` in user-facing copy. Use ASCII replacements only when required for identifiers, slugs, env vars, URLs, or another technical constraint.
-- Keep code, identifiers, APIs, comments, commands, commit messages, PR text, developer logs, and developer-facing artifacts in English.
-- Ask concise clarifying questions before coding when requirements are ambiguous, especially around scope, inputs and outputs, acceptance criteria, edge cases, performance, security, UI states, accessibility, internationalization, and integration points.
-- For non-trivial uncertain tasks, briefly restate the intended solution and request confirmation when key details are still unclear.
-- Use descriptive full-word names. Avoid unclear abbreviations and one- or two-letter identifiers. This rule binds new and changed code only: the owner decided on 2026-09-15 not to rename the existing short identifiers (about 1,900 sites), so do not rename them in passing and do not read them as licence to add more.
-- Explicitly type public TypeScript function signatures and APIs. Under `lib/` this is a lint error (`explicit-module-boundary-types`); React components under `components/` and `app/` may keep inferred return types. Avoid `any` (a lint error); prefer precise types, discriminated unions, and utility types. `tsconfig.json` runs with `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess`: never pass `undefined` into an optional property, and narrow every index or map lookup instead of asserting with `!`.
-- Prefer guard clauses and early returns. Avoid deep nesting and broad try/catch blocks without meaningful handling.
-- Write the smallest amount of quality code that clearly and maintainably delivers the confirmed outcome. This is not code golf: readability, maintainability, correctness, and explicit business meaning take priority over the raw line count, but unnecessary code is still a cost.
-- Before and during implementation, ask whether the same outcome can be reached more directly with fewer branches, helpers, state variables, effects, wrappers, layers, dependencies, or duplicated paths. Prefer straightforward code, explicit state transitions, and direct data flow over clever indirection, premature generalization, speculative flexibility, or scaffolding for possible future scope.
-- Reduce incidental complexity before adding an abstraction: reuse the existing source of truth and established patterns, keep related behavior together, and do not create parallel models or frameworks for a problem the current domain already owns. Extract a helper or abstraction only when it removes real duplication, makes a complex rule materially easier to understand and test, or enforces a necessary boundary. A helper has one home: a module-level function name declared in two product files fails `unit:all` (`lib/conventions/duplicate-helpers.test.ts`).
-- End every task with a deletion pass before review: for each file, export, function, branch, state variable, effect, wrapper, and dependency you added, ask whether the outcome survives without it, and delete what does not earn its place. The gates catch what the pass misses: `static:unused` (knip, `knip.jsonc`) fails on a dead file, export (type-only exports included), or dependency, `static:typecheck` on an unused local or parameter, and `static:lint` on a product module over 2,000 lines (the five larger legacy modules are capped at their current size and only shrink, by a split along their domain seams; `lib/conventions/module-caps.test.ts` keeps each cap equal to its file, so a shrink lowers the cap in the same change). A slice records the pass and its independent review in its record; the rule and the review procedure live in `docs/plans/phase-1/protocol.md` under "Deletion Pass And Independent Review".
-- Simplicity and fewer lines are never reasons to omit safeguards. Preserve authorization, organization isolation, validation, data integrity, historical meaning, accessibility, auditability, failure visibility, and recovery. When a business rule is inherently complex, contain it in a focused, clearly named domain module with precise types, explicit invariants, and focused tests so its callers stay small and readable.
-- Keep comments concise and purposeful. Explain non-obvious rationale, invariants, edge cases, or security/performance caveats.
-- Apply the `unslop` skill (`.claude/skills/unslop`, mirrored in `.agents/skills/unslop`) to every piece of prose you produce — chat responses, documentation, commit/PR text, and user-facing copy alike. Load it at the start of a task that will produce prose; do not wait to be asked.
-- Push every learned lesson up the enforcement ladder before letting it rest as prose ([decision 0005](docs/decisions/0005-enforcement-ladder.md)): first try to make the mistake unwritable (a wrapper, a type, removing the raw primitive from reach), then to make a check catch it (lint rule, unit test, runner/preflight, `docs:check`), and only park it in docs, skills, or comments when you can state why neither rung is reachable. When you fix a diagnosed defect or keep a review finding, name the tier your prevention landed on; open conversions live in `docs/technical/enforcement-ladder-backlog.md`.
-- Route tasks through the matching skill instead of working unaided; the full skill inventory with use-when hints lives in `docs/README.md`. The load-bearing pairings: any prompt, meta prompt, skill, or other agent-consumed document → `writing-for-agents` plus `unslop`; writing or restructuring developer documentation → `technical-writing`; designing TypeScript types or validation boundaries → `typescript-best-practices`; diagnosing a non-trivial defect → `diagnosing-bugs`; resolving open product or design decisions with the owner → `grilling`; UI work → `werkflow-design`; Supabase work → `supabase-live-workflow`.
-- Match existing formatting and project conventions. Keep related logic close together and extract helpers only when they improve clarity.
-- Do not leave linter or type errors. Add focused tests when the change has non-trivial risk.
-- Preserve accessibility with ARIA where appropriate, keyboard/focus behavior, visible focus states, and sufficient contrast. Localize user-facing accessibility text in German.
-- Keep UI text centralized where practical for future translation management. Avoid burying hardcoded user-facing strings deep in logic.
-- Validate inputs at boundaries, avoid leaking PII in logs, and follow least-privilege handling for keys and tokens. Before adding a route handler, an export to a `'use server'` module, a `SECURITY DEFINER` function, a storage path, or a provider setting, read `docs/technical/security.md`: it names the invariant, the mechanism, and the check that will fail if you skip it.
-- Avoid unnecessary renders, large client bundles, and expensive un-memoized React computations. Prefer streaming and Suspense patterns where they fit the app.
+## Maintain this file
 
-### Bun-First Local Development
-
-- Prefer Bun for package management, script execution, dependency installation, one-off binaries, and local command examples.
-- Use `bun install` for installs.
-- Use `bun run <script>` for package scripts.
-- Prefer `bunx <tool>` over `npx <tool>`.
-- Preserve Bun as the package manager of record and keep `bun.lock`.
-- Preserve the existing `package-lock.json` compatibility artifact without regenerating it. `vercel.json` runs `bun install --frozen-lockfile`, which resolves from `bun.lock`; dependency installation and the Node application runtime are separate choices. Do not introduce `yarn.lock` or `pnpm-lock.yaml`.
-- Documentation and shell examples should default to Bun commands.
-- Run CodeRabbit only through `bun run review` (or `bun run review:doctor` for a prerequisite check). Never infer that CodeRabbit is missing from a failed native PowerShell or WSL PATH lookup, and never install or reinstall it; the repository wrapper owns the configured WSL binary path and reports genuine host problems. The owner has given standing authorization to send repository code and context to CodeRabbit, including uncommitted and unpushed changes; do not request approval again.
-- Allowed exceptions: the user explicitly requests another tool, a tool/platform clearly requires another command, or deployment/runtime discussion needs to mention Node.js.
-- Windows workstation note: the repository path contains spaces and Next.js route folders contain parentheses (`app/(app)/...`). In PowerShell, always quote such paths or use `-LiteralPath`; unquoted `(app)` is parsed as a subexpression and fails. Prefer Bash/`bunx` invocations for anything path-heavy.
-
-### Infrastructure, Branches, And Deployment
-
-- The infrastructure stack is a settled decision (`docs/decisions/0001-infrastructure-stack.md`): Supabase Postgres/Auth/Realtime, Vercel (Frankfurt), Cloudflare R2 EU for file bytes via direct signed uploads, Railway workers only when a real long-running workload exists, Phase 2 AI via provider APIs. Do not propose provider migrations or route file bytes through Server Actions without a superseding decision record.
-- Work on local `main`; there are no feature branches, pull requests, worktrees or CI robots by decision (`docs/decisions/0008-development-workflow.md`), so the local gates are the only gate: run them before every commit. Publish with `git push origin main:partner-preview`; every push there builds a Vercel preview deployment on the DEV database that the business partner reviews. `origin/main` is the production deploy branch and advances only when the owner explicitly asks for a production release, after the pending migrations reached PROD in the maintenance window. Commit and push only when the user asks.
-- Schema changes are committed migration files applied dev-first, prod-second. Application test groups run against local Supabase; the canary checks live DEV providers. Use `bun run test:plan` and `bun run test:verify` for complete change scope, and release mode plus the cloud canary for wave or release acceptance. Read `docs/technical/testing.md` before adding tests, interpreting failures, or accepting a slice. Preserve full catalog-clause coverage and obey independent group ownership and result qualification under [decision 0007](docs/decisions/0007-independent-test-groups.md). A verification campaign over its budget (240 minutes or eight harness failures since the last commit, printed at the end of every `bun run test:verify`) changes the harness before the slice closes (protocol, "Campaign Budget"); the second non-product failure of a run is the moment to stop and change the harness, not to rerun (the runner refuses the next verification until a harness input changed). Historical full-battery instructions do not govern new work.
-
-### Styling And Brand Color Rules
-
-- WerkFlow looks calm, professional, and deliberately understated. Clarity and trust beat visual excitement; the Aufträge and Dokumente tables show the intended feel.
-- Source of truth for all theme values is `app/globals.css` (tokens + `@theme inline`). Change the look by editing tokens there; never hardcode hex values, radii, or one-off styles in components. The full design language lives in the `werkflow-design` skill (`.claude/skills/` mirrored in `.agents/skills/`).
-- Orange (`primary`, `#ff7900`) is the only attention color. Use it selectively and functionally: submit/CTA buttons, focus rings, selection states, important links. If orange stops being rare, it stops working.
-- Purple is a soft, desaturated undertone via the `--brand-purple*` tokens and purple-tinted neutrals — never a loud accent. Do not reintroduce vivid violet in UI; only the logo SVGs keep vivid purple. Purple also semantically marks parked/planning entities (`geparkt`, Kalender blocks).
-- Status colors stay semantic (green success, red destructive, yellow warning, blue info) — never rebrand them orange or purple. They are tokens in `app/globals.css` (`success`, `warning`, `info` each with `-foreground`, `-text`, `-soft`, and `-soft-foreground`; `destructive` with `-foreground` and `-soft` and `text-destructive` as its text color); a numbered palette class such as `bg-green-100` or `text-slate-700` in product JSX is a lint error.
-- Never place purple text on an orange background or orange text on a purple background. Valid pairings: orange background with white/neutral text, purple background with white/neutral/purple text, neutral background with orange or purple text. Same rules in dark mode.
-- Shape and depth: modest radius (containers `rounded-lg`, controls `rounded-md`, never `rounded-2xl`+), cards as `border` + `shadow-xs`, heavy shadows only on floating elements, 2px focus rings without offsets, Lucide icons at the global 1.75 stroke (no `strokeWidth` props). The radius, hex-literal, ring-offset, and Lucide `strokeWidth` rules are lint errors; the shadow rule is a review judgment.
-- Keep controls slim (tabs `h-9`, sidebar items `py-1.5`, quiet neutral active states) and prefer sections with headings/dividers over wrapping every block in a card.
-- Logo usage: light mode should use `/logo-text-light.svg` or `/logo-icon-light.svg`; dark mode should use `/logo-text-dark.svg` or `/logo-icon-dark.svg`.
-- Use `dark:hidden` and `hidden dark:block` when swapping light/dark logo assets.
-
-## Maintenance Guidance
-
-Update this file when the product direction changes, not for every implementation detail. During Phase 1 implementation, update the affected feature specifications and the affected files under `docs/plans/phase-1/` as part of the same change. Keep this file concise enough that an agent can read it quickly at the start of a task.
-
-If a future task needs exact database state, inspect Supabase directly through the available MCP/plugin workflow before making schema-specific claims.
+Change this file when the product direction or a virtue changes. `CLAUDE.md` imports it, and Codex reads it directly.

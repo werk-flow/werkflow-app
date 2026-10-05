@@ -93,7 +93,8 @@ export function packLanes<Item extends BoardSpanItem>(
   placed.sort((left, right) => {
     if (left.column !== right.column) return left.column - right.column;
     if (left.span !== right.span) return right.span - left.span;
-    if (left.item.sortMinutes !== right.item.sortMinutes) return left.item.sortMinutes - right.item.sortMinutes;
+    if (left.item.sortMinutes !== right.item.sortMinutes)
+      return left.item.sortMinutes - right.item.sortMinutes;
     return left.item.key.localeCompare(right.item.key);
   });
   const occupancy: boolean[][] = [];
@@ -104,7 +105,10 @@ export function packLanes<Item extends BoardSpanItem>(
       const row = occupancy[lane] ?? (occupancy[lane] = []);
       let free = true;
       for (let column = entry.column; column < entry.column + entry.span; column += 1) {
-        if (row[column]) { free = false; break; }
+        if (row[column]) {
+          free = false;
+          break;
+        }
       }
       if (free) {
         for (let column = entry.column; column < entry.column + entry.span; column += 1) row[column] = true;

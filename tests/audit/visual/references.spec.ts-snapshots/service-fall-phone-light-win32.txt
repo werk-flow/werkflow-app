@@ -1,0 +1,24 @@
+Menü öffnen
+Service
+Servicefälle
+Anlagen & Geräte
+Wartung
+Servicefälle
+SRV-2026-001
+Neu
+Normal
+Therme zeigt Störung F.28
+Direkt erfasst
+· Aktualisiert
+01.01.2026, 08:00
+Bearbeiten
+Ursprüngliche Kundenaussage
+Die Therme geht nach dem Zünden wieder aus und zeigt F.28 an.
+Einschätzung
+Vorläufiger Kostenkontext
+Noch ungeklärt
+Zugang und Hinweise vor Ort
+Bitte vorher anrufen, tagsüber ist niemand zu Hause.
+Interne Einschätzung
+Nicht erfasst
+Diese Einordnung dient nur der Einsatzplanung. Sie ist keine rechtliche Gewährleistungs- oder endgültige Kostenentscheidung.

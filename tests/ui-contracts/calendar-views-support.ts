@@ -1,20 +1,28 @@
 import { expect, type Locator, type Page } from '@playwright/test';
-import { assertWorkspaceTestLock } from '@/lib/testing/workspace-test-lock';
+import { assertWorkspaceTestLock } from '@/lib/testing/runner/workspace-test-lock';
 
-/** Geometry utilities only; behaviour comes from the real components. */
-const geometry = '.relative{position:relative}.absolute{position:absolute}.sticky{position:relative}.fixed{position:fixed}.flex{display:flex}.grid{display:grid}.contents{display:contents}.flex-col{flex-direction:column}.min-w-0{min-width:0}.hidden{display:none}[hidden]{display:none!important}.pointer-events-none{pointer-events:none}.left-0{left:0}.top-0{top:0}.inset-y-0{top:0;bottom:0}.-left-2{left:-8px}.-right-2{right:-8px}.w-6{width:24px}.w-2{width:8px}.h-full{height:100%}.w-full{width:100%}.grid-cols-7{grid-template-columns:repeat(7,minmax(0,1fr))}.z-10{z-index:10}.z-20{z-index:20}.z-30{z-index:30}.overflow-hidden{overflow:hidden}';
-
-export async function openCalendarContract(page: Page, fixture: 'calendar-board' | 'calendar-day' | 'calendar-month'): Promise<void> {
+export async function openCalendarContract(
+  page: Page,
+  fixture: 'calendar-board' | 'calendar-day' | 'calendar-month',
+): Promise<void> {
   assertWorkspaceTestLock();
   const bundle = process.env.WERKFLOW_UI_CONTRACT_BUNDLE;
   if (!bundle) throw new Error('Run through bun tests/ui-contracts/run.ts.');
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.route('http://localhost/ui-contracts', (route) => route.fulfill({ contentType: 'text/html', body: `<html lang="de"><head><style>${geometry}</style></head><body><div id="root"></div></body></html>` }));
+  await page.route('http://localhost/ui-contracts', (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      body: '<html lang="de"><body><div id="root"></div></body></html>',
+    }),
+  );
   await page.goto('http://localhost/ui-contracts');
   // The app's compiled stylesheet: the hour axis, lanes and handles need real geometry.
   const css = process.env.WERKFLOW_UI_CONTRACT_CSS;
-  if (css) await page.addStyleTag({ path: css });
-  await page.evaluate((name) => { window.uiContractFixture = name; }, fixture);
+  if (!css) throw new Error('Calendar contracts require the compiled application stylesheet.');
+  await page.addStyleTag({ path: css });
+  await page.evaluate((name) => {
+    window.uiContractFixture = name;
+  }, fixture);
   await page.addScriptTag({ path: bundle });
 }
 
@@ -28,11 +36,15 @@ export function card(page: Page, title: string): Locator {
 }
 
 export function boardRowCard(page: Page, employeeRecordId: string, title: string): Locator {
-  return view(page).locator(`[data-board-row="${employeeRecordId}"] [data-calendar-card]`).filter({ hasText: title });
+  return view(page)
+    .locator(`[data-board-row="${employeeRecordId}"] [data-calendar-card]`)
+    .filter({ hasText: title });
 }
 
 export function boardCell(page: Page, employeeRecordId: string, dateIso: string): Locator {
-  return view(page).locator(`[data-board-row="${employeeRecordId}"] [data-board-cell][data-date="${dateIso}"]`);
+  return view(page).locator(
+    `[data-board-row="${employeeRecordId}"] [data-board-cell][data-date="${dateIso}"]`,
+  );
 }
 
 export function boardHighlight(page: Page): Locator {
@@ -74,7 +86,12 @@ export async function writeCount(page: Page): Promise<number> {
 }
 
 /** Presses on `from`, crosses the 5 px threshold, moves to `to` in steps, releases. */
-export async function dragPointer(page: Page, from: Locator, to: Locator, options: { release?: boolean; moves?: number; beforeRelease?: () => Promise<void> } = {}): Promise<void> {
+export async function dragPointer(
+  page: Page,
+  from: Locator,
+  to: Locator,
+  options: { release?: boolean; moves?: number; beforeRelease?: () => Promise<void> } = {},
+): Promise<void> {
   const source = await from.boundingBox();
   const target = await to.boundingBox();
   if (!source || !target) throw new Error('Drag source or target has no layout.');
@@ -83,13 +100,19 @@ export async function dragPointer(page: Page, from: Locator, to: Locator, option
   await page.mouse.move(startX, startY);
   await page.mouse.down();
   await page.mouse.move(startX + 8, startY, { steps: 2 });
-  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: options.moves ?? 10 });
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, {
+    steps: options.moves ?? 10,
+  });
   await options.beforeRelease?.();
   if (options.release !== false) await page.mouse.up();
 }
 
 /** Presses on a card, crosses the threshold and moves to an absolute point without releasing. */
-export async function beginDragToPoint(page: Page, from: Locator, point: { x: number; y: number }): Promise<void> {
+export async function beginDragToPoint(
+  page: Page,
+  from: Locator,
+  point: { x: number; y: number },
+): Promise<void> {
   const source = await from.boundingBox();
   if (!source) throw new Error('Drag source has no layout.');
   const startX = source.x + 20;

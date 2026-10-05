@@ -10,12 +10,21 @@ describe('calendar preferences', () => {
   test('reads defaults for missing, damaged and foreign JSON', () => {
     expect(readCalendarPreferences(null)).toEqual(DEFAULT_CALENDAR_PREFERENCES);
     expect(readCalendarPreferences('nonsense')).toEqual(DEFAULT_CALENDAR_PREFERENCES);
-    expect(readCalendarPreferences({ auftraege: { visibleColumns: ['title'] } })).toEqual(DEFAULT_CALENDAR_PREFERENCES);
+    expect(readCalendarPreferences({ auftraege: { visibleColumns: ['title'] } })).toEqual(
+      DEFAULT_CALENDAR_PREFERENCES,
+    );
   });
 
   test('keeps valid fields and replaces invalid ones field by field', () => {
     const preferences = readCalendarPreferences({
-      calendar: { horizonWeeks: 6, density: 'loud', hideWeekends: true, search: 'Heizung', dispatchStates: ['rueckfrage', 'bogus'], view: 'week' },
+      calendar: {
+        horizonWeeks: 6,
+        density: 'loud',
+        hideWeekends: true,
+        search: 'Heizung',
+        dispatchStates: ['rueckfrage', 'bogus'],
+        view: 'week',
+      },
     });
     expect(preferences).toEqual({
       ...DEFAULT_CALENDAR_PREFERENCES,
@@ -27,8 +36,14 @@ describe('calendar preferences', () => {
   });
 
   test('writes beside other preference keys without touching them', () => {
-    const json = writeCalendarPreferencesJson({ auftraege: { visibleColumns: ['title'] } }, { ...DEFAULT_CALENDAR_PREFERENCES, hideWeekends: true });
-    expect(json).toEqual({ auftraege: { visibleColumns: ['title'] }, calendar: { ...DEFAULT_CALENDAR_PREFERENCES, hideWeekends: true } });
+    const json = writeCalendarPreferencesJson(
+      { auftraege: { visibleColumns: ['title'] } },
+      { ...DEFAULT_CALENDAR_PREFERENCES, hideWeekends: true },
+    );
+    expect(json).toEqual({
+      auftraege: { visibleColumns: ['title'] },
+      calendar: { ...DEFAULT_CALENDAR_PREFERENCES, hideWeekends: true },
+    });
     expect(readCalendarPreferences(json).hideWeekends).toBe(true);
   });
 

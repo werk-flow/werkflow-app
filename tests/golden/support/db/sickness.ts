@@ -1,4 +1,4 @@
-import { createAdminClient, withRoleClient } from './shared';
+import { createAdminClient } from './shared';
 
 // P1-08: latest sickness report of a record plus its append-only event trail —
 // the DB-side proof for reported facts, corrections, evidence bookkeeping,
@@ -22,26 +22,24 @@ export async function getLatestSicknessReportState(
 ): Promise<SicknessReportDbState> {
   const admin = createAdminClient();
   const { data, error } = await admin
-    .from("sickness_reports")
+    .from('sickness_reports')
     .select(
-      "id, status, absence_type, start_date, end_date, day_portion, evidence_required, evidence_status, cancellation_reason",
+      'id, status, absence_type, start_date, end_date, day_portion, evidence_required, evidence_status, cancellation_reason',
     )
-    .eq("organization_id", orgId)
-    .eq("employee_record_id", employeeRecordId)
-    .order("created_at", { ascending: false })
+    .eq('organization_id', orgId)
+    .eq('employee_record_id', employeeRecordId)
+    .order('created_at', { ascending: false })
     .limit(1)
     .single();
   if (error || !data) {
-    throw new Error(
-      `No sickness report found for record ${employeeRecordId}: ${error?.message}`,
-    );
+    throw new Error(`No sickness report found for record ${employeeRecordId}: ${error?.message}`);
   }
 
   const { data: events, error: eventsError } = await admin
-    .from("sickness_report_events")
-    .select("event_type, created_at")
-    .eq("sickness_report_id", data.id)
-    .order("created_at", { ascending: true });
+    .from('sickness_report_events')
+    .select('event_type, created_at')
+    .eq('sickness_report_id', data.id)
+    .order('created_at', { ascending: true });
   if (eventsError) {
     throw new Error(`Sickness event query failed: ${eventsError.message}`);
   }
@@ -60,31 +58,27 @@ export async function getLatestSicknessReportState(
   };
 }
 
-// P1-08: which sickness-report rows a real signed-in user can see under RLS
-// (managers all org rows, a person exactly their own, outsiders none) — the
-// browser never shows foreign reports, so the privacy matrix's row-level
-// boundary is proved here with real credentials. No signOut, as documented on
-// getVisibleWorkScheduleRecordIdsAs.
-export async function getVisibleSicknessRecordIdsAs(
-  user: { email: string; password: string },
-  orgId: string,
-): Promise<string[]> {
-  return withRoleClient(user, async (client) => {
-
-    const { data, error } = await client
-      .from("sickness_reports")
-      .select("employee_record_id")
-      .eq("organization_id", orgId);
-    if (error) {
-      throw new Error(
-        `sickness_reports query failed for ${user.email}: ${error.message}`,
-      );
-    }
-
-    return [
-      ...new Set((data ?? []).map((row) => row.employee_record_id as string)),
-    ].sort();
+/** A reported full-day sickness, written like the self-report action. Setup only. */
+export async function seedSicknessReport(input: {
+  organizationId: string;
+  employeeRecordId: string;
+  reportedBy: string;
+  startDate: string;
+  endDate: string;
+}): Promise<void> {
+  const { error } = await createAdminClient().from('sickness_reports').insert({
+    organization_id: input.organizationId,
+    employee_record_id: input.employeeRecordId,
+    absence_type: 'krankheit',
+    start_date: input.startDate,
+    end_date: input.endDate,
+    day_portion: 'full',
+    status: 'reported',
+    evidence_required: false,
+    evidence_status: 'not_required',
+    reported_by: input.reportedBy,
   });
+  if (error) throw new Error(`Sickness report setup failed: ${error.message}`);
 }
 
 // P1-08: the effective absence spans (approved vacation + active sickness,
@@ -98,51 +92,49 @@ export async function getAbsenceSpansForRecord(
   windowEndIso: string,
 ): Promise<
   Array<{
-    type: "vacation" | "sickness";
+    type: 'vacation' | 'sickness';
     startDate: string;
     endDate: string;
-    dayPortion: "full" | "half_day";
+    dayPortion: 'full' | 'half_day';
   }>
 > {
   const admin = createAdminClient();
   const [vacationResult, sicknessResult] = await Promise.all([
     admin
-      .from("vacation_requests")
-      .select("start_date, end_date, day_portion")
-      .eq("organization_id", orgId)
-      .eq("employee_record_id", employeeRecordId)
-      .eq("status", "approved")
-      .lte("start_date", windowEndIso)
-      .gte("end_date", windowStartIso),
+      .from('vacation_requests')
+      .select('start_date, end_date, day_portion')
+      .eq('organization_id', orgId)
+      .eq('employee_record_id', employeeRecordId)
+      .eq('status', 'approved')
+      .lte('start_date', windowEndIso)
+      .gte('end_date', windowStartIso),
     admin
-      .from("sickness_reports")
-      .select("start_date, end_date, day_portion")
-      .eq("organization_id", orgId)
-      .eq("employee_record_id", employeeRecordId)
-      .eq("status", "reported")
-      .lte("start_date", windowEndIso)
+      .from('sickness_reports')
+      .select('start_date, end_date, day_portion')
+      .eq('organization_id', orgId)
+      .eq('employee_record_id', employeeRecordId)
+      .eq('status', 'reported')
+      .lte('start_date', windowEndIso)
       .or(`end_date.gte.${windowStartIso},end_date.is.null`),
   ]);
   if (vacationResult.error || sicknessResult.error) {
     throw new Error(
-      `Absence span query failed: ${
-        vacationResult.error?.message ?? sicknessResult.error?.message
-      }`,
+      `Absence span query failed: ${vacationResult.error?.message ?? sicknessResult.error?.message}`,
     );
   }
 
   return [
     ...(vacationResult.data ?? []).map((row) => ({
-      type: "vacation" as const,
+      type: 'vacation' as const,
       startDate: row.start_date as string,
       endDate: row.end_date as string,
-      dayPortion: row.day_portion as "full" | "half_day",
+      dayPortion: row.day_portion as 'full' | 'half_day',
     })),
     ...(sicknessResult.data ?? []).map((row) => ({
-      type: "sickness" as const,
+      type: 'sickness' as const,
       startDate: row.start_date as string,
       endDate: (row.end_date as string | null) ?? windowEndIso,
-      dayPortion: row.day_portion as "full" | "half_day",
+      dayPortion: row.day_portion as 'full' | 'half_day',
     })),
   ];
 }

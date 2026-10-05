@@ -46,7 +46,7 @@ describe('planning recurrence materialization', () => {
         monthDay: 31,
         occurrenceCount: 3,
       }),
-      '2026-06-30'
+      '2026-06-30',
     );
     expect(occurrences.map((occurrence) => occurrence.originalStartLocal)).toEqual([
       '2026-01-31T09:00',
@@ -65,8 +65,8 @@ describe('planning recurrence materialization', () => {
           frequency: 'daily',
           occurrenceCount: 2,
         }),
-        '2026-12-31'
-      )[0]
+        '2026-12-31',
+      )[0],
     ).toMatchObject({
       startDate: '2026-08-12',
       endDateExclusive: '2026-08-15',
@@ -78,14 +78,14 @@ describe('planning recurrence materialization', () => {
   test('uses a stable logical identity', () => {
     const [firstOccurrence] = materializeSeries(draft(), '2027-01-01');
     if (!firstOccurrence) throw new Error('Expected at least one occurrence');
-    expect(
-      occurrenceIdentity('org', 'lineage', firstOccurrence.originalStartLocal)
-    ).toBe('org:lineage:2026-08-14T09:00');
+    expect(occurrenceIdentity('org', 'lineage', firstOccurrence.originalStartLocal)).toBe(
+      'org:lineage:2026-08-14T09:00',
+    );
   });
 
   test('rejects non-advancing intervals and respects an inclusive until date', () => {
     expect(() => materializeSeries(draft({ interval: 0 }), '2027-01-01')).toThrow(
-      'invalid_recurrence_interval'
+      'invalid_recurrence_interval',
     );
     expect(
       materializeSeries(
@@ -95,13 +95,9 @@ describe('planning recurrence materialization', () => {
           occurrenceCount: 10,
           untilLocalDate: '2026-08-14',
         }),
-        '2027-01-01'
-      ).map((occurrence) => occurrence.originalStartLocal)
-    ).toEqual([
-      '2026-08-12T09:00',
-      '2026-08-13T09:00',
-      '2026-08-14T09:00',
-    ]);
+        '2027-01-01',
+      ).map((occurrence) => occurrence.originalStartLocal),
+    ).toEqual(['2026-08-12T09:00', '2026-08-13T09:00', '2026-08-14T09:00']);
   });
 
   test('terminates when every monthly candidate day is invalid', () => {
@@ -115,8 +111,8 @@ describe('planning recurrence materialization', () => {
           interval: 12,
           occurrenceCount: 5,
         }),
-        '2027-01-01'
-      )
+        '2027-01-01',
+      ),
     ).toEqual([]);
   });
 });

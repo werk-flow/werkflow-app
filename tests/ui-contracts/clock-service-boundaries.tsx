@@ -29,7 +29,9 @@ export function useOrganization(): Pick<OrgContextValue, 'activeOrgId' | 'active
 
 export async function transitionTimeActivity(input: TimeTransitionInput): Promise<TimeTransitionResult> {
   window.clockContract.transitions.push(input);
-  await new Promise<void>((resolve) => { window.clockContract.resolveTransition = resolve; });
+  await new Promise<void>((resolve) => {
+    window.clockContract.resolveTransition = resolve;
+  });
   window.clockContract.resolveTransition = null;
   return {
     success: true,
@@ -44,7 +46,9 @@ export async function transitionTimeActivity(input: TimeTransitionInput): Promis
 }
 
 // Job selection is outside this contract; clock reads and mutations stay distinct.
-export function JobPickerModal(props: ComponentProps<typeof import('@/components/job-picker-modal').JobPickerModal>): null {
+export function JobPickerModal(
+  props: ComponentProps<typeof import('@/components/job-picker-modal').JobPickerModal>,
+): null {
   if (props.open) throw new Error('The clock readiness contract must not open the job picker.');
   return null;
 }

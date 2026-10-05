@@ -8,30 +8,17 @@ import { Card } from '@/components/ui/card';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import { getBusinessTodayIso } from '@/lib/personnel/types';
 import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
-import {
-  getCapabilityKindLabel,
-  type OwnQualificationProfile,
-} from '@/lib/qualifications/types';
+import { getCapabilityKindLabel, type OwnQualificationProfile } from '@/lib/qualifications/types';
 
-export function OwnQualificationOverview({
-  profile,
-}: {
-  profile: OwnQualificationProfile | null;
-}) {
+export function OwnQualificationOverview({ profile }: { profile: OwnQualificationProfile | null }) {
   const router = useRouter();
   const refreshAtBusinessDayChange = useCallback(() => router.refresh(), [router]);
   useBusinessDayRefresh(refreshAtBusinessDayChange);
   useRealtimeRouterRefresh({
-    tables: [
-      'teams',
-      'team_memberships',
-      'organization_capabilities',
-      'employee_capabilities',
-    ],
+    tables: ['teams', 'team_memberships', 'organization_capabilities', 'employee_capabilities'],
   });
   const today = getBusinessTodayIso();
-  const formatDate = (value: string) =>
-    new Date(`${value}T00:00:00`).toLocaleDateString('de-DE');
+  const formatDate = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString('de-DE');
   if (!profile) {
     return (
       <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
@@ -48,9 +35,7 @@ export function OwnQualificationOverview({
           <h2 className="text-sm font-semibold">Meine Teams</h2>
         </div>
         {profile.teamNames.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Du bist aktuell keinem Team zugeordnet.
-          </p>
+          <p className="text-sm text-muted-foreground">Du bist aktuell keinem Team zugeordnet.</p>
         ) : (
           <div className="flex flex-wrap gap-2">
             {profile.teamNames.map((name) => (
@@ -74,9 +59,7 @@ export function OwnQualificationOverview({
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {profile.capabilities.map(({ definition, record }) => {
-              const expired = Boolean(
-                record.validUntil && record.validUntil < today
-              );
+              const expired = Boolean(record.validUntil && record.validUntil < today);
               const future = record.validFrom > today;
               return (
                 <Card
@@ -92,20 +75,8 @@ export function OwnQualificationOverview({
                         {getCapabilityKindLabel(definition.kind)}
                       </p>
                     </div>
-                    <Badge
-                      variant={
-                        expired
-                          ? 'destructive'
-                          : future
-                            ? 'secondary'
-                            : 'outline'
-                      }
-                    >
-                      {expired
-                        ? 'Abgelaufen'
-                        : future
-                          ? 'Noch nicht gültig'
-                          : 'Gültig'}
+                    <Badge variant={expired ? 'destructive' : future ? 'secondary' : 'outline'}>
+                      {expired ? 'Abgelaufen' : future ? 'Noch nicht gültig' : 'Gültig'}
                     </Badge>
                   </div>
                   <p className="text-sm text-muted-foreground">
@@ -137,8 +108,8 @@ export function OwnQualificationOverview({
       </section>
 
       <p className="text-xs text-muted-foreground">
-        Die Angaben dienen der internen Planung. Sie sind keine rechtliche
-        Bewertung deiner Einsatzberechtigung.
+        Die Angaben dienen der internen Planung. Sie sind keine rechtliche Bewertung deiner
+        Einsatzberechtigung.
       </p>
     </div>
   );

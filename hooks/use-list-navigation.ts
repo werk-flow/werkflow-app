@@ -19,7 +19,8 @@ export function useListNavigation() {
   // A committed URL settles this request permanently. Later navigation by a
   // different control also cancels it, while intermediate URLs from the same
   // rapid request chain must keep waiting for the latest target.
-  if (requested !== null && (requested.query === current || !requested.knownQueries.includes(current))) setRequested(null);
+  if (requested !== null && (requested.query === current || !requested.knownQueries.includes(current)))
+    setRequested(null);
   useEffect(() => {
     if (requested === null) {
       if (timer.current) clearTimeout(timer.current);
@@ -35,13 +36,21 @@ export function useListNavigation() {
     window.addEventListener('popstate', cancelForHistory);
     return () => window.removeEventListener('popstate', cancelForHistory);
   }, []);
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
   useEffect(() => {
     if (requested === null || requested.query === current) return;
     const timeout = setTimeout(() => {
       pending.current = current;
       setRequested(null);
-      showBanner({ variant: 'error', message: 'Die Liste wurde noch nicht aktualisiert. Bitte aktualisiere die Seite.' });
+      showBanner({
+        variant: 'error',
+        message: 'Die Liste wurde noch nicht aktualisiert. Bitte aktualisiere die Seite.',
+      });
     }, 15_000);
     return () => clearTimeout(timeout);
   }, [requested, current, showBanner]);
@@ -54,7 +63,10 @@ export function useListNavigation() {
     pending.current = next.toString();
     if (timer.current) clearTimeout(timer.current);
     const query = pending.current;
-    setRequested((previous) => ({ query, knownQueries: [...new Set([...(previous?.knownQueries ?? [current]), query])] }));
+    setRequested((previous) => ({
+      query,
+      knownQueries: [...new Set([...(previous?.knownQueries ?? [current]), query])],
+    }));
     const href = `${pathname}?${pending.current}`;
     if (delay) timer.current = setTimeout(() => router.replace(href, { scroll: false }), delay);
     else router.replace(href, { scroll: false });

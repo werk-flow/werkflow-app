@@ -21,6 +21,16 @@ insert into public.organization_members (organization_id, user_id, role)
 values ('23000000-0000-0000-0000-000000000010',
   '23000000-0000-0000-0000-000000000002', 'employee');
 
+-- Exercise the real trigger independently of unrelated correction prerequisites.
+create temporary table correction_period_probe (
+  organization_id uuid not null,
+  before_snapshot jsonb not null,
+  applied_snapshot jsonb not null
+);
+create trigger correction_period_probe_guard before insert on correction_period_probe
+  for each row execute function app_private.guard_time_correction_closed_period();
+grant insert on correction_period_probe to service_role;
+
 set local role service_role;
 
 do $$
@@ -43,6 +53,12 @@ declare
   account_version_after_submit bigint;
   document_id uuid := '23000000-0000-0000-0000-000000000090';
   code_mappings jsonb;
+  closing_kind text;
+  closing_snapshot jsonb;
+  period_version_before_decision bigint;
+  decision_id uuid;
+  replayed_decision_id uuid;
+  decide_source text;
 begin
   select id into admin_employee_id from public.employee_records
     where organization_id = '23000000-0000-0000-0000-000000000010'
@@ -171,9 +187,37 @@ begin
   exception when others then
     if sqlerrm not like '%approval_required_finding%' then raise; end if;
   end;
-  perform public.decide_time_period_finding(
+  select period.version into period_version_before_decision
+    from public.time_periods period
+    join public.time_period_calculations calculation on calculation.period_id = period.id
+    where calculation.id = v_calculation_id;
+  decision_id := public.decide_time_period_finding(
     '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
     finding_id, 'approved', 'Geprüft', '23000000-0000-0000-0000-000000000053');
+  -- The decision signals other sessions through the published period root;
+  -- a replay of the same operation writes and signals nothing.
+  replayed_decision_id := public.decide_time_period_finding(
+    '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
+    finding_id, 'approved', 'Geprüft', '23000000-0000-0000-0000-000000000053');
+  if replayed_decision_id is distinct from decision_id
+    or (select count(*) from public.time_period_finding_decisions
+        where organization_id = '23000000-0000-0000-0000-000000000010'
+          and operation_id = '23000000-0000-0000-0000-000000000053') <> 1
+  then raise exception 'a replayed finding decision did not return the stored decision'; end if;
+  -- A concurrent replay waits on the period lock, so it finds the stored
+  -- decision only when the lookup runs after the lock.
+  decide_source := pg_get_functiondef(
+    'public.decide_time_period_finding(uuid,uuid,uuid,public.time_period_finding_decision,text,uuid)'::regprocedure);
+  if strpos(decide_source, 'for update of period') = 0
+    or strpos(decide_source, 'for update of period') > strpos(decide_source, 'operation_id = p_operation_id')
+  then raise exception 'the finding decision replay lookup runs before the period lock'; end if;
+  if (select period.version from public.time_periods period
+      join public.time_period_calculations calculation on calculation.period_id = period.id
+      where calculation.id = v_calculation_id) <> period_version_before_decision + 1
+  then raise exception 'a finding decision did not touch the published period root exactly once'; end if;
+  if not exists (select 1 from pg_publication_tables
+      where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'time_periods')
+  then raise exception 'the period root is not published'; end if;
   close_id := public.close_time_period(
     '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
     (select period_id from public.time_period_calculations where id = v_calculation_id),
@@ -192,6 +236,31 @@ begin
   exception when others then
     if sqlerrm not like '%period_closed%' then raise; end if;
   end;
+  -- July is closed while August is open. Midnight closes still affect July.
+  foreach closing_kind in array array['clock_out', 'break_end'] loop
+    closing_snapshot := jsonb_build_object('facts', jsonb_build_array(jsonb_build_object(
+      'timestamp', '2026-07-31T22:00:00Z', 'entryType', closing_kind
+    )));
+    begin
+      insert into pg_temp.correction_period_probe values (
+        '23000000-0000-0000-0000-000000000010', closing_snapshot, '{"facts":[]}');
+      raise exception 'midnight closing deletion bypassed the closed month';
+    exception when others then
+      if sqlerrm not like '%period_closed%' then raise; end if;
+    end;
+    begin
+      insert into pg_temp.correction_period_probe values (
+        '23000000-0000-0000-0000-000000000010', '{"facts":[]}', closing_snapshot);
+      raise exception 'midnight closing addition bypassed the closed month';
+    exception when others then
+      if sqlerrm not like '%period_closed%' then raise; end if;
+    end;
+  end loop;
+  -- Opening at midnight and closing after midnight belong to open August.
+  insert into pg_temp.correction_period_probe values (
+    '23000000-0000-0000-0000-000000000010', '{"facts":[]}',
+    '{"facts":[{"timestamp":"2026-07-31T22:00:00Z","entryType":"clock_in"},
+      {"timestamp":"2026-07-31T22:00:00.001Z","entryType":"clock_out"}]}');
   begin
     update public.time_period_close_versions set source_fingerprint = repeat('2', 64) where id = close_id;
     raise exception 'immutable close version was updated';
@@ -251,6 +320,18 @@ begin
     'Korrektur erforderlich', '23000000-0000-0000-0000-000000000070', repeat('7', 64));
   if (select current_balance_minutes from public.time_accounts where id = employee_account_id) <> 15
     then raise exception 'reopen did not reverse the closed balance'; end if;
+  if (select state from public.time_periods
+      where id = (select period_id from public.time_period_calculations where id = v_calculation_id))
+      <> 'reopened'
+    or not exists (select 1 from public.time_period_close_versions where id = close_id)
+    or (select state from public.payroll_exports where id = export_id) <> 'ready'
+    then raise exception 'reopen discarded the close version or the export history'; end if;
+  if (select count(*) from public.time_account_events
+      where organization_id = '23000000-0000-0000-0000-000000000010'
+        and event_kind = 'period_reopen_reversal')
+     <> (select count(*) from public.time_accounts
+      where organization_id = '23000000-0000-0000-0000-000000000010')
+    then raise exception 'reopen did not record one reversal event per account'; end if;
   perform app_private.assert_p1_23_period_open(
     '23000000-0000-0000-0000-000000000010', '2026-07-15');
 
@@ -307,6 +388,13 @@ begin
   if (select count(*) from public.time_periods
       where organization_id = '23000000-0000-0000-0000-000000000010') <> 0
     then raise exception 'outsider could read time periods'; end if;
+  if exists (select 1 from public.time_accounts
+      where organization_id = '23000000-0000-0000-0000-000000000010')
+     or exists (select 1 from public.time_period_employee_results
+      where organization_id = '23000000-0000-0000-0000-000000000010')
+     or exists (select 1 from public.payroll_exports
+      where organization_id = '23000000-0000-0000-0000-000000000010')
+    then raise exception 'outsider could read time accounts, period results or payroll exports'; end if;
   if has_function_privilege('authenticated',
       'public.prepare_time_period(uuid,uuid,date,date,text,jsonb,jsonb,jsonb,jsonb,uuid,text)', 'EXECUTE')
      or has_function_privilege('anon',

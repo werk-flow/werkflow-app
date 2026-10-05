@@ -1,0 +1,32 @@
+Menü öffnen
+Inventar
+1 Artikel · 1 Lager · 0 geplante Artikel
+CSV importieren
+Lager anlegen
+Artikel anlegen
+Artikel mit Bestand
+1
+Knapp
+0
+Leer
+0
+Geplante Artikel
+0
+Alle Artikel
+Lager
+Geplant
+Bewegungen
+Alle Typen
+Alle Bestände
+Alle Lager
+Kupferrohr 15 mm
+Auf Lager
+Material
+20 Stück
+verfügbar
+· Bestand
+20 Stück
+· Geplant
+0 Stück
+Hauptlager 20 Stück
+Aktionen

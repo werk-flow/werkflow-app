@@ -14,11 +14,7 @@ import {
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import {
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-} from '@/components/ui/context-menu';
+import { ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -210,10 +206,7 @@ export function DocumentActionsMenu({
   );
 }
 
-export function DocumentContextMenuContent({
-  isTrashView,
-  handlers,
-}: DocumentActionsProps) {
+export function DocumentContextMenuContent({ isTrashView, handlers }: DocumentActionsProps) {
   return (
     <ContextMenuContent>
       <DocumentActionItems
@@ -226,12 +219,7 @@ export function DocumentContextMenuContent({
   );
 }
 
-export function FolderActionsMenu({
-  folder,
-  disabled,
-  handlers,
-  onOpenChange,
-}: FolderActionsProps) {
+export function FolderActionsMenu({ folder, disabled, handlers, onOpenChange }: FolderActionsProps) {
   return (
     <DropdownMenu onOpenChange={(open) => open && onOpenChange?.()}>
       <DropdownMenuTrigger asChild>
@@ -251,11 +239,7 @@ export function FolderActionsMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <FolderActionItems
-          handlers={handlers}
-          item={DropdownMenuItem}
-          separator={DropdownMenuSeparator}
-        />
+        <FolderActionItems handlers={handlers} item={DropdownMenuItem} separator={DropdownMenuSeparator} />
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -264,11 +248,7 @@ export function FolderActionsMenu({
 export function FolderContextMenuContent({ handlers }: FolderActionsProps) {
   return (
     <ContextMenuContent>
-      <FolderActionItems
-        handlers={handlers}
-        item={ContextMenuItem}
-        separator={ContextMenuSeparator}
-      />
+      <FolderActionItems handlers={handlers} item={ContextMenuItem} separator={ContextMenuSeparator} />
     </ContextMenuContent>
   );
 }

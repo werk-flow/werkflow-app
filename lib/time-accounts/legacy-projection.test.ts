@@ -3,10 +3,7 @@ import { describe, expect, test } from 'bun:test';
 import type { TimeCorrectionApplicationProjection } from '@/lib/time-corrections/types';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 
-import {
-  hasUnclosedLegacySequence,
-  projectLegacyEntriesForWindow,
-} from './legacy-projection';
+import { hasUnclosedLegacySequence, projectLegacyEntriesForWindow } from './legacy-projection';
 
 const organizationId = '10000000-0000-0000-0000-000000000001';
 const userId = '10000000-0000-0000-0000-000000000002';

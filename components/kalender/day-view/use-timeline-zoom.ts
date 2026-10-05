@@ -1,7 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { DAY_NAME_COLUMN_PX, fittedHourWidth, TIMELINE_MAX_ZOOM, TIMELINE_MIN_ZOOM, TIMELINE_START_HOUR } from '@/lib/calendar/day-layout';
+import {
+  DAY_NAME_COLUMN_PX,
+  fittedHourWidth,
+  TIMELINE_MAX_ZOOM,
+  TIMELINE_MIN_ZOOM,
+  TIMELINE_START_HOUR,
+} from '@/lib/calendar/day-layout';
 
 const WHEEL_STEP = 0.08;
 
@@ -11,13 +17,20 @@ const WHEEL_STEP = 0.08;
  * anchored under the pointer. The scroller is the page's calendar region,
  * which owns both axes. Scrolls to the first working hour per shown day.
  */
-export function useTimelineZoom(input: { zoom: number; onZoomChange: (zoom: number) => void; dateKey: string; scroller: () => HTMLElement | null }): number {
-  const { zoom, onZoomChange, dateKey, scroller } = input;
+export function useTimelineZoom(input: {
+  zoom: number;
+  onZoomChange: (zoom: number) => void;
+  dateKey: string;
+  scroller: () => HTMLElement | null;
+  enabled?: boolean;
+}): number {
+  const { zoom, onZoomChange, dateKey, scroller, enabled = true } = input;
   const [viewportWidth, setViewportWidth] = useState(0);
   const hourWidth = fittedHourWidth(Math.max(0, viewportWidth - DAY_NAME_COLUMN_PX), zoom);
   const anchorRef = useRef<{ hour: number; cursorX: number } | null>(null);
 
-  useLayoutEffect(() => {
+  // The parent owns the scroller ref. Its ref is not attached yet during this child's layout effect.
+  useEffect(() => {
     const element = scroller();
     if (!element) return;
     setViewportWidth(element.clientWidth);
@@ -27,6 +40,7 @@ export function useTimelineZoom(input: { zoom: number; onZoomChange: (zoom: numb
   }, [scroller]);
 
   useEffect(() => {
+    if (!enabled) return;
     const element = scroller();
     if (!element) return;
     const handleWheel = (event: WheelEvent) => {
@@ -40,7 +54,7 @@ export function useTimelineZoom(input: { zoom: number; onZoomChange: (zoom: numb
     };
     element.addEventListener('wheel', handleWheel, { passive: false });
     return () => element.removeEventListener('wheel', handleWheel);
-  }, [hourWidth, onZoomChange, scroller, zoom]);
+  }, [enabled, hourWidth, onZoomChange, scroller, zoom]);
 
   // Keep the hour under the pointer where it was after the width changed.
   useLayoutEffect(() => {
@@ -61,9 +75,12 @@ export function useTimelineZoom(input: { zoom: number; onZoomChange: (zoom: numb
 
   const measured = viewportWidth > 0;
   useEffect(() => {
-    if (measured) scrollToStart();
+    if (!enabled) {
+      const element = scroller();
+      if (element) element.scrollLeft = 0;
+    } else if (measured) scrollToStart();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the day view scrolls to the working hours once per shown day, once the viewport is measured
-  }, [dateKey, measured]);
+  }, [dateKey, measured, enabled]);
 
   return hourWidth;
 }

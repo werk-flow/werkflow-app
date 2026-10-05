@@ -7,7 +7,12 @@ export type CalendarSurfaceActions = {
   /** Opens the card popover anchored to the element that was activated. */
   onOpenCard: (job: CalendarJob, element: HTMLElement, row: CalendarBoardRow | null) => void;
   /** Opens the create dialog preset to a person, a date and, from the day view, a time span. */
-  onAddEntry: (input: { date: string; time?: string | undefined; endTime?: string | undefined; userId?: string | undefined }) => void;
+  onAddEntry: (input: {
+    date: string;
+    time?: string | undefined;
+    endTime?: string | undefined;
+    userId?: string | undefined;
+  }) => void;
   /** Starts the park flow (the card leaves the grid, the context dialog opens). */
   onPark: (job: CalendarJob) => void;
 };

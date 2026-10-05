@@ -1,6 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from 'bun:test';
 
-import { createTrailingScheduler } from "./scheduler";
+import { createTrailingScheduler } from './scheduler';
 
 /** Deterministic timers: advance the clock and fire due callbacks in order. */
 function fakeClock() {
@@ -20,7 +20,9 @@ function fakeClock() {
     advance(ms: number) {
       const target = time + ms;
       for (;;) {
-        const due = [...timers.entries()].filter(([, timer]) => timer.at <= target).sort((a, b) => a[1].at - b[1].at)[0];
+        const due = [...timers.entries()]
+          .filter(([, timer]) => timer.at <= target)
+          .sort((a, b) => a[1].at - b[1].at)[0];
         if (!due) break;
         timers.delete(due[0]);
         time = due[1].at;
@@ -31,11 +33,16 @@ function fakeClock() {
   };
 }
 
-describe("trailing scheduler with bounded deferral (PF-12)", () => {
-  test("a burst inside the delay lands as one run after the last event", () => {
+describe('trailing scheduler with bounded deferral (PF-12)', () => {
+  test('a burst inside the delay lands as one run after the last event', () => {
     const clock = fakeClock();
     let runs = 0;
-    const scheduler = createTrailingScheduler({ delayMs: 150, maxWaitMs: 1_000, run: () => runs++, ...clock });
+    const scheduler = createTrailingScheduler({
+      delayMs: 150,
+      maxWaitMs: 1_000,
+      run: () => runs++,
+      ...clock,
+    });
     scheduler.schedule();
     clock.advance(100);
     scheduler.schedule();
@@ -47,10 +54,15 @@ describe("trailing scheduler with bounded deferral (PF-12)", () => {
     expect(scheduler.pending()).toBe(false);
   });
 
-  test("a sustained stream cannot defer the run past the maximum wait", () => {
+  test('a sustained stream cannot defer the run past the maximum wait', () => {
     const clock = fakeClock();
     const runAt: number[] = [];
-    const scheduler = createTrailingScheduler({ delayMs: 150, maxWaitMs: 1_000, run: () => runAt.push(clock.now()), ...clock });
+    const scheduler = createTrailingScheduler({
+      delayMs: 150,
+      maxWaitMs: 1_000,
+      run: () => runAt.push(clock.now()),
+      ...clock,
+    });
     // One event every 100 ms for three seconds: the trailing delay alone would never fire.
     for (let step = 0; step < 30; step += 1) {
       scheduler.schedule();
@@ -65,10 +77,15 @@ describe("trailing scheduler with bounded deferral (PF-12)", () => {
     expect(runAt).toEqual([1_000, 2_000, 3_000, 3_300]);
   });
 
-  test("cancel drops the pending run and reports it, so suspension can queue it", () => {
+  test('cancel drops the pending run and reports it, so suspension can queue it', () => {
     const clock = fakeClock();
     let runs = 0;
-    const scheduler = createTrailingScheduler({ delayMs: 150, maxWaitMs: 1_000, run: () => runs++, ...clock });
+    const scheduler = createTrailingScheduler({
+      delayMs: 150,
+      maxWaitMs: 1_000,
+      run: () => runs++,
+      ...clock,
+    });
     expect(scheduler.cancel()).toBe(false);
     scheduler.schedule();
     expect(scheduler.pending()).toBe(true);
@@ -81,7 +98,7 @@ describe("trailing scheduler with bounded deferral (PF-12)", () => {
     expect(runs).toBe(1);
   });
 
-  test("rejects a maximum wait shorter than the delay", () => {
+  test('rejects a maximum wait shorter than the delay', () => {
     expect(() => createTrailingScheduler({ delayMs: 150, maxWaitMs: 100, run: () => undefined })).toThrow();
   });
 });

@@ -19,7 +19,7 @@ function SubpageTitle() {
   );
 }
 
-function SectionTitle() {
+function SectionTitleSkeleton() {
   return <Skeleton className="h-6 w-40" />;
 }
 
@@ -40,7 +40,7 @@ export function TimeAccountSkeleton() {
       <SubpageTitle />
       <Skeleton className="h-28 w-full rounded-lg" />
       <div className="space-y-3">
-        <SectionTitle />
+        <SectionTitleSkeleton />
         <BorderedList count={4}>
           <div className="grid gap-2 border-b p-4 last:border-b-0 sm:grid-cols-5">
             <Skeleton className="h-5 w-28" />
@@ -52,7 +52,7 @@ export function TimeAccountSkeleton() {
         </BorderedList>
       </div>
       <div className="space-y-3">
-        <SectionTitle />
+        <SectionTitleSkeleton />
         <BorderedList count={4}>
           <div className="flex items-center justify-between gap-4 border-b p-4 last:border-b-0">
             <div className="space-y-1.5">
@@ -92,17 +92,17 @@ export function TimePeriodDetailSkeleton() {
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6">
       <SubpageTitle />
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-3 gap-3 sm:gap-4">
         <Skeleton className="h-24 rounded-lg" />
         <Skeleton className="h-24 rounded-lg" />
         <Skeleton className="h-24 rounded-lg" />
       </div>
       <div className="space-y-3">
-        <SectionTitle />
+        <SectionTitleSkeleton />
         <TimePeriodResultsSkeleton />
       </div>
       <div className="space-y-3">
-        <SectionTitle />
+        <SectionTitleSkeleton />
         <Skeleton className="h-16 w-full rounded-lg" />
         <Skeleton className="h-16 w-full rounded-lg" />
       </div>

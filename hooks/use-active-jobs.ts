@@ -48,14 +48,11 @@ export function useActiveJobsProvider({
     resetKey: activeOrgId,
   });
 
-  const activeJobIds = useMemo(
-    () => new Set(view.data?.jobIds ?? []),
-    [view.data]
-  );
+  const activeJobIds = useMemo(() => new Set(view.data?.jobIds ?? []), [view.data]);
 
   const activeProjectIds = useMemo(() => new Set(view.data?.projectIds ?? []), [view.data]);
   return useMemo(
     () => ({ activeJobIds, activeProjectIds, isLoading: view.isLoading }),
-    [activeJobIds, activeProjectIds, view.isLoading]
+    [activeJobIds, activeProjectIds, view.isLoading],
   );
 }

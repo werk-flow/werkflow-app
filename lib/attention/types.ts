@@ -32,7 +32,8 @@ type AttentionSourceType =
   | 'work_artifact_review'
   | 'work_artifact_correction'
   | 'work_defect_due'
-  | 'work_handover_review';
+  | 'work_handover_review'
+  | 'organization_join_request';
 
 export type AttentionItemIdentity = {
   sourceType: AttentionSourceType;
@@ -174,11 +175,17 @@ export type AttentionTask =
       targetType: 'job' | 'project';
       targetLabel: string;
       targetHref: string;
-      packageState: 'missing' | Exclude<
-        Database['public']['Enums']['work_handover_package_state'],
-        'released'
-      >;
+      packageState:
+        | 'missing'
+        | Exclude<Database['public']['Enums']['work_handover_package_state'], 'released'>;
       stateVersion: string;
+    }
+  // Someone entered the organization code and waits for Admin or Büro.
+  | {
+      sourceType: 'organization_join_request';
+      sourceId: string;
+      personName: string;
+      email: string | null;
     };
 
 // Informational notices, deduplicated per source record: a domain state

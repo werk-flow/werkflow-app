@@ -1,5 +1,6 @@
 'use client';
 
+import { PlainButton } from '@/components/ui/plain-button';
 import Link from 'next/link';
 
 interface EntityLinkCardProps {
@@ -21,26 +22,22 @@ export function EntityLinkCard({
   emptyState,
   onEmptyClick,
 }: EntityLinkCardProps) {
-  const isEmpty = !href && emptyState;
-
-  if (isEmpty) {
+  if (!href && emptyState) {
     const isClickable = !!onEmptyClick;
     return (
-      <button
+      <PlainButton
         type="button"
         className={`w-full rounded-lg border border-dashed bg-card p-4 text-left ${
-          isClickable
-            ? 'cursor-pointer transition-colors hover:border-primary/50 hover:bg-accent/30'
-            : ''
+          isClickable ? 'cursor-pointer transition-colors hover:border-primary/50 hover:bg-accent/30' : ''
         }`}
         onClick={onEmptyClick}
         disabled={!isClickable}
       >
         <div className="flex flex-col items-center gap-2 py-2 text-center">
-          <span className="text-muted-foreground">{emptyState!.text}</span>
-          {emptyState!.action}
+          <span className="text-muted-foreground">{emptyState.text}</span>
+          {emptyState.action}
         </div>
-      </button>
+      </PlainButton>
     );
   }
 
@@ -59,10 +56,7 @@ export function EntityLinkCard({
           {metadata && metadata.length > 0 && (
             <div className="mt-1 space-y-0.5">
               {metadata.map((m) => (
-                <p
-                  key={m.label}
-                  className="truncate text-xs text-muted-foreground"
-                >
+                <p key={m.label} className="truncate text-xs text-muted-foreground">
                   {m.label}: {m.value}
                 </p>
               ))}

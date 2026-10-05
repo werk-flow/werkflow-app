@@ -47,7 +47,7 @@ export function RowActionsMenu({ actions, disabled = false }: RowActionsMenuProp
     setPosition(
       window.innerHeight - bounds.bottom >= estimatedHeight || bounds.top < estimatedHeight
         ? { top: bounds.bottom + 4, right }
-        : { bottom: window.innerHeight - bounds.top + 4, right }
+        : { bottom: window.innerHeight - bounds.top + 4, right },
     );
     setOpen(true);
   }
@@ -105,7 +105,7 @@ export function RowActionsMenu({ actions, disabled = false }: RowActionsMenuProp
     if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
     event.preventDefault();
     const items = Array.from(
-      event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')
+      event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)'),
     );
     if (items.length === 0) return;
     const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
@@ -138,11 +138,7 @@ export function RowActionsMenu({ actions, disabled = false }: RowActionsMenuProp
           if (!open) openMenu();
         }}
       >
-        {disabled ? (
-          <Loader2 className="size-4 animate-spin" />
-        ) : (
-          <MoreHorizontal className="size-4" />
-        )}
+        {disabled ? <Loader2 className="size-4 animate-spin" /> : <MoreHorizontal className="size-4" />}
       </button>
 
       {open &&
@@ -165,7 +161,7 @@ export function RowActionsMenu({ actions, disabled = false }: RowActionsMenuProp
                   className={cn(
                     'relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none focus:bg-accent focus:text-accent-foreground',
                     action.variant === 'destructive' &&
-                      'text-destructive focus:bg-destructive/10 focus:text-destructive dark:focus:bg-destructive/20'
+                      'text-destructive focus:bg-destructive/10 focus:text-destructive dark:focus:bg-destructive/20',
                   )}
                   onClick={() => {
                     // Restore before the action so a newly opened dialog owns
@@ -181,7 +177,7 @@ export function RowActionsMenu({ actions, disabled = false }: RowActionsMenuProp
               </div>
             ))}
           </div>,
-          document.body
+          document.body,
         )}
     </>
   );

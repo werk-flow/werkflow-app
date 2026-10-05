@@ -12,11 +12,7 @@
 // routine operation; CORS is normally managed in the Cloudflare dashboard.
 // See docs/technical/environments.md.
 
-import {
-  GetBucketCorsCommand,
-  PutBucketCorsCommand,
-  S3Client,
-} from '@aws-sdk/client-s3';
+import { GetBucketCorsCommand, PutBucketCorsCommand, S3Client } from '@aws-sdk/client-s3';
 
 const accountId = process.env.R2_ACCOUNT_ID;
 const accessKeyId = process.env.R2_ACCESS_KEY_ID;
@@ -25,7 +21,9 @@ const bucketName = process.env.R2_BUCKET_NAME;
 const jurisdiction = process.env.R2_JURISDICTION ?? 'eu';
 
 if (!accountId || !accessKeyId || !secretAccessKey || !bucketName) {
-  console.error('Missing R2 env vars. Need R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME.');
+  console.error(
+    'Missing R2 env vars. Need R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME.',
+  );
   process.exit(1);
 }
 
@@ -38,13 +36,15 @@ if (siteUrl) {
   try {
     origins.add(new URL(siteUrl).origin);
   } catch {
-    console.error(`Invalid NEXT_PUBLIC_SITE_URL: ${siteUrl}. Fix it or set R2_CORS_LOCAL_ONLY=1 for a deliberate localhost-only policy.`);
+    console.error(
+      `Invalid NEXT_PUBLIC_SITE_URL: ${siteUrl}. Fix it or set R2_CORS_LOCAL_ONLY=1 for a deliberate localhost-only policy.`,
+    );
     process.exit(1);
   }
 } else if (!localOnly) {
   console.error(
     'NEXT_PUBLIC_SITE_URL is not set. A localhost-only CORS policy would break the deployed app. ' +
-      'Set NEXT_PUBLIC_SITE_URL, or set R2_CORS_LOCAL_ONLY=1 to apply a localhost-only policy deliberately (dev bucket).'
+      'Set NEXT_PUBLIC_SITE_URL, or set R2_CORS_LOCAL_ONLY=1 to apply a localhost-only policy deliberately (dev bucket).',
   );
   process.exit(1);
 }
@@ -70,7 +70,7 @@ await client.send(
         },
       ],
     },
-  })
+  }),
 );
 
 const current = await client.send(new GetBucketCorsCommand({ Bucket: bucketName }));

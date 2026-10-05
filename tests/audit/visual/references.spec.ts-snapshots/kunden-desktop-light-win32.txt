@@ -1,0 +1,51 @@
+Haustechnik Krämer GmbH
+Organisation erstellen
+Dashboard
+Aufgaben
+3
+3 offene Aufgaben und Benachrichtigungen
+Kalender
+Zeiterfassung
+Qualifikationen
+Anfragen
+Aufträge
+Dokumente
+Inventar
+Service
+Arbeitsvorlagen
+Mitarbeiter
+Kunden
+MK
+Martin Krämer
+martin.kraemer@haustechnik-kraemer.de
+Kunden
+Kunde hinzufügen
+4
+Kunden
+Name
+Typ
+E-Mail
+Telefon
+Bäckerei Sommer GmbH
+Gewerblich
+—
+—
+Aktionen öffnen
+Familie Hoffmann
+Privat
+—
+—
+Aktionen öffnen
+Praxis Dr. Wolf
+Gewerblich
+—
+—
+Aktionen öffnen
+Wohnungsbaugenossenschaft Neckartal eG
+Gewerblich
+—
+—
+Aktionen öffnen
+1–4
+von
+4

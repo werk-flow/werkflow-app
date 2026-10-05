@@ -1,9 +1,14 @@
 'use server';
 
+import type { ActionFailure } from '@/lib/action-result';
 import { getAuthenticatedUser, getCachedMemberships } from '@/lib/data/cached';
 import { getJobDisplayTitle } from '@/lib/jobs/types';
 import { getBusinessTodayIso } from '@/lib/personnel/types';
+import { logReadFailure } from '@/lib/data/read-request-cache';
+import { logError } from '@/lib/logging';
+import { uuidSchema } from '@/lib/validation/uuid';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { getLocalDayEnd, getLocalDayStart } from './day-utils';
 
 type PickerJob = {
@@ -25,14 +30,15 @@ type PickerJob = {
 async function getJobIdsPlannedTodayForUser(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   organizationId: string,
-  userId: string
+  userId: string,
 ): Promise<Set<string>> {
-  const { data: record } = await admin
+  const { data: record, error: recordError } = await admin
     .from('employee_records')
     .select('id')
     .eq('organization_id', organizationId)
     .eq('user_id', userId)
     .maybeSingle();
+  if (recordError) logReadFailure('getJobIdsPlannedTodayForUser: employee record failed', recordError);
   if (!record) return new Set();
   const now = new Date();
   const today = getBusinessTodayIso();
@@ -45,10 +51,10 @@ async function getJobIdsPlannedTodayForUser(
     .eq('own.employee_record_id', record.id)
     .or(
       `and(time_kind.eq.timed,start_at.lt.${getLocalDayEnd(now).toISOString()},end_at.gt.${getLocalDayStart(now).toISOString()}),` +
-        `and(time_kind.eq.all_day,start_date.lte.${today},end_date_exclusive.gt.${today})`
+        `and(time_kind.eq.all_day,start_date.lte.${today},end_date_exclusive.gt.${today})`,
     );
   if (error) {
-    console.error('Error fetching planned jobs for the picker:', error);
+    logError('Error fetching planned jobs for the picker:', error);
     return new Set();
   }
   return new Set((data ?? []).flatMap((row) => (row.job_id ? [row.job_id] : [])));
@@ -60,11 +66,12 @@ async function getJobIdsPlannedTodayForUser(
  * Employee: only assigned, non-archived jobs.
  */
 export async function getJobsForPicker(
-  organizationId: string
-): Promise<
-  { success: true; jobs: PickerJob[] } | { success: false; error: string }
-> {
+  rawOrganizationId: string,
+): Promise<{ success: true; jobs: PickerJob[] } | ActionFailure> {
   try {
+    const parsed = uuidSchema.safeParse(rawOrganizationId);
+    if (!parsed.success) return { success: false, error: 'invalid_input' };
+    const organizationId = parsed.data;
     const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
@@ -82,96 +89,105 @@ export async function getJobsForPicker(
     let jobIds: string[] | null = null;
 
     if (!isManagerOrAbove) {
-      const { data: assignments, error: assignError } = await admin
-        .from('job_assignments')
-        .select('job_id')
-        .eq('user_id', user.id);
+      const { data: assignments, error: assignError } = await readCompleteRows(
+        (from, to) =>
+          admin
+            .from('job_assignments')
+            .select('job_id')
+            .eq('organization_id', organizationId)
+            .eq('user_id', user.id)
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      );
 
       if (assignError) {
-        console.error('Error fetching job assignments:', assignError);
+        logError('Error fetching job assignments:', assignError);
         return { success: false, error: 'fetch_failed' };
       }
 
-      if (!assignments || assignments.length === 0) {
+      if (assignments.length === 0) {
         return { success: true, jobs: [] };
       }
 
       jobIds = assignments.map((a) => a.job_id);
     }
 
-    let query = admin
-      .from('jobs')
-      .select('id, title, description, job_number, status, project_id, client_id')
-      .eq('organization_id', organizationId)
-      .neq('status', 'fertig')
-      .order('title', { ascending: true });
-
-    if (jobIds) {
-      query = query.in('id', jobIds);
-    }
-
-    const { data: jobs, error: jobsError } = await query;
+    const jobQuery = () =>
+      admin
+        .from('jobs')
+        .select('id, title, description, job_number, status, project_id, client_id')
+        .eq('organization_id', organizationId)
+        .neq('status', 'fertig')
+        .order('title', { ascending: true })
+        .order('id');
+    const { data: jobs, error: jobsError } = jobIds
+      ? await readInBatches(jobIds, (batch) =>
+          readCompleteRows(
+            (from, to) =>
+              jobQuery()
+                .in('id', [...batch])
+                .range(from, to),
+            LIST_ROW_CAP,
+          ),
+        )
+      : await readCompleteRows((from, to) => jobQuery().range(from, to), LIST_ROW_CAP);
 
     if (jobsError) {
-      console.error('Error fetching picker jobs:', jobsError);
+      logReadFailure('Error fetching picker jobs:', jobsError);
       return { success: false, error: 'fetch_failed' };
     }
+    // Batches arrive in id order; restore the title order of the single query.
+    if (jobIds)
+      jobs.sort(
+        (left, right) => left.title.localeCompare(right.title, 'de') || left.id.localeCompare(right.id),
+      );
 
-    const projectIds = (jobs || [])
-      .map((j) => j.project_id)
-      .filter((id): id is string => id !== null);
-    const clientIds = (jobs || [])
-      .map((j) => j.client_id)
-      .filter((id): id is string => id !== null);
-
-    let projectMap: Record<string, string> = {};
-    let clientMap: Record<string, string> = {};
+    const projectIds = jobs.map((j) => j.project_id).filter((id): id is string => id !== null);
+    const clientIds = jobs.map((j) => j.client_id).filter((id): id is string => id !== null);
 
     const [projectsData, clientsData, plannedToday] = await Promise.all([
-      projectIds.length > 0
-        ? admin
-            .from('projects')
-            .select('id, name')
-            .in('id', [...new Set(projectIds)])
-        : null,
-      clientIds.length > 0
-        ? admin
-            .from('clients')
-            .select('id, name')
-            .in('id', [...new Set(clientIds)])
-        : null,
+      readInBatches(projectIds, (batch) =>
+        admin
+          .from('projects')
+          .select('id, name')
+          .eq('organization_id', organizationId)
+          .in('id', [...batch]),
+      ),
+      readInBatches(clientIds, (batch) =>
+        admin
+          .from('clients')
+          .select('id, name')
+          .eq('organization_id', organizationId)
+          .in('id', [...batch]),
+      ),
       getJobIdsPlannedTodayForUser(admin, organizationId, user.id),
     ]);
+    const labelError = projectsData.error ?? clientsData.error;
+    if (labelError) logReadFailure('getJobsForPicker: project or customer names failed', labelError);
 
-    if (projectsData?.data) {
-      projectMap = Object.fromEntries(
-        projectsData.data.map((p) => [p.id, p.name])
-      );
-    }
-    if (clientsData?.data) {
-      clientMap = Object.fromEntries(
-        clientsData.data.map((c) => [c.id, c.name])
-      );
-    }
+    const projectMap: Record<string, string> = Object.fromEntries(
+      projectsData.data.map((p) => [p.id, p.name]),
+    );
+    const clientMap: Record<string, string> = Object.fromEntries(clientsData.data.map((c) => [c.id, c.name]));
 
     return {
       success: true,
-      jobs: (jobs || []).map((j) => ({
+      jobs: jobs.map((j) => ({
         id: j.id,
         title: getJobDisplayTitle({
           title: j.title,
-          description: j.description
+          description: j.description,
         }),
         jobNumber: j.job_number,
         status: j.status,
         projectName: j.project_id ? (projectMap[j.project_id] ?? null) : null,
         clientName: j.client_id ? (clientMap[j.client_id] ?? null) : null,
         plannedToday: plannedToday.has(j.id),
-      }))
+      })),
     };
   } catch (error) {
-    console.error('Unexpected error in getJobsForPicker:', error);
+    logError('Unexpected error in getJobsForPicker:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
-

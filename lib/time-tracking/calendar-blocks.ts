@@ -1,8 +1,4 @@
-import type {
-  InteractiveCalendarSession,
-  TimeEntry,
-  WorkSessionBreak
-} from './types';
+import type { InteractiveCalendarSession, TimeEntry, WorkSessionBreak } from './types';
 import { getLocalDayEnd, isSameLocalDay } from './day-utils';
 import { getEffectiveTimeEntries } from './effective-entries';
 import { isBreakEndFollowedByClockIn } from './transition-pairs';
@@ -38,10 +34,7 @@ export type CalendarWorkBlock = {
 };
 
 type OpenBlockState = {
-  block: Omit<
-    CalendarWorkBlock,
-    'end' | 'endEntry' | 'isOpen' | 'isOnBreak' | 'isComposite' | 'isPending'
-  >;
+  block: Omit<CalendarWorkBlock, 'end' | 'endEntry' | 'isOpen' | 'isOnBreak' | 'isComposite' | 'isPending'>;
   segmentType: 'work' | 'break';
   segmentStart: TimeEntry;
 };
@@ -53,7 +46,7 @@ function buildSegmentId(startEntry: TimeEntry, endEntry: TimeEntry | null) {
 function cloneBlock(
   state: OpenBlockState,
   endEntry: TimeEntry | null,
-  isOnBreak: boolean
+  isOnBreak: boolean,
 ): CalendarWorkBlock {
   const isComposite =
     state.block.segments.length > 1 ||
@@ -68,15 +61,12 @@ function cloneBlock(
     isOnBreak,
     isComposite,
     isPending: state.block.sourceEntries.some(
-      (entry) => entry.status === 'pending' || Boolean(entry.pendingCorrectionRequestId)
-    )
+      (entry) => entry.status === 'pending' || Boolean(entry.pendingCorrectionRequestId),
+    ),
   };
 }
 
-function addClosedSegment(
-  state: OpenBlockState,
-  endEntry: TimeEntry
-): OpenBlockState {
+function addClosedSegment(state: OpenBlockState, endEntry: TimeEntry): OpenBlockState {
   const startMs = new Date(state.segmentStart.timestamp).getTime();
   const endMs = new Date(endEntry.timestamp).getTime();
 
@@ -85,8 +75,8 @@ function addClosedSegment(
       ...state,
       block: {
         ...state.block,
-        sourceEntries: [...state.block.sourceEntries, endEntry]
-      }
+        sourceEntries: [...state.block.sourceEntries, endEntry],
+      },
     };
   }
 
@@ -101,11 +91,11 @@ function addClosedSegment(
           type: state.segmentType,
           start: state.segmentStart.timestamp,
           end: endEntry.timestamp,
-          jobId: state.block.jobId
-        }
+          jobId: state.block.jobId,
+        },
       ],
-      sourceEntries: [...state.block.sourceEntries, endEntry]
-    }
+      sourceEntries: [...state.block.sourceEntries, endEntry],
+    },
   };
 }
 
@@ -121,10 +111,10 @@ function addOpenSegment(state: OpenBlockState): OpenBlockState {
           type: state.segmentType,
           start: state.segmentStart.timestamp,
           end: null,
-          jobId: state.block.jobId
-        }
-      ]
-    }
+          jobId: state.block.jobId,
+        },
+      ],
+    },
   };
 }
 
@@ -138,10 +128,10 @@ function startBlock(entry: TimeEntry, jobId: string | null): OpenBlockState {
       start: entry.timestamp,
       startEntry: entry,
       segments: [],
-      sourceEntries: [entry]
+      sourceEntries: [entry],
     },
     segmentType: 'work',
-    segmentStart: entry
+    segmentStart: entry,
   };
 }
 
@@ -155,13 +145,10 @@ function extractBreaks(entries: TimeEntry[]): WorkSessionBreak[] {
       continue;
     }
 
-    if (
-      currentBreakStart &&
-      (entry.entryType === 'break_end' || entry.entryType === 'clock_out')
-    ) {
+    if (currentBreakStart && (entry.entryType === 'break_end' || entry.entryType === 'clock_out')) {
       breaks.push({
         breakStart: currentBreakStart,
-        breakEnd: entry.entryType === 'break_end' ? entry : null
+        breakEnd: entry.entryType === 'break_end' ? entry : null,
       });
       currentBreakStart = null;
     }
@@ -170,7 +157,7 @@ function extractBreaks(entries: TimeEntry[]): WorkSessionBreak[] {
   if (currentBreakStart) {
     breaks.push({
       breakStart: currentBreakStart,
-      breakEnd: null
+      breakEnd: null,
     });
   }
 
@@ -181,7 +168,7 @@ function buildSyntheticBreakEntry(
   block: CalendarWorkBlock,
   entryType: 'break_start' | 'break_end',
   timestamp: Date,
-  idSuffix: string
+  idSuffix: string,
 ): TimeEntry {
   return {
     id: `${block.id}-${idSuffix}`,
@@ -202,72 +189,69 @@ function buildSyntheticBreakEntry(
 function resolveDisplayBreakPolicy(
   block: CalendarWorkBlock,
   referenceDate: Date,
-  settings?: OrganizationTimeTrackingSettings | null
+  settings?: OrganizationTimeTrackingSettings | null,
 ) {
   if (!settings) {
-    return null
+    return null;
   }
 
-  return resolveBreakPolicyAtTimestamp(
-    settings,
-    block.end ? new Date(block.end) : referenceDate
-  )
+  return resolveBreakPolicyAtTimestamp(settings, block.end ? new Date(block.end) : referenceDate);
 }
 
 function getCalendarBlockDisplayBreaks(
   block: CalendarWorkBlock,
   referenceDate = new Date(),
-  settings?: OrganizationTimeTrackingSettings | null
+  settings?: OrganizationTimeTrackingSettings | null,
 ): WorkSessionBreak[] {
-  const actualBreaks = extractBreaks(block.sourceEntries)
+  const actualBreaks = extractBreaks(block.sourceEntries);
   if (actualBreaks.length > 0) {
-    return actualBreaks
+    return actualBreaks;
   }
 
-  const displayPolicy = resolveDisplayBreakPolicy(block, referenceDate, settings)
-  const displayEnd = block.end ? new Date(block.end) : referenceDate
-  const automaticBreak = getAutomaticBreakRange(block.start, displayEnd, displayPolicy)
+  const displayPolicy = resolveDisplayBreakPolicy(block, referenceDate, settings);
+  const displayEnd = block.end ? new Date(block.end) : referenceDate;
+  const automaticBreak = getAutomaticBreakRange(block.start, displayEnd, displayPolicy);
 
   if (!automaticBreak) {
-    return []
+    return [];
   }
 
   const breakStartEntry = buildSyntheticBreakEntry(
     block,
     'break_start',
     automaticBreak.breakStart,
-    'auto-break-start'
-  )
+    'auto-break-start',
+  );
   const breakEndEntry = buildSyntheticBreakEntry(
     block,
     'break_end',
     automaticBreak.breakEnd,
-    'auto-break-end'
-  )
+    'auto-break-end',
+  );
 
-  return [{ breakStart: breakStartEntry, breakEnd: breakEndEntry }]
+  return [{ breakStart: breakStartEntry, breakEnd: breakEndEntry }];
 }
 
 export function getCalendarBlockDisplaySegments(
   block: CalendarWorkBlock,
   referenceDate = new Date(),
-  settings?: OrganizationTimeTrackingSettings | null
+  settings?: OrganizationTimeTrackingSettings | null,
 ): CalendarBlockSegment[] {
-  const actualBreaks = extractBreaks(block.sourceEntries)
+  const actualBreaks = extractBreaks(block.sourceEntries);
   if (actualBreaks.length > 0) {
-    return block.segments
+    return block.segments;
   }
 
-  const displayPolicy = resolveDisplayBreakPolicy(block, referenceDate, settings)
-  const displayEnd = block.end ? new Date(block.end) : referenceDate
-  const automaticBreak = getAutomaticBreakRange(block.start, displayEnd, displayPolicy)
+  const displayPolicy = resolveDisplayBreakPolicy(block, referenceDate, settings);
+  const displayEnd = block.end ? new Date(block.end) : referenceDate;
+  const automaticBreak = getAutomaticBreakRange(block.start, displayEnd, displayPolicy);
 
   if (!automaticBreak) {
-    return block.segments
+    return block.segments;
   }
 
-  const blockStart = new Date(block.start)
-  const segments: CalendarBlockSegment[] = []
+  const blockStart = new Date(block.start);
+  const segments: CalendarBlockSegment[] = [];
 
   if (blockStart < automaticBreak.breakStart) {
     segments.push({
@@ -276,7 +260,7 @@ export function getCalendarBlockDisplaySegments(
       start: block.start,
       end: automaticBreak.breakStart.toISOString(),
       jobId: block.jobId,
-    })
+    });
   }
 
   segments.push({
@@ -285,7 +269,7 @@ export function getCalendarBlockDisplaySegments(
     start: automaticBreak.breakStart.toISOString(),
     end: automaticBreak.breakEnd.toISOString(),
     jobId: block.jobId,
-  })
+  });
 
   if (displayEnd > automaticBreak.breakEnd) {
     segments.push({
@@ -294,16 +278,13 @@ export function getCalendarBlockDisplaySegments(
       start: automaticBreak.breakEnd.toISOString(),
       end: block.end,
       jobId: block.jobId,
-    })
+    });
   }
 
-  return segments
+  return segments;
 }
 
-function getCalendarBlockDisplayEnd(
-  block: CalendarWorkBlock,
-  referenceDate = new Date()
-): Date {
+function getCalendarBlockDisplayEnd(block: CalendarWorkBlock, referenceDate = new Date()): Date {
   if (block.end) {
     return new Date(block.end);
   }
@@ -313,10 +294,7 @@ function getCalendarBlockDisplayEnd(
   return new Date(Math.max(start, now));
 }
 
-function getCalendarBlockDurationMinutes(
-  block: CalendarWorkBlock,
-  referenceDate = new Date()
-): number {
+function getCalendarBlockDurationMinutes(block: CalendarWorkBlock, referenceDate = new Date()): number {
   const startMs = new Date(block.start).getTime();
   const endMs = getCalendarBlockDisplayEnd(block, referenceDate).getTime();
   return Math.max(0, (endMs - startMs) / 60000);
@@ -325,20 +303,17 @@ function getCalendarBlockDurationMinutes(
 export function createSessionFromCalendarBlock(
   block: CalendarWorkBlock,
   referenceDate = new Date(),
-  settings?: OrganizationTimeTrackingSettings | null
+  settings?: OrganizationTimeTrackingSettings | null,
 ): InteractiveCalendarSession {
-  const durationMinutes = Math.round(
-    getCalendarBlockDurationMinutes(block, referenceDate)
-  );
-  const displayPolicy = resolveDisplayBreakPolicy(block, referenceDate, settings)
+  const durationMinutes = Math.round(getCalendarBlockDurationMinutes(block, referenceDate));
+  const displayPolicy = resolveDisplayBreakPolicy(block, referenceDate, settings);
 
   return {
     clockIn: block.startEntry,
     clockOut: block.endEntry,
     durationMinutes: block.isOpen ? null : durationMinutes,
     jobId: block.jobId,
-    startEntryType:
-      block.startEntry.entryType === 'clock_in' ? 'clock_in' : 'break_end',
+    startEntryType: block.startEntry.entryType === 'clock_in' ? 'clock_in' : 'break_end',
     endEntryType:
       block.endEntry?.entryType === 'clock_out'
         ? 'clock_out'
@@ -353,13 +328,11 @@ export function createSessionFromCalendarBlock(
     autoBreakThresholdMinutes: displayPolicy?.autoBreakThresholdMinutes,
     autoBreakDurationMinutes: displayPolicy?.autoBreakDurationMinutes,
     isCompositeBlock: block.isComposite,
-    isOnBreakBlock: block.isOnBreak
+    isOnBreakBlock: block.isOnBreak,
   };
 }
 
-export function calculateCalendarWorkBlocks(
-  entries: TimeEntry[]
-): CalendarWorkBlock[] {
+export function calculateCalendarWorkBlocks(entries: TimeEntry[]): CalendarWorkBlock[] {
   const effectiveEntries = getEffectiveTimeEntries(entries);
   const blocks: CalendarWorkBlock[] = [];
   let current: OpenBlockState | null = null;
@@ -374,17 +347,14 @@ export function calculateCalendarWorkBlocks(
   for (let index = 0; index < effectiveEntries.length; index += 1) {
     const entry = effectiveEntries[index];
     if (!entry) continue;
-    if (
-      current &&
-      !isSameLocalDay(new Date(current.segmentStart.timestamp), new Date(entry.timestamp))
-    ) {
+    if (current && !isSameLocalDay(new Date(current.segmentStart.timestamp), new Date(entry.timestamp))) {
       const dayEndEntry: TimeEntry = {
         ...current.segmentStart,
         id: `${current.segmentStart.id}-day-end`,
         entryType: 'clock_out',
         timestamp: getLocalDayEnd(new Date(current.segmentStart.timestamp)).toISOString(),
         createdAt: current.segmentStart.updatedAt,
-        updatedAt: current.segmentStart.updatedAt
+        updatedAt: current.segmentStart.updatedAt,
       };
 
       current = addClosedSegment(current, dayEndEntry);
@@ -407,7 +377,7 @@ export function calculateCalendarWorkBlocks(
         current = {
           ...current,
           segmentType: 'break',
-          segmentStart: entry
+          segmentStart: entry,
         };
         break;
       case 'break_end':
@@ -430,7 +400,7 @@ export function calculateCalendarWorkBlocks(
           current = {
             ...current,
             segmentType: 'work',
-            segmentStart: entry
+            segmentStart: entry,
           };
         }
         break;

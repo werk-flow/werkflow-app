@@ -7,10 +7,12 @@ import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 export default async function OrganizationSettingsPage() {
-  const [{ data: { user } }, cookieStore] = await Promise.all([
-    getCachedUser(),
-    cookies(),
-  ]);
+  const [
+    {
+      data: { user },
+    },
+    cookieStore,
+  ] = await Promise.all([getCachedUser(), cookies()]);
 
   if (!user) {
     redirect('/login');
@@ -19,9 +21,7 @@ export default async function OrganizationSettingsPage() {
   const memberships = await getCachedMemberships(user.id);
   const activeOrgId = await resolveActiveOrgId(cookieStore, user.id);
   const activeMembership =
-    memberships.find((membership) => membership.orgId === activeOrgId) ??
-    memberships[0] ??
-    null;
+    memberships.find((membership) => membership.orgId === activeOrgId) ?? memberships[0] ?? null;
 
   if (!activeMembership) {
     redirect('/dashboard');

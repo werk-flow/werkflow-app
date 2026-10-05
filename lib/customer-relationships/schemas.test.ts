@@ -1,10 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import {
-  communicationExceptionInputSchema,
-  followUpInputSchema,
-  followUpTransitionSchema,
-} from './schemas';
+import { communicationExceptionInputSchema, followUpInputSchema, followUpTransitionSchema } from './schemas';
 
 const VALID_FOLLOW_UP = {
   title: 'Wartung abstimmen',
@@ -44,19 +40,19 @@ describe('customer relationship action schemas', () => {
       followUpInputSchema.safeParse({
         ...VALID_FOLLOW_UP,
         title: 'T'.repeat(161),
-      }).success
+      }).success,
     ).toBe(false);
     expect(
       followUpInputSchema.safeParse({
         ...VALID_FOLLOW_UP,
         note: 'N'.repeat(2001),
-      }).success
+      }).success,
     ).toBe(false);
     expect(
       followUpInputSchema.safeParse({
         ...VALID_FOLLOW_UP,
         sourceType: 'job',
-      }).success
+      }).success,
     ).toBe(false);
   });
 
@@ -65,28 +61,24 @@ describe('customer relationship action schemas', () => {
       followUpInputSchema.safeParse({
         ...VALID_FOLLOW_UP,
         dueAt: '2014-02-30T09:00:00+01:00',
-      }).success
+      }).success,
     ).toBe(false);
     expect(
       followUpInputSchema.safeParse({
         ...VALID_FOLLOW_UP,
         dueAt: '2026-08-11T09:00:00+02:00',
-      }).success
+      }).success,
     ).toBe(true);
   });
 
   test('accepts only known follow-up transitions and bounded reasons', () => {
-    expect(
-      followUpTransitionSchema.safeParse({ targetStatus: 'completed' }).success
-    ).toBe(true);
-    expect(
-      followUpTransitionSchema.safeParse({ targetStatus: 'deleted' }).success
-    ).toBe(false);
+    expect(followUpTransitionSchema.safeParse({ targetStatus: 'completed' }).success).toBe(true);
+    expect(followUpTransitionSchema.safeParse({ targetStatus: 'deleted' }).success).toBe(false);
     expect(
       followUpTransitionSchema.safeParse({
         targetStatus: 'open',
         reason: 42,
-      }).success
+      }).success,
     ).toBe(false);
   });
 
@@ -106,15 +98,12 @@ describe('customer relationship action schemas', () => {
       channel: 'phone',
       purpose: 'appointment_service',
     } as const;
-    expect(
-      communicationExceptionInputSchema.safeParse({ ...base, reason: '  ' })
-        .success
-    ).toBe(false);
+    expect(communicationExceptionInputSchema.safeParse({ ...base, reason: '  ' }).success).toBe(false);
     expect(
       communicationExceptionInputSchema.safeParse({
         ...base,
         reason: 'Kunde bittet um Rückruf zur akuten Störung.',
-      }).success
+      }).success,
     ).toBe(true);
   });
 });

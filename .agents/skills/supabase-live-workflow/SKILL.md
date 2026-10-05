@@ -7,7 +7,7 @@ description: Use for Supabase-related work in this WerkFlow repo: database schem
 
 WerkFlow runs two cloud Supabase projects plus a local stack. Project IDs, plan and compute posture, per-backend configuration, and which tool reaches which backend live in `docs/technical/environments.md`; read it before any Supabase work and do not restate its facts elsewhere.
 
-- **Prod** serves the deployed Vercel app and real customers. Treat as read-only outside the migration rule below.
+- **Prod** serves the deployed Vercel app and real customers. Treat as read-only outside the migration rule.
 - **Dev** supports local development, the cloud canary, and explicitly scoped provider checks. Routine wave and release verification uses the local release plan plus the cloud canary under decision 0007. Read `docs/technical/testing.md` for selection and acceptance.
 - **Local stack** (WSL Docker, `supabase db reset` over the committed migrations) is the default backend for application test groups. Reached through the Supabase CLI in WSL and direct psql, not through MCP.
 
@@ -21,16 +21,11 @@ WerkFlow runs two cloud Supabase projects plus a local stack. Project IDs, plan 
 
 ## The migration rule
 
-Every schema change:
+`docs/technical/environments.md` ("The migration rule") is the one home of the rule. Read it before you write or apply a migration. Do not restate it here or anywhere else.
 
-1. **Is a committed file** in `supabase/migrations/<version>_<name>.sql`. No ad-hoc DDL that lives only in a database.
-2. **Applies dev-first, prod-second**, always both projects, always the same SQL. Verify on dev (types, tests) before touching prod.
-3. **Goes to dev through `bunx supabase db push`** (the repo is linked to the dev ref), because it records the committed file's exact version in the remote history. MCP `apply_migration` stamps its own apply-time version, and canary C9 fails on that divergence, so an MCP-applied dev migration must be followed by the history alignment described in `docs/technical/environments.md` ("The migration rule").
-4. **Goes to prod through MCP `apply_migration`** with the identical SQL. Never `supabase link` or `db push` against prod.
+A migration that creates a table also follows the table item of the checklist in `docs/technical/security.md`: RLS, policies and explicit grants in the same file. A new table that feeds the period calculation also gets the closed-period trigger, and `sql:closed-period-writes` covers it. `bun run test:verify --group sql:security` fails on a table that misses them.
 
-Also forbidden: schema changes on prod that have no migration file, and running tests or bulk scripts while `.env.local` points at prod (`bun run env:prod` sessions are a deliberate, temporary exception; switch back with `bun run env:dev`).
-
-The four `*baseline*` repair migrations reconcile pre-split unrecorded drift; they are idempotent no-ops on prod and must never be edited to change history semantics.
+Never run tests or bulk scripts while `.env.local` points at prod. A `bun run env:prod` session is a deliberate, temporary exception. Switch back with `bun run env:dev`.
 
 ## Edge functions
 
@@ -41,8 +36,8 @@ Sources are versioned in `supabase/functions/` and deployed with `bunx supabase 
 - Ground database-related claims in actual Supabase inspection when needed.
 - Confirm live auth, RLS, table, function, or storage state before relying on it.
 - After Supabase-sensitive changes, verify the relevant behavior with MCP queries or the most direct available check, on dev first.
-- Run the guards that cover the change: `bun run migrations:check` (dev history matches the committed files), `bun run types:check`, `bun run realtime:check` (publication and replica-identity parity), and the SQL groups that own the change (`bun run test:verify --group sql:p1-24`, `sql:security`, `sql:list-pagination`); the registry in `lib/testing/test-groups.ts` is the only list of a group's SQL files.
+- Run the guards that cover the change: `bun run migrations:check` (dev history matches the committed files), `bun run types:check`, `bun run realtime:check` (publication and replica-identity parity), and the SQL groups that own the change (`bun run test:verify --group sql:p1-24`, `sql:security`, `sql:list-pagination`); the registry in `lib/testing/selection/test-groups.ts` is the only list of a group's SQL files.
 
 ## Parity check between DEV and PROD
 
-None of the guards above compares the two cloud catalogs, and matching migration names or identical generated types do not detect a changed function body: on 2026-09-05 `fulfill_instruction_evidence` differed on DEV from the committed migration and from PROD while both ledgers listed the same migration name. To compare the projects, run read-only catalog queries on each through MCP `execute_sql`: `pg_class` (tables and their RLS flag), `pg_policies`, `pg_proc` with `pg_get_functiondef`, `information_schema.columns`, `pg_constraint`, `pg_indexes`, `pg_trigger`, `pg_publication_tables`, and `supabase_migrations.schema_migrations`. Compare by schema-qualified object identity, and normalize whitespace and comments before dismissing a differing function body as formatting. `supabase/tests/security_boundaries.sql` holds the function-definition and ACL part of these queries, and `canary:security` repeats the grant comparison on DEV. Record the result in the slice or cross-slice record; `docs/technical/environments.md` explains why no gate does this automatically.
+None of the guards above compares the two cloud catalogs, and matching migration names or identical generated types do not detect a changed function body. To compare the projects, run read-only catalog queries on each through MCP `execute_sql`: `pg_class` (tables and their RLS flag), `pg_policies`, `pg_proc` with `pg_get_functiondef`, `information_schema.columns`, `pg_constraint`, `pg_indexes`, `pg_trigger`, `pg_publication_tables`, and `supabase_migrations.schema_migrations`. Compare by schema-qualified object identity, and normalize whitespace and comments before dismissing a differing function body as formatting. `supabase/tests/security_boundaries.sql` holds the function-definition and ACL part of these queries, and `canary:security` repeats the grant comparison on DEV. Record the result in the slice or cross-slice record; `docs/technical/environments.md` explains why no gate does this automatically.

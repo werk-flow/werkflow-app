@@ -7,7 +7,6 @@ import {
   getCachedMemberships,
   getCachedOrganizationCalendar,
   getCachedOrganizationSettings,
-  getCachedOrganizationUserPreferences,
   getCachedUser,
 } from '@/lib/data/cached';
 import { getChangeRequestsForEntries, getTimeEntries } from '@/lib/time-tracking/actions';
@@ -22,9 +21,16 @@ import { CalendarContainer } from '@/components/kalender/calendar-container';
 import type { CalendarInitialData } from '@/components/kalender/use-calendar-range-data';
 import { KalenderPageSkeleton } from '@/components/loading-states/kalender-page-skeleton';
 import { PageHeader } from '@/components/shared/page-header';
+import { RegionLoadError } from '@/components/shared/region-load-error';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
-import { getBerlinDayFetchRange, getBerlinWeekFetchRange } from '@/lib/calendar/business-range';
-import { readCalendarPreferences } from '@/lib/calendar/preferences';
+import {
+  getBerlinDayFetchRange,
+  getBerlinWeekFetchRange,
+  getBerlinMonthFetchRange,
+} from '@/lib/calendar/business-range';
+import { getCalendarPreferencesForPage } from '@/lib/calendar/preferences-server';
+import type { CalendarPreferences } from '@/lib/calendar/preferences';
+import { logError } from '@/lib/logging';
 import { type OrgRole } from '@/lib/members/actions';
 import { getOrgMembersForUser } from '@/lib/members/queries';
 import { getBusinessTodayIso, shiftIsoDateByDays } from '@/lib/personnel/types';
@@ -57,39 +63,81 @@ async function KalenderData({
   const businessDate = calendarDateFromQuery((await searchParams).date, getBusinessTodayIso());
   // The landing view is the user's saved view, else the Plantafel for managers
   // and the day for employees (P1-24a, D1); the prefetch covers its window.
-  const preferences = readCalendarPreferences((await getCachedOrganizationUserPreferences(activeOrgId, userId)).preferences);
+  let preferences: CalendarPreferences;
+  try {
+    preferences = await getCalendarPreferencesForPage(activeOrgId, userId);
+  } catch (error) {
+    logError('kalender.page.preferences_read_failed', error);
+    return (
+      <PageShell>
+        <PageHeader title="Kalender" />
+        <PageBody>
+          <RegionLoadError>
+            Deine Kalenderansicht konnte nicht geladen werden. Bitte versuche es erneut.
+          </RegionLoadError>
+        </PageBody>
+      </PageShell>
+    );
+  }
   const landingView = preferences.view ?? (isAdminOrManager ? 'week' : 'day');
-  const window = landingView === 'week'
-    ? getBerlinWeekFetchRange(businessDate, preferences.horizonWeeks)
-    : { ...getBerlinDayFetchRange(businessDate), fromIso: shiftIsoDateByDays(businessDate, -1), toIso: businessDate };
+  const window =
+    landingView === 'week'
+      ? getBerlinWeekFetchRange(businessDate, preferences.horizonWeeks)
+      : landingView === 'month'
+        ? getBerlinMonthFetchRange(businessDate)
+        : {
+            ...getBerlinDayFetchRange(businessDate),
+            fromIso: shiftIsoDateByDays(businessDate, -1),
+            toIso: businessDate,
+          };
   const range = { start: window.start, end: window.end };
   const fromIso = window.fromIso;
   const toIso = window.toIso;
 
-  async function fetchMembers(): Promise<MemberRow[]> {
-    const data = await getOrgMembersForUser(activeOrgId, userId);
+  async function fetchMembers(): Promise<MemberRow[] | null> {
+    const membersRead = await getOrgMembersForUser(activeOrgId, userId);
+    if (!membersRead.success) return null;
     if (isAdminOrManager) {
-      return data;
+      return membersRead.members;
     }
-    return data.filter((member) => member.user_id === userId);
+    return membersRead.members.filter((member) => member.user_id === userId);
   }
 
   const dates = { from: fromIso, to: toIso };
-  const [entriesResult, members, jobsResult, organizationSettings, holidayCalendar, vacationResult, sicknessResult, boardResult] =
-    await Promise.all([
-      completeCalendarEntryRead(getTimeEntries({
+  const [
+    entriesResult,
+    members,
+    jobsResult,
+    organizationSettings,
+    holidayCalendar,
+    vacationResult,
+    sicknessResult,
+    boardResult,
+  ] = await Promise.all([
+    completeCalendarEntryRead(
+      getTimeEntries({
         organizationId: activeOrgId,
         from: range.start.toISOString(),
-        to: range.end.toISOString()
-      }), getChangeRequestsForEntries),
-      fetchMembers(),
-      getPlanningEntries(fromIso, toIso),
-      getCachedOrganizationSettings(activeOrgId),
-      getCachedOrganizationCalendar(activeOrgId),
-      getVacationCalendarEntries(dates),
-      getSicknessCalendarEntries(dates),
-      getCalendarBoardContext({ organizationId: activeOrgId, fromDate: fromIso, toDate: toIso }),
-    ]);
+        to: range.end.toISOString(),
+      }),
+      getChangeRequestsForEntries,
+    ),
+    fetchMembers(),
+    getPlanningEntries(fromIso, toIso),
+    getCachedOrganizationSettings(activeOrgId),
+    getCachedOrganizationCalendar(activeOrgId),
+    getVacationCalendarEntries(dates),
+    getSicknessCalendarEntries(dates),
+    getCalendarBoardContext({ organizationId: activeOrgId, fromDate: fromIso, toDate: toIso }),
+  ]);
+
+  if (!members) {
+    return (
+      <RegionLoadError title="Der Kalender konnte nicht geladen werden">
+        Die Mitarbeiterliste ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
+      </RegionLoadError>
+    );
+  }
 
   // Initial data carries the same official plus provisional projection and
   // the same pending-correction badges as every later client read (PF-06).
@@ -102,7 +150,14 @@ async function KalenderData({
     ...(vacationResult.success ? { vacation: vacationResult.entries } : {}),
     ...(sicknessResult.success ? { sickness: sicknessResult.entries } : {}),
     ...(boardResult.success
-      ? { board: { rows: boardResult.rows, days: boardResult.days, dispatch: boardResult.dispatch, materialDemandJobIds: boardResult.materialDemandJobIds } }
+      ? {
+          board: {
+            rows: boardResult.rows,
+            days: boardResult.days,
+            dispatch: boardResult.dispatch,
+            materialDemandJobIds: boardResult.materialDemandJobIds,
+          },
+        }
       : {}),
   };
 
@@ -115,7 +170,7 @@ async function KalenderData({
       members={members}
       organizationSettings={organizationSettings}
       holidayCalendar={holidayCalendar}
-      initialData={landingView === 'month' ? undefined : initialData}
+      initialData={initialData}
       initialDate={businessDate}
       initialPreferences={preferences}
       initialView={landingView}
@@ -123,13 +178,17 @@ async function KalenderData({
   );
 }
 
-export default async function KalenderPage({ searchParams }: {
+export default async function KalenderPage({
+  searchParams,
+}: {
   searchParams: Promise<{ date?: string | string[] }>;
 }) {
-  const [{ data: { user } }, cookieStore] = await Promise.all([
-    getCachedUser(),
-    cookies()
-  ]);
+  const [
+    {
+      data: { user },
+    },
+    cookieStore,
+  ] = await Promise.all([getCachedUser(), cookies()]);
 
   if (!user) {
     redirect('/login');
@@ -137,7 +196,7 @@ export default async function KalenderPage({ searchParams }: {
 
   const [activeOrgId, memberships] = await Promise.all([
     resolveActiveOrgId(cookieStore, user.id),
-    getCachedMemberships(user.id)
+    getCachedMemberships(user.id),
   ]);
 
   if (!activeOrgId) {
@@ -145,9 +204,7 @@ export default async function KalenderPage({ searchParams }: {
       <PageShell>
         <PageHeader title="Kalender" />
         <PageBody>
-          <p className="text-muted-foreground">
-            Bitte wähle zuerst eine Organisation aus.
-          </p>
+          <p className="text-muted-foreground">Bitte wähle zuerst eine Organisation aus.</p>
         </PageBody>
       </PageShell>
     );
@@ -160,8 +217,7 @@ export default async function KalenderPage({ searchParams }: {
   }
 
   const currentUserRole = currentMembership.role as OrgRole;
-  const isAdminOrManager =
-    currentUserRole === 'admin' || currentUserRole === 'buero';
+  const isAdminOrManager = currentUserRole === 'admin' || currentUserRole === 'buero';
 
   // CalendarContainer renders the page shell itself: its header carries the
   // date navigation and the create action, which are bound to client state.

@@ -1,22 +1,13 @@
-import { ListRow } from "@/components/ui/list-row";
-import { Skeleton } from "@/components/ui/skeleton";
-import { SkeletonList, SkeletonTable } from "@/components/ui/skeleton-table";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import type { TimePeriodDetail } from "@/lib/time-accounts/actions";
-import { formatMinutes } from "@/lib/time-accounts/presentation";
-import { TIME_PERIOD_RESULT_COLUMNS } from "./time-period-result-columns";
+import { ListRow } from '@/components/ui/list-row';
+import { Skeleton } from '@/components/ui/skeleton';
+import { SkeletonList, SkeletonTable } from '@/components/ui/skeleton-table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import type { TimePeriodDetail } from '@/lib/time-accounts/queries';
+import { formatMinutes } from '@/lib/time-accounts/presentation';
+import { TIME_PERIOD_RESULT_COLUMNS } from './time-period-result-columns';
 
 /** All result fields remain available on phones, without a scrolling table. */
-export function TimePeriodResults({
-  results,
-}: Pick<TimePeriodDetail, "results">): React.JSX.Element {
+export function TimePeriodResults({ results }: Pick<TimePeriodDetail, 'results'>): React.JSX.Element {
   return (
     <>
       <div className="space-y-2 md:hidden">
@@ -25,25 +16,15 @@ export function TimePeriodResults({
             <p className="font-medium">{result.employeeName}</p>
             <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
               <dt className="text-muted-foreground">Soll</dt>
-              <dd className="text-right tabular-nums">
-                {formatMinutes(result.targetMinutes)}
-              </dd>
+              <dd className="text-right tabular-nums">{formatMinutes(result.targetMinutes)}</dd>
               <dt className="text-muted-foreground">Gewertet</dt>
-              <dd className="text-right tabular-nums">
-                {formatMinutes(result.creditedMinutes)}
-              </dd>
+              <dd className="text-right tabular-nums">{formatMinutes(result.creditedMinutes)}</dd>
               <dt className="text-muted-foreground">Differenz</dt>
-              <dd className="text-right tabular-nums">
-                {formatMinutes(result.periodDeltaMinutes)}
-              </dd>
+              <dd className="text-right tabular-nums">{formatMinutes(result.periodDeltaMinutes)}</dd>
               <dt className="text-muted-foreground">Schlusssaldo</dt>
-              <dd className="text-right tabular-nums">
-                {formatMinutes(result.closingBalanceMinutes)}
-              </dd>
+              <dd className="text-right tabular-nums">{formatMinutes(result.closingBalanceMinutes)}</dd>
               <dt className="text-muted-foreground">Sollquelle</dt>
-              <dd className="text-right">
-                {result.authoritativeTargets ? "Arbeitsplan" : "Ersatzwert"}
-              </dd>
+              <dd className="text-right">{result.authoritativeTargets ? 'Arbeitsplan' : 'Ersatzwert'}</dd>
             </dl>
           </ListRow>
         ))}
@@ -62,23 +43,13 @@ export function TimePeriodResults({
           <TableBody>
             {results.map((result) => (
               <TableRow key={result.employeeRecordId}>
-                <TableCell className="font-medium">
-                  {result.employeeName}
-                </TableCell>
-                <TableCell className="tabular-nums">
-                  {formatMinutes(result.targetMinutes)}
-                </TableCell>
-                <TableCell className="tabular-nums">
-                  {formatMinutes(result.creditedMinutes)}
-                </TableCell>
-                <TableCell className="tabular-nums">
-                  {formatMinutes(result.periodDeltaMinutes)}
-                </TableCell>
-                <TableCell className="tabular-nums">
-                  {formatMinutes(result.closingBalanceMinutes)}
-                </TableCell>
+                <TableCell className="font-medium">{result.employeeName}</TableCell>
+                <TableCell className="tabular-nums">{formatMinutes(result.targetMinutes)}</TableCell>
+                <TableCell className="tabular-nums">{formatMinutes(result.creditedMinutes)}</TableCell>
+                <TableCell className="tabular-nums">{formatMinutes(result.periodDeltaMinutes)}</TableCell>
+                <TableCell className="tabular-nums">{formatMinutes(result.closingBalanceMinutes)}</TableCell>
                 <TableCell className="text-muted-foreground">
-                  {result.authoritativeTargets ? "Arbeitsplan" : "Ersatzwert"}
+                  {result.authoritativeTargets ? 'Arbeitsplan' : 'Ersatzwert'}
                 </TableCell>
               </TableRow>
             ))}
@@ -98,20 +69,14 @@ export function TimePeriodResultsSkeleton(): React.JSX.Element {
           <div className="grid grid-cols-2 gap-x-4 gap-y-1">
             {TIME_PERIOD_RESULT_COLUMNS.slice(1).map((column) => (
               <div key={column.id} className="contents">
-                <span className="text-sm text-muted-foreground">
-                  {column.header}
-                </span>
+                <span className="text-sm text-muted-foreground">{column.header}</span>
                 <span className="justify-self-end">{column.skeleton}</span>
               </div>
             ))}
           </div>
         </div>
       </SkeletonList>
-      <SkeletonTable
-        columns={TIME_PERIOD_RESULT_COLUMNS}
-        rows={5}
-        className="hidden bg-card md:block"
-      />
+      <SkeletonTable columns={TIME_PERIOD_RESULT_COLUMNS} rows={5} className="hidden bg-card md:block" />
     </>
   );
 }

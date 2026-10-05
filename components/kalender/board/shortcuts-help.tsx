@@ -23,18 +23,28 @@ const SHORTCUTS: ReadonlyArray<[string, string]> = [
 ];
 
 /** The `?` overlay (P1-24a, criterion 18). */
-export function ShortcutsHelp({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }): React.JSX.Element {
+export function ShortcutsHelp({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}): React.JSX.Element {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Tastenkürzel</DialogTitle>
-          <DialogDescription>Die Kürzel gelten im Kalender außerhalb von Eingabefeldern und Dialogen.</DialogDescription>
+          <DialogDescription>
+            Die Kürzel gelten im Kalender außerhalb von Eingabefeldern und Dialogen.
+          </DialogDescription>
         </DialogHeader>
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
           {SHORTCUTS.map(([keys, description]) => (
             <div key={keys} className="contents">
-              <dt><kbd className="rounded-sm border bg-muted px-1.5 py-0.5 font-mono text-xs">{keys}</kbd></dt>
+              <dt>
+                <kbd className="rounded-sm border bg-muted px-1.5 py-0.5 font-mono text-xs">{keys}</kbd>
+              </dt>
               <dd className="text-muted-foreground">{description}</dd>
             </div>
           ))}

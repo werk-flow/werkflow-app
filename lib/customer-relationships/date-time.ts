@@ -21,12 +21,7 @@ type DateTimeParts = {
 };
 
 function berlinParts(value: Date): DateTimeParts {
-  const parts = new Map(
-    BERLIN_DATE_TIME_FORMAT.formatToParts(value).map((part) => [
-      part.type,
-      part.value,
-    ])
-  );
+  const parts = new Map(BERLIN_DATE_TIME_FORMAT.formatToParts(value).map((part) => [part.type, part.value]));
   return {
     year: Number(parts.get('year')),
     month: Number(parts.get('month')),
@@ -51,14 +46,9 @@ export function formatBerlinDateTimeInput(value: string | Date): string {
   return formatParts(berlinParts(date));
 }
 
-export function tomorrowMorningInBerlin(
-  now: Date = new Date(),
-  hour = 9
-): string {
+export function tomorrowMorningInBerlin(now: Date = new Date(), hour = 9): string {
   const current = berlinParts(now);
-  const tomorrow = new Date(
-    Date.UTC(current.year, current.month - 1, current.day + 1)
-  );
+  const tomorrow = new Date(Date.UTC(current.year, current.month - 1, current.day + 1));
   return formatParts({
     year: tomorrow.getUTCFullYear(),
     month: tomorrow.getUTCMonth() + 1,
@@ -70,8 +60,7 @@ export function tomorrowMorningInBerlin(
 }
 
 export function parseBerlinDateTimeInput(value: string): Date | null {
-  const match =
-    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
   if (!match) return null;
   const target: DateTimeParts = {
     year: Number(match[1]),
@@ -81,13 +70,7 @@ export function parseBerlinDateTimeInput(value: string): Date | null {
     minute: Number(match[5]),
     second: 0,
   };
-  const targetWallTime = Date.UTC(
-    target.year,
-    target.month - 1,
-    target.day,
-    target.hour,
-    target.minute
-  );
+  const targetWallTime = Date.UTC(target.year, target.month - 1, target.day, target.hour, target.minute);
   let candidateTime = targetWallTime;
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -97,7 +80,7 @@ export function parseBerlinDateTimeInput(value: string): Date | null {
       rendered.month - 1,
       rendered.day,
       rendered.hour,
-      rendered.minute
+      rendered.minute,
     );
     const correction = targetWallTime - renderedWallTime;
     candidateTime += correction;

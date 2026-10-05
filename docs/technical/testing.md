@@ -1,143 +1,243 @@
 # Verify application changes
 
-Status: living — last reviewed 2026-09-25
+Status: living — last reviewed 2026-10-04
 
-Start here when implementing a slice, investigating a failed test, or preparing a release. [Decision 0007](../decisions/0007-independent-test-groups.md) defines the model: independent test groups, each with its own inputs and its own proof, selected by what changed and executed by one command. [Decision 0006](../decisions/0006-testing-architecture.md) keeps the local backend and the cloud providers apart. The harness overhaul of 2026-09-25 rebuilt the execution model after the P1-24a campaign; [decision 0007](../decisions/0007-independent-test-groups.md#amendment-2026-09-25-the-execution-model) records why.
+Start here when you implement a slice, investigate a failed test, or prepare a release. [Decision 0007](../decisions/0007-independent-test-groups.md) owns the model, and [its amendment on browser tests](../decisions/0007-independent-test-groups.md#amendment-2026-10-01-browser-tests-are-a-sanity-check) owns the rules on this page. [Decision 0006](../decisions/0006-testing-architecture.md) keeps the local backend and the cloud providers apart.
 
-## The model on one page
+## How to work
 
-- A **group** is one executable check with a registered set of files and an input set: `lib/testing/test-groups.ts` owns the registry. Kinds: static, unit, SQL, component browser (`ui:contracts`), golden (one business journey per file), audit (one catalog area per file), canary (live DEV providers).
-- A group's **inputs** are the files that can change its outcome: its own files, the application folders its scopes name, everything they import (a static import graph over the repository), and the shared files no group owns. `bun run test:plan` prints every group with its input count and whether a proof exists.
-- A **proof** is a passing result recorded in a verification report whose input fingerprint matches the current inputs. Content is identified by its token stream without comments, so a comment edit keeps a proof; any token change discards it. A later failure on the same inputs replaces an earlier pass.
-- `bun run test:verify` runs every selected group without a proof, once, in one workspace-locked run, and writes `.agent-logs/verification/<id>/report.json`. Groups with a proof are reused and attributed. The run passes when every selected group passed.
-- Browser groups run against a recorded production build on port 3000 (`bun run test:server local`) and a disposable organization per run in the local Supabase stack. A failed group keeps its world for diagnosis; a passed group deletes it.
-- Every failure is classified from evidence and lands as a mechanism, not as prose (the [enforcement ladder](../decisions/0005-enforcement-ladder.md)). The [campaign budget](#the-campaign-budget) bounds how much verification a slice may cost before the harness itself has to change.
+Write each test at its boundary while you build the behavior, and run the narrowest check after each edit.
+
+### Choose the boundary for a rule
+
+1. A calculation or a pure rule gets a unit test beside its module under `lib/`.
+2. A permission, a grant or a history rule gets an SQL assertion in `supabase/tests/`: one rolled-back transaction with a failure message per invariant.
+3. A Server Action's authorization gets a boundary fixture on `lib/testing/fixtures/action-boundary-world.ts`.
+4. A shared control, pending feedback or a held write gets a contract in `tests/ui-contracts/`.
+5. A connected outcome across roles or sessions gets a step in the slice's golden or audit spec.
+6. Map the catalog clause in `lib/testing/selection/coverage-map.json` to the boundary that proves it.
+
+Wrong turn: a browser test for a rule that a unit test can expose. It costs minutes per run and fails for reasons the rule does not own.
+
+### Write a spec that stands alone
+
+1. Seed each test's preconditions through the helpers in `tests/golden/support/db/`, and drive the claimed operation through the real UI.
+2. Take dates from the `businessDate` fixture or `berlinDateAtOffset`, and give every record a test-specific name.
+3. Keep a connected workflow inside one test, with named `test.step` stages.
+4. Locate controls through the area module under `tests/golden/support/steps/`: it owns copy (from a pure product label owner where one exists), structure hooks and key presses, and the spec passes data. Act through `steps/interaction.ts` and wait for the exact changed fact.
+5. Run `bun run test:unit lib/testing/spec-support` and `bun run lint <spec>`. Then run the test alone with `bun run test:golden:focused --grep "<title>"` or `bun run test:audit:focused --grep "<title>"`, with `bun run test:server local` serving the build.
+
+Wrong turn: a test that reads what an earlier test created. It passes in file order and fails alone, in another order and on a rerun.
+
+### Run checks while you work
+
+1. After each edit, run the narrowest check: `bun run test:unit <path>` for a module, `bun run test:ui <spec>` for a contract, `bun run test:verify --group <id>` for one SQL or browser group.
+2. Before you finish, run `bun run test:plan` and read why each group is selected. A group you did not expect points at a file you did not mean to touch.
+3. At the end, run `bun run test:verify` for the whole plan.
+
+Wrong turn: the full plan after every edit. Its many results hide which edit broke what.
+
+### Handle a failure
+
+1. Read the evidence before you run anything again, then follow [Failures](#failures).
+2. Repair the cause. When the test seems wrong, compare it with the catalog clause and the feature spec before you touch the assertion.
+
+Wrong turn: running again to see whether it passes. The runner refuses an unchanged repeat without a classified environment failure.
+
+### Review the change
+
+1. Run `bun run review`. Its default scope is the uncommitted diff, and [CodeRabbit](coderabbit.md) owns the other scopes.
+2. Give each finding one disposition: repaired, declined with the reason, or deferred with its owner. A kept finding names the tier where its prevention landed.
+3. Record the dispositions in the slice record, or outside a slice in the commit message body.
+
+Wrong turn: a clean review score taken as acceptance. CodeRabbit adds to the independent reviewer's judgment and does not replace it.
+
+## What browser tests are for
+
+Browser groups are a rough check that the user flows in the [catalog](../product/user-flow-catalog.md) and the golden journeys still work. A rule belongs at the cheapest boundary that can expose its failure: domain units for calculations, SQL for permissions and history, component contracts (`ui:contracts`) for shared controls, a browser journey for connected outcomes and cross-user freshness, the cloud canary for live providers.
+
+A group is one executable check in `lib/testing/selection/test-groups.ts`. The kinds are static, unit, SQL, component (`ui:contracts`), golden (one business journey per file), audit (one catalog area per file), and canary (live DEV providers). Every golden and audit group owns one spec file and one disposable organization.
+
+## Quality of tests and the runner
+
+A useful test fails when the intended behavior breaks, survives an equivalent implementation, and names the failed invariant. Check a regression test against the broken case. Preserve catalog-clause coverage when you move an assertion. Runner changes need focused unit tests for the changed selection, qualification, failure, or recovery behavior. A runner test enforcing an author rule opens with `// Rule test:`, and `docs:check` requires an owner doc to name it. A credible report separates product failure, environment failure, blocked execution, and missing evidence. Test count proves nothing.
+
+## When a proof is valid
+
+A proof is a passing result in a verification report whose fingerprint matches the current inputs. A later failure on the same inputs replaces an earlier pass. `createGroupQualification` in `lib/testing/evidence/group-qualification.ts` computes the inputs.
+
+| Kind | Fingerprint inputs |
+| --- | --- |
+| Golden, audit, canary | The spec file, the test support it imports under `tests/` and `lib/testing/`, its Playwright config and global setup, `package.json`, `bun.lock`, and the environment digest. The two runner pilots (`golden:p1-24a`, `audit:wave-3:p1-24a`) add the runner files. |
+| Unit | Every tracked non-documentation file. |
+| SQL, component, static | Their own files, the folders their scopes name, everything those import, and files no group owns. SQL groups own the migrations. |
+
+Product code (`app/`, `components/`, `hooks/`, `lib/` outside `lib/testing/`), migrations, generated types, and `app/globals.css` are not inputs of a browser group. Selection covers them instead. A selected browser group needs a pass since selection: a pass that ran on the current content of the files that selected it (`passedSinceSelection`). Code files are compared by their token stream without comments, so a comment edit keeps a proof.
+
+## How selection works
+
+`groupSelections` in `lib/testing/selection/group-selection.ts` chooses the groups. `bun run test:plan` prints each group with its reason, and one line per reason with the first file that caused it. Change mode compares the tree with the baseline: the latest passing automatic plan, or the explicit run that passed the last group an automatic plan left unresolved (`selectionBaseline`). Without a baseline it compares with `HEAD`.
+
+| Changed file | Browser groups selected in change mode |
+| --- | --- |
+| Product file under a `TEST_SCOPE_PREFIXES` folder, or a file the registry names (a feature hook, skeleton, or API route) | The groups that declare that scope |
+| `components/ui/`, `app/globals.css` | `golden:gg-00`, `audit:layout` |
+| `proxy.ts`, `lib/auth/`, `app/auth/`, `app/(auth)/`, `components/auth/`, `lib/data/cached.ts`, `hooks/use-sign-out.ts` | `golden:gg-00`, `audit:security:account` |
+| `package.json`, `bun.lock`, changed environment | `golden:gg-00`, `audit:layout`, `audit:security:account` |
+| Any other product file without an owner, including new, deleted, and generated files | `golden:gg-00` |
+| Spec or test support | The groups whose spec imports it |
+| Runner file (`scripts/verify.ts`, `lib/testing/selection/group-selection.ts`, and the other registered orchestration files) | The two runner pilots |
+
+A registry entry that ends in `/` owns a folder, any other entry owns one file; `test-scope-prefixes.test.ts` requires every file under `hooks/` to have one feature owner or to be listed as shared. The static gates run in every plan. The unit, SQL, and component groups are in every plan and run when their inputs changed. `static:dependencies` runs when a dependency input changed. Scope ownership is a risk policy, and release mode catches what it misses.
+
+In a change plan, the browser groups whose own spec or test support under `tests/` changed run first. When one of them fails, the later browser groups are blocked for that attempt and run in the repair plan (`changedTestsFirstBlock` in `lib/testing/runner/group-schedule.ts`). `test:verify` refuses to start while the latest failed run of a group it would run is unclassified.
+
+### Repair mode
+
+When the latest result of a browser group is failed or blocked, a change plan selects exactly those browser groups plus the cheap gates. When those groups pass, the repair is verified and the passing report becomes the baseline.
+
+A failed browser group may run again as soon as any source file changed (`directGroupRetryProblem`). Clean its retained world first. A repeat on the identical tree needs a classified environment failure, a passing diagnostic replay, and then the cleanup ([Failures](#failures)).
+
+### Release mode
+
+`bun run test:verify --mode release` selects every group and rejects `--group`. A browser pass is reused only when every product file is unchanged since it ran. The `audit:performance:*` groups and `audit:visual` run in release mode only, and an explicit `--group` runs them in change mode. A change plan never selects a measured group, but it names each `audit:performance:*` group whose scopes own a changed product file, with the command that runs it. Latency deadlines, budgets, and reference comparisons fail a group in release mode only. In change mode the runner records them in the report's `measurements` and in `overTarget`, and the group passes. Missing, malformed, or incorrect evidence fails in every mode. An explicit `--group audit:performance:<name>` run enforces its deadlines, so you can prove a performance repair.
+
+After a failed release run, pass every failed group with `--group` before the next release plan. After two consecutive failed release runs, write the diagnosis into the incident log first (`lib/testing/publication/release-breaker.ts`).
+
+## Publication gate
+
+`.githooks/pre-push` is the one gate before publication. Enable it once per clone with `git config core.hooksPath .githooks`. The hook runs `scripts/check-publication-gate.ts` and refuses the push unless both conditions hold:
+
+1. The push publishes the checked-out commit. The newest local verification report is an automatic plan that passed, its snapshot matches the current tree, and no input file is uncommitted.
+2. A CodeRabbit review completed on the tree being pushed. `bun run review` writes a record under `.agent-logs/review/` with the content digest of every changed file its scope covered. A file counts as reviewed while its content equals what a completed review saw, so a review of uncommitted work still counts after the commit, and an edit needs a new review of that file only.
+
+The digests leave out documentation (`isDocumentationInput` in `lib/testing/evidence/group-evidence.ts`). A documentation edit keeps the report and the review records valid. The records of the pushed tree must together cover every changed non-documentation file. The owner can override with `WERKFLOW_PUSH_OVERRIDE="<reason>" git push ...`.
 
 ## Commands
 
 ```bash
-bun run env:local                              # route .env.local at the local stack; the environment is an input of every local proof
-bun run test:plan                              # what would run and why (change mode, local target); names the changed inputs when there are few
+bun run env:local                              # route .env.local at the local stack
+bun run test:plan                              # what would run and why (change mode, local target)
 bun run test:plan --mode release               # the complete release selection
-bun run test:server local                      # build and serve the recorded production build (durable terminal)
+bun run test:server local                      # build and serve the recorded production build (own terminal)
 bun run test:verify                            # run the plan
-bun run test:verify --group golden:p1-06,audit:wave-2:p1-16   # an explicit subset (proves only that subset)
-bun run test:verify --group <ids> --fresh      # run even when a proof exists (measurement, calibration)
-bun run test:verify --jobs 2                   # two workers for independent browser groups (see "Workers")
-bun run test:campaign                          # the verification cost since the last commit
+bun run test:verify --group golden:p1-06,audit:wave-2:p1-16   # an explicit subset
+bun run test:verify --group <ids> --fresh      # run even when a proof exists; --jobs 2 adds a second browser worker
+bun run test:campaign                          # verification cost since the last commit
 bun run test:runs list|classify|cleanup|prune|recover-interrupted|cleanup-local-relocated
 bun run test:verify --target cloud             # the canary groups against DEV (after bun run env:dev and test:server cloud)
-bun run test:golden:focused --grep "<titles>"  # a focused fresh-world run (diagnosis, iteration); test:audit:focused and test:canary:focused likewise
+bun run test:golden:focused --grep "<titles>"  # a focused fresh-world run; test:audit:focused and test:canary:focused likewise
 bun run test:diagnostic --grep "<title>" --reuse-run <run-key>   # replay on a retained world
+WERKFLOW_UPDATE_VISUAL_REFERENCES=1 bun run test:audit:focused --grep @AUDIT-VISUAL   # rewrite changed visual references
 ```
-
-The default mode is `change` and the default target is `local`. Change selection compares the current inputs with the last passing complete report for the target; before such a baseline exists it compares against `HEAD`, including untracked and deleted files. Unresolved group failures stay selected even when nothing changed. `.env.local` is an input: after `bun run env:dev` every local proof is void until `bun run env:local` restores the routing, and the preflight refuses a local-target run that routes at the cloud. Release mode selects every audit group, the integrated golden journey, the unit, component, SQL and static groups; it rejects `--group`. The cloud target selects the canary groups against DEV (`bun run test:server cloud`, then `bun run test:verify --target cloud`); the canary always runs afresh because unchanged source proves nothing about a live provider.
 
 | Work | Required evidence |
 | --- | --- |
-| Slice or application change | The complete selected local change plan, catalog coverage, the visual review the slice names, and provider checks when provider behaviour changed |
-| Wave end, beta handoff, production release | The complete local release plan and the cloud canary on the release inputs |
-| Failure investigation | The smallest relevant group, or a retained diagnostic; neither replaces fresh acceptance evidence |
-| Documentation-only change | The documentation checks and any executable contract the documentation changed |
+| Slice or application change | The automatic change plan passes. Add the visual review the slice names and the canary when provider behavior changed. |
+| Wave end, beta handoff, production release | The release plan and the cloud canary pass on the release tree. |
+| Documentation-only change | `bun run docs:check` and any executable contract the documentation changed. |
 
 ## How a run executes
 
-`scripts/verify.ts` plans, takes the workspace lock (`.agent-logs/workspace-test-operation.lock`), and then does the shared work of a browser run **once**: the server and backend preflight (build receipt, port-3000 ownership, backend routing, storage, edge runtime, Realtime parity), one Playwright discovery per suite, and a run key per group. It writes them to `prepared-plan.json` beside the report and names the file in `WERKFLOW_PREPARED_PLAN`; every group runner (`scripts/run-playwright.ts group …`) reads it and starts Playwright directly. Outside a verification run (focused and diagnostic lanes) the runner does that work itself. The per-group overhead outside Playwright is under 20 seconds; world seeding and the four role logins inside Playwright take about 18 seconds more. Two checks have no group of their own and run only in that preflight: Realtime publication parity (`bun run realtime:check`) and DEV migration history parity (`bun run migrations:check`). The lock covers verification runs, the focused and diagnostic lanes, `test:unit`, the SQL wrappers, recorded builds and environment switching; a raw `supabase db reset` or a directly invoked `bun test <file>` bypasses it (an open conversion in the [backlog](enforcement-ladder-backlog.md)).
+`scripts/verify.ts` plans, takes the workspace lock, and runs static, unit, SQL, component, then browser groups. A failed static gate, an input edited during the run (which voids the attempt), an interruption, or a failed changed-spec tier blocks later groups. While the lock is held, the edit guard refuses agent edits to proof inputs (`scripts/guard-edits-during-verification.ts`, `lib/testing/runner/edit-guard.test.ts`). The run writes `.agent-logs/verification/<id>/report.json`.
 
-Groups run in this order: static, unit, SQL, component, then browser groups. Only a failed shared prerequisite blocks the groups after it: a failed static gate, an input that changed during the run, or an interruption. A browser group's own failure never blocks its neighbours; a group whose Playwright never produced a manifest is blocked on its own.
-
-**Workers.** `--jobs N` (1 to 8, or `WERKFLOW_VERIFY_JOBS`) runs independent golden and audit groups on N workers. Groups that measure freshness, readiness or a registered scenario, the integrated golden journey, SQL, the canary and every setup gate always run alone (`GroupTimingRequirements.exclusive`, derived from the spec source). The default is 1, measured on the workstation on 2026-09-25: two workers on six golden groups gained 11 percent and three workers on five groups about 20 percent, while each overlapping group ran about 70 percent slower on the one shared Next.js server and Chromium on the same CPU. Use 2 for a plan without timing-sensitive groups when the machine is otherwise idle; the workspace lock refuses a second verification command.
-
-**Realtime health.** Before every timing-sensitive group on the local target, the runner probes the local Realtime tenant (`scripts/realtime-probe.ts`): a throwaway user subscribes to database changes and the tenant must confirm within five seconds. A slower or failed answer restarts the Realtime container once and probes again (`lib/testing/realtime-health.ts`); a second failure stops the run with the remedy. `bun run test:server local` additionally holds one warm subscription for its lifetime, so the tenant does not go cold between groups.
-
-**Input drift.** Editing any input while the run is active voids the attempt: the report cannot certify, and a group whose result carries that reason (the run's own or the group runner's) has neither a proof nor a failed attempt. Documentation edits and comment-only edits are not inputs; both identities read the comment-free token stream. A recovered interruption without a failed business test is no attempt either.
-
-## Groups and ownership
-
-`TEST_SCOPE_PREFIXES` in `lib/testing/test-groups.ts` names the application folders each feature scope owns; a group declares the scopes it covers, and shared application code without an owner (`hooks/`, `components/ui/`, `lib/data/`) is an input of every group on purpose. Harness code under `tests/*/support/`, `lib/testing/` and `scripts/` qualifies only the groups whose specs import it (`IMPORT_QUALIFIED_PREFIXES`); the Playwright configs, `tests/ui-contracts/`, `eslint-rules/` and `bunfig.toml` belong to the kind that executes them. Runtime Markdown is an input; repository guidance is not.
-
-The browser support lives in domain modules, one per product area, so that a helper edit reruns the groups of that area and nothing else:
-
-| Directory | Modules |
-| --- | --- |
-| `tests/golden/support/steps/` | `shared` (locators, dialog plumbing, the typed-segment inputs), `customers`, `requests`, `work`, `service`, `documents`, `inventory`, `organization`, `personnel`, `qualifications`, `vacation`, `sickness`, `attention`, `time-tracking`, `calendar`, `dispatch` |
-| `tests/golden/support/db/` | the same domains except `organization`, for database state reads, with `shared` holding the admin client and the role-client wrapper |
-| `tests/audit/support/` | per-area audit steps (`a1-steps.ts` …), the performance profile and steps, fixtures |
-| `tests/golden/support/` | worlds, sessions, fixtures, run state, date ownership, preconditions, checkpoints, the measurement helpers |
-
-A new helper goes into the module of its product area; a helper two areas need goes into `shared`. Importing a whole-area module for one helper is fine; re-exporting one module from another is not, because it widens the importer's inputs (`lib/testing/spec-conventions.test.ts` rejects `export … from` in the domain modules).
-
-**Adding a group.** A new `tests/golden/<slice>.spec.ts` becomes `golden:<slice>` by itself: its scopes are those of the slice's audit definition in any wave (`golden:p1-24a` shares `audit:wave-3:p1-24a`'s), its producers come from its `requires-file` annotations, and a golden file without an audit definition or an early-scope entry is global. An audit group is a row in `auditDefinitions` (`lib/testing/test-groups.ts`) with its file and scopes; `validateTestGroupInventory` rejects an audit file the registry does not name. Both need their flows mapped in `lib/testing/coverage-map.json` (`static:coverage`) and their run-day offsets registered in `tests/golden/support/date-ownership.ts` ([integrated-test-state.md](integrated-test-state.md)).
+Browser groups run against the recorded production build on port 3000 and a disposable organization in the local Supabase stack. `--jobs N` runs independent groups on N workers. Groups that measure freshness, readiness, or a scenario always run alone, after a Realtime probe. No browser group starts from 23:40 to 00:10 Berlin time, because a group fixes its business date at start; the runner waits (`MIDNIGHT_START_WINDOW` in `lib/testing/runner/group-schedule.ts`). Stop the server before you rebuild. Every run ends with the informational [campaign line](../plans/phase-1/protocol.md#campaign-line).
 
 ## Specs
 
-Every golden and audit spec runs its tests in declaration order on one worker and continues after a failure, so one run shows every failure the file holds (`lib/testing/spec-conventions.test.ts` rejects `test.describe.configure(`; `lib/testing/browser-server-contract.test.ts` pins one worker, no retries and no failure cap in the three Playwright configs). Two mechanisms carry state between tests. Across files, a golden spec declares its producer files with `requires-file` annotations and exact earlier titles with `requires-test`; the runner pulls the producers into the same world and rejects missing, unknown, ambiguous, self-referencing or out-of-order producers before setup. Inside a file, a test that needs state an earlier test created guards it with `requireChainedValue`, `requireChainedPrecondition` or `requireVisiblePrecondition` (`tests/golden/support/preconditions.ts`): the guard fails in seconds with the exact `--grep` chain to run in the focused lane, never after minutes on a misleading locator timeout. App-assigned identities (job numbers, invite codes) travel through typed checkpoints (`lib/testing/checkpoints.ts`); derive everything else from the run.
+The tests of a spec file share its world.
 
-Every test starts without persisted per-user UI preferences: the automatic `freshPreferences` fixture deletes the world's `organization_user_preferences` rows before each test. A test that proves persistence proves it inside its own run. The world's other state (customers, jobs, entries) is the file's own history and each test names what it relies on.
+A helper goes into the domain module of its product area under `tests/golden/support/steps/` or `db/`. A helper that two areas need goes into `shared`. Do not re-export one module from another. To add a group, add `tests/golden/<slice>.spec.ts` or a row in `auditDefinitions` (a new SQL file is a row in `sqlDefinitions`). Declare its scopes, map its flows in `lib/testing/selection/coverage-map.json`, and register its run-day offsets in `tests/golden/support/date-ownership.ts`. A golden file without declared scopes is selected only when its own test code changes and in release mode. [integrated-test-state.md](integrated-test-state.md) owns fixture dates.
 
-Audit groups own a disposable company each; golden groups run their declared producer files in one disposable company; canary checks share their cloud test company. Setup drives prerequisites through the admin client, then the behaviour under assertion through the real boundary; setup never pre-completes the operation a test claims to prove. Setup and teardown never sweep another group's records.
+### Spec checklist
 
-The harness admin client (`tests/golden/support/db/shared.ts`) sends a read a second time after one connection-level failure and a write exactly once (`lib/testing/transport-diagnostics.ts`).
+Items marked Tier 2 fail `bun run test:unit` (`spec-conventions.test.ts` with `lib/testing/spec-support/spec-independence.ts`) or ESLint; the others are review duties.
 
-Step conventions: prepare, submit once, verify completion at both boundaries (the visible confirmation and the persisted row). Wait for the required control to be usable, not for a dialog shell. Capture the baseline before an action and wait for the exact changed fact; an existing row, a count, a banner alone or an optimistic echo proves nothing. Scope positive locators to their semantic owner (PPR keeps hidden page copies); `visibleText()` for positive text, `textInDom()` for whole-DOM absence. Use accessible roles and names where the wording is part of the requirement; the `Banner` dismiss button is „Hinweis schließen". Close an open multi-select popover before clicking a pinned dialog footer. The typed-segment helpers (`typeIntoDatePicker`, `typeIntoDatePickerById`, `typeIntoTimeInput` in `steps/shared.ts`) are for `DatePicker` and `TimeInput`; `QuantityStepper` and `DurationHoursInput` take `.fill()`. ESLint and the convention tests reject raw page-root selectors, positional selection, fixed sleeps, skipped or focused tests and per-test timeout overrides.
-
-## Coverage
-
-The [user-flow catalog](../product/user-flow-catalog.md) owns supported behaviour. Every stable flow ID and every observable clause stays covered; `lib/testing/coverage-map.json` maps flows to evidence and `static:coverage` verifies identities, catalog hashes, referenced files and executable ownership. It cannot verify that prose matches assertions: review that correspondence when the catalog text or the assertion changes, and reopen the mapping on a material wording change. Choose the cheapest test that proves the boundary: domain functions for calculations, SQL for denial and history, the component fixture for shared controls, the browser for navigation, outcomes and cross-user freshness, the canary for live providers. A flow may map to several tests and a test to several flows; remove duplicate execution only after recording where each assertion remains. Revocation tests prove that both receivers observed the permitted initial event before access is removed.
-
-## Evidence and reuse
-
-The report records the selected scope, the input snapshot, every result with its run key and build id, and the measurements. A browser result qualifies only when its run passed, was cleaned, ran on the recorded build with the group's fingerprint, and every test passed. Reuse is conservative: a change to a group's own inputs or a shared dependency discards its proof; a changed repository elsewhere does not. Three identity rules keep proofs from dying for nothing: the proof environment replaces the local stack's private address with a token (`lib/testing/proof-environment.ts`), code is identified by its comment-free token stream (`lib/testing/source-content.ts`), and configuration files belong to the kind that executes them (`lib/testing/group-qualification.ts`).
-
-Build identity is separate: `build:test` records source and environment digests, workspace, build id and time in `.next/werkflow-build-receipt.json`; the preflight compares the receipt with the current inputs, the disk and served build ids and the server's owner. Stop the server before rebuilding. Input digests contain no secrets and do not prove a schema reset or a provider's behaviour; record those as their own evidence.
+- [ ] **Independent.** Each test prepares its own preconditions: setup through the admin-client helpers in `tests/golden/support/db/`, the claimed operation through its real UI. It passes alone (`--grep` on its title) and in any order. A connected workflow is one test with named `test.step` stages. Records carry a test-specific name, and a count or "latest row" check covers only the test's own records. Tier 2: no `requires-test`, no chained value or checkpoint between tests, no module-level `let` or mutated module constant. A measured test prepares the typical profile through `ensureTypicalProfile`, which seeds it once per world.
+- [ ] **One proof per behavior.** For a slice with a golden and an audit file, the golden file holds the journey a user walks, including the second-session and live checks. The audit file holds the edge cases, denials, and role variants the journey does not reach. Delete a duplicate; a second browser proof needs a distinct risk or role.
+- [ ] **Right boundary.** A rule that only reads database state is an SQL assertion in `supabase/tests/`: one transaction, rolled back, an explicit failure message per invariant. A calculation is a unit test, a shared control a component contract. The browser keeps navigation, the visible confirmation, cross-session delivery, and one persisted-row check per mutation. Point the coverage map at the boundary that proves the rule.
+- [ ] **No wall clock.** Dates come from the `businessDate` fixture or `berlinDateAtOffset` inside the test. Seed "yesterday" or "a completed time today" relative to that date, never from the current minute. Tier 2: no `new Date()` or `Date.now()` at module scope.
+- [ ] **Bounded group.** A group's expected duration stays at about four minutes, including about one minute of world setup. Split a growing file by catalog area into its own group with its scopes and date window.
+- [ ] **Steps.** A step prepares, submits once, and verifies at both boundaries: the visible confirmation and the persisted row. Capture the baseline before an action and wait for the exact changed fact.
+- [ ] **Locators.** The area module locates by accessible role and name, the spec passes data. Tier 2: the [checklist](#checklist) rules, no positional selection, fixed sleeps, skipped tests, per-test timeouts, serial mode, or `!` assertions (`expectDefined` instead).
+- [ ] **Clean start.** Every test starts without persisted per-user UI preferences (an automatic fixture).
 
 ## Deadlines and measured scenarios
 
-The [freshness contract](realtime-and-caching.md) owns the product expectations. Cross-session checks (`expectLiveWithin`, `tests/golden/support/live.ts`) start the clock before submission in the acting session and end when the receiving session shows the exact new fact; the helper waits for both pages' database readiness and network idle first. The two-second target is judged with the combined tolerance of 25 percent or 250 ms (`lib/testing/responsiveness-tolerance.ts`): a sample inside the tolerance is recorded as over target and does not fail; beyond it fails. Readiness checks (`expectReadyWithin`) enforce five seconds from opening to usable controls. Measured failures do not retry; a vanished dialog is a preparation condition outside a measurement and a failure inside one.
+The [freshness contract](realtime-and-caching.md) owns the product targets. `expectLiveWithin` measures from submission in the acting session to the exact new fact in the receiving session against the live target and its tolerance in `lib/testing/responsiveness-tolerance.ts`. `expectReadyWithin` measures from opening to usable controls. A slow but correct observation completes its test, and the runner judges the archived timing afterwards (`checkLatencyEvidence`).
 
-Scenario measurements (`expectUsableWithin`, `expectScenarioLiveWithin`) use the ids, boundaries, budgets and sample counts in `lib/testing/measured-scenarios.ts` and the reviewed references in `lib/testing/performance-baselines.json`. Every sample must pass correctness and its hard budget; the median of the declared samples is compared with the reference under the same tolerance. A `required` scenario fails qualification when its reference is missing, incompatible or exceeded, and `lib/testing/performance-references.test.ts` fails the unit group when a required scenario has no reference at the current measurement digest. The digest covers the scenario spec, `tests/golden/support/scenario-measurement.ts`, `browser-observation.ts`, `lib/testing/live-observation.ts` and `tests/audit/support/performance-steps.ts`: an edit to any of them recalibrates or marks the scenario `calibrating` in the same change. A `calibrating` scenario still enforces correctness and its budget and records the comparison as unverified.
+Scenario measurements use the ids, budgets, and sample counts in `lib/testing/measured-scenarios.ts` and the reviewed references in `lib/testing/performance-baselines.json`. Each `audit:performance:*` group seeds the typical profile into its own organization and runs alone.
 
-Calibration: after the measured groups pass on the current inputs, `bun scripts/calibrate-performance.ts --runs <up to three run keys> --reason "<review basis>"` drafts references under `.agent-logs/performance-calibration/`. Review the samples, the median, the environment and the tolerance, copy the entries into `performance-baselines.json`, set the scenarios to `required`, and rerun the measured groups to prove the required path. The validator refuses fewer than three samples, an over-budget sample, a reference that is not the median, missing build provenance or duplicate run keys. Never derive a reference from a failed or over-budget run, widen a budget to fit a slow candidate, or raise a Playwright timeout (180 s per golden test, 240 s per audit test, 300 s in the cloud, 30 s actions, 60 s navigations; `lib/testing/browser-server-contract.test.ts` pins them) to repair a regression. Compatibility spans scenario and measurement versions, workload identity, backend, role, browser, viewport and host.
+- **Budget.** A new scenario takes the budget of the registered scenarios with its boundary, and a cross-session scenario takes the live target. A budget never follows what a build happens to do.
+- **Comparison basis.** The sample median is compared with the reference, without the provider's delivery time; the budget judges the whole interval (`comparableMs` in `lib/testing/latency-evidence.ts`).
+- **References.** Every required scenario has a reviewed reference at its current measurement digest. Calibration refuses failed, diagnostic, stale or undersampled runs and never replaces a reviewed reference by itself. To calibrate, pass the measured groups, then run `bun scripts/calibrate-performance.ts --runs <up to three run keys> --reason "<review basis>"`. Review the draft under `.agent-logs/performance-calibration/` before you copy it into the references. Never derive a reference from a failed run, widen a budget to fit a slow build, or raise a Playwright timeout to repair a regression.
 
-The measured owners: `audit:performance:calendar` (the typical profile: 10 records, 40 visits a day in a 44-day window and a live week, 1,000 customers, 2,500 jobs; the calendar entry, drops and view switches), `audit:performance:lists` (the bounded first pages), `audit:performance:planning` (the planning benchmark and role openings) and `audit:performance:calendar-live` (closure and correction delivery to an open receiver). They seed their own organization, run alone, publish their last fixture row through an authenticated Realtime subscription before measuring (`insertFinalFixtureTimeEntry`, three-minute deadline), keep their traces, and record every sample. Run them without competing load on the host.
+### Visual references
 
-**Iterate on one scenario.** A focused run with `KEEP_WORLD=1` (read by `tests/golden/global-teardown.ts`, honoured in the focused lanes only) keeps its world after a pass; `bun run test:diagnostic:audit --grep "<title>" --reuse-run <run-key>` replays the scenario on that world as often as the design needs. Diagnostic and iteration results explain; acceptance comes from the group.
-
-## Retention
-
-Every browser run keeps its manifest, runner log, latency and workload archives and archived state under `.agent-logs/playwright-runs/<run-key>/`; traces, HTML reports and the active world copy are diagnosis material. `bun run test:runs prune` removes those from cleaned runs older than a day that no current proof, reviewed baseline or retained world cites; the runner refuses to start browser groups while they hold more than 10 GB and names the command. Run the prune before a campaign, not when the limit stops a plan.
+`audit:visual` compares one screenshot per page family with the reference image the owner accepted. A failed comparison is a design change that waits for acceptance or a regression to repair. Never rewrite a reference to make a run pass. A verification run never writes a reference, and only a focused run with `WERKFLOW_UPDATE_VISUAL_REFERENCES=1` rewrites one. The update run certifies nothing (`lib/testing/runner/visual-reference-updates.test.ts`). [Keep accepted screens as visual references](standards-audit.md#keep-accepted-screens-as-visual-references) owns the acceptance and update steps.
 
 ## Failures
 
-1. Open the failed group's `error-context.md`, screenshot and trace under its run directory; the verification log names the run key.
-2. Check the exact saved result before repeating any mutation whose response was unclear.
-3. Classify the cause from evidence and record it with `bun run test:runs classify <run-key> <product|harness|environment|transient> "<cause>" "<prevention>"`.
-4. Reproduce the smallest relevant failure, fix its cause, and add prevention at the highest reachable tier.
-5. Clean the retained world (`bun run test:runs cleanup <run-key>`) and rerun the affected group; then rerun the plan.
+1. Open the failed browser group's `error-context.md`, screenshot, and trace under `.agent-logs/playwright-runs/<run-key>/`; the verification log names the run key, and `.agent-logs/test-server/` holds the server output. Any other group's log is under `.agent-logs/verification/<report-id>/`.
+2. Find the cause and fix it. Add prevention at the highest reachable tier of the [enforcement ladder](../decisions/0005-enforcement-ladder.md).
+3. Record the cause with `bun run test:runs classify <run-key> <class> "<cause>" "<prevention>"`. A static, unit, SQL, or component group has no run key: give its group id instead, for example `classify sql:security environment ...`, and the diagnosis of its latest failed attempt is stored beside its report. The campaign line counts failures by this classification.
+4. Clean the retained world with `bun run test:runs cleanup <run-key>`.
+5. Run `bun run test:verify`. Repair mode selects the failed groups. Their pass closes the repair.
 
-| Class | Basis |
-| --- | --- |
-| Product | The intended business, UI or response-time contract fails in the application |
-| Harness | Setup, selection, timing, state hygiene or an assertion misrepresents the promised behaviour |
-| Environment | A provider, process, network, server or WSL problem prevents a valid observation |
-| Transient | A specifically evidenced temporary event explains the failure; a later pass alone is not evidence |
+An `environment` class allows one retry on unchanged inputs: a browser group's after a passing diagnostic replay and the cleanup, any other group's at once. A second failure on those inputs needs a change. A product or harness class allows no retry, because its repair changes the inputs.
 
-A failed group on unchanged inputs is blocked from another attempt until it is diagnosed; a repeat is not a repair. One bounded retry after an environment failure needs the classification, a passing diagnostic replay on the same build and target (`lib/testing/group-recovery.ts`), and then the cleanup, in that order: cleaning the world first forfeits the retry. Two failures on the same inputs stay blocked until the cause is resolved. A preflight failure that creates no run is blocked verification, not a product failure. Windows listener inspection repeats its read once after a timeout and otherwise fails. If the host kills a run, confirm the lock owner and its children are gone, then `bun run test:runs recover-interrupted <run-key> "<observed interruption>"`; no command steals a live lock. After a WSL address change, `bun run test:runs cleanup-local-relocated <run-key> "<observed change>"` cleans a retained world after verifying both organizations by id, name and owner.
+Classify as product when the application breaks its contract, as harness when setup, selection, timing, or an assertion of a proven test misrepresents the behavior, and as environment when a provider, process, network, or WSL problem prevents a valid observation. Transient needs evidence of the temporary event. A later pass alone is not evidence. Classify as authoring when test code that never passed on its current content fails; the command refuses it for test inputs that passed. Classify as accepted-change when an accepted design made an `audit:visual` reference stale. The campaign line counts both apart from harness, so harness measures failures of proven tests.
 
-After a failed release run the next action is a focused run of every failed group; after two consecutive failed release runs, the diagnosis and a harness hypothesis go into the [incident log](test-incident-log.md) before anything runs again (`lib/testing/release-breaker.ts`). Every incident entry ends in a Tier 1 or Tier 2 change, a Tier 3 with its reason, or the statement that no prevention follows (`docs:check` check 12).
+A preflight failure that creates no run is blocked verification. It is not a product failure. If the host kills a run, confirm that the lock owner is gone, then run `bun run test:runs recover-interrupted <run-key> "<observed interruption>"`. After a WSL address change, use `cleanup-local-relocated`. `bun run test:runs prune` removes diagnosis material of cleaned runs older than a day that no proof cites.
 
-## The campaign budget
+Testing authorizes no commit, push, deployment, or schema change.
 
-`bun run test:campaign` sums the verification since the last commit (`--since <ISO time>` moves the boundary): reports, minutes, groups run and reused, failures by classification, blocked groups. Every verify run prints the same line at its end. Reading it: a group counts as reused when its result started before the report did; a browser failure carries the classification of its run and `unclassified` until `test:runs classify` names one; a static or unit failure counts as `static`; an attempt the runner voided for input drift is skipped; an aborted report costs until its last group start (`lib/testing/campaign-summary.ts`).
+## Checklist
 
-The budget per slice is 240 minutes of verification or 8 harness failures. Past either, the slice does not close until the harness changed in a way the next slice cannot undo: a fixture, a runner rule, a convention test, a split of ownership, never a sentence in a document. The stop rule is a mechanism, not a reminder: after the second browser failure classified harness or environment since the last commit, `bun run test:verify` refuses to start browser groups until a harness input (`lib/testing/`, `scripts/`, `tests/*/support/`, the Playwright configs, `eslint-rules/`) differs from the snapshot of the report that holds the latest such failure (`campaignGateProblem`; the plan prints the same sentence as a warning). A harness failure class seen twice in one slice needs the same treatment regardless of the budget. Over budget, the slice record quotes the campaign line, the incident log gets the entry with the classification of every failure and the tier of each prevention, and the harness change lands in the same diff as the closure; the rule and its evidence live in the [protocol](../plans/phase-1/protocol.md#campaign-budget).
+The [spec checklist](#spec-checklist) adds the detail for a single spec. A `[judgment]` item is a Tier 3 default: diverge only with the note that `AGENTS.md` describes under "How to read the virtues".
 
-## Tiers and collections
+- Each rule sits at the cheapest boundary that can expose its failure: a unit test for a calculation, SQL for a permission, `ui:contracts` for a shared control, a browser journey for a connected outcome. [judgment]
+- A new or rewritten browser case prepares its own prerequisites and runs alone in a fresh world. [test `lib/testing/spec-support/spec-conventions.test.ts`]
+- Locators are scoped to their semantic owner: no raw page-root selector, no positional selection, no zero-count check on visible text. [lint `playwright-spec/no-unscoped-page-selectors`, lint `playwright-spec/no-visible-text-zero-count`, lint `specSelectors`, test `lib/testing/spec-support/playwright-spec-rules.test.mjs`, test `lib/testing/spec-support/work-artifact-locators.test.ts`]
+- A spec passes data; its area module owns copy, locator functions and structure hooks. No parent hop, xpath or CSS class locates a control, and no spec reads a Server Action payload. [lint `playwright-spec/no-copy-in-spec-locator`, lint `playwright-spec/no-locator-function-in-spec`, lint `playwright-spec/no-structural-locator`, lint `playwright-spec/no-transport-internals`, lint `playwright-spec/no-scoped-has-locator`, test `lib/testing/spec-support/playwright-spec-rules.test.mjs`]
+- A key press settles its scope first and never types into a focused field. [lint `playwright-spec/no-raw-key-press`, group `ui:contracts`]
+- A step waits on a real app signal and verifies both the visible confirmation and the persisted row. [lint `specSelectors`, judgment]
+- Describe and checkpoint ownership follow the spec convention. [test `lib/testing/spec-support/spec-checkpoint-conventions.test.ts`]
+- Expectations name semantic tokens, never palette classes. [test `lib/conventions/palette-classes-in-tests.test.ts`]
+- Every catalog flow maps to evidence, and a changed catalog clause reopens its mapping. Whether each mapped assertion proves its clause is the reviewer's reading of the assertion against the bullet. [group `static:coverage`, test `lib/testing/selection/coverage-map.test.ts`, judgment]
+- A new spec file is a registered group with its scopes, and every scope prefix exists. A measured or freshness group runs alone. [test `lib/testing/selection/test-groups.test.ts`, test `lib/testing/selection/test-scope-prefixes.test.ts`, test `lib/testing/selection/group-selection.test.ts`]
+- Every required measured scenario has a reviewed reference at its current digest, and a baseline never exceeds its budget. [test `lib/testing/performance-references.test.ts`, test `lib/testing/performance-baselines.test.ts`]
+- An accepted screen keeps its look and its visible text (image and text reference), and only a focused update run rewrites a reference. [group `audit:visual`, test `lib/testing/runner/visual-reference-updates.test.ts`]
+- A failure is diagnosed, classified and its world cleaned before the next run. [script `test:runs`, judgment]
+- After two failed release runs, the diagnosis goes into the incident log first. [test `lib/testing/publication/release-breaker.test.ts`]
+- Runner changes carry focused unit tests. [group `unit:all`, judgment]
+- Every change gets `bun run review` and a disposition per finding. [script `review`, judgment]
+- A push passes the publication gate: a passing report, and review records whose per-file digests cover every changed file of the pushed tree. [code `.githooks/pre-push`, test `lib/testing/publication/publication-gate.test.ts`]
 
-| Tier | Testing responsibility |
-| --- | --- |
-| 1, construction | Owned worlds and paths, typed checkpoints, the preference reset, shared controls, helpers that separate preparation from one submission |
-| 2, automated checks | Coverage identities and hashes, producer selection, input-qualified results, the lock, selector and spec conventions, response deadlines, the Realtime probe, the budget line |
-| 3, reviewed meaning | Whether assertions prove the promised clauses, a screenshot supports a visual claim, an environment explanation has evidence |
+## Never
 
-`bun run test:unit` runs `lib/` tests through the workspace lock; the convention tests read the repository, so the unit group's inputs are the complete executable snapshot. `bun run test:ui` mounts real components in Chromium with explicit service-boundary fixtures and the compiled stylesheet (`WERKFLOW_UI_CONTRACT_CSS`) for geometry assertions. A SQL group executes its registered files in `supabase/tests/` through `scripts/run-sql-assertions.ts`, each file a rolled-back transaction. The layout audit (`tests/audit/layout/mobile-viewport.spec.ts`) owns page overflow, shell scrolling and form geometry over `lib/testing/mobile-route-inventory.ts`; a new authenticated page joins that inventory. Local mail capture reads only recipients the world reserved (`lib/testing/local-mailpit.ts`). Backend ids, the local stack and machine onboarding live in [environments.md](environments.md); integrated golden producers and fixture dates in [integrated-test-state.md](integrated-test-state.md). Testing policy authorizes no commit, push, deployment or schema change.
+- Commit `test.only`, `test.skip`, `test.fixme`, `test.slow` or a per-test timeout. [lint `specSelectors`]
+- Add a fixed sleep, or mint a golden cleanup marker outside the seed module. [lint `specSelectors`]
+- Use a `!` assertion in a spec. [lint `@typescript-eslint/no-non-null-assertion`]
+- Locate a control in a spec by its copy, a parent hop or a CSS class. [lint `playwright-spec/no-copy-in-spec-locator`, lint `playwright-spec/no-structural-locator`]
+- Weaken an assertion, or retry until green. [judgment]
+- Derive a reference from a failed run. [test `lib/testing/performance-calibration.test.ts`]
+- Raise a timeout or a budget, or rewrite a visual reference, to make a run pass. [judgment]
+- Treat a review score or an old report as acceptance. [judgment]
+- Call the CodeRabbit CLI directly. [test `lib/testing/publication/coderabbit-review-command.test.ts`]
+- Push past the gate without the owner's logged override. [code `.githooks/pre-push`]
+- Edit a proof input while a verification run holds the workspace lock. [code `scripts/guard-edits-during-verification.ts`, test `lib/testing/runner/edit-guard.test.ts`]
+
+## Verify your work
+
+1. Run `bun run test:plan` and read the reason for each selected group.
+2. Run `bun run test:verify`. A pass is a report whose selected groups all passed.
+3. On a failure, follow [Failures](#failures), then run `bun run test:verify` again.
+4. Run `bun run review` and record a disposition for each finding.
+5. For a wave end or a release, run `bun run test:verify --mode release` and the cloud canary.
+6. Record the Tier 3 answers (clause proof, failure class, finding dispositions) in the slice record.
+
+## Examples
+
+- `lib/supabase/query-batches.test.ts`: unit tests at the cheapest boundary, each title naming the invariant.
+- `lib/security/proxy-session.test.ts`: drives the real proxy through the missing, rejected and unavailable session.

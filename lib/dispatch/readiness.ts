@@ -4,16 +4,12 @@
 // a reservation (P1-26) and tools are never assessed here (P1-32).
 
 import type { PlanningConflict } from '@/lib/planning/types';
-import type {
-  ReadinessDimension,
-  ReadinessResult,
-  TravelNote,
-} from './types';
+import type { ReadinessDimension, ReadinessResult, TravelNote } from './types';
 
 /**
- * The two readiness chips a calendar card carries until Wave 3 changes the
- * values (P1-24a, criterion 13): the wording has one home here, beside the
- * dimensions the Einsätze dialog renders in full.
+ * The two readiness chips a calendar card carries while material is not
+ * reserved and tools are not assessed: the wording has one home here, beside
+ * the dimensions the Einsätze dialog renders in full.
  */
 export const MATERIAL_UNRESERVED_LABEL = 'Material nicht reserviert';
 
@@ -44,11 +40,9 @@ export type ReadinessFacts = {
 };
 
 export function composeReadiness(facts: ReadinessFacts): ReadinessResult {
-  const capacityConflicts = facts.planningConflicts.filter(
-    (conflict) => conflict.kind !== 'qualification'
-  );
+  const capacityConflicts = facts.planningConflicts.filter((conflict) => conflict.kind !== 'qualification');
   const qualificationConflicts = facts.planningConflicts.filter(
-    (conflict) => conflict.kind === 'qualification'
+    (conflict) => conflict.kind === 'qualification',
   );
 
   const capacity: ReadinessDimension = {
@@ -70,10 +64,7 @@ export function composeReadiness(facts: ReadinessFacts): ReadinessResult {
         key: 'site',
         state: 'ok',
         label: 'Einsatzort',
-        details: [
-          facts.site.name,
-          ...(facts.site.accessNotes ? [facts.site.accessNotes] : []),
-        ],
+        details: [facts.site.name, ...(facts.site.accessNotes ? [facts.site.accessNotes] : [])],
       }
     : {
         key: 'site',
@@ -85,9 +76,7 @@ export function composeReadiness(facts: ReadinessFacts): ReadinessResult {
             : ['Kein Einsatzort hinterlegt.'],
       };
 
-  const zeroGapNotes = facts.travelNotes.filter(
-    (note) => note.kind === 'no_gap_different_sites'
-  );
+  const zeroGapNotes = facts.travelNotes.filter((note) => note.kind === 'no_gap_different_sites');
   const travel: ReadinessDimension = {
     key: 'travel',
     state: zeroGapNotes.length > 0 ? 'warning' : 'unknown',
@@ -96,7 +85,7 @@ export function composeReadiness(facts: ReadinessFacts): ReadinessResult {
       zeroGapNotes.length > 0
         ? zeroGapNotes.map(
             (note) =>
-              `${note.employeeName}: keine Zeit zwischen „${note.previousTitle}“ und „${note.nextTitle}“ an unterschiedlichen Orten (${note.localDate}).`
+              `${note.employeeName}: keine Zeit zwischen „${note.previousTitle}“ und „${note.nextTitle}“ an unterschiedlichen Orten (${note.localDate}).`,
           )
         : ['Fahrzeit nicht bewertet.'],
   };
@@ -111,9 +100,7 @@ export function composeReadiness(facts: ReadinessFacts): ReadinessResult {
     };
   } else if (facts.material.state === 'demand') {
     const shortLines = facts.material.lines.filter(
-      (line) =>
-        line.availableQuantity <
-        Math.max(0, line.plannedQuantity - line.takenQuantity)
+      (line) => line.availableQuantity < Math.max(0, line.plannedQuantity - line.takenQuantity),
     );
     material = {
       key: 'material',
@@ -124,7 +111,7 @@ export function composeReadiness(facts: ReadinessFacts): ReadinessResult {
         // decision compares against the current stock.
         ...facts.material.lines.map(
           (line) =>
-            `${line.itemName}: ${Math.max(0, line.plannedQuantity - line.takenQuantity)} offen von ${line.plannedQuantity} geplant, ${line.availableQuantity} aktuell verfügbar – nicht reserviert.`
+            `${line.itemName}: ${Math.max(0, line.plannedQuantity - line.takenQuantity)} offen von ${line.plannedQuantity} geplant, ${line.availableQuantity} aktuell verfügbar – nicht reserviert.`,
         ),
         ...(shortLines.length > 0
           ? ['Der aktuelle Bestand deckt den offenen Bedarf möglicherweise nicht.']

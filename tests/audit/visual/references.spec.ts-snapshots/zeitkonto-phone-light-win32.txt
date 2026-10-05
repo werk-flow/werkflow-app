@@ -1,0 +1,13 @@
+Menü öffnen
+Zeiterfassung
+Zeiterfassung
+Zeitkonto
+Perioden
+Regeln & Export
+Zeitkonto
+Abgeschlossene Monatswerte und nachvollziehbare Kontobewegungen.
+Dein Zeitkonto wurde noch nicht eröffnet. Die Zeiterfassung funktioniert unverändert weiter.
+Monatsabschlüsse
+Noch keine abgeschlossenen oder vorbereiteten Perioden.
+Kontobewegungen
+Noch keine Kontobewegungen.

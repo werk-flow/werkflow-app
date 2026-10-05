@@ -1,22 +1,9 @@
-# Acquisition Process
+# Acquisition process
 
-Status: living — last reviewed 2026-09-02; placeholder, do not invent details it lacks
+Status: living — last reviewed 2026-09-25; stable route to the canonical business document
 
-This document is a placeholder for the future WerkFlow customer acquisition process.
+Read the [canonical acquisition process](../../../werkflow-business/docs/acquisition.md) in werkflow-business. Edit commercial facts there and follow its [workspace workflow](../../../werkflow-business/docs/workflow.md). This page preserves existing app links without maintaining a second version.
 
-It should eventually describe how SHK businesses discover, evaluate, buy, onboard, and expand their use of WerkFlow.
+John owns channels, qualification, scripts and the sales journey. The website owns campaign-page and form implementation. The operational customer CRM in this app is not a second sales CRM.
 
-## Not Yet Defined
-
-Do not invent acquisition channels, funnel steps, conversion assumptions, sales scripts, or onboarding promises from this placeholder. Ask the product owner before using acquisition-related assumptions in product or implementation work.
-
-## Future Topics
-
-- Target channels.
-- Lead qualification.
-- Sales flow.
-- Demo flow.
-- Trial or pilot process.
-- Onboarding sequence.
-- Follow-up and activation.
-- Expansion into adjacent trades.
+The [app roadmap](../plans/phase-1/roadmap.md) and owning feature baselines establish implementation status. A local commit or business draft is not production evidence. Read the [app release workflow](../decisions/0008-development-workflow.md) for publication. If the sibling checkout is missing, use [the business repository](https://github.com/werk-flow/werkflow-business) at an identified published revision or report the missing source.

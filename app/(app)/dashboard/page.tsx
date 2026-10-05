@@ -11,16 +11,20 @@ import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 
 async function DashboardData({ activeOrgId }: { activeOrgId: string | null }) {
-  const memberCount = activeOrgId ? await getCachedMemberCount(activeOrgId) : null;
+  if (!activeOrgId) return <OrgInfoCard initialMemberCount={null} />;
+  // The reader logged a failure and cached nothing; the card shows the failure with a retry.
+  const memberCount = await getCachedMemberCount(activeOrgId).catch(() => null);
 
   return <OrgInfoCard initialMemberCount={memberCount} />;
 }
 
 export default async function DashboardPage() {
-  const [{ data: { user } }, cookieStore] = await Promise.all([
-    getCachedUser(),
-    cookies()
-  ]);
+  const [
+    {
+      data: { user },
+    },
+    cookieStore,
+  ] = await Promise.all([getCachedUser(), cookies()]);
 
   if (!user) {
     redirect('/login');
@@ -40,10 +44,7 @@ export default async function DashboardPage() {
       </Suspense>
 
       <Suspense fallback={null}>
-        <UrlFlashBanner
-          paramKey="created"
-          messageTemplate="Organisation erstellt — Du bist jetzt Admin."
-        />
+        <UrlFlashBanner paramKey="created" messageTemplate="Organisation erstellt — Du bist jetzt Admin." />
       </Suspense>
 
       <Suspense fallback={null}>

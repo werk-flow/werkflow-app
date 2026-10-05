@@ -10,7 +10,12 @@ test('read-request scopes stay confined to the reviewed GET handlers and identit
   for (const directory of ['app', 'lib']) {
     for (const relative of new Bun.Glob('**/*.{ts,tsx}').scanSync({ cwd: resolve(root, directory) })) {
       const path = `${directory}/${relative.replaceAll('\\', '/')}`;
-      if (path.includes('/fixtures/') || path.endsWith('.test.ts') || path === 'lib/data/read-request-cache.ts') continue;
+      if (
+        path.includes('/fixtures/') ||
+        path.endsWith('.test.ts') ||
+        path === 'lib/data/read-request-cache.ts'
+      )
+        continue;
       const source = readFileSync(resolve(root, path), 'utf8');
       if (/withReadRequest\s*\(/.test(source)) {
         scopeOwners.push(path);
@@ -19,14 +24,26 @@ test('read-request scopes stay confined to the reviewed GET handlers and identit
       }
       if (/memoizeRequestRead\s*\(/.test(source)) {
         readerOwners.push(path);
-        const names = [...source.matchAll(/export const (\w+) = memoizeRequestRead\(/g)].map((match) => match[1]);
-        expect(names).toEqual(path === 'lib/data/cached.ts'
-          ? ['getAuthenticatedUser', 'getCachedMemberships', 'getCachedPrestartMemberships']
-          : ['loadResponsibilityRuntimeState']);
-        if (path === 'lib/responsibilities/server.ts') expect(source).toContain("{ outsideRequest: 'fresh' }");
+        const names = [...source.matchAll(/export const (\w+) = memoizeRequestRead\(/g)].map(
+          (match) => match[1],
+        );
+        expect(names).toEqual(
+          path === 'lib/data/cached.ts'
+            ? ['getAuthenticatedUser', 'getCachedMemberships', 'getCachedPrestartMemberships']
+            : ['loadResponsibilityRuntimeState'],
+        );
+        if (path === 'lib/responsibilities/server.ts')
+          expect(source).toContain("{ outsideRequest: 'fresh' }");
       }
     }
   }
-  expect(scopeOwners.sort()).toEqual(['app/api/attention-counts/route.ts', 'app/api/background-read/route.ts', 'app/api/calendar-board/route.ts', 'app/api/calendar-window/route.ts', 'app/api/customer-page/route.ts', 'app/api/time-tracking-state/route.ts']);
+  expect(scopeOwners.sort()).toEqual([
+    'app/api/attention-counts/route.ts',
+    'app/api/background-read/route.ts',
+    'app/api/calendar-board/route.ts',
+    'app/api/calendar-window/route.ts',
+    'app/api/customer-page/route.ts',
+    'app/api/time-tracking-state/route.ts',
+  ]);
   expect(readerOwners.sort()).toEqual(['lib/data/cached.ts', 'lib/responsibilities/server.ts']);
 });

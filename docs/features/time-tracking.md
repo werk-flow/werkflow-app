@@ -1,247 +1,221 @@
 # Time Tracking
 
-Status: living — last reviewed 2026-09-17
+Status: living — last reviewed 2026-10-04
 
-Time tracking (`Zeiterfassung`) covers attendance, working time, travel, breaks, job/project allocation, on-call work, overtime, time accounts, corrections, approvals, absence effects, and payroll/accounting handoffs.
+Time tracking (`Zeiterfassung`) covers attendance, working time, travel, breaks, job and project allocation, on-call work, overtime, time accounts, corrections, approvals, absence effects, and payroll and accounting handoffs.
 
-This is a future-facing product specification. It distinguishes the implemented baseline from the complete operational core WerkFlow should provide. It describes product outcomes and workflow contracts, not a database or legal-compliance design.
+This spec separates the implemented baseline from the complete operational core. It describes product outcomes and workflow contracts, not a database or a legal-compliance design.
 
 ## Product Goal
 
-WerkFlow should let a field employee record the right kind of time with almost no administrative effort while giving the employee, office, owner, project lead, and payroll process one understandable and auditable result.
+A field employee records the right kind of time with almost no administrative effort. The employee, office, owner, project lead, and payroll process get one understandable and auditable result.
 
-The feature should answer:
+The feature answers:
 
-- Am I currently clocked out, working, travelling, on call, or on break?
+- Am I clocked out, working, travelling, on call, or on break?
 - Which Auftrag or Projekt receives this time?
 - What counts as attendance, paid time, overtime, payroll time, and customer-billable time?
 - Is anything missing, pending, corrected, rejected, or not yet synchronized?
 - How was my daily, weekly, monthly, and time-account balance calculated?
 - Which records are ready for job costing, invoicing, payroll, or export?
 
-The product must reduce timesheets and repeated office reconciliation without hiding calculation rules or pretending to provide legal advice.
+The product removes timesheets and repeated office reconciliation without hiding calculation rules or pretending to give legal advice.
 
 ## Current Product Baseline
 
-As of 2026-09-02, every role clocks in and out through the clock button on every page and on `/zeiterfassung`, records explicit work, travel, break, standby, call-out, and internal-activity segments, and can propose corrections that a second person approves. Admin, Büro, and effective `time_approval` holders review and approve time, close monthly periods, and produce a payroll-ready export. Employees see their own history, balance, and monthly statements.
+Every role clocks in and out, records work, travel, break, standby, call-out, and internal-activity segments, and can propose corrections that a second person approves. Admin, Büro, and effective holders of the time-approval responsibility review and approve time, close monthly periods, and produce a payroll-ready export. Employees see their own history, balance, and monthly statements.
 
-- **Clock readiness (Step 2, 2026-09-08).** Clock actions remain disabled until the current organization's clock state has loaded successfully. A missing or failed response never means the employee is clocked out. Failure offers retry; pending transitions prevent duplicate actions. Optional clock reads do not hold up other page content. The [shared readiness contract](../technical/realtime-and-caching.md#shared-layout-and-clock-readiness) owns implementation and checks.
-- The clock button (pre-Wave-3 step 3, 2026-09-15). The fixed button at the bottom right of every page opens a sheet of next actions, not a form: one tap per transition, the job carried along, and the rare kinds (standby, call-out, internal activity) and the travel qualifiers behind „Weitere Aktivitäten …", which opens the full activity dialog. While clocked in, two hot keys above the button perform the two most likely next transitions of the current state (working: „Pause" and „Auftrag wechseln …"; travelling: „Arbeit an <Auftrag>" and „Pause"; on a break: „Weiter: <Aktivität · Auftrag>" and „Weiter ohne Auftrag"), the button turns green while working and yellow with a mug on a break, and the pill above it names the running activity and its job (the elapsed time lives on the Zeiterfassung page's clock; a second counter was removed on 2026-09-17 as clutter). Switching to exactly the running activity is not offered: the full dialog disables its confirm for an unchanged selection and the database answers such a request with `no_change`. The clock state carries the activity a break interrupted (`resumeActivity`), so resuming the same job is one tap; the job picker lists the caller's jobs planned today first. The Zeiterfassung dashboard's „Schnellzugriff" renders the same action list. On desktop the sheet sits above the button instead of in the page center. Deliberately absent: a clock-out hot key (a one-tap clock-out on a fixed button at the page's scroll edge is the accidental tap the design canon warns about, and an ended session has no undo, so clock-out stays behind the sheet) and a global keyboard shortcut for the sheet (owner decision 2026-09-15; Tab, Enter or Space and Escape reach it on desktop).
-- Live capture. Each active membership owns one stable attendance session with at most one open activity segment; every switch is atomic, replay-safe, and attributed, and nobody can be clocked in in two organizations at once. Work, travel, and call-out link to an assigned job or stay explicitly unallocated, and travel also records the route and the driver or passenger role. Current-day totals per category and Europe/Berlin day splitting are display only ([P1-21](../plans/phase-1/slices/p1-21-time-segments.md)).
-- Recovery. A session open longer than 24 hours shows a concrete recovery path, a live legacy sequence is bridged on the next canonical action, and sign-out closes the session attributably. Historical `time_entries` stay unchanged compatibility facts and are never backfilled ([P1-21](../plans/phase-1/slices/p1-21-time-segments.md)). Since the [2026-09 security hardening](../plans/phase-1/hardening-2026-09/05-step-1-security-infrastructure.md), member removal refuses any recorded time and leaves membership, sessions, and history unchanged. The office ends employment through the personnel record instead. `P1-33` replaces this containment with retained historical identity.
-- Break rule. Admin chooses between manually stamped breaks and one automatic break threshold and duration; Büro sees the rule, and rule changes never rewrite closed days ([Grundstock](../product/user-flow-catalog.md#grundstock-vor-phase-1-stand-vor-p1-00-4-august-2026)).
-- Targets and the weekly view. The dashboard shows presence, work, break, and overtime per day. The daily target and the weekly `Soll` come from each date's resolved schedule, holiday, closure, vacation, and sickness context rather than a fixed eight hours, and a missing schedule is a visibly labeled 8h fallback. Approved full-day vacation blocks clock-in, while a sickness day only warns ([P1-04](../plans/phase-1/slices/p1-04-work-schedules-and-holidays.md), [P1-06](../plans/phase-1/slices/p1-06-vacation.md), [P1-08](../plans/phase-1/slices/p1-08-sickness.md)).
-- Manual entries. Everyone can add same-day work or break entries with sequence and overlap checks. Employee entries and a Büro user's own entries wait for approval; an Admin's own additions apply directly as the owner recovery path ([Grundstock](../product/user-flow-catalog.md#grundstock-vor-phase-1-stand-vor-p1-00-4-august-2026), [P1-05](../plans/phase-1/slices/p1-05-scoped-responsibilities.md)).
-- Approval authority. Pending time is decided in the **Anträge** tab by effective holders of the `time_approval` responsibility, shown as **Zeitfreigaben**. Without configuration Admin decides Büro and employee time and Büro decides employee time; named holders replace that default, substitutes inherit their base holder's scope for a date window, and self-approval never exists ([P1-05](../plans/phase-1/slices/p1-05-scoped-responsibilities.md)). Pending entries are listed one card per manual submission: the rows a person entered together for one day, walked in time order so a clock-in owns its breaks and clock-out (`lib/time-tracking/pending-sessions.ts`, unit-tested since 2026-09-18 after a bulk insert had welded unrelated days into bogus sessions). A card decision and **Alle genehmigen** both go through one batched action that re-checks every entry's pending state and the holder's authority, so a backlog of any size is one round trip.
-- Corrections. The guided `Zeitkorrektur` form covers add, edit, delete, split, activity reclassification, job reallocation, employee reassignment, and missed clocks across legacy entries, canonical segments, and earlier corrections. An employee's own change is always a proposal; an authorized Admin or Büro user may apply a correction for another person directly, but their own correction still needs a second holder ([P1-22](../plans/phase-1/slices/p1-22-time-corrections-and-approvals.md)).
-- Correction lifecycle. Requests move through `Zur Prüfung`, `Rückfrage`, resubmission, `Freigegeben`, `Abgelehnt`, `Zurückgezogen`, and `Anwendung fehlgeschlagen`, and nothing is erased. Selected approvals apply as one all-or-nothing batch, pending proposals are labeled provisional everywhere, and confirmed readers show only accepted results while the original capture history stays intact ([P1-22](../plans/phase-1/slices/p1-22-time-corrections-and-approvals.md)). Since Step 2 (2026-09-08) the provisional projection behind every time and calendar read loads only pending requests, filtered to the requested subject, with their current revisions; the visibility rule is unchanged, and the calendar's first server render already includes the provisional entries that later client reads show.
-- Attention. The Zeiterfassung sidebar badge and the **Anträge** tab count time and vacation approvals for the viewer, and the same items appear on `/aufgaben` for exactly the effective holders; decisions run only through the review actions ([P1-07](../plans/phase-1/slices/p1-07-attention-pattern.md)).
-- Time accounts. Each organization has one versioned default credited-time policy plus optional employee-specific policies; credit rules use the six activity categories at 0, 50, or 100 percent and never change recorded minutes. Every in-scope person, including people without a login, has an explicitly opened account with opening balance, date, and reason, and employees see their own account and statements under `Zeitkonto` ([P1-23](../plans/phase-1/slices/p1-23-time-accounts-period-close-and-payroll-export.md)).
-- Period close. A period is one organization-wide calendar month in Europe/Berlin and covers the whole workforce; a missing balance, schedule, policy, or absence classification blocks close for that person instead of counting as zero. Close writes an immutable version. A late correction keeps failing with `period_closed` until an Admin reopens with a reason, and recalculation and re-close create a successor version ([P1-23](../plans/phase-1/slices/p1-23-time-accounts-period-close-and-payroll-export.md)).
-- Payroll export. Admin and Büro generate one deterministic payroll-ready ZIP per closed period version from a confirmed employee and code mapping, and a re-export explicitly supersedes the earlier one. Effective `time_approval` holders resolve findings, approve overtime candidates and account adjustments, and close periods in **Perioden** ([P1-23](../plans/phase-1/slices/p1-23-time-accounts-period-close-and-payroll-export.md)).
-- Access suspension. An organization-scoped suspension removes the membership from every authorization result without deleting time rows, sessions, statements, or closed periods ([P1-24](../plans/phase-1/slices/p1-24-controlled-people-lifecycle.md)).
-- Connected surfaces. Calendar working-time blocks, job and project time views, and the field work pack read the same projection of legacy entries, canonical segments, and accepted corrections; the work pack uses the global session and creates no job-local timer. Planning moves never create or rewrite actual time. An office handover release may include a bounded customer-safe time summary, an active clock blocks the release, and review never edits or approves time ([P1-11](../plans/phase-1/slices/p1-11-planning-occurrences.md), [P1-16](../plans/phase-1/slices/p1-16-field-work-pack.md), [P1-17](../plans/phase-1/slices/p1-17-office-handover.md), [P1-22](../plans/phase-1/slices/p1-22-time-corrections-and-approvals.md)).
+- **Clock readiness.** Clock actions stay disabled until the organization's clock state has loaded. A missing or failed response never means the employee is clocked out. A failure offers retry, and a pending transition blocks duplicate actions. The [shared readiness contract](../technical/realtime-and-caching.md#shared-layout-and-clock-readiness) owns the mechanism.
+- **The clock button.** A fixed button on every page opens a sheet of next actions, not a form. Each transition is one tap and carries the job along. Rare activities sit one level deeper. While clocked in, two hot keys offer the two most likely next transitions. After a break, resuming the interrupted job is one tap, and the job picker lists today's planned jobs first.
+- **What the clock button deliberately lacks.** There is no clock-out hot key: a one-tap clock-out on a fixed button is an easy accidental tap, and an ended session has no undo. There is no global keyboard shortcut for the sheet (owner decision). The elapsed time shows only on the Zeiterfassung page, not as a second counter on the button.
+- **Live capture.** Each membership has one attendance session with at most one open activity. Every switch is atomic, safe to repeat, and attributed. Nobody can be clocked in in two organizations at once. Work, travel, and call-out link to an assigned job or stay explicitly unallocated. Travel also records the route and whether the employee drove or rode along. Current-day totals and the split at midnight (Europe/Berlin) are display only ([P1-21](../plans/phase-1/slices/p1-21-time-segments.md)).
+- **Recovery.** A session open longer than 24 hours shows a concrete recovery path. Sign-out closes the session and records who closed it. Time recorded before the segment model stays unchanged and is never backfilled.
+- **Member removal.** Removing a member who has recorded time is refused, and membership, sessions, and history stay unchanged. The office ends employment through the personnel record instead. `P1-33` replaces this containment with retained historical identity.
+- **Break rule.** Admin chooses between manually stamped breaks and one automatic break threshold and duration. Büro sees the rule. Saving a new rule also ends the open break of every member on a break today and resumes the job that break interrupted. The rule and the break ends save together. A closed period or a concurrent rule change refuses the whole save. A rule change never rewrites closed days.
+- **Targets.** The dashboard shows presence, work, break, and overtime per day. The daily and weekly target come from each date's schedule, holidays, closures, vacation, and sickness, not from a fixed eight hours. A missing schedule shows a visibly labeled 8-hour fallback. Approved full-day vacation blocks clock-in; a sickness day only warns.
+- **Manual entries.** Everyone can add same-day work or break entries, with sequence and overlap checks. Employee entries and a Büro user's own entries wait for approval. An Admin's own additions apply directly, as the owner's recovery path.
+- **Approval authority.** Effective holders of the time-approval responsibility decide pending time. Without configuration, Admin decides Büro and employee time and Büro decides employee time. Named holders replace that default, and a substitute inherits the base holder's scope for a date window. Self-approval never exists ([P1-05](../plans/phase-1/slices/p1-05-scoped-responsibilities.md)). Pending entries are grouped per manual submission for one day. A single decision and approve-all both re-check every entry's pending state and the approver's authority. A review or deletion of several entries applies to all of them or to none.
+- **Corrections.** A guided `Zeitkorrektur` covers add, edit, delete, split, activity reclassification, job reallocation, employee reassignment, and missed clocks. An employee's own change is always a proposal. An authorized Admin or Büro user may apply a correction for another person directly, but their own correction still needs a second approver ([P1-22](../plans/phase-1/slices/p1-22-time-corrections-and-approvals.md)).
+- **Correction lifecycle.** A request can be in review, returned with a question, resubmitted, approved, rejected, withdrawn, or failed to apply. Nothing is erased. Selected approvals apply all or nothing. The approval queue reads only submitted requests. The history pages on the server, newest first, and counts only the requests the viewer may see. Pending proposals are labeled provisional everywhere, confirmed views show only accepted results, and the original capture history stays intact.
+- **Attention.** Time and vacation approvals count toward the viewer's Zeiterfassung badge and appear in `Aufgaben` for exactly the effective approvers. Decisions run only through the review actions.
+- **Time accounts.** Each organization has one versioned default credited-time policy, plus optional employee-specific policies. Credit rules weight the six activity categories at 0, 50, or 100 percent and never change recorded minutes. Every in-scope person, including people without a login, has an explicitly opened account with opening balance, date, and reason. Employees see their own account and statements under `Zeitkonto` ([P1-23](../plans/phase-1/slices/p1-23-time-accounts-period-close-and-payroll-export.md)).
+- **Period close.** A period is one organization-wide calendar month in Europe/Berlin and covers the whole workforce. A missing balance, schedule, policy, or absence classification blocks close for that person instead of counting as zero. A period cannot close while a session that started before its end is still running, and the refusal names the employees. Close writes a version that cannot change. Any write of recorded time whose day or new day lies in a closed period fails until an Admin reopens the period with a reason: a manual entry, an entry review, an edit, a deletion or a correction. The database refuses the write too, so no path around the actions changes a closed month. Recalculation and re-close create a successor version.
+- **Payroll export.** Admin and Büro generate one reproducible payroll-ready ZIP per closed period version, from a confirmed employee and code mapping. A re-export explicitly supersedes the earlier one. A failed export ends as failed, and the period can be exported again. An export that stopped part way counts as failed at the next export of its period, once it has not changed for 15 minutes. Effective time approvers resolve findings, approve overtime candidates and account adjustments, and close periods in `Perioden`. A finding decision reaches other open sessions of the period page live.
+- **Failed reads.** A failed read on the Zeiterfassung and Perioden pages shows the failure with a retry, never an empty list or a hidden tab.
+- **Access suspension.** Suspending a member removes all their access without deleting time records, sessions, statements, or closed periods.
+- **Connected views.** Calendar time blocks, job and project time views, and the field work pack show the same accepted time. The work pack uses the global session and has no job-local timer. Moving a plan never creates or rewrites actual time. An office handover may include a customer-safe time summary, an active clock blocks the handover, and handover review never edits or approves time.
 
 ### Important Current Limitations
 
-- `updateEntry`, `reassignEntryBatch` and the calendar's block moves do not check the period close of the target date (`P1-24a` discovery F-1, 2026-09-18); the closed-period rule lives in the correction and approval flows. The calendar refuses moves into the future and over other blocks at the pointer; a move into a closed period is a server-side gap recorded in the enforcement-ladder backlog.
-
-- The two historical production legacy change requests keep their legacy interpretation; new corrections use the P1-22 aggregate and do not backfill them.
-- Time accounts provide manual adjustment, expiry, and payout events with four-eyes approval and reasoned close or reopen. There are no automatic caps, expiry, payout, forfeiture, or compensatory-time requests.
-- Standby, call-out, travel, and the other activities receive versioned 0, 50, or 100 percent credit; night, Sunday, and holiday values are classifications only. Arbitrary percentages, organization-defined categories, premiums, and wage values are out of scope.
-- Policy-driven warnings for breaks, daily duration, rest, and classified night, Sunday, or holiday work are review aids, not proof of compliance with German law, a tariff, or an employment agreement.
-- The payroll handoff is a generic ZIP with explicit employee and code mapping, not a provider integration, payroll calculation, accounting export, or PDF payslip.
-- Further absence vocabulary and hour-based absence are later scope.
-- There is no native mobile app or offline time queue; web behavior must not be described as offline-capable.
-- A payroll export always covers the complete organization population frozen by one closed period version; the artifact records that full scope. Filtering by employee and differential exports are deferred ([P1-23](../plans/phase-1/slices/p1-23-time-accounts-period-close-and-payroll-export.md)).
-
-Current application code and live database state remain authoritative if this baseline drifts.
+- Change requests from before the guided correction flow keep their old meaning and are not converted.
+- Time accounts support manual adjustment, expiry, and payout events with four-eyes approval, and reasoned close or reopen. There are no automatic caps, expiry, payout, forfeiture, or compensatory-time requests.
+- Standby, call-out, travel, and the other activities get 0, 50, or 100 percent credit. Night, Sunday, and holiday values are classifications only. Arbitrary percentages, organization-defined categories, premiums, and wage values are out of scope.
+- Warnings for breaks, daily duration, rest, and night, Sunday, or holiday work are review aids, not proof of compliance with German law, a tariff, or an employment agreement.
+- The payroll handoff is a generic ZIP with explicit employee and code mapping. It is not a provider integration, payroll calculation, accounting export, or PDF payslip.
+- A payroll export always covers the whole workforce of one closed period version, and records that scope. Filtering by employee and differential exports are deferred.
+- More absence types and hour-based absence are later scope.
+- There is no native mobile app or offline time queue. Do not describe web behavior as offline-capable.
 
 ## Phase 1 — Complete Operational Core
 
-Phase 1 is not an MVP stopwatch. It is the complete, dependable operational time system expected before intelligence and automation become the focus.
+Phase 1 is not an MVP stopwatch. It is the complete, dependable time system the business needs before intelligence and automation.
 
 ### Clear Time Concepts
 
-- Distinguish attendance/presence, productive work, travel, break, standby/on-call, active deployment during on-call, absence, and manual adjustments.
-- Keep gross presence, paid/credited time, payroll-relevant time, job-cost time, and customer-billable time separate. One number must not silently stand in for all of them.
-- Give every segment a visible source, classification, date, employee, organization, and current status.
-- Make the transition rules understandable: users should know which actions are available from the current state and why another action is unavailable.
-- Support multiple work and travel segments in a day, job switches, split days, interrupted work, overnight work, and entries that cross a payroll or calendar boundary.
-- Preserve original capture time separately from later correction, approval, rounding, or export results.
-- Use practical German labels. The employee should not need to understand event models, wage types, or internal status codes.
+- Distinguish attendance, productive work, travel, break, standby, active deployment during on-call, absence, and manual adjustments.
+- Keep gross presence, credited time, payroll time, job-cost time, and customer-billable time separate. One number never silently stands in for all of them.
+- Every segment shows its source, classification, date, employee, organization, and status.
+- Support several segments a day, split days, interrupted and overnight work, and entries that cross a payroll or calendar boundary.
+- Keep the original capture time separate from later correction, approval, rounding, or export results.
 
 ### Everyday Capture
 
-- Provide one consistent web and future mobile clock surface for working, travelling, breaking, switching jobs, and clocking out.
-- Show the current state, active Auftrag, elapsed time, last successful synchronization, and pending local actions at all times.
-- Let an employee start from an assigned job, from the clock surface, or from today's schedule without creating different kinds of records accidentally.
-- Keep job selection optional, as settled by `P1-21`, and show missing allocation explicitly. Any later mandatory-allocation policy needs a separate decision and must preserve captured time.
-- Make switching between travel, work, break, and jobs a short explicit action that closes the previous segment and shows the new state.
-- Support correcting a missed clock-in/out or wrong classification through a guided request rather than forcing employees to invent compensating entries.
-- Detect impossible or suspicious sequences, overlaps, duplicate taps, clocking in elsewhere, and abandoned sessions while preserving a recoverable path.
-- Make automatic recovery visible. A system-created close or correction must never look like an employee's original action.
-- Allow authorized office users to create or correct records for another employee without impersonating that employee.
-- Support an optional shared terminal/kiosk as a later Phase 1 channel only if its identity, security, and fallback behavior are deliberately approved; personal web/mobile capture remains the default.
+- One clock for web and the future mobile app. Starting from an assigned job, the clock, or today's schedule creates the same kind of record.
+- The clock shows which actions the current state allows and why another action is unavailable.
+- Job selection stays optional, and missing allocation shows explicitly. A mandatory-allocation policy needs a separate decision and must keep captured time.
+- A missed clock or wrong classification is fixed through a guided request, never through invented compensating entries.
+- Detect impossible sequences, overlaps, duplicate taps, clocking in elsewhere, and abandoned sessions, and keep a recovery path.
+- Automatic recovery is visible. A system-created close or correction never looks like the employee's own action.
+- Authorized office users create or correct records for another employee without impersonating them.
+- A shared terminal or kiosk is a possible later Phase 1 channel only after its identity, security, and fallback are approved. Personal web and mobile capture stays the default.
 
 ### Travel, Work, Break, And On-Call
 
-- Record travel separately from work so the organization can apply its selected payroll, costing, and billing treatment.
-- Support travel linked to a job/customer as well as non-job travel such as warehouse, training, or company errands.
-- Distinguish a break from unpaid absence, travel, waiting, and a gap caused by missing data.
-- Support manually stamped breaks and configurable automatic break treatment, with the applied rule visible on each day.
-- Preserve actual stamped breaks even if another calculation is used for payroll or compliance review.
-- Represent standby/on-call windows separately from active deployments, including which time is scheduled, actually worked, credited, or supplement-relevant.
-- Allow the organization to define its treatment of travel, on-call, and other categories without baking a single collective agreement or legal interpretation into WerkFlow.
-- Explain totals after classification: “8:30 Anwesenheit – 0:30 Pause = 8:00 Arbeitszeit,” plus any separately credited travel or supplements.
+- Record travel separately from work, so the organization applies its own payroll, costing, and billing treatment. Travel can belong to a job or be non-job travel such as warehouse, training, or errands.
+- Distinguish a break from unpaid absence, travel, waiting, and a gap from missing data.
+- Show the applied break rule on each day. Keep actual stamped breaks even when payroll or compliance review uses another calculation.
+- Keep standby windows separate from active deployments, including which time is scheduled, worked, credited, or relevant for supplements.
+- The organization defines its treatment of travel, on-call, and other categories. WerkFlow bakes in no single collective agreement or legal interpretation.
+- Explain totals after classification: "8:30 Anwesenheit – 0:30 Pause = 8:00 Arbeitszeit", plus any separately credited travel or supplements.
 
 ### Job And Project Allocation
 
-- Allocate work and travel segments to an Auftrag, Projekt, customer, internal activity, or explicit “not yet allocated” queue.
-- Let field employees choose only relevant assigned/open work by default, while authorized office users can search the organization scope.
-- Support switching allocation during a running day without ending attendance.
-- Allow an approved time block to be split or reassigned with before/after history and a reason.
-- Show planned versus actual labor by job/project, employee, trade activity, and period.
-- Support non-billable but operationally necessary categories such as warehouse work, training, meetings, cleaning, administration, or rework.
-- Keep billability explicit and reviewable. Job allocation alone must not automatically make time customer-billable.
-- Preserve time links when a job is completed, archived, renumbered, moved into a project, or reassigned.
-- Identify unallocated or unexpectedly allocated time before job costing, invoice preparation, or payroll close.
+- Allocate work and travel to an Auftrag, Projekt, customer, internal activity, or an explicit "not yet allocated" queue.
+- Field employees see their relevant assigned or open work by default. Authorized office users search the whole organization.
+- Change allocation during a running day without ending attendance. Split or reassign an approved block with before and after history and a reason.
+- Show planned versus actual labor by job, project, employee, trade activity, and period.
+- Support non-billable but necessary categories such as warehouse work, training, meetings, cleaning, administration, or rework.
+- Billability is explicit and reviewable. Job allocation alone never makes time customer-billable.
+- Time links survive when a job is completed, archived, renumbered, moved into a project, or reassigned.
+- Flag unallocated or unexpectedly allocated time before job costing, invoicing, or payroll close.
 
 ### Schedules, Target Time, And Holidays
 
-- Derive target time from the employee's date-effective employment conditions, work schedule, approved absence, and applicable organization holiday calendar.
-- Support full-time, part-time, flexible days, shift patterns, apprentices, changed weekly hours, and date-specific schedule exceptions.
-- Show daily, weekly, monthly, and payroll-period target versus credited actual time.
-- Handle public holidays and organization closure days explicitly, including regional calendars selected by the business.
-- Keep schedule changes effective-dated so they do not silently alter historical balances.
-- Treat missing schedule configuration as an exception, not as zero target hours or an assumed eight-hour day.
-- Explain whether an absence or holiday reduces target time, credits time, or is informational according to the selected organization policy.
+- Target time follows the employee's employment conditions, schedule, approved absence, and organization holiday calendar on that date.
+- Support full-time, part-time, flexible days, shift patterns, apprentices, changed weekly hours, and date-specific exceptions.
+- Show daily, weekly, monthly, and payroll-period target versus credited time.
+- Handle public holidays and closure days explicitly, including the regional calendar the business selects.
+- Schedule changes are effective-dated and never silently change historical balances.
+- A missing schedule is an exception, never zero target hours or an assumed eight-hour day.
+- Explain whether an absence or holiday reduces target time, credits time, or is informational under the organization's policy.
 
 ### Time Accounts, Overtime, And Supplements
 
-- Provide an understandable time account with opening balance, target, credited actual time, approved adjustments, carryover, expiry or payout events, and current balance.
-- Show the employee the same balance foundation the office uses; role differences may limit sensitive rates, not the existence of time.
-- Distinguish time worked beyond target from ordered/approved overtime and from payroll treatment.
-- Support organization-defined handling of overtime: approval, time off in lieu, carryover, payout handoff, cap, or expiry.
-- Record manual balance adjustments with a reason, actor, effective date, and audit history.
-- Support relevant night, Sunday, holiday, travel, on-call, and other supplement classifications without assuming one legally correct percentage.
-- Keep the raw record, credited-time calculation, supplement classification, and final payroll export result traceable to one another.
-- Show forecast and confirmed balances separately when records, leave, or corrections are still pending.
-- Prevent a retroactive policy change from rewriting closed balances without an explicit recalculation and review process.
+- A time account shows opening balance, target, credited time, approved adjustments, carryover, expiry or payout events, and current balance.
+- The employee sees the same balance foundation as the office. Roles may hide sensitive rates, never the existence of time.
+- Distinguish time beyond target from ordered or approved overtime and from its payroll treatment.
+- Support organization-defined overtime handling: approval, time off in lieu, carryover, payout handoff, cap, or expiry.
+- Record manual balance adjustments with reason, actor, effective date, and audit history.
+- Support night, Sunday, holiday, travel, on-call, and other supplement classifications without assuming one legally correct percentage.
+- Keep the raw record, credited time, supplement classification, and payroll export result traceable to one another.
+- Show forecast and confirmed balances separately while records, leave, or corrections are pending.
+- A retroactive policy change never rewrites closed balances without explicit recalculation and review.
 
 ### German Compliance Configuration
 
-WerkFlow should help an organization apply and monitor its chosen rules, but it must not claim that configuration equals legal compliance.
+WerkFlow helps an organization apply and monitor its chosen rules. It never claims that configuration equals legal compliance, and it never says "legally compliant" based on settings alone.
 
-- Let authorized users configure working-day/week limits, break expectations, rest-period expectations, Sunday/holiday treatment, rounding, overtime approval, and warnings relevant to their business.
-- Support effective dates and history for every policy that changes calculations or warnings.
-- Distinguish informational warning, approval-required exception, and hard block; each rule should state which behavior the organization selected.
-- Detect likely issues such as insufficient break, excessive day length, insufficient rest, work on a restricted day, missing record, conflicting sessions, or an unresolved overnight shift.
-- Explain which captured facts triggered a warning and which organization rule was applied.
-- Keep apprentice/youth-protection, collective-agreement, company-agreement, and exceptional-work requirements as configurable or separately reviewed cases rather than universal defaults.
-- Allow documented authorized exceptions without erasing the warning or original record.
-- Require the business to confirm configuration and recommend professional legal/payroll review where appropriate.
-- Avoid language such as “legally compliant” based only on software settings.
+- Authorized users configure day and week limits, break and rest expectations, Sunday and holiday treatment, rounding, overtime approval, and warnings. Every such policy has effective dates and history.
+- Each rule states whether the organization chose an informational warning, an approval-required exception, or a hard block.
+- Detect likely issues: insufficient break or rest, excessive day length, work on a restricted day, a missing record, conflicting sessions, or an unresolved overnight shift. Each warning names the captured facts and the rule behind it.
+- Apprentice and youth protection, collective agreements, company agreements, and exceptional work stay configurable or separately reviewed cases, not universal defaults.
+- An authorized exception is documented and keeps the warning and the original record.
+- The business confirms its configuration, and WerkFlow recommends professional legal or payroll review where appropriate.
 
 ### Corrections, Requests, And Approvals
 
-- Give employees a complete personal history and a guided way to request add, edit, delete, split, classification, allocation, and missed-clock corrections.
-- Show the proposed result before submission, including changed totals, job allocation, break impact, and time-account impact.
-- Require a reason for material corrections and retain original value, proposed value, actor, approver, timestamps, decision, and comment.
-- Preserve the `P1-22` rule that an employee's own correction is a proposal. `P1-23` defines the closed-period lock and reasoned reopen path.
-- Apply four-eyes rules consistently when an approver changes their own records or records where they have a conflict of interest.
-- Support delegated approvers, substitutes, reminders, escalation, and clear fallback when no approver is available.
-- Allow admins/Büro to approve, reject, return for clarification, or correct within explicit authority.
-- Keep pending changes visible in calendar, day totals, employee history, manager queues, and export preflight. Never use hidden intermediate states.
-- Explain whether totals are provisional or confirmed while a request is pending.
-- Support safe batch approval and exception handling, but never allow a bulk action to conceal materially different entries.
-- Let an employee withdraw their own pending request and see why a request was rejected.
+- Before submission, a correction shows its result: changed totals, job allocation, break impact, and time-account impact.
+- A material correction needs a reason. Keep the original value, proposed value, actor, approver, timestamps, decision, and comment.
+- Four-eyes rules apply whenever an approver changes their own records or records where they have a conflict of interest.
+- Support delegated approvers, substitutes, reminders, escalation, and a clear fallback when no approver is available.
+- Pending changes show in the calendar, day totals, employee history, approval queues, and export checks. There are no hidden intermediate states.
+- Batch approval never hides materially different entries.
+- An employee can withdraw their own pending request and sees why a request was rejected.
 
 ### Period Review And Close
 
-- Provide daily and payroll-period readiness queues for missing clocks, open sessions, overlaps, unallocated time, unresolved warnings, pending requests, missing schedules, and absence conflicts.
-- Let office users review by exception rather than inspect every normal shift manually.
-- Show a reproducible summary by employee before close: target, work, travel, break, absence, overtime, supplements, adjustments, and balance movement.
-- Require unresolved exceptions to be resolved, explicitly accepted, or carried with a documented reason.
-- Close a period deliberately so payroll/export uses a stable version.
-- Prevent ordinary edits after close; authorized reopen and correction must create a new traceable version or correction handoff.
+- Daily and payroll-period queues show missing clocks, open sessions, overlaps, unallocated time, unresolved warnings, pending requests, missing schedules, and absence conflicts. Office users review by exception, not shift by shift.
+- Before close, show a reproducible summary per employee: target, work, travel, break, absence, overtime, supplements, adjustments, and balance movement.
+- Each unresolved exception is resolved, explicitly accepted, or carried forward with a documented reason.
 - Show who prepared, reviewed, closed, reopened, exported, or re-exported a period.
-- Keep employee visibility after close so the result is not a black box.
+- Employees keep seeing their results after close.
 
 ### Leave And Absence Effects
 
 - Consume approved vacation, illness, training, compensatory time, and other absence from employee management.
-- Show absence in the personal day/week/month view without exposing private health details.
-- Apply the selected absence treatment to target time and payroll handoff while keeping the absence record distinct from a clocked work segment.
-- Prevent contradictory active clock and full-day absence states, but provide an authorized correction path for partial work, call-out, or a late absence change.
-- Reflect pending absence requests as provisional in planning without treating them as approved payroll input.
-- Keep leave balances owned and explained by employee management while time tracking shows their effect on target and credited time.
+- Show absence in the personal views without exposing private health details.
+- Apply the selected absence treatment to target time and payroll handoff, and keep the absence distinct from a clocked work segment.
+- Block a running clock during a full-day absence, but give an authorized correction path for partial work, a call-out, or a late absence change.
+- Show pending absence requests as provisional in planning, never as approved payroll input.
 
 ### Offline And Mobile Reliability
 
-- Put jobs, time, absence, documents, and inventory in one employee app shell rather than requiring specialist apps.
-- Define offline support per action: what data is available, what can be captured, what stays queued, and what cannot proceed.
-- Record actions with device-local capture time and synchronization time, and show both where a delay matters.
-- Show offline, syncing, synchronized, failed, and conflict states in plain language.
-- Prevent repeated taps or reconnects from creating duplicate time segments.
-- Resolve conflicts deterministically where safe and ask the user where intent cannot be inferred.
-- Preserve queued actions through app restarts and make retry/cancel consequences clear.
-- Reconcile server-side job reassignment, schedule changes, period close, or another-device actions without silently discarding local records.
-- Support correct local time, organization time zone, daylight-saving changes, overnight shifts, and travel across time zones.
-- Make battery/network failure recoverable without encouraging screenshots or paper backup as the normal process.
+- Jobs, time, absence, documents, and inventory live in one employee app, not in specialist apps.
+- Offline support is defined per action: which data is available, what can be captured, what is queued, and what cannot proceed.
+- Show offline, syncing, synchronized, failed, and conflict states, the last successful sync, and pending local actions in plain language.
+- Record device capture time and sync time, and show both where a delay matters.
+- Repeated taps or reconnects never create duplicate segments. Queued actions survive app restarts, and retry or cancel consequences are clear.
+- Resolve conflicts automatically where safe, and ask the user where intent is unclear. Server-side reassignment, schedule changes, period close, or actions from another device never silently drop local records.
+- Handle the organization time zone, daylight-saving changes, overnight shifts, and travel across time zones.
+- Battery or network failure is recoverable without screenshots or paper as the normal backup.
 
 ### Employee Transparency
 
-- Show today's state and totals first, then day/week/month/period history and calculation detail through progressive disclosure.
-- Give employees a clear time-account balance and a line-by-line explanation of how it was calculated.
-- Label raw, provisional, approved, exported, corrected, rejected, and closed values consistently.
-- Show pending requests, responsible approver, submission date, decision, and any required next action.
-- Explain automatic breaks, rounding, supplements, target-time changes, and balance adjustments on the affected record.
-- Notify employees of material office changes to their time and let them inspect before/after values.
-- Provide a personal export or statement for the relevant period.
-- Do not hide synchronized data behind a separate office-only app when it determines the employee's balance or payroll handoff.
+- Employees get a line-by-line explanation of their time-account balance and a personal statement or export per period.
+- Show each pending request with its responsible approver, submission date, decision, and any next step.
+- Explain automatic breaks, rounding, supplements, target changes, and balance adjustments on the affected record.
+- Notify employees of material office changes to their time and show before and after values.
+- Data that determines the employee's balance or payroll handoff is never hidden in an office-only app.
 
 ### Manager And Owner Oversight
 
-- Show who is working, travelling, on break, clocked out, on call, offline with queued actions, or in an unresolved state, within privacy boundaries.
-- Prioritize exceptions such as missing clock-out, very long session, insufficient break, unallocated time, pending request, schedule mismatch, or sync failure.
-- Provide views by employee, team, job/project, customer, activity, day/week/month, and payroll period.
-- Let planners compare planned effort and actual labor without exposing wage details unnecessarily.
-- Keep operational live status distinct from performance scoring; presence alone is not a productivity measure.
-- Allow authorized corrections and approvals from the context where the issue is found while preserving one audit path.
+- Show who is working, travelling, on break, clocked out, on call, offline with queued actions, or in an unresolved state, within privacy limits.
+- Put exceptions first: missing clock-out, very long session, insufficient break, unallocated time, pending request, schedule mismatch, or sync failure.
+- Provide views by employee, team, job, project, customer, activity, day, week, month, and payroll period.
+- Planners compare planned and actual labor without seeing wage details they do not need.
+- Live status is not performance scoring. Presence alone is no productivity measure.
+- Authorized corrections and approvals happen where the issue is found, with one audit path.
 
 ### Reporting, Export, Payroll, And Accounting Handoff
 
-- Provide reproducible day, week, month, payroll-period, employee, team, job, project, customer, activity, and exception reports.
-- Export approved source time, credited/payroll time, absence, overtime, supplements, cost allocation, job allocation, and correction history as clearly separated fields.
-- Support structured CSV/Excel-compatible exports and provider-specific handoffs selected by product priority; a PDF statement may supplement but not replace structured data.
-- Use stable employee, organization, job, project, and export-period references.
-- Provide mapping for wage types, cost centers, activities, and payroll identifiers, with validation before export.
-- Record export version, filter scope, mapping version, generator, timestamp, and whether it supersedes a previous export.
-- Accept payroll/accounting feedback where useful without letting an external system silently rewrite operational source records.
-- Make post-export corrections an explicit correction/re-export workflow.
-- Keep customer billing, job costing, payroll, and attendance outputs connected but distinct.
+- Provide reproducible reports by day, week, month, payroll period, employee, team, job, project, customer, activity, and exception.
+- Export approved source time, credited and payroll time, absence, overtime, supplements, cost allocation, job allocation, and correction history as separate fields.
+- Support structured CSV or Excel-compatible exports and provider-specific handoffs in product priority order. A PDF statement may add to structured data, never replace it.
+- Use stable employee, organization, job, project, and period references, and map wage types, cost centers, activities, and payroll identifiers with validation before export.
+- Record export version, scope, mapping version, generator, timestamp, and which export it supersedes. A correction after export goes through an explicit re-export.
+- Accept payroll or accounting feedback where useful. An external system never silently rewrites operational source records.
+- Customer billing, job costing, payroll, and attendance outputs stay connected but distinct.
 
 ### Privacy, Retention, And Auditability
 
-- Restrict organization-wide live status, history, corrections, exports, and payroll classifications by role and responsibility.
-- Let employees see their own records and meaningful changes without seeing colleagues' time.
-- Avoid collecting precise location, photos, device telemetry, or behavioral data unless a separately approved use case requires it.
-- Preserve a complete human-readable audit trail for captured, system-created, corrected, approved, rejected, reassigned, rounded, closed, and exported records.
-- Retain historical employee identity and job links through offboarding.
+- Role and responsibility restrict organization-wide live status, history, corrections, exports, and payroll classifications.
+- Employees see their own records and meaningful changes, never colleagues' time.
+- Collect no precise location, photos, device telemetry, or behavioral data unless a separately approved use case requires it.
+- Keep a complete, readable audit trail for captured, system-created, corrected, approved, rejected, reassigned, rounded, closed, and exported records.
+- Keep historical employee identity and job links through offboarding.
 - Support organization export, retention, and deletion policies without making business history inexplicable.
-- Never log sensitive time or location data unnecessarily in developer logs.
+- Never log sensitive time or location data in developer logs without need.
 
 ## Connected Workflow Contracts
 
-These contracts describe the information each feature area may provide or consume. They are product contracts, not a schema design.
+These are product contracts between feature areas, not a schema design.
 
 | Connected area | Inputs time tracking consumes | Outputs time tracking provides | Contract rules |
 | --- | --- | --- | --- |
 | Employee management | Active employment state, effective work schedule, target hours, absence, approver, payroll identity, applicable policy group | Actual/credited totals, time-account movement, overtime, warnings, request status, period readiness | Historical calculations use the conditions effective on the recorded date. Offboarding never erases approved history. |
 | Jobs and projects | Assignment, open/archived state, planned duration, customer/project link, permitted activities | Actual work/travel by employee and activity, unallocated time, planned-vs-actual labor, costing/billing eligibility | Assignment is not proof of attendance; job linkage is not automatically billable. Archived work retains time links. |
 | Calendar | Planned jobs, shifts, appointments, holidays, training, absence | Actual time blocks, live state where permitted, pending corrections, schedule conflicts | Planned and actual time remain visually and semantically distinct. Sensitive absence detail is minimized. |
-| Documents | Permitted evidence/document context and audit capabilities | Period statements, export artifacts, correction/approval references where retained | Time corrections should not require attaching sensitive evidence by default. Document access does not broaden time permissions. |
+| Documents | Permitted evidence/document context and audit capabilities | Period statements, export artifacts, correction/approval references where retained | Time corrections do not require attaching sensitive evidence by default. Document access does not broaden time permissions. |
 | Finance and payroll | Wage types, cost centers, export mapping, closed-period feedback, billing rules | Approved payroll time, supplements, absence, cost allocation, billable labor candidates, export versions | Payroll, costing, billing, and raw attendance values stay distinguishable and traceable. |
 | Inventory | Job/material action context and responsible employee | Time context that may help explain material usage | Clock state never automatically changes stock, and a stock movement never silently creates time. |
 | CRM and customers | Customer/job/site context, service window, address | Approved customer-facing service duration or report input where explicitly selected | Never expose employee balances, private schedule, absence, or payroll data to CRM/customer surfaces. |
@@ -250,81 +224,74 @@ These contracts describe the information each feature area may provide or consum
 
 ### Handwerker/in And Apprentice
 
-- Gets one prominent current-state control and only the next valid actions.
-- Sees assigned jobs first, with quick travel/work/break/job switching.
-- Sees own day/week/month totals, time account, requests, decisions, and synchronization status in understandable German.
-- Can recover from a missed action without learning an office process or asking someone to edit data invisibly.
+- One prominent current-state control that offers only the next valid actions.
+- Assigned jobs first, with quick switching between travel, work, break, and jobs.
+- Own totals, time account, requests, decisions, and sync status in plain German.
+- Recovery from a missed action without learning an office process or asking someone to edit data invisibly.
 
 ### Büro / Office
 
 - Works from exception, approval, correction, allocation, and period-readiness queues.
-- Can manage employees in scope but should not approve their own consequential changes without an explicit rule.
+- Manages employees in scope, but never approves their own consequential changes without an explicit rule.
 - Sees calculation explanations and audit history before changing a result.
 
 ### Admin / Owner
 
-- Controls organization policies, authority, export mapping, close/reopen, and exceptional overrides.
-- Gets concise operational and payroll-readiness oversight rather than a surveillance dashboard.
-- Must be warned when configuration is missing, contradictory, or not professionally reviewed.
+- Controls organization policies, authority, export mapping, close and reopen, and exceptional overrides.
+- Gets concise operational and payroll-readiness oversight, not a surveillance dashboard.
+- Gets a warning when configuration is missing, contradictory, or not professionally reviewed.
 
 ### Project Lead
 
-- Sees planned-versus-actual labor and job allocation for work they manage.
-- Does not automatically receive organization-wide employee history, time accounts, absence detail, or payroll classifications.
-- May correct allocation or approve job context only if that responsibility is explicitly granted.
+- Sees planned versus actual labor and job allocation for the work they manage.
+- Does not automatically get organization-wide employee history, time accounts, absence detail, or payroll classifications.
+- Corrects allocation or approves job context only with an explicitly granted responsibility.
 
 ### Shared UX Rules
 
-- Use progressive disclosure: current state and next action first; calculation, history, and audit details one level deeper.
+- Current state and next action come first; calculation, history, and audit detail sit one level deeper.
 - Never hide pending, offline, failed, provisional, automatically created, rounded, or corrected state.
-- Make balances and policy effects explainable with arithmetic and source records.
-- Keep controls consistent across web and mobile and keep all employee workflows in one app shell.
-- Use natural German labels, generous tap targets, visible focus, keyboard support, and accessible status communication.
+- Balances and policy effects are explained with arithmetic and source records.
 - Prefer safe defaults and warnings over dense setup, but never silently assume an eight-hour weekday or one legal rule set.
 
 ## Phase 2 — Intelligence And Automation
 
-Phase 2 should reduce review work only after Phase 1 classifications, policy history, offline state, and audits are dependable:
+Phase 2 reduces review work only after Phase 1 classifications, policy history, offline state, and audits are dependable:
 
-- Detect likely missed clocks, duplicates, wrong job allocation, implausible travel, unusual duration, or schedule mismatch and propose a correction.
-- Suggest a likely Auftrag or activity from the employee's schedule and operational context, with employee confirmation.
+- Detect likely missed clocks, duplicates, wrong job allocation, implausible travel, unusual duration, or schedule mismatch, and propose a correction.
+- Suggest a likely Auftrag or activity from the employee's schedule, with employee confirmation.
 - Forecast overtime, time-account pressure, staffing gaps, and payroll-readiness risk.
-- Prepare an exception summary for office review instead of automatically approving or changing time.
+- Prepare an exception summary for office review instead of approving or changing time automatically.
 - Recommend break or rest reminders from configured rules without claiming legal certainty.
-- Draft timesheets from schedule, job activity, or other operational evidence only as unapproved proposals; never infer payroll time silently.
-- Explain balance changes and payroll preflight problems in natural German with links to the underlying records.
-- Identify recurring correction causes that indicate a confusing workflow or bad configuration.
-- Assist with wage-type and export mapping, showing confidence and requiring payroll review.
-- Provide permission-aware operational questions such as “Which Aufträge have unallocated labor this week?” with reproducible filters.
+- Draft timesheets from schedule, job activity, or other evidence only as unapproved proposals. Never infer payroll time silently.
+- Explain balance changes and payroll check problems in natural German, with links to the records.
+- Find recurring correction causes that point to a confusing workflow or bad configuration.
+- Help with wage-type and export mapping, showing confidence and requiring payroll review.
+- Answer permission-aware questions such as "Which Aufträge have unallocated labor this week?" with reproducible filters.
 
-Every intelligent action must show its source, proposed change, uncertainty, human approval point, audit record, organization boundary, and undo/recovery behavior.
+Every intelligent action shows its source, proposed change, uncertainty, human approval point, audit record, organization boundary, and undo or recovery path.
 
 ## Boundaries And Decision Gates
 
-- WerkFlow supports recordkeeping and organization-selected rules; it is not a lawyer, tax adviser, payroll adviser, or guarantee of compliance with the ArbZG, MiLoG, collective agreements, works agreements, or sector-specific requirements.
+- WerkFlow supports recordkeeping and organization-selected rules. It is not a lawyer, tax adviser, or payroll adviser, and it guarantees no compliance with the ArbZG, MiLoG, collective agreements, works agreements, or sector rules.
 - Native payroll calculation is outside the operational core unless separately approved. Payroll-ready handoff and auditability are required.
-- Attendance, credited payroll time, job cost, and customer-billable time must remain separate even when a business often configures them identically.
-- Precise GPS, geofencing, continuous location history, photos, biometrics, facial recognition, and employee scoring are not default time-capture features. Any such proposal requires a separate necessity, privacy, consent/worker-representation, retention, and fallback decision.
-- Automatic break deductions, rounding, overtime expiry, and historical recalculation require explicit effective-dated policy and professional review.
+- Attendance, credited payroll time, job cost, and customer-billable time stay separate, even when a business configures them identically.
+- Precise GPS, geofencing, continuous location history, photos, biometrics, facial recognition, and employee scoring are not default capture features. Any such proposal needs a separate decision on necessity, privacy, consent or worker representation, retention, and fallback.
+- Automatic break deductions, rounding, overtime expiry, and historical recalculation need an explicit effective-dated policy and professional review.
 - Shared terminals, hardware clocks, NFC, wearables, vehicle telematics, and third-party clock imports are separate capture-channel decisions.
-- Overnight shifts, travel across time zones, emergency service, and on-call compensation must be validated with real SHK cases before being considered complete.
-- Absence entitlement remains owned by employee management; time tracking consumes its operational effect.
-- Offline support cannot be marketed as a binary capability. Each action needs a documented availability, queue, conflict, and recovery contract.
-- Approval authority, self-approval, delegation, and closed-period correction require a single consistent model across time, leave, and payroll export.
-- Data retention and employee access after exit require policy/legal review; destructive deletion must not be the normal correction or offboarding path.
+- Overnight shifts, travel across time zones, emergency service, and on-call compensation need validation with real SHK cases before they count as complete.
+- Employee management owns absence entitlement. Time tracking consumes its operational effect.
+- Offline support is never marketed as a yes-or-no capability. Each action needs a documented availability, queue, conflict, and recovery contract.
+- Approval authority, self-approval, delegation, and closed-period correction follow one model across time, leave, and payroll export.
+- Data retention and employee access after exit need policy and legal review. Destructive deletion is never the normal correction or offboarding path.
 
 ## Open Product Decisions
 
-The current baseline above describes the accepted capture, approval, correction, account, and export decisions. Their linked slice records preserve the rationale. Remaining questions:
+The baseline above holds the accepted capture, approval, correction, account, and export decisions, and the linked slice records keep their reasons. Remaining questions:
 
-- Should a shared terminal/kiosk be part of Phase 1, and what fallback identifies employees safely?
-- What offline data must be available for an employee's next assignments, and how are conflicting device actions resolved?
-- How a forgotten clock-out is closed. Competitors either cut the session hard (ToolTime at midnight, Aplano at 03:00, Connecteam after N hours with a flag) or send schedule-driven push reminders (plancraft, HERO); it is the top complaint class in their forums (research of 2026-09-15). WerkFlow's 24-hour recovery state is the flag today; reminders and a configurable cut are open.
-- Is any location evidence necessary for specific customers, and can the same outcome be achieved with less intrusive evidence?
+- Is a shared terminal or kiosk part of Phase 1, and what fallback identifies employees safely?
+- Which offline data must an employee have for the next assignments, and how are conflicting device actions resolved?
+- How is a forgotten clock-out closed? Competitors either cut the session at a fixed time or after a set number of hours, or send schedule-based reminders; it is the top complaint in their forums. The 24-hour recovery state is the flag today. Reminders and a configurable cut are open.
+- Is location evidence necessary for specific customers, and can less intrusive evidence achieve the same outcome?
 
-## Related Docs
-
-- [Product capability map](../product/product-capability-map.md) — feature ownership, shared objects, and cross-feature handoff rules.
-- [Phase 1 roadmap](../plans/phase-1/roadmap.md) — slice order, current status, and links to per-slice acceptance records.
-- [User-flow catalog](../product/user-flow-catalog.md) — this feature's accepted user-visible flows by stable ID.
-- Connected feature specs: the **Connected Workflow Contracts** table above names every cross-feature contract; load only the specs the current slice names.
+The [product capability map](../product/product-capability-map.md) owns cross-feature handoffs, and the [Phase 1 roadmap](../plans/phase-1/roadmap.md) owns slice order and status.

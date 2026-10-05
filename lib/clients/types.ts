@@ -1,11 +1,11 @@
+import type { ActionResult } from '@/lib/action-result';
 import type { Database } from '@/lib/supabase/database.types';
 
 // ============================================
 // Database Row Aliases
 // ============================================
 
-export type ClientContactRow =
-  Database['public']['Tables']['client_contacts']['Row'];
+export type ClientContactRow = Database['public']['Tables']['client_contacts']['Row'];
 export type ClientSiteRow = Database['public']['Tables']['client_sites']['Row'];
 
 // ============================================
@@ -64,17 +64,11 @@ export const CONTACT_ROLE_SUGGESTIONS = [
 // Result Types
 // ============================================
 
-export type ClientContactResult =
-  | { success: true; contact: ClientContact }
-  | { success: false; error: string };
+export type ClientContactResult = ActionResult<{ contact: ClientContact }>;
 
-export type ClientSiteResult =
-  | { success: true; site: ClientSite }
-  | { success: false; error: string };
+export type ClientSiteResult = ActionResult<{ site: ClientSite }>;
 
-export type ClientRelationsResult =
-  | { success: true; contacts: ClientContact[]; sites: ClientSite[] }
-  | { success: false; error: string };
+export type ClientRelationsResult = ActionResult<{ contacts: ClientContact[]; sites: ClientSite[] }>;
 
 // ============================================
 // Converters And Helpers
@@ -119,9 +113,16 @@ export function toClientSite(row: ClientSiteRow): ClientSite {
 }
 
 // One-line address for pickers, job "Ort" snapshots, and calendar context.
-export function formatSiteAddress(
-  site: Pick<ClientSite, 'street' | 'postalCode' | 'city'>
-): string {
+/** The same one-line address for a site row as the database returns it. */
+export function formatSiteRowAddress(site: {
+  street: string | null;
+  postal_code: string | null;
+  city: string | null;
+}): string {
+  return [site.street, [site.postal_code, site.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+}
+
+export function formatSiteAddress(site: Pick<ClientSite, 'street' | 'postalCode' | 'city'>): string {
   const cityLine = [site.postalCode, site.city].filter(Boolean).join(' ');
   return [site.street, cityLine].filter(Boolean).join(', ');
 }

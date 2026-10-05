@@ -7,32 +7,28 @@
 // repair there no longer changes the identity of a reviewed reference
 // (pre-Wave-3 step 1, 2026-09-14, after five context-only transfers in Step 3).
 
-import { appendFileSync, mkdirSync } from "node:fs";
-import { resolve } from "node:path";
-import type { BrowserContext, Page, Response } from "@playwright/test";
-import { getMeasuredScenario, MEASUREMENT_VERSION } from "../../../lib/testing/measured-scenarios";
-import { LIVE_HARD_BUDGET_MS, LIVE_TARGET_MS, SCENARIO_ARCHIVE, type ScenarioAttribution, type ScenarioObservation } from "../../../lib/testing/latency-evidence";
-import type { LiveObservation } from "../../../lib/testing/live-observation";
-import { currentRunKey, readRunManifest, runDirectory } from "./run-state";
-import { capturePerformanceContext, type PerformanceContext } from "../../../lib/testing/performance-context";
-import { requireEnv } from "./env";
-import { observeBrowserDuringMutation, type MeasuredTarget } from "./browser-observation";
+import { appendFileSync, mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
+import type { Page, Response } from '@playwright/test';
+import { getMeasuredScenario, MEASUREMENT_VERSION } from '../../../lib/testing/measured-scenarios';
+import {
+  SCENARIO_ARCHIVE,
+  type ScenarioAttribution,
+  type ScenarioObservation,
+} from '../../../lib/testing/latency-evidence';
+import {
+  LIVE_HARD_BUDGET_MS,
+  LIVE_TARGET_MS,
+  completeRecordedObservation,
+} from '../../../lib/testing/responsiveness-tolerance';
+import type { LiveObservation } from '../../../lib/testing/live-observation';
+import { currentRunKey, readRunManifest, runDirectory } from './run-state';
+import { capturePerformanceContext, type PerformanceContext } from '../../../lib/testing/performance-context';
+import { requireEnv } from './env';
+import { observeBrowserDuringMutation, type MeasuredTarget } from './browser-observation';
 
-/** Each declared navigation sample owns a fresh cache/document context with the same role session. */
-export async function createMeasurementPage(authenticatedPage: Page): Promise<{ context: BrowserContext; page: Page }> {
-  const browser = authenticatedPage.context().browser();
-  if (!browser) throw new Error("Performance sampling needs the owned fixture browser.");
-  const context = await browser.newContext({
-    storageState: await authenticatedPage.context().storageState(),
-    baseURL: new URL(authenticatedPage.url()).origin,
-    viewport: authenticatedPage.viewportSize(), locale: "de-DE", timezoneId: "Europe/Berlin",
-  });
-  try { return { context, page: await context.newPage() }; }
-  catch (error) { await context.close(); throw error; }
-}
-
-function currentBackend(): "local" | "cloud" {
-  return process.env.WERKFLOW_TEST_TARGET === "cloud" ? "cloud" : "local";
+function currentBackend(): 'local' | 'cloud' {
+  return process.env.WERKFLOW_TEST_TARGET === 'cloud' ? 'cloud' : 'local';
 }
 
 function currentBuildId(): string | null {
@@ -45,7 +41,13 @@ function currentBuildId(): string | null {
 
 const recordedSamples = new Map<string, number>();
 
-function recordScenario(scenarioId: string, measurement: LiveObservation, context: PerformanceContext, attribution?: ScenarioAttribution): void {
+function recordScenario(
+  scenarioId: string,
+  measurement: LiveObservation,
+  context: PerformanceContext,
+  attribution?: ScenarioAttribution,
+  signalDeliveryMs?: number,
+): void {
   const scenario = getMeasuredScenario(scenarioId);
   const sample = (recordedSamples.get(scenarioId) ?? 0) + 1;
   recordedSamples.set(scenarioId, sample);
@@ -65,6 +67,7 @@ function recordScenario(scenarioId: string, measurement: LiveObservation, contex
     correctness: measurement.correctness,
     responsiveness: measurement.responsiveness,
     ...(attribution ? { attribution } : {}),
+    ...(signalDeliveryMs !== undefined ? { signalDeliveryMs } : {}),
     recordedAt: new Date().toISOString(),
   };
   const directory = runDirectory(currentRunKey());
@@ -86,26 +89,40 @@ async function markBrowserClock(page: Page): Promise<BrowserClockMark | null> {
  * or user data. A full navigation replaces the document (new time origin), so
  * every entry of the new document counts and its navigation timing is fresh.
  */
-async function readAttribution(page: Page, mark: BrowserClockMark | null, rscUrls: readonly string[]): Promise<ScenarioAttribution | undefined> {
+async function readAttribution(
+  page: Page,
+  mark: BrowserClockMark | null,
+  rscUrls: readonly string[],
+): Promise<ScenarioAttribution | undefined> {
   if (!mark) return undefined;
   try {
-    return await page.evaluate(({ timeOrigin, now, rscUrls: confirmedRscUrls }) => {
-      const sameDocument = performance.timeOrigin === timeOrigin;
-      const since = sameDocument ? now : 0;
-      const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
-      const fresh = !sameDocument && navigation !== undefined;
-      const resources = (performance.getEntriesByType("resource") as PerformanceResourceTiming[]).filter((entry) => entry.startTime >= since);
-      const rsc = resources.filter((entry) => confirmedRscUrls.includes(entry.name));
-      const sum = (entries: PerformanceResourceTiming[]): number => entries.reduce((total, entry) => total + (entry.transferSize || entry.encodedBodySize || 0), 0);
-      return {
-        navigationTtfbMs: fresh && navigation ? Math.round(navigation.responseStart - navigation.startTime) : null,
-        navigationResponseEndMs: fresh && navigation ? Math.round(navigation.responseEnd - navigation.startTime) : null,
-        requestCount: resources.length,
-        transferBytes: sum(resources),
-        rscRequestCount: rsc.length,
-        rscBytes: sum(rsc),
-      };
-    }, { ...mark, rscUrls: [...rscUrls] });
+    return await page.evaluate(
+      ({ timeOrigin, now, rscUrls: confirmedRscUrls }) => {
+        const sameDocument = performance.timeOrigin === timeOrigin;
+        const since = sameDocument ? now : 0;
+        const navigation = performance.getEntriesByType('navigation')[0] as
+          | PerformanceNavigationTiming
+          | undefined;
+        const fresh = !sameDocument && navigation !== undefined;
+        const resources = (performance.getEntriesByType('resource') as PerformanceResourceTiming[]).filter(
+          (entry) => entry.startTime >= since,
+        );
+        const rsc = resources.filter((entry) => confirmedRscUrls.includes(entry.name));
+        const sum = (entries: PerformanceResourceTiming[]): number =>
+          entries.reduce((total, entry) => total + (entry.transferSize || entry.encodedBodySize || 0), 0);
+        return {
+          navigationTtfbMs:
+            fresh && navigation ? Math.round(navigation.responseStart - navigation.startTime) : null,
+          navigationResponseEndMs:
+            fresh && navigation ? Math.round(navigation.responseEnd - navigation.startTime) : null,
+          requestCount: resources.length,
+          transferBytes: sum(resources),
+          rscRequestCount: rsc.length,
+          rscBytes: sum(rsc),
+        };
+      },
+      { ...mark, rscUrls: [...rscUrls] },
+    );
   } catch {
     return undefined;
   }
@@ -113,17 +130,22 @@ async function readAttribution(page: Page, mark: BrowserClockMark | null, rscUrl
 
 async function scenarioContext(page: Page, scenarioId: string): Promise<PerformanceContext> {
   const browser = page.context().browser();
-  if (!browser) throw new Error("A measured scenario requires an owned browser context.");
-  const browserState = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight, scale: window.devicePixelRatio }));
+  if (!browser) throw new Error('A measured scenario requires an owned browser context.');
+  const browserState = await page.evaluate(() => ({
+    width: window.innerWidth,
+    height: window.innerHeight,
+    scale: window.devicePixelRatio,
+  }));
   return capturePerformanceContext({
-    repositoryRoot: resolve(__dirname, "../../.."),
+    repositoryRoot: resolve(__dirname, '../../..'),
     evidenceDirectory: runDirectory(currentRunKey()),
     scenario: getMeasuredScenario(scenarioId),
-    browser: browser.browserType().name(), browserVersion: browser.version(),
+    browser: browser.browserType().name(),
+    browserVersion: browser.version(),
     viewport: page.viewportSize() ?? { width: browserState.width, height: browserState.height },
     deviceScaleFactor: browserState.scale,
     target: currentBackend(),
-    providerOrigin: new URL(requireEnv("NEXT_PUBLIC_SUPABASE_URL")).origin,
+    providerOrigin: new URL(requireEnv('NEXT_PUBLIC_SUPABASE_URL')).origin,
   });
 }
 
@@ -138,7 +160,12 @@ export async function expectUsableWithin(
   options: { page: Page; trigger: () => Promise<unknown>; usable: MeasuredTarget },
 ): Promise<number> {
   const scenario = getMeasuredScenario(scenarioId);
-  const usableBoundaries = new Set(["navigation-to-usable-content", "view-switch-to-usable-content", "interaction-to-visible-change", "interaction-to-settled"]);
+  const usableBoundaries = new Set([
+    'navigation-to-usable-content',
+    'view-switch-to-usable-content',
+    'interaction-to-visible-change',
+    'interaction-to-settled',
+  ]);
   if (!usableBoundaries.has(scenario.boundary)) {
     throw new Error(`Scenario ${scenarioId} is not a usable-content or interaction boundary.`);
   }
@@ -147,27 +174,71 @@ export async function expectUsableWithin(
   const context = await scenarioContext(options.page, scenarioId);
   const rscUrls = new Set<string>();
   const onResponse = (response: Response): void => {
-    if (response.headers()["content-type"]?.split(";")[0]?.trim() === "text/x-component") rscUrls.add(response.url());
+    if (response.headers()['content-type']?.split(';')[0]?.trim() === 'text/x-component')
+      rscUrls.add(response.url());
   };
-  options.page.on("response", onResponse);
+  options.page.on('response', onResponse);
   let measured: LiveObservation | undefined;
   try {
-    return await observeBrowserDuringMutation({
-      target: options.usable,
-      targetMs: scenario.budgetMs,
-      hardTimeoutMs: hardBudgetMs,
-      rejectNavigation: false,
-      mutation: async (startObservation) => {
-        await startObservation();
-        await options.trigger();
-      },
-      record: (measurement) => { measured = measurement; },
-    });
+    return await completeRecordedObservation(() =>
+      observeBrowserDuringMutation({
+        target: options.usable,
+        targetMs: scenario.budgetMs,
+        hardTimeoutMs: hardBudgetMs,
+        rejectNavigation: false,
+        mutation: async (startObservation) => {
+          await startObservation();
+          await options.trigger();
+        },
+        record: (measurement) => {
+          measured = measurement;
+        },
+      }),
+    );
   } finally {
-    options.page.off("response", onResponse);
+    options.page.off('response', onResponse);
     // The measured interval has ended. Resource inspection must not add to it.
-    if (measured) recordScenario(scenarioId, measured, context, await readAttribution(options.page, mark, [...rscUrls]));
+    if (measured)
+      recordScenario(scenarioId, measured, context, await readAttribution(options.page, mark, [...rscUrls]));
   }
+}
+
+type RealtimeSignal = { hostMs: number; wallMs: number; commitMs: number };
+const signalWatches = new WeakMap<Page, RealtimeSignal[]>();
+
+/**
+ * Records when Realtime data signals reach a receiving page. Call it before
+ * the page opens its channel: a socket that already exists is not observed.
+ */
+export function watchRealtimeSignals(page: Page): void {
+  if (signalWatches.has(page)) return;
+  const signals: RealtimeSignal[] = [];
+  signalWatches.set(page, signals);
+  page.on('websocket', (socket) =>
+    socket.on('framereceived', (frame) => {
+      // Only a data change carries a commit timestamp; joins, heartbeats and system messages do not.
+      if (typeof frame.payload !== 'string') return;
+      const commit = /"commit_timestamp":"([^"]+)"/.exec(frame.payload)?.[1];
+      const commitMs = commit ? Date.parse(commit) : Number.NaN;
+      if (Number.isFinite(commitMs))
+        signals.push({ hostMs: performance.now(), wallMs: Date.now(), commitMs });
+    }),
+  );
+}
+
+/**
+ * The provider's share: from the commit of the first data change after the
+ * submission until its signal reached the receiving session. The database
+ * clock runs in WSL or the cloud; a small skew against the host is allowed.
+ */
+function signalDeliveryMs(
+  signals: readonly RealtimeSignal[],
+  submitted: { hostMs: number; wallMs: number },
+): number | undefined {
+  const signal = signals.find(
+    (entry) => entry.hostMs >= submitted.hostMs && entry.commitMs >= submitted.wallMs - 100,
+  );
+  return signal ? Math.max(0, signal.wallMs - signal.commitMs) : undefined;
 }
 
 /**
@@ -181,20 +252,49 @@ export async function expectScenarioLiveWithin(
   options: { mutation: (beforeSubmit: () => Promise<void>) => Promise<void> },
 ): Promise<number> {
   const scenario = getMeasuredScenario(scenarioId);
-  if (scenario.boundary !== "before-submit-to-visible" || scenario.budgetMs !== LIVE_TARGET_MS) {
+  if (scenario.boundary !== 'before-submit-to-visible' || scenario.budgetMs !== LIVE_TARGET_MS) {
     throw new Error(`Scenario ${scenarioId} does not use the cross-session freshness contract.`);
   }
+  const signals = signalWatches.get(target.locator.page());
+  if (!signals)
+    throw new Error(
+      `Scenario ${scenarioId} needs watchRealtimeSignals(receivingPage) before that page loads.`,
+    );
   const context = await scenarioContext(target.locator.page(), scenarioId);
   const backend = currentBackend();
-  return observeBrowserDuringMutation({
-    target, targetMs: scenario.budgetMs, hardTimeoutMs: LIVE_HARD_BUDGET_MS[backend],
-    rejectNavigation: true, mutation: options.mutation,
-    record: (measurement) => {
-      recordScenario(scenarioId, measurement, context);
-      appendFileSync(resolve(runDirectory(currentRunKey()), "live-latencies.ndjson"), `${JSON.stringify({
-        label: scenarioId, backend, ...measurement, boundary: "before-submit-to-visible",
-        hardBudgetMs: LIVE_HARD_BUDGET_MS[backend], overTarget: measurement.responsiveness === "over_target", recordedAt: new Date().toISOString(),
-      })}\n`);
-    },
-  });
+  let submitted: { hostMs: number; wallMs: number } | undefined;
+  return completeRecordedObservation(() =>
+    observeBrowserDuringMutation({
+      target,
+      targetMs: scenario.budgetMs,
+      hardTimeoutMs: LIVE_HARD_BUDGET_MS[backend],
+      rejectNavigation: true,
+      mutation: (beforeSubmit) =>
+        options.mutation(async () => {
+          submitted = { hostMs: performance.now(), wallMs: Date.now() };
+          await beforeSubmit();
+        }),
+      record: (measurement) => {
+        recordScenario(
+          scenarioId,
+          measurement,
+          context,
+          undefined,
+          submitted ? signalDeliveryMs(signals, submitted) : undefined,
+        );
+        appendFileSync(
+          resolve(runDirectory(currentRunKey()), 'live-latencies.ndjson'),
+          `${JSON.stringify({
+            label: scenarioId,
+            backend,
+            ...measurement,
+            boundary: 'before-submit-to-visible',
+            hardBudgetMs: LIVE_HARD_BUDGET_MS[backend],
+            overTarget: measurement.responsiveness === 'over_target',
+            recordedAt: new Date().toISOString(),
+          })}\n`,
+        );
+      },
+    }),
+  );
 }

@@ -42,7 +42,9 @@ During the beta there is one customer, so production is the pilot and nothing is
 
 ## Configuration this decision needs
 
-- Vercel: the Supabase URL, publishable key and every other Supabase and R2 variable scoped per environment, Preview to DEV and Production to PROD (the owner does this in the Vercel dashboard before the step 5 preview). Today every environment points at PROD.
+Correction recorded 2026-09-25: the setup below was completed with the September 18 release; the previous future-tense description was stale.
+
+- Vercel: the Supabase URL, publishable key and every other Supabase and R2 variable scoped per environment, Preview to DEV and Production to PROD (applied by the owner on 2026-09-18 and verified in the linked release record). Preview uses DEV; Production uses PROD. Recheck scopes when deployment configuration changes.
 - Nothing on GitHub, nothing on Supabase.
 
 ## Revisit triggers
@@ -57,4 +59,4 @@ During the beta there is one customer, so production is the pilot and nothing is
 - [environments.md](../technical/environments.md) — the live configuration, project IDs, the migration rule and the publishing commands.
 - [Decision 0003](0003-dev-prod-environment-split.md) — the two-project model this flow runs on.
 - [Decision 0001](0001-infrastructure-stack.md) — the stack.
-- [Pre-Wave-3 step 5](../plans/phase-1/pre-wave-3/05-beta-acceptance-and-production-rollout.md) — the release that adopts this flow.
+- The pre-Wave-3 step 5 record, kept in Git history, holds the release that adopted this flow.

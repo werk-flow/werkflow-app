@@ -14,9 +14,16 @@ export async function readOrganizationClients(
   client: SupabaseClient<Database>,
   organizationId: string,
 ): Promise<Client[]> {
-  // A single request stops at PostgREST's max_rows without an error (PF-25).
+  // A single request stops at PostgREST's max_rows without an error.
   const { data, error } = await readCompleteRows(
-    (from, to) => client.from('clients').select('*').eq('organization_id', organizationId).order('name').order('id').range(from, to),
+    (from, to) =>
+      client
+        .from('clients')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .order('name')
+        .order('id')
+        .range(from, to),
     LIST_ROW_CAP,
   );
   if (error) throw new Error(`Failed to load clients for organization ${organizationId}: ${error.message}`);

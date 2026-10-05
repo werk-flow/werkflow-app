@@ -11,11 +11,9 @@
 // an unconfigured person never pays seven days per week.
 
 import type { EmploymentCondition } from '@/lib/personnel/types';
+import { isValidIsoDate } from '@/lib/calendar/date-range';
 import type { WorkSchedule } from '@/lib/personnel/schedule';
-import {
-  resolveDailyTarget,
-  type OrganizationHolidayCalendar,
-} from '@/lib/personnel/targets';
+import { resolveDailyTarget, type OrganizationHolidayCalendar } from '@/lib/personnel/targets';
 import type { VacationDayPortion, VacationRequest } from './types';
 
 /**
@@ -29,7 +27,7 @@ import type { VacationDayPortion, VacationRequest } from './types';
  */
 export function resolveVacationEntitlementForYear(
   conditions: EmploymentCondition[],
-  year: number
+  year: number,
 ): number | null {
   const yearEnd = `${year}-12-31`;
   const effective = conditions
@@ -52,32 +50,19 @@ export type VacationCountingContext = {
  */
 export const MAX_VACATION_RANGE_DAYS = 366;
 
-/** Strict YYYY-MM-DD validation without JavaScript's rollover behavior. */
-export function isValidIsoDate(value: string): boolean {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return false;
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const parsed = new Date(Date.UTC(year, month - 1, day));
-  return (
-    parsed.getUTCFullYear() === year &&
-    parsed.getUTCMonth() === month - 1 &&
-    parsed.getUTCDate() === day
-  );
-}
-
 /** Inclusive day span of an ISO date range without materializing the days. */
-export function countCalendarDaysInRange(
-  startDate: string,
-  endDate: string
-): number {
+export function countCalendarDaysInRange(startDate: string, endDate: string): number {
   const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
   const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
   if (
-    !isValidIsoDate(startDate) || !isValidIsoDate(endDate) ||
-    startYear === undefined || startMonth === undefined || startDay === undefined ||
-    endYear === undefined || endMonth === undefined || endDay === undefined
+    !isValidIsoDate(startDate) ||
+    !isValidIsoDate(endDate) ||
+    startYear === undefined ||
+    startMonth === undefined ||
+    startDay === undefined ||
+    endYear === undefined ||
+    endMonth === undefined ||
+    endDay === undefined
   ) {
     throw new Error(`Invalid ISO date range: ${startDate} – ${endDate}`);
   }
@@ -87,17 +72,19 @@ export function countCalendarDaysInRange(
 }
 
 /** Inclusive ISO-date iteration without timezone drift. */
-export function listIsoDatesInRange(
-  startDate: string,
-  endDate: string
-): string[] {
+export function listIsoDatesInRange(startDate: string, endDate: string): string[] {
   const dates: string[] = [];
   const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
   const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
   if (
-    !isValidIsoDate(startDate) || !isValidIsoDate(endDate) ||
-    startYear === undefined || startMonth === undefined || startDay === undefined ||
-    endYear === undefined || endMonth === undefined || endDay === undefined
+    !isValidIsoDate(startDate) ||
+    !isValidIsoDate(endDate) ||
+    startYear === undefined ||
+    startMonth === undefined ||
+    startDay === undefined ||
+    endYear === undefined ||
+    endMonth === undefined ||
+    endDay === undefined
   ) {
     throw new Error(`Invalid ISO date range: ${startDate} – ${endDate}`);
   }
@@ -106,7 +93,7 @@ export function listIsoDatesInRange(
   for (let time = cursor; time <= last; time += 86_400_000) {
     const date = new Date(time);
     dates.push(
-      `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`
+      `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`,
     );
   }
   return dates;
@@ -117,10 +104,7 @@ export function listIsoDatesInRange(
  * Derived from the resolved target (no absence input — consumption asks what
  * the day would have required, not what it requires after the vacation).
  */
-export function doesDateConsumeVacation(
-  dateIso: string,
-  context: VacationCountingContext
-): boolean {
+export function doesDateConsumeVacation(dateIso: string, context: VacationCountingContext): boolean {
   const target = resolveDailyTarget({ dateIso, ...context });
   if (target.targetMinutes <= 0) return false;
   // Labeled default source: the legacy 480 applies to every day including
@@ -139,7 +123,7 @@ export function countVacationDaysByYear(
     endDate: string;
     dayPortion: VacationDayPortion;
   },
-  context: VacationCountingContext
+  context: VacationCountingContext,
 ): Record<string, number> {
   const perDay = input.dayPortion === 'half_day' ? 0.5 : 1;
   const daysByYear: Record<string, number> = {};
@@ -158,12 +142,9 @@ export function countVacationDays(
     endDate: string;
     dayPortion: VacationDayPortion;
   },
-  context: VacationCountingContext
+  context: VacationCountingContext,
 ): number {
-  return Object.values(countVacationDaysByYear(input, context)).reduce(
-    (total, days) => total + days,
-    0
-  );
+  return Object.values(countVacationDaysByYear(input, context)).reduce((total, days) => total + days, 0);
 }
 
 export type VacationBalance = {
@@ -186,7 +167,7 @@ export type VacationBalance = {
 export function computeVacationBalance(
   year: number,
   requests: VacationRequest[],
-  context: VacationCountingContext
+  context: VacationCountingContext,
 ): VacationBalance {
   const yearKey = String(year);
   let takenDays = 0;
@@ -196,23 +177,18 @@ export function computeVacationBalance(
     if (request.status === 'approved') {
       takenDays += request.approvedDaysByYear?.[yearKey] ?? 0;
     } else if (request.status === 'pending') {
-      pendingDays +=
-        countVacationDaysByYear(request, context)[yearKey] ?? 0;
+      pendingDays += countVacationDaysByYear(request, context)[yearKey] ?? 0;
     }
   }
 
-  const entitlementDays = resolveVacationEntitlementForYear(
-    context.conditions,
-    year
-  );
+  const entitlementDays = resolveVacationEntitlementForYear(context.conditions, year);
 
   return {
     year,
     entitlementDays,
     takenDays,
     pendingDays,
-    remainingDays:
-      entitlementDays === null ? null : entitlementDays - takenDays,
+    remainingDays: entitlementDays === null ? null : entitlementDays - takenDays,
   };
 }
 

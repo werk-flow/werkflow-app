@@ -22,7 +22,7 @@ function expectedPrefixes(): string[] {
 }
 
 function quotedEntries(block: string): string[] {
-  return [...block.matchAll(/'([^']+)'/g)].map((match) => match[1]!);
+  return [...block.matchAll(/'([^']+)'/g)].flatMap((match) => (match[1] === undefined ? [] : [match[1]]));
 }
 
 test('PROTECTED_PREFIXES covers every authenticated route area', () => {
@@ -42,8 +42,13 @@ test('the proxy matcher routes every protected prefix', () => {
     // proxy: Step 3 (2026-09-13) found /zeiterfassung listed bare with four subroutes.
     const folder = authenticatedAreasOutsideGroup.includes(prefix) ? `app${prefix}` : `app/(app)${prefix}`;
     // Route groups and private folders (`(group)`, `_lib`) are not subroutes.
-    const nested = readdirSync(resolve(repositoryRoot, folder), { withFileTypes: true }).some((entry) => entry.isDirectory() && !/^[_(]/.test(entry.name));
+    const nested = readdirSync(resolve(repositoryRoot, folder), { withFileTypes: true }).some(
+      (entry) => entry.isDirectory() && !/^[_(]/.test(entry.name),
+    );
     const expected = nested ? `${prefix}/:path*` : prefix;
-    expect(entries.has(expected) || entries.has(`${prefix}/:path*`), `${expected} missing from the proxy matcher`).toBe(true);
+    expect(
+      entries.has(expected) || entries.has(`${prefix}/:path*`),
+      `${expected} missing from the proxy matcher`,
+    ).toBe(true);
   }
 });

@@ -2,9 +2,7 @@ import { describe, expect, test } from 'bun:test';
 
 import { computeBatchShiftItems, type BatchSourceOccurrence } from './batch';
 
-function timedSource(
-  overrides: Partial<BatchSourceOccurrence>
-): BatchSourceOccurrence {
+function timedSource(overrides: Partial<BatchSourceOccurrence>): BatchSourceOccurrence {
   return {
     occurrenceId: 'occurrence-1',
     version: 3,
@@ -41,7 +39,7 @@ describe('batch reschedule math', () => {
           endAt: '2026-09-08T13:00:00.000Z',
         }),
       ],
-      { dayShift: 0, newTime: '06:30' }
+      { dayShift: 0, newTime: '06:30' },
     );
     expect(result.success).toBe(true);
     if (!result.success) return;
@@ -62,7 +60,7 @@ describe('batch reschedule math', () => {
           endAt: '2026-10-23T08:00:00.000Z',
         }),
       ],
-      { dayShift: 3, newTime: null }
+      { dayShift: 3, newTime: null },
     );
     expect(result.success).toBe(true);
     if (!result.success) return;
@@ -81,7 +79,7 @@ describe('batch reschedule math', () => {
           endAt: '2026-03-28T02:30:00.000Z',
         }),
       ],
-      { dayShift: 1, newTime: null }
+      { dayShift: 1, newTime: null },
     );
     expect(result.success).toBe(true);
     if (!result.success) return;
@@ -100,8 +98,8 @@ describe('batch reschedule math', () => {
             endAt: '2026-09-07T09:00:00.000Z',
           }),
         ],
-        { dayShift: 1, newTime: null }
-      )
+        { dayShift: 1, newTime: null },
+      ),
     ).toEqual({
       success: false,
       error: 'batch_item_invalid',
@@ -123,8 +121,8 @@ describe('batch reschedule math', () => {
             endDateExclusive: '2026-09-08',
           },
         ],
-        { dayShift: 0, newTime: '08:00' }
-      )
+        { dayShift: 0, newTime: '08:00' },
+      ),
     ).toEqual({
       success: false,
       error: 'batch_item_all_day_needs_day_shift',
@@ -145,7 +143,7 @@ describe('batch reschedule math', () => {
           endDateExclusive: '2026-09-10',
         },
       ],
-      { dayShift: 7, newTime: '08:00' }
+      { dayShift: 7, newTime: '08:00' },
     );
     expect(result.success).toBe(true);
     if (!result.success) return;
@@ -155,19 +153,17 @@ describe('batch reschedule math', () => {
   });
 
   test('a no-op shift and invalid inputs are rejected deterministically', () => {
-    expect(
-      computeBatchShiftItems([timedSource({})], { dayShift: 0, newTime: null })
-    ).toEqual({ success: false, error: 'batch_shift_noop', occurrenceId: null });
-    expect(
-      computeBatchShiftItems([timedSource({})], { dayShift: 400, newTime: null })
-    ).toEqual({
+    expect(computeBatchShiftItems([timedSource({})], { dayShift: 0, newTime: null })).toEqual({
+      success: false,
+      error: 'batch_shift_noop',
+      occurrenceId: null,
+    });
+    expect(computeBatchShiftItems([timedSource({})], { dayShift: 400, newTime: null })).toEqual({
       success: false,
       error: 'batch_shift_invalid',
       occurrenceId: null,
     });
-    expect(
-      computeBatchShiftItems([timedSource({})], { dayShift: 1, newTime: '25:00' })
-    ).toEqual({
+    expect(computeBatchShiftItems([timedSource({})], { dayShift: 1, newTime: '25:00' })).toEqual({
       success: false,
       error: 'batch_shift_invalid',
       occurrenceId: null,
@@ -177,7 +173,7 @@ describe('batch reschedule math', () => {
   test('a structurally broken item aborts with its occurrence id (all-or-nothing)', () => {
     const result = computeBatchShiftItems(
       [timedSource({}), timedSource({ occurrenceId: 'broken', startAt: null })],
-      { dayShift: 1, newTime: null }
+      { dayShift: 1, newTime: null },
     );
     expect(result).toEqual({
       success: false,

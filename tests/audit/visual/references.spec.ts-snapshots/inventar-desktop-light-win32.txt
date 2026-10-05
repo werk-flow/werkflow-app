@@ -1,0 +1,59 @@
+Haustechnik Krämer GmbH
+Organisation erstellen
+Dashboard
+Aufgaben
+3
+3 offene Aufgaben und Benachrichtigungen
+Kalender
+Zeiterfassung
+Qualifikationen
+Anfragen
+Aufträge
+Dokumente
+Inventar
+Service
+Arbeitsvorlagen
+Mitarbeiter
+Kunden
+MK
+Martin Krämer
+martin.kraemer@haustechnik-kraemer.de
+Inventar
+1 Artikel · 1 Lager · 0 geplante Artikel
+CSV importieren
+Lager anlegen
+Artikel anlegen
+Artikel mit Bestand
+1
+Knapp
+0
+Leer
+0
+Geplante Artikel
+0
+Alle Artikel
+Lager
+Geplant
+Bewegungen
+Alle Typen
+Alle Bestände
+Alle Lager
+Artikel
+Typ
+Lager
+Bestand
+Geplant
+Verfügbar
+Status
+Kupferrohr 15 mm
+Material
+Hauptlager
+20 Stück
+20 Stück
+0 Stück
+20 Stück
+Auf Lager
+Aktionen
+1–1
+von
+1

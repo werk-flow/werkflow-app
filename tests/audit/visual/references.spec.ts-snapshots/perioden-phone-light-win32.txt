@@ -1,0 +1,14 @@
+Menü öffnen
+Zeiterfassung
+Zeiterfassung
+Zeitkonto
+Perioden
+Regeln & Export
+Abrechnungsperioden
+Jeder Kalendermonat wird vorbereitet, geprüft und dann für die Lohnabrechnung abgeschlossen.
+Monat vorbereiten oder neu berechnen
+Monat
+*
+Pflichtfeld
+Periode vorbereiten
+Noch keine Periode vorbereitet.

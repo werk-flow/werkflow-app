@@ -25,7 +25,9 @@ function conflict(kind: PlanningConflict['kind']): PlanningConflict {
 }
 
 function dimension(result: ReturnType<typeof composeReadiness>, key: string) {
-  return result.dimensions.find((entry) => entry.key === key)!;
+  const found = result.dimensions.find((entry) => entry.key === key);
+  if (!found) throw new Error(`missing readiness dimension: ${key}`);
+  return found;
 }
 
 describe('readiness composition', () => {
@@ -33,42 +35,30 @@ describe('readiness composition', () => {
     const result = composeReadiness(
       facts({
         planningConflicts: [conflict('overlap'), conflict('qualification')],
-      })
+      }),
     );
     expect(dimension(result, 'capacity').state).toBe('warning');
     expect(dimension(result, 'capacity').details).toEqual(['Konflikt: overlap']);
     expect(dimension(result, 'qualification').state).toBe('warning');
-    expect(dimension(result, 'qualification').details).toEqual([
-      'Konflikt: qualification',
-    ]);
+    expect(dimension(result, 'qualification').details).toEqual(['Konflikt: qualification']);
   });
 
   test('missing site is a visible unknown, never converted into readiness', () => {
-    const result = composeReadiness(
-      facts({ site: { known: false, reason: 'missing' } })
-    );
+    const result = composeReadiness(facts({ site: { known: false, reason: 'missing' } }));
     expect(dimension(result, 'site').state).toBe('unknown');
-    expect(dimension(result, 'site').details).toEqual([
-      'Kein Einsatzort hinterlegt.',
-    ]);
+    expect(dimension(result, 'site').details).toEqual(['Kein Einsatzort hinterlegt.']);
   });
 
   test('a failed site lookup stays distinguishable from a missing site', () => {
-    const result = composeReadiness(
-      facts({ site: { known: false, reason: 'load_failed' } })
-    );
+    const result = composeReadiness(facts({ site: { known: false, reason: 'load_failed' } }));
     expect(dimension(result, 'site').state).toBe('unknown');
-    expect(dimension(result, 'site').details).toEqual([
-      'Einsatzort konnte nicht geladen werden.',
-    ]);
+    expect(dimension(result, 'site').details).toEqual(['Einsatzort konnte nicht geladen werden.']);
   });
 
   test('travel warns only on explicit zero-gap facts and is otherwise "nicht bewertet"', () => {
     const quiet = composeReadiness(facts({}));
     expect(dimension(quiet, 'travel').state).toBe('unknown');
-    expect(dimension(quiet, 'travel').details).toEqual([
-      'Fahrzeit nicht bewertet.',
-    ]);
+    expect(dimension(quiet, 'travel').details).toEqual(['Fahrzeit nicht bewertet.']);
 
     const warned = composeReadiness(
       facts({
@@ -83,7 +73,7 @@ describe('readiness composition', () => {
             nextTitle: 'Besuch B',
           },
         ],
-      })
+      }),
     );
     expect(dimension(warned, 'travel').state).toBe('warning');
   });
@@ -102,13 +92,11 @@ describe('readiness composition', () => {
             },
           ],
         },
-      })
+      }),
     );
     expect(dimension(covered, 'material').state).toBe('ok');
     expect(dimension(covered, 'material').label).toContain('nicht reserviert');
-    expect(dimension(covered, 'material').details[0]).toContain(
-      'nicht reserviert'
-    );
+    expect(dimension(covered, 'material').details[0]).toContain('nicht reserviert');
 
     const exactCover = composeReadiness(
       facts({
@@ -123,7 +111,7 @@ describe('readiness composition', () => {
             },
           ],
         },
-      })
+      }),
     );
     expect(dimension(exactCover, 'material').state).toBe('ok');
 
@@ -140,7 +128,7 @@ describe('readiness composition', () => {
             },
           ],
         },
-      })
+      }),
     );
     expect(dimension(short, 'material').state).toBe('warning');
   });
@@ -153,9 +141,7 @@ describe('readiness composition', () => {
   test('tools are never assessed in this slice — always the labeled unknown', () => {
     const result = composeReadiness(facts({}));
     expect(dimension(result, 'tools').state).toBe('unknown');
-    expect(dimension(result, 'tools').details).toEqual([
-      'Werkzeugverfügbarkeit nicht bewertet.',
-    ]);
+    expect(dimension(result, 'tools').details).toEqual(['Werkzeugverfügbarkeit nicht bewertet.']);
   });
 
   test('snapshot mirrors every dimension for the audit record', () => {
@@ -175,7 +161,7 @@ describe('readiness composition', () => {
         key: entry.key,
         state: entry.state,
         details: entry.details,
-      }))
+      })),
     );
   });
 });

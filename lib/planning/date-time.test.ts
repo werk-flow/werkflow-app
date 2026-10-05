@@ -14,9 +14,7 @@ describe('planning Europe/Berlin wall times', () => {
       localDateTime: '2026-08-10T09:00',
       resolution: 'exact',
     });
-    expect(resolveBerlinWallTime('2026-01-10T09:00')?.instant.toISOString()).toBe(
-      '2026-01-10T08:00:00.000Z'
-    );
+    expect(resolveBerlinWallTime('2026-01-10T09:00')?.instant.toISOString()).toBe('2026-01-10T08:00:00.000Z');
   });
 
   test('shifts a nonexistent spring wall time forward by the DST gap', () => {
@@ -39,8 +37,8 @@ describe('planning Europe/Berlin wall times', () => {
     expect(
       splitTimedIntervalByBerlinDate(
         new Date('2026-08-10T21:30:00.000Z'),
-        new Date('2026-08-11T01:30:00.000Z')
-      )
+        new Date('2026-08-11T01:30:00.000Z'),
+      ),
     ).toEqual([
       { localDate: '2026-08-10', minutes: 30 },
       { localDate: '2026-08-11', minutes: 210 },
@@ -51,8 +49,8 @@ describe('planning Europe/Berlin wall times', () => {
     expect(
       splitTimedIntervalByBerlinDate(
         new Date('2026-03-28T22:00:00.000Z'),
-        new Date('2026-03-29T03:00:00.000Z')
-      )
+        new Date('2026-03-29T03:00:00.000Z'),
+      ),
     ).toEqual([
       { localDate: '2026-03-28', minutes: 60 },
       { localDate: '2026-03-29', minutes: 240 },
@@ -63,8 +61,8 @@ describe('planning Europe/Berlin wall times', () => {
     expect(
       splitTimedIntervalByBerlinDate(
         new Date('2026-10-24T22:00:00.000Z'),
-        new Date('2026-10-26T00:00:00.000Z')
-      )
+        new Date('2026-10-26T00:00:00.000Z'),
+      ),
     ).toEqual([
       { localDate: '2026-10-25', minutes: 1500 },
       { localDate: '2026-10-26', minutes: 60 },

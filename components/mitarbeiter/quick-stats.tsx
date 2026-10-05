@@ -7,16 +7,13 @@ import { useAttentionCounts } from '@/components/realtime/attention-count-provid
 interface QuickStatsProps {
   organizationId: string;
   totalMembers: number;
-  /** Active working count - passed from parent that has statusMap */
-  activeWorkingCount: number;
+  /** Active working count from the parent's statusMap; null while the status read failed. */
+  activeWorkingCount: number | null;
   /** Whether the current user is an admin */
   isAdmin?: boolean;
 }
 
-export function QuickStats({
-  totalMembers,
-  activeWorkingCount,
-}: QuickStatsProps) {
+export function QuickStats({ totalMembers, activeWorkingCount }: QuickStatsProps) {
   // Time and vacation approvals — matches the Anträge tab this card links to.
   const { approvalsCount } = useAttentionCounts();
   const pendingCount = approvalsCount;
@@ -31,15 +28,17 @@ export function QuickStats({
         </span>
       </div>
 
-      <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2">
-        <Clock className="h-4 w-4 text-success-text" />
-        <span className="text-sm">
-          <span className="font-medium">{activeWorkingCount}</span>
-          <span className="text-muted-foreground ml-1">
-            {activeWorkingCount === 1 ? 'arbeitet gerade' : 'arbeiten gerade'}
+      {activeWorkingCount !== null && (
+        <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2">
+          <Clock className="h-4 w-4 text-success-text" />
+          <span className="text-sm">
+            <span className="font-medium">{activeWorkingCount}</span>
+            <span className="text-muted-foreground ml-1">
+              {activeWorkingCount === 1 ? 'arbeitet gerade' : 'arbeiten gerade'}
+            </span>
           </span>
-        </span>
-      </div>
+        </div>
+      )}
 
       {pendingCount > 0 && (
         <Link
@@ -48,13 +47,9 @@ export function QuickStats({
         >
           <AlertCircle className="h-4 w-4 text-warning-soft-foreground" />
           <span className="text-sm">
-            <span className="font-medium text-warning-soft-foreground">
-              {pendingCount}
-            </span>
+            <span className="font-medium text-warning-soft-foreground">{pendingCount}</span>
             <span className="text-warning-soft-foreground ml-1">
-              {pendingCount === 1
-                ? 'ausstehender Antrag'
-                : 'ausstehende Anträge'}
+              {pendingCount === 1 ? 'ausstehender Antrag' : 'ausstehende Anträge'}
             </span>
           </span>
         </Link>

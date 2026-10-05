@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { assertWorkspaceTestLock } from '@/lib/testing/workspace-test-lock';
+import { assertWorkspaceTestLock } from '@/lib/testing/runner/workspace-test-lock';
 import { textInDom } from '../golden/support/steps/shared';
 
 test.beforeEach(async ({ page }) => {
@@ -8,13 +8,22 @@ test.beforeEach(async ({ page }) => {
   if (!bundle) throw new Error('Run through bun tests/ui-contracts/run.ts.');
   await page.clock.install({ time: new Date('2026-09-08T10:00:00Z') });
   await page.clock.pauseAt(new Date('2026-09-08T10:00:01Z'));
-  await page.route('http://localhost/ui-contracts**', (route) => route.fulfill({ contentType: 'text/html', body: '<html lang="de"><body><div id="root"></div></body></html>' }));
+  await page.route('http://localhost/ui-contracts**', (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      body: '<html lang="de"><body><div id="root"></div></body></html>',
+    }),
+  );
   await page.goto('http://localhost/ui-contracts');
-  await page.evaluate(() => { window.uiContractFixture = 'list-navigation'; });
+  await page.evaluate(() => {
+    window.uiContractFixture = 'list-navigation';
+  });
   await page.addScriptTag({ path: bundle });
 });
 
-test('completed pagination does not become pending again after another control changes the URL', async ({ page }) => {
+test('completed pagination does not become pending again after another control changes the URL', async ({
+  page,
+}) => {
   await page.getByRole('button', { name: 'Zweite Seite laden' }).click();
   await expect(page.getByLabel('Listenstatus')).toHaveText('Wird geladen');
   await page.evaluate(() => {
@@ -26,7 +35,9 @@ test('completed pagination does not become pending again after another control c
   await page.evaluate(() => window.listNavigationContract.commit('/ui-contracts?view=work'));
   await expect(page.getByLabel('Listenstatus')).toHaveText('Bereit');
   await page.clock.runFor(15_001);
-  await expect(textInDom(page, 'Die Liste wurde noch nicht aktualisiert. Bitte aktualisiere die Seite.')).toHaveCount(0);
+  await expect(
+    textInDom(page, 'Die Liste wurde noch nicht aktualisiert. Bitte aktualisiere die Seite.'),
+  ).toHaveCount(0);
 });
 
 test('rapid searches retain the latest request across an intermediate URL commit', async ({ page }) => {
@@ -56,7 +67,9 @@ test('history navigation cancels a queued search and new pagination uses that UR
   await page.clock.runFor(251);
   expect(await page.evaluate(() => window.listNavigationContract.requests.length)).toBe(0);
   await page.getByRole('button', { name: 'Zweite Seite laden' }).click();
-  expect(await page.evaluate(() => window.listNavigationContract.requests[0])).toBe('/ui-contracts?view=folders&page=2');
+  expect(await page.evaluate(() => window.listNavigationContract.requests[0])).toBe(
+    '/ui-contracts?view=folders&page=2',
+  );
 });
 
 test('another control replaces an unfinished request and cancels its queued follow-up', async ({ page }) => {
@@ -67,12 +80,18 @@ test('another control replaces an unfinished request and cancels its queued foll
   await expect(page.getByLabel('Listenstatus')).toHaveText('Bereit');
   await page.clock.runFor(15_001);
   expect(await page.evaluate(() => window.listNavigationContract.requests.length)).toBe(1);
-  await expect(textInDom(page, 'Die Liste wurde noch nicht aktualisiert. Bitte aktualisiere die Seite.')).toHaveCount(0);
+  await expect(
+    textInDom(page, 'Die Liste wurde noch nicht aktualisiert. Bitte aktualisiere die Seite.'),
+  ).toHaveCount(0);
   await page.getByRole('button', { name: 'Zweite Seite laden' }).click();
-  expect(await page.evaluate(() => window.listNavigationContract.requests[1])).toBe('/ui-contracts?view=work&page=2');
+  expect(await page.evaluate(() => window.listNavigationContract.requests[1])).toBe(
+    '/ui-contracts?view=work&page=2',
+  );
 });
 
-test('pager retains a distinct count announcement and truthful loading feedback while a page is pending', async ({ page }) => {
+test('pager retains a distinct count announcement and truthful loading feedback while a page is pending', async ({
+  page,
+}) => {
   const pager = page.getByRole('navigation', { name: 'Testliste', exact: true });
   const count = pager.getByRole('status', { name: 'Eintragsanzahl', exact: true });
   await expect(count).toHaveText('1–50 von 61');

@@ -8,5 +8,7 @@ export interface CalendarMember {
 }
 
 export function memberDisplayName(member: CalendarMember): string {
-  return member.first_name || member.last_name ? `${member.first_name || ''} ${member.last_name || ''}`.trim() : member.email;
+  return member.first_name || member.last_name
+    ? `${member.first_name || ''} ${member.last_name || ''}`.trim()
+    : member.email;
 }

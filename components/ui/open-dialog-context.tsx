@@ -1,14 +1,6 @@
 'use client';
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 /**
  * Tracks whether any overlay (Dialog, AlertDialog, Sheet) is currently open.
@@ -37,16 +29,9 @@ export function OpenDialogProvider({ children }: { children: ReactNode }) {
     return () => setOpenCount((count) => Math.max(0, count - 1));
   }, []);
 
-  const value = useMemo(
-    () => ({ register, anyOpen: openCount > 0 }),
-    [register, openCount]
-  );
+  const value = useMemo(() => ({ register, anyOpen: openCount > 0 }), [register, openCount]);
 
-  return (
-    <OpenDialogContext.Provider value={value}>
-      {children}
-    </OpenDialogContext.Provider>
-  );
+  return <OpenDialogContext.Provider value={value}>{children}</OpenDialogContext.Provider>;
 }
 
 /**

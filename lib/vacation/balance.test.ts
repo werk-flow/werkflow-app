@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { isValidIsoDate } from '@/lib/calendar/date-range';
 
 import type { EmploymentCondition } from '@/lib/personnel/types';
 import type { WorkSchedule } from '@/lib/personnel/schedule';
@@ -13,7 +14,6 @@ import {
   countVacationDays,
   countVacationDaysByYear,
   formatVacationDays,
-  isValidIsoDate,
   listIsoDatesInRange,
   MAX_VACATION_RANGE_DAYS,
   resolveVacationEntitlementForYear,
@@ -21,11 +21,7 @@ import {
 } from './balance';
 import type { VacationRequest } from './types';
 
-function makeSchedule(
-  validFrom: string,
-  dayMinutes: number[],
-  id = `schedule-${validFrom}`
-): WorkSchedule {
+function makeSchedule(validFrom: string, dayMinutes: number[], id = `schedule-${validFrom}`): WorkSchedule {
   return {
     id,
     organizationId: 'org-1',
@@ -42,7 +38,7 @@ function makeSchedule(
 function makeCondition(
   validFrom: string,
   vacationDaysPerYear: number | null,
-  weeklyHours: number | null = null
+  weeklyHours: number | null = null,
 ): EmploymentCondition {
   return {
     id: `condition-${validFrom}`,
@@ -95,9 +91,7 @@ const FULL_TIME_CONTEXT: VacationCountingContext = {
 
 const BAVARIA_CALENDAR: OrganizationHolidayCalendar = {
   holidayRegion: 'BY',
-  holidayRegionHistory: [
-    { region: 'BY', effectiveFrom: '2026-01-01T00:00:00Z' },
-  ],
+  holidayRegionHistory: [{ region: 'BY', effectiveFrom: '2026-01-01T00:00:00Z' }],
   closureDays: [],
 };
 
@@ -107,16 +101,11 @@ describe('resolveVacationEntitlementForYear', () => {
   });
 
   test('condition without vacation days → null', () => {
-    expect(
-      resolveVacationEntitlementForYear([makeCondition('2026-01-01', null)], 2026)
-    ).toBeNull();
+    expect(resolveVacationEntitlementForYear([makeCondition('2026-01-01', null)], 2026)).toBeNull();
   });
 
   test('newest condition effective within the year governs it', () => {
-    const conditions = [
-      makeCondition('2025-01-01', 28),
-      makeCondition('2026-07-01', 32),
-    ];
+    const conditions = [makeCondition('2025-01-01', 28), makeCondition('2026-07-01', 32)];
     expect(resolveVacationEntitlementForYear(conditions, 2025)).toBe(28);
     // Mid-year change: the latest value entered for the year applies.
     expect(resolveVacationEntitlementForYear(conditions, 2026)).toBe(32);
@@ -131,9 +120,7 @@ describe('resolveVacationEntitlementForYear', () => {
 
 describe('listIsoDatesInRange', () => {
   test('single day and multi-day inclusive ranges', () => {
-    expect(listIsoDatesInRange('2026-08-10', '2026-08-10')).toEqual([
-      '2026-08-10',
-    ]);
+    expect(listIsoDatesInRange('2026-08-10', '2026-08-10')).toEqual(['2026-08-10']);
     expect(listIsoDatesInRange('2026-12-30', '2027-01-02')).toEqual([
       '2026-12-30',
       '2026-12-31',
@@ -149,9 +136,7 @@ describe('countCalendarDaysInRange', () => {
     expect(countCalendarDaysInRange('2026-12-30', '2027-01-02')).toBe(4);
     // A full leap-adjacent year stays within the boundary limit.
     expect(countCalendarDaysInRange('2026-01-01', '2026-12-31')).toBe(365);
-    expect(
-      countCalendarDaysInRange('2026-01-01', '2027-01-01')
-    ).toBeLessThanOrEqual(MAX_VACATION_RANGE_DAYS);
+    expect(countCalendarDaysInRange('2026-01-01', '2027-01-01')).toBeLessThanOrEqual(MAX_VACATION_RANGE_DAYS);
   });
 });
 
@@ -183,8 +168,8 @@ describe('countVacationDaysByYear', () => {
     expect(
       countVacationDays(
         { startDate: '2026-08-06', endDate: '2026-08-10', dayPortion: 'full' },
-        FULL_TIME_CONTEXT
-      )
+        FULL_TIME_CONTEXT,
+      ),
     ).toBe(3);
   });
 
@@ -197,8 +182,8 @@ describe('countVacationDaysByYear', () => {
           schedules: [makeSchedule('2026-01-01', THREE_DAY_WEEK)],
           conditions: [],
           calendar: EMPTY_HOLIDAY_CALENDAR,
-        }
-      )
+        },
+      ),
     ).toBe(3);
   });
 
@@ -211,7 +196,7 @@ describe('countVacationDaysByYear', () => {
         schedules: [makeSchedule('2026-01-01', FULL_TIME)],
         conditions: [],
         calendar: BAVARIA_CALENDAR,
-      }
+      },
     );
     // Mo–Fr week containing the Thursday holiday: 4 instead of 5.
     expect(consumed).toBe(4);
@@ -227,7 +212,7 @@ describe('countVacationDaysByYear', () => {
           ...EMPTY_HOLIDAY_CALENDAR,
           closureDays: [{ closureDate: '2026-08-05', label: 'Betriebsruhe' }],
         },
-      }
+      },
     );
     expect(consumed).toBe(4);
   });
@@ -238,8 +223,8 @@ describe('countVacationDaysByYear', () => {
     expect(
       countVacationDays(
         { startDate: '2026-08-03', endDate: '2026-08-09', dayPortion: 'full' },
-        { schedules: [], conditions: [], calendar: EMPTY_HOLIDAY_CALENDAR }
-      )
+        { schedules: [], conditions: [], calendar: EMPTY_HOLIDAY_CALENDAR },
+      ),
     ).toBe(5);
   });
 
@@ -251,8 +236,8 @@ describe('countVacationDaysByYear', () => {
           schedules: [],
           conditions: [makeCondition('2026-01-01', 30, 20)],
           calendar: EMPTY_HOLIDAY_CALENDAR,
-        }
-      )
+        },
+      ),
     ).toBe(5);
   });
 
@@ -260,8 +245,8 @@ describe('countVacationDaysByYear', () => {
     expect(
       countVacationDays(
         { startDate: '2026-08-10', endDate: '2026-08-10', dayPortion: 'half_day' },
-        FULL_TIME_CONTEXT
-      )
+        FULL_TIME_CONTEXT,
+      ),
     ).toBe(0.5);
   });
 
@@ -274,8 +259,8 @@ describe('countVacationDaysByYear', () => {
           schedules: [makeSchedule('2026-01-01', THREE_DAY_WEEK)],
           conditions: [],
           calendar: EMPTY_HOLIDAY_CALENDAR,
-        }
-      )
+        },
+      ),
     ).toBe(0);
   });
 
@@ -283,7 +268,7 @@ describe('countVacationDaysByYear', () => {
     // 2026-12-30 Wed, 2026-12-31 Thu, 2027-01-01 Fri, 2027-01-02 Sat.
     const byYear = countVacationDaysByYear(
       { startDate: '2026-12-30', endDate: '2027-01-02', dayPortion: 'full' },
-      FULL_TIME_CONTEXT
+      FULL_TIME_CONTEXT,
     );
     expect(byYear).toEqual({ '2026': 2, '2027': 1 });
   });
@@ -376,7 +361,7 @@ describe('computeVacationBalance', () => {
           approvedDaysByYear: { '2026': 4 },
         }),
       ],
-      context
+      context,
     );
     expect(balance.entitlementDays).toBe(30);
     expect(balance.takenDays).toBe(4);
@@ -394,7 +379,7 @@ describe('computeVacationBalance', () => {
           endDate: '2026-08-11',
         }),
       ],
-      context
+      context,
     );
     expect(balance.takenDays).toBe(0);
     expect(balance.pendingDays).toBe(2);
@@ -413,7 +398,7 @@ describe('computeVacationBalance', () => {
           approvedDaysByYear: { '2026': 3 },
         }),
       ],
-      context
+      context,
     );
     expect(balance.takenDays).toBe(0);
     expect(balance.remainingDays).toBe(30);
@@ -435,7 +420,7 @@ describe('computeVacationBalance', () => {
           approvedDaysByYear: { '2026': 5 },
         }),
       ],
-      changedContext
+      changedContext,
     );
     expect(balance.takenDays).toBe(5);
   });
@@ -450,7 +435,7 @@ describe('computeVacationBalance', () => {
           approvedDaysByYear: { '2026': 2 },
         }),
       ],
-      { ...context, conditions: [] }
+      { ...context, conditions: [] },
     );
     expect(balance.entitlementDays).toBeNull();
     expect(balance.takenDays).toBe(2);

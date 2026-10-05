@@ -4,12 +4,22 @@ type WaitingRequest = {
   priority: RequestPriority;
   start: () => void;
 };
-type ScheduleRequest = <Result>(priority: RequestPriority, signal: AbortSignal, operation: () => Promise<Result>) => Promise<Result>;
+type ScheduleRequest = <Result>(
+  priority: RequestPriority,
+  signal: AbortSignal,
+  operation: () => Promise<Result>,
+) => Promise<Result>;
 
 /** Bound one server process's backend pressure while reserving room for user work. */
 export function createRequestScheduler(maximum = 8, maximumBackground = 4): ScheduleRequest {
-  if (!Number.isInteger(maximum) || maximum < 1 || !Number.isInteger(maximumBackground)
-    || maximumBackground < 1 || maximumBackground > maximum) throw new Error('Invalid request concurrency limits');
+  if (
+    !Number.isInteger(maximum) ||
+    maximum < 1 ||
+    !Number.isInteger(maximumBackground) ||
+    maximumBackground < 1 ||
+    maximumBackground > maximum
+  )
+    throw new Error('Invalid request concurrency limits');
   const waiting: WaitingRequest[] = [];
   let active = 0;
   let activeBackground = 0;
@@ -18,8 +28,10 @@ export function createRequestScheduler(maximum = 8, maximumBackground = 4): Sche
   function dispatch(): void {
     while (active < maximum) {
       let index = waiting.findIndex((request) => request.priority === 'foreground');
-      const backgroundIndex = activeBackground < maximumBackground
-        ? waiting.findIndex((request) => request.priority === 'background') : -1;
+      const backgroundIndex =
+        activeBackground < maximumBackground
+          ? waiting.findIndex((request) => request.priority === 'background')
+          : -1;
       // At most one full foreground burst before a waiting background read.
       if (backgroundIndex >= 0 && (index < 0 || foregroundStarts >= maximum)) index = backgroundIndex;
       if (index < 0) return;
@@ -30,9 +42,16 @@ export function createRequestScheduler(maximum = 8, maximumBackground = 4): Sche
     }
   }
 
-  return async function schedule<Result>(priority: RequestPriority, signal: AbortSignal, operation: () => Promise<Result>): Promise<Result> {
+  return async function schedule<Result>(
+    priority: RequestPriority,
+    signal: AbortSignal,
+    operation: () => Promise<Result>,
+  ): Promise<Result> {
     await new Promise<void>((resolve, reject) => {
-      if (signal.aborted) { reject(signal.reason); return; }
+      if (signal.aborted) {
+        reject(signal.reason);
+        return;
+      }
       const pending: WaitingRequest = {
         priority,
         start: () => {

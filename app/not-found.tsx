@@ -1,16 +1,15 @@
 import Link from 'next/link';
+import { StandaloneScreen } from '@/components/shared/standalone-screen';
 import { Button } from '@/components/ui/button';
 
 export default function NotFoundPage() {
   return (
-    <main className="flex min-h-dvh flex-col items-center justify-center bg-background px-6">
+    <StandaloneScreen>
       <div className="w-full max-w-lg rounded-lg border bg-card p-8 text-center shadow-sm">
-        <h1 className="text-3xl font-semibold tracking-tight">
-        Seite nicht gefunden
-        </h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Seite nicht gefunden</h1>
         <p className="mt-3 text-muted-foreground">
-          Die angeforderte Seite existiert nicht oder wurde verschoben.
-          Überprüfe die eingegebene Adresse oder kehre zum Dashboard zurück.
+          Die angeforderte Seite existiert nicht oder wurde verschoben. Überprüfe die eingegebene Adresse oder
+          kehre zum Dashboard zurück.
         </p>
         <div className="mt-6 flex justify-center">
           <Button asChild>
@@ -18,6 +17,6 @@ export default function NotFoundPage() {
           </Button>
         </div>
       </div>
-    </main>
+    </StandaloneScreen>
   );
 }

@@ -1,0 +1,23 @@
+Menü öffnen
+Einstellungen
+Profil
+Konto & Sicherheit
+Abonnement & Abrechnung
+Organisation
+Organisationweite Grundeinstellungen und Standardwerte.
+Gilt für Haustechnik Krämer GmbH
+Organisationsdetails
+Die wichtigsten Stammdaten deiner aktiven Organisation auf einen Blick.
+Deine Rolle
+Admin
+Erstellt am
+1. Januar 2026
+Allgemeine Angaben
+Admins können den Organisationsnamen und den Code für den Beitritt pflegen.
+Name der Organisation
+*
+Pflichtfeld
+Pro Admin darf jeder Organisationsname nur einmal vergeben sein.
+Organisationscode
+*
+Pflichtfeld

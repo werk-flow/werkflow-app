@@ -13,12 +13,18 @@ declare global {
 }
 
 window.organizationContract = {
-  cookie: 'organization-one', writes: [], navigations: [], reads: [],
+  cookie: 'organization-one',
+  writes: [],
+  navigations: [],
+  reads: [],
   finishCookie(success): void {
     const write = pending;
     if (!write) throw new Error('No pending organization cookie write.');
     pending = null;
-    if (!success) { write.reject(new Error('not_a_member')); return; }
+    if (!success) {
+      write.reject(new Error('not_a_member'));
+      return;
+    }
     window.organizationContract.cookie = write.organizationId;
     write.resolve();
   },
@@ -26,11 +32,21 @@ window.organizationContract = {
 
 export async function setActiveOrgCookie(organizationId: string): Promise<void> {
   window.organizationContract.writes.push(organizationId);
-  await new Promise<void>((resolve, reject) => { pending = { resolve, reject, organizationId }; });
+  await new Promise<void>((resolve, reject) => {
+    pending = { resolve, reject, organizationId };
+  });
 }
 const router = {
-  refresh(): void { window.organizationContract.navigations.push('refresh'); },
-  push(path: string): void { window.organizationContract.navigations.push(path); },
+  refresh(): void {
+    window.organizationContract.navigations.push('refresh');
+  },
+  push(path: string): void {
+    window.organizationContract.navigations.push(path);
+  },
 };
-export function useRouter(): typeof router { return router; }
-export function usePathname(): string { return '/dashboard'; }
+export function useRouter(): typeof router {
+  return router;
+}
+export function usePathname(): string {
+  return '/dashboard';
+}

@@ -5,7 +5,8 @@ import { LogOut } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
-import { clearEmailChangeChallengeBeforeSignOut } from '@/lib/settings/email-change-actions';
+import { clearEmailChangeChallengeQuietly } from '@/hooks/use-sign-out';
+import { loadDocument } from '@/lib/navigation/document-load';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
 interface SignOutAndRedirectButtonProps {
@@ -17,7 +18,7 @@ interface SignOutAndRedirectButtonProps {
 export function SignOutAndRedirectButton({
   inviteCode,
   invitedEmail,
-  isExistingUser
+  isExistingUser,
 }: SignOutAndRedirectButtonProps) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [isLoading, setIsLoading] = useState(false);
@@ -28,50 +29,38 @@ export function SignOutAndRedirectButton({
     setError(null);
 
     try {
-      try {
-        const cleanupResult = await clearEmailChangeChallengeBeforeSignOut();
-        if (!cleanupResult.success) {
-          console.error('Failed to clear email change challenge before sign out.');
-        }
-      } catch {
-        console.error('Failed to clear email change challenge before sign out.');
-      }
+      await clearEmailChangeChallengeQuietly();
 
       // Sign out the current user (explicit global preserves the pre-existing
       // default behavior of this flow).
       const { error: signOutError } = await supabase.auth.signOut({ scope: 'global' });
       if (signOutError) throw signOutError;
 
-      // Redirect based on whether the invited user exists
+      // A full load so the next page starts without the old session in client state.
+      // The code comes from the URL unvalidated; encoding keeps it one parameter.
+      const encodedInviteCode = encodeURIComponent(inviteCode);
       if (isExistingUser) {
-        // Existing user: redirect to login page with invite code
-        window.location.href = `/login?invite_code=${inviteCode}`;
+        loadDocument(`/login?invite_code=${encodedInviteCode}`);
       } else {
-        // New user: redirect to signup page with email prefilled and invite code
         const signupUrl = invitedEmail
-          ? `/signup?email=${encodeURIComponent(
-              invitedEmail
-            )}&invite_code=${inviteCode}`
-          : `/signup?invite_code=${inviteCode}`;
-        window.location.href = signupUrl;
+          ? `/signup?email=${encodeURIComponent(invitedEmail)}&invite_code=${encodedInviteCode}`
+          : `/signup?invite_code=${encodedInviteCode}`;
+        loadDocument(signupUrl);
       }
-    } catch (error) {
-      console.error('Error signing out:', error);
+    } catch {
       setError('Die Abmeldung konnte nicht abgeschlossen werden. Bitte versuche es erneut.');
       setIsLoading(false);
     }
   };
 
   // Button text changes based on whether user needs to log in or sign up
-  const buttonText = isExistingUser
-    ? 'Abmelden & anmelden'
-    : 'Abmelden & registrieren';
+  const buttonText = isExistingUser ? 'Abmelden & anmelden' : 'Abmelden & registrieren';
 
   return (
     <div className="grid gap-2">
       <Button onClick={handleSignOutAndRedirect} disabled={isLoading}>
         <LogOut className="mr-2 size-4" />
-        {isLoading ? 'Wird abgemeldet...' : buttonText}
+        {isLoading ? 'Wird abgemeldet…' : buttonText}
       </Button>
       <ErrorText>{error}</ErrorText>
     </div>

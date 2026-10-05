@@ -1,12 +1,14 @@
 import 'server-only';
-
+import { logReadFailure } from '@/lib/data/read-request-cache';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { LIST_ROW_CAP, readCompleteRows } from '@/lib/supabase/query-batches';
 import { getCachedOrganizationCalendar } from '@/lib/data/cached';
 import { toEmploymentCondition } from '@/lib/personnel/types';
 import { toWorkSchedule } from '@/lib/personnel/schedule';
 import type { ApprovedAbsenceSpan } from '@/lib/personnel/targets';
 import type { VacationCountingContext } from './balance';
 import { toVacationRequest, type VacationRequest } from './types';
+import { logError } from '@/lib/logging';
 
 // Server-only shared loaders for the vacation domain. Server actions and the
 // target loaders consume these; nothing here performs authorization — callers
@@ -19,7 +21,7 @@ import { toVacationRequest, type VacationRequest } from './types';
  */
 export async function loadVacationCountingContext(
   organizationId: string,
-  employeeRecordId: string
+  employeeRecordId: string,
 ): Promise<VacationCountingContext | null> {
   const admin = createSupabaseAdminClient();
   // organization_id is redundant with the record filter but keeps the
@@ -39,9 +41,9 @@ export async function loadVacationCountingContext(
   ]);
 
   if (schedulesResult.error || conditionsResult.error) {
-    console.error(
+    logReadFailure(
       'Failed to load vacation counting context:',
-      schedulesResult.error ?? conditionsResult.error
+      schedulesResult.error ?? conditionsResult.error,
     );
     return null;
   }
@@ -56,7 +58,7 @@ export async function loadVacationCountingContext(
 /** All vacation requests of one employee record, newest first. */
 export async function loadVacationRequestsForRecord(
   organizationId: string,
-  employeeRecordId: string
+  employeeRecordId: string,
 ): Promise<VacationRequest[] | null> {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
@@ -67,7 +69,7 @@ export async function loadVacationRequestsForRecord(
     .order('start_date', { ascending: false });
 
   if (error) {
-    console.error('Failed to load vacation requests:', error);
+    logError('Failed to load vacation requests:', error);
     return null;
   }
   return (data ?? []).map(toVacationRequest);
@@ -76,31 +78,36 @@ export async function loadVacationRequestsForRecord(
 /**
  * Approved vacation spans per employee record intersecting a date window —
  * the input `resolveDailyTarget` consumes. Only approved requests qualify;
- * pending requests are provisional and never reach targets.
+ * pending requests are provisional and never reach targets. A failed read
+ * returns null: "no absence" would silently raise every target.
  */
 export async function loadApprovedVacationSpansByRecord(
   organizationId: string,
   windowStartIso: string,
-  windowEndIso: string
-): Promise<Map<string, ApprovedAbsenceSpan[]>> {
+  windowEndIso: string,
+): Promise<Map<string, ApprovedAbsenceSpan[]> | null> {
   const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
-    .from('vacation_requests')
-    .select('employee_record_id, start_date, end_date, day_portion')
-    .eq('organization_id', organizationId)
-    .eq('status', 'approved')
-    .lte('start_date', windowEndIso)
-    .gte('end_date', windowStartIso);
+  const { data, error } = await readCompleteRows(
+    (from, to) =>
+      admin
+        .from('vacation_requests')
+        .select('employee_record_id, start_date, end_date, day_portion')
+        .eq('organization_id', organizationId)
+        .eq('status', 'approved')
+        .lte('start_date', windowEndIso)
+        .gte('end_date', windowStartIso)
+        .order('id')
+        .range(from, to),
+    LIST_ROW_CAP,
+  );
 
   if (error) {
-    // Absence must never break the target surfaces: degrade to "no absence"
-    // (targets stay pre-P1-06 correct) and log for diagnosis.
-    console.error('Failed to load approved vacation spans:', error);
-    return new Map();
+    logError('Failed to load approved vacation spans:', error);
+    return null;
   }
 
   const spansByRecord = new Map<string, ApprovedAbsenceSpan[]>();
-  for (const row of data ?? []) {
+  for (const row of data) {
     const spans = spansByRecord.get(row.employee_record_id) ?? [];
     spans.push({
       type: 'vacation',
@@ -120,7 +127,7 @@ export async function loadApprovedVacationSpansByRecord(
 export async function hasApprovedFullDayVacationOn(
   organizationId: string,
   userId: string,
-  dateIso: string
+  dateIso: string,
 ): Promise<boolean> {
   const admin = createSupabaseAdminClient();
   const { data: record, error: recordError } = await admin
@@ -130,7 +137,7 @@ export async function hasApprovedFullDayVacationOn(
     .eq('user_id', userId)
     .maybeSingle();
   if (recordError) {
-    console.error('Failed to load record for vacation clock check:', recordError);
+    logError('Failed to load record for vacation clock check:', recordError);
     return false;
   }
   if (!record) return false;
@@ -148,7 +155,7 @@ export async function hasApprovedFullDayVacationOn(
   if (error) {
     // Fail open: a transient read failure must not lock everyone out of time
     // capture; the approval/correction flow catches contradictions later.
-    console.error('Failed vacation clock check:', error);
+    logError('Failed vacation clock check:', error);
     return false;
   }
   return (data ?? []).length > 0;

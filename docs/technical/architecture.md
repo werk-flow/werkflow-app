@@ -1,166 +1,79 @@
-# Technical Architecture
+# Technical architecture
 
-Status: living — last reviewed 2026-09-17
+Status: living — last reviewed 2026-10-01
 
-This document describes the current high-level architecture of WerkFlow. It intentionally avoids duplicating exact database schema details; for exact schema, inspect the live Supabase project and `lib/supabase/database.types.ts`. Coding standards, including the implementation-simplicity rules, live in `AGENTS.md` and are not repeated here.
+This document describes the runtime shape of WerkFlow and the reasons behind it. For exact schema, inspect the live Supabase project and `lib/supabase/database.types.ts`. Coding standards live in `AGENTS.md`.
 
-## Product Context
+## Runtime and framework
 
-WerkFlow is a German-language operations platform for SHK businesses first, with possible future expansion to adjacent trades. The app is currently a TypeScript web app and may later be paired with a React Native mobile app.
+WerkFlow is a Next.js App Router application in TypeScript with React, Tailwind CSS v4 and shadcn-style UI primitives. Supabase provides auth, the database, generated types and Realtime. `package.json` is the source of truth for versions.
 
-The product goal is to become the digital operations backbone for a business: jobs/projects, employees, working time, documents, inventory, and future AI-assisted automations.
+`next.config.ts` enables Cache Components. Pages render on the server and stream through Suspense.
 
-## Runtime And Framework
+## Infrastructure stack
 
-- Next.js App Router
-- React
-- TypeScript
-- Tailwind CSS v4
-- shadcn/Radix-style UI primitives
-- Supabase for auth, database, generated types, and Realtime
+[Decision 0001](../decisions/0001-infrastructure-stack.md) owns the accepted stack and its rationale. The target state:
 
-`next.config.ts` enables Cache Components:
+- Vercel hosts the Next.js app. `vercel.json` pins functions to Frankfurt, next to the Supabase EU database.
+- Supabase in the EU provides Postgres as the operational source of truth, Auth and Realtime. Server code enforces authorization. RLS is defense in depth, not the only barrier.
+- Cloudflare R2 with EU jurisdiction stores document bytes. Browser uploads and downloads use signed URLs from `lib/storage/r2.ts`, which avoids the Server Action request-body limit and application-server egress. Server-generated files go to storage through `putStorageObject`. Postgres keeps file metadata.
+- Profile avatars are the exception. They use a public Supabase Storage bucket through `lib/profile-avatar.ts`, and their URLs need no authentication.
+- A separate S3 bucket with Object Lock in compliance mode will hold retention-relevant document copies. R2 alone is not a compliance archive.
+- Railway is the home for future long-running workers. Add it when the first such workload exists.
+- Phase 2 AI uses external model provider APIs with server-side keys. There are no self-hosted models and no GPU infrastructure.
 
-```ts
-const nextConfig = {
-  cacheComponents: true,
-};
-```
+Do not migrate the database, auth or hosting providers, and do not route file bytes through server compute, without a superseding decision record.
 
-Use `package.json` as the source of truth for dependency versions.
+## Application shape
 
-## Infrastructure Stack
+The route tree under `app/` is the authority for what exists. `app/(app)/` holds the authenticated product shell and its pages. Authentication, onboarding, the subscription upgrade and the invite error live outside that shell.
 
-The accepted stack and its rationale live in [decision 0001 — infrastructure stack](../decisions/0001-infrastructure-stack.md). Summary of the target state:
+Route handlers exist for three reasons: auth callbacks, invite redemption, and authorized reads that must stay out of the browser's Server Action queue. [Realtime and caching](realtime-and-caching.md#reads-outside-the-server-action-queue) owns the reason and the rules for those reads. Route handlers are not confined to `app/api/`. The security route inventory test checks the current handler set, and [security](security.md) owns the rules for a new handler.
 
-- **Vercel** hosts the Next.js app. `vercel.json` pins functions to Frankfurt (`fra1`), next to the Supabase EU database.
-- **Supabase (EU)** provides Postgres (operational source of truth), Auth, and Realtime. Authorization is enforced primarily in server code; RLS is defense in depth, not the sole barrier.
-- **Cloudflare R2 (EU jurisdiction)** stores document bytes. Browser uploads and downloads use signed URLs from `lib/storage/r2.ts`, avoiding the Server Action request-body limit and application-server egress. Server-generated artifact HTML, handover HTML, and payroll ZIP files use `putStorageObject` directly. Postgres keeps file metadata. Profile avatars use the public `profile-avatars` Supabase Storage bucket through `lib/profile-avatar.ts`; their URLs need no authentication. The local test stack substitutes its own S3-compatible storage endpoint, as described in [environments.md](environments.md).
-- **A separate S3 bucket with Object Lock (compliance mode)** will hold retention-relevant document copies (designed in slice `P1-45`); R2 alone is not a compliance archive.
-- **Railway** is the designated home for future long-running workers (OCR, imports/exports, queues, connector sync). It is added when the first such workload exists, not before.
-- **Phase 2 AI** uses external model provider APIs (Anthropic/OpenAI/OpenRouter) with server-side keys. No self-hosted models or GPU infrastructure.
+### Page shell
 
-Agents must not migrate the database, auth, or hosting providers, and must not route file bytes through server compute, without a superseding decision record.
+Every authenticated page renders one column through `PageShell`, `PageHeader` and `PageBody`. `PageBody` owns padding and the scroll region. An area with subpages renders the shell and a persistent header in its `layout.tsx`, so the header does not blink while a page loads. The `werkflow-design` skill owns these rules and the rules for lists, skeletons, form controls and feedback.
 
-## Application Shape
-
-The app uses the Next.js App Router. The top-level trees under `app/` are:
-
-- `app/(auth)/`: login, signup, verification, forgot-password, and reset-password pages.
-- `app/onboarding/`: create or join an organization, plus `meine-aufgaben`, the bounded own-onboarding view a future starter sees before access activates.
-- `app/(app)/`: authenticated product shell and operational pages.
-- `app/api/`: route handlers for invite redemption (`redeem-invite`), the bounded customer page (`customer-page`), and the authorized reads kept outside the client Server Action queue: attention counts (`attention-counts`), the calendar window (`calendar-window`), time-tracking state (`time-tracking-state`), and the closed registry of background page reads (`background-read`, backed by `lib/data/background-reads.ts`); `csp-report` receives the browser's reports for the enforced script policy and is the one unauthenticated handler by design (since 2026-09-18). Step 1 removed the retired member/profile lookup and active-organization-cookie endpoints; the authenticated time-entry read (`POST /api/time-entries`) was deleted on 2026-09-15. The security route inventory checks the current handler set.
-- `app/auth/`: `callback` handles the Supabase auth callback and `flash` sets the short-lived auth flash cookie. Both are route handlers, so route handlers are not confined to `app/api/`.
-- `app/upgrade/` and `app/invite-error/`: standalone pages outside the product shell for the subscription upgrade and for a failed invite redemption.
-
-Authenticated product areas are Dashboard, Aufgaben, Kalender, Zeiterfassung with Zeitkonto and Perioden, Qualifikationen, Anfragen, Aufträge and Projekte with Übergaben, Dokumente, Inventar, Service with Anlagen, Fälle and Wartung, Arbeitsvorlagen, Mitarbeiter, Kunden, and Einstellungen. The sidebar entries live in `components/sidebar/app-shell.tsx`; the route tree under `app/(app)/` is the authority for what exists. Inventory V1 is implemented; use [inventory.md](../features/inventory.md) for the current product boundary.
-
-### Page shell and area layouts
-
-Since 2026-09-03 every authenticated page renders one column: `PageShell` → `PageHeader` → `PageBody` from `components/shared/page-shell.tsx` and `page-header.tsx`. The app shell's `<main>` carries no padding and no scroll region; `PageBody` owns both, hides horizontal overflow, and reserves the bottom clearance for the clock button. Areas with subpages (`/service`, `/zeiterfassung`, `/einstellungen`) render the shell and a persistent header with `AreaNav` route tabs in a `layout.tsx`; their pages render content only, and their `loading.tsx` files render content-only skeletons so the header never blinks. Full-height shells and standalone states use the dynamic viewport (`h-dvh`/`min-h-dvh`), never the browser-chrome-sensitive `h-screen`/`min-h-screen`. ESLint bans the raw page-column and static-viewport literals outside their owners, and the `@AUDIT-LAYOUT` browser audit walks every area at 375 px. The design rules behind this live in the `werkflow-design` skill; the record of the change is [02-uiux-hardening.md](../plans/phase-1/hardening-2026-09/02-uiux-hardening.md).
-
-Tailwind v4 scans an explicit application boundary from `app/globals.css`: `@import 'tailwindcss' source(none)` followed by `@source` entries for `app`, `components`, `hooks`, `lib`, and `proxy.ts`. This keeps repository-local build backups, retained browser evidence, and other generated trees out of candidate discovery. `lib/ui/tailwind-source.test.ts` pins that boundary; add a source entry there when a new product-code root starts emitting Tailwind classes.
-
-Lists share their column definitions between headers and `SkeletonRows` (`components/ui/skeleton-table.tsx`). Grid lists share their header and row layout with an exported skeleton, as the maintenance due list does. `TableRow` and `ListRow` own hover through `interactive`. The skeleton-pairing and row-contract tests check composition, live/loading interaction parity, and every product table's desktop-only containment. The phone audit also checks visible tables and their nested scroll containers; document width alone cannot detect a table that scrolls inside its own wrapper. Period results have mobile cards retaining all metrics. Visual fidelity and conditional layouts still require browser evidence.
-
-Refresh controls retain loaded rows. `RefreshButton` owns the router transition; `useServerAction`, `useBusyIds`, and `useOptimisticList` own mutation feedback. For props-driven lists, `useSettleOnChange` waits for the supplied value to change. A timeout shows a refresh error and releases settlement; unmount cancels quietly. The timeout does not reclassify an accepted mutation as failed. Effective ESLint configuration tests ensure that named exceptions preserve unrelated restrictions.
-
-### Shared control contracts
-
-`Field` owns stable label, description, error, and required-description IDs. Registered controls consume that context. Inputs and comboboxes expose supported required/invalid semantics. Custom date and time groups reference their errors and hidden required text through `aria-describedby`, keeping the field name unchanged. Their visual invalid state uses `data-invalid`.
-
-Searchable controls expose named listboxes with selected options and shared keyboard navigation. Search, clear, and inline-create actions remain keyboard-reachable. Mobile record navigation includes a semantic link or button. `RowActionsMenu` restores trigger focus before selection, preserves a newly opened dialog's focus, and supports Tab traversal out of the menu.
-
-These shared owners provide Tier 1 behavior. Lint probes, rendered field tests, enum-bound checks, and isolated component browser contracts provide Tier 2 regression detection. Domain meaning, visual balance, and feedback-policy exceptions still require Tier 3 review and the relevant application proofs. [Testing](testing.md) owns execution procedures; the [current reconciliation](../plans/phase-1/hardening-2026-09/03-uiux-and-test-reliability.md) records coverage and acceptance limits.
+Tailwind v4 scans an explicit boundary declared in `app/globals.css`, which keeps build backups and retained browser evidence out of class discovery. `lib/ui/tailwind-source.test.ts` pins that boundary. Add a source entry there when a new product-code root starts to emit Tailwind classes.
 
 ### Request-edge routing
 
-`proxy.ts` at the repository root is the Next.js 16 replacement for `middleware.ts`. It calls `getSession()` for a cookie-only session check with no network call and no JWT validation, then redirects an unauthenticated request to `/login` when the path is `/` or starts with a prefix in its hardcoded `PROTECTED_PREFIXES` list. It is a routing convenience. Authorization lives in the `app/(app)/layout.tsx` redirect, in the server actions, and in RLS.
+`proxy.ts` at the repository root is the Next.js 16 replacement for `middleware.ts`. It reads the cookie session without validating the JWT and redirects an unauthenticated request for a protected path to `/login`. This is a routing convenience. Authorization lives in the `app/(app)/layout.tsx` redirect, in the Server Actions and in RLS. `lib/security/proxy-prefixes.test.ts` derives the required areas from `app/(app)` and checks that `PROTECTED_PREFIXES` covers them.
 
-Step 1 added the previously missing route areas to the prefix list and matcher. `lib/security/proxy-prefixes.test.ts` derives the required areas from `app/(app)` and checks their coverage. This routing check does not replace server authorization.
+## Supabase access model
 
-## Supabase Access Model
+The app has five Supabase client factories under `lib/supabase/`, one per trust boundary:
 
-The app has five Supabase client factories, one per trust boundary:
+- `client.ts` is the browser singleton. It runs under the user's JWT and RLS and carries the Realtime connection.
+- `server.ts` is the client for server rendering and Server Actions. It reads the request cookies and uses the publishable key, so it is also RLS-bound.
+- `admin.ts` is the service-role singleton. It bypasses RLS. The file imports `server-only`, so an import from a client component is a build error.
+- `implicit-client.ts` is a browser client with the implicit flow. Only the forgot-password form uses it, because the client that sends the recovery email decides which flow the link opens.
+- `transient-client.ts` is a browser client that persists no session. The password-change card uses it to verify the current password without replacing the signed-in session.
 
-- `lib/supabase/client.ts`: the browser singleton built with `createBrowserClient` from `@supabase/ssr`. It runs under the user's JWT and RLS and carries the Realtime connection.
-- `lib/supabase/server.ts`: the SSR and Server Action client. It reads the request cookies and uses the publishable key, so it is also RLS-bound.
-- `lib/supabase/admin.ts`: the service-role singleton. It bypasses RLS, so the file starts with `import 'server-only'` and a client-component import is a build error, Tier 1 on the enforcement ladder of [decision 0005](../decisions/0005-enforcement-ladder.md).
-- `lib/supabase/implicit-client.ts`: a browser client with `flowType: 'implicit'`. Only the forgot-password form uses it, because the client that sends the recovery email decides which flow the link opens.
-- `lib/supabase/transient-client.ts`: a browser client that persists no session. The password-change card uses it to re-verify the current password without replacing the signed-in session.
+Server code that uses the admin client establishes identity and authorization first. [Security](security.md#checklist) owns those rules, including the request scope for GET handlers. Membership and role are read fresh on every request, as [permission facts](realtime-and-caching.md#permission-facts) describes. An in-flight request is still a snapshot, so a business write that needs atomic authorization reauthorizes inside its database RPC transaction.
 
-Server code that uses the admin client must establish identity and authorization first. `getAuthenticatedUser()` in `lib/data/cached.ts` calls `auth.getUser()` and React `cache()` memoizes the result while rendering. The calendar-window, attention-count and time-tracking-state GET handlers instead enter `withReadRequest`, because route handlers have no React memoization context. Within that GET only, `memoizeRequestRead` shares in-flight identity and membership wrapper reads. Each request gets a separate store; Server Actions never enter it. Many feature actions use `authenticateAndAuthorize()` in `lib/jobs/auth.ts`; it returns a typed `AuthContext` or failure using the active organization and `getCachedMemberships()`. Other actions resolve authorization separately, and newer business RPCs reauthorize inside the transaction. Membership candidates are loaded fresh per request/render, including lifecycle restrictions. An in-flight request is still a snapshot; business RPCs that reauthorize within their write transaction remain necessary for atomic authorization. Server-only domain readers live in `lib/<feature>/server.ts`; Server Actions commonly live in `actions.ts`.
+Time transitions use that transactional form. A Server Action validates the request and calls a versioned RPC, which reauthorizes the actor and writes every row in one transaction. Browser clients keep SELECT-only access to the canonical time tables through RLS.
 
-Supabase environment values are read only through `lib/env/public.ts` for the URL and publishable key and `lib/env/server.ts` for the secret key and site URL; the server file is itself `server-only`. The R2 credentials are the recorded exception, read directly in `lib/storage/r2.ts`.
+Supabase environment values are read only through `lib/env/public.ts` and `lib/env/server.ts`. The server file imports `server-only`. The R2 credentials are the recorded exception and are read in `lib/storage/r2.ts`.
 
-P1-21 time transitions follow the stricter transactional form of that boundary: a narrow authenticated Server Action validates the discriminated request, then calls a versioned database RPC. The RPC reauthorizes the actor, locks the organization-member boundary, validates tenant references and writes the session, segment, append-only event and idempotency receipt in one transaction. Browser clients retain SELECT-only access through RLS; they cannot write the canonical time tables directly.
+Server-generated documents follow the storage boundary. The server uploads the bytes directly to the organization-scoped R2 path, then a guarded RPC registers the metadata and the lifecycle transition in one transaction. A failed registration deletes the object only after it proves that no committed row references it. Source bytes are referenced by identity and never copied through a Server Action.
 
-Production and cloud dev are separate Supabase projects, and the default browser batteries use a local stack. [Environments](environments.md) owns project identities, configuration posture, target selection, and the dev-first migration workflow. Generated types come from dev. Inspect the requested backend for current state; shared migration intent does not establish live parity.
+[Environments](environments.md) owns project identities, target selection and the dev-first migration rule.
 
-## Authentication And Organization Context
+## Authentication and organization context
 
-Users authenticate through Supabase Auth. After authentication, users are routed either into the app or into onboarding depending on whether they belong to an organization.
+Users authenticate through Supabase Auth. After authentication, a user enters the app or onboarding, depending on whether the user belongs to an organization.
 
-WerkFlow is organization-scoped. Users may belong to multiple organizations, and the active organization is stored through app-level organization context/cookies. Most operational data should be scoped by `organization_id`.
+WerkFlow is organization-scoped. A user can belong to several organizations, and a cookie stores the active organization. Operational data is scoped by `organization_id`.
 
-Current role labels:
+The roles are `admin`, `buero` and `employee`. Role-specific behavior is intentional. Employees get simple, focused flows. Admins and office users get overview and operational control.
 
-- `admin`: Admin
-- `buero`: Büro
-- `employee`: Handwerker/in
+## Data model
 
-Role-specific behavior should be intentional. Employees should have simple, focused flows. Admins, office users, and managers need efficient overview and operational control.
+The [conceptual data model](data-model.md) owns the domain model. Do not keep a column-by-column schema in docs. When schema details matter, inspect live Supabase, then check the generated types, then update code and docs if the conceptual model changed.
 
-## Data Model Boundaries
+## Caching, Realtime and freshness
 
-The conceptual domain model, one section per accepted slice, lives in [data-model.md](data-model.md). This document does not repeat it.
+The product principle is a fast initial load with fresh operational data. The app caches a few identity-keyed reads across requests, reads everything else per request after authorization, and uses Realtime events as signals to read again. Do not add client-side fetching or polling when server rendering, cache invalidation and the Realtime hooks support the workflow.
 
-Do not maintain a manual column-by-column schema in docs. If schema details matter:
-
-1. Inspect live Supabase through the MCP/plugin workflow.
-2. Check generated types in `lib/supabase/database.types.ts`.
-3. Then update app code and docs if the conceptual model changed.
-
-`lib/parking/` is a legacy module name. Its actions read and write `work_blockers` rows with `kind = 'parking'`, the P1-14 model that replaced the P1-12 parking tables, so the module is live code rather than leftover P1-12 code.
-
-P1-17 follows the existing storage boundary: the server renders deterministic customer-safe HTML and uploads those bytes directly to the organization-scoped EU R2 path through the storage adapter; a guarded database RPC then atomically registers document metadata, immutable release facts and the lifecycle transition. Source document/artifact bytes are referenced by exact identity, never copied through a Server Action. A failed post-upload registration deletes the object only after proving no committed document or release references it.
-
-## Caching And Freshness
-
-The app has three caching layers:
-
-- `react.cache()` deduplicates work within a Server Component render pass. The reviewed GET handlers use [a separate request scope](security.md#read-request-authorization-reuse).
-- `unstable_cache()` caches data across requests behind tags.
-- The Next.js 16 `'use cache'` directive with `cacheTag()` caches a function's result behind the same tag names. `lib/work-templates/server.ts` is the current user.
-
-The `CACHE_TAGS` registry in `lib/data/cached.ts` is the single list of tag names. Server Actions that mutate cached data call `updateTag()` for the affected tags. `updateTag()` is Server-Action-only; a route handler such as `app/api/redeem-invite/route.ts` calls `revalidateTag(tag, 'max')` instead.
-
-The product principle is fast initial load with fresh operational data. Avoid adding client-side fetching or polling when existing server rendering, cache invalidation, and Realtime patterns can support the workflow. The [reader inventory](realtime-and-caching.md#cross-request-reader-inventory) lists every cross-request cache with its key and invalidating writes; everything else, including the calendar, the large lists, and the attention derivations, reads per request after authorization.
-
-Surfaces that read a window of data (the calendar) own that window through a typed range state: coverage per dataset, request generations, and derived readiness, so a view switch shows either covered data or an honest loading state and never another range's rows. The [calendar data owner](realtime-and-caching.md#range-scoped-data-owner-calendar) describes the mechanism. Optional shell content such as attention counts loads after mount through its provider instead of blocking the app layout.
-
-## Realtime
-
-Supabase Realtime is centralized through `components/realtime/realtime-provider.tsx`.
-
-The published table list has one home: `REALTIME_TABLES` in `lib/realtime/tables.ts`. The provider generates its bindings, including organization filters except for `profiles`, delivers every authorized event to the shared refresh hooks, and owns focus/visibility catch-up. Most immutable ledgers refetch behind a root signal; ordinary documents and attention retain published history tables. `bun run realtime:check` verifies publication and replica-identity configuration, not cross-tenant delivery guarantees. The [transport reference](realtime-and-caching.md) owns that distinction. ESLint bans `onAuthStateChange` outside the provider, with a named exception for the password-recovery form.
-
-Surfaces consume through the live-view family: `hooks/use-live-view.ts` for client refetch views (shared debounce, generation guards, keep-last-known, dialog suspension, catch-up) and `hooks/use-realtime-router-refresh.ts` for route refreshes. Pending state on server actions comes from `hooks/use-server-action.ts`. The full freshness and latency contract lives in [realtime-and-caching.md](realtime-and-caching.md).
-
-When adding new operational data that must stay live:
-
-- Add publication membership, minimal replica identity, and the protected deletion trigger through the [Realtime procedure](realtime-and-caching.md#adding-new-realtime-data), then register the table in `REALTIME_TABLES`.
-- Consume through the live-view family; debounce, batching, suspension, and catch-up come with the primitive, never per surface.
-- Keep employee views lightweight and manager views efficient.
-
-## UI And Language
-
-User-facing UI copy is German. Code, identifiers, comments, commits, and developer-facing artifacts are English. See the language and coding standards in `AGENTS.md`.
-
-The app should feel fast, modern, clear, and hard to misuse, especially for field-worker (`Handwerker/in`) workflows.
-
-## Related Docs
-
-- [decision 0001 — infrastructure stack](../decisions/0001-infrastructure-stack.md): why the providers above are settled and what needs a superseding record.
-- [data-model.md](data-model.md): the conceptual domain model per accepted slice.
-- [realtime-and-caching.md](realtime-and-caching.md): the freshness, transport, and latency contract behind the Realtime and caching sections.
+[Realtime and caching](realtime-and-caching.md) owns every rule in this area: which readers may be cached, tag invalidation, the transport, the client freshness contract, the latency targets and the procedure to [add Realtime data](realtime-and-caching.md#add-realtime-data).

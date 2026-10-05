@@ -7,10 +7,7 @@ import { registerTestUserEmail } from './world';
 import { planTestWorld, seedOwnedWorld } from '../../../lib/testing/seed-world-plan';
 import { ownedTestEmails } from '../../../lib/testing/test-email-ownership';
 import { deleteOwnedMailpitMessages, localMailpitUrl } from '../../../lib/testing/local-mailpit';
-import {
-  deleteStorageObjects,
-  listStorageObjectPaths,
-} from '../../../lib/storage/r2';
+import { deleteStorageObjects, listStorageObjectPaths } from '../../../lib/storage/r2';
 
 const ORGANIZATION_CODE_CHARSET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
@@ -24,7 +21,11 @@ export function goldenTestOrganizationName(label: string, runId: string): string
 }
 
 function createAdminClient(): SupabaseClient {
-  return createClient(requireEnv('NEXT_PUBLIC_SUPABASE_URL'), requireEnv('SUPABASE_SECRET_KEY'), testSupabaseClientOptions);
+  return createClient(
+    requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
+    requireEnv('SUPABASE_SECRET_KEY'),
+    testSupabaseClientOptions,
+  );
 }
 
 // Mailbox stand-in for UI signup tests. The production flow requires the user
@@ -52,9 +53,7 @@ export async function confirmTestUserEmail(email: string): Promise<void> {
 function randomOrgCode(): string {
   let code = '';
   for (let index = 0; index < 6; index++) {
-    code += ORGANIZATION_CODE_CHARSET.charAt(
-      Math.floor(Math.random() * ORGANIZATION_CODE_CHARSET.length)
-    );
+    code += ORGANIZATION_CODE_CHARSET.charAt(Math.floor(Math.random() * ORGANIZATION_CODE_CHARSET.length));
   }
   return code;
 }
@@ -84,14 +83,13 @@ async function createTestUser(admin: SupabaseClient, user: TestUser): Promise<vo
   if (profileError) {
     throw new Error(`Failed to set profile name for ${email}: ${profileError.message}`);
   }
-
 }
 
 async function createOrganizationWithSettings(
   admin: SupabaseClient,
   organizationId: string,
   name: string,
-  adminUserId: string
+  adminUserId: string,
 ): Promise<void> {
   const { data: org, error: orgError } = await admin
     .from('organizations')
@@ -122,7 +120,6 @@ async function createOrganizationWithSettings(
   if (settingsError) {
     throw new Error(`Failed to create organization settings: ${settingsError.message}`);
   }
-
 }
 
 // Seeds inventory master data plus opening stock. Stock enters through the
@@ -132,7 +129,7 @@ async function seedInventory(
   admin: SupabaseClient,
   orgId: string,
   actorId: string,
-  inventory: TestWorld['inventory']
+  inventory: TestWorld['inventory'],
 ): Promise<void> {
   const { locationId, locationName, itemId, itemName, initialQuantity } = inventory;
 
@@ -183,7 +180,6 @@ async function seedInventory(
   if (movementError) {
     throw new Error(`Failed to seed inventory stock: ${movementError.message}`);
   }
-
 }
 
 export async function createTestWorld(
@@ -224,7 +220,12 @@ export async function createTestWorld(
           .insert({ organization_id: world.orgId, user_id: user.id, role });
         if (error) throw new Error(`Failed to add ${role} membership: ${error.message}`);
       }
-      await createOrganizationWithSettings(admin, world.outsider.orgId, world.outsider.orgName, world.outsider.admin.id);
+      await createOrganizationWithSettings(
+        admin,
+        world.outsider.orgId,
+        world.outsider.orgName,
+        world.outsider.admin.id,
+      );
       await seedInventory(admin, world.orgId, world.users.admin.id, world.inventory);
     },
   });
@@ -248,13 +249,20 @@ export async function destroyTestWorld(world: TestWorld): Promise<void> {
   const mailbox = localMailpitUrl(requireEnv('NEXT_PUBLIC_SUPABASE_URL'));
   if (mailbox) {
     const emails = [
-      ...Object.values(world.users).map((user) => user.email), world.invitee.email,
-      world.removableEmployee.email, world.personnelInvitee.email, world.outsider.admin.email,
+      ...Object.values(world.users).map((user) => user.email),
+      world.invitee.email,
+      world.removableEmployee.email,
+      world.personnelInvitee.email,
+      world.outsider.admin.email,
       ...additionalEmails,
     ];
     const suffix = `-${world.runId}@werkflow-golden.test`;
-    const ownedRecipients = emails.filter((email) => email.endsWith(suffix) ||
-      email === `delivered+gg-${world.runId}@resend.dev` || email === `delivered+gg-p103-${world.runId}@resend.dev`);
+    const ownedRecipients = emails.filter(
+      (email) =>
+        email.endsWith(suffix) ||
+        email === `delivered+gg-${world.runId}@resend.dev` ||
+        email === `delivered+gg-p103-${world.runId}@resend.dev`,
+    );
     if (ownedRecipients.length !== emails.length) {
       failures.push('A Mailpit cleanup recipient does not belong to this test world');
     }
@@ -292,8 +300,8 @@ export async function destroyTestWorld(world: TestWorld): Promise<void> {
   // organization rows, but R2 objects would otherwise linger).
   for (const orgId of organizationIds) {
     try {
-      const paths = await listStorageObjectPaths(`${orgId}/`);
-      await deleteStorageObjects(paths);
+      const paths = await listStorageObjectPaths({ organizationId: orgId, prefix: `${orgId}/` });
+      await deleteStorageObjects({ organizationId: orgId, paths });
     } catch (error) {
       failures.push(`R2 cleanup for ${orgId}: ${(error as Error).message}`);
     }
@@ -311,18 +319,12 @@ export async function destroyTestWorld(world: TestWorld): Promise<void> {
   }
 
   // Every org-scoped table cascades from organizations (verified 2026-08-04).
-  const { error: orgDeleteError } = await admin
-    .from('organizations')
-    .delete()
-    .in('id', organizationIds);
+  const { error: orgDeleteError } = await admin.from('organizations').delete().in('id', organizationIds);
   if (orgDeleteError) {
     failures.push(`organization delete: ${orgDeleteError.message}`);
   }
 
-  const { error: subscriptionError } = await admin
-    .from('subscriptions')
-    .delete()
-    .in('user_id', userIds);
+  const { error: subscriptionError } = await admin.from('subscriptions').delete().in('user_id', userIds);
   if (subscriptionError) {
     failures.push(`subscription delete: ${subscriptionError.message}`);
   }

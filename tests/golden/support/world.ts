@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { browserRunPaths, configuredRunKey } from '../../../lib/testing/run-paths';
-import { withFileLock, writeJsonAtomically } from '../../../lib/testing/file-lock';
+import { browserRunPaths, configuredRunKey } from '../../../lib/testing/runs/run-paths';
+import { withFileLock, writeJsonAtomically } from '../../../lib/testing/runner/file-lock';
 import { addOwnedTestEmail, preserveOwnedTestEmails } from '../../../lib/testing/test-email-ownership';
 
 export type TestRole = 'admin' | 'buero' | 'employee';
@@ -60,10 +60,6 @@ export function artifactsDirectory(runKey = configuredRunKey()): string {
 
 export function worldFilePath(runKey = configuredRunKey()): string {
   return resolve(artifactsDirectory(runKey), 'world.json');
-}
-
-export function storageStatePath(role: TestRole | 'outsider', runKey = configuredRunKey()): string {
-  return resolve(artifactsDirectory(runKey), `${role}.json`);
 }
 
 export function saveWorld(world: TestWorld): void {

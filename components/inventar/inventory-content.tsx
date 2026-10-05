@@ -1,549 +1,58 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  Boxes,
-  ClipboardList,
-  FileUp,
-  Loader2,
-  MoreHorizontal,
-  PackagePlus,
-  Pencil,
-  Plus,
-  Search,
-  SlidersHorizontal,
-  Warehouse,
-} from 'lucide-react';
+import { FileUp, Plus, Warehouse } from 'lucide-react';
 
-import { Badge } from '@/components/ui/badge';
-import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { ErrorText } from '@/components/ui/error-text';
-import { Field } from '@/components/ui/field';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { InlinePending } from '@/components/ui/inline-pending';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { EmptyState } from '@/components/ui/empty-state';
 import { ListRow } from '@/components/ui/list-row';
 import { PendingRow } from '@/components/ui/pending-row';
-import { SearchableSelect } from '@/components/ui/searchable-select';
-import { SelectWithCreate } from '@/components/ui/select-with-create';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Textarea } from '@/components/ui/textarea';
 import {
   INVENTORY_ITEM_COLUMNS,
   INVENTORY_MOVEMENT_COLUMNS,
 } from '@/components/inventar/inventory-table-columns';
-import { LocationSelectWithCreate } from '@/components/inventar/location-select-with-create';
+import { ListPagination } from '@/components/shared/list-pagination';
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
-import { QuantityStepper } from '@/components/ui/quantity-stepper';
-import { useBusyIds } from '@/hooks/use-busy-id';
-import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
-import { usePendingTask, useServerAction } from '@/hooks/use-server-action';
-import { useSettleOnChange } from '@/hooks/use-settle-on-change';
-import {
-  adjustInventoryStock,
-  createInventoryLocation,
-  importInventoryRows,
-  upsertInventoryItem,
-  type ImportInventoryRowsInput,
-  type InventoryImportRow,
-} from '@/lib/inventory/actions';
-import type {
-  InventoryCategory,
-  InventoryItemType,
-  InventoryLocation,
-  InventoryLocationType,
-  InventoryOverview,
-  InventoryOverviewItem,
-  InventoryUnitOption,
-} from '@/lib/inventory/types';
-import {
-  formatInventoryQuantity,
-  getInventoryUnitLabel,
-  INVENTORY_ITEM_TYPE_LABELS,
-  INVENTORY_LOCATION_TYPE_LABELS,
-  INVENTORY_MOVEMENT_TYPE_LABELS,
-  INVENTORY_STOCK_STATUS_LABELS,
-  INVENTORY_UNIT_OPTIONS,
-} from '@/lib/inventory/types';
-import { cn } from '@/lib/utils';
-import { ListPagination } from '@/components/shared/list-pagination';
 import { useListNavigation } from '@/hooks/use-list-navigation';
+import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
+import { isServerRow, withPendingDraft } from '@/lib/inventory/pending-drafts';
+import type { InventoryOverview, InventoryOverviewItem } from '@/lib/inventory/types';
+import { INVENTORY_MOVEMENT_TYPE_LABELS } from '@/lib/inventory/types';
+import { cn, formatGermanDateTime } from '@/lib/utils';
+import { InventoryFilterBar } from './inventory-filter-bar';
+import type { PendingItemDraft } from './inventory-form-state';
+import { ImportDialog } from './inventory-import-dialog';
+import { ItemDialog } from './inventory-item-dialog';
+import {
+  InventoryItemCardBody,
+  InventoryItemCells,
+  ItemActionsMenu,
+  PendingItemCardBody,
+  pendingItemRowCells,
+} from './inventory-item-row-parts';
+import { LocationDialog } from './inventory-location-dialog';
+import { LocationsView } from './inventory-locations-view';
+import { formatMovementTarget } from './inventory-row-format';
+import { StockAdjustmentDialog } from './inventory-stock-adjustment-dialog';
+import { InventorySummaryTiles } from './inventory-summary-tiles';
+import { useInventoryEditing } from './use-inventory-editing';
+import { useInventoryFilters } from './use-inventory-filters';
 
 type InventoryContentProps = {
   overview: InventoryOverview;
 };
 
-type ItemFormState = {
-  id: string | null;
-  name: string;
-  itemType: InventoryItemType;
-  description: string;
-  categoryId: string;
-  unit: string;
-  internalSku: string;
-  manufacturer: string;
-  supplierId: string;
-  supplierName: string;
-  supplierArticleNumber: string;
-  purchasePrice: string;
-  salePrice: string;
-  isBillable: boolean;
-  globalMinimumStock: string;
-  globalTargetStock: string;
-  initialLocationId: string;
-  initialQuantity: string;
-  barcode: string;
-  notes: string;
-};
-
-type LocationFormState = {
-  name: string;
-  description: string;
-  locationType: InventoryLocationType;
-};
-
-type StockDialogState = {
-  item: InventoryOverviewItem;
-  locationId: string;
-  direction: 'add' | 'remove';
-  quantity: string;
-  reason: string;
-} | null;
-
-// What the list shows for a record the user just created, until the refreshed
-// server list carries it (feedback canon: create from a dialog).
-type PendingItemDraft = {
-  confirmedId: string | null;
-  name: string;
-  internalSku: string;
-  itemType: InventoryItemType;
-  unit: string;
-  quantity: number;
-  locationName: string | null;
-};
-
-type PendingLocationDraft = {
-  name: string;
-  locationType: InventoryLocationType;
-};
-
-type ImportColumnKey = keyof InventoryImportRow;
-
-const NONE_VALUE = '__none__';
-const NEW_SUPPLIER_VALUE = '__new_supplier__';
-const ALL_VALUE = 'all';
-
-const IMPORT_COLUMNS: Array<{ key: ImportColumnKey; label: string }> = [
-  { key: 'name', label: 'Artikelname' },
-  { key: 'itemType', label: 'Typ' },
-  { key: 'categoryName', label: 'Kategorie' },
-  { key: 'locationName', label: 'Lager' },
-  { key: 'unit', label: 'Einheit' },
-  { key: 'quantity', label: 'Bestand' },
-  { key: 'minimumStock', label: 'Mindestbestand' },
-  { key: 'targetStock', label: 'Zielbestand' },
-  { key: 'internalSku', label: 'Interne SKU' },
-  { key: 'barcode', label: 'Barcode' },
-  { key: 'manufacturer', label: 'Hersteller' },
-  { key: 'supplierName', label: 'Lieferant' },
-  { key: 'supplierArticleNumber', label: 'Lieferanten-Nr.' },
-  { key: 'purchasePriceCents', label: 'Einkaufspreis' },
-  { key: 'salePriceCents', label: 'Verkaufspreis' },
-  { key: 'isBillable', label: 'Abrechenbar' },
-  { key: 'notes', label: 'Notizen' },
-];
-
-const EMPTY_ITEM_FORM: ItemFormState = {
-  id: null,
-  name: '',
-  itemType: 'material',
-  description: '',
-  categoryId: NONE_VALUE,
-  unit: 'piece',
-  internalSku: '',
-  manufacturer: '',
-  supplierId: NONE_VALUE,
-  supplierName: '',
-  supplierArticleNumber: '',
-  purchasePrice: '',
-  salePrice: '',
-  isBillable: true,
-  globalMinimumStock: '0',
-  globalTargetStock: '',
-  initialLocationId: '',
-  initialQuantity: '',
-  barcode: '',
-  notes: '',
-};
-
-const EMPTY_LOCATION_FORM: LocationFormState = {
-  name: '',
-  description: '',
-  locationType: 'room',
-};
-
-function decimalFromInput(value: string): number {
-  const normalized = value.trim().replace(',', '.');
-  if (!normalized) return 0;
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function centsFromInput(value: string): number | null {
-  const normalized = value.trim().replace(',', '.');
-  if (!normalized) return null;
-  const parsed = Number(normalized);
-  if (!Number.isFinite(parsed)) return null;
-  return Math.max(0, Math.round(parsed * 100));
-}
-
-function centsToInput(cents: number | null): string {
-  if (cents === null) return '';
-  return String(cents / 100).replace('.', ',');
-}
-
-function itemToForm(item: InventoryOverviewItem): ItemFormState {
-  return {
-    ...EMPTY_ITEM_FORM,
-    id: item.id,
-    name: item.name,
-    itemType: item.itemType,
-    description: item.description ?? '',
-    categoryId: item.categoryId ?? NONE_VALUE,
-    unit: item.unit,
-    internalSku: item.internalSku ?? '',
-    manufacturer: item.manufacturer ?? '',
-    supplierId: item.supplierId ?? NONE_VALUE,
-    supplierArticleNumber: item.supplierArticleNumber ?? '',
-    purchasePrice: centsToInput(item.purchasePriceCents),
-    salePrice: centsToInput(item.salePriceCents),
-    isBillable: item.isBillable,
-    globalMinimumStock: String(item.globalMinimumStock).replace('.', ','),
-    globalTargetStock:
-      item.globalTargetStock === null
-        ? ''
-        : String(item.globalTargetStock).replace('.', ','),
-    initialLocationId: '',
-    initialQuantity: '',
-    barcode: item.primaryBarcode ?? '',
-    notes: item.notes ?? '',
-  };
-}
-
-function getInventoryActionErrorMessage(error: string): string {
-  const messages: Record<string, string> = {
-    name_required: 'Bitte gib einen Namen ein.',
-    unit_required: 'Bitte wähle eine Einheit aus.',
-    location_required_for_initial_stock:
-      'Bitte wähle zuerst ein Lager aus oder lege direkt in diesem Feld ein neues Lager an.',
-    location_required: 'Bitte wähle ein Lager aus.',
-    location_not_found: 'Das ausgewählte Lager wurde nicht gefunden.',
-    category_not_found: 'Die ausgewählte Kategorie wurde nicht gefunden.',
-    quantity_required: 'Bitte gib eine Menge größer als 0 ein.',
-    stock_would_go_negative:
-      'Der Bestand in diesem Lager reicht nicht aus. Wähle eine kleinere Menge oder ein anderes Lager.',
-    save_failed: 'Der Artikel konnte nicht gespeichert werden.',
-    create_failed: 'Das Lager konnte nicht gespeichert werden.',
-    not_authorized: 'Du hast keine Berechtigung für diese Aktion.',
-  };
-
-  return messages[error] ?? 'Die Aktion konnte nicht abgeschlossen werden.';
-}
-
-function formatMovementTarget(movement: InventoryOverview['movements'][number]): {
-  from: string;
-  to: string;
-} {
-  const jobLabel = movement.jobNumber
-    ? `Auftrag ${movement.jobNumber}`
-    : movement.jobTitle
-      ? `Auftrag ${movement.jobTitle}`
-      : 'Auftrag';
-  const projectLabel = movement.projectNumber
-    ? `Projekt ${movement.projectNumber}`
-    : movement.projectName
-      ? `Projekt ${movement.projectName}`
-      : 'Projekt';
-  const targetLabel = movement.jobId
-    ? movement.projectId
-      ? `${jobLabel} · ${projectLabel}`
-      : jobLabel
-    : movement.projectId
-      ? projectLabel
-      : null;
-
-  switch (movement.movementType) {
-    case 'job_take':
-      return {
-        from: movement.locationName,
-        to: targetLabel ?? 'Auftrag/Projekt',
-      };
-    case 'job_return':
-      return {
-        from: targetLabel ?? 'Auftrag/Projekt',
-        to: movement.locationName,
-      };
-    case 'stock_in':
-    case 'initial_count':
-      return { from: 'Externe Quelle', to: movement.locationName };
-    case 'stock_out':
-      return { from: movement.locationName, to: 'Korrektur/Ausgang' };
-    case 'transfer_in':
-      return { from: 'Umlagerung', to: movement.locationName };
-    case 'transfer_out':
-      return { from: movement.locationName, to: 'Umlagerung' };
-    default:
-      return { from: movement.locationName, to: 'Korrektur' };
-  }
-}
-
-function stockStatusClasses(status: InventoryOverviewItem['stockStatus']): string {
-  switch (status) {
-    case 'out_of_stock':
-      return 'border-destructive/40 bg-destructive-soft text-destructive-soft-foreground';
-    case 'low_stock':
-      return 'border-warning/40 bg-warning-soft text-warning-soft-foreground';
-    case 'in_stock':
-      return 'border-success/40 bg-success-soft text-success-soft-foreground';
-  }
-}
-
-function itemTypeClasses(type: InventoryItemType): string {
-  switch (type) {
-    case 'material':
-      return 'bg-muted text-muted-foreground';
-    case 'consumable':
-      return 'bg-muted text-muted-foreground';
-    case 'tool':
-      return 'bg-muted text-muted-foreground';
-    case 'asset':
-      return 'bg-muted text-muted-foreground';
-  }
-}
-
-// Places a pending draft where the server row will land: both lists are
-// ordered by name (inventory_items and, with equal sort_order, inventory_locations).
-function withPendingDraft<Row extends { name: string }, Draft extends { name: string }>(
-  rows: Row[],
-  draft: Draft | null
-): Array<Row | Draft> {
-  if (!draft) return rows;
-  const index = rows.findIndex((row) => draft.name.localeCompare(row.name, 'de') <= 0);
-  const position = index === -1 ? rows.length : index;
-  return [...rows.slice(0, position), draft, ...rows.slice(position)];
-}
-
-function isServerRow<Row extends { id: string }, Draft extends object>(
-  row: Row | Draft
-): row is Row {
-  return 'id' in row;
-}
-
-function formatDateTime(value: string): string {
-  return new Date(value).toLocaleString('de-DE', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function parseCsvLine(line: string, delimiter: string): string[] {
-  const cells: string[] = [];
-  let current = '';
-  let quoted = false;
-
-  for (let index = 0; index < line.length; index++) {
-    const char = line[index];
-    const next = line[index + 1];
-
-    if (char === '"' && quoted && next === '"') {
-      current += '"';
-      index++;
-      continue;
-    }
-
-    if (char === '"') {
-      quoted = !quoted;
-      continue;
-    }
-
-    if (char === delimiter && !quoted) {
-      cells.push(current.trim());
-      current = '';
-      continue;
-    }
-
-    current += char;
-  }
-
-  cells.push(current.trim());
-  return cells;
-}
-
-function parseCsv(text: string): { headers: string[]; rows: Record<string, string>[] } {
-  const lines = text
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n')
-    .split('\n')
-    .filter((line) => line.trim().length > 0);
-
-  const [firstLine] = lines;
-  if (firstLine === undefined) return { headers: [], rows: [] };
-  const delimiter =
-    parseCsvLine(firstLine, ';').length >= parseCsvLine(firstLine, ',').length
-      ? ';'
-      : ',';
-  const headers = parseCsvLine(firstLine, delimiter).map((header) => header.trim());
-  const rows = lines.slice(1).map((line) => {
-    const cells = parseCsvLine(line, delimiter);
-    return headers.reduce<Record<string, string>>((acc, header, index) => {
-      acc[header] = cells[index] ?? '';
-      return acc;
-    }, {});
-  });
-
-  return { headers, rows };
-}
-
-function guessMapping(headers: string[]): Partial<Record<ImportColumnKey, string | undefined>> {
-  const lowerHeaders = headers.map((header) => ({
-    original: header,
-    lower: header.toLowerCase(),
-  }));
-
-  function find(...needles: string[]) {
-    return lowerHeaders.find(({ lower }) =>
-      needles.some((needle) => lower.includes(needle))
-    )?.original;
-  }
-
-  return {
-    name: find('artikel', 'name', 'bezeichnung', 'produkt'),
-    itemType: find('typ', 'art'),
-    categoryName: find('kategorie', 'gruppe'),
-    locationName: find('lager', 'ort', 'standort'),
-    unit: find('einheit', 'unit'),
-    quantity: find('bestand', 'menge', 'anzahl'),
-    minimumStock: find('mindest', 'minimum'),
-    targetStock: find('zielbestand', 'sollbestand'),
-    internalSku: find('sku', 'artikelnummer', 'nr.'),
-    barcode: find('barcode', 'ean', 'gtin'),
-    manufacturer: find('hersteller', 'manufacturer'),
-    supplierName: find('lieferant', 'supplier'),
-    supplierArticleNumber: find('lieferanten', 'lieferantennr'),
-    purchasePriceCents: find('einkauf', 'ek'),
-    salePriceCents: find('verkauf', 'vk'),
-    isBillable: find('abrechenbar'),
-    notes: find('notiz', 'bemerkung'),
-  };
-}
-
-function parseItemType(value: string): InventoryItemType {
-  const normalized = value.toLowerCase();
-  if (normalized.includes('werkzeug') || normalized.includes('tool')) return 'tool';
-  if (normalized.includes('anlage') || normalized.includes('gerät') || normalized.includes('asset')) {
-    return 'asset';
-  }
-  if (normalized.includes('verbrauch')) return 'consumable';
-  return 'material';
-}
-
-function parseBoolean(value: string): boolean | null {
-  const normalized = value.trim().toLowerCase();
-  if (!normalized) return null;
-  if (['ja', 'j', 'yes', 'true', '1'].includes(normalized)) return true;
-  if (['nein', 'n', 'no', 'false', '0'].includes(normalized)) return false;
-  return null;
-}
-
-function parseMoneyToCents(value: string): number | null {
-  const normalized = value
-    .trim()
-    .replace(/\s/g, '')
-    .replace('EUR', '')
-    .replace('€', '');
-  if (!normalized) return null;
-
-  const usesDotDecimal =
-    !normalized.includes(',') && /^[+-]?\d+\.\d{1,2}$/.test(normalized);
-  const cleaned = usesDotDecimal
-    ? normalized
-    : normalized.replace(/\./g, '').replace(',', '.');
-  if (!cleaned) return null;
-  const parsed = Number(cleaned);
-  if (!Number.isFinite(parsed)) return null;
-  return Math.max(0, Math.round(parsed * 100));
-}
-
 export function InventoryContent({ overview }: InventoryContentProps) {
   const router = useRouter();
-  const { showBanner } = useBanner();
   const navigation = useListNavigation();
   const query = overview.page.query;
-  const [search, setSearch] = useState(query.search);
-  const [typeFilter, setTypeFilter] = useState<string>(query.type);
-  const [stockFilter, setStockFilter] = useState<string>(query.stock);
-  const [locationFilter, setLocationFilter] = useState<string>(query.location);
-  const [itemDialogOpen, setItemDialogOpen] = useState(false);
-  const [itemForm, setItemForm] = useState<ItemFormState>(EMPTY_ITEM_FORM);
-  const [locationDialogOpen, setLocationDialogOpen] = useState(false);
-  const [locationForm, setLocationForm] = useState<LocationFormState>(EMPTY_LOCATION_FORM);
-  const [stockDialog, setStockDialog] = useState<StockDialogState>(null);
+  const filters = useInventoryFilters(query, navigation);
+  const editing = useInventoryEditing(overview);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
-  const [pendingItemDraft, setPendingItemDraft] = useState<PendingItemDraft | null>(null);
-  const [pendingLocationDraft, setPendingLocationDraft] =
-    useState<PendingLocationDraft | null>(null);
-  // Dialog edits: the button spins while the action runs; the changed row
-  // shows an inline indicator until the refreshed props land.
-  const itemSave = useServerAction(upsertInventoryItem);
-  const stockSave = useServerAction(adjustInventoryStock);
-  const busyItems = useBusyIds();
-  const waitForItems = useSettleOnChange(overview.items);
-  const waitForLocations = useSettleOnChange(overview.locations);
-
-  const visiblePendingItemDraft =
-    pendingItemDraft?.confirmedId &&
-    overview.items.some((item) => item.id === pendingItemDraft.confirmedId)
-      ? null
-      : pendingItemDraft;
 
   useRealtimeRouterRefresh({
     tables: [
@@ -560,192 +69,15 @@ export function InventoryContent({ overview }: InventoryContentProps) {
     ],
   });
 
-  const filterKey = JSON.stringify([query.search, query.type, query.stock, query.location]);
-  const [appliedFilterKey, setAppliedFilterKey] = useState(filterKey);
-  if (appliedFilterKey !== filterKey && !navigation.busy) {
-    setAppliedFilterKey(filterKey);
-    setSearch(query.search);
-    setTypeFilter(query.type);
-    setStockFilter(query.stock);
-    setLocationFilter(query.location);
-  }
   const pageItems = useMemo(() => {
-    const byId = new Map(overview.items.map(item => [item.id,item]));
-    return overview.page.ids.flatMap(id => { const item=byId.get(id); return item ? [item] : []; });
+    const byId = new Map(overview.items.map((item) => [item.id, item]));
+    return overview.page.ids.flatMap((id) => {
+      const item = byId.get(id);
+      return item ? [item] : [];
+    });
   }, [overview.items, overview.page.ids]);
   const filteredItems = pageItems;
   const plannedItems = pageItems;
-  const stockedItemCount = overview.summary.stockedItems;
-
-  function openCreateItemDialog() {
-    setFormError(null);
-    setItemForm(EMPTY_ITEM_FORM);
-    setItemDialogOpen(true);
-  }
-
-  function openEditItemDialog(item: InventoryOverviewItem) {
-    setFormError(null);
-    setItemForm(itemToForm(item));
-    setItemDialogOpen(true);
-  }
-
-  function handleItemSave() {
-    setFormError(null);
-    const initialQuantity = decimalFromInput(itemForm.initialQuantity);
-    if (!itemForm.id && initialQuantity > 0 && !itemForm.initialLocationId) {
-      setFormError(getInventoryActionErrorMessage('location_required_for_initial_stock'));
-      return;
-    }
-
-    const input = {
-      ...(itemForm.id !== null ? { id: itemForm.id } : {}),
-      name: itemForm.name,
-      itemType: itemForm.itemType,
-      description: itemForm.description,
-      categoryId:
-        itemForm.categoryId === NONE_VALUE ? null : itemForm.categoryId,
-      unit: itemForm.unit,
-      internalSku: itemForm.internalSku,
-      manufacturer: itemForm.manufacturer,
-      supplierId:
-        itemForm.supplierId === NONE_VALUE ||
-        itemForm.supplierId === NEW_SUPPLIER_VALUE
-          ? null
-          : itemForm.supplierId,
-      supplierName:
-        itemForm.supplierId === NEW_SUPPLIER_VALUE
-          ? itemForm.supplierName
-          : null,
-      supplierArticleNumber: itemForm.supplierArticleNumber,
-      purchasePriceCents: centsFromInput(itemForm.purchasePrice),
-      salePriceCents: centsFromInput(itemForm.salePrice),
-      isBillable: itemForm.isBillable,
-      globalMinimumStock: decimalFromInput(itemForm.globalMinimumStock),
-      globalTargetStock: itemForm.globalTargetStock
-        ? decimalFromInput(itemForm.globalTargetStock)
-        : null,
-      trackQuantity: true,
-      trackIndividualAssets:
-        itemForm.itemType === 'tool' || itemForm.itemType === 'asset',
-      barcode: itemForm.barcode,
-      notes: itemForm.notes,
-      initialLocationId: itemForm.id ? null : itemForm.initialLocationId || null,
-      initialQuantity: itemForm.id ? null : initialQuantity,
-    };
-
-    if (!itemForm.id) {
-      // Create: the dialog closes at once and the table carries the draft as
-      // a pending row until the refreshed list contains the new item.
-      setItemDialogOpen(false);
-      setPendingItemDraft({
-        confirmedId: null,
-        name: itemForm.name.trim(),
-        internalSku: itemForm.internalSku.trim(),
-        itemType: itemForm.itemType,
-        unit: itemForm.unit,
-        quantity: initialQuantity,
-        locationName:
-          overview.locations.find((location) => location.id === itemForm.initialLocationId)
-            ?.name ?? null,
-      });
-      void (async () => {
-        const result = await upsertInventoryItem(input).catch(() => null);
-        if (!result?.success) {
-          setPendingItemDraft(null);
-          showBanner({
-            variant: 'error',
-            message: getInventoryActionErrorMessage(result?.error ?? 'save_failed'),
-          });
-          return;
-        }
-        showBanner({ variant: 'success', message: 'Der Artikel wurde angelegt.' });
-        setPendingItemDraft((current) =>
-          current ? { ...current, confirmedId: result.item.id } : current
-        );
-        const refreshed = waitForItems();
-        router.refresh();
-        await refreshed;
-        setPendingItemDraft(null);
-      })();
-      return;
-    }
-
-    const itemId = itemForm.id;
-    void (async () => {
-      const result = await itemSave.run(input).catch(() => null);
-      if (!result?.success) {
-        setFormError(getInventoryActionErrorMessage(result?.error ?? 'save_failed'));
-        return;
-      }
-      setItemDialogOpen(false);
-      showBanner({ variant: 'success', message: 'Der Artikel wurde gespeichert.' });
-      router.refresh();
-      void busyItems.run(itemId, waitForItems);
-    })();
-  }
-
-  function handleLocationSave() {
-    setFormError(null);
-    const form = locationForm;
-    // Create: the dialog closes at once; the Lager tab shows a pending card
-    // until the refreshed location list contains the new one.
-    setLocationDialogOpen(false);
-    setLocationForm(EMPTY_LOCATION_FORM);
-    setPendingLocationDraft({ name: form.name.trim(), locationType: form.locationType });
-    void (async () => {
-      const result = await createInventoryLocation(form).catch(() => null);
-      if (!result?.success) {
-        setPendingLocationDraft(null);
-        showBanner({
-          variant: 'error',
-          message: getInventoryActionErrorMessage(result?.error ?? 'create_failed'),
-        });
-        return;
-      }
-      showBanner({ variant: 'success', message: 'Das Lager wurde angelegt.' });
-      router.refresh();
-      await waitForLocations();
-      setPendingLocationDraft(null);
-    })();
-  }
-
-  function handleStockSave() {
-    if (!stockDialog) return;
-
-    setFormError(null);
-    const itemId = stockDialog.item.id;
-    void (async () => {
-      const result = await stockSave
-        .run({
-          itemId,
-          locationId: stockDialog.locationId,
-          direction: stockDialog.direction,
-          quantity: decimalFromInput(stockDialog.quantity),
-          reason: stockDialog.reason,
-        })
-        .catch(() => null);
-      if (!result?.success) {
-        setFormError(getInventoryActionErrorMessage(result?.error ?? 'save_failed'));
-        return;
-      }
-      setStockDialog(null);
-      showBanner({ variant: 'success', message: 'Der Bestand wurde angepasst.' });
-      router.refresh();
-      void busyItems.run(itemId, waitForItems);
-    })();
-  }
-
-  function openStockDialog(item: InventoryOverviewItem) {
-    setFormError(null);
-    setStockDialog({
-      item,
-      locationId:
-        item.stockByLocation[0]?.locationId ?? overview.locations[0]?.id ?? '',
-      direction: 'add',
-      quantity: '',
-      reason: '',
-    });
-  }
 
   return (
     <PageShell>
@@ -754,59 +86,30 @@ export function InventoryContent({ overview }: InventoryContentProps) {
         subtitle={`${overview.summary.totalItems} Artikel · ${overview.locations.length} Lager · ${overview.summary.plannedItems} geplante Artikel`}
         actions={
           <>
-            <Button
-              variant="outline"
-              className="gap-2"
-              onClick={() => setImportDialogOpen(true)}
-            >
+            <Button variant="outline" className="gap-2" onClick={() => setImportDialogOpen(true)}>
               <FileUp className="size-4" />
               CSV importieren
             </Button>
-            <Button
-              variant="outline"
-              className="gap-2"
-              onClick={() => {
-                setFormError(null);
-                setLocationForm(EMPTY_LOCATION_FORM);
-                setLocationDialogOpen(true);
-              }}
-            >
+            <Button variant="outline" className="gap-2" onClick={editing.location.openCreate}>
               <Warehouse className="size-4" />
-              Lager
+              Lager anlegen
             </Button>
-            <Button className="gap-2" onClick={openCreateItemDialog}>
+            <Button className="gap-2" onClick={editing.item.openCreate}>
               <Plus className="size-4" />
-              Artikel
+              Artikel anlegen
             </Button>
           </>
         }
       />
 
       <PageBody>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <SummaryTile
-            label="Artikel mit Bestand"
-            value={String(stockedItemCount)}
-            icon={<Boxes className="size-4" />}
-          />
-          <SummaryTile
-            label="Knapp"
-            value={String(overview.summary.lowStockItems)}
-            icon={<SlidersHorizontal className="size-4" />}
-          />
-          <SummaryTile
-            label="Leer"
-            value={String(overview.summary.outOfStockItems)}
-            icon={<ClipboardList className="size-4" />}
-          />
-          <SummaryTile
-            label="Geplante Artikel"
-            value={String(overview.summary.plannedItems)}
-            icon={<PackagePlus className="size-4" />}
-          />
-        </div>
+        <InventorySummaryTiles summary={overview.summary} />
 
-        <Tabs value={query.tab} onValueChange={(tab) => navigation.navigate({ tab, page: 1 })} className="mt-4">
+        <Tabs
+          value={query.tab}
+          onValueChange={(tab) => navigation.navigate({ tab, page: 1 })}
+          className="mt-4"
+        >
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <TabsList>
               <TabsTrigger value="all">Alle Artikel</TabsTrigger>
@@ -815,87 +118,36 @@ export function InventoryContent({ overview }: InventoryContentProps) {
               <TabsTrigger value="movements">Bewegungen</TabsTrigger>
             </TabsList>
 
-            <div className="flex flex-col gap-2 md:flex-row md:items-center">
-              <div className="relative min-w-0 md:w-64">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={search}
-                  onChange={(event) => { setSearch(event.target.value); navigation.navigate({ search: event.target.value, page: 1 }, 200); }}
-                  placeholder="Suchen"
-                  aria-label="Artikel suchen"
-                  className="pl-8"
-                />
-              </div>
-              <Select value={typeFilter} onValueChange={(value) => { setTypeFilter(value); navigation.navigate({ type: value, page: 1 }); }}>
-                <SelectTrigger className="md:w-44" aria-label="Nach Typ filtern">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL_VALUE}>Alle Typen</SelectItem>
-                  {Object.entries(INVENTORY_ITEM_TYPE_LABELS).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={stockFilter} onValueChange={(value) => { setStockFilter(value); navigation.navigate({ stock: value, page: 1 }); }}>
-                <SelectTrigger className="md:w-40" aria-label="Nach Bestand filtern">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL_VALUE}>Alle Bestände</SelectItem>
-                  {Object.entries(INVENTORY_STOCK_STATUS_LABELS).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <div className="md:w-44">
-                <SearchableSelect
-                  ariaLabel="Nach Lager filtern"
-                  options={[
-                    { value: ALL_VALUE, label: 'Alle Lager' },
-                    ...overview.locations.map((location) => ({
-                      value: location.id,
-                      label: location.name,
-                    })),
-                  ]}
-                  value={locationFilter}
-                  onChange={(value) => { setLocationFilter(value); navigation.navigate({ location: value, page: 1 }); }}
-                  searchPlaceholder="Lager suchen …"
-                  emptyMessage="Kein Lager gefunden"
-                />
-              </div>
-            </div>
+            <InventoryFilterBar filters={filters} locations={overview.locations} />
           </div>
 
           <TabsContent value="all" className="mt-4" aria-busy={navigation.busy} inert={navigation.busy}>
             <InventoryTable
               items={filteredItems}
-              pendingDraft={visiblePendingItemDraft}
-              isBusy={busyItems.isBusy}
-              onEdit={openEditItemDialog}
-              onAdjust={openStockDialog}
+              pendingDraft={editing.item.pendingDraft}
+              isBusy={editing.isItemBusy}
+              onEdit={editing.item.openEdit}
+              onAdjust={editing.stock.open}
             />
           </TabsContent>
 
           <TabsContent value="locations" className="mt-4" aria-busy={navigation.busy} inert={navigation.busy}>
             <LocationsView
-              locations={overview.locations.filter(location => overview.page.locationIds.includes(location.id))}
+              locations={overview.locations.filter((location) =>
+                overview.page.locationIds.includes(location.id),
+              )}
               items={overview.items}
               itemCounts={overview.page.locationCounts}
-              pendingDraft={pendingLocationDraft}
+              pendingDraft={editing.location.pendingDraft}
             />
           </TabsContent>
 
           <TabsContent value="planned" className="mt-4" aria-busy={navigation.busy} inert={navigation.busy}>
             <InventoryTable
               items={plannedItems}
-              isBusy={busyItems.isBusy}
-              onEdit={openEditItemDialog}
-              onAdjust={openStockDialog}
+              isBusy={editing.isItemBusy}
+              onEdit={editing.item.openEdit}
+              onAdjust={editing.stock.open}
             />
           </TabsContent>
 
@@ -903,41 +155,47 @@ export function InventoryContent({ overview }: InventoryContentProps) {
             <MovementsTable movements={overview.movements} />
           </TabsContent>
         </Tabs>
-        {query.tab !== 'movements' && <ListPagination page={query.page}
-          total={query.tab === 'locations' ? overview.locations.length : overview.page.total}
-          pageSize={query.tab === 'locations' ? 12 : 50} busy={navigation.busy}
-          label={query.tab === 'locations' ? 'Lagerseiten' : 'Artikelseiten'}
-          onPageChange={page => navigation.navigate({ page })} />}
+        {query.tab !== 'movements' && (
+          <ListPagination
+            page={query.page}
+            total={query.tab === 'locations' ? overview.locations.length : overview.page.total}
+            pageSize={query.tab === 'locations' ? 12 : 50}
+            busy={navigation.busy}
+            label={query.tab === 'locations' ? 'Lagerseiten' : 'Artikelseiten'}
+            onPageChange={(page) => navigation.navigate({ page })}
+          />
+        )}
       </PageBody>
 
       <ItemDialog
-        open={itemDialogOpen}
-        onOpenChange={setItemDialogOpen}
-        form={itemForm}
-        setForm={setItemForm}
+        open={editing.item.dialogOpen}
+        onOpenChange={editing.item.setDialogOpen}
+        form={editing.item.form}
+        setForm={editing.item.setForm}
         categories={overview.categories}
         suppliers={overview.suppliers}
         locations={overview.locations}
-        isSaving={itemSave.isPending}
-        error={formError}
-        onSave={handleItemSave}
+        isSaving={editing.item.isSaving}
+        error={editing.formError}
+        onSave={editing.item.save}
       />
 
       <LocationDialog
-        open={locationDialogOpen}
-        onOpenChange={setLocationDialogOpen}
-        form={locationForm}
-        setForm={setLocationForm}
-        onSave={handleLocationSave}
+        open={editing.location.dialogOpen}
+        onOpenChange={editing.location.setDialogOpen}
+        form={editing.location.form}
+        setForm={editing.location.setForm}
+        onSave={editing.location.save}
+        error={editing.formError}
       />
 
       <StockAdjustmentDialog
-        state={stockDialog}
-        setState={setStockDialog}
+        state={editing.stock.dialog}
+        setState={editing.stock.setDialog}
         locations={overview.locations}
-        isSaving={stockSave.isPending}
-        error={formError}
-        onSave={handleStockSave}
+        isSaving={editing.stock.isSaving}
+        error={editing.formError}
+        onSave={editing.stock.save}
       />
 
       <ImportDialog
@@ -949,26 +207,6 @@ export function InventoryContent({ overview }: InventoryContentProps) {
         onImported={() => router.refresh()}
       />
     </PageShell>
-  );
-}
-
-function SummaryTile({
-  label,
-  value,
-  icon,
-}: {
-  label: string;
-  value: string;
-  icon: ReactNode;
-}) {
-  return (
-    <div className="rounded-lg border bg-card px-3 py-3">
-      <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {icon}
-        {label}
-      </div>
-      <p className="text-lg font-semibold tabular-nums">{value}</p>
-    </div>
   );
 }
 
@@ -995,76 +233,28 @@ function InventoryTable({
     <>
       <div className="space-y-2 md:hidden">
         {isEmpty ? (
-          <div className="rounded-lg border bg-card px-4 py-12 text-center text-sm text-muted-foreground">
-            Keine Artikel gefunden.
-          </div>
+          <EmptyState
+            title="Keine Artikel gefunden"
+            description="Ändere die Suche oder die Filter, oder lege über „Artikel anlegen“ einen Artikel an."
+          />
         ) : (
-          rows.map((item) => isServerRow(item) ? (
-            <ListRow key={item.id} className="items-start">
-              <div className="min-w-0 flex-1 space-y-1">
-                <div className="flex items-center gap-2">
-                  <p className="min-w-0 truncate text-sm font-medium">{item.name}</p>
-                  <InlinePending active={isBusy(item.id)} />
-                  <Badge
-                    variant="outline"
-                    className={cn('shrink-0', stockStatusClasses(item.stockStatus))}
-                  >
-                    {INVENTORY_STOCK_STATUS_LABELS[item.stockStatus]}
-                  </Badge>
-                </div>
-                <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-                  <span>{INVENTORY_ITEM_TYPE_LABELS[item.itemType]}</span>
-                  {item.internalSku && <span>SKU {item.internalSku}</span>}
-                  {item.categoryName && <span>{item.categoryName}</span>}
-                </div>
-                <p className="text-xs tabular-nums">
-                  <span className="font-medium">
-                    {formatInventoryQuantity(item.availableQuantity, item.unit)} verfügbar
-                  </span>
-                  <span className="text-muted-foreground">
-                    {' '}· Bestand {formatInventoryQuantity(item.totalOnHand, item.unit)} · Geplant{' '}
-                    {formatInventoryQuantity(item.plannedQuantity, item.unit)}
-                  </span>
-                </p>
-                {item.stockByLocation.length > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    {item.stockByLocation
-                      .slice(0, 2)
-                      .map(
-                        (stock) =>
-                          `${stock.locationName} ${formatInventoryQuantity(stock.quantityOnHand, item.unit)}`
-                      )
-                      .join(' · ')}
-                    {item.stockByLocation.length > 2 &&
-                      ` · +${item.stockByLocation.length - 2} weitere`}
-                  </p>
-                )}
-              </div>
-              <ItemActionsMenu item={item} onEdit={onEdit} onAdjust={onAdjust} />
-            </ListRow>
-          ) : (
-            <ListRow
-              key="pending-item"
-              role="status"
-              aria-label={PENDING_ITEM_LABEL}
-              className="items-start opacity-70"
-            >
-              <div className="min-w-0 flex-1 space-y-1">
-                <div className="flex items-center gap-2">
-                  <InlinePending active label={PENDING_ITEM_LABEL} />
-                  <p className="min-w-0 truncate text-sm font-medium">{item.name}</p>
-                </div>
-                <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-                  <span>{INVENTORY_ITEM_TYPE_LABELS[item.itemType]}</span>
-                  {item.internalSku && <span>SKU {item.internalSku}</span>}
-                </div>
-                <p className="text-xs tabular-nums text-muted-foreground">
-                  Bestand {formatInventoryQuantity(item.quantity, item.unit)}
-                  {item.locationName && ` · ${item.locationName}`}
-                </p>
-              </div>
-            </ListRow>
-          ))
+          rows.map((item) =>
+            isServerRow(item) ? (
+              <ListRow key={item.id} className="items-start">
+                <InventoryItemCardBody item={item} busy={isBusy(item.id)} />
+                <ItemActionsMenu item={item} onEdit={onEdit} onAdjust={onAdjust} />
+              </ListRow>
+            ) : (
+              <ListRow
+                key="pending-item"
+                role="status"
+                aria-label={PENDING_ITEM_LABEL}
+                className="items-start opacity-70"
+              >
+                <PendingItemCardBody item={item} label={PENDING_ITEM_LABEL} />
+              </ListRow>
+            ),
+          )
         )}
       </div>
 
@@ -1090,114 +280,25 @@ function InventoryTable({
                 </TableCell>
               </TableRow>
             ) : (
-              rows.map((item) => isServerRow(item) ? (
-              <TableRow key={item.id}>
-                <TableCell>
-                  <div className="min-w-48">
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium">{item.name}</p>
-                      <InlinePending active={isBusy(item.id)} />
-                    </div>
-                    <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                      {item.internalSku && <span>SKU {item.internalSku}</span>}
-                      {item.primaryBarcode && <span>Barcode {item.primaryBarcode}</span>}
-                      {item.categoryName && <span>{item.categoryName}</span>}
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <Badge variant="secondary" className={itemTypeClasses(item.itemType)}>
-                    {INVENTORY_ITEM_TYPE_LABELS[item.itemType]}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  {item.stockByLocation.length === 0 ? (
-                    <span className="text-muted-foreground">-</span>
-                  ) : (
-                    <div className="space-y-1">
-                      {item.stockByLocation.slice(0, 2).map((stock) => (
-                        <div key={stock.locationId} className="text-xs">
-                          <span className="font-medium">{stock.locationName}</span>{' '}
-                          <span className="text-muted-foreground">
-                            {formatInventoryQuantity(stock.quantityOnHand, item.unit)}
-                          </span>
-                        </div>
-                      ))}
-                      {item.stockByLocation.length > 2 && (
-                        <p className="text-xs text-muted-foreground">
-                          +{item.stockByLocation.length - 2} weitere
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {formatInventoryQuantity(item.totalOnHand, item.unit)}
-                </TableCell>
-                <TableCell className="text-right tabular-nums text-muted-foreground">
-                  {formatInventoryQuantity(item.plannedQuantity, item.unit)}
-                </TableCell>
-                <TableCell className="text-right tabular-nums font-medium">
-                  {formatInventoryQuantity(item.availableQuantity, item.unit)}
-                </TableCell>
-                <TableCell>
-                  <Badge variant="outline" className={stockStatusClasses(item.stockStatus)}>
-                    {INVENTORY_STOCK_STATUS_LABELS[item.stockStatus]}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <ItemActionsMenu item={item} onEdit={onEdit} onAdjust={onAdjust} />
-                </TableCell>
-              </TableRow>
-              ) : (
-              <PendingRow
-                key="pending-item"
-                columns={INVENTORY_ITEM_COLUMNS}
-                label={PENDING_ITEM_LABEL}
-                cells={{
-                  name: (
-                    <div className="min-w-48">
-                      <p className="font-medium">{item.name}</p>
-                      {item.internalSku && (
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          SKU {item.internalSku}
-                        </p>
-                      )}
-                    </div>
-                  ),
-                  type: (
-                    <Badge variant="secondary" className={itemTypeClasses(item.itemType)}>
-                      {INVENTORY_ITEM_TYPE_LABELS[item.itemType]}
-                    </Badge>
-                  ),
-                  location: item.locationName ? (
-                    <span className="text-xs">
-                      <span className="font-medium">{item.locationName}</span>{' '}
-                      <span className="text-muted-foreground">
-                        {formatInventoryQuantity(item.quantity, item.unit)}
-                      </span>
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">-</span>
-                  ),
-                  onHand: (
-                    <span className="ml-auto tabular-nums">
-                      {formatInventoryQuantity(item.quantity, item.unit)}
-                    </span>
-                  ),
-                  planned: (
-                    <span className="ml-auto tabular-nums text-muted-foreground">
-                      {formatInventoryQuantity(0, item.unit)}
-                    </span>
-                  ),
-                  available: (
-                    <span className="ml-auto tabular-nums font-medium">
-                      {formatInventoryQuantity(item.quantity, item.unit)}
-                    </span>
-                  ),
-                }}
-              />
-              ))
+              rows.map((item) =>
+                isServerRow(item) ? (
+                  <TableRow key={item.id}>
+                    <InventoryItemCells
+                      item={item}
+                      busy={isBusy(item.id)}
+                      onEdit={onEdit}
+                      onAdjust={onAdjust}
+                    />
+                  </TableRow>
+                ) : (
+                  <PendingRow
+                    key="pending-item"
+                    columns={INVENTORY_ITEM_COLUMNS}
+                    label={PENDING_ITEM_LABEL}
+                    cells={pendingItemRowCells(item)}
+                  />
+                ),
+              )
             )}
           </TableBody>
         </Table>
@@ -1206,45 +307,15 @@ function InventoryTable({
   );
 }
 
-function ItemActionsMenu({
-  item,
-  onEdit,
-  onAdjust,
-}: {
-  item: InventoryOverviewItem;
-  onEdit: (item: InventoryOverviewItem) => void;
-  onAdjust: (item: InventoryOverviewItem) => void;
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="size-8 shrink-0">
-          <MoreHorizontal className="size-4" />
-          <span className="sr-only">Aktionen</span>
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={() => onAdjust(item)}>
-          <SlidersHorizontal className="mr-2 size-4" />
-          Bestand ändern
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onEdit(item)}>
-          <Pencil className="mr-2 size-4" />
-          Bearbeiten
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 function MovementsTable({ movements }: { movements: InventoryOverview['movements'] }) {
   return (
     <>
       <div className="space-y-2 md:hidden">
         {movements.length === 0 ? (
-          <div className="rounded-lg border bg-card px-4 py-12 text-center text-sm text-muted-foreground">
-            Noch keine Bewegungen erfasst.
-          </div>
+          <EmptyState
+            title="Noch keine Bewegungen"
+            description="Zugänge, Entnahmen und Umlagerungen erscheinen hier, sobald Bestand gebucht wird."
+          />
         ) : (
           movements.map((movement) => {
             const target = formatMovementTarget(movement);
@@ -1256,9 +327,7 @@ function MovementsTable({ movements }: { movements: InventoryOverview['movements
                     <span
                       className={cn(
                         'shrink-0 text-sm font-medium tabular-nums',
-                        movement.quantityDelta < 0
-                          ? 'text-destructive'
-                          : 'text-success-text'
+                        movement.quantityDelta < 0 ? 'text-destructive' : 'text-success-text',
                       )}
                     >
                       {movement.quantityDelta > 0 ? '+' : ''}
@@ -1267,7 +336,7 @@ function MovementsTable({ movements }: { movements: InventoryOverview['movements
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {INVENTORY_MOVEMENT_TYPE_LABELS[movement.movementType]} ·{' '}
-                    {formatDateTime(movement.createdAt)}
+                    {formatGermanDateTime(movement.createdAt)}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {target.from} → {target.to}
@@ -1313,24 +382,20 @@ function MovementsTable({ movements }: { movements: InventoryOverview['movements
                 return (
                   <TableRow key={movement.id}>
                     <TableCell className="text-muted-foreground">
-                      {formatDateTime(movement.createdAt)}
+                      {formatGermanDateTime(movement.createdAt)}
                     </TableCell>
                     <TableCell className="font-medium">{movement.itemName}</TableCell>
                     <TableCell>{movement.locationName}</TableCell>
                     <TableCell>{target.from}</TableCell>
                     <TableCell>{target.to}</TableCell>
-                    <TableCell>
-                      {INVENTORY_MOVEMENT_TYPE_LABELS[movement.movementType]}
-                    </TableCell>
+                    <TableCell>{INVENTORY_MOVEMENT_TYPE_LABELS[movement.movementType]}</TableCell>
                     <TableCell className="text-right tabular-nums">
                       {movement.quantityBefore.toLocaleString('de-DE')}
                     </TableCell>
                     <TableCell
                       className={cn(
                         'text-right tabular-nums',
-                        movement.quantityDelta < 0
-                          ? 'text-destructive'
-                          : 'text-success-text'
+                        movement.quantityDelta < 0 ? 'text-destructive' : 'text-success-text',
                       )}
                     >
                       {movement.quantityDelta > 0 ? '+' : ''}
@@ -1348,936 +413,5 @@ function MovementsTable({ movements }: { movements: InventoryOverview['movements
         </Table>
       </div>
     </>
-  );
-}
-
-function LocationsView({
-  locations,
-  items,
-  itemCounts,
-  pendingDraft,
-}: {
-  locations: InventoryLocation[];
-  items: InventoryOverviewItem[];
-  itemCounts: Record<string,number>;
-  pendingDraft: PendingLocationDraft | null;
-}) {
-  return (
-    <div className="grid gap-4 xl:grid-cols-2">
-      {withPendingDraft(locations, pendingDraft).map((location) => {
-        if (!isServerRow(location)) {
-          return (
-            <div
-              key="pending-location"
-              role="status"
-              aria-label="Lager wird angelegt"
-              className="rounded-lg border bg-card p-4 opacity-70"
-            >
-              <div className="flex items-center gap-2">
-                <InlinePending active label="Lager wird angelegt" />
-                <Warehouse className="size-4 text-muted-foreground" />
-                <h2 className="font-semibold">{location.name}</h2>
-              </div>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {INVENTORY_LOCATION_TYPE_LABELS[location.locationType]}
-              </p>
-            </div>
-          );
-        }
-        const locationItems = items.filter((item) =>
-          item.stockByLocation.some((stock) => stock.locationId === location.id)
-        ).sort((left,right) => left.name.localeCompare(right.name, "de"));
-        const itemCount = itemCounts[location.id] ?? 0;
-        return (
-          <div key={location.id} className="rounded-lg border bg-card p-4">
-            <div className="mb-4 flex items-start justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Warehouse className="size-4 text-muted-foreground" />
-                  <h2 className="font-semibold">{location.name}</h2>
-                </div>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {INVENTORY_LOCATION_TYPE_LABELS[location.locationType]}
-                </p>
-              </div>
-              <Badge variant="secondary">
-                {itemCount} Artikel
-              </Badge>
-            </div>
-            <div className="mb-3 rounded-md bg-muted/40 px-3 py-2 text-sm">
-              Artikel in diesem Lager:{' '}
-              <span className="font-medium tabular-nums">
-                {itemCount.toLocaleString('de-DE')}
-              </span>
-            </div>
-            {itemCount === 0 ? (
-              <p className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-                Keine Artikel in diesem Lager.
-              </p>
-            ) : (
-              <div className="divide-y rounded-md border">
-                {locationItems.slice(0, 6).map((item) => {
-                  const stock = item.stockByLocation.find(
-                    (entry) => entry.locationId === location.id
-                  );
-                  return (
-                    <div key={item.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-                      <span className="min-w-0 truncate font-medium">{item.name}</span>
-                      <span className="shrink-0 tabular-nums text-muted-foreground">
-                        {formatInventoryQuantity(stock?.quantityOnHand ?? 0, item.unit)}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function ItemDialog({
-  open,
-  onOpenChange,
-  form,
-  setForm,
-  categories,
-  suppliers,
-  locations,
-  isSaving,
-  error,
-  onSave,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  form: ItemFormState;
-  setForm: (form: ItemFormState) => void;
-  categories: InventoryCategory[];
-  suppliers: Array<{ id: string; name: string }>;
-  locations: InventoryLocation[];
-  isSaving: boolean;
-  error: string | null;
-  onSave: () => void;
-}) {
-  const unitOptions: InventoryUnitOption[] = INVENTORY_UNIT_OPTIONS;
-  const initialQuantity = decimalFromInput(form.initialQuantity);
-  const [attempted, setAttempted] = useState(false);
-  const nameError =
-    attempted && !form.name.trim() ? 'Bitte gib einen Namen ein.' : undefined;
-  const initialLocationError =
-    attempted && !form.id && initialQuantity > 0 && !form.initialLocationId
-      ? 'Wähle ein Lager für den Startbestand.'
-      : undefined;
-
-  const supplierItems = useMemo(() => {
-    const items: Array<{ id: string; name: string }> = [...suppliers];
-    if (form.supplierId === NEW_SUPPLIER_VALUE && form.supplierName) {
-      items.push({ id: NEW_SUPPLIER_VALUE, name: `${form.supplierName} (neu)` });
-    }
-    return items;
-  }, [suppliers, form.supplierId, form.supplierName]);
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>{form.id ? 'Artikel bearbeiten' : 'Artikel anlegen'}</DialogTitle>
-          <DialogDescription>
-            Stammdaten, Lagerkennzahlen und Barcode für den Inventarartikel.
-          </DialogDescription>
-        </DialogHeader>
-
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            setAttempted(true);
-            if (!form.name.trim()) {
-              document.getElementById('inventory-item-name')?.focus();
-              return;
-            }
-            if (!form.id && initialQuantity > 0 && !form.initialLocationId) {
-              document.getElementById('inventory-item-initial-location')?.focus();
-              return;
-            }
-            onSave();
-          }}
-          noValidate
-          className="flex min-h-0 flex-1 flex-col"
-        >
-        <DialogBody className="grid gap-4 py-1 sm:grid-cols-2">
-          <h3 className="text-sm font-semibold sm:col-span-2">Stammdaten</h3>
-          <Field label="Name" htmlFor="inventory-item-name" required error={nameError}>
-            <Input
-              value={form.name}
-              onChange={(event) => setForm({ ...form, name: event.target.value })}
-            />
-          </Field>
-          <Field label="Typ" htmlFor="inventory-item-type">
-            <Select
-              value={form.itemType}
-              onValueChange={(value) =>
-                setForm({ ...form, itemType: value as InventoryItemType })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(INVENTORY_ITEM_TYPE_LABELS).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="Kategorie" htmlFor="inventory-item-category">
-            <SearchableSelect
-              options={categories.map((category) => ({
-                value: category.id,
-                label: category.name,
-              }))}
-              value={form.categoryId === NONE_VALUE ? '' : form.categoryId}
-              onChange={(value) =>
-                setForm({ ...form, categoryId: value || NONE_VALUE })
-              }
-              placeholder="Keine Kategorie"
-              searchPlaceholder="Kategorie suchen …"
-              emptyMessage="Keine Kategorie gefunden"
-              allowNone
-              noneLabel="Keine Kategorie"
-            />
-          </Field>
-          <Field label="Einheit" htmlFor="inventory-item-unit">
-            <SearchableSelect
-              options={unitOptions}
-              value={form.unit}
-              onChange={(value) => setForm({ ...form, unit: value })}
-              searchPlaceholder="Einheit suchen …"
-              emptyMessage="Keine Einheit gefunden"
-            />
-          </Field>
-          <h3 className="border-t pt-4 text-sm font-semibold sm:col-span-2">
-            Bestand & Kennzeichnung
-          </h3>
-          {!form.id && (
-            <>
-              <Field
-                label="Lager"
-                htmlFor="inventory-item-initial-location"
-                error={initialLocationError}
-              >
-                <LocationSelectWithCreate
-                  locations={locations}
-                  value={form.initialLocationId}
-                  onValueChange={(value) =>
-                    setForm({ ...form, initialLocationId: value })
-                  }
-                  placeholder="Lager wählen oder erstellen"
-                  allowNone
-                  noneLabel="Noch kein Lager"
-                />
-              </Field>
-              <Field
-                label="Startbestand"
-                htmlFor="inventory-item-initial-quantity"
-                description={
-                  initialQuantity > 0
-                    ? `Beim Speichern werden ${formatInventoryQuantity(
-                        initialQuantity,
-                        form.unit
-                      )} in das gewählte Lager gebucht.`
-                    : 'Ohne Startbestand wird nur der Artikel angelegt.'
-                }
-              >
-                <QuantityStepper
-                  value={form.initialQuantity}
-                  onChange={(value) =>
-                    setForm({ ...form, initialQuantity: value })
-                  }
-                  unitLabel={getInventoryUnitLabel(form.unit)}
-                  min={0}
-                />
-              </Field>
-            </>
-          )}
-          <Field label="Interne SKU" htmlFor="inventory-item-internal-sku">
-            <Input
-              value={form.internalSku}
-              onChange={(event) =>
-                setForm({ ...form, internalSku: event.target.value })
-              }
-            />
-          </Field>
-          <Field label="Barcode" htmlFor="inventory-item-barcode">
-            <Input
-              value={form.barcode}
-              onChange={(event) => setForm({ ...form, barcode: event.target.value })}
-            />
-          </Field>
-          <Field label="Mindestbestand" htmlFor="inventory-item-minimum-stock">
-            <Input
-              inputMode="decimal"
-              value={form.globalMinimumStock}
-              onChange={(event) =>
-                setForm({ ...form, globalMinimumStock: event.target.value })
-              }
-            />
-          </Field>
-          <Field label="Zielbestand" htmlFor="inventory-item-target-stock">
-            <Input
-              inputMode="decimal"
-              value={form.globalTargetStock}
-              onChange={(event) =>
-                setForm({ ...form, globalTargetStock: event.target.value })
-              }
-            />
-          </Field>
-          <h3 className="border-t pt-4 text-sm font-semibold sm:col-span-2">
-            Lieferant & Preise
-          </h3>
-          <Field label="Hersteller" htmlFor="inventory-item-manufacturer">
-            <Input
-              value={form.manufacturer}
-              onChange={(event) =>
-                setForm({ ...form, manufacturer: event.target.value })
-              }
-            />
-          </Field>
-          <Field label="Lieferant" htmlFor="inventory-item-supplier">
-            <SelectWithCreate
-              items={supplierItems}
-              getOption={(supplier) => ({
-                value: supplier.id,
-                label: supplier.name,
-              })}
-              value={form.supplierId === NONE_VALUE ? '' : form.supplierId}
-              onValueChange={(value) => {
-                // The quick-create path writes id and name atomically via
-                // onCreated below; skipping here avoids an ordering dependency
-                // between the two same-tick setForm calls.
-                if (value === NEW_SUPPLIER_VALUE) return;
-                setForm({
-                  ...form,
-                  supplierId: value || NONE_VALUE,
-                  // A picked existing supplier clears any pending new name.
-                  supplierName: '',
-                });
-              }}
-              createLabel="Neuen Lieferanten anlegen"
-              renderCreateDialog={({ open: createOpen, onOpenChange: onCreateOpenChange, onCreated }) => (
-                <SupplierQuickCreateDialog
-                  open={createOpen}
-                  onOpenChange={onCreateOpenChange}
-                  onCreated={onCreated}
-                />
-              )}
-              onCreated={(supplier) =>
-                setForm({
-                  ...form,
-                  supplierId: NEW_SUPPLIER_VALUE,
-                  supplierName: supplier.name,
-                })
-              }
-              placeholder="Kein Lieferant"
-              searchPlaceholder="Lieferant suchen …"
-              emptyMessage="Kein Lieferant gefunden"
-              allowNone
-              noneLabel="Kein Lieferant"
-            />
-          </Field>
-          <Field label="Lieferanten-Nr." htmlFor="inventory-item-supplier-number">
-            <Input
-              value={form.supplierArticleNumber}
-              onChange={(event) =>
-                setForm({ ...form, supplierArticleNumber: event.target.value })
-              }
-            />
-          </Field>
-          <Field label="Einkaufspreis" htmlFor="inventory-item-purchase-price">
-            <Input
-              inputMode="decimal"
-              value={form.purchasePrice}
-              onChange={(event) =>
-                setForm({ ...form, purchasePrice: event.target.value })
-              }
-            />
-          </Field>
-          <Field label="Verkaufspreis" htmlFor="inventory-item-sale-price">
-            <Input
-              inputMode="decimal"
-              value={form.salePrice}
-              onChange={(event) =>
-                setForm({ ...form, salePrice: event.target.value })
-              }
-            />
-          </Field>
-          <div className="flex items-center gap-2 rounded-md border px-3 py-2">
-            <Checkbox
-              id="inventory-item-billable"
-              checked={form.isBillable}
-              onCheckedChange={(checked) =>
-                setForm({ ...form, isBillable: checked === true })
-              }
-            />
-            <Label htmlFor="inventory-item-billable">Abrechenbar</Label>
-          </div>
-          <h3 className="border-t pt-4 text-sm font-semibold sm:col-span-2">
-            Beschreibung & Notizen
-          </h3>
-          <div className="sm:col-span-2">
-            <Field label="Beschreibung" htmlFor="inventory-item-description">
-              <Textarea
-                value={form.description}
-                onChange={(event) =>
-                  setForm({ ...form, description: event.target.value })
-                }
-              />
-            </Field>
-          </div>
-          <div className="sm:col-span-2">
-            <Field label="Notizen" htmlFor="inventory-item-notes">
-              <Textarea
-                value={form.notes}
-                onChange={(event) => setForm({ ...form, notes: event.target.value })}
-              />
-            </Field>
-          </div>
-          <div className="sm:col-span-2">
-            <ErrorText>{error}</ErrorText>
-          </div>
-        </DialogBody>
-        <DialogFooter className="pt-4">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={isSaving}
-          >
-            Abbrechen
-          </Button>
-          <Button type="submit" disabled={isSaving}>
-            {isSaving && <Loader2 className="mr-2 size-4 animate-spin" />}
-            Speichern
-          </Button>
-        </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function SupplierQuickCreateDialog({
-  open,
-  onOpenChange,
-  onCreated,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onCreated: (supplier: { id: string; name: string }) => void;
-}) {
-  const [name, setName] = useState('');
-
-  function handleSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    // React synthetic submit events bubble through the portal along the REACT
-    // tree: without stopPropagation this nested dialog's submit also fires the
-    // surrounding ItemDialog form and saves the item prematurely.
-    event.stopPropagation();
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    // The supplier row itself is created server-side when the item is saved
-    // (upsertInventoryItem's supplierName path); this dialog only stages the
-    // name as the pending selection.
-    onCreated({ id: NEW_SUPPLIER_VALUE, name: trimmed });
-    setName('');
-    onOpenChange(false);
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Neuen Lieferanten anlegen</DialogTitle>
-          <DialogDescription>
-            Der Lieferant wird beim Speichern des Artikels angelegt.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} noValidate className="space-y-4">
-          <Field label="Name" htmlFor="inventory-new-supplier-name" required>
-            <Input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="z. B. Großhandel Nord GmbH"
-            />
-          </Field>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Abbrechen
-            </Button>
-            <Button type="submit" disabled={!name.trim()}>
-              Übernehmen
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// Create-only dialog: it closes on submit and the Lager tab shows the pending
-// card, so it carries no pending or error state of its own.
-function LocationDialog({
-  open,
-  onOpenChange,
-  form,
-  setForm,
-  onSave,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  form: LocationFormState;
-  setForm: (form: LocationFormState) => void;
-  onSave: () => void;
-}) {
-  const [attempted, setAttempted] = useState(false);
-  const nameError =
-    attempted && !form.name.trim() ? 'Bitte gib einen Namen ein.' : undefined;
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Lager anlegen</DialogTitle>
-          <DialogDescription>Räume, Lagerhallen, Regale oder Fahrzeuge.</DialogDescription>
-        </DialogHeader>
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            setAttempted(true);
-            if (!form.name.trim()) {
-              document.getElementById('inventory-location-name')?.focus();
-              return;
-            }
-            onSave();
-          }}
-          noValidate
-          className="space-y-4"
-        >
-          <Field label="Name" htmlFor="inventory-location-name" required error={nameError}>
-            <Input
-              value={form.name}
-              onChange={(event) => setForm({ ...form, name: event.target.value })}
-            />
-          </Field>
-          <Field label="Typ" htmlFor="inventory-location-type">
-            <Select
-              value={form.locationType}
-              onValueChange={(value) =>
-                setForm({ ...form, locationType: value as InventoryLocationType })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(INVENTORY_LOCATION_TYPE_LABELS).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="Beschreibung" htmlFor="inventory-location-description">
-            <Textarea
-              value={form.description}
-              onChange={(event) =>
-                setForm({ ...form, description: event.target.value })
-              }
-            />
-          </Field>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Abbrechen
-            </Button>
-            <Button type="submit">Speichern</Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function StockAdjustmentDialog({
-  state,
-  setState,
-  locations,
-  isSaving,
-  error,
-  onSave,
-}: {
-  state: StockDialogState;
-  setState: (state: StockDialogState) => void;
-  locations: InventoryLocation[];
-  isSaving: boolean;
-  error: string | null;
-  onSave: () => void;
-}) {
-  const quantity = state ? decimalFromInput(state.quantity) : 0;
-  const selectedLocation = state
-    ? locations.find((location) => location.id === state.locationId)
-    : null;
-  const [attempted, setAttempted] = useState(false);
-  const locationError =
-    attempted && state && !state.locationId ? 'Bitte wähle ein Lager.' : undefined;
-  const quantityError =
-    attempted && state && quantity <= 0
-      ? 'Bitte gib eine Menge größer als 0 ein.'
-      : undefined;
-
-  return (
-    <Dialog open={!!state} onOpenChange={(open) => !open && setState(null)}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Bestand ändern</DialogTitle>
-          <DialogDescription>{state?.item.name}</DialogDescription>
-        </DialogHeader>
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            setAttempted(true);
-            if (!state?.locationId) {
-              document.getElementById('inventory-stock-location')?.focus();
-              return;
-            }
-            if (quantity <= 0) {
-              document.getElementById('inventory-stock-quantity')?.focus();
-              return;
-            }
-            onSave();
-          }}
-          noValidate
-          className="space-y-4"
-        >
-        {state && (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label id="inventory-stock-action-label">Aktion</Label>
-              <div
-                className="grid grid-cols-2 gap-2"
-                role="group"
-                aria-labelledby="inventory-stock-action-label"
-              >
-                <Button
-                  type="button"
-                  variant={state.direction === 'add' ? 'default' : 'outline'}
-                  onClick={() => setState({ ...state, direction: 'add' })}
-                >
-                  Hinzufügen
-                </Button>
-                <Button
-                  type="button"
-                  variant={state.direction === 'remove' ? 'default' : 'outline'}
-                  onClick={() => setState({ ...state, direction: 'remove' })}
-                >
-                  Entnehmen
-                </Button>
-              </div>
-            </div>
-            <Field
-              label="Lager"
-              htmlFor="inventory-stock-location"
-              required
-              error={locationError}
-            >
-              <LocationSelectWithCreate
-                locations={locations}
-                value={state.locationId}
-                onValueChange={(value) =>
-                  setState({ ...state, locationId: value })
-                }
-                placeholder="Lager wählen oder erstellen"
-              />
-            </Field>
-            <Field
-              label={`Menge (${getInventoryUnitLabel(state.item.unit)})`}
-              htmlFor="inventory-stock-quantity"
-              required
-              error={quantityError}
-            >
-              <QuantityStepper
-                value={state.quantity}
-                onChange={(value) => setState({ ...state, quantity: value })}
-                unitLabel={getInventoryUnitLabel(state.item.unit)}
-                min={0}
-              />
-            </Field>
-            <Field label="Grund" htmlFor="inventory-stock-reason">
-              <Textarea
-                value={state.reason}
-                onChange={(event) =>
-                  setState({ ...state, reason: event.target.value })
-                }
-              />
-            </Field>
-            <p
-              className={cn(
-                'rounded-md px-3 py-2 text-sm',
-                state.direction === 'add'
-                  ? 'bg-success-soft text-success-soft-foreground'
-                  : 'bg-destructive-soft text-destructive-soft-foreground'
-              )}
-            >
-              {state.direction === 'add'
-                ? `Diese Aktion fügt ${formatInventoryQuantity(
-                    quantity,
-                    state.item.unit
-                  )} ${selectedLocation ? `zu ${selectedLocation.name}` : 'zum Inventar'} hinzu.`
-                : `Diese Aktion zieht ${formatInventoryQuantity(
-                    quantity,
-                    state.item.unit
-                  )} ${selectedLocation ? `aus ${selectedLocation.name}` : 'aus dem Inventar'} ab.`}
-            </p>
-          </div>
-        )}
-        <ErrorText>{error}</ErrorText>
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setState(null)}
-            disabled={isSaving}
-          >
-            Abbrechen
-          </Button>
-          <Button type="submit" disabled={isSaving}>
-            {isSaving && <Loader2 className="mr-2 size-4 animate-spin" />}
-            Speichern
-          </Button>
-        </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function ImportDialog({
-  open,
-  onOpenChange,
-  existingItemCount,
-  locations,
-  categories,
-  onImported,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  existingItemCount: number;
-  locations: InventoryLocation[];
-  categories: InventoryCategory[];
-  onImported: () => void;
-}) {
-  const { showBanner } = useBanner();
-  const [fileName, setFileName] = useState('');
-  const [headers, setHeaders] = useState<string[]>([]);
-  const [rows, setRows] = useState<Record<string, string>[]>([]);
-  const [mapping, setMapping] = useState<Partial<Record<ImportColumnKey, string | undefined>>>({});
-  const [error, setError] = useState<string | null>(null);
-  const { run: runImportTask, isPending } = usePendingTask();
-  const [attempted, setAttempted] = useState(false);
-  const fileError =
-    attempted && rows.length === 0
-      ? 'Wähle eine CSV-Datei mit mindestens einer Datenzeile.'
-      : undefined;
-  const nameMappingError =
-    attempted && rows.length > 0 && !mapping.name
-      ? 'Ordne die Spalte mit dem Artikelnamen zu.'
-      : undefined;
-
-  function resetImportState() {
-    setFileName('');
-    setHeaders([]);
-    setRows([]);
-    setMapping({});
-    setError(null);
-    setAttempted(false);
-  }
-
-  function handleOpenChange(nextOpen: boolean) {
-    if (!nextOpen) resetImportState();
-    onOpenChange(nextOpen);
-  }
-
-  function handleFile(file: File | null) {
-    setError(null);
-    if (!file) return;
-
-    file
-      .text()
-      .then((content) => {
-        const parsed = parseCsv(content);
-        setFileName(file.name);
-        setHeaders(parsed.headers);
-        setRows(parsed.rows);
-        setMapping(guessMapping(parsed.headers));
-      })
-      .catch(() => setError('Die Datei konnte nicht gelesen werden.'));
-  }
-
-  function handleImport() {
-    setError(null);
-    void runImportTask(async () => {
-      const normalizedRows: InventoryImportRow[] = rows.map((row) => {
-        const read = (key: ImportColumnKey) => {
-          const header = mapping[key];
-          return header ? row[header] ?? '' : '';
-        };
-
-        return {
-          name: read('name'),
-          itemType: read('itemType') ? parseItemType(read('itemType')) : 'material',
-          categoryName: read('categoryName') || null,
-          locationName: read('locationName') || null,
-          unit: read('unit') || null,
-          quantity: decimalFromInput(read('quantity')),
-          minimumStock: decimalFromInput(read('minimumStock')),
-          targetStock: read('targetStock') ? decimalFromInput(read('targetStock')) : null,
-          internalSku: read('internalSku') || null,
-          barcode: read('barcode') || null,
-          manufacturer: read('manufacturer') || null,
-          supplierName: read('supplierName') || null,
-          supplierArticleNumber: read('supplierArticleNumber') || null,
-          purchasePriceCents: parseMoneyToCents(read('purchasePriceCents')),
-          salePriceCents: parseMoneyToCents(read('salePriceCents')),
-          isBillable: parseBoolean(read('isBillable')),
-          notes: read('notes') || null,
-        };
-      });
-
-      const payload: ImportInventoryRowsInput = {
-        fileName: fileName || 'inventar-import.csv',
-        columnMapping: Object.fromEntries(
-          Object.entries(mapping).filter((entry): entry is [string, string] =>
-            Boolean(entry[1])
-          )
-        ),
-        rows: normalizedRows,
-      };
-
-      // One server call imports every row; the result carries the counts.
-      const result = await importInventoryRows(payload).catch(() => null);
-      if (!result?.success) {
-        setError('Der Import konnte nicht abgeschlossen werden.');
-        return;
-      }
-
-      handleOpenChange(false);
-      const importedLabel = `${result.importedCount} Artikel importiert`;
-      showBanner(
-        result.failedCount > 0
-          ? {
-              variant: 'error',
-              message: `${importedLabel}, ${result.failedCount} ${
-                result.failedCount === 1 ? 'Zeile konnte' : 'Zeilen konnten'
-              } nicht übernommen werden. Prüfe die CSV-Datei.`,
-            }
-          : { variant: 'success', message: `${importedLabel}.` }
-      );
-      onImported();
-    });
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>CSV importieren</DialogTitle>
-          <DialogDescription>
-            {rows.length > 0
-              ? `${rows.length} Zeilen erkannt`
-              : `${existingItemCount} bestehende Artikel, ${locations.length} Lager, ${categories.length} Kategorien`}
-          </DialogDescription>
-        </DialogHeader>
-
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            setAttempted(true);
-            if (rows.length === 0) {
-              document.getElementById('inventory-import-file')?.focus();
-              return;
-            }
-            if (!mapping.name) {
-              document.getElementById('inventory-import-name')?.focus();
-              return;
-            }
-            handleImport();
-          }}
-          noValidate
-          className="flex min-h-0 flex-1 flex-col"
-        >
-        <DialogBody className="space-y-4 py-1">
-          <Field label="CSV-Datei" htmlFor="inventory-import-file" required error={fileError}>
-            <Input
-              type="file"
-              accept=".csv,text/csv"
-              onChange={(event) => handleFile(event.target.files?.[0] ?? null)}
-            />
-          </Field>
-
-          {headers.length > 0 && (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {IMPORT_COLUMNS.map((column) => (
-                <Field
-                  key={column.key}
-                  label={column.label}
-                  htmlFor={`inventory-import-${column.key}`}
-                  required={column.key === 'name'}
-                  error={column.key === 'name' ? nameMappingError : undefined}
-                >
-                  <SearchableSelect
-                    options={headers.map((header) => ({ value: header, label: header }))}
-                    value={mapping[column.key] ?? ''}
-                    onChange={(value) =>
-                      setMapping({
-                        ...mapping,
-                        [column.key]: value || undefined,
-                      })
-                    }
-                    placeholder="Nicht importieren"
-                    searchPlaceholder="Spalte suchen …"
-                    emptyMessage="Keine Spalte gefunden"
-                    allowNone
-                    noneLabel="Nicht importieren"
-                  />
-                </Field>
-              ))}
-            </div>
-          )}
-          <ErrorText>{error}</ErrorText>
-        </DialogBody>
-
-        <DialogFooter className="pt-4">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => handleOpenChange(false)}
-            disabled={isPending}
-          >
-            Abbrechen
-          </Button>
-          <Button type="submit" disabled={isPending}>
-            {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
-            Importieren
-          </Button>
-        </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }

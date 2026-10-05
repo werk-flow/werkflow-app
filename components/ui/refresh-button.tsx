@@ -6,6 +6,7 @@ import { useCallback, useTransition } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { useServerAction } from '@/hooks/use-server-action';
+import { useHydrated } from '@/hooks/use-hydrated';
 import { cn } from '@/lib/utils';
 
 /**
@@ -43,6 +44,7 @@ export function RefreshButton({
   className?: string;
 }) {
   const routeRefresh = useRouterRefresh();
+  const hydrated = useHydrated();
   const liveRefresh = useServerAction(async () => {
     if (onRefresh) await onRefresh();
   });
@@ -58,7 +60,7 @@ export function RefreshButton({
         if (onRefresh) void liveRefresh.run();
         if (withRouteRefresh) routeRefresh.refresh();
       }}
-      disabled={isPending}
+      disabled={!hydrated || isPending}
       aria-label={label}
       title={label}
     >

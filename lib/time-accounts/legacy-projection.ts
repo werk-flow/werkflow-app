@@ -24,30 +24,20 @@ export function projectLegacyEntriesForWindow({
 }: ProjectLegacyEntriesForWindowInput): TimeEntry[] {
   const startTimestamp = Date.parse(startInstant);
   const endTimestamp = Date.parse(endInstant);
-  if (
-    !Number.isFinite(startTimestamp) ||
-    !Number.isFinite(endTimestamp) ||
-    startTimestamp >= endTimestamp
-  ) {
+  if (!Number.isFinite(startTimestamp) || !Number.isFinite(endTimestamp) || startTimestamp >= endTimestamp) {
     throw new Error('Invalid legacy time-entry projection window.');
   }
 
-  return applyApprovedTimeCorrections(
-    entries,
-    applications,
-    organizationId
-  ).filter((entry) => {
+  return applyApprovedTimeCorrections(entries, applications, organizationId).filter((entry) => {
     const timestamp = Date.parse(entry.timestamp);
     return timestamp >= startTimestamp && timestamp < endTimestamp;
   });
 }
 
-export function hasUnclosedLegacySequence(
-  entries: readonly TimeEntry[]
-): boolean {
+export function hasUnclosedLegacySequence(entries: readonly TimeEntry[]): boolean {
   let active = false;
   for (const entry of [...entries].sort(
-    (left, right) => Date.parse(left.timestamp) - Date.parse(right.timestamp)
+    (left, right) => Date.parse(left.timestamp) - Date.parse(right.timestamp),
   )) {
     if (entry.status !== 'approved') continue;
     if (['clock_in', 'break_start', 'break_end'].includes(entry.entryType)) {

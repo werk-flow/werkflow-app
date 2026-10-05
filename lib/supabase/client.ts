@@ -8,8 +8,7 @@ export function createSupabaseBrowserClient(): ReturnType<typeof createBrowserCl
     browserClient = createBrowserClient(getSupabaseUrl(), getSupabasePublishableKey(), {
       realtime: {
         heartbeatIntervalMs: 15_000,
-        reconnectAfterMs: (tries: number) =>
-          Math.min(1_000 * 2 ** tries, 30_000),
+        reconnectAfterMs: (tries: number) => Math.min(1_000 * 2 ** tries, 30_000),
         timeout: 20_000,
       },
     });

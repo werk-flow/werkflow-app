@@ -1,4 +1,80 @@
+import { randomUUID } from 'node:crypto';
+import type { Database } from '../../../../lib/supabase/database.types';
 import { createAdminClient } from './shared';
+
+type RequestEnums = Database['public']['Enums'];
+
+/**
+ * Inserts a request in the given state as the actor. Closed and converted
+ * requests carry the facts the table constraints require; the request number
+ * stays run-scoped so list and search assertions find exactly this row.
+ */
+export async function seedRequest(input: {
+  orgId: string;
+  actorId: string;
+  summary: string;
+  requestNumber: string;
+  clientId?: string;
+  siteId?: string;
+  contactId?: string;
+  callerName?: string;
+  callerPhone?: string;
+  callerEmail?: string;
+  callerAddress?: string;
+  details?: string;
+  urgency?: RequestEnums['request_urgency'];
+  assignedTo?: string;
+  outcome?:
+    | { status: 'offen' | 'in_klaerung' }
+    | { status: 'geschlossen'; reason: RequestEnums['request_close_reason'] }
+    | { status: 'umgewandelt'; projectId: string };
+  /** Event-log entries recorded after the request, such as `status_changed`. */
+  eventTypes?: readonly string[];
+}): Promise<string> {
+  const admin = createAdminClient();
+  const requestId = randomUUID();
+  const outcome = input.outcome ?? { status: 'offen' };
+  const now = new Date().toISOString();
+  await admin
+    .from('client_requests')
+    .insert({
+      id: requestId,
+      organization_id: input.orgId,
+      created_by: input.actorId,
+      summary: input.summary,
+      request_number: input.requestNumber,
+      client_id: input.clientId ?? null,
+      site_id: input.siteId ?? null,
+      contact_id: input.contactId ?? null,
+      caller_name: input.callerName ?? null,
+      caller_phone: input.callerPhone ?? null,
+      caller_email: input.callerEmail ?? null,
+      caller_address: input.callerAddress ?? null,
+      details: input.details ?? null,
+      urgency: input.urgency ?? 'normal',
+      assigned_to: input.assignedTo ?? null,
+      status: outcome.status,
+      ...(outcome.status === 'geschlossen'
+        ? { closed_reason: outcome.reason, closed_at: now, closed_by: input.actorId }
+        : {}),
+      ...(outcome.status === 'umgewandelt'
+        ? { converted_project_id: outcome.projectId, converted_at: now, converted_by: input.actorId }
+        : {}),
+    })
+    .throwOnError();
+  for (const eventType of input.eventTypes ?? []) {
+    await admin
+      .from('client_request_events')
+      .insert({
+        organization_id: input.orgId,
+        request_id: requestId,
+        event_type: eventType,
+        created_by: input.actorId,
+      })
+      .throwOnError();
+  }
+  return requestId;
+}
 
 export type RequestConversionState = {
   status: string;
@@ -15,18 +91,14 @@ export async function getRequestConversionState(
   requestNumber: string,
 ): Promise<RequestConversionState> {
   const { data, error } = await createAdminClient()
-    .from("client_requests")
-    .select(
-      "status, converted_job_id, converted_project_id, converted_at, converted_by",
-    )
-    .eq("organization_id", orgId)
-    .eq("request_number", requestNumber)
+    .from('client_requests')
+    .select('status, converted_job_id, converted_project_id, converted_at, converted_by')
+    .eq('organization_id', orgId)
+    .eq('request_number', requestNumber)
     .single();
 
   if (error || !data) {
-    throw new Error(
-      `No request found with number ${requestNumber}: ${error?.message}`,
-    );
+    throw new Error(`No request found with number ${requestNumber}: ${error?.message}`);
   }
 
   return {
@@ -63,24 +135,22 @@ export async function getRequestAuditState(
 }> {
   const admin = createAdminClient();
   const { data, error } = await admin
-    .from("client_requests")
+    .from('client_requests')
     .select(
-      "id,status,client_id,contact_id,site_id,caller_name,caller_phone,caller_email,caller_address,details,category,urgency,source,assigned_to,received_at,converted_project_id",
+      'id,status,client_id,contact_id,site_id,caller_name,caller_phone,caller_email,caller_address,details,category,urgency,source,assigned_to,received_at,converted_project_id',
     )
-    .eq("organization_id", orgId)
-    .eq("request_number", requestNumber)
+    .eq('organization_id', orgId)
+    .eq('request_number', requestNumber)
     .single();
   if (error || !data) {
-    throw new Error(
-      `No request found with number ${requestNumber}: ${error?.message}`,
-    );
+    throw new Error(`No request found with number ${requestNumber}: ${error?.message}`);
   }
   const { data: events, error: eventsError } = await admin
-    .from("client_request_events")
-    .select("event_type,created_by,created_at")
-    .eq("organization_id", orgId)
-    .eq("request_id", data.id)
-    .order("created_at", { ascending: true });
+    .from('client_request_events')
+    .select('event_type,created_by,created_at')
+    .eq('organization_id', orgId)
+    .eq('request_id', data.id)
+    .order('created_at', { ascending: true });
   if (eventsError) {
     throw new Error(`Request events could not be read: ${eventsError.message}`);
   }
@@ -102,9 +172,7 @@ export async function getRequestAuditState(
     receivedAt: data.received_at as string,
     convertedProjectId: (data.converted_project_id as string | null) ?? null,
     eventTypes: (events ?? []).map((event) => event.event_type as string),
-    eventActorIds: (events ?? []).map(
-      (event) => (event.created_by as string | null) ?? null,
-    ),
+    eventActorIds: (events ?? []).map((event) => (event.created_by as string | null) ?? null),
   };
 }
 
@@ -126,44 +194,38 @@ export async function getConvertedRequestJobState(
 }> {
   const admin = createAdminClient();
   const { data: request, error: requestError } = await admin
-    .from("client_requests")
-    .select("converted_job_id")
-    .eq("organization_id", orgId)
-    .eq("request_number", requestNumber)
+    .from('client_requests')
+    .select('converted_job_id')
+    .eq('organization_id', orgId)
+    .eq('request_number', requestNumber)
     .single();
   if (requestError || !request?.converted_job_id) {
-    throw new Error(
-      `Converted job missing for ${requestNumber}: ${requestError?.message}`,
-    );
+    throw new Error(`Converted job missing for ${requestNumber}: ${requestError?.message}`);
   }
   const { data: job, error: jobError } = await admin
-    .from("jobs")
-    .select(
-      "job_number,title,description,client_id,contact_id,site_id,priority,status,planned_date",
-    )
-    .eq("organization_id", orgId)
-    .eq("id", request.converted_job_id)
+    .from('jobs')
+    .select('job_number,title,description,client_id,contact_id,site_id,priority,status,planned_date')
+    .eq('organization_id', orgId)
+    .eq('id', request.converted_job_id)
     .single();
   if (jobError || !job) {
     throw new Error(`Converted job could not be read: ${jobError?.message}`);
   }
   const [planningResult, dispatchResult] = await Promise.all([
     admin
-      .from("planning_occurrences")
-      .select("id", { count: "exact", head: true })
-      .eq("organization_id", orgId)
-      .eq("job_id", request.converted_job_id),
+      .from('planning_occurrences')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
+      .eq('job_id', request.converted_job_id),
     admin
-      .from("planning_dispatches")
-      .select("id", { count: "exact", head: true })
-      .eq("organization_id", orgId)
-      .eq("job_id", request.converted_job_id),
+      .from('planning_dispatches')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
+      .eq('job_id', request.converted_job_id),
   ]);
   const countError = planningResult.error ?? dispatchResult.error;
   if (countError) {
-    throw new Error(
-      `Converted job side effects could not be read: ${countError.message}`,
-    );
+    throw new Error(`Converted job side effects could not be read: ${countError.message}`);
   }
   return {
     jobNumber: (job.job_number as string | null) ?? null,
@@ -184,10 +246,10 @@ export async function getConvertedRequestJobState(
 // the mode-independent input for unified-badge expectations.
 export async function countOpenClientRequests(orgId: string): Promise<number> {
   const { count, error } = await createAdminClient()
-    .from("client_requests")
-    .select("*", { count: "exact", head: true })
-    .eq("organization_id", orgId)
-    .in("status", ["offen", "in_klaerung"]);
+    .from('client_requests')
+    .select('*', { count: 'exact', head: true })
+    .eq('organization_id', orgId)
+    .in('status', ['offen', 'in_klaerung']);
   if (error) {
     throw new Error(`Open request count failed: ${error.message}`);
   }

@@ -58,14 +58,8 @@ export function NewPasswordFieldsForm({
       control: form.control,
       name: 'password',
     }) ?? '';
-  const requirements = useMemo(
-    () => getPasswordRequirements(passwordValue),
-    [passwordValue]
-  );
-  const strengthLevel = useMemo(
-    () => getPasswordStrengthLevel(passwordValue),
-    [passwordValue]
-  );
+  const requirements = useMemo(() => getPasswordRequirements(passwordValue), [passwordValue]);
+  const strengthLevel = useMemo(() => getPasswordStrengthLevel(passwordValue), [passwordValue]);
   const displayError = validationError ?? formError ?? null;
 
   function clearValidationError() {
@@ -113,11 +107,7 @@ export function NewPasswordFieldsForm({
           control={form.control}
           name="confirmPassword"
           render={({ field, fieldState }) => (
-            <Field
-              label="Passwort bestätigen"
-              required
-              error={fieldState.error?.message}
-            >
+            <Field label="Passwort bestätigen" required error={fieldState.error?.message}>
               <PasswordInput
                 {...field}
                 autoComplete="new-password"
@@ -135,18 +125,14 @@ export function NewPasswordFieldsForm({
 
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
           {onBack ? (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onBack}
-              disabled={isSubmitting}
-            >
+            <Button type="button" variant="outline" onClick={onBack} disabled={isSubmitting}>
               {backLabel}
             </Button>
           ) : null}
           <Button
             className={onBack ? undefined : 'w-full'}
             type="submit"
+            // eslint-disable-next-line ui/submit-disabled-only-while-pending -- canon exception: two fields, and the checklist above shows every unmet requirement live
             disabled={isSubmitting || !requirements.allMet}
           >
             {isSubmitting ? (

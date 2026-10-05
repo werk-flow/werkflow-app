@@ -1,10 +1,8 @@
 # Employee Management
 
-Status: living — last reviewed 2026-09-08
+Status: living — last reviewed 2026-10-04
 
-Employee management covers the complete operational relationship between an organization and the people who work in it: membership, access, personnel information, employment conditions, availability, qualifications, assignments, leave, personnel documents, and controlled handoffs to time tracking and payroll.
-
-This is a future-facing product specification. It distinguishes the implemented baseline from the capabilities WerkFlow should provide when the operational core is complete. Exact schema and permission details must still be verified against live Supabase, generated types, and current application code before implementation work.
+Employee management covers the operational relationship between an organization and its people: membership, access, personnel data, employment conditions, availability, qualifications, assignments, leave, personnel documents, and handoffs to time tracking and payroll.
 
 ## Product Goal
 
@@ -16,185 +14,177 @@ WerkFlow should give an SHK business one reliable place to answer:
 - Which onboarding, document, certification, leave, or offboarding actions are still open?
 - Which information may the employee, office, management, payroll, or project lead see and change?
 
-The product should replace personnel spreadsheets, paper folders, scattered certificates, informal availability knowledge, and repeated master-data entry without turning WerkFlow into a complex generic HR suite. Employee-facing tasks should remain part of the same simple WerkFlow experience used for jobs, time, documents, and inventory.
+The product replaces personnel spreadsheets, paper folders, scattered certificates, and informal availability knowledge. It is not a complex generic HR suite. Employee tasks stay inside the same simple app used for jobs, time, documents, and inventory.
 
 ## Current Product Baseline
 
-As of 2026-09-02, every person in an organization has one personnel record that carries employment conditions, a work schedule, responsibilities, vacation and sickness, teams and qualifications, a time account, protected personnel documents, and a controlled access and employment lifecycle. Admin and Büro manage people on `/mitarbeiter` and under **Einstellungen**. Employees act on their own data from `/zeiterfassung`, `/qualifikationen`, `/aufgaben`, and, before their start date, `/onboarding/meine-aufgaben`.
+Every person in an organization has one personnel record. It carries employment conditions, a work schedule, responsibilities, vacation and sickness, teams and qualifications, a time account, protected personnel documents, and an access and employment lifecycle. Admin and Büro manage people. Employees act on their own data, and a future starter sees their own onboarding tasks before the start date.
 
-- Membership and roles. The fixed roles `admin`, `buero`, and `employee` appear as `Admin`, `Büro`, and `Handwerker/in`. Nobody can change their own role, appoint a second admin, or remove themselves, and Büro manages employees but not peers or admins. Custom roles and per-field permissions are intentionally absent ([Grundstock](../product/user-flow-catalog.md#grundstock-vor-phase-1-stand-vor-p1-00-4-august-2026), [P1-05](../plans/phase-1/slices/p1-05-scoped-responsibilities.md)).
-- Invitations and the member list. Admin and Büro invite Büro or employee members by email, manage pending invitations, and see the member list with clock status and daily progress on `/mitarbeiter`; employees are redirected away. New users can also join by organization code ([Grundstock](../product/user-flow-catalog.md#grundstock-vor-phase-1-stand-vor-p1-00-4-august-2026)).
-- Personnel record. Admin and Büro maintain **Personalien** with the employee number `MA-NNN`, contact and emergency data, entry and exit dates, and notes, and see every change in **Verlauf**. People without a login live under **Weiteres Personal**; **Zugang einladen** connects an account to the existing record later without creating a duplicate. For people with a login the profile name stays authoritative ([P1-03](../plans/phase-1/slices/p1-03-employee-records.md)).
-- Employment conditions. **Beschäftigung** holds date-effective versions of employment type, weekly hours, and vacation days per year; the version effective on a date is the newest one on or before it, so past work keeps its meaning. Compensation fields do not exist by decision. Records without a controlled lifecycle retain employment and access labels derived from dates and login state. P1-24 lifecycle roots and their effective transitions own controlled state ([P1-03](../plans/phase-1/slices/p1-03-employee-records.md)).
-- Work schedules and holiday context. Each person carries date-effective **Arbeitszeitmodell** versions with minutes per weekday, and the schedule wins over the condition's weekly hours for time targets. Admin selects the holiday region and, with Büro, maintains **Betriebsruhe** days at `/einstellungen/zeiterfassung`; only today and future days can change. The daily target resolves per date from the schedule, else labeled weekly hours, else a visibly labeled 8h default, and holidays or closure days set it to 0 ([P1-04](../plans/phase-1/slices/p1-04-work-schedules-and-holidays.md)).
-- Scoped responsibilities. The organization owner configures **Zeitfreigaben** and **Urlaubsfreigaben** under **Einstellungen → Mitarbeiter**: either the role default, where Admin and Büro decide, or a named holder set that replaces it without granting other manager access. Authority is resolved server-side at action time, self-approval is always denied, and every change goes through the **Auswirkung vor dem Speichern** preview ([P1-05](../plans/phase-1/slices/p1-05-scoped-responsibilities.md)).
-- Substitutes. A holder can have a substitute for an inclusive date window who inherits exactly that holder's scope and loses it when the window ends, even if a browser still shows the old view. Affected people see **Meine Verantwortlichkeiten und Vertretungen** in their settings ([P1-05](../plans/phase-1/slices/p1-05-scoped-responsibilities.md)).
-- Vacation. Employees request and withdraw their own vacation in **Urlaub & Abwesenheit**; `leave_approval` holders decide in the **Anträge** tab and can cancel approved vacation with a reason. Entitlement comes from the employment condition, only days with a positive target consume it, and the balance is plain arithmetic or the labeled „Kein Urlaubsanspruch hinterlegt". Approved vacation lowers the daily target and blocks clock-in on that day ([P1-06](../plans/phase-1/slices/p1-06-vacation.md)).
-- Sickness. A sickness report is a fact, not a request: employees report themselves in **Krankmeldung**, Admin and Büro record on someone's behalf, and corrections happen on the same report with a reason. There is no diagnosis field by design, and the type and evidence status exist only for the person and Admin/Büro while the shared calendar shows a neutral „Abwesend – Name". Active sickness sets the target to 0 but does not block clock-in ([P1-08](../plans/phase-1/slices/p1-08-sickness.md)).
-- Teams. Teams are date-effective planning shortcuts that grant no rights; picking a team in an assignment control expands the members active on that date ([P1-09](../plans/phase-1/slices/p1-09-teams-and-qualifications.md)).
-- Qualifications. Admin and Büro maintain an organization catalog of skills and certifications, assign entries with validity and evidence status, and attach requirements to jobs; every assignment re-checks coverage on the planned date, and a gap can be overridden only with a recorded reason. „Intern bestätigt" is an operational fact, not a legal claim. Employees see their own entries read-only at `/qualifikationen`, and expiring certificates surface on `/aufgaben` ([P1-09](../plans/phase-1/slices/p1-09-teams-and-qualifications.md)).
-- Attention. `/aufgaben` shows the approvals a person can decide right now, decision notifications, and **Meine Anträge**; badges never count an item the viewer cannot act on ([P1-07](../plans/phase-1/slices/p1-07-attention-pattern.md)).
-- Dispatch acknowledgement. Employees confirm or challenge the current revision of a dispatched work instruction; acknowledgement never stands in for attendance or recorded time ([P1-12](../plans/phase-1/slices/p1-12-dispatch.md)).
-- Time facts. Each membership owns one attendance session with explicit activity segments. Managers inspect time but never impersonate live capture, and a self-correction always needs a second `time_approval` holder ([P1-21](../plans/phase-1/slices/p1-21-time-segments.md), [P1-22](../plans/phase-1/slices/p1-22-time-corrections-and-approvals.md)).
-- Time accounts. Every in-scope personnel record, including records without a login, has an explicitly opened time account; a missing opening balance, schedule, or policy blocks period close for that person instead of counting as zero. Employees see their own account and monthly statements under `/zeiterfassung/zeitkonto` ([P1-23](../plans/phase-1/slices/p1-23-time-accounts-period-close-and-payroll-export.md)).
-- Access and employment lifecycle. Admin plans activation, suspends, reactivates, or ends organization access and runs employment transitions without deleting the record, its history, or the global login; a record without a lifecycle is labeled as not controlled. The owner and the last effective Admin are protected, and the last holder of a responsibility blocks an employment transition until reassigned ([P1-24](../plans/phase-1/slices/p1-24-controlled-people-lifecycle.md)).
-- Onboarding. Organization templates have immutable published versions; an instantiated plan holds editable typed requirements that reference existing documents, qualifications, conditions, schedules, teams, or acknowledgements. Only an explicit `blocks_access` requirement delays activation, and missing configuration is never shown as complete ([P1-24](../plans/phase-1/slices/p1-24-controlled-people-lifecycle.md)).
-- Protected personnel documents. The classes `personnel_standard`, `admin_restricted`, and `health_evidence` sit outside the ordinary library and never follow a responsibility, job assignment, or ordinary document permission. Admin sees every class, Büro manages standard files, and the person sees only explicitly released versions or uploads their own requested health evidence. An acknowledgement proves that one exact version was seen and makes no signature claim ([P1-24](../plans/phase-1/slices/p1-24-controlled-people-lifecycle.md)).
-
-The September 5 hardening gives the personnel lifecycle section an authoritative read after confirmed changes, including protected-document uploads, so its own updates do not depend solely on a route refresh or Realtime delivery. Background read progress stays visible without blocking unrelated operations; a failed read exposes stale data and a retry. Own-personnel confirmations and health-evidence uploads show explicit success feedback. The evidence dialog supports native form submission and preserves entered values after a rejected upload for an explicit retry. The [qualified verification record](../plans/phase-1/hardening-2026-09/03-uiux-and-test-reliability.md) records component, focused business, and cloud proof with their certification limits.
+- **Roles.** Creating an organization makes the creator its Admin, with a personnel record and the default settings, in one step. If any part fails, no organization remains. The fixed roles appear as `Admin`, `Büro`, and `Handwerker/in`. Nobody can change their own role, appoint a second admin, or remove themselves. Büro manages employees but not peers or admins. Custom roles and per-field permissions are absent by decision.
+- **Invitations and member list.** Admin and Büro invite Büro or employee members by email, manage pending invitations, and see each member's clock status and daily progress. Employees cannot open the member list. An invite link makes the person a member at once. Inviting a person without a login replaces their pending invite and connects the new one to their personnel record in one save, before any mail goes out. When the invite mail cannot be sent, no invite stays behind, and a personnel record keeps the invite it had before. A failed read of the list or of a personnel record's sections shows the failure with a retry.
+- **Join requests.** A person who enters the organization code sends a join request and waits outside the app. Each person has one open request at most and can withdraw it. Admin and Büro see open requests in `Aufgaben` and decide them in the Mitarbeiter area. An approval adds the person as `Handwerker/in`, and the waiting person enters the app without reloading. After a decline, the person sees the decline and can enter another code. Wrong codes count against an hourly limit.
+- **Personnel record.** Admin and Büro maintain the employee number, contact and emergency data, entry and exit dates, and notes, and see every change in a history. People without a login are personnel records too. Inviting such a person later connects the account to the existing record without a duplicate. For people with a login, the profile name is authoritative.
+- **Employment conditions.** Employment type, weekly hours, and yearly vacation days are date-effective versions. The version that applies on a date is the newest one on or before it, so past work keeps its meaning. WerkFlow stores no compensation, by decision. A record without a controlled lifecycle shows employment and access labels derived from its dates and login state.
+- **Work schedules and holidays.** Each person has date-effective weekly work patterns with minutes per weekday. For time targets, the schedule wins over the weekly hours. Admin selects the holiday region. Admin and Büro maintain company closure days, and only today and future days can change. The daily target comes from the schedule, else from the weekly hours, else from a visibly labeled 8-hour default. Holidays and closure days set it to 0.
+- **Scoped responsibilities.** The organization owner decides who approves time and who approves vacation. Either the role default applies, where Admin and Büro decide, or a named group of holders replaces it. Naming a holder grants no other manager access. The server checks authority when the action runs. Nobody approves their own request. Every change shows its effect before it is saved.
+- **Substitutes.** A holder can name a substitute for an inclusive date window. The substitute gets exactly that holder's scope and loses it when the window ends, even if a browser still shows the old view. Affected people see their responsibilities and substitutions in their settings.
+- **Vacation.** Employees request and withdraw their own vacation. Vacation approvers decide requests and can cancel approved vacation with a reason. Entitlement comes from the employment condition. Only days with a positive target consume it. The balance is plain arithmetic, or a label that no entitlement exists. Approved vacation lowers the daily target and blocks clock-in on that day.
+- **Sickness.** A sickness report is a fact, not a request. Employees report themselves, and Admin and Büro can record a report for someone. Corrections change the same report and need a reason. There is no diagnosis field, by design. Only the person and Admin or Büro see the sickness type and evidence status. The shared calendar shows a neutral absence. Active sickness sets the target to 0 but does not block clock-in.
+- **Teams.** Teams are date-effective planning shortcuts and grant no rights. Picking a team in an assignment adds the members active on that date.
+- **Qualifications.** Admin and Büro maintain a catalog of skills and certifications, assign entries with validity and evidence status, and set requirements on jobs. Every assignment checks coverage on the planned date. A gap can be overridden only with a recorded reason. „Intern bestätigt" is an operational fact, not a legal claim. Employees see their own entries read-only, and expiring certificates appear in `Aufgaben`.
+- **Attention.** `Aufgaben` shows the approvals a person can decide now, decision notifications, and the person's own requests. A badge never counts an item the viewer cannot act on.
+- **Dispatch acknowledgement.** Employees confirm or challenge the current revision of a dispatched work instruction. An acknowledgement never stands in for attendance or recorded time.
+- **Time facts.** Managers inspect time but never record live time on someone's behalf. A correction of one's own time always needs a second time approver. [Time tracking](time-tracking.md) owns the time rules.
+- **Time accounts.** Every in-scope personnel record, with or without a login, has an explicitly opened time account. A missing opening balance, schedule, or policy blocks the period close for that person and never counts as zero. Employees see their own account and monthly statements.
+- **Access and employment lifecycle.** Admin plans activation, suspends, reactivates, or ends organization access, and runs employment transitions. None of these deletes the record, its history, or the person's login. A record without a lifecycle is labeled as not controlled. The owner and the last effective Admin are protected. The last holder of a responsibility blocks an employment transition until someone else takes it over.
+- **Onboarding.** Organization templates have published versions that never change. A plan created from a template holds editable requirements that reference existing documents, qualifications, conditions, schedules, teams, or acknowledgements. Only a requirement marked as blocking access delays activation. Missing configuration never shows as complete.
+- **Protected personnel documents.** Personnel files have three classes: standard, Admin-only, and health evidence. They sit outside the ordinary library. No responsibility, job assignment, or ordinary document permission grants access to them. Admin sees every class, and Büro manages standard files. The person sees only expressly released versions and can upload requested health evidence. An acknowledgement proves that the person saw one exact version. It is not a signature.
 
 ### Important Current Limitations
 
-- Capacity conflicts, minimum staffing, shift rotations, and date-specific schedule overrides belong to planning ([P1-11](../plans/phase-1/slices/p1-11-planning-occurrences.md)); employee management shows only absence signals.
-- Vacation and sickness are the only absence types. Training, special leave, compensatory time, and hour-based absence are later scope. Time-account adjustments, expiry, and payout are manual four-eyes events without automatic caps, expiry, payout, or money calculation. Time-account balances carry forward; vacation carryover remains unimplemented.
-- Attention is in-app only: no reminders, escalation, notification preferences, or external delivery, which is `P1-46`.
-- A sole admin's own vacation request has no eligible approver until named `leave_approval` holders are selected.
-- Employees cannot propose corrections to their own master data or conditions. Their self-service is vacation, sickness, acknowledgements, released documents, and requested evidence.
-- Ownership transfer and emergency owner recovery do not exist yet.
-- Member removal is allowed only before any time has been recorded. The [September security hardening](../plans/phase-1/hardening-2026-09/05-step-1-security-infrastructure.md) makes the database refuse removal when legacy entries or canonical sessions exist, preserving membership and time history. The office ends employment and controls access through the personnel record. Complete offboarding and retained historical identity remain `P1-33`.
-- No compensation, payroll profile, payslip, provider integration, electronic signature, legal retention, or complete organization export exists. `P1-23` supplies only a generic payroll-ready ZIP with employee and code mapping.
+- Capacity conflicts, minimum staffing, shift rotations, and date-specific schedule overrides belong to [planning](../plans/phase-1/slices/p1-11-planning-occurrences.md). Employee management shows only absence signals.
+- Vacation and sickness are the only absence types. Training, special leave, compensatory time, and hour-based absence are later scope.
+- Time-account adjustments, expiry, and payout are manual four-eyes events. WerkFlow applies no automatic cap, expiry, payout, or money calculation. Time-account balances carry forward. Vacation carryover does not exist.
+- Attention is in-app only. Reminders, escalation, notification preferences, and external delivery belong to `P1-46`.
+- A sole admin's own vacation request has no eligible approver until named vacation approvers exist.
+- Employees cannot propose corrections to their own master data or conditions. Their self-service covers vacation, sickness, acknowledgements, released documents, and requested evidence.
+- Ownership transfer and emergency owner recovery do not exist.
+- A member who asks to join a further organization of the same owner sees it after the next reload or tab return, not live. A join request records who decided and when, but no reason.
+- A member can be removed only before any time was recorded, so membership and time history survive. The office ends employment and access through the personnel record instead. A removal marks the personnel record as exited today in the same step, so a refused removal changes nothing. A member whose entry date lies in the future is removed only after that date is corrected. Complete offboarding with retained historical identity belongs to `P1-33`.
+- No compensation, payroll profile, payslip, payroll-provider integration, electronic signature, legal retention, or complete organization export exists. The only payroll output is a generic payroll-ready export with employee and code mapping.
 
 ## Phase 1 — Complete Operational Core
 
-Phase 1 is not an MVP or a thin employee directory. It is the complete people-operations foundation expected before intelligence and automation become the focus.
+Phase 1 is the complete people-operations foundation, not a thin employee directory. The areas below are product intent. The baseline above says which parts exist.
 
 ### Organization Membership And Employment Identity
 
-- Represent a person once per organization while keeping authentication identity, organization membership, and employment relationship understandable as distinct concepts.
-- Support invited, active, temporarily inactive, future-start, notice-period, exited, and archived states without erasing operational history.
-- Keep a stable employee number and organization-specific identity even when name, email, account, role, or employment conditions change.
-- Capture the practical personnel master data the business needs: names, preferred form of address, business and private contact channels where appropriate, address, emergency contact, employee number, start/end dates, employment type, department/team, manager or responsible office contact, and operational notes.
-- Make field ownership and visibility explicit. An employee should know which information they can maintain themselves and which information requires office review.
-- Support people without immediate app access, such as a future starter or short-term worker, while making the difference between “personnel record” and “active login” obvious.
-- Preserve organization boundaries when one user belongs to more than one organization. Employment data, permissions, schedules, balances, and documents must never leak between organizations.
-- Provide import, duplicate review, and data-completeness status so onboarding an existing workforce does not require retyping every record blindly.
+- Keep login identity, organization membership, and employment relationship as distinct concepts that users can still understand.
+- Support invited, active, temporarily inactive, future-start, notice-period, exited, and archived states without erasing history.
+- Keep a stable employee number when name, email, account, role, or conditions change.
+- Capture the master data the business needs, including preferred form of address, address, department or team, and responsible office contact.
+- Make field ownership visible. An employee knows which data they maintain and which needs office review.
+- Make the difference between a personnel record and an active login obvious.
+- Never let employment data, permissions, schedules, balances, or documents leak between organizations when one user belongs to several.
+- Provide import, duplicate review, and completeness status, so onboarding an existing workforce needs no blind retyping.
 
 ### Roles, Permissions, And Responsibilities
 
-- Keep understandable default role experiences for owner/admin, office/manager, and field employee.
-- Define permissions by recognizable business capability: people data, sensitive personnel data, access management, job planning, time review, leave approval, documents, inventory, finance handoff, and organization settings.
-- Show the effective result of a permission change before it is applied, including lost access and responsibility gaps.
-- Separate operational responsibility from unrestricted personnel access. A project lead may allocate work without seeing compensation, health, or contract data.
-- Allow approval responsibility and temporary delegation to be assigned explicitly, with start/end dates and a visible substitute.
-- Make every denied or hidden action understandable. Users should not encounter controls that appear available but fail after submission.
-- Preserve a safe organization-owner path. Ownership transfer, the last-admin case, and emergency access recovery require dedicated flows rather than ordinary role editing.
-- Preserve the fixed roles and scoped responsibilities settled by `P1-05`. A custom-role or field-permission builder needs a separate product decision.
+- Name permissions by business capability: people data, sensitive personnel data, access, job planning, time review, leave approval, documents, inventory, finance handoff, and settings.
+- Show the effect of a permission change before it applies, including lost access and responsibility gaps.
+- Separate operational responsibility from personnel access. A project lead may allocate work without seeing compensation, health, or contract data.
+- Show every denied or hidden action clearly. A control that looks available never fails after submit.
+- Give ownership transfer, the last-admin case, and emergency recovery dedicated flows, not ordinary role editing.
 
 ### Personnel Master Data And Employment Conditions
 
-- Record effective-dated employment conditions so a future change does not silently rewrite past time, leave, costing, or payroll periods.
-- Cover employment type, weekly target hours, working days, probation and notice information, contractual start/end, vacation entitlement, cost center or team, and other payroll-relevant classifications selected by the business.
-- Support part-time, apprentices, temporary staff, marginal employment, changing hours, and parallel conditions over time without forcing every person into an eight-hour weekday assumption.
-- Separate operational hourly cost or costing information from compensation details, and protect both with stricter permissions than ordinary employee data.
-- Show the current condition first while keeping previous and scheduled conditions available to authorized users.
-- Warn when required conditions are missing before schedules, leave balances, time accounts, job costing, or payroll exports depend on them.
-- Avoid making legal conclusions. WerkFlow records the organization's chosen conditions and highlights inconsistencies; the employer and its advisers remain responsible for correctness.
+- Keep conditions date-effective, so a change never rewrites past time, leave, costing, or payroll periods.
+- Cover working days, probation and notice, contract start and end, cost center or team, and the payroll classifications the business selects.
+- Support part-time staff, apprentices, temporary staff, marginal employment, and changing hours, without an eight-hour weekday assumption.
+- Keep hourly cost separate from compensation, and protect both more strictly than ordinary employee data.
+- Show the current condition first, with previous and scheduled conditions available to authorized users.
+- Warn about missing conditions before schedules, balances, time accounts, costing, or payroll exports depend on them.
+- Draw no legal conclusions. WerkFlow records the organization's chosen conditions and highlights inconsistencies. The employer and its advisers stay responsible for correctness.
 
 ### Work Schedules, Availability, And Capacity
 
-- Support recurring weekly work patterns, flexible schedules, shift patterns, fixed days off, seasonal arrangements, and effective-dated changes.
+- Support flexible schedules, shift patterns, fixed days off, and seasonal arrangements.
 - Allow date-specific overrides without destroying the underlying pattern.
-- Combine contractual target time, approved absence, holidays, training, planned assignments, and other unavailability into one understandable availability result.
-- Show capacity in planning at employee, team, day, and week level, with conflicts explained rather than represented as an unexplained color.
-- Distinguish “not working by schedule,” “approved absent,” “tentatively requested,” “already assigned,” and “unknown/unconfigured.”
-- Support team membership and operational grouping without turning teams into a second permission system.
-- Provide office users with a useful planning view while giving employees a simple personal schedule in the same app.
+- Combine target time, approved absence, holidays, training, assignments, and other unavailability into one availability result.
+- Show capacity per employee, team, day, and week, with each conflict explained, never just colored.
+- Distinguish "not working by schedule", "approved absent", "requested", "already assigned", and "not configured".
+- Give office users a planning view and employees a simple personal schedule in the same app.
 
 ### Skills, Certifications, And Operational Eligibility
 
-- Maintain practical skills, trade specializations, experience tags, languages, driving permissions, safety qualifications, manufacturer training, and other SHK-relevant capabilities.
-- Record certification or qualification validity, issuing body, evidence, renewal date, and any operational restriction where needed.
-- Make expiring, expired, missing, and verified states visible to the right people.
-- Link supporting evidence to the protected personnel-document context rather than relying on notes or filenames.
-- Let job planning filter or warn by required qualification without claiming that software alone proves legal eligibility.
-- Allow a job to express required capabilities and show whether the assigned team covers them.
-- Support planned training and renewal work as availability-impacting events.
-- Keep skill data practical and curated. Free-form tags may supplement, but should not replace, a usable organization vocabulary.
+- Cover SHK-relevant capabilities such as trade specializations, languages, driving permissions, safety qualifications, and manufacturer training.
+- Record issuing body, renewal date, and operational restrictions where needed.
+- Show expiring, expired, missing, and verified states to the right people.
+- Link evidence to the protected personnel documents, not to notes or filenames.
+- Let planning filter and warn by required qualification, without claiming that software proves legal eligibility.
+- Treat planned training and renewals as events that affect availability.
+- Keep the vocabulary curated. Free tags may add to it but never replace it.
 
 ### Contracts And Personnel Documents
 
-- Give each employee a protected personnel-document area for employment contracts, amendments, certificates, policies, acknowledgements, payroll-related forms, and other employee records.
-- Separate personnel-document access from the ordinary manager document library. Access to job documents must not imply access to contracts or health-related evidence.
-- Support document requirements by employment type or role, with missing, pending, valid, expiring, and superseded states.
-- Preserve versions, who uploaded or changed a document, and when a document became effective.
-- Support employee acknowledgement or signature status where the business needs proof that a policy or document was received.
-- Allow a document to be operationally referenced without exposing more of the file than necessary. For example, planning may need “qualification valid until …” without revealing the full certificate to every planner.
-- Support controlled export and retention on offboarding. Retention and deletion rules must be decided by document category, not by one blanket “delete employee” action.
+- Give each employee a protected area for contracts, amendments, certificates, policies, acknowledgements, and payroll forms.
+- Support required documents per employment type or role, with missing, pending, valid, expiring, and superseded states.
+- Record who uploaded or changed a document and when it became effective.
+- Support acknowledgement or signature status where the business needs proof of receipt.
+- Let planning see a fact such as "qualification valid until ..." without the full certificate.
+- Decide retention and deletion per document category, never through one blanket "delete employee" action.
 
 ### Onboarding
 
-- Provide a role-appropriate onboarding plan from accepted offer or future start through first productive day.
-- Cover personnel-data completion, app invitation, role/access assignment, employment conditions, work schedule, required documents, policy acknowledgements, qualifications, training, team assignment, equipment/vehicle/tool handover, and first job readiness.
-- Show owner, due date, status, blocker, and evidence for each onboarding requirement.
-- Allow reusable organization templates for common profiles such as `Handwerker/in`, apprentice, office staff, or project lead while keeping the generated checklist editable.
-- Coordinate the moment account access begins. A future starter should not accidentally see operational data before the intended date.
-- Give the new employee one short, guided list of their own required actions rather than exposing an office checklist.
-- Make incomplete onboarding visible in assignment planning when the missing item affects readiness or safety.
+- Provide a role-appropriate plan from accepted offer or future start to the first productive day.
+- Cover data completion, invitation, access, conditions, schedule, documents, acknowledgements, qualifications, training, team, equipment, vehicle and tool handover, and first job readiness.
+- Show owner, due date, status, blocker, and evidence for each requirement.
+- Offer templates for common profiles such as `Handwerker/in`, apprentice, office staff, or project lead. The generated checklist stays editable.
+- Start account access at the intended moment. A future starter never sees operational data early.
+- Give the new employee one short guided list of their own actions, not the office checklist.
+- Show incomplete onboarding in planning when it affects readiness or safety.
 
 ### Offboarding And Employment Changes
 
-- Treat offboarding as a controlled transition, not deletion.
-- Support planned end dates, immediate suspension where authorized, notice-period changes, and reactivation when a departure is reversed.
-- Identify open responsibilities before exit: assigned jobs, pending time or leave requests, approvals owned by the person, documents, tools/assets, vehicle access, inventory responsibility, and unfinished onboarding/training tasks.
-- Reassign work and approvals explicitly; do not silently drop ownership.
-- End or revoke app access at the intended time while retaining the historical name and relationship on jobs, time entries, stock movements, documents, and audit events.
-- Track return of tools, keys, vehicles, devices, clothing, and other issued assets.
+- Treat offboarding as a controlled transition, never as deletion.
+- Support planned end dates, immediate suspension, notice changes, and reactivation.
+- Before exit, list open responsibilities: jobs, pending time or leave requests, owned approvals, documents, tools, vehicles, inventory, and unfinished onboarding or training.
+- Reassign work and approvals explicitly. Ownership is never dropped silently.
+- End access at the intended time. Keep the historical name on jobs, time, stock movements, documents, and audit events.
+- Track the return of tools, keys, vehicles, devices, clothing, and other issued assets.
 - Finalize time, leave, and payroll handoffs for the last period, including later corrections.
-- Provide authorized export and category-based retention/deletion workflows. An exited employee should disappear from normal active planning without becoming “unknown” in historical records.
+- An exited employee leaves active planning but never becomes "unknown" in history.
 
 ### Leave, Vacation, And Sick Workflows
 
-- Support organization-defined absence types such as vacation, illness, child illness, training, special leave, unpaid leave, compensatory time, and other operational unavailability.
-- Derive understandable entitlement and balance views from employment conditions, carryover, approved use, manual adjustments, and expiry rules chosen by the organization.
-- Let employees request, withdraw, and inspect their own leave in a simple calendar flow.
-- Let authorized approvers approve, reject, request clarification, and delegate approval with an auditable reason and visible current state.
-- Detect conflicts with assignments, minimum staffing, scheduled work, overlapping requests, and relevant qualification coverage without silently blocking all exceptions.
+- Support organization-defined absence types such as child illness, training, special leave, unpaid leave, and compensatory time.
+- Explain entitlement and balance from conditions, carryover, approved use, manual adjustments, and the organization's expiry rules.
+- Let approvers also reject with a reason, ask for clarification, and delegate.
+- Detect conflicts with assignments, minimum staffing, overlapping requests, and qualification coverage without blocking every exception.
 - Support partial days and hour-based absence where the organization uses them.
-- Keep sick-notice capture minimal and privacy-preserving. Planning needs availability; only a tightly authorized group should see evidence or sensitive notes, and diagnoses should not be requested as a default.
-- Make proof/evidence requirements configurable and explicit without presenting them as legal advice.
-- Reflect approved absence consistently in employee availability, calendar planning, target hours, time accounts, and payroll handoff.
-- Preserve cancellation, correction, and retroactive-change history. A changed balance must always be explainable.
+- Make evidence requirements configurable and explicit, without presenting them as legal advice.
+- Reflect approved absence the same way in availability, planning, targets, time accounts, and payroll handoff.
+- Keep cancellation, correction, and retroactive-change history. Every balance change stays explainable.
 
 ### Assignments And Operational Context
 
-- Show each employee's current and upcoming jobs, projects, team, planned effort, role on the assignment, and conflicts.
-- Let authorized planners assign individuals or teams based on availability and required capabilities.
-- Keep the employee's field view limited to actionable assigned work, related customer/site context, permitted documents, time capture, and inventory actions.
-- Make reassignment visible to affected employees and planners, including what changed and when.
-- Preserve historical assignment participation even after the person leaves or the current assignment changes.
-- Distinguish planned assignment, accepted/acknowledged assignment where needed, actual attendance, and recorded time. None of these should silently stand in for another.
+- Show each employee's current and upcoming jobs, projects, team, planned effort, assignment role, and conflicts.
+- Let planners assign people or teams by availability and required capabilities.
+- Limit the field view to assigned work, related customer and site context, permitted documents, time capture, and inventory actions.
+- Show affected employees and planners what changed in a reassignment, and when.
+- Keep historical participation after the person leaves or the assignment changes.
+- Keep planned assignment, acknowledgement, attendance, and recorded time distinct. None stands in for another.
 
 ### Employee Self-Service
 
-- Give employees one personal surface for profile completion, schedule, assignments, time, leave, documents requiring action, certifications, and issued assets.
-- Show exactly which personal fields can be changed directly, which become a review request, and which require office contact.
-- Let employees see their own employment-condition summary, target schedule, leave balance calculation, time account, and request status in plain German.
-- Provide downloadable copies of documents and exports the employee is entitled to receive.
-- Keep office-only and sensitive concepts out of the normal field flow through progressive disclosure, not a collection of separate specialist apps.
-- Ensure apprentices and users with low technical confidence can complete common actions with a small number of explicit choices.
+- Give employees one personal area for profile, schedule, assignments, time, leave, documents that need action, certifications, and issued assets.
+- Show which personal fields they can change directly, which become a review request, and which need office contact.
+- Explain their condition summary, target schedule, leave balance, time account, and request status in plain German.
+- Offer downloads of the documents and exports the employee is entitled to.
+- Keep office-only and sensitive concepts out of the field flow through progressive disclosure, not separate specialist apps.
+- Let apprentices and users with little technical confidence finish common actions with few, explicit choices.
 
 ### Privacy, Auditability, And Record Quality
 
-- Apply least-privilege access separately to ordinary profile data, personnel documents, compensation/costing, health-related absence evidence, and access administration.
-- Show authorized users who changed important employment, schedule, entitlement, role, document, or status data; retain before/after values and effective date.
-- Give the employee visibility into meaningful changes affecting their schedule, balance, access, or employment information.
-- Avoid hidden states: pending, incomplete, blocked, inactive, archived, expired, and scheduled changes must have visible explanations.
-- Support correction, export, retention, and deletion processes without breaking legally or operationally relevant history.
-- Minimize collected data and avoid exposing private contact information in job, calendar, inventory, or CRM surfaces.
+- Apply least privilege separately to profile data, personnel documents, compensation and costing, health evidence, and access administration.
+- Show authorized users who changed employment, schedule, entitlement, role, document, or status data, with before and after values and the effective date.
+- Tell the employee about changes that affect their schedule, balance, access, or employment data.
+- Support correction, export, retention, and deletion without breaking relevant history.
+- Collect little data, and never show private contact data in job, calendar, inventory, or CRM views.
 - Make data-quality problems actionable: duplicate people, missing schedules, invalid date ranges, unverified certificates, missing payroll identifiers, and inconsistent balances.
 
 ### Payroll And Accounting Handoffs
 
-- Maintain the employee identifiers and classifications required to hand approved working time, absence, supplements, and costing information to the organization's payroll/accounting process.
-- Map WerkFlow concepts to an organization's wage types, cost centers, and export expectations without hard-coding one payroll provider as the product model.
-- Provide a preflight view of missing employee data, unapproved time, unresolved absence, invalid balances, and changes after period close.
-- Support an explicit period-ready status, controlled close, export history, and traceable correction/re-export.
-- Preserve the distinction between operational job cost, payroll-relevant value, and customer-billable value.
-- Support structured exports and integration handoffs with stable employee references. Native payroll calculation is not implied.
+- Keep the identifiers and classifications that payroll needs for approved time, absence, supplements, and costing.
+- Map WerkFlow concepts to the organization's wage types, cost centers, and export formats without making one payroll provider the product model.
+- Provide a preflight of missing data, unapproved time, unresolved absence, invalid balances, and changes after period close.
+- Support a period-ready status, a controlled close, export history, and traceable re-export after correction.
+- Keep job cost, payroll value, and billable value distinct.
+- WerkFlow exports structured data with stable employee references. It does not calculate payroll.
 
 ## Connected Workflow Contracts
 
-These contracts describe the information each feature area may provide or consume. They are product contracts, not a database design.
+These are product contracts, not a database design.
 
 | Connected area | Inputs employee management consumes | Outputs employee management provides | Contract rules |
 | --- | --- | --- | --- |
@@ -210,86 +200,76 @@ These contracts describe the information each feature area may provide or consum
 
 ### Admin / Owner
 
-- Owns organization access, employment-policy configuration, sensitive-data delegation, and final accountability.
-- Needs exception-first oversight rather than a screen full of every personnel field.
-- Must be protected from removing the last safe owner/admin path.
+- Owns organization access, employment-policy settings, delegation of sensitive data, and final accountability.
+- Needs exception-first oversight, not a screen of every personnel field.
+- Cannot remove the last safe owner or admin path.
 
 ### Büro / Office / People Operations
 
-- Needs fast employee onboarding, planning, document follow-up, leave coordination, time readiness, and payroll preflight.
-- May receive broad operational responsibility without automatically receiving compensation or health-document access.
-- Should manage by queues, missing requirements, and upcoming changes rather than hunting through individual profiles.
+- Needs fast onboarding, planning, document follow-up, leave coordination, time readiness, and payroll preflight.
+- May get broad operational responsibility without compensation or health-document access.
+- Works from queues, missing requirements, and upcoming changes, not by searching individual profiles.
 
 ### Project Lead
 
-- Needs availability, assignment, skills, and business contact information.
-- Should not receive contracts, compensation, sick evidence, private contact details, or global access administration solely because they lead work.
-- This responsibility may be represented through scoped permissions rather than a new global role.
+- Needs availability, assignments, skills, and business contact data.
+- Gets no contracts, compensation, sick evidence, private contact data, or access administration just for leading work.
+- May be a scoped responsibility instead of a new global role.
 
 ### Handwerker/in And Apprentice
 
-- Uses one WerkFlow app for assigned jobs, schedule, time, leave, documents requiring action, and inventory.
-- Sees personal balances and status in understandable language with no hidden approval or synchronization state.
+- Uses one app for assigned jobs, schedule, time, leave, documents that need action, and inventory.
+- Sees personal balances and status in plain language, with no hidden approval or sync state.
 - Gets guided choices, strong defaults, and explicit confirmation for consequential changes.
 
 ### Shared UX Rules
 
-- Use progressive disclosure: show the current status and next action first, with history and specialist detail available when needed.
-- Prefer natural German employment language over HR or technical jargon.
-- Make every balance, warning, permission, and readiness state explainable.
-- Never represent missing configuration as zero, available, compliant, or complete.
-- Keep web and future mobile behavior consistent; avoid splitting employee work across specialist apps.
-- Preserve keyboard, screen-reader, focus, and mobile usability for all common flows.
+- Show the current status and next action first. History and detail come on demand.
+- Use natural German employment language, not HR or technical jargon.
+- Make every balance, warning, permission, readiness, and pending, blocked, or scheduled state explainable.
+- Never show missing configuration as zero, available, compliant, or complete.
+- Keep web and future mobile behavior consistent.
 
 ## Phase 2 — Intelligence And Automation
 
-Phase 2 should reduce coordination work after Phase 1 data and auditability are trustworthy:
+Phase 2 reduces coordination work once Phase 1 data and audit history are trustworthy:
 
-- Suggest suitable employees for a job from availability, qualifications, team continuity, location context, and workload, with the planner making the decision.
+- Suggest suitable employees for a job from availability, qualifications, team continuity, location, and workload. The planner decides.
 - Predict capacity gaps and qualification bottlenecks before schedules are published.
-- Produce onboarding/offboarding plans from role and employment context, while showing every generated requirement for review.
-- Extract proposed master data, validity dates, and document type from personnel documents with source references and human confirmation.
-- Warn about expiring certificates, missing acknowledgements, unresolved offboarding assets, and payroll-readiness gaps.
-- Summarize staffing, leave, and personnel-document exceptions for authorized users without exposing sensitive details to unauthorized roles.
-- Suggest leave coverage options and schedule changes rather than silently reassigning jobs.
-- Answer permission-aware natural-language questions such as “Which refrigeration-qualified employees are available next Tuesday?” using traceable source data.
-- Prepare employee or payroll changes as reviewable drafts; never autonomously change access, employment conditions, compensation, leave decisions, or personnel-document retention.
+- Draft onboarding and offboarding plans from role and employment context, with every requirement shown for review.
+- Extract master data, validity dates, and document type from personnel documents, with source references and human confirmation.
+- Warn about expiring certificates, missing acknowledgements, unreturned assets, and payroll-readiness gaps.
+- Summarize staffing, leave, and personnel-document exceptions without exposing sensitive details to unauthorized roles.
+- Suggest leave coverage and schedule changes instead of reassigning jobs silently.
+- Answer permission-aware questions such as "Which refrigeration-qualified employees are available next Tuesday?" from traceable data.
+- Prepare employee or payroll changes as reviewable drafts. Never change access, conditions, compensation, leave decisions, or document retention on its own.
 
-Every intelligent action must show its source, proposed result, confidence or uncertainty where relevant, approval point, audit record, organization boundary, and recovery path.
+Every intelligent action shows its source, proposed result, uncertainty where relevant, approval point, audit record, organization boundary, and recovery path.
 
 ## Boundaries And Decision Gates
 
-- WerkFlow is an operational people-management system first, not a full payroll engine, recruiting suite, performance-management platform, or source of employment-law advice.
-- The boundary between a practical personnel record and a full HRIS must be validated with SHK businesses before adding generic enterprise HR features.
-- Phase 1 is fixed roles plus the tested scoped-responsibility vocabulary. A custom-role or field-permission builder remains a separate future decision gate and must not be inferred from this model.
-- Personnel-document categories, retention periods, deletion rights, and employee access require legal/privacy review; do not invent one universal policy.
-- Health and sick-leave data must remain minimal. Diagnosis capture, broad manager visibility, or medical-document sharing is outside the default product.
-- Compensation storage, native payroll calculation, and specific payroll-provider integrations are separate decision gates.
-- Location tracking, biometric attendance, employee scoring, productivity surveillance, and automated disciplinary conclusions are not Phase 1 defaults and require explicit product, privacy, and worker-representation review.
-- Team leads, dispatchers, external workers, subcontractors, and people without user accounts need a deliberate identity/permission model before being treated like normal employees.
-- Deactivation/archive must replace destructive membership removal before offboarding is considered complete.
-- Employee data portability and customer exit behavior must be decided before assisted migration is promised.
+- WerkFlow is an operational people-management system first. It is not a payroll engine, recruiting suite, performance-management platform, or source of employment-law advice.
+- The line between a practical personnel record and a full HR system needs validation with SHK businesses before generic enterprise HR features arrive.
+- Phase 1 has fixed roles plus scoped responsibilities. A custom-role or field-permission builder is a separate future decision gate.
+- Personnel-document categories, retention periods, deletion rights, and employee access need legal and privacy review. There is no single universal policy.
+- Health and sickness data stays minimal. Planning needs only availability, and only a small authorized group sees evidence or sensitive notes. Diagnosis capture, broad manager visibility, and medical-document sharing are outside the default product.
+- Compensation storage, payroll calculation, and specific payroll-provider integrations are separate decision gates.
+- Location tracking, biometric attendance, employee scoring, productivity surveillance, and automated disciplinary conclusions are not Phase 1 defaults. They need product, privacy, and worker-representation review.
+- Team leads, dispatchers, external workers, subcontractors, and people without accounts need a deliberate identity and permission model before they are treated like employees.
+- Deactivation and archive must replace destructive member removal before offboarding counts as complete.
+- Employee data portability and customer exit behavior need a decision before assisted migration is promised.
 
 ## Open Product Decisions
 
-The current baseline above describes the accepted decisions. Their rationale and bounded scope live in the linked slice records; the questions below cover remaining scope.
-
-- Which additional personnel fields are genuinely required for the first SHK customer profiles beyond the `P1-03` set, and which remain optional?
-- Which future operational responsibility beyond Zeitfreigaben and Urlaubsfreigaben proves necessary in real SHK use without becoming a generic permission switch (for example, a future scoped project-lead contract)?
-- Which personnel documents need special retention rules in `P1-45`, beyond the exact-version access and acknowledgement model delivered by `P1-24`?
-- How should employees propose corrections to private master data and employment conditions?
-- Which carryover and expiry policies (deferred out of `P1-06`) must become configurable beyond the period-close behavior delivered by `P1-23`, and do real customers need manual balance adjustments beyond dated condition changes?
-- Beyond the `P1-04` weekly pattern and state-level holiday calendars: are shift rotations, seasonal patterns, or municipal holiday nuance (e.g. Augsburger Friedensfest) needed beyond the planning model delivered by `P1-11`, and should holiday/closure treatment ever be configurable per organization (reduce vs. credit) instead of the fixed target-0 rule?
-- Should a scoped `sickness_management` responsibility ever narrow the manager-role default for sickness type/evidence visibility (deferred out of `P1-08`; would be a `P1-05` vocabulary extension with role-default snapshots), and do real organizations need Büro excluded from it?
-- How should contractors, temporary workers, apprentices, mini-job workers, and non-login personnel differ from ordinary employees?
-- Which tools, vehicles, devices, and inventory responsibilities belong in onboarding/offboarding?
-- Which payroll/accounting products and export formats should be supported first?
-- Which employee data remains visible after exit, for how long, and to which roles?
+- Which personnel fields beyond the current set do the first SHK customers need, and which stay optional?
+- Which further operational responsibility beyond time and vacation approval proves necessary in real use without becoming a generic permission switch, for example a scoped project-lead responsibility?
+- Which personnel documents need special retention rules in `P1-45`?
+- How should employees propose corrections to their private master data and employment conditions?
+- Which vacation carryover and expiry policies must become configurable, and do customers need manual balance adjustments beyond dated condition changes?
+- Are shift rotations, seasonal patterns, or municipal holidays such as the Augsburger Friedensfest needed beyond the planning model? Should an organization ever choose how holidays and closure days count (reduce the target or credit time) instead of the fixed target-0 rule?
+- Should a scoped sickness-management responsibility ever narrow who sees sickness type and evidence, and do real organizations need Büro excluded from it?
+- How should contractors, temporary workers, apprentices, mini-job workers, and people without a login differ from ordinary employees?
+- Which tools, vehicles, devices, and inventory responsibilities belong in onboarding and offboarding?
+- Which payroll and accounting products and export formats come first?
+- Which employee data stays visible after exit, for how long, and to which roles?
 - How should ownership transfer work as a dedicated flow?
-
-## Related Docs
-
-- [Product capability map](../product/product-capability-map.md) — feature ownership, shared objects, and cross-feature handoff rules.
-- [Phase 1 roadmap](../plans/phase-1/roadmap.md) — slice order, current status, and links to per-slice acceptance records.
-- [User-flow catalog](../product/user-flow-catalog.md) — this feature's accepted user-visible flows by stable ID.
-- Connected feature specs: the **Connected Workflow Contracts** table above names every cross-feature contract; load only the specs the current slice names.

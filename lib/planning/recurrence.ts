@@ -1,21 +1,10 @@
-import {
-  addLocalDays,
-  addLocalMonths,
-  getLocalWeekday,
-  resolveBerlinWallTime,
-} from './date-time';
-import type {
-  MaterializedOccurrence,
-  PlanningSeriesDraft,
-} from './types';
+import { addLocalDays, addLocalMonths, getLocalWeekday, resolveBerlinWallTime } from './date-time';
+import type { MaterializedOccurrence, PlanningSeriesDraft } from './types';
 
 const MAX_OCCURRENCES = 730;
 const MAX_MONTH_OFFSET = 1200;
 
-function getCandidateDates(
-  draft: PlanningSeriesDraft,
-  horizonLocalDate: string
-): string[] {
+function getCandidateDates(draft: PlanningSeriesDraft, horizonLocalDate: string): string[] {
   if (!Number.isInteger(draft.interval) || draft.interval < 1) {
     throw new Error('invalid_recurrence_interval');
   }
@@ -43,9 +32,7 @@ function getCandidateDates(
       date <= endDate && dates.length < limit;
       date = addLocalDays(date, 1), offset += 1
     ) {
-      const weekIndex = Math.floor(
-        (offset + getLocalWeekday(startDate)) / 7
-      );
+      const weekIndex = Math.floor((offset + getLocalWeekday(startDate)) / 7);
       if (weekIndex % draft.interval === 0 && weekdays.has(getLocalWeekday(date))) {
         dates.push(date);
       }
@@ -75,7 +62,7 @@ function getCandidateDates(
 
 export function materializeSeries(
   draft: PlanningSeriesDraft,
-  horizonLocalDate: string
+  horizonLocalDate: string,
 ): MaterializedOccurrence[] {
   const localTime = draft.startsAtLocal.slice(11, 16);
   return getCandidateDates(draft, horizonLocalDate).map((localDate) => {
@@ -100,9 +87,7 @@ export function materializeSeries(
       originalStartLocal,
       timeKind: 'timed',
       startAt: resolved.instant.toISOString(),
-      endAt: new Date(
-        resolved.instant.getTime() + durationMinutes * 60_000
-      ).toISOString(),
+      endAt: new Date(resolved.instant.getTime() + durationMinutes * 60_000).toISOString(),
       startDate: null,
       endDateExclusive: null,
       dstResolution: resolved.resolution,
@@ -113,7 +98,7 @@ export function materializeSeries(
 export function occurrenceIdentity(
   organizationId: string,
   lineageId: string,
-  originalStartLocal: string
+  originalStartLocal: string,
 ): string {
   return `${organizationId}:${lineageId}:${originalStartLocal}`;
 }

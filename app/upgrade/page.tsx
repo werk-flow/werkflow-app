@@ -2,27 +2,24 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { CreditCard, Check } from 'lucide-react';
 
-import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { userHasOrganizations, isUserSubscribed } from '@/lib/subscription/helpers';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle
-} from '@/components/ui/card';
+import { getCachedSubscriptionStatus, getCachedUser } from '@/lib/data/cached';
+import { userHasOrganizations } from '@/lib/subscription/helpers';
+import { StandaloneScreen } from '@/components/shared/standalone-screen';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 import { SimulatePaymentButton } from './simulate-payment-button';
 
 export const metadata: Metadata = {
-  title: 'Upgrade - WerkFlow'
+  title: 'Upgrade - WerkFlow',
 };
 
 export default async function UpgradePage() {
-  const supabase = await createSupabaseServerClient();
+  // An unavailable Auth service or a failed subscription read throws into
+  // app/error.tsx with its retry: the offer is shown only to a caller whose
+  // subscription was read and is not active.
   const {
-    data: { user }
-  } = await supabase.auth.getUser();
+    data: { user },
+  } = await getCachedUser();
 
   if (!user) {
     redirect('/login');
@@ -35,21 +32,17 @@ export default async function UpgradePage() {
   }
 
   // If user is already subscribed, redirect to create organization
-  const subscribed = await isUserSubscribed(user.id);
+  const subscribed = await getCachedSubscriptionStatus(user.id);
   if (subscribed) {
     redirect('/onboarding/create-organization');
   }
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center bg-background px-4">
+    <StandaloneScreen>
       <div className="w-full max-w-md space-y-8">
         <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight">
-            WerkFlow Pro
-          </h1>
-          <p className="text-muted-foreground">
-            Erstelle deine Organisation und starte durch
-          </p>
+          <h1 className="text-3xl font-bold tracking-tight">WerkFlow Pro</h1>
+          <p className="text-muted-foreground">Erstelle deine Organisation und starte durch</p>
         </div>
 
         <Card>
@@ -58,9 +51,7 @@ export default async function UpgradePage() {
               <CreditCard className="size-6 text-primary" />
             </div>
             <CardTitle className="text-2xl">Pro Plan</CardTitle>
-            <CardDescription>
-              Alles was du brauchst, um dein Team zu verwalten
-            </CardDescription>
+            <CardDescription>Alles was du brauchst, um dein Team zu verwalten</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <ul className="space-y-3">
@@ -69,7 +60,7 @@ export default async function UpgradePage() {
                 'Unbegrenzte Mitarbeiter',
                 'Vollständige Admin-Kontrolle',
                 'E-Mail-Einladungen',
-                'Prioritäts-Support'
+                'Prioritäts-Support',
               ].map((feature) => (
                 <li key={feature} className="flex items-center gap-3">
                   <Check className="size-4 text-success-text" />
@@ -79,12 +70,8 @@ export default async function UpgradePage() {
             </ul>
 
             <div className="rounded-lg bg-muted p-4 text-center">
-              <p className="text-xs text-muted-foreground mb-1">
-                Entwicklungsmodus
-              </p>
-              <p className="text-sm">
-                Klicke unten, um die Zahlung zu simulieren
-              </p>
+              <p className="text-xs text-muted-foreground mb-1">Entwicklungsmodus</p>
+              <p className="text-sm">Klicke unten, um die Zahlung zu simulieren</p>
             </div>
 
             <SimulatePaymentButton />
@@ -95,9 +82,6 @@ export default async function UpgradePage() {
           Dies ist eine Entwicklungsumgebung. Keine echte Zahlung erforderlich.
         </p>
       </div>
-    </div>
+    </StandaloneScreen>
   );
 }
-
-
-

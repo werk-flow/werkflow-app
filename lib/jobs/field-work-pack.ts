@@ -1,13 +1,6 @@
 import { formatSiteAddress } from '@/lib/clients/types';
-import type {
-  JobInstructionActor,
-  JobInstructionItemWithDetails,
-  JobWithDetails,
-} from '@/lib/jobs/types';
-import {
-  isTerminalWorkExecutionState,
-  type WorkExecutionState,
-} from '@/lib/work-lifecycle/types';
+import type { JobInstructionActor, JobInstructionItemWithDetails, JobWithDetails } from '@/lib/jobs/types';
+import { isTerminalWorkExecutionState, type WorkExecutionState } from '@/lib/work-lifecycle/types';
 
 export type FieldWorkPackJob = {
   id: string;
@@ -70,7 +63,7 @@ export function projectFieldWorkPackJob(job: JobWithDetails): FieldWorkPackJob {
 }
 
 export function sanitizeFieldInstructionItems(
-  items: JobInstructionItemWithDetails[]
+  items: JobInstructionItemWithDetails[],
 ): JobInstructionItemWithDetails[] {
   // Keep this allow-list explicit so new office-only fields stay out by default.
   return items.map((item) => ({

@@ -25,7 +25,7 @@ export function useBusyIds<Id extends string = string>(): {
     };
   }, []);
 
-  const run = useCallback(async <Result,>(id: Id, task: () => Promise<Result>) => {
+  const run = useCallback(async <Result>(id: Id, task: () => Promise<Result>) => {
     setBusyIds((current) => new Set(current).add(id));
     try {
       return await task();

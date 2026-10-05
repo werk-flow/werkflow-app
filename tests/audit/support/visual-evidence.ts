@@ -22,7 +22,9 @@ export async function captureResponsiveSection(
       if (target !== section) {
         // Keep short evidence rows away from the fixed clock launcher at the
         // viewport edge. This scrolls the real page without hiding any UI.
-        await target.evaluate((element) => element.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' }));
+        await target.evaluate((element) =>
+          element.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' }),
+        );
         await expect(target).toBeInViewport({ ratio: 1 });
       }
       const evidenceName = `${name}-${viewport.name}`;

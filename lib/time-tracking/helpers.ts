@@ -9,11 +9,7 @@ import type {
 } from './types';
 import { DEFAULT_DAILY_TARGET_MINUTES } from '@/lib/personnel/targets';
 import { MANAGED_ROLES } from './types';
-import {
-  getLocalDayEnd,
-  getLocalDayKey,
-  isSameLocalDay
-} from './day-utils';
+import { getLocalDayEnd, getLocalDayKey, isSameLocalDay } from './day-utils';
 import { getEffectiveTimeEntries } from './effective-entries';
 import {
   canHolderApproveTarget,
@@ -21,10 +17,10 @@ import {
 } from '@/lib/responsibilities/resolution';
 
 // ── Time model constants ──────────────────────────────────────────────
-const TOTAL_RING_MINUTES = 510;        // 8.5h = one full rotation of main ring
-const BREAK_THRESHOLD_MINUTES = 360;   // 6h total clocked → break applies
+const TOTAL_RING_MINUTES = 510; // 8.5h = one full rotation of main ring
+const BREAK_THRESHOLD_MINUTES = 360; // 6h total clocked → break applies
 const BREAK_DURATION_MINUTES = 30;
-const BREAK_START_MINUTES = 330;       // 5.5h mark on ring where yellow starts
+const BREAK_START_MINUTES = 330; // 5.5h mark on ring where yellow starts
 const OVERTIME_THRESHOLD_MINUTES = 510; // legacy threshold for fixed-break fallback
 export const WORK_GOAL_MINUTES = DEFAULT_DAILY_TARGET_MINUTES; // 8h legacy default, one source
 const OVERTIME_RING_MAX_MINUTES = 240; // 4h = full outer overtime ring
@@ -44,7 +40,7 @@ export interface TimeBreakdown {
 export function computeTimeBreakdown(
   totalMinutes: number,
   actualBreakMinutes?: number,
-  targetMinutes: number = WORK_GOAL_MINUTES
+  targetMinutes: number = WORK_GOAL_MINUTES,
 ): TimeBreakdown {
   if (actualBreakMinutes !== undefined) {
     const clampedBreakMinutes = Math.max(0, Math.min(actualBreakMinutes, totalMinutes));
@@ -54,8 +50,7 @@ export function computeTimeBreakdown(
     return { workMinutes, breakMinutes: clampedBreakMinutes, overtimeMinutes };
   }
 
-  const breakMinutes =
-    totalMinutes >= BREAK_THRESHOLD_MINUTES ? BREAK_DURATION_MINUTES : 0;
+  const breakMinutes = totalMinutes >= BREAK_THRESHOLD_MINUTES ? BREAK_DURATION_MINUTES : 0;
   const overtimeMinutes = Math.max(0, totalMinutes - OVERTIME_THRESHOLD_MINUTES);
   const workMinutes = totalMinutes - breakMinutes - overtimeMinutes;
   return { workMinutes, breakMinutes, overtimeMinutes };
@@ -76,7 +71,7 @@ export function getNonNegativeElapsedMs(clockInTime: string | null): number {
 
 interface RingSegment {
   startFraction: number; // 0-1, position on ring
-  endFraction: number;   // 0-1, position on ring
+  endFraction: number; // 0-1, position on ring
   type: 'work' | 'break';
 }
 
@@ -94,7 +89,7 @@ function pushTimelineSegment(
   segments: ClockTimelineSegment[],
   type: 'work' | 'break',
   startMs: number,
-  endMs: number
+  endMs: number,
 ) {
   if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
     return;
@@ -102,18 +97,18 @@ function pushTimelineSegment(
 
   segments.push({
     type,
-    minutes: (endMs - startMs) / 60000
+    minutes: (endMs - startMs) / 60000,
   });
 }
 
 export function buildClockTimelineSegments(
   entries: TimeEntry[],
   referenceDate = new Date(),
-  options?: ClockTimelineOptions
+  options?: ClockTimelineOptions,
 ): ClockTimelineSegment[] {
   const effectiveEntries = getEffectiveTimeEntries(entries, {
     referenceDate,
-    sameLocalDayOnly: options?.sameLocalDayOnly ?? true
+    sameLocalDayOnly: options?.sameLocalDayOnly ?? true,
   });
   const includeOpenSegment = options?.includeOpenSegment ?? false;
 
@@ -185,7 +180,7 @@ export function buildClockTimelineSegments(
 export function computeRingSegments(
   totalMinutes: number,
   actualBreakMinutes?: number,
-  targetMinutes: number = WORK_GOAL_MINUTES
+  targetMinutes: number = WORK_GOAL_MINUTES,
 ): RingData {
   if (actualBreakMinutes !== undefined) {
     const clamped = Math.max(0, totalMinutes);
@@ -194,7 +189,7 @@ export function computeRingSegments(
     const clampedWorkMinutes = Math.max(0, mainMinutes - clampedBreakMinutes);
     const overtimeMinutes = Math.max(
       0,
-      Math.max(0, totalMinutes - actualBreakMinutes) - Math.max(0, targetMinutes)
+      Math.max(0, totalMinutes - actualBreakMinutes) - Math.max(0, targetMinutes),
     );
     const overtimeFraction = Math.min(overtimeMinutes / OVERTIME_RING_MAX_MINUTES, 1);
 
@@ -224,7 +219,7 @@ export function computeRingSegments(
   const overtimeMinutes = Math.max(0, clamped - TOTAL_RING_MINUTES);
   const overtimeFraction = Math.min(overtimeMinutes / OVERTIME_RING_MAX_MINUTES, 1);
 
-  const breakStart = BREAK_START_MINUTES / TOTAL_RING_MINUTES;  // 330/510
+  const breakStart = BREAK_START_MINUTES / TOTAL_RING_MINUTES; // 330/510
   const breakEnd = BREAK_THRESHOLD_MINUTES / TOTAL_RING_MINUTES; // 360/510
   const currentFraction = mainMinutes / TOTAL_RING_MINUTES;
 
@@ -249,12 +244,12 @@ export function computeRingSegments(
 
 export function computeRingSegmentsFromTimeline(
   timelineSegments: ClockTimelineSegment[],
-  targetMinutes: number = WORK_GOAL_MINUTES
+  targetMinutes: number = WORK_GOAL_MINUTES,
 ): RingData {
   const normalizedSegments = timelineSegments.filter((segment) => segment.minutes > 0);
   const totalWorkMinutes = normalizedSegments.reduce(
     (total, segment) => total + (segment.type === 'work' ? segment.minutes : 0),
-    0
+    0,
   );
   const overtimeMinutes = Math.max(0, totalWorkMinutes - Math.max(0, targetMinutes));
   const overtimeFraction = Math.min(overtimeMinutes / OVERTIME_RING_MAX_MINUTES, 1);
@@ -275,7 +270,7 @@ export function computeRingSegmentsFromTimeline(
     segments.push({
       startFraction: cursorMinutes / TOTAL_RING_MINUTES,
       endFraction: (cursorMinutes + usableMinutes) / TOTAL_RING_MINUTES,
-      type: segment.type
+      type: segment.type,
     });
     cursorMinutes += usableMinutes;
   }
@@ -296,10 +291,7 @@ export type DerivedClockState = {
   lastEntry: TimeEntry | null;
 };
 
-export function deriveCurrentClockState(
-  entries: TimeEntry[],
-  referenceDate = new Date()
-): DerivedClockState {
+export function deriveCurrentClockState(entries: TimeEntry[], referenceDate = new Date()): DerivedClockState {
   const todayEntries = getEffectiveTimeEntries(entries, {
     referenceDate,
     sameLocalDayOnly: true,
@@ -378,10 +370,7 @@ export function deriveCurrentClockState(
  * in the new optimistic approval model. Pending entries affect the working state
  * immediately - approval just confirms they stay, rejection removes them.
  */
-export function hasOpenSession(
-  entries: TimeEntry[],
-  referenceDate = new Date()
-): boolean {
+export function hasOpenSession(entries: TimeEntry[], referenceDate = new Date()): boolean {
   return deriveCurrentClockState(entries, referenceDate).isClockedIn;
 }
 
@@ -397,7 +386,7 @@ export function hasOpenSession(
 export function determineApprovalStatus(
   callerRole: OrgRole,
   targetUserId: string,
-  callerId: string
+  callerId: string,
 ): TimeEntryStatus {
   // Admin adding any entry → immediately approved
   if (callerRole === 'admin') {
@@ -421,11 +410,7 @@ export function determineApprovalStatus(
  * - Manager can manage entries for roles below them (accountant, secretary, employee)
  * - Others cannot manage anyone's entries
  */
-export function canManageEntries(
-  callerRole: OrgRole,
-  targetRole: OrgRole,
-  isOwnEntry: boolean
-): boolean {
+export function canManageEntries(callerRole: OrgRole, targetRole: OrgRole, isOwnEntry: boolean): boolean {
   // Admin can manage all entries
   if (callerRole === 'admin') {
     return true;
@@ -456,14 +441,10 @@ export function canApproveEntries(
   options?: {
     holder: EffectiveResponsibilityHolder;
     targetUserId: string;
-  }
+  },
 ): boolean {
   if (options) {
-    return canHolderApproveTarget(
-      options.holder,
-      options.targetUserId,
-      targetRole
-    );
+    return canHolderApproveTarget(options.holder, options.targetUserId, targetRole);
   }
 
   // Admin can approve all entries
@@ -491,7 +472,7 @@ export function canViewEntries(
   callerRole: OrgRole,
   targetUserId: string,
   callerId: string,
-  _targetRole?: OrgRole
+  _targetRole?: OrgRole,
 ): boolean {
   void _targetRole;
 
@@ -559,9 +540,7 @@ export function formatDuration(minutes: number): string {
 /**
  * Group entries by date (YYYY-MM-DD)
  */
-export function groupEntriesByDate(
-  entries: TimeEntry[]
-): Record<string, TimeEntry[]> {
+export function groupEntriesByDate(entries: TimeEntry[]): Record<string, TimeEntry[]> {
   const grouped: Record<string, TimeEntry[]> = {};
 
   for (const entry of entries) {
@@ -574,10 +553,7 @@ export function groupEntriesByDate(
 
   // Sort entries within each date
   for (const dateEntries of Object.values(grouped)) {
-    dateEntries.sort(
-      (a, b) =>
-        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-    );
+    dateEntries.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
   }
 
   return grouped;
@@ -595,7 +571,7 @@ export function canAddEntriesFor(
   callerRole: OrgRole,
   targetRole: OrgRole,
   callerId: string,
-  targetUserId: string
+  targetUserId: string,
 ): boolean {
   // Everyone can add entries for themselves
   if (callerId === targetUserId) {

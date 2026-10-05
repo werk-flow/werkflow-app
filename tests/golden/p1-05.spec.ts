@@ -1,30 +1,66 @@
 import { expect, test } from './support/fixtures';
-import { getEmployeeRecordStateByUser, getLatestResponsibilityConfigurationState, getVisibleResponsibilityEmployeeRecordIdsAs } from './support/db/personnel';
-import { expectOwnerRoleMutationRejected } from './support/db/shared';
-import { findLatestManualTimeEntryState, getLatestManualTimeEntryState } from './support/db/time-tracking';
-import { confirmResponsibilityPreview, createResponsibilityDelegationViaSettings, endResponsibilityDelegationViaSettings, previewResponsibilityChange } from './support/steps/personnel';
-import { expectVisibleAfterSave, textInDom, visibleText } from './support/steps/shared';
-import { approvePendingTimeEntry, createOwnManualTimeEntry, expectExpiredResponsibilityDeniedAtAction, expectMemberRemovalBlockedByResponsibility, expectPendingTimeApprovalHidden, expectPendingTimeApprovalVisible, expectTimeApprovalsUnavailable, openTimeApprovals } from './support/steps/time-tracking';
+import {
+  getEmployeeRecordStateByUser,
+  getLatestResponsibilityConfigurationState,
+  setResponsibilityHolders,
+} from './support/db/personnel';
+import { getLatestManualTimeEntryState } from './support/db/time-tracking';
+import {
+  confirmResponsibilityPreview,
+  createResponsibilityDelegationViaSettings,
+  endResponsibilityDelegationViaSettings,
+  previewResponsibilityChange,
+} from './support/steps/personnel';
+import {
+  approvePendingTimeEntry,
+  createOwnManualTimeEntry,
+  expectExpiredResponsibilityDeniedAtAction,
+  expectMemberRemovalBlockedByResponsibility,
+  expectPendingTimeApprovalHidden,
+  expectPendingTimeApprovalVisible,
+  expectTimeApprovalsUnavailable,
+  openTimeApprovals,
+} from './support/steps/time-tracking';
+import type { TestRole, TestWorld } from './support/world';
 
-function berlinTodayIso(): string {
-  return new Intl.DateTimeFormat('sv-SE', {
-    timeZone: 'Europe/Berlin',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-}
+// P1-05 — Scoped responsibilities and substitution (@P1-05). Every test pins
+// the time-approval holders it builds on through the product's configuration
+// function, so no test inherits another test's configuration. Which assignment
+// rows each role can read and the owner protection are database rules
+// (supabase/tests/people_boundaries.sql); what an affected person and Büro see
+// in their own settings is the A3 audit's role variant.
 
 function shiftIsoDate(dateIso: string, days: number): string {
   const [year, month, day] = dateIso.split('-').map(Number);
-  if (year === undefined || month === undefined || day === undefined) throw new Error(`Invalid ISO date: ${dateIso}`);
+  if (year === undefined || month === undefined || day === undefined)
+    throw new Error(`Invalid ISO date: ${dateIso}`);
   const shifted = new Date(Date.UTC(year, month - 1, day) + days * 86_400_000);
-  return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, '0')}-${String(shifted.getUTCDate()).padStart(2, '0')}`;
+  return shifted.toISOString().slice(0, 10);
 }
 
 function toDatePickerDigits(dateIso: string): string {
   const [year, month, day] = dateIso.split('-');
   return `${day}${month}${year}`;
+}
+
+async function pinTimeApprovalHolders(
+  world: TestWorld,
+  holders: readonly TestRole[] | 'role_default',
+): Promise<void> {
+  const holderEmployeeRecordIds =
+    holders === 'role_default'
+      ? holders
+      : await Promise.all(
+          holders.map(
+            async (role) => (await getEmployeeRecordStateByUser(world.orgId, world.users[role].id)).id,
+          ),
+        );
+  await setResponsibilityHolders({
+    organizationId: world.orgId,
+    ownerUserId: world.users.admin.id,
+    responsibility: 'time_approval',
+    holderEmployeeRecordIds,
+  });
 }
 
 test.describe('P1-05 Verantwortlichkeiten und Vertretung @P1-05', () => {
@@ -35,10 +71,8 @@ test.describe('P1-05 Verantwortlichkeiten und Vertretung @P1-05', () => {
     const adminName = `${world.users.admin.firstName} ${world.users.admin.lastName}`;
     const bueroName = `${world.users.buero.firstName} ${world.users.buero.lastName}`;
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
-    const before = await getLatestResponsibilityConfigurationState(
-      world.orgId,
-      'time_approval'
-    );
+    await pinTimeApprovalHolders(world, 'role_default');
+    const before = await getLatestResponsibilityConfigurationState(world.orgId, 'time_approval');
 
     await previewResponsibilityChange(adminPage, {
       responsibility: 'time_approval',
@@ -47,84 +81,60 @@ test.describe('P1-05 Verantwortlichkeiten und Vertretung @P1-05', () => {
       lostNames: [bueroName],
     });
 
-    const duringPreview = await getLatestResponsibilityConfigurationState(
-      world.orgId,
-      'time_approval'
-    );
+    const duringPreview = await getLatestResponsibilityConfigurationState(world.orgId, 'time_approval');
     expect(duringPreview.id).toBe(before.id);
 
     await confirmResponsibilityPreview(adminPage);
-    const after = await getLatestResponsibilityConfigurationState(
-      world.orgId,
-      'time_approval'
-    );
-    expect(after.id).not.toBe(before.id);
-    expect(after.mode).toBe('selected');
-  });
-
-  test('Eine gezielt verantwortliche Person kann freigeben', async ({
-    bueroPage,
-    employeePage,
-    world,
-  }) => {
-    const yesterdayDigits = toDatePickerDigits(
-      shiftIsoDate(berlinTodayIso(), -1)
-    );
-    const bueroName = `${world.users.buero.firstName} ${world.users.buero.lastName}`;
+    const after = await getLatestResponsibilityConfigurationState(world.orgId, 'time_approval');
     const [adminRecord, employeeRecord] = await Promise.all([
       getEmployeeRecordStateByUser(world.orgId, world.users.admin.id),
       getEmployeeRecordStateByUser(world.orgId, world.users.employee.id),
     ]);
-    const configuration = await getLatestResponsibilityConfigurationState(
-      world.orgId,
-      'time_approval'
-    );
-    expect(configuration.mode).toBe('selected');
-    expect(configuration.holderEmployeeRecordIds).toEqual(
-      [adminRecord.id, employeeRecord.id].sort()
-    );
+    expect(after.id).not.toBe(before.id);
+    expect(after.mode).toBe('selected');
+    expect(after.holderEmployeeRecordIds).toEqual([adminRecord.id, employeeRecord.id].sort());
+  });
+
+  test('Eine gezielt verantwortliche Person kann freigeben', async ({
+    bueroPage,
+    businessDate,
+    employeePage,
+    world,
+  }) => {
+    const bueroName = `${world.users.buero.firstName} ${world.users.buero.lastName}`;
+    await pinTimeApprovalHolders(world, ['admin', 'employee']);
 
     await createOwnManualTimeEntry(bueroPage, {
       memberName: bueroName,
-      dateDigits: yesterdayDigits,
+      dateDigits: toDatePickerDigits(shiftIsoDate(businessDate, -1)),
       clockInDigits: '0600',
       clockOutDigits: '0700',
     });
-    expect(
-      (await getLatestManualTimeEntryState(world.orgId, world.users.buero.id))
-        .status
-    ).toBe('pending');
+    expect((await getLatestManualTimeEntryState(world.orgId, world.users.buero.id)).status).toBe('pending');
 
     await openTimeApprovals(employeePage);
     await expectPendingTimeApprovalVisible(employeePage, world.users.buero.id);
     await approvePendingTimeEntry(employeePage, world.users.buero.id);
-    expect(
-      (await getLatestManualTimeEntryState(world.orgId, world.users.buero.id))
-        .status
-    ).toBe('approved');
+    expect((await getLatestManualTimeEntryState(world.orgId, world.users.buero.id)).status).toBe('approved');
   });
 
   test('Eigene Einträge bleiben für Verantwortliche im Vier-Augen-Prinzip', async ({
     adminPage,
     bueroPage,
+    businessDate,
     employeePage,
     world,
   }) => {
-    const yesterdayDigits = toDatePickerDigits(
-      shiftIsoDate(berlinTodayIso(), -1)
-    );
+    await pinTimeApprovalHolders(world, ['admin', 'employee']);
 
-    const existingEmployeeEntry = await findLatestManualTimeEntryState(
-      world.orgId,
-      world.users.employee.id
+    await createOwnManualTimeEntry(employeePage, {
+      dateDigits: toDatePickerDigits(shiftIsoDate(businessDate, -1)),
+      clockInDigits: '0600',
+      clockOutDigits: '0700',
+    });
+    expect((await getLatestManualTimeEntryState(world.orgId, world.users.employee.id)).status).toBe(
+      'pending',
     );
-    if (existingEmployeeEntry?.status !== 'pending') {
-      await createOwnManualTimeEntry(employeePage, {
-        dateDigits: yesterdayDigits,
-        clockInDigits: '0600',
-        clockOutDigits: '0700',
-      });
-    }
     await expectTimeApprovalsUnavailable(bueroPage);
     await openTimeApprovals(employeePage);
     await expectPendingTimeApprovalHidden(employeePage, world.users.employee.id);
@@ -132,46 +142,34 @@ test.describe('P1-05 Verantwortlichkeiten und Vertretung @P1-05', () => {
     await openTimeApprovals(adminPage);
     await expectPendingTimeApprovalVisible(adminPage, world.users.employee.id);
     await approvePendingTimeEntry(adminPage, world.users.employee.id);
-    expect(
-      (
-        await getLatestManualTimeEntryState(
-          world.orgId,
-          world.users.employee.id
-        )
-      ).status
-    ).toBe('approved');
+    expect((await getLatestManualTimeEntryState(world.orgId, world.users.employee.id)).status).toBe(
+      'approved',
+    );
   });
 
   test('Eine Vertretung gilt im Fenster und verliert die Freigabe nach dem Ende am Aktionspunkt', async ({
     adminPage,
     bueroPage,
+    businessDate,
     employeePage,
     world,
   }) => {
-    const todayIso = berlinTodayIso();
-    const yesterdayDigits = toDatePickerDigits(shiftIsoDate(todayIso, -1));
     const adminName = `${world.users.admin.firstName} ${world.users.admin.lastName}`;
     const bueroName = `${world.users.buero.firstName} ${world.users.buero.lastName}`;
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
+    await pinTimeApprovalHolders(world, ['admin', 'buero']);
 
-    await previewResponsibilityChange(adminPage, {
-      responsibility: 'time_approval',
-      selectedNames: [adminName, bueroName],
-      gainedNames: [bueroName],
-      lostNames: [employeeName],
-    });
-    await confirmResponsibilityPreview(adminPage);
     await createResponsibilityDelegationViaSettings(adminPage, {
       responsibility: 'time_approval',
       delegatorName: adminName,
       substituteName: employeeName,
-      validFromDigits: toDatePickerDigits(todayIso),
-      validUntilDigits: toDatePickerDigits(shiftIsoDate(todayIso, 1)),
+      validFromDigits: toDatePickerDigits(businessDate),
+      validUntilDigits: toDatePickerDigits(shiftIsoDate(businessDate, 1)),
     });
 
     await createOwnManualTimeEntry(bueroPage, {
       memberName: bueroName,
-      dateDigits: yesterdayDigits,
+      dateDigits: toDatePickerDigits(shiftIsoDate(businessDate, -1)),
       clockInDigits: '0800',
       clockOutDigits: '0900',
     });
@@ -181,83 +179,18 @@ test.describe('P1-05 Verantwortlichkeiten und Vertretung @P1-05', () => {
     // End the substitution in the admin session while the employee still has
     // the stale approval card. The click must be denied by action-time
     // resolution, not merely disappear after a UI refresh.
-    await endResponsibilityDelegationViaSettings(
-      adminPage,
-      'time_approval',
-      employeeName
-    );
-    await expectExpiredResponsibilityDeniedAtAction(
-      employeePage,
-      world.users.buero.id
-    );
-    expect(
-      (await getLatestManualTimeEntryState(world.orgId, world.users.buero.id))
-        .status
-    ).toBe('pending');
+    await endResponsibilityDelegationViaSettings(adminPage, 'time_approval', employeeName);
+    await expectExpiredResponsibilityDeniedAtAction(employeePage, world.users.buero.id);
+    expect((await getLatestManualTimeEntryState(world.orgId, world.users.buero.id)).status).toBe('pending');
 
     await openTimeApprovals(adminPage);
     await approvePendingTimeEntry(adminPage, world.users.buero.id);
   });
 
-  test('Letzter Admin und letzter ausgewählter Verantwortlicher bleiben geschützt', async ({
-    adminPage,
-    world,
-  }) => {
+  test('Der letzte ausgewählte Verantwortliche lässt sich nicht entfernen', async ({ adminPage, world }) => {
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
-    await previewResponsibilityChange(adminPage, {
-      responsibility: 'time_approval',
-      selectedNames: [employeeName],
-    });
-    await confirmResponsibilityPreview(adminPage);
+    await pinTimeApprovalHolders(world, ['employee']);
 
     await expectMemberRemovalBlockedByResponsibility(adminPage, employeeName);
-    await expectOwnerRoleMutationRejected(world.orgId, world.users.admin.id);
-  });
-
-  test('Betroffene sehen nur die eigene Verantwortung; Fremdorganisationen sehen nichts', async ({
-    employeePage,
-    outsiderPage,
-    world,
-  }) => {
-    const employeeRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.employee.id
-    );
-    const configuration = await getLatestResponsibilityConfigurationState(
-      world.orgId,
-      'time_approval'
-    );
-    expect(configuration.mode).toBe('selected');
-    expect(configuration.holderEmployeeRecordIds).toEqual([employeeRecord.id]);
-    const visibleToEmployee =
-      await getVisibleResponsibilityEmployeeRecordIdsAs(
-        world.users.employee,
-        world.orgId
-      );
-    expect(visibleToEmployee).toEqual([employeeRecord.id]);
-
-    const visibleToOutsider =
-      await getVisibleResponsibilityEmployeeRecordIdsAs(
-        world.outsider.admin,
-        world.orgId
-      );
-    expect(visibleToOutsider).toEqual([]);
-
-    await employeePage.goto('/einstellungen/mitarbeiter');
-    await expectVisibleAfterSave(
-      employeePage,
-      'Meine Verantwortlichkeiten und Vertretungen'
-    );
-    await expect(
-      employeePage.getByRole('button', { name: 'Verantwortung ändern' })
-    ).toHaveCount(0);
-    await expect(visibleText(employeePage, 'Zeitfreigaben')).toBeVisible();
-
-    await outsiderPage.goto('/einstellungen/mitarbeiter');
-    await expect(visibleText(outsiderPage, world.outsider.orgName)).toBeVisible();
-    await expect(
-      visibleText(outsiderPage, 'Verantwortlichkeiten und Freigaben')
-    ).toBeVisible();
-    await expect(textInDom(outsiderPage, world.orgName)).toHaveCount(0);
   });
 });

@@ -1,65 +1,57 @@
-"use client";
+'use client';
 
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { Building2 } from "lucide-react";
+import { EmptyState } from '@/components/ui/empty-state';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { Building2 } from 'lucide-react';
 
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { InlinePending } from "@/components/ui/inline-pending";
-import { ListRow } from "@/components/ui/list-row";
-import { PendingRow } from "@/components/ui/pending-row";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  SkeletonList,
-  SkeletonRows,
-  type SkeletonColumn,
-} from "@/components/ui/skeleton-table";
-import type { OptimisticListItem } from "@/hooks/use-optimistic-list";
-import { ClientActionsMenu } from "./client-actions-menu";
-import { CLIENT_TYPE_LABELS, type Client } from "@/lib/jobs/types";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { InlinePending } from '@/components/ui/inline-pending';
+import { ListRow } from '@/components/ui/list-row';
+import { PendingRow } from '@/components/ui/pending-row';
+import { Skeleton } from '@/components/ui/skeleton';
+import { SkeletonList, SkeletonRows, type SkeletonColumn } from '@/components/ui/skeleton-table';
+import type { OptimisticListItem } from '@/hooks/use-optimistic-list';
+import { ClientActionsMenu } from './client-actions-menu';
+import { CLIENT_TYPE_LABELS, type Client } from '@/lib/jobs/types';
 
 interface ClientsTableProps {
+  /** A search is active, so an empty list means "no match", not "nothing yet". */
+  isFiltered: boolean;
   rows: OptimisticListItem<Client>[];
   isBusy: (clientId: string) => boolean;
   onSaved: (clientId: string) => void;
   onDelete: (client: Client) => Promise<void>;
 }
 
-const PENDING_LABEL = "Kunde wird gespeichert";
+const PENDING_LABEL = 'Kunde wird gespeichert';
 
 // One column definition for the loaded table and its skeleton (design canon):
 // header count, widths and hover cannot drift apart.
 const CLIENT_COLUMNS: readonly SkeletonColumn[] = [
   {
-    id: "name",
-    header: "Name",
-    className: "w-[25%]",
+    id: 'name',
+    header: 'Name',
+    className: 'w-[25%]',
     skeleton: <Skeleton className="h-5 w-28" />,
   },
   {
-    id: "type",
-    header: "Typ",
-    className: "w-[120px] px-4",
+    id: 'type',
+    header: 'Typ',
+    className: 'w-[120px] px-4',
     skeleton: <Skeleton className="h-[22px] w-20 rounded-full" />,
   },
-  { id: "email", header: "E-Mail", skeleton: <Skeleton className="h-5 w-40" /> },
+  { id: 'email', header: 'E-Mail', skeleton: <Skeleton className="h-5 w-40" /> },
   {
-    id: "phone",
-    header: "Telefon",
-    className: "w-[150px]",
+    id: 'phone',
+    header: 'Telefon',
+    className: 'w-[150px]',
     skeleton: <Skeleton className="h-5 w-28" />,
   },
   {
-    id: "actions",
-    header: "",
-    className: "w-[50px]",
+    id: 'actions',
+    header: '',
+    className: 'w-[50px]',
     skeleton: <Skeleton className="size-8 rounded" />,
   },
 ];
@@ -107,19 +99,13 @@ export function ClientsTableSkeleton({ count }: { count: number }) {
   );
 }
 
-function ClientTypeBadge({
-  clientType,
-  compact,
-}: {
-  clientType: Client["clientType"];
-  compact?: boolean;
-}) {
+function ClientTypeBadge({ clientType, compact }: { clientType: Client['clientType']; compact?: boolean }) {
   return (
     <span
       className={
         compact
-          ? "inline-flex shrink-0 items-center rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-medium text-accent-foreground"
-          : "inline-flex items-center rounded-full bg-accent px-2.5 py-0.5 text-xs font-medium text-accent-foreground"
+          ? 'inline-flex shrink-0 items-center rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-medium text-accent-foreground'
+          : 'inline-flex items-center rounded-full bg-accent px-2.5 py-0.5 text-xs font-medium text-accent-foreground'
       }
     >
       {CLIENT_TYPE_LABELS[clientType]}
@@ -131,9 +117,7 @@ function ClientContactLine({ client }: { client: Client }) {
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
       {client.email && <span className="truncate">{client.email}</span>}
-      {client.email && client.phone && (
-        <span className="text-muted-foreground/60">&middot;</span>
-      )}
+      {client.email && client.phone && <span className="text-muted-foreground/60">&middot;</span>}
       {client.phone && <span>{client.phone}</span>}
       {!client.email && !client.phone && <span>&mdash;</span>}
     </div>
@@ -143,13 +127,7 @@ function ClientContactLine({ client }: { client: Client }) {
 /** Mobile counterpart of `PendingRow`: the draft, dimmed, without actions. */
 function PendingClientCard({ client }: { client: Client }) {
   return (
-    <ListRow
-      interactive
-      role="status"
-      aria-label={PENDING_LABEL}
-      data-pending-row=""
-      className="opacity-70"
-    >
+    <ListRow interactive role="status" aria-label={PENDING_LABEL} data-pending-row="" className="opacity-70">
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-center gap-2">
           <InlinePending active label={PENDING_LABEL} />
@@ -192,12 +170,7 @@ function ClientCard({
         <ClientContactLine client={client} />
       </div>
       <div onClick={(e) => e.stopPropagation()}>
-        <ClientActionsMenu
-          client={client}
-          isBusy={isBusy}
-          onSaved={onSaved}
-          onDelete={onDelete}
-        />
+        <ClientActionsMenu client={client} isBusy={isBusy} onSaved={onSaved} onDelete={onDelete} />
       </div>
     </ListRow>
   );
@@ -206,21 +179,22 @@ function ClientCard({
 // No loading prop on purpose: the list never turns into a skeleton over data
 // it already has (feedback canon); `ClientsTableSkeleton` serves loading.tsx.
 // A record the user just created rides along as an optimistic row.
-export function ClientsTable({ rows, isBusy, onSaved, onDelete }: ClientsTableProps) {
+export function ClientsTable({ rows, isBusy, onSaved, onDelete, isFiltered }: ClientsTableProps) {
   const router = useRouter();
 
   if (rows.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
-        <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-muted">
-          <Building2 className="size-6 text-muted-foreground" />
-        </div>
-        <h2 className="text-lg font-semibold">Noch keine Kunden</h2>
-        <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-          Du hast noch keine Kunden hinzugefügt. Klicke auf &quot;Kunde
-          hinzufügen&quot; um einen neuen Kunden anzulegen.
-        </p>
-      </div>
+    return isFiltered ? (
+      <EmptyState
+        icon={Building2}
+        title="Keine Kunden gefunden"
+        description="Zu deiner Suche gibt es keinen Kunden. Prüfe die Schreibweise oder leere die Suche."
+      />
+    ) : (
+      <EmptyState
+        icon={Building2}
+        title="Noch keine Kunden"
+        description="Lege deinen ersten Kunden über „Kunde hinzufügen“ an."
+      />
     );
   }
 
@@ -239,7 +213,7 @@ export function ClientsTable({ rows, isBusy, onSaved, onDelete }: ClientsTablePr
               onSaved={onSaved}
               onDelete={onDelete}
             />
-          )
+          ),
         )}
       </div>
 
@@ -258,17 +232,13 @@ export function ClientsTable({ rows, isBusy, onSaved, onDelete }: ClientsTablePr
                   cells={{
                     name: <span className="font-medium">{client.name}</span>,
                     type: <ClientTypeBadge clientType={client.clientType} />,
-                    email: client.email || "—",
-                    phone: client.phone || "—",
+                    email: client.email || '—',
+                    phone: client.phone || '—',
                     actions: <span className="block size-8" />,
                   }}
                 />
               ) : (
-                <TableRow
-                  key={client.id}
-                  interactive
-                  onClick={() => router.push(`/kunden/${client.id}`)}
-                >
+                <TableRow key={client.id} interactive onClick={() => router.push(`/kunden/${client.id}`)}>
                   <TableCell className="font-medium">
                     <span className="flex items-center gap-2">
                       <Link
@@ -284,8 +254,8 @@ export function ClientsTable({ rows, isBusy, onSaved, onDelete }: ClientsTablePr
                   <TableCell className="px-4">
                     <ClientTypeBadge clientType={client.clientType} />
                   </TableCell>
-                  <TableCell>{client.email || "—"}</TableCell>
-                  <TableCell>{client.phone || "—"}</TableCell>
+                  <TableCell>{client.email || '—'}</TableCell>
+                  <TableCell>{client.phone || '—'}</TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <ClientActionsMenu
                       client={client}
@@ -295,7 +265,7 @@ export function ClientsTable({ rows, isBusy, onSaved, onDelete }: ClientsTablePr
                     />
                   </TableCell>
                 </TableRow>
-              )
+              ),
             )}
           </TableBody>
         </Table>

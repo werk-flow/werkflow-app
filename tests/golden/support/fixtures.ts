@@ -1,11 +1,17 @@
 import { expect, test as base, type Browser, type Page } from '@playwright/test';
 
+import { testBusinessDate } from '../../../lib/testing/runner/business-date';
 import { createRolePage, type SessionRole } from './sessions';
 import { resetPersistedPreferences } from './preferences-reset';
-import { loadWorld, storageStatePath, type TestWorld } from './world';
+import { loadWorld, type TestWorld } from './world';
 
 type GoldenFixtures = {
   world: TestWorld;
+  /**
+   * The run's Berlin business date (YYYY-MM-DD), read when the test starts. Specs derive "today",
+   * "yesterday" and every offset from it, never from the wall clock or at module load.
+   */
+  businessDate: string;
   /** Automatic: the world's persisted per-user preferences are gone before every test. */
   freshPreferences: void;
   adminPage: Page;
@@ -20,7 +26,7 @@ async function rolePage(
   browser: Browser,
   baseUrl: string,
   role: SessionRole,
-  provide: (page: Page) => Promise<void>
+  provide: (page: Page) => Promise<void>,
 ): Promise<void> {
   const { context, page } = await createRolePage({
     browser,
@@ -36,16 +42,6 @@ async function rolePage(
   }
 
   let cleanupError: unknown;
-  if (!provideError) {
-    try {
-      // Protected-route middleware can rotate Supabase cookies while a role
-      // fixture is in use. Persist only a successful fixture's final state;
-      // global setup force-refreshes every role before retained diagnostics.
-      await context.storageState({ path: storageStatePath(role) });
-    } catch (error) {
-      cleanupError = error;
-    }
-  }
   try {
     await context.close();
   } catch (error) {
@@ -63,12 +59,18 @@ export const test = base.extend<GoldenFixtures>({
   world: async ({}, provide) => {
     await provide(loadWorld());
   },
-  freshPreferences: [async ({}, provide) => {
-    // Reads the world itself: the audit lane replaces the world in its own automatic fixture first.
-    const world = loadWorld();
-    await resetPersistedPreferences([world.orgId, world.outsider.orgId]);
-    await provide();
-  }, { auto: true }],
+  businessDate: async ({}, provide) => {
+    await provide(testBusinessDate());
+  },
+  freshPreferences: [
+    async ({}, provide) => {
+      // Reads the world itself: the audit lane replaces the world in its own automatic fixture first.
+      const world = loadWorld();
+      await resetPersistedPreferences([world.orgId, world.outsider.orgId]);
+      await provide();
+    },
+    { auto: true },
+  ],
   adminPage: async ({ browser, baseURL }, provide) =>
     rolePage(browser, baseURL ?? DEFAULT_BASE_URL, 'admin', provide),
   bueroPage: async ({ browser, baseURL }, provide) =>

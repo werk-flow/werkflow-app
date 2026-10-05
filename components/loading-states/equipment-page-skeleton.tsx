@@ -1,10 +1,10 @@
-"use client";
+'use client';
 
-import { ContextualDocumentsSkeleton } from "@/components/dokumente/contextual-documents-layout";
-import { ServiceToolbarSkeleton } from "@/components/loading-states/service-cases-page-skeleton";
-import { EQUIPMENT_COLUMNS } from "@/components/service/equipment-list-content";
-import { Skeleton } from "@/components/ui/skeleton";
-import { SkeletonList, SkeletonTable } from "@/components/ui/skeleton-table";
+import { ContextualDocumentsSkeleton } from '@/components/dokumente/contextual-documents-layout';
+import { ServiceToolbarSkeleton } from '@/components/loading-states/service-cases-page-skeleton';
+import { EQUIPMENT_COLUMNS } from '@/components/service/equipment-list-content';
+import { Skeleton } from '@/components/ui/skeleton';
+import { SkeletonList, SkeletonTable } from '@/components/ui/skeleton-table';
 
 /** Filter strip and rows. Loaded rows are links, so skeleton rows hover too. */
 export function EquipmentListSkeleton() {
@@ -16,26 +16,16 @@ export function EquipmentListSkeleton() {
         <Skeleton className="h-9 w-full md:w-36" />
       </div>
       <SkeletonList interactive className="md:hidden" />
-      <SkeletonTable
-        columns={EQUIPMENT_COLUMNS}
-        interactive
-        className="hidden shadow-xs md:block"
-      />
+      <SkeletonTable columns={EQUIPMENT_COLUMNS} interactive className="hidden shadow-xs md:block" />
     </div>
   );
 }
 
 export function EquipmentPageSkeleton() {
   return (
-    <div
-      className="space-y-6"
-      role="status"
-      aria-label="Anlagen und Geräte werden geladen"
-    >
+    <div className="space-y-6" role="status" aria-label="Anlagen und Geräte werden geladen">
       <span className="sr-only">Anlagen und Geräte werden geladen.</span>
-      <ServiceToolbarSkeleton
-        actions={<Skeleton className="hidden h-9 w-40 md:block" />}
-      />
+      <ServiceToolbarSkeleton actions={<Skeleton className="h-9 w-40" />} />
       <EquipmentListSkeleton />
     </div>
   );

@@ -2,11 +2,8 @@
 // Berlin days (optionally with one new start time). The RPC re-validates and
 // applies all-or-nothing; this module only computes the target schedule.
 
-import {
-  addLocalDays,
-  formatBerlinLocalDateTime,
-  resolveBerlinWallTime,
-} from '@/lib/planning/date-time';
+import type { ActionFailure } from '@/lib/action-result';
+import { addLocalDays, formatBerlinLocalDateTime, resolveBerlinWallTime } from '@/lib/planning/date-time';
 import type { DstResolution } from '@/lib/planning/types';
 
 export type BatchSourceOccurrence = {
@@ -37,11 +34,11 @@ export type BatchShiftItem = {
 
 export type BatchShiftResult =
   | { success: true; items: BatchShiftItem[] }
-  | { success: false; error: string; occurrenceId: string | null };
+  | (ActionFailure & { occurrenceId: string | null });
 
 export function computeBatchShiftItems(
   sources: BatchSourceOccurrence[],
-  shift: BatchShiftInput
+  shift: BatchShiftInput,
 ): BatchShiftResult {
   if (!Number.isInteger(shift.dayShift) || Math.abs(shift.dayShift) > 366) {
     return { success: false, error: 'batch_shift_invalid', occurrenceId: null };
@@ -68,10 +65,7 @@ export function computeBatchShiftItems(
         };
       }
       const currentLocal = formatBerlinLocalDateTime(source.startAt);
-      const targetDate = addLocalDays(
-        currentLocal.slice(0, 10),
-        shift.dayShift
-      );
+      const targetDate = addLocalDays(currentLocal.slice(0, 10), shift.dayShift);
       const targetTime = shift.newTime ?? currentLocal.slice(11, 16);
       const resolved = resolveBerlinWallTime(`${targetDate}T${targetTime}`);
       if (!resolved) {
@@ -81,8 +75,7 @@ export function computeBatchShiftItems(
           occurrenceId: source.occurrenceId,
         };
       }
-      const durationMs =
-        new Date(source.endAt).getTime() - new Date(source.startAt).getTime();
+      const durationMs = new Date(source.endAt).getTime() - new Date(source.startAt).getTime();
       items.push({
         occurrenceId: source.occurrenceId,
         expectedVersion: source.version,

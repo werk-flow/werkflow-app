@@ -4,16 +4,8 @@
 
 const DEFAULT_RETURN_PATH = '/';
 
-export function resolveSafeReturnPath(
-  candidate: string | null | undefined,
-  origin: string
-): string {
-  if (
-    !candidate ||
-    !candidate.startsWith('/') ||
-    candidate.startsWith('//') ||
-    candidate.startsWith('/\\')
-  ) {
+export function resolveSafeReturnPath(candidate: string | null | undefined, origin: string): string {
+  if (!candidate || !candidate.startsWith('/') || candidate.startsWith('//') || candidate.startsWith('/\\')) {
     return DEFAULT_RETURN_PATH;
   }
 

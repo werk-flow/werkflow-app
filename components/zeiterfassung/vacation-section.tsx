@@ -1,104 +1,26 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { Loader2, Palmtree, Plus } from 'lucide-react';
+import { useState } from 'react';
 
-import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
-import { DatePicker } from '@/components/ui/date-picker';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { ErrorText } from '@/components/ui/error-text';
-import { Field } from '@/components/ui/field';
 import { InlinePending } from '@/components/ui/inline-pending';
-import { Label } from '@/components/ui/label';
+import { SectionError } from '@/components/ui/section-error';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Textarea } from '@/components/ui/textarea';
 import {
-  createVacationRequest,
-  previewVacationRequest,
   withdrawVacationRequest,
   type OwnVacationOverview,
   type VacationRequestListItem,
 } from '@/lib/vacation/actions';
 import { readInBackground } from '@/lib/data/background-read-client';
-import { formatVacationDays } from '@/lib/vacation/balance';
-import {
-  VACATION_PORTION_LABELS,
-  VACATION_STATUS_LABELS,
-  type VacationRequestStatus,
-} from '@/lib/vacation/types';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
-import { cn, toLocalDateString } from '@/lib/utils';
+import { OwnVacationBalanceSummary } from './vacation-section-balance';
+import { getVacationRequestErrorMessage } from './vacation-section-messages';
+import { OwnVacationRequestDialog } from './vacation-section-request-dialog';
+import { OwnVacationRequestList } from './vacation-section-request-list';
 
 // Settle key for a request that has no row yet; request ids are UUIDs.
 const NEW_REQUEST_ID = 'new';
-
-const REQUEST_ERROR_MESSAGES = {
-  invalid_dates: 'Bitte gib gültige Daten an.',
-  invalid_range: 'Das Enddatum darf nicht vor dem Startdatum liegen.',
-  range_too_long:
-    'Ein Antrag kann höchstens ein Jahr umfassen. Bitte teile längere Zeiträume auf.',
-  invalid_portion: 'Bitte wähle Ganztägig oder Halbtägig aus.',
-  half_day_needs_single_day:
-    'Ein halber Urlaubstag gilt nur für einen einzelnen Tag.',
-  overlap_conflict:
-    'Für diesen Zeitraum existiert bereits ein offener oder genehmigter Urlaubsantrag.',
-  no_employee_record:
-    'Zu deinem Zugang wurde keine Personalakte gefunden. Bitte wende dich an dein Büro.',
-  not_authenticated: 'Bitte melde dich erneut an.',
-  not_a_member: 'Du gehörst dieser Organisation nicht mehr an.',
-  request_not_pending: 'Der Antrag ist nicht mehr offen.',
-  not_authorized: 'Du darfst diesen Antrag nicht ändern.',
-  insert_failed: 'Der Antrag konnte nicht gespeichert werden.',
-  unexpected_error: 'Der Antrag konnte nicht gespeichert werden.',
-} satisfies Record<string, string>;
-const REQUEST_ERROR_MESSAGE_BY_CODE: Record<string, string> = REQUEST_ERROR_MESSAGES;
-
-const PREVIEW_ERROR_MESSAGES = {
-  no_employee_record: REQUEST_ERROR_MESSAGES.no_employee_record,
-  not_authenticated: REQUEST_ERROR_MESSAGES.not_authenticated,
-  not_a_member: REQUEST_ERROR_MESSAGES.not_a_member,
-  load_failed: 'Die Urlaubstage konnten nicht berechnet werden.',
-  unexpected_error: 'Die Urlaubstage konnten nicht berechnet werden.',
-} satisfies Record<string, string>;
-const PREVIEW_ERROR_MESSAGE_BY_CODE: Record<string, string> = PREVIEW_ERROR_MESSAGES;
-
-const STATUS_BADGE_CLASSES: Record<VacationRequestStatus, string> = {
-  pending: 'bg-warning-soft text-warning-soft-foreground',
-  approved: 'bg-success-soft text-success-soft-foreground',
-  rejected: 'bg-destructive/10 text-destructive',
-  withdrawn: 'bg-muted text-muted-foreground',
-  cancelled: 'bg-muted text-muted-foreground',
-};
-
-function formatGermanNumber(value: number): string {
-  return new Intl.NumberFormat('de-DE', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 1,
-  }).format(value);
-}
-
-function formatDate(value: string): string {
-  return new Date(`${value}T00:00:00`).toLocaleDateString('de-DE', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
-}
-
-function formatRange(startDate: string, endDate: string): string {
-  if (startDate === endDate) return formatDate(startDate);
-  return `${formatDate(startDate)} – ${formatDate(endDate)}`;
-}
 
 export function VacationSection() {
   const [showRequestDialog, setShowRequestDialog] = useState(false);
@@ -111,9 +33,7 @@ export function VacationSection() {
     tables: ['vacation_requests', 'employment_conditions'],
     read: async ({ signal }): Promise<LiveViewResult<OwnVacationOverview>> => {
       const result = await readInBackground('own-vacation-overview', {}, signal);
-      return result.success
-        ? { ok: true, data: result.overview }
-        : { ok: false };
+      return result.success ? { ok: true, data: result.overview } : { ok: false };
     },
   });
 
@@ -131,8 +51,7 @@ export function VacationSection() {
       const result = await withdrawVacationRequest({ requestId: request.id });
       if (!result.success) {
         setListError(
-          REQUEST_ERROR_MESSAGE_BY_CODE[result.error] ??
-            'Der Antrag konnte nicht zurückgezogen werden.'
+          getVacationRequestErrorMessage(result.error, 'Der Antrag konnte nicht zurückgezogen werden.'),
         );
       }
       await refetch();
@@ -141,13 +60,6 @@ export function VacationSection() {
 
   const balance = overview?.balance ?? null;
   const hasEntitlement = balance?.entitlementDays != null;
-  const usedPercentage =
-    hasEntitlement && balance!.entitlementDays! > 0
-      ? Math.min(
-          Math.round((balance!.takenDays / balance!.entitlementDays!) * 100),
-          100
-        )
-      : 0;
 
   return (
     <div className="space-y-3">
@@ -156,148 +68,42 @@ export function VacationSection() {
         <InlinePending active={busy.isBusy(NEW_REQUEST_ID)} />
       </h3>
 
-      <Card>
-        <CardContent className="p-4">
-          {isLoading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-5 w-40" />
-              <Skeleton className="h-2 w-full" />
-              <Skeleton className="h-4 w-56" />
-            </div>
-          ) : loadFailed ? (
-            <p className="text-sm text-muted-foreground">
-              Die Urlaubsdaten konnten nicht geladen werden.
-            </p>
-          ) : (
-            <div className="flex items-start gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-purple/10">
-                <Palmtree className="h-6 w-6 text-brand-purple" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="text-sm font-medium">
-                    Urlaubsanspruch {overview?.year}
-                  </span>
-                  {hasEntitlement ? (
-                    <span className="text-xs text-muted-foreground tabular-nums">
-                      {formatGermanNumber(balance!.takenDays)} von{' '}
-                      {formatGermanNumber(balance!.entitlementDays!)} Tagen
-                      genommen
-                    </span>
-                  ) : null}
-                </div>
-
-                {hasEntitlement ? (
-                  <>
-                    <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full rounded-full bg-brand-purple transition-all"
-                        style={{ width: `${usedPercentage}%` }}
-                      />
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                      <span>
-                        {balance!.pendingDays > 0
-                          ? `${formatVacationDays(balance!.pendingDays)} angefragt`
-                          : 'Keine offenen Anträge'}
-                      </span>
-                      <span className="font-semibold text-foreground tabular-nums">
-                        {formatVacationDays(balance!.remainingDays ?? 0)}{' '}
-                        <span className="font-normal">Resturlaub</span>
-                      </span>
-                    </div>
-                  </>
-                ) : (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Kein Urlaubsanspruch hinterlegt. Der Anspruch wird vom Büro
-                    in den Beschäftigungs&shy;konditionen gepflegt; Anträge sind
-                    trotzdem möglich.
-                  </p>
-                )}
-
-                <div className="mt-3">
-                  <Button
-                    size="sm"
-                    className="gap-1.5"
-                    onClick={() => setShowRequestDialog(true)}
-                    disabled={!overview?.employeeRecordId}
-                  >
-                    <Plus className="size-3.5" />
-                    Urlaub beantragen
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {overview && overview.requests.length > 0 && (
+      {/* A failed first read is a failure with retry, never an empty card. */}
+      {loadFailed ? (
+        <SectionError onRetry={() => void view.refresh()} retryPending={view.isRefreshing}>
+          Die Urlaubsdaten konnten nicht geladen werden.
+        </SectionError>
+      ) : (
         <Card>
           <CardContent className="p-4">
-            <h4 className="mb-2 text-sm font-medium">Meine Urlaubsanträge</h4>
-            <ul className="grid gap-2">
-              {overview.requests.map((request) => (
-                <li
-                  key={request.id}
-                  className="rounded-md border px-3 py-2.5"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-medium tabular-nums">
-                          {formatRange(request.startDate, request.endDate)}
-                        </span>
-                        <span
-                          className={cn(
-                            'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-                            STATUS_BADGE_CLASSES[request.status]
-                          )}
-                        >
-                          {VACATION_STATUS_LABELS[request.status]}
-                        </span>
-                        <InlinePending active={busy.isBusy(request.id)} />
-                      </div>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        {VACATION_PORTION_LABELS[request.dayPortion]}
-                        {` · ${formatVacationDays(request.totalDays)}`}
-                        {request.status === 'pending' && ' (vorläufig)'}
-                      </p>
-                      {request.status === 'rejected' &&
-                        request.decisionComment && (
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Grund: {request.decisionComment}
-                          </p>
-                        )}
-                      {request.status === 'cancelled' &&
-                        request.cancellationReason && (
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Storniert: {request.cancellationReason}
-                          </p>
-                        )}
-                    </div>
-                    {request.status === 'pending' && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => void handleWithdraw(request)}
-                        disabled={busy.isBusy(request.id)}
-                        aria-label={`Urlaubsantrag vom ${formatRange(request.startDate, request.endDate)} zurückziehen`}
-                      >
-                        Zurückziehen
-                      </Button>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-            <ErrorText className="mt-2">{listError}</ErrorText>
+            {isLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-5 w-40" />
+                <Skeleton className="h-2 w-full" />
+                <Skeleton className="h-4 w-56" />
+              </div>
+            ) : (
+              <OwnVacationBalanceSummary
+                overview={overview}
+                balance={balance}
+                setShowRequestDialog={setShowRequestDialog}
+              />
+            )}
           </CardContent>
         </Card>
       )}
 
+      {overview && overview.requests.length > 0 && (
+        <OwnVacationRequestList
+          requests={overview.requests}
+          busy={busy}
+          handleWithdraw={handleWithdraw}
+          listError={listError}
+        />
+      )}
+
       {showRequestDialog && (
-        <VacationRequestDialog
+        <OwnVacationRequestDialog
           hasEntitlement={hasEntitlement}
           onClose={(saved) => {
             setShowRequestDialog(false);
@@ -306,262 +112,5 @@ export function VacationSection() {
         />
       )}
     </div>
-  );
-}
-
-function VacationRequestDialog({
-  hasEntitlement,
-  onClose,
-}: {
-  hasEntitlement: boolean;
-  onClose: (saved: boolean) => void;
-}) {
-  const todayIso = toLocalDateString(new Date());
-  const [startDate, setStartDate] = useState<string>(todayIso);
-  const [endDate, setEndDate] = useState<string>(todayIso);
-  const [halfDay, setHalfDay] = useState(false);
-  const [comment, setComment] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [previewDays, setPreviewDays] = useState<number | null>(null);
-  const [isPreviewing, setIsPreviewing] = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
-  const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
-  const previewGenerationRef = useRef(0);
-  const [dateErrors, setDateErrors] = useState<{ start?: string | undefined; end?: string | undefined }>({});
-
-  const isSingleDay = startDate === endDate;
-  const dayPortion = halfDay && isSingleDay ? 'half_day' : 'full';
-  const rangePreviewError =
-    startDate && endDate && endDate < startDate
-      ? REQUEST_ERROR_MESSAGES.invalid_range
-      : null;
-
-  const invalidatePreview = () => {
-    previewGenerationRef.current += 1;
-    setPreviewDays(null);
-    setIsPreviewing(false);
-    setPreviewError(null);
-  };
-
-  useEffect(() => {
-    if (!startDate || !endDate || endDate < startDate) return;
-    const generation = ++previewGenerationRef.current;
-    const timer = setTimeout(() => {
-      setIsPreviewing(true);
-      setPreviewError(null);
-      void previewVacationRequest({ startDate, endDate, dayPortion })
-        .then((result) => {
-          if (generation !== previewGenerationRef.current) return;
-          if (result.success) {
-            setPreviewDays(result.totalDays);
-          } else {
-            setPreviewError(result.error);
-          }
-        })
-        .catch(() => {
-          if (generation === previewGenerationRef.current) {
-            setPreviewError('unexpected_error');
-          }
-        })
-        .finally(() => {
-          if (generation === previewGenerationRef.current) {
-            setIsPreviewing(false);
-          }
-        });
-    }, 150);
-    return () => clearTimeout(timer);
-  }, [dayPortion, endDate, previewRefreshKey, startDate]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isSaving) return;
-    setError(null);
-
-    const nextDateErrors = {
-      start: startDate ? undefined : 'Bitte wähle ein Startdatum aus.',
-      end: !endDate
-        ? 'Bitte wähle ein Enddatum aus.'
-        : endDate < startDate
-          ? REQUEST_ERROR_MESSAGES.invalid_range
-          : undefined,
-    };
-    setDateErrors(nextDateErrors);
-    if (nextDateErrors.start || nextDateErrors.end) {
-      document
-        .getElementById(nextDateErrors.start ? 'vacation-start-date' : 'vacation-end-date')
-        ?.focus();
-      return;
-    }
-
-    setIsSaving(true);
-    const result = await createVacationRequest({
-      startDate,
-      endDate,
-      dayPortion,
-      ...(comment.trim() ? { comment: comment.trim() } : {}),
-    });
-    setIsSaving(false);
-
-    if (result.success) {
-      onClose(true);
-    } else {
-      setError(
-        REQUEST_ERROR_MESSAGE_BY_CODE[result.error] ??
-          'Der Antrag konnte nicht gespeichert werden.'
-      );
-    }
-  };
-
-  return (
-    <Dialog open onOpenChange={(open) => !open && !isSaving && onClose(false)}>
-      <DialogContent className="sm:max-w-[425px]">
-        <DialogHeader>
-          <DialogTitle>Urlaub beantragen</DialogTitle>
-          <DialogDescription>
-            Der Antrag wird zur Freigabe eingereicht. Wochenenden, Feiertage,
-            Betriebsruhe und freie Tage laut Arbeitszeitmodell kosten keine
-            Urlaubstage.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} noValidate>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-2 gap-3">
-              <Field
-                label="Von"
-                htmlFor="vacation-start-date"
-                required
-                error={dateErrors.start}
-              >
-                <DatePicker
-                  ariaLabel="Von"
-                  value={
-                    startDate ? new Date(`${startDate}T00:00:00`) : undefined
-                  }
-                  onChange={(date) => {
-                    const next = date ? toLocalDateString(date) : '';
-                    const nextEnd =
-                      next && (!endDate || endDate < next) ? next : endDate;
-                    if (next === startDate && nextEnd === endDate) return;
-                    invalidatePreview();
-                    setStartDate(next);
-                    if (nextEnd !== endDate) setEndDate(nextEnd);
-                  }}
-                  disabled={isSaving}
-                />
-              </Field>
-              <Field
-                label="Bis"
-                htmlFor="vacation-end-date"
-                required
-                error={dateErrors.end ?? rangePreviewError}
-              >
-                <DatePicker
-                  ariaLabel="Bis"
-                  value={endDate ? new Date(`${endDate}T00:00:00`) : undefined}
-                  onChange={(date) => {
-                    const next = date ? toLocalDateString(date) : '';
-                    if (next === endDate) return;
-                    invalidatePreview();
-                    setEndDate(next);
-                  }}
-                  disabled={isSaving}
-                />
-              </Field>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="vacation-half-day"
-                checked={halfDay && isSingleDay}
-                onCheckedChange={(checked) => {
-                  invalidatePreview();
-                  setHalfDay(checked === true);
-                }}
-                disabled={isSaving || !isSingleDay}
-              />
-              <Label
-                htmlFor="vacation-half-day"
-                className={cn(
-                  'text-sm font-normal',
-                  !isSingleDay && 'text-muted-foreground'
-                )}
-              >
-                Halbtägig (0,5 Tage)
-                {!isSingleDay && ' – nur bei einem einzelnen Tag'}
-              </Label>
-            </div>
-
-            <div
-              aria-live="polite"
-              className="rounded-md border bg-muted/30 px-3 py-2 text-sm"
-            >
-              {isPreviewing ? (
-                <span className="flex items-center gap-2 text-muted-foreground">
-                  <Loader2 className="size-4 animate-spin" />
-                  Urlaubstage werden berechnet...
-                </span>
-              ) : previewDays !== null ? (
-                <span data-testid="vacation-days-preview">
-                  Berechnete Urlaubstage:{' '}
-                  <strong>{formatVacationDays(previewDays)}</strong>
-                </span>
-              ) : rangePreviewError ? null : previewError ? (
-                <span className="flex items-center justify-between gap-3 text-destructive">
-                  {PREVIEW_ERROR_MESSAGE_BY_CODE[previewError] ??
-                    'Die Urlaubstage konnten nicht berechnet werden.'}
-                  {(previewError === 'load_failed' ||
-                    previewError === 'unexpected_error') && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setPreviewRefreshKey((value) => value + 1)
-                      }
-                    >
-                      Erneut berechnen
-                    </Button>
-                  )}
-                </span>
-              ) : null}
-            </div>
-
-            <Field label="Notiz (optional)" htmlFor="vacation-comment">
-              <Textarea
-                placeholder="z. B. Familienfeier"
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                disabled={isSaving}
-              />
-            </Field>
-
-            {!hasEntitlement && (
-              <p className="text-xs text-muted-foreground">
-                Hinweis: Für dich ist noch kein Urlaubsanspruch hinterlegt. Der
-                Antrag ist trotzdem möglich; die Freigabe entscheidet dein
-                Betrieb.
-              </p>
-            )}
-
-            <ErrorText>{error}</ErrorText>
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onClose(false)}
-              disabled={isSaving}
-            >
-              Abbrechen
-            </Button>
-            <Button type="submit" disabled={isSaving || isPreviewing}>
-              {isSaving && <Loader2 className="size-4 animate-spin" />}
-              {isSaving ? 'Wird eingereicht...' : 'Antrag einreichen'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }

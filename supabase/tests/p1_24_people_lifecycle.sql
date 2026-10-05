@@ -315,6 +315,13 @@ begin
   exception when others then
     if sqlerrm not like '%protected_personnel_document_delete_blocked%' then raise; end if;
   end;
+  if not exists (
+    select 1 from public.employee_record_events
+    where employee_record_id = employee_id and event_type = 'access_transition'
+  ) or not exists (
+    select 1 from public.employee_record_events
+    where employee_record_id = employee_id and event_type = 'personnel_document_uploaded'
+  ) then raise exception 'access transition or protected upload left no personnel history event'; end if;
 end;
 $$;
 
@@ -378,6 +385,7 @@ begin
     'personnel_access_lifecycles',
     'personnel_employment_lifecycles',
     'personnel_documents',
+    'personnel_document_releases',
     'personnel_onboarding_plans',
     'personnel_onboarding_requirements',
     'personnel_acknowledgements'

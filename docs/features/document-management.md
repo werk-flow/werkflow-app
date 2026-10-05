@@ -1,158 +1,107 @@
 # Document Management
 
-Status: living — last reviewed 2026-09-13
+Status: living — last reviewed 2026-10-04
 
-Document management gives SHK businesses a central digital place for job photos, contracts, invoices, offers, reports, and general business files. The goal is to reduce paper folders, scattered files, and disconnected customer/project documentation while staying practical for office staff and extremely simple for field workers.
-
-This document describes the current product baseline, the Phase 1 and Phase 2 build-out, and the open decisions. The implementation reference, from storage paths and the signed upload flow to RLS, operations, audit vocabulary, and code locations, lives in [Document storage and access](../technical/document-storage-and-access.md). For exact schema details, prefer live Supabase inspection and `lib/supabase/database.types.ts` over this file.
+Document management gives SHK businesses one digital place for job photos, contracts, invoices, offers, reports, and general business files. It replaces paper folders and scattered files. Office staff get a practical library, and field workers get a very simple flow. [Document storage and access](../technical/document-storage-and-access.md) owns storage, upload, access, and audit mechanics.
 
 ## Product Goal
 
 Document management should:
 
-- Reduce paper dependency and scattered local files.
-- Make job/project/customer/employee documents easy to find from operational context.
-- Let office/manager users organize files like a lightweight Drive/SharePoint.
-- Keep field-worker flows upload/view/download simple on mobile.
-- Preserve recoverability and traceability for business-critical files.
-
-Before adding more scope, ask WerkFlow's three product questions:
-
-- Does this reduce paperwork?
-- Does this make work more organized?
-- Does this save time?
+- Reduce paper and scattered local files.
+- Make job, project, customer, and employee documents easy to find from their operational context.
+- Let office users organize files like a lightweight Drive or SharePoint.
+- Keep upload, view, and download simple for field workers on mobile.
+- Keep business-critical files recoverable and traceable.
 
 ## Current Product Baseline
 
-The central library loads 50 documents per server-selected page, with independent pages for sibling folders. Search, sorting, category/link filters, and unlinked/trash selection cover all authorized ordinary documents before paging. The `Verknüpfungen` view has the same document pager and builds headings from the current page's linked targets; its counts describe that page. Folder navigation retains the complete bounded folder tree. Paging clears row selection, so batch operations act on the displayed page. Contextual attachments retain a complete bounded read and a global newest-first order after ID batches; equal creation times sort by document ID. Lazy link catalogs, including installed equipment, report a load failure if their declared bound is exceeded. [The performance reference](../technical/realtime-and-caching.md#server-paginated-lists) owns the implementation and verification rules.
+Admin and Büro organize ordinary organization files in the central library. Operational records show their documents in a contextual section. Field workers upload, view, and download ordinary files on assigned jobs. Protected personnel files follow separate access rules.
 
-As of 2026-09-02, document management is substantially implemented. Admin and Büro organize ordinary organization files in the central library under `/dokumente`; operational records carry a contextual `Dokumente & Bilder` section. Field workers upload, view, and download ordinary files on assigned jobs. Protected personnel files use the separate access rules below. File bytes live in private Cloudflare R2 buckets in EU jurisdiction and all metadata in Postgres. The implementation reference lives in [Document storage and access](../technical/document-storage-and-access.md).
-
-- **Central library.** Admin and Büro browse a manual folder tree with breadcrumbs, the `Verknüpfungen` overview grouped by linked target, and `Alle Dateien`, with search, category and link filters, sortable columns, and a separate `Papierkorb`. They create, rename, move, copy, and delete folders, and upload single files, batches, or whole folders, including mixed drag and drop. The table supports multi-select, rectangle select, drag-to-folder, batch move, copy, and delete, and one shared row menu.
-- **One file, many links.** A document exists once and is linked by metadata to jobs, projects, customers, employees, requests, installed equipment, service cases, and maintenance coverage ([P1-02](../plans/phase-1/slices/p1-02-client-requests.md), [P1-18](../plans/phase-1/slices/p1-18-installed-equipment.md), [P1-19](../plans/phase-1/slices/p1-19-reactive-service.md), [P1-20](../plans/phase-1/slices/p1-20-maintenance-plans.md)). Links never copy bytes. Converting a request adds a second link from each attachment to the created work. WerkFlow creates no folder when an operational record is created; manual folders and link filters organize the library instead.
-- **Contextual sections.** Job, project, customer, employee, request, equipment, service-case, and coverage pages show their linked documents. Managers attach existing library files, manage links in one dialog, and remove a link without deleting the file. Assigned employees upload, view, and download on their job only, from the focused field work pack; they never see the library, trash, versions, or audit history ([P1-16](../plans/phase-1/slices/p1-16-field-work-pack.md)).
-- **Recoverability and history.** Delete moves a file to the `Papierkorb`, where managers restore or permanently delete it. Documents in the `contract`, `invoice`, `offer`, and `report` categories keep numbered versions. Every action lands in an audit history that managers see in the details dialog. Categories `photo`, `contract`, `invoice`, `offer`, `report`, and `other` are labels inferred at upload and editable by managers; a category is not a structured record.
-- **Viewer.** PDFs and images open in a large in-app viewer with a download fallback. A link to `/dokumente?document=<id>` opens one exact document, which the customer chronology uses for its document entries ([P1-10](../plans/phase-1/slices/p1-10-customer-relationship-timeline.md)).
-- **Evidence and handover artifacts.** A work-template item may declare an expected evidence category without creating a file ([P1-13](../plans/phase-1/slices/p1-13-work-templates.md)). A document can be related to one exact work-artifact revision as evidence, closure proof, signature mark, or export; ordinary uploads never become evidence automatically ([P1-15](../plans/phase-1/slices/p1-15-structured-site-evidence.md)). A handover release freezes exact document versions and registers one customer-safe HTML package as an ordinary document; the app does not deliver it and creates no public link ([P1-17](../plans/phase-1/slices/p1-17-office-handover.md)).
-- **Protected personnel documents.** A personnel file is a separate access class outside the ordinary library, owned by the personnel record rather than by an employee link, with standard, Admin-only, and health-evidence classes. The affected employee reaches only expressly released versions, and no job assignment or ordinary document permission widens that access ([P1-24](../plans/phase-1/slices/p1-24-controlled-people-lifecycle.md)).
-- **History guards.** Once an equipment-history event depends on a document link, ordinary unlink and permanent deletion are rejected ([P1-18](../plans/phase-1/slices/p1-18-installed-equipment.md)). Equipment, service-case, and coverage links grant an assigned employee no document access beyond the exact assigned job ([P1-19](../plans/phase-1/slices/p1-19-reactive-service.md), [P1-20](../plans/phase-1/slices/p1-20-maintenance-plans.md)).
+- **Central library.** Admin and Büro browse a manual folder tree, an overview grouped by linked target, and a list of all files, with search, filters, sorting, and a separate `Papierkorb`. They create, rename, move, copy, and delete folders. They upload single files, batches, or whole folders by drag and drop. Batch move, copy, and delete work on a multi-selection. Deleting or copying a folder covers its whole tree or nothing.
+- **Paged lists.** Search, sorting, and filters cover every authorized document before the library pages its results. Paging clears the selection, so a batch action acts only on the displayed page. [Realtime and caching](../technical/realtime-and-caching.md#server-paginated-lists) owns the paging rules.
+- **One file, many links.** A document exists once. Links connect it to jobs, projects, customers, employees, requests, installed equipment, service cases, and maintenance coverage. A link never copies the file. Converting a request links each of its attachments to the created work as well. WerkFlow creates no folder when an operational record is created. Manual folders and link filters organize the library instead.
+- **Contextual sections.** Every linked record shows its documents. Managers attach existing library files, manage links in one dialog, and remove a link without deleting the file. Assigned employees upload, view, and download only on their own job, from the field work pack. On the page of a project with at least one of their jobs, they also view and download the project's own documents, read-only. Job documents there stay limited to their own jobs. They never see the library, the trash, versions, or audit history.
+- **Recovery and history.** Delete moves a file to the `Papierkorb`, where managers restore or permanently delete it. Contracts, invoices, offers, and reports keep numbered versions. Managers see the audit history of every document. Each upload, new version, link change, rename, category change, move, copy, delete, restore, and permanent deletion saves together with its audit entry, or not at all. An upload registers the file and its link together, and a refused upload keeps no stored file. WerkFlow infers a category at upload, and managers can change it. A category is a label, not a structured record.
+- **Viewer.** PDFs and images open in a large in-app viewer with a download fallback. A link can open one exact document, and the customer chronology uses such links.
+- **Evidence and handover.** A work-template item may name an expected evidence category without creating a file. A document can be tied to one exact work-artifact revision as evidence, closure proof, signature mark, or export. An ordinary upload never becomes evidence by itself. A handover release freezes exact document versions and stores one customer-safe package as an ordinary document. The app does not deliver the package and creates no public link.
+- **Protected personnel documents.** A personnel file is a separate access class outside the ordinary library. It belongs to the personnel record, not to an employee link. The affected employee reaches only versions that were expressly released. No job assignment or ordinary document permission widens this access. [Employee management](employee-management.md) owns the access classes.
+- **History guards.** Once an equipment-history event depends on a document link, WerkFlow rejects unlinking or permanently deleting that document. Equipment, service-case, and coverage links give an assigned employee no document access beyond the assigned job.
 
 ### Important Current Limitations
 
-- No automatic folder per job, project, customer, or employee. This is deliberate; see the design decisions in the technical doc.
-- No OCR, invoice parsing, or AI classification.
-- No thumbnail generation.
-- No dedicated offer, contract, or invoice entities.
-- No version rollback; previous versions can only be downloaded.
+- No automatic folder per job, project, customer, or employee. This is deliberate.
+- No OCR, invoice parsing, AI classification, or thumbnails.
+- No dedicated offer, contract, or invoice records.
+- No version rollback. Users can only download previous versions.
 - No external delivery, public link, or customer portal for any document or handover package.
-- Attach-existing from the library targets jobs, projects, customers, and employees; request, equipment, service-case, and coverage links are made from their own detail pages.
+- Attaching an existing library file works for jobs, projects, customers, and employees. Request, equipment, service-case, and coverage links start from their own detail pages.
 
 ## Phase 1 — Complete Operational Core
 
-Stages 1–4 established the reliability foundation: private storage, contextual links, manager organization, audit, trash, restore, versioning, viewer, and cleanup safeguards.
-
-The complete operational core should extend that foundation in the following product areas.
+The complete operational core extends the baseline in the following areas.
 
 ### Capture And Inbound Documents
 
-Users should be able to bring documents into WerkFlow from the way the business actually receives or creates them:
+Documents should enter WerkFlow the way the business receives or creates them: web upload, mobile camera scan and photo, files shared from the future mobile app, approved email or message intake, documents generated by other WerkFlow features, and supplier or accounting documents from supported integrations.
 
-- web file/folder upload;
-- mobile camera scan and photo capture;
-- files shared from the future mobile operating system;
-- approved email-to-WerkFlow or message attachment intake;
-- generated reports, offers, invoices, contracts, and forms from other WerkFlow features;
-- supplier and accounting documents received through supported integrations.
-
-Every inbound path should show:
-
-- organization and uploader/source;
-- upload and processing state;
-- duplicate or version warning where relevant;
-- required review before a file becomes a trusted financial or legal record;
-- a recoverable error when upload, processing, or linking fails.
+Every inbound path shows the source and uploader, the upload and processing state, and a duplicate or version warning where relevant. A file needs review before it becomes a trusted financial or legal record.
 
 ### Findability And Large-Library Use
 
-The manager library should remain usable at real business volume:
+The library should stay usable at real business volume:
 
-- generated image/PDF thumbnails where they materially improve scanning;
-- full-text search across supported digital documents;
-- OCR text for scans and photos;
-- search by document metadata, linked context, date, category, participant, and business reference;
-- saved filters or smart collections for recurring office work;
+- thumbnails where they help scanning;
+- full-text search for digital documents and OCR text for scans and photos;
+- search by metadata, linked context, date, category, participant, and business reference;
+- saved filters for recurring office work;
 - visible processing and index state;
-- bulk actions and export that remain understandable;
-- performance that does not require the office user to know the storage layout.
+- bulk actions and export that stay understandable, without the office user knowing the storage layout.
 
-OCR makes a document searchable. It does not by itself make extracted values financially correct.
+OCR makes a document searchable. It does not make extracted values financially correct.
 
 ### Structured Forms, Reports, And Signatures
 
-WerkFlow should support structured operational artifacts without turning every form into a custom software project:
+WerkFlow should support structured artifacts without turning every form into a custom project: reusable report and form templates, job, service, measurement, inspection, handover, defect, and site-diary outputs, required and conditional fields, capture time and responsible person, photos and annotations, internal approval and customer signature where relevant, correction history, and stable PDF output.
 
-- reusable report and form templates;
-- job, service, measurement, inspection, handover, defect, and site-diary outputs;
-- required and conditional fields;
-- original capture time and responsible person;
-- photos and annotations;
-- internal approval and customer signature where relevant;
-- correction and version history;
-- stable PDF/export output for external use.
-
-The structured record and rendered file should remain linked so future changes do not create two unrelated sources of truth.
+The structured record and its rendered file stay linked, so there are never two unrelated sources of truth.
 
 ### Document Review And Approval
 
-Selected documents should support:
+Selected documents should support a review owner and due state, comments or correction requests, approval, rejection, replacement, and superseded state. Multi-step approval appears only where the business process needs it. Internal review and customer signature stay distinct. The audit records who accepted financially or legally relevant extracted data.
 
-- review owner and due state;
-- comments or correction requests;
-- approval, rejection, replacement, and superseded state;
-- multi-step approval only where the business process requires it;
-- clear distinction between internal review and customer signature;
-- audit of who accepted financially or legally relevant extracted data.
-
-The product should avoid imposing document approval on ordinary job photos or low-risk uploads.
+Ordinary job photos and low-risk uploads get no approval step.
 
 ### Commercial And Accounting Integration
 
-Documents should connect to dedicated structured records:
+Documents should connect to structured records:
 
-- an uploaded supplier invoice can become the source for a reviewed incoming-bill draft;
-- an offer, order confirmation, contract, invoice, credit, or service report generated by WerkFlow remains linked to its structured entity;
-- delivery notes can be connected to purchase orders and receipts;
-- customer and supplier files can be found from both their business context and the central library;
-- commercial corrections create appropriate versions or successor records instead of mutating signed/final artifacts without trace.
+- an uploaded supplier invoice can become the source of a reviewed incoming-bill draft;
+- an offer, order confirmation, contract, invoice, credit, or service report that WerkFlow generates stays linked to its record;
+- delivery notes connect to purchase orders and receipts;
+- customer and supplier files are findable from their business context and from the library;
+- a commercial correction creates a new version or successor record and never changes a signed or final artifact without trace.
 
-Document categories remain useful for organization, but a file categorized as `invoice` is not automatically a structured invoice or an accounting transaction.
+A file in the invoice category is not a structured invoice or an accounting transaction.
 
 ### Governance, Retention, And Portability
 
-Complete document management needs policy-level clarity:
+Complete document management needs:
 
-- organization retention rules by document type;
-- legal-hold or deletion-block behavior where required;
-- role and context access that stays understandable;
+- retention rules per document type, and legal hold or deletion blocks where required;
+- role and context access that stays understandable, possibly with a finer `Dokumentenfreigabe` that decides which project documents field workers see;
 - external sharing with recipient, expiry, revocation, and download history where justified;
-- complete organization export with files, metadata, versions, links, and audit context;
-- import/migration that preserves meaningful folder and reference information;
-- recoverability and deletion behavior aligned across structured records and stored files.
+- a complete organization export with files, metadata, versions, links, and audit context;
+- import that keeps meaningful folder and reference information;
+- the same recovery and deletion behavior for structured records and their files.
 
-The future retention archive follows [decision 0001](../decisions/0001-infrastructure-stack.md). `P1-45` owns its design and delivery; the archive is not implemented. Retention rules must distinguish document categories and receive qualified legal review before implementation or compliance claims.
-
-Claims such as `GoBD-konform`, `revisionssicher`, or legally sufficient electronic signature require qualified validation before they appear in product marketing.
+The retention archive follows [decision 0001](../decisions/0001-infrastructure-stack.md). `P1-45` owns its design and delivery, and it is not implemented. Retention rules must distinguish document categories and need qualified legal review before implementation or any compliance claim. Claims such as `GoBD-konform`, `revisionssicher`, or a legally sufficient electronic signature need qualified validation before they appear in marketing.
 
 ### Smart Views Without Folder Duplication
 
-The product may add metadata-driven views for:
+The product may add metadata-driven views per customer, site, project, job, service asset, employee, supplier, purchase, or commercial record, and views for missing documents, pending approvals, recently generated or shared artifacts, and retention or review exceptions.
 
-- every customer, site, project, job, service asset, employee, supplier, purchase, or commercial record;
-- missing-document and awaiting-approval work;
-- recently generated or externally shared artifacts;
-- retention or review exceptions.
-
-These views should use the existing link model. Physical folder creation should remain optional and deliberate unless a validated operational need outweighs its rename, synchronization, and duplicate-file costs.
+These views use the existing link model. Physical folders stay optional and deliberate unless a validated need outweighs their rename, sync, and duplicate-file costs.
 
 ## Connected Workflow Contracts
 
@@ -166,62 +115,52 @@ These views should use the existing link model. Physical folder creation should 
 | Commercial and finance   | Structured offer, contract, invoice, credit, expense, payment, and accounting state        | Source files, rendered outputs, versions, signatures, and reviewed extraction evidence |
 | AI automations           | Authorized source scope, processing request, and review policy                             | Searchable content, source references, drafts, and document-trigger events             |
 
-No feature should store a private duplicate merely to display the same file in its context.
+No feature stores a private duplicate only to show the same file in its context.
 
 ## Role And UX Principles
 
 - `admin` and `buero` need the central library, governance, review, bulk organization, and export.
-- `employee` users need documents, capture actions, and forms for assigned work, plus their expressly released personnel documents and requested evidence uploads.
-- Personnel, financial, contract, customer, and supplier documents need purpose-specific access rather than one broad `manager` assumption forever.
-- Upload should remain fast; classification, linking, and extraction suggestions must not block simple field evidence.
-- Document status, structured-record status, processing status, and approval status should be visually distinct.
-- A failed upload, scan, OCR, extraction, share, or signature must remain visible with a recovery action.
-- Mobile capture should make offline and synchronization state explicit.
-- Destructive actions, link removal, permanent deletion, and version replacement must explain their cross-context impact.
+- `employee` users need documents, capture, and forms for assigned work, plus their released personnel documents and requested evidence uploads.
+- Personnel, financial, contract, customer, and supplier documents need purpose-specific access, not one broad manager permission forever.
+- Upload stays fast. Classification, linking, and extraction suggestions never block simple field evidence.
+- Document status, record status, processing status, and approval status look visibly different.
+- A failed upload, scan, OCR run, extraction, share, or signature stays visible with a recovery action.
+- Mobile capture shows offline and sync state explicitly.
+- Link removal, permanent deletion, and version replacement explain their effect on every linked context.
 
 ## Phase 2 — Intelligence And Automation
 
-Once the capture, search, structured-record, and review foundations are stable, intelligence can support:
+Once capture, search, structured records, and review are stable, intelligence can:
 
-- category, link-target, and smart-view suggestions;
-- extraction of invoice, delivery-note, offer, contract, report, and form fields;
-- comparison of versions or contract/offer changes;
-- summaries of large document sets with source references;
-- identification of missing signatures, required attachments, or inconsistent values;
-- conversion of speech, notes, and photos into a report draft;
-- routing a reviewed document into the correct job, service, procurement, or commercial workflow;
-- document-triggered automations with explicit permissions and approvals.
+- suggest categories, link targets, and smart views;
+- extract fields from invoices, delivery notes, offers, contracts, reports, and forms;
+- compare versions and contract or offer changes;
+- summarize large document sets with source references;
+- find missing signatures, missing attachments, and inconsistent values;
+- turn speech, notes, and photos into a report draft;
+- route a reviewed document into the right job, service, procurement, or commercial workflow;
+- run document-triggered automations with explicit permissions and approvals.
 
-Financially, legally, technically, or employment-relevant extraction remains a proposal until an authorized person reviews it. The original file and extracted source region should remain available.
+Financially, legally, technically, or employment-relevant extraction stays a proposal until an authorized person reviews it. The original file and the source region stay available.
 
 ## Boundaries And Decision Gates
 
-- Document management is not a replacement for structured jobs, stock, employee, service, or finance records.
-- A document category does not create commercial/accounting meaning on its own.
-- Automatic physical folder creation remains deferred unless user research establishes a stronger need than metadata-driven views.
-- Broad employee library access should not be introduced merely for convenience.
+- Document management does not replace structured job, stock, employee, service, or finance records.
+- A document category creates no commercial or accounting meaning.
+- Automatic physical folders stay deferred unless user research shows a stronger need than metadata-driven views.
+- Broad employee library access is not added for convenience.
 - External sharing and electronic signatures need security, identity, revocation, retention, and legal-validity decisions.
-- Long-term archive and compliance claims require qualified German legal/accounting validation.
-- AI may propose classification, extraction, links, summaries, and workflows; it must not silently alter signed or financially final records.
+- Long-term archive and compliance claims need qualified German legal and accounting validation.
+- AI may propose classification, extraction, links, summaries, and workflows. It never silently changes signed or financially final records.
 
 ## Open Product Decisions
 
-- Which Phase 1 workflows require OCR and full-text search first?
-- Which document types need structured templates rather than uploaded files?
-- Which review/approval patterns deserve a shared product workflow?
-- What retention and deletion rules should be configurable by document category?
-- Which external sharing and signature use cases provide enough value for the first complete product?
-- What organization-wide export format preserves files, links, versions, and structured record relationships?
-- Which personnel, financial, supplier, and customer documents require more granular permission groups?
-- When should a newly uploaded file be treated as a duplicate, a new version, or a different business record?
-- Which extracted fields may be accepted in bulk, and which always require individual review?
-
-## Related Docs
-
-- [Product capability map](../product/product-capability-map.md) — feature ownership, shared objects, and cross-feature handoff rules.
-- [Phase 1 roadmap](../plans/phase-1/roadmap.md) — slice order, current status, and links to per-slice acceptance records.
-- [User-flow catalog](../product/user-flow-catalog.md) — this feature's accepted user-visible flows by stable ID.
-- Connected feature specs: the **Connected Workflow Contracts** table above names every cross-feature contract; load only the specs the current slice names.
-- [Decision 0001 — infrastructure stack](../decisions/0001-infrastructure-stack.md) — the R2 storage decision this feature implements.
-- [Technical architecture](../technical/architecture.md) — the signed-upload storage flow in the runtime picture.
-- [Document storage and access](../technical/document-storage-and-access.md). Storage paths, signed upload flow, RLS matrix, operations reference, audit vocabulary, and code locations.
+- Which Phase 1 workflows need OCR and full-text search first?
+- Which document types need structured templates instead of uploaded files?
+- Which review and approval patterns deserve a shared product workflow?
+- Which retention and deletion rules should be configurable per document category?
+- Which external sharing and signature use cases are worth it for the first complete product?
+- Which organization-wide export format keeps files, links, versions, and record relationships?
+- Which personnel, financial, supplier, and customer documents need finer permission groups?
+- When is a new upload a duplicate, a new version, or a different business record?
+- Which extracted fields may be accepted in bulk, and which always need individual review?

@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 
-import { WorkHandoverPage } from '@/components/auftraege/work-handover-page';
+import { WorkHandoverPage } from '@/components/auftraege/handover/work-handover-page';
 import { getWorkHandoverWorkspaceByNumber } from '@/lib/work-handover/actions';
 
 export default async function StandaloneJobHandoverPage({
@@ -10,7 +10,8 @@ export default async function StandaloneJobHandoverPage({
 }) {
   const { jobNumber } = await params;
   const result = await getWorkHandoverWorkspaceByNumber({
-    targetType: 'job', targetNumber: decodeURIComponent(jobNumber),
+    targetType: 'job',
+    targetNumber: decodeURIComponent(jobNumber),
   });
   if (!result.success) redirect('/auftraege');
   return <WorkHandoverPage workspace={result.workspace} />;

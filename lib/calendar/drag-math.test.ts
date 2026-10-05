@@ -8,7 +8,9 @@ import {
   minutesToPixels,
   pixelsToMinutes,
   snapMinutes,
-  uniformTrackStarts, autoScrollDue } from './drag-math';
+  uniformTrackStarts,
+  autoScrollDue,
+} from './drag-math';
 
 describe('drag math', () => {
   test('resolves track indices from cumulative starts and reports outside positions as null', () => {

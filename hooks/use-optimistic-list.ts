@@ -1,13 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { expireOptimisticOverlay, type OptimisticOverlayEntry } from '@/lib/ui/optimistic-overlay';
 
 /**
  * Optimistic overlay for a list whose authority is server data (props from a
  * route refresh or a `useLiveView` read). The overlay holds inserts, updates,
  * and removes keyed by id; `items` is the merged view the surface renders.
  *
- * Contract (feedback canon, 2026-09-03):
+ * Contract:
  * - `insert` shows the draft immediately in its sorted position, flagged
  *   optimistic so the row renders dimmed; `commit(tempId, real)` swaps in the
  *   server row in place; `rollback(tempId)` removes it.
@@ -16,14 +17,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
  *   its id (insert or update) or no longer contains it (remove). A route
  *   refresh or Realtime refetch landing first therefore reconciles by itself,
  *   which is what made the calendar's drag-and-drop override map safe.
+ * - `settle(id)` after the server confirmed a mutation whose row the echo
+ *   cannot predict completely (a server-set `updatedAt`, an insert that is
+ *   never committed under its real id): the entry then leaves with the next
+ *   authoritative list, so the caller starts that read and needs no manual
+ *   rollback after it.
  * - Callers that own a `useLiveView` call `view.invalidate()` before applying
  *   an entry, per the live-view contract.
  */
-
-type Overlay<Item> =
-  | { kind: 'insert'; item: Item; tempId: string }
-  | { kind: 'update'; item: Item; previous: Item }
-  | { kind: 'remove'; previous: Item };
 
 export interface OptimisticListItem<Item> {
   item: Item;
@@ -49,10 +50,11 @@ export function useOptimisticList<Item>({
   remove: (id: string) => void;
   commit: (tempId: string, confirmed: Item) => void;
   rollback: (id: string) => void;
+  settle: (id: string) => void;
   isOptimistic: (id: string) => boolean;
   hasPending: boolean;
 } {
-  const [overlay, setOverlay] = useState<Map<string, Overlay<Item>>>(() => new Map());
+  const [overlay, setOverlay] = useState<ReadonlyMap<string, OptimisticOverlayEntry<Item>>>(() => new Map());
   const getIdRef = useRef(getId);
   useEffect(() => {
     getIdRef.current = getId;
@@ -60,23 +62,7 @@ export function useOptimisticList<Item>({
 
   // Self-expiry against the authoritative list.
   useEffect(() => {
-    setOverlay((current) => {
-      if (current.size === 0) return current;
-      const serverIds = new Set(serverItems.map((item) => getIdRef.current(item)));
-      let changed = false;
-      const next = new Map(current);
-      for (const [id, entry] of current) {
-        const confirmedByServer =
-          (entry.kind === 'insert' && serverIds.has(id)) ||
-          (entry.kind === 'update' && serverIds.has(id) && entryMatchesServer(entry, serverItems, getIdRef.current)) ||
-          (entry.kind === 'remove' && !serverIds.has(id));
-        if (confirmedByServer) {
-          next.delete(id);
-          changed = true;
-        }
-      }
-      return changed ? next : current;
-    });
+    setOverlay((current) => expireOptimisticOverlay(current, serverItems, getIdRef.current));
   }, [serverItems]);
 
   const items = useMemo(() => {
@@ -116,7 +102,7 @@ export function useOptimisticList<Item>({
         return new Map(current).set(id, { kind: 'update', item: next, previous });
       });
     },
-    [serverItems]
+    [serverItems],
   );
 
   const remove = useCallback(
@@ -129,12 +115,14 @@ export function useOptimisticList<Item>({
           return next;
         }
         const previous =
-          existing?.kind === 'update' ? existing.previous : serverItems.find((item) => getIdRef.current(item) === id);
+          existing?.kind === 'update'
+            ? existing.previous
+            : serverItems.find((item) => getIdRef.current(item) === id);
         if (previous === undefined) return current;
         return new Map(current).set(id, { kind: 'remove', previous });
       });
     },
-    [serverItems]
+    [serverItems],
   );
 
   const commit = useCallback((tempId: string, confirmed: Item) => {
@@ -156,22 +144,25 @@ export function useOptimisticList<Item>({
     });
   }, []);
 
+  const settle = useCallback((id: string) => {
+    setOverlay((current) => {
+      const entry = current.get(id);
+      if (!entry || entry.settled) return current;
+      return new Map(current).set(id, { ...entry, settled: true });
+    });
+  }, []);
+
   const isOptimistic = useCallback((id: string) => overlay.has(id), [overlay]);
 
-  return { items, insert, update, remove, commit, rollback, isOptimistic, hasPending: overlay.size > 0 };
-}
-
-function entryMatchesServer<Item>(
-  entry: { kind: 'update'; item: Item },
-  serverItems: readonly Item[],
-  getId: (item: Item) => string
-): boolean {
-  const id = getId(entry.item);
-  const serverItem = serverItems.find((item) => getId(item) === id);
-  if (serverItem === undefined) return false;
-  // Shallow field comparison: the server row is authoritative once every
-  // field the optimistic update set matches it.
-  return Object.entries(entry.item as Record<string, unknown>).every(
-    ([key, value]) => (serverItem as Record<string, unknown>)[key] === value
-  );
+  return {
+    items,
+    insert,
+    update,
+    remove,
+    commit,
+    rollback,
+    settle,
+    isOptimistic,
+    hasPending: overlay.size > 0,
+  };
 }

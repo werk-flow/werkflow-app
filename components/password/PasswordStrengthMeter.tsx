@@ -1,12 +1,6 @@
 import { cn } from '@/lib/utils';
 
-const STRENGTH_LABELS = [
-  'Sehr schwach',
-  'Schwach',
-  'Ausreichend',
-  'Gut',
-  'Sehr stark'
-] as const;
+const STRENGTH_LABELS = ['Sehr schwach', 'Schwach', 'Ausreichend', 'Gut', 'Sehr stark'] as const;
 
 // Semantic tokens only (werkflow-design): the weak end reads red, the middle
 // yellow, the strong end green; no functional colour literal in JSX.
@@ -17,10 +11,7 @@ type PasswordStrengthMeterProps = {
   className?: string;
 };
 
-export function PasswordStrengthMeter({
-  level,
-  className
-}: PasswordStrengthMeterProps) {
+export function PasswordStrengthMeter({ level, className }: PasswordStrengthMeterProps) {
   const clampedLevel = Math.max(0, Math.min(4, Math.round(level)));
   const label = STRENGTH_LABELS[clampedLevel];
   const percent = Math.min(100, Math.max(0, (clampedLevel / 4) * 100));
@@ -42,8 +33,9 @@ export function PasswordStrengthMeter({
           className={cn('h-full rounded-full transition-all duration-500 ease-in-out', fillClass)}
           role="meter"
           style={{
-            width: `${percent}%`,
-            transitionProperty: 'width, background-color'
+            width: `${percent}%`,
+
+            transitionProperty: 'width, background-color',
           }}
         />
       </div>

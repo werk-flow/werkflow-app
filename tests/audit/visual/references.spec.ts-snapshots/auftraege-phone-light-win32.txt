@@ -1,0 +1,40 @@
+Menü öffnen
+Aufträge
+Erstellen
+Aktuelle Aufträge und Projekte
+Alle
+4
+Nicht begonnen
+4
+In Ausführung
+0
+Unterbrochen
+0
+Filter
+A-2026-0103
+Waschtisch im Behandlungsraum tauschen
+Praxis Dr. Wolf
+Nicht begonnen
+Mittel
+A-2026-0102
+Abluft der Backstube prüfen
+Bäckerei Sommer GmbH
+Nicht begonnen
+Mittel
+A-2026-0101
+Gastherme warten und Abgasmessung
+Familie Hoffmann
+Nicht begonnen
+Mittel
+KS
+P-2026-0007
+Sanierung Wohnanlage Uferweg
+Wohnungsbaugenossenschaft Neckartal eG
+Nicht begonnen · automatisch
+0
+/
+2
+KS
+1–4
+von
+4

@@ -3,10 +3,8 @@
  *
  * Without a timeout, a stalled connection hangs the awaiting server action
  * forever: the user stares at a disabled button ("Wird gelöscht...") and the
- * harness burns its full test budget. Evidenced 2026-08-21 across customer
- * deletion, assignment saves, and harness logins (see the M2 entry in
- * docs/plans/phase-1/audits/golden-gate-log.md). With this bound, a stalled request rejects
- * and the callers' error handling surfaces a visible failure instead.
+ * harness burns its full test budget. With this bound, a stalled request
+ * rejects and the callers' error handling surfaces a visible failure instead.
  *
  * 30 s is deliberately generous: the slowest legitimate calls (auth admin
  * pagination, edge-function invocations waiting on Resend) finish well under
@@ -18,16 +16,16 @@ import { createRequestScheduler } from './request-scheduler';
 const SUPABASE_FETCH_TIMEOUT_MS = 30_000;
 const scheduleRequest = createRequestScheduler();
 
-function boundedFetch(
-  input: RequestInfo | URL,
-  init?: RequestInit
-): Promise<Response> {
+function boundedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const timeoutSignal = AbortSignal.timeout(SUPABASE_FETCH_TIMEOUT_MS);
   const signals = [timeoutSignal];
   if (init?.signal) signals.push(init.signal);
   if (input instanceof Request) signals.push(input.signal);
   const requestSignal = getReadRequestSignal();
-  if (requestSignal) signals.push(requestSignal);
+  const url = new URL(input instanceof Request ? input.url : input.toString());
+  // A discarded view cancels its data reads, not authentication/token rotation.
+  // auth-js logs rejected fetches as network failures, including expected navigation aborts.
+  if (requestSignal && !url.pathname.startsWith('/auth/v1/')) signals.push(requestSignal);
   const signal = AbortSignal.any(signals);
 
   return scheduleRequest(getReadRequestPriority(), signal, () => fetch(input, { ...init, signal }));

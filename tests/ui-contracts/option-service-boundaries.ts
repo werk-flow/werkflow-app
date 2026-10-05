@@ -5,7 +5,12 @@ declare global {
   interface Window {
     optionContract: {
       requests: JobOptionRequest[];
-      resolve: (index: number, options: JobEntityOption[], selected?: JobEntityOption[], hasMore?: boolean) => void;
+      resolve: (
+        index: number,
+        options: JobEntityOption[],
+        selected?: JobEntityOption[],
+        hasMore?: boolean,
+      ) => void;
       fail: (index: number) => void;
     };
   }

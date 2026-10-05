@@ -1,18 +1,16 @@
-import { resolve } from "node:path";
+import { resolve } from 'node:path';
 import {
   readCheckpoint,
   writeCheckpoint,
   type CheckpointValues,
-} from "../../../lib/testing/checkpoints";
-import { artifactsDirectory, loadWorld } from "./world";
+} from '../../../lib/testing/spec-support/checkpoints';
+import { artifactsDirectory, loadWorld } from './world';
 
 function checkpointPath(): string {
-  return resolve(artifactsDirectory(), "checkpoints.json");
+  return resolve(artifactsDirectory(), 'checkpoints.json');
 }
 
-export function checkpointValue<Key extends keyof CheckpointValues>(
-  key: Key,
-): CheckpointValues[Key] {
+export function checkpointValue<Key extends keyof CheckpointValues>(key: Key): CheckpointValues[Key] {
   return readCheckpoint(checkpointPath(), loadWorld().runId, key);
 }
 

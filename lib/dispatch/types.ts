@@ -3,10 +3,8 @@ import type { Database, Json } from '@/lib/supabase/database.types';
 export const DISPATCH_OVERVIEW_MAX_OFFSET_DAYS = 14;
 
 type DispatchStatus = Database['public']['Enums']['dispatch_status'];
-type DispatchChangeKind =
-  Database['public']['Enums']['dispatch_change_kind'];
-export type DispatchAcknowledgementState =
-  Database['public']['Enums']['dispatch_acknowledgement_state'];
+type DispatchChangeKind = Database['public']['Enums']['dispatch_change_kind'];
+export type DispatchAcknowledgementState = Database['public']['Enums']['dispatch_acknowledgement_state'];
 
 // Derived per (current revision, recipient); never stored as a bare flag.
 // 'nicht_moeglich' marks a recipient employee record without an active login —
@@ -18,10 +16,7 @@ export type DispatchRecipientDerivedState =
   | 'rueckfrage'
   | 'nicht_moeglich';
 
-export const DISPATCH_RECIPIENT_STATE_LABELS: Record<
-  DispatchRecipientDerivedState,
-  string
-> = {
+export const DISPATCH_RECIPIENT_STATE_LABELS: Record<DispatchRecipientDerivedState, string> = {
   ausstehend: 'Bestätigung ausstehend',
   bestaetigt: 'Bestätigt',
   uebernommen: 'Übernommen',
@@ -112,13 +107,7 @@ export type TravelNote = {
 
 type ReadinessState = 'ok' | 'warning' | 'unknown';
 
-type ReadinessDimensionKey =
-  | 'capacity'
-  | 'qualification'
-  | 'site'
-  | 'travel'
-  | 'material'
-  | 'tools';
+type ReadinessDimensionKey = 'capacity' | 'qualification' | 'site' | 'travel' | 'material' | 'tools';
 
 export type ReadinessDimension = {
   key: ReadinessDimensionKey;
@@ -170,46 +159,32 @@ const DISPATCH_ERROR_MESSAGES: Record<string, string> & {
   dispatch_not_found: 'Der Einsatz wurde nicht gefunden.',
   dispatch_not_active: 'Der Einsatz ist nicht mehr aktiv.',
   dispatch_occurrence_not_found: 'Der geplante Besuch wurde nicht gefunden.',
-  dispatch_occurrence_not_scheduled:
-    'Nur eingeplante Besuche können versendet werden.',
+  dispatch_occurrence_not_scheduled: 'Nur eingeplante Besuche können versendet werden.',
   dispatch_job_not_found: 'Der Auftrag wurde nicht gefunden.',
-  dispatch_job_not_dispatchable:
-    'Dieser Auftrag kann derzeit nicht versendet werden.',
-  dispatch_job_has_scheduled_visits:
-    'Der Auftrag hat eingeplante Besuche – bitte den Besuch versenden.',
-  dispatch_requires_recipients:
-    'Ein Einsatz benötigt mindestens eine zugewiesene Person.',
-  dispatch_recipient_not_found:
-    'Eine ausgewählte Person wurde nicht gefunden.',
+  dispatch_job_not_dispatchable: 'Dieser Auftrag kann derzeit nicht versendet werden.',
+  dispatch_job_has_scheduled_visits: 'Der Auftrag hat eingeplante Besuche – bitte den Besuch versenden.',
+  dispatch_requires_recipients: 'Ein Einsatz benötigt mindestens eine zugewiesene Person.',
+  dispatch_recipient_not_found: 'Eine ausgewählte Person wurde nicht gefunden.',
   dispatch_recipients_follow_assignments:
     'Bei eingeplanten Besuchen folgen die Empfänger der Besuchszuweisung.',
-  stale_dispatch_revision:
-    'Der Einsatz wurde zwischenzeitlich geändert. Bitte aktualisieren.',
+  stale_dispatch_revision: 'Der Einsatz wurde zwischenzeitlich geändert. Bitte aktualisieren.',
   not_a_recipient: 'Dieser Einsatz ist nicht dir zugewiesen.',
   open_challenge_exists: 'Es gibt bereits eine offene Rückfrage.',
-  challenge_reason_invalid:
-    'Bitte eine Begründung mit 8 bis 500 Zeichen angeben.',
-  resolution_reason_invalid:
-    'Bitte eine Begründung mit 3 bis 1000 Zeichen angeben.',
+  challenge_reason_invalid: 'Bitte eine Begründung mit 8 bis 500 Zeichen angeben.',
+  resolution_reason_invalid: 'Bitte eine Begründung mit 3 bis 1000 Zeichen angeben.',
   cancel_reason_invalid: 'Bitte eine Begründung mit 3 bis 1000 Zeichen angeben.',
   challenge_not_found: 'Die Rückfrage wurde nicht gefunden.',
-  batch_reason_invalid:
-    'Bitte eine Begründung mit 8 bis 1000 Zeichen angeben.',
-  batch_selection_invalid:
-    'Bitte 1 bis 100 zukünftige Besuche auswählen.',
-  batch_item_stale:
-    'Ein ausgewählter Besuch wurde zwischenzeitlich geändert. Bitte neu prüfen.',
+  batch_reason_invalid: 'Bitte eine Begründung mit 8 bis 1000 Zeichen angeben.',
+  batch_selection_invalid: 'Bitte 1 bis 100 zukünftige Besuche auswählen.',
+  batch_item_stale: 'Ein ausgewählter Besuch wurde zwischenzeitlich geändert. Bitte neu prüfen.',
   batch_item_not_found: 'Ein ausgewählter Besuch wurde nicht gefunden.',
-  batch_item_not_scheduled:
-    'Ein ausgewählter Besuch ist nicht mehr eingeplant.',
-  batch_item_started:
-    'Ein ausgewählter Besuch liegt nicht mehr in der Zukunft.',
+  batch_item_not_scheduled: 'Ein ausgewählter Besuch ist nicht mehr eingeplant.',
+  batch_item_started: 'Ein ausgewählter Besuch liegt nicht mehr in der Zukunft.',
   batch_item_invalid: 'Ein ausgewählter Besuch kann so nicht verschoben werden.',
   batch_item_all_day_needs_day_shift:
     'Ganztägige Besuche benötigen eine Verschiebung um mindestens einen Tag.',
   planning_warning: 'Es liegen Planungshinweise vor.',
-  stale_assessment:
-    'Die Planungslage hat sich geändert. Bitte die Hinweise erneut prüfen.',
+  stale_assessment: 'Die Planungslage hat sich geändert. Bitte die Hinweise erneut prüfen.',
   update_failed: 'Die Änderung konnte nicht gespeichert werden.',
   create_failed: 'Der Einsatz konnte nicht erstellt werden.',
   unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.',
@@ -219,7 +194,7 @@ export function dispatchErrorMessage(error: string): string {
   const known = DISPATCH_ERROR_MESSAGES[error];
   if (known) return known;
   const batchMessage = Object.entries(DISPATCH_ERROR_MESSAGES).find(
-    ([key]) => key.startsWith('batch_item_') && error.startsWith(key)
+    ([key]) => key.startsWith('batch_item_') && error.startsWith(key),
   )?.[1];
   return batchMessage ?? DISPATCH_ERROR_MESSAGES.unexpected_error;
 }

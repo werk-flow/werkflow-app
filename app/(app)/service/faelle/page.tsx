@@ -1,49 +1,48 @@
-import { SectionError } from "@/components/ui/section-error";
-import { cache, Suspense } from "react";
-import { redirect } from "next/navigation";
+import { RegionLoadError } from '@/components/shared/region-load-error';
+import { SubpageHeader } from '@/components/shared/subpage-header';
+import { Suspense } from 'react';
+import { redirect } from 'next/navigation';
 
-import { ServiceCaseListSkeleton } from "@/components/loading-states/service-cases-page-skeleton";
+import { ServiceCaseListSkeleton } from '@/components/loading-states/service-cases-page-skeleton';
 import {
   ServiceCaseCreateButton,
   ServiceCaseListContent,
-} from "@/components/service/service-case-list-content";
-import { Skeleton } from "@/components/ui/skeleton";
-import { getServiceCaseList } from "@/lib/service-cases/actions";
+} from '@/components/service/service-case-list-content';
+import { getServiceCasePage } from '@/lib/service-cases/list-page-server';
+import { parseServiceCaseListQuery } from '@/lib/service-cases/list-page';
 
-// One request-scoped read shared by the toolbar action and the list, so the
-// static toolbar paints before the data and the workspace still loads once.
-const loadServiceCases = cache(getServiceCaseList);
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-export default function ServiceCasesPage() {
+export default function ServiceCasesPage({
+  searchParams = Promise.resolve({}),
+}: {
+  searchParams?: SearchParams;
+}) {
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div><h2 className="text-lg font-semibold">Servicefälle</h2><p className="mt-1 text-sm text-muted-foreground">Störungen, Reparaturen und vermutete Gewährleistungsfälle vom Eingang bis zur Nacharbeit.</p></div>
-        <div className="hidden md:block">
-          <Suspense fallback={<Skeleton className="h-9 w-44" />}>
-            <ServiceCaseCreateAction />
-          </Suspense>
-        </div>
-      </div>
+      <SubpageHeader
+        title="Servicefälle"
+        description="Störungen, Reparaturen und vermutete Gewährleistungsfälle vom Eingang bis zur Nacharbeit."
+        actions={<ServiceCaseCreateButton />}
+      />
       <Suspense fallback={<ServiceCaseListSkeleton />}>
-        <ServiceCaseList />
+        <ServiceCaseList searchParams={searchParams} />
       </Suspense>
     </div>
   );
 }
 
-async function ServiceCaseCreateAction() {
-  const result = await loadServiceCases();
-  if (!result.success) return null;
-  return <ServiceCaseCreateButton clients={result.workspace.clients} />;
-}
-
-async function ServiceCaseList() {
-  const result = await loadServiceCases();
+async function ServiceCaseList({ searchParams }: { searchParams: SearchParams }) {
+  const query = parseServiceCaseListQuery(await searchParams);
+  const result = await getServiceCasePage(query);
   if (!result.success) {
-    if (result.error === "not_authorized") redirect("/auftraege");
-    if (["not_authenticated", "no_active_org", "not_a_member"].includes(result.error)) redirect("/login");
-    return <SectionError>Servicefälle konnten nicht geladen werden.</SectionError>;
+    if (result.error === 'not_authorized') redirect('/auftraege');
+    if (['not_authenticated', 'no_active_org', 'not_a_member'].includes(result.error)) redirect('/login');
+    return (
+      <RegionLoadError title="Servicefälle konnten nicht geladen werden">
+        Die Liste ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
+      </RegionLoadError>
+    );
   }
-  return <ServiceCaseListContent initialCases={result.workspace.cases} clients={result.workspace.clients} />;
+  return <ServiceCaseListContent initialPage={result.page} query={query} />;
 }

@@ -13,36 +13,17 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger
+  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useBanner } from '@/components/ui/banner';
 import { createOptimisticChannel } from '@/hooks/use-optimistic-channel';
+import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import { sendOrgInvite, type InviteRole } from '@/lib/invites/actions';
 import type { Invite } from './invitations-table';
-
-const ERROR_MESSAGES: Record<string, string> = {
-  not_authenticated: 'Du bist nicht angemeldet.',
-  no_active_org: 'Keine Organisation ausgewählt.',
-  org_not_found: 'Organisation nicht gefunden.',
-  not_authorized: 'Du bist nicht berechtigt, Einladungen zu senden.',
-  invalid_email: 'Bitte gib eine gültige E-Mail-Adresse ein.',
-  invalid_role: 'Ungültige Rolle ausgewählt.',
-  already_member: 'Diese Person ist bereits Mitglied dieser Organisation.',
-  invite_already_pending:
-    'Es gibt bereits eine ausstehende Einladung für diese E-Mail-Adresse.',
-  insert_failed: 'Fehler beim Erstellen der Einladung.',
-  email_send_failed: 'Fehler beim Senden der Einladungs-E-Mail.',
-  unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.'
-};
+import { SEND_INVITE_MESSAGES } from './invite-messages';
 
 // Email validation regex (same as signup form)
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -96,7 +77,7 @@ export function InviteDialog() {
       invited_role: role,
       created_at: now,
       expires_at: now,
-      accepted_at: null
+      accepted_at: null,
     };
     inviteCreations.publish({ kind: 'insert', tempId, draft });
     resetForm();
@@ -105,24 +86,25 @@ export function InviteDialog() {
     const result = await sendOrgInvite(invitedEmail, role).catch(() => null);
     if (!result || !result.success) {
       inviteCreations.publish({ kind: 'rollback', tempId });
-      const reason =
-        ERROR_MESSAGES[result?.error || 'unexpected_error'] ||
-        result?.error ||
-        ERROR_MESSAGES.unexpected_error;
+      const reason = describeFailure(
+        result?.error ?? 'unexpected_error',
+        SEND_INVITE_MESSAGES,
+        SHARED_FAILURE_MESSAGES.unexpected_error,
+      );
       showBanner({
         variant: 'error',
-        message: `Einladung an ${invitedEmail} konnte nicht gesendet werden: ${reason}`
+        message: `Einladung an ${invitedEmail} konnte nicht gesendet werden: ${reason}`,
       });
       return;
     }
     inviteCreations.publish({
       kind: 'commit',
       tempId,
-      confirmed: { ...draft, id: result.inviteId ?? tempId }
+      confirmed: { ...draft, id: result.inviteId ?? tempId },
     });
     showBanner({
       variant: 'success',
-      message: `Einladung an ${invitedEmail} wurde gesendet.`
+      message: `Einladung an ${invitedEmail} wurde gesendet.`,
     });
     router.refresh();
   };
@@ -140,29 +122,23 @@ export function InviteDialog() {
       <DialogTrigger asChild>
         <Button size="default" className="gap-2">
           <UserPlus className="size-4" />
-          <span className="hidden sm:inline">Mitarbeiter hinzufügen</span>
-          <span className="sm:hidden">Hinzufügen</span>
+          <span className="sr-only sm:not-sr-only">Mitarbeiter hinzufügen</span>
+          <span className="sm:hidden" aria-hidden="true">
+            Hinzufügen
+          </span>
         </Button>
       </DialogTrigger>
-      <DialogContent
-        className="sm:max-w-[425px]"
-        onOpenAutoFocus={(e) => e.preventDefault()}
-      >
+      <DialogContent size="md" onOpenAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>Mitarbeiter einladen</DialogTitle>
           <DialogDescription>
-            Gib die E-Mail-Adresse des Mitarbeiters ein, den du einladen
-            möchtest. Er erhält eine E-Mail mit einem Einladungslink.
+            Gib die E-Mail-Adresse des Mitarbeiters ein, den du einladen möchtest. Er erhält eine E-Mail mit
+            einem Einladungslink.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} noValidate>
           <div className="grid gap-4 py-4">
-            <Field
-              label="E-Mail-Adresse"
-              htmlFor="email"
-              required
-              error={showEmailError ? emailError : null}
-            >
+            <Field label="E-Mail-Adresse" htmlFor="email" required error={showEmailError ? emailError : null}>
               <Input
                 type="text"
                 inputMode="email"
@@ -181,10 +157,7 @@ export function InviteDialog() {
               htmlFor="role"
               description="Die Rolle, die der Mitarbeiter nach Annahme der Einladung erhält."
             >
-              <Select
-                value={selectedRole}
-                onValueChange={(value) => setSelectedRole(value as InviteRole)}
-              >
+              <Select value={selectedRole} onValueChange={(value) => setSelectedRole(value as InviteRole)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Rolle auswählen" />
                 </SelectTrigger>

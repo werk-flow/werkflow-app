@@ -5,18 +5,8 @@ import { useRouter } from 'next/navigation';
 import { ContactRound } from 'lucide-react';
 
 import { ListRow } from '@/components/ui/list-row';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  AccessStateBadge,
-  EmploymentStateBadge,
-} from '@/components/mitarbeiter/personnel-state-badges';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { AccessStateBadge, EmploymentStateBadge } from '@/components/mitarbeiter/personnel-state-badges';
 import {
   EMPLOYMENT_TYPE_LABELS,
   formatEmployeeRecordName,
@@ -24,14 +14,8 @@ import {
   getEmploymentState,
 } from '@/lib/personnel/types';
 import type { PersonnelListEntry } from '@/lib/personnel/actions';
-
-function formatDate(value: string): string {
-  return new Date(`${value}T00:00:00`).toLocaleDateString('de-DE', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
-}
+import { formatGermanDate } from '@/lib/utils';
+import { SectionTitle } from '@/components/shared/section-title';
 
 interface PersonnelRecordsSectionProps {
   entries: PersonnelListEntry[];
@@ -44,10 +28,7 @@ interface PersonnelRecordsSectionProps {
  * without app access, plus exited people whose membership was removed. Active
  * members stay in the members table above.
  */
-export function PersonnelRecordsSection({
-  entries,
-  profileNames,
-}: PersonnelRecordsSectionProps) {
+export function PersonnelRecordsSection({ entries, profileNames }: PersonnelRecordsSectionProps) {
   const router = useRouter();
 
   if (entries.length === 0) return null;
@@ -61,7 +42,7 @@ export function PersonnelRecordsSection({
     }
     return formatEmployeeRecordName(a.record, profileNames[a.record.id]).localeCompare(
       formatEmployeeRecordName(b.record, profileNames[b.record.id]),
-      'de'
+      'de',
     );
   });
 
@@ -69,9 +50,7 @@ export function PersonnelRecordsSection({
     <section className="mt-6">
       <div className="mb-2 flex items-center gap-2">
         <ContactRound className="size-4 text-muted-foreground" />
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-          Weiteres Personal
-        </h2>
+        <SectionTitle as="h2">Weiteres Personal</SectionTitle>
       </div>
       <p className="mb-3 text-xs text-muted-foreground">
         Zukünftige und ehemalige Mitarbeiter sowie Personal ohne App-Zugang.
@@ -84,28 +63,21 @@ export function PersonnelRecordsSection({
           return (
             // A real link so keyboard, middle-click, and copy-link work.
             <ListRow key={record.id} asChild interactive>
-              <Link
-                href={`/mitarbeiter/${record.id}`}
-                aria-label={`Personalakte öffnen: ${name}`}
-              >
+              <Link href={`/mitarbeiter/${record.id}`} aria-label={`Personalakte öffnen: ${name}`}>
                 <div className="min-w-0 flex-1 space-y-1">
                   <div className="flex items-center gap-2">
                     <p className="truncate text-sm font-medium">{name}</p>
                     {record.employeeNumber && (
-                      <span className="shrink-0 text-xs text-muted-foreground">
-                        {record.employeeNumber}
-                      </span>
+                      <span className="shrink-0 text-xs text-muted-foreground">{record.employeeNumber}</span>
                     )}
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5">
                     <EmploymentStateBadge state={getEmploymentState(record)} />
-                    <AccessStateBadge
-                      state={getAccessState(record, hasPendingInvite)}
-                    />
+                    <AccessStateBadge state={getAccessState(record, hasPendingInvite)} />
                   </div>
                   {record.entryDate && (
                     <p className="text-xs text-muted-foreground">
-                      Eintritt: {formatDate(record.entryDate)}
+                      Eintritt: {formatGermanDate(record.entryDate)}
                     </p>
                   )}
                 </div>
@@ -131,10 +103,7 @@ export function PersonnelRecordsSection({
           </TableHeader>
           <TableBody>
             {sorted.map(({ record, hasPendingInvite, currentCondition }) => {
-              const name = formatEmployeeRecordName(
-                record,
-                profileNames[record.id]
-              );
+              const name = formatEmployeeRecordName(record, profileNames[record.id]);
               return (
                 <TableRow
                   key={record.id}
@@ -152,27 +121,21 @@ export function PersonnelRecordsSection({
                       {name}
                     </Link>
                   </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {record.employeeNumber || '—'}
-                  </TableCell>
+                  <TableCell className="text-muted-foreground">{record.employeeNumber || '—'}</TableCell>
                   <TableCell>
                     <EmploymentStateBadge state={getEmploymentState(record)} />
                   </TableCell>
                   <TableCell>
-                    <AccessStateBadge
-                      state={getAccessState(record, hasPendingInvite)}
-                    />
+                    <AccessStateBadge state={getAccessState(record, hasPendingInvite)} />
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {currentCondition
-                      ? EMPLOYMENT_TYPE_LABELS[currentCondition.employmentType]
-                      : '—'}
+                    {currentCondition ? EMPLOYMENT_TYPE_LABELS[currentCondition.employmentType] : '—'}
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {record.entryDate ? formatDate(record.entryDate) : '—'}
+                    {record.entryDate ? formatGermanDate(record.entryDate) : '—'}
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {record.exitDate ? formatDate(record.exitDate) : '—'}
+                    {record.exitDate ? formatGermanDate(record.exitDate) : '—'}
                   </TableCell>
                 </TableRow>
               );

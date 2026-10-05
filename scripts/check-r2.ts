@@ -18,7 +18,9 @@ const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
 const bucketName = process.env.R2_BUCKET_NAME;
 
 if (!accountId || !accessKeyId || !secretAccessKey || !bucketName) {
-  console.error('Missing R2 env vars. Need R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME.');
+  console.error(
+    'Missing R2 env vars. Need R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME.',
+  );
   process.exit(1);
 }
 
@@ -51,7 +53,7 @@ async function roundTrip(jurisdiction: string | null): Promise<void> {
   const payload = 'werkflow r2 connectivity check';
 
   await client.send(
-    new PutObjectCommand({ Bucket: bucketName, Key: key, Body: payload, ContentType: 'text/plain' })
+    new PutObjectCommand({ Bucket: bucketName, Key: key, Body: payload, ContentType: 'text/plain' }),
   );
 
   try {
@@ -73,15 +75,19 @@ const defaultWorks = await tryEndpoint('Default', null);
 
 if (euWorks) {
   await roundTrip('eu');
-  console.log('Result: use the EU endpoint (R2_JURISDICTION=eu, the app default). Bucket is EU-jurisdiction as intended.');
+  console.log(
+    'Result: use the EU endpoint (R2_JURISDICTION=eu, the app default). Bucket is EU-jurisdiction as intended.',
+  );
 } else if (defaultWorks) {
   await roundTrip(null);
   console.warn(
     'Result: bucket is only reachable on the DEFAULT endpoint — it was probably created without the EU jurisdiction. ' +
-      'Recreate the bucket with jurisdiction "European Union" (jurisdiction cannot be changed later), or set R2_JURISDICTION="" consciously.'
+      'Recreate the bucket with jurisdiction "European Union" (jurisdiction cannot be changed later), or set R2_JURISDICTION="" consciously.',
   );
   process.exit(2);
 } else {
-  console.error('Result: bucket unreachable on both endpoints. Check account ID, bucket name, and token permissions.');
+  console.error(
+    'Result: bucket unreachable on both endpoints. Check account ID, bucket name, and token permissions.',
+  );
   process.exit(1);
 }

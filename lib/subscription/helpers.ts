@@ -1,4 +1,17 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { logError } from '@/lib/logging';
+
+/**
+ * A subscription or membership read that failed. It is never "not subscribed"
+ * or "no organizations": callers let it reach the error boundary or return
+ * their own failure, so a paying customer never sees the offer by mistake.
+ */
+class SubscriptionReadError extends Error {
+  constructor(readonly code: 'subscription_read_failed' | 'membership_read_failed') {
+    super(code);
+    this.name = 'SubscriptionReadError';
+  }
+}
 
 type SubscriptionStatus = 'active' | 'inactive' | 'canceled' | 'trialing';
 
@@ -14,24 +27,18 @@ type Subscription = {
 /**
  * Fetches the subscription record for a given user
  */
-async function getUserSubscription(
-  userId: string
-): Promise<Subscription | null> {
+async function getUserSubscription(userId: string): Promise<Subscription | null> {
   const supabase = await createSupabaseServerClient();
 
-  const { data, error } = await supabase
-    .from('subscriptions')
-    .select('*')
-    .eq('user_id', userId)
-    .single();
+  const { data, error } = await supabase.from('subscriptions').select('*').eq('user_id', userId).single();
 
   if (error) {
     // PGRST116 means no rows returned - user has no subscription
     if (error.code === 'PGRST116') {
       return null;
     }
-    console.error('Error fetching subscription:', error);
-    return null;
+    logError('Error fetching subscription:', error);
+    throw new SubscriptionReadError('subscription_read_failed');
   }
 
   return data as Subscription;
@@ -57,12 +64,9 @@ export async function userHasOrganizations(userId: string): Promise<boolean> {
     .eq('user_id', userId);
 
   if (error) {
-    console.error('Error checking organizations:', error);
-    return false;
+    logError('Error checking organizations:', error);
+    throw new SubscriptionReadError('membership_read_failed');
   }
 
   return (count ?? 0) > 0;
 }
-
-
-

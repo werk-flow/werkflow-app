@@ -66,3 +66,50 @@ The six rules that follow from that:
 - Recurring cross-feature regressions, which would justify an ICM-style change-impact index ("touching time entries hits RLS, calendar realtime, these tests"). Only worth it if map maintenance joins the same-change definition of done, since an unmaintained map is worse than none.
 - The docs corpus growing well past its current size, or a split into multiple repos, which is the point where a per-folder index stops being enough.
 - Agents demonstrably failing multi-hop questions that grep plus the roadmap's reading protocol answers today.
+
+## Amendment 2026-09-25: sibling ownership and bounded context
+
+WerkFlow now has independent app, business and website repositories. Each AGENTS.md routes to the other owners; each CLAUDE.md imports its local AGENTS.md. Business facts and the Hormozi library live in werkflow-business. App offer/avatar/acquisition paths remain thin routes. The website owns page implementation. The parent Code folder has no Git repository or shared deployment. The business [workspace workflow](../../../werkflow-business/docs/workflow.md) owns synchronization and cross-repository maintenance. App engineering skills remain separate from the five business/website skill mirrors.
+
+Use current feature contracts and narrowly selected technical references for implementation. Read a closed record for a specific decision or evidence question, not as a mandatory tour of all previous work. Documentation routing helps retrieval; it does not define a good screen or replace rendered review.
+
+The earlier research rationale contains broad benchmark and tool-market claims. Treat them as dated rationale, not universal conclusions or an instruction-count limit. [Evaluating AGENTS.md](https://arxiv.org/abs/2602.11988) reports worse average success and higher cost in its tested settings; it does not show that useful repository rules should be removed. [ICM](https://arxiv.org/abs/2603.16021) proposes filesystem context organization; it does not certify WerkFlow design quality. [Anthropic's context guidance](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents) supports selective retrieval and concrete examples. None proves that a folder restructure, graph database or paid community would repair this calendar. Evaluate any retrieval change on actual WerkFlow tasks before replacing the present structure.
+
+## Amendment 2026-10-01: docs hold only what code cannot say, with a size budget
+
+The owner decided this on 2026-10-01 and authorized restructuring the docs and earlier records.
+
+Measured before the change: `docs/` held 447,000 words, three times the size this record names in its context. A routine task loaded between 26,000 and 76,000 words. About 63 percent of the standards audit was dated checkpoint narrative. The migration rule lived in five places and had drifted in two. The list of read-request handlers lived in three places, all different. The docs said "four" quality areas in one place and "six" in another. 38 of 47 rules in `AGENTS.md` named no mechanism. The incident log and the backlog sat on the default reading path. No rule covered removing a doc. `docs:check` verified form, not duplicates, counters or freshness.
+
+Decided:
+
+1. A doc never restates what the code or the database can say: schema, file inventories, handler lists, function names used as description, counts, current values. A doc holds intent, product decisions, rules, reasons, procedures, and a pointer to the mechanism that enforces a rule. [The docs index](../README.md#what-a-doc-may-contain) owns the rule and its examples.
+2. Every fact has exactly one home. Dated incident narrative and evidence do not belong in a rule document. They live in closed records and in the incident log.
+3. Six virtues define quality and live in `AGENTS.md`, each with its rules, its mechanisms by tier, its commands and its owner doc. The standards audit keeps only the two procedures the virtues refer to. An agent who finds a missing, wrong or outdated rule changes the virtue in the same change, so that separate audits become unnecessary.
+4. Size budget: the required reading of a routine task stays under 10,000 words. That reading is `AGENTS.md`, the docs index, the Current Product Baseline of one feature spec and one technical doc. A living technical doc contains no dated narrative, no counters, no build ids and no report ids.
+5. Removing is a normal edit. [The docs index](../README.md#add-change-and-remove-docs) owns the rules for adding, changing, closing and removing docs.
+6. History leaves the reading path. Incident entries before 2026-09-25 moved to a closed archive. The backlog lists open candidates only. Finished hardening and pre-Wave-3 records are closed.
+
+This amendment supersedes rule 1 of the original decision where that rule allowed counters and acceptance evidence as "changeable facts" inside living docs.
+
+Enforcement. `docs:check` (`scripts/check-docs.ts`) is the Tier 2 mechanism. Beside links, index coverage, status lines, skill mirrors and record sections, it rejects a date in a living technical doc outside its status line (the incident log and closed docs are exempt, and a link target may name a dated heading), a living technical doc over 3,300 words, an `AGENTS.md` over 2,800 words, and a link or backticked docs path in `AGENTS.md` or a skill that resolves to nothing. `lib/docs/living-doc-rules.test.ts` tests the rules. Whether a sentence restates code, and whether a fact has a second home, stay Tier 3 judgments under virtue 6.
+
+## Amendment 2026-10-03: "How to work" procedures and the word budget
+
+The owner asked on 2026-10-03 that each virtue show an agent how to reach good work while it builds, not only what good work looks like afterwards. Agents had slowed the app and left the docs messier, and fixed half of what they built after the checks ran. Each virtue's owner doc therefore opens with a "How to work" section: one short procedure per recurring task, with the file to start from, the decisions in order, the fast check to run at each point and the wrong turn it prevents.
+
+The procedures needed room that cuts could not give without removing rules. The owner's request is the reason the living technical doc budget rises from 3,300 to 4,000 words. Folding the old procedural sections of the Realtime doc into its procedures and merging the table-migration steps of the security checklist recovered part of the space. The `AGENTS.md` budget stays at 2,800 words.
+
+Open conflict. The routine reading of rule 4 (`AGENTS.md`, the docs index, one Current Product Baseline and one technical doc) already exceeded 10,000 words for the larger specs before this change, and the new budget widens the gap. `docs:check` does not measure that sum. The owner decides whether the routine reading may exclude the parts of a technical doc a task does not touch, or whether the 10,000-word limit changes.
+
+## Amendment 2026-10-03: routine reading by procedure
+
+The owner resolved the open conflict above on 2026-10-03. The owner asked for procedures that steer the work, and those procedures made the owner docs longer on purpose. A word cap on the sum of whole docs would force out the procedures the owner asked for.
+
+Decided:
+
+1. Routine reading is `AGENTS.md` and the docs index in full. Each task adds the Current Product Baseline of the feature spec it changes and, for each virtue it touches, the "How to work" procedure and the "Checklist" and "Never" items of that virtue's owner doc. An agent reads the rest of an owner doc only when the task reaches it.
+2. The 10,000-word limit on the routine reading of rule 4 is removed. No check could measure it per task, and a number that nothing measures decays. The per-doc budgets stay, and `docs:check` measures them.
+3. A budget changes only by the owner's decision, recorded as a dated amendment to this record.
+
+[The docs index](../README.md) owns the reading rule. This amendment supersedes the reading definition and the 10,000-word limit of rule 4 in the 2026-10-01 amendment.

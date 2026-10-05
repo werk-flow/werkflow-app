@@ -1,10 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import {
-  getEasterSunday,
-  getHolidayName,
-  getPublicHolidaysForYear,
-} from './holidays';
+import { getEasterSunday, getHolidayName, getPublicHolidaysForYear } from './holidays';
 
 // These fixed reference lists catch changes to the in-code calculation.
 // They do not detect legislative changes; review official sources before
@@ -40,9 +36,7 @@ describe('getPublicHolidaysForYear', () => {
 
   test('Bayern ohne Mariä Himmelfahrt drops exactly that holiday', () => {
     const withMariae = getPublicHolidaysForYear('BY', 2026).map((h) => h.date);
-    const without = getPublicHolidaysForYear('BY_OHNE_MARIAE', 2026).map(
-      (h) => h.date
-    );
+    const without = getPublicHolidaysForYear('BY_OHNE_MARIAE', 2026).map((h) => h.date);
     expect(without).toEqual(withMariae.filter((d) => d !== '2026-08-15'));
   });
 

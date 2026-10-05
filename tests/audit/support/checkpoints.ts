@@ -1,4 +1,4 @@
 export {
   checkpointValue as auditCheckpoint,
   saveCheckpoint as saveAuditCheckpoint,
-} from "../../golden/support/checkpoints";
+} from '../../golden/support/checkpoints';

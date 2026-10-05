@@ -1,0 +1,33 @@
+Haustechnik Krämer GmbH
+Organisation erstellen
+Dashboard
+Aufgaben
+3
+3 offene Aufgaben und Benachrichtigungen
+Kalender
+Zeiterfassung
+Qualifikationen
+Anfragen
+Aufträge
+Dokumente
+Inventar
+Service
+Arbeitsvorlagen
+Mitarbeiter
+Kunden
+MK
+Martin Krämer
+martin.kraemer@haustechnik-kraemer.de
+Zeiterfassung
+Zeiterfassung
+Zeitkonto
+Perioden
+Regeln & Export
+Abrechnungsperioden
+Jeder Kalendermonat wird vorbereitet, geprüft und dann für die Lohnabrechnung abgeschlossen.
+Monat vorbereiten oder neu berechnen
+Monat
+*
+Pflichtfeld
+Periode vorbereiten
+Noch keine Periode vorbereitet.

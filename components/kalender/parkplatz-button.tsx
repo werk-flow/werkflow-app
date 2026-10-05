@@ -3,6 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { ParkingSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useHydrated } from '@/hooks/use-hydrated';
 import { useCalendarDrag } from './drag-engine/drag-engine';
 
 interface ParkplatzButtonProps {
@@ -17,8 +18,12 @@ interface ParkplatzButtonProps {
  * panel is open. The engine highlights the ghost; the button itself stays
  * quiet so the header never flashes.
  */
-export const ParkplatzButton = forwardRef<HTMLButtonElement, ParkplatzButtonProps>(function ParkplatzButton({ count, isOpen, onToggle }, ref) {
+export const ParkplatzButton = forwardRef<HTMLButtonElement, ParkplatzButtonProps>(function ParkplatzButton(
+  { count, isOpen, onToggle },
+  ref,
+) {
   const { registerDropZone } = useCalendarDrag();
+  const hydrated = useHydrated();
   const buttonRef = useRef<HTMLButtonElement>(null);
   useImperativeHandle(ref, () => buttonRef.current as HTMLButtonElement);
   useEffect(() => {
@@ -30,15 +35,21 @@ export const ParkplatzButton = forwardRef<HTMLButtonElement, ParkplatzButtonProp
   return (
     <Button
       ref={buttonRef}
-      variant={isOpen ? 'default' : 'outline'}
+      variant={isOpen ? 'secondary' : 'ghost'}
       size="default"
-      className="relative gap-2"
+      className="relative h-11 gap-2 sm:h-9"
       onClick={onToggle}
+      disabled={!hydrated}
+      aria-label={
+        count > 0
+          ? `Parkplatz, ${count} ${count === 1 ? 'geparkter Auftrag' : 'geparkte Aufträge'}`
+          : 'Parkplatz'
+      }
       aria-pressed={isOpen}
       data-parkplatz-zone=""
     >
       <ParkingSquare className="size-4" aria-hidden="true" />
-      <span>Parkplatz</span>
+      <span className="sr-only sm:not-sr-only">Parkplatz</span>
       {count > 0 && (
         <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-purple px-1 text-[10px] font-bold text-white">
           {count}

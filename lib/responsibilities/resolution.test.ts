@@ -47,10 +47,7 @@ const directConfiguration: ResponsibilityConfiguration = {
   ],
 };
 
-function resolveWithDelegation(
-  businessDate: string,
-  delegation: ResponsibilityDelegation
-) {
+function resolveWithDelegation(businessDate: string, delegation: ResponsibilityDelegation) {
   return resolveEffectiveResponsibility({
     responsibility: 'time_approval',
     actionTime: '2026-08-10T10:00:00.000Z',
@@ -74,10 +71,7 @@ describe('resolveEffectiveResponsibility', () => {
 
     expect(result.configurationId).toBeNull();
     expect(result.mode).toBe('role_default');
-    expect(result.holders.map((holder) => holder.userId)).toEqual([
-      'admin-user',
-      'buero-user',
-    ]);
+    expect(result.holders.map((holder) => holder.userId)).toEqual(['admin-user', 'buero-user']);
     expect(result.holders[0]?.source.kind).toBe('role_default');
   });
 
@@ -127,11 +121,7 @@ describe('resolveEffectiveResponsibility', () => {
       revokedFrom: null,
     });
 
-    expect(
-      result.holders.some(
-        (holder) => holder.employeeRecordId === 'employee-record'
-      )
-    ).toBe(expected);
+    expect(result.holders.some((holder) => holder.employeeRecordId === 'employee-record')).toBe(expected);
   });
 
   test('revocation is exclusive and preserves earlier days', () => {
@@ -145,12 +135,8 @@ describe('resolveEffectiveResponsibility', () => {
       revokedFrom: '2026-08-13',
     };
 
-    expect(resolveWithDelegation('2026-08-12', delegation).holders).toHaveLength(
-      2
-    );
-    expect(resolveWithDelegation('2026-08-13', delegation).holders).toHaveLength(
-      1
-    );
+    expect(resolveWithDelegation('2026-08-12', delegation).holders).toHaveLength(2);
+    expect(resolveWithDelegation('2026-08-13', delegation).holders).toHaveLength(1);
   });
 
   test('a delegate inherits the delegator target scope', () => {
@@ -185,17 +171,11 @@ describe('resolveEffectiveResponsibility', () => {
         },
       ],
     });
-    const delegate = result.holders.find(
-      (holder) => holder.employeeRecordId === 'employee-record'
-    );
+    const delegate = result.holders.find((holder) => holder.employeeRecordId === 'employee-record');
 
     expect(delegate?.source.kind).toBe('delegation');
-    expect(
-      delegate ? canHolderApproveTarget(delegate, 'someone', 'buero') : true
-    ).toBe(false);
-    expect(
-      delegate ? canHolderApproveTarget(delegate, 'someone', 'employee') : false
-    ).toBe(true);
+    expect(delegate ? canHolderApproveTarget(delegate, 'someone', 'buero') : true).toBe(false);
+    expect(delegate ? canHolderApproveTarget(delegate, 'someone', 'employee') : false).toBe(true);
   });
 
   test('resolves overlapping anomalous delegations independently of input order', () => {
@@ -230,10 +210,10 @@ describe('resolveEffectiveResponsibility', () => {
       });
 
     const forward = resolve(delegations).holders.find(
-      (holder) => holder.employeeRecordId === 'employee-record'
+      (holder) => holder.employeeRecordId === 'employee-record',
     );
     const reversed = resolve(delegations.toReversed()).holders.find(
-      (holder) => holder.employeeRecordId === 'employee-record'
+      (holder) => holder.employeeRecordId === 'employee-record',
     );
 
     expect(forward?.source).toEqual(reversed?.source);
@@ -255,9 +235,7 @@ describe('resolveEffectiveResponsibility', () => {
     const holder = result.holders[0];
 
     expect(holder).toBeDefined();
-    expect(holder && canHolderApproveTarget(holder, 'buero-user', 'buero')).toBe(
-      false
-    );
+    expect(holder && canHolderApproveTarget(holder, 'buero-user', 'buero')).toBe(false);
   });
 
   test('detects a sole selected base holder even when a substitute is active', () => {
@@ -282,8 +260,8 @@ describe('resolveEffectiveResponsibility', () => {
     expect(
       getResponsibilitiesStrandedByEmployeeRemoval(
         { time_approval: timeApproval, leave_approval: leaveApproval },
-        'buero-record'
-      )
+        'buero-record',
+      ),
     ).toEqual(['time_approval']);
   });
 });

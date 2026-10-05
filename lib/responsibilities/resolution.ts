@@ -59,9 +59,7 @@ type DelegatedResponsibilitySource = {
   delegatedFromEmployeeRecordId: string;
   validFrom: string;
   validUntil: string;
-  inheritedSource:
-    | RoleDefaultResponsibilitySource
-    | DirectResponsibilitySource;
+  inheritedSource: RoleDefaultResponsibilitySource | DirectResponsibilitySource;
 };
 
 type EffectiveResponsibilitySource =
@@ -94,19 +92,16 @@ type ResolveEffectiveResponsibilityInput = {
 function selectEffectiveConfiguration(
   configurations: ResponsibilityConfiguration[],
   responsibility: OrganizationResponsibility,
-  actionTime: string
+  actionTime: string,
 ): ResponsibilityConfiguration | null {
   return (
     configurations
       .filter(
         (configuration) =>
-          configuration.responsibility === responsibility &&
-          configuration.effectiveFrom <= actionTime
+          configuration.responsibility === responsibility && configuration.effectiveFrom <= actionTime,
       )
       .toSorted((left, right) => {
-        const effectiveComparison = right.effectiveFrom.localeCompare(
-          left.effectiveFrom
-        );
+        const effectiveComparison = right.effectiveFrom.localeCompare(left.effectiveFrom);
         if (effectiveComparison !== 0) return effectiveComparison;
         const createdComparison = right.createdAt.localeCompare(left.createdAt);
         if (createdComparison !== 0) return createdComparison;
@@ -115,10 +110,7 @@ function selectEffectiveConfiguration(
   );
 }
 
-function isDelegationEffective(
-  delegation: ResponsibilityDelegation,
-  businessDate: string
-): boolean {
+function isDelegationEffective(delegation: ResponsibilityDelegation, businessDate: string): boolean {
   return (
     delegation.validFrom <= businessDate &&
     delegation.validUntil >= businessDate &&
@@ -135,15 +127,9 @@ export function resolveEffectiveResponsibility({
   delegations,
 }: ResolveEffectiveResponsibilityInput): EffectiveResponsibility {
   const activeMemberByRecordId = new Map(
-    members
-      .filter((member) => member.active)
-      .map((member) => [member.employeeRecordId, member])
+    members.filter((member) => member.active).map((member) => [member.employeeRecordId, member]),
   );
-  const configuration = selectEffectiveConfiguration(
-    configurations,
-    responsibility,
-    actionTime
-  );
+  const configuration = selectEffectiveConfiguration(configurations, responsibility, actionTime);
 
   const baseHolders: EffectiveResponsibilityHolder[] = configuration
     ? configuration.assignments.flatMap<EffectiveResponsibilityHolder>((assignment) => {
@@ -152,8 +138,7 @@ export function resolveEffectiveResponsibility({
 
         if (
           assignment.source === 'role_default' &&
-          (assignment.roleSnapshot === 'admin' ||
-            assignment.roleSnapshot === 'buero')
+          (assignment.roleSnapshot === 'admin' || assignment.roleSnapshot === 'buero')
         ) {
           return [
             {
@@ -185,10 +170,7 @@ export function resolveEffectiveResponsibility({
         return [];
       })
     : members.flatMap((member) => {
-        if (
-          !member.active ||
-          (member.role !== 'admin' && member.role !== 'buero')
-        ) {
+        if (!member.active || (member.role !== 'admin' && member.role !== 'buero')) {
           return [];
         }
 
@@ -205,15 +187,12 @@ export function resolveEffectiveResponsibility({
         ];
       });
 
-  const holders = new Map(
-    baseHolders.map((holder) => [holder.employeeRecordId, holder])
-  );
+  const holders = new Map(baseHolders.map((holder) => [holder.employeeRecordId, holder]));
 
   const effectiveDelegations = delegations
     .filter(
       (delegation) =>
-        delegation.responsibility === responsibility &&
-        isDelegationEffective(delegation, businessDate)
+        delegation.responsibility === responsibility && isDelegationEffective(delegation, businessDate),
     )
     .toSorted((left, right) => {
       const startComparison = right.validFrom.localeCompare(left.validFrom);
@@ -224,16 +203,12 @@ export function resolveEffectiveResponsibility({
     });
 
   for (const delegation of effectiveDelegations) {
-    if (
-      holders.has(delegation.substituteEmployeeRecordId)
-    ) {
+    if (holders.has(delegation.substituteEmployeeRecordId)) {
       continue;
     }
 
     const delegator = holders.get(delegation.delegatorEmployeeRecordId);
-    const substitute = activeMemberByRecordId.get(
-      delegation.substituteEmployeeRecordId
-    );
+    const substitute = activeMemberByRecordId.get(delegation.substituteEmployeeRecordId);
     if (!delegator || !substitute || delegator.source.kind === 'delegation') {
       continue;
     }
@@ -264,14 +239,11 @@ export function resolveEffectiveResponsibility({
 export function canHolderApproveTarget(
   holder: EffectiveResponsibilityHolder,
   targetUserId: string,
-  targetRole: OrgRole
+  targetRole: OrgRole,
 ): boolean {
   if (holder.userId === targetUserId) return false;
 
-  const source =
-    holder.source.kind === 'delegation'
-      ? holder.source.inheritedSource
-      : holder.source;
+  const source = holder.source.kind === 'delegation' ? holder.source.inheritedSource : holder.source;
 
   if (source.kind === 'direct_assignment') return true;
   if (source.role === 'admin') return true;
@@ -280,20 +252,16 @@ export function canHolderApproveTarget(
 
 export function getResponsibilitiesStrandedByEmployeeRemoval(
   effective: Partial<Record<OrganizationResponsibility, EffectiveResponsibility>>,
-  employeeRecordId: string
+  employeeRecordId: string,
 ): OrganizationResponsibility[] {
-  return ORGANIZATION_RESPONSIBILITIES.filter(
-    (responsibility) => {
-      const resolved = effective[responsibility];
-      if (!resolved) return false;
-      const baseHolders = resolved.holders.filter(
-        (holder) => holder.source.kind !== 'delegation'
-      );
-      return (
-        resolved.mode === 'selected' &&
-        baseHolders.length === 1 &&
-        baseHolders[0]?.employeeRecordId === employeeRecordId
-      );
-    }
-  );
+  return ORGANIZATION_RESPONSIBILITIES.filter((responsibility) => {
+    const resolved = effective[responsibility];
+    if (!resolved) return false;
+    const baseHolders = resolved.holders.filter((holder) => holder.source.kind !== 'delegation');
+    return (
+      resolved.mode === 'selected' &&
+      baseHolders.length === 1 &&
+      baseHolders[0]?.employeeRecordId === employeeRecordId
+    );
+  });
 }

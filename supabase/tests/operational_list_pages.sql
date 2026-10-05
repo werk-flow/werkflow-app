@@ -31,7 +31,7 @@ do $$ declare
   query jsonb := '{"page":1,"pageSize":50,"search":"","status":"alle","entryType":"alle","clientIds":[],"employeeIds":[],"dateFrom":"","dateTo":"","sort":"bezeichnung","direction":"asc","enabled":true}';
   result jsonb; next_result jsonb; signature text;
 begin
-  foreach signature in array array['public.list_customer_page(uuid,text,integer,integer)','public.list_job_entries_page(uuid,uuid,boolean,jsonb)','public.list_project_job_page(uuid,uuid,boolean,uuid,integer,integer)','public.list_document_page(uuid,jsonb)'] loop
+  foreach signature in array array['public.list_customer_page(uuid,text,integer,integer)','public.list_job_entries_page(uuid,uuid,boolean,jsonb)','public.list_project_job_page(uuid,uuid,boolean,uuid,integer,integer)','public.list_document_page(uuid,jsonb)','public.list_request_page(uuid,text,text,text[],integer,integer)'] loop
     if has_function_privilege('anon',signature,'execute') or has_function_privilege('authenticated',signature,'execute') or not has_function_privilege('service_role',signature,'execute') then raise exception 'page RPC grant mismatch: %',signature; end if;
   end loop;
   result := public.list_customer_page(org_id,'',1,50);
@@ -111,5 +111,70 @@ begin
   if result#>>'{active,entries,0,id}'<>'74000000-0000-4000-8000-000000000081' or result#>>'{active,entries,1,id}'<>'74000000-0000-4000-8000-000000000082' then
     raise exception 'identical creation timestamps lost deterministic identity order';
   end if;
+end $$;
+
+-- The "Nr." sort orders record numbers by year, then by the numeric sequence,
+-- across the page boundary; a number outside the form sorts last ascending and
+-- first descending.
+insert into public.jobs(id,organization_id,title,job_number,created_by)
+select md5('natural-job-'||number)::uuid,'74000000-0000-4000-8000-000000000010','Naturnummer '||number,number,'74000000-0000-4000-8000-000000000001'
+from unnest(array['AUF-2026-1000','AUF-2026-101','ALT-7','AUF-2026-100','AUF-2025-1200','AUF-2026-099']) number;
+do $$ declare
+  expected text[] := array['AUF-2025-1200','AUF-2026-099','AUF-2026-100','AUF-2026-101','AUF-2026-1000','ALT-7'];
+  direction text; page_number integer; position integer; result jsonb;
+begin
+  foreach direction in array array['asc','desc'] loop
+    for page_number in 1..3 loop
+      result := public.list_job_entries_page('74000000-0000-4000-8000-000000000010','74000000-0000-4000-8000-000000000001',true,
+        jsonb_build_object('active',jsonb_build_object('page',page_number,'pageSize',2,'search','Naturnummer','sort','nr','direction',direction)));
+      for position in 1..2 loop
+        if result#>>array['active','entries',(position-1)::text,'id']<>md5('natural-job-'||expected[case when direction='asc' then page_number*2-2+position else 7-(page_number*2-2+position) end])::uuid::text then
+          raise exception 'job numbers do not sort naturally on page % (%)',page_number,direction;
+        end if;
+      end loop;
+    end loop;
+  end loop;
+end $$;
+
+-- Request pages: status scope, search and count before the page boundary, newest first.
+insert into public.client_requests(id,organization_id,summary,status,category,client_id,assigned_to,received_at)
+select md5('list-request-'||number)::uuid,'74000000-0000-4000-8000-000000000010','Anfrage '||lpad(number::text,4,'0'),
+  (case when number<=5 then 'in_klaerung' else 'offen' end)::public.request_status,
+  (case when number=7 then 'wartung' else 'sonstiges' end)::public.request_category,
+  case when number=120 then md5('list-client-1051')::uuid end,
+  case when number=119 then '74000000-0000-4000-8000-000000000002'::uuid end,
+  '2026-01-01T00:00:00Z'::timestamptz + number * interval '1 minute'
+from generate_series(1,120) number;
+insert into public.client_requests(organization_id,summary) values('74000000-0000-4000-8000-000000000011','Fremde Anfrage');
+do $$ declare
+  org_id uuid := '74000000-0000-4000-8000-000000000010';
+  result jsonb;
+begin
+  result := public.list_request_page(org_id,'aktiv','','{}',1,50);
+  if (result->>'total')::int<>120 or jsonb_array_length(result->'rows')<>50 or not (result->>'hasAny')::boolean then raise exception 'request page total or size wrong: %',result->>'total'; end if;
+  if exists(select 1 from jsonb_array_elements(result->'rows') with ordinality listed(entry,position) where entry->>'id'<>md5('list-request-'||(121-position))::uuid::text) then raise exception 'request page is not newest first'; end if;
+  if result#>>'{rows,0,clientName}'<>'Kunde 1051' or result#>>'{rows,1,assigneeEmail}'<>'lists-worker@example.test' or not (result#>>'{rows,1,hasAssignee}')::boolean or (result#>>'{rows,2,hasAssignee}')::boolean then raise exception 'request row labels lost'; end if;
+  result := public.list_request_page(org_id,'aktiv','','{}',3,50);
+  if (result->>'total')::int<>120 or jsonb_array_length(result->'rows')<>20 or result#>>'{rows,19,id}'<>md5('list-request-1')::uuid::text then raise exception 'request last page incomplete'; end if;
+  -- Bounds: at most 100 rows, at least one row, and never a page before the first.
+  if jsonb_array_length(public.list_request_page(org_id,'aktiv','','{}',1,100000)->'rows')<>100 then raise exception 'request page size is not capped at 100'; end if;
+  if jsonb_array_length(public.list_request_page(org_id,'aktiv','','{}',1,0)->'rows')<>1 then raise exception 'request page size has no lower bound'; end if;
+  if public.list_request_page(org_id,'aktiv','','{}',-3,50)#>>'{rows,0,id}'<>md5('list-request-120')::uuid::text then raise exception 'request page number has no lower bound'; end if;
+  result := public.list_request_page(org_id,'aktiv','','{}',2147483647,100);
+  if (result->>'total')::int<>120 or result->'rows'<>'[]'::jsonb then raise exception 'request page past the end is not empty'; end if;
+  -- Status scope and search count before paging.
+  if (public.list_request_page(org_id,'in_klaerung','','{}',1,50)->>'total')::int<>5 or (public.list_request_page(org_id,'geschlossen','','{}',1,50)->>'total')::int<>0 or (public.list_request_page(org_id,'alle','','{}',1,50)->>'total')::int<>120 then raise exception 'request status scope wrong'; end if;
+  result := public.list_request_page(org_id,'aktiv','anfrage 0001','{}',1,50);
+  if (result->>'total')::int<>1 or result#>>'{rows,0,id}'<>md5('list-request-1')::uuid::text then raise exception 'request search missed the oldest row'; end if;
+  if public.list_request_page(org_id,'aktiv','kunde 1051','{}',1,50)#>>'{rows,0,id}'<>md5('list-request-120')::uuid::text or public.list_request_page(org_id,'aktiv','lists-worker','{}',1,50)#>>'{rows,0,id}'<>md5('list-request-119')::uuid::text then raise exception 'request search missed customer or assignee'; end if;
+  result := public.list_request_page(org_id,'aktiv','wartung',array['wartung'],1,50);
+  if (result->>'total')::int<>1 or result#>>'{rows,0,id}'<>md5('list-request-7')::uuid::text then raise exception 'request category search wrong'; end if;
+  -- Tenant isolation: the other organization's request is neither counted nor found, and an organization without requests reports none.
+  result := public.list_request_page(org_id,'alle','Fremde','{}',1,50);
+  if (result->>'total')::int<>0 or result->'rows'<>'[]'::jsonb then raise exception 'request tenant leaked'; end if;
+  result := public.list_request_page('74000000-0000-4000-8000-000000000011','alle','','{}',1,50);
+  if (result->>'total')::int<>1 or jsonb_array_length(result->'rows')<>1 then raise exception 'foreign organization page wrong'; end if;
+  result := public.list_request_page('74000000-0000-4000-8000-000000000012','alle','','{}',1,50);
+  if (result->>'total')::int<>0 or (result->>'hasAny')::boolean then raise exception 'empty organization reports requests'; end if;
 end $$;
 rollback;

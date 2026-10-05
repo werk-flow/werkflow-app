@@ -3,37 +3,27 @@ import { Award, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { ErrorText } from '@/components/ui/error-text';
-import type {
-  PersonnelQualificationSummary,
-} from '@/lib/qualifications/types';
+import { RegionLoadError } from '@/components/shared/region-load-error';
+import type { PersonnelQualificationSummary } from '@/lib/qualifications/types';
+import { SectionTitle } from '@/components/shared/section-title';
 
 export type PersonnelQualificationSummaryData = PersonnelQualificationSummary;
 
-export function PersonnelQualificationSummary({
-  data,
-}: {
-  data: PersonnelQualificationSummaryData | null;
-}) {
+export function PersonnelQualificationSummary({ data }: { data: PersonnelQualificationSummaryData | null }) {
   if (!data) {
     return (
-      <Card className="p-4">
-        <ErrorText>
-          Teams und Qualifikationen konnten nicht geladen werden.
-        </ErrorText>
-      </Card>
+      <RegionLoadError title="Teams und Qualifikationen konnten nicht geladen werden">
+        Die übrigen Angaben zur Person bleiben nutzbar. Versuche es in einem Moment erneut.
+      </RegionLoadError>
     );
   }
-  const formatDate = (value: string) =>
-    new Date(`${value}T00:00:00`).toLocaleDateString('de-DE');
+  const formatDate = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString('de-DE');
   return (
     <Card className="gap-4 p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold">Teams & Qualifikationen</h2>
-          <p className="text-xs text-muted-foreground">
-            Operative Angaben für die Planung.
-          </p>
+          <SectionTitle as="h2">Teams & Qualifikationen</SectionTitle>
+          <p className="text-xs text-muted-foreground">Operative Angaben für die Planung.</p>
         </div>
         <Button variant="outline" size="sm" asChild>
           <Link href="/mitarbeiter">Verwalten</Link>
@@ -53,9 +43,7 @@ export function PersonnelQualificationSummary({
             ))}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">
-            Keine aktuelle Teamzuordnung.
-          </p>
+          <p className="text-sm text-muted-foreground">Keine aktuelle Teamzuordnung.</p>
         )}
       </div>
       <div className="space-y-2">
@@ -73,18 +61,14 @@ export function PersonnelQualificationSummary({
                   {record.validUntil ? ' – ' + formatDate(record.validUntil) : ''}
                   {definition.kind === 'certification'
                     ? ' · ' +
-                      (record.confirmationStatus === 'confirmed'
-                        ? 'intern bestätigt'
-                        : 'nicht bestätigt')
+                      (record.confirmationStatus === 'confirmed' ? 'intern bestätigt' : 'nicht bestätigt')
                     : ''}
                 </p>
               </div>
             ))}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">
-            Keine Qualifikationen hinterlegt.
-          </p>
+          <p className="text-sm text-muted-foreground">Keine Qualifikationen hinterlegt.</p>
         )}
       </div>
     </Card>

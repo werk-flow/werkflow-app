@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
-import { ServiceToolbarSkeleton } from "@/components/loading-states/service-cases-page-skeleton";
-import { MaintenanceDueListSkeleton } from "@/components/service/maintenance-content";
-import { Skeleton } from "@/components/ui/skeleton";
+import { ServiceToolbarSkeleton } from '@/components/loading-states/service-cases-page-skeleton';
+import { MaintenanceDueListSkeleton } from '@/components/service/maintenance-lists';
+import { Skeleton } from '@/components/ui/skeleton';
 
 /**
  * Search, the three in-page tabs, and the due list. Due rows carry their own

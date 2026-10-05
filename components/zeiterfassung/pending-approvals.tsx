@@ -1,56 +1,20 @@
 'use client';
 
 import { useState } from 'react';
-import dynamic from 'next/dynamic';
-import {
-  Check,
-  X,
-  Clock,
-  RefreshCw,
-  Plus,
-  Pencil,
-  Trash2,
-  Briefcase
-} from 'lucide-react';
+import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { ErrorText } from '@/components/ui/error-text';
-import { InlinePending } from '@/components/ui/inline-pending';
-import { RefreshButton } from '@/components/ui/refresh-button';
-import { Skeleton } from '@/components/ui/skeleton';
-import {
-  reviewEntries,
-  reviewChangeRequest
-} from '@/lib/time-tracking/actions';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger
-} from '@/components/ui/alert-dialog';
+import { reviewEntries, reviewChangeRequest } from '@/lib/time-tracking/actions';
 import { readInBackground } from '@/lib/data/background-read-client';
-import type {
-  PendingSession,
-  ChangeRequestWithDetails,
-  WorkSession
-} from '@/lib/time-tracking/types';
+import type { PendingSession, ChangeRequestWithDetails } from '@/lib/time-tracking/types';
 import type { OrgRole } from '@/lib/members/actions';
-import { useBusyIds } from '@/hooks/use-busy-id';
+import { useBanner } from '@/components/ui/banner';
+import type { ActionResult } from '@/lib/action-result';
+import { describeBatchRefusal, describeFailure } from '@/lib/action-messages';
+import { useOptimisticList } from '@/hooks/use-optimistic-list';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
-import { toLocalDateString } from '@/lib/utils';
-
-const EntryDetailsDialog = dynamic(
-  () =>
-    import('@/components/kalender/entry-details-dialog').then(
-      (mod) => mod.EntryDetailsDialog
-    ),
-  { ssr: false }
-);
+import { PendingApprovalsHeader } from './pending-approvals-header';
+import { combinePendingApprovalItems, PendingApprovalsList } from './pending-approvals-list';
 
 interface PendingApprovalsProps {
   organizationId: string;
@@ -59,19 +23,16 @@ interface PendingApprovalsProps {
   currentUserId: string;
 }
 
-// Union type for all request types
-type RequestItem =
-  | { type: 'session'; data: PendingSession }
-  | { type: 'edit'; data: ChangeRequestWithDetails }
-  | { type: 'delete'; data: ChangeRequestWithDetails };
+type PendingApprovalData = {
+  sessions: PendingSession[];
+  changeRequests: ChangeRequestWithDetails[];
+};
 
-const APPROVAL_ERROR_MESSAGES: Record<string, string> = {
-  self_approval_not_allowed:
-    'Eigene Arbeitszeiten können nicht selbst freigegeben werden.',
-  not_responsible:
-    'Du bist für diese Freigabe nicht mehr verantwortlich. Die Ansicht wurde aktualisiert.',
-  responsibility_load_failed:
-    'Die aktuelle Freigabeverantwortung konnte nicht geprüft werden. Bitte versuche es erneut.',
+// The area's own sentences; describeFailure adds the shared ones
+// (invalid_input, period_closed, ...) from lib/action-messages.ts.
+const APPROVAL_ERROR_MESSAGES: Readonly<Partial<Record<string, string>>> = {
+  self_approval_not_allowed: 'Eigene Arbeitszeiten können nicht selbst freigegeben werden.',
+  not_responsible: 'Du bist für diese Freigabe nicht mehr verantwortlich. Die Ansicht wurde aktualisiert.',
   fetch_failed: 'Die ausstehenden Anträge konnten nicht geladen werden.',
   not_authenticated: 'Bitte melde dich erneut an.',
   not_a_member: 'Du gehörst dieser Organisation nicht mehr an.',
@@ -82,85 +43,65 @@ const APPROVAL_ERROR_MESSAGES: Record<string, string> = {
   unexpected_error: 'Die Freigabe konnte nicht gespeichert werden.',
 };
 
-function formatTime(timestamp: string): string {
-  return new Date(timestamp).toLocaleTimeString('de-DE', {
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-}
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr + 'T00:00:00').toLocaleDateString('de-DE', {
-    weekday: 'long',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric'
-  });
-}
-
-function formatDateTime(timestamp: string): string {
-  return new Date(timestamp).toLocaleString('de-DE', {
-    weekday: 'long',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-}
-
-function formatDuration(clockIn: string, clockOut: string): string {
-  const start = new Date(clockIn);
-  const end = new Date(clockOut);
-  const diffMs = end.getTime() - start.getTime();
-  const hours = Math.floor(diffMs / (1000 * 60 * 60));
-  const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-  return `${minutes}m`;
-}
+const EMPTY_SESSIONS: PendingSession[] = [];
+const EMPTY_CHANGE_REQUESTS: ChangeRequestWithDetails[] = [];
+const getPendingItemId = (item: { id: string }) => item.id;
 
 function getApprovalErrorMessage(error: string): string {
-  const message = APPROVAL_ERROR_MESSAGES[error];
-  if (!message) {
-    console.error('Unexpected time approval error code:', error);
-  }
-  return message ?? 'Die Freigabe konnte nicht gespeichert werden.';
+  return describeFailure(error, APPROVAL_ERROR_MESSAGES, 'Die Freigabe konnte nicht gespeichert werden.');
 }
 
-// Badge component for request type
-function RequestTypeBadge({ type }: { type: 'session' | 'edit' | 'delete' }) {
-  if (type === 'session') {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 text-[10px] font-medium text-warning-soft-foreground">
-        <Plus className="h-3 w-3" />
-        Neuer Eintrag
-      </span>
-    );
-  }
-
-  if (type === 'edit') {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-info-soft px-2 py-0.5 text-[10px] font-medium text-info-soft-foreground">
-        <Pencil className="h-3 w-3" />
-        Änderung
-      </span>
-    );
-  }
-
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-destructive-soft px-2 py-0.5 text-[10px] font-medium text-destructive-soft-foreground">
-      <Trash2 className="h-3 w-3" />
-      Löschung
-    </span>
-  );
+// The server reviews every entry of a selection or none of them.
+function getEntryReviewErrorMessage(error: string): string {
+  return describeBatchRefusal(error, getApprovalErrorMessage(error));
 }
 
-// Icon component for request type (left side) - same neutral color for all types
-function RequestTypeIcon() {
-  return <Clock className="h-4 w-4 text-muted-foreground shrink-0" />;
+// A failed read says that the list could not load, never that a decision was not saved.
+const READ_FAILURE = 'Die ausstehenden Anträge konnten nicht geladen werden.';
+function getApprovalReadErrorMessage(error: string): string {
+  return describeFailure(error, APPROVAL_ERROR_MESSAGES, READ_FAILURE);
+}
+
+async function readPendingApprovalData(
+  organizationId: string,
+  isAdmin: boolean,
+  signal: AbortSignal,
+): Promise<LiveViewResult<PendingApprovalData>> {
+  try {
+    // Fetch pending sessions (for all admin/manager)
+    const sessionsResult = await readInBackground('pending-sessions', { organizationId }, signal);
+    if (!sessionsResult.success) {
+      return {
+        ok: false,
+        error: getApprovalReadErrorMessage(sessionsResult.error),
+      };
+    }
+
+    // Fetch change requests (admin only)
+    let changeRequests: ChangeRequestWithDetails[] = [];
+    if (isAdmin) {
+      const changeRequestsResult = await readInBackground(
+        'pending-change-requests',
+        { organizationId },
+        signal,
+      );
+      if (!changeRequestsResult.success) {
+        return {
+          ok: false,
+          error: getApprovalReadErrorMessage(changeRequestsResult.error),
+        };
+      }
+      changeRequests = changeRequestsResult.requests;
+    }
+
+    return {
+      ok: true,
+      data: { sessions: sessionsResult.sessions, changeRequests },
+    };
+  } catch {
+    // A transport failure; the server logs its own failures.
+    return { ok: false, error: READ_FAILURE };
+  }
 }
 
 export function PendingApprovals({
@@ -171,257 +112,87 @@ export function PendingApprovals({
 }: PendingApprovalsProps) {
   // Errors from approve/reject actions; read errors come from view.error.
   const [actionError, setActionError] = useState<string | null>(null);
-  // Row-scoped pending: the reviewed card spins until the refetch lands;
-  // the other cards stay actionable.
-  const busy = useBusyIds();
+  const { showBanner } = useBanner();
 
-  const view = useLiveView<{
-    sessions: PendingSession[];
-    changeRequests: ChangeRequestWithDetails[];
-  }>({
+  const view = useLiveView<PendingApprovalData>({
     tables: ['time_entries', 'entry_change_requests'],
-    read: async ({ signal }): Promise<
-      LiveViewResult<{
-        sessions: PendingSession[];
-        changeRequests: ChangeRequestWithDetails[];
-      }>
-    > => {
-      try {
-        // Fetch pending sessions (for all admin/manager)
-        const sessionsResult = await readInBackground('pending-sessions', { organizationId }, signal);
-        if (!sessionsResult.success) {
-          return {
-            ok: false,
-            error: getApprovalErrorMessage(sessionsResult.error)
-          };
-        }
-
-        // Fetch change requests (admin only)
-        let changeRequests: ChangeRequestWithDetails[] = [];
-        if (isAdmin) {
-          const changeRequestsResult = await readInBackground('pending-change-requests', { organizationId }, signal);
-          if (!changeRequestsResult.success) {
-            return {
-              ok: false,
-              error: getApprovalErrorMessage(changeRequestsResult.error)
-            };
-          }
-          changeRequests = changeRequestsResult.requests;
-        }
-
-        return {
-          ok: true,
-          data: { sessions: sessionsResult.sessions, changeRequests }
-        };
-      } catch (err) {
-        console.error('Error fetching pending items:', err);
-        return {
-          ok: false,
-          error: 'Die ausstehenden Anträge konnten nicht geladen werden.'
-        };
-      }
-    },
-    resetKey: `${organizationId}:${isAdmin ? 'admin' : 'manager'}`
+    read: ({ signal }) => readPendingApprovalData(organizationId, isAdmin, signal),
+    resetKey: `${organizationId}:${isAdmin ? 'admin' : 'manager'}`,
   });
 
-  const sessions = view.data?.sessions ?? [];
-  const changeRequests = view.data?.changeRequests ?? [];
+  // A reviewed card leaves the list in the first frame. The overlay expires
+  // when the authoritative read no longer carries the item and rolls back when
+  // the server refuses, so the card returns together with the reason.
+  const sessionList = useOptimisticList({
+    items: view.data?.sessions ?? EMPTY_SESSIONS,
+    getId: getPendingItemId,
+  });
+  const changeRequestList = useOptimisticList({
+    items: view.data?.changeRequests ?? EMPTY_CHANGE_REQUESTS,
+    getId: getPendingItemId,
+  });
+  const sessions = sessionList.items.map((row) => row.item);
+  const changeRequests = changeRequestList.items.map((row) => row.item);
   const isInitialLoading = view.isLoading;
   const error = actionError ?? view.error;
 
-  const reviewPendingSession = (
-    session: PendingSession,
-    decision: 'approved' | 'rejected'
+  // Confirmation appears only after the server accepted the review.
+  const review = async (
+    list: { remove: (id: string) => void; rollback: (id: string) => void },
+    ids: string[],
+    write: () => Promise<ActionResult>,
+    confirmation: string,
+    describeRefusal: (error: string) => string,
   ) => {
     setActionError(null);
-    return busy.run(session.id, async () => {
-      try {
-        const result = await reviewEntries(session.entryIds, decision);
-        // Refresh while the card is still busy so the reviewed item is gone
-        // (or the view corrected) before the next action is possible.
-        await view.refresh();
-        if (!result.success) {
-          setActionError(getApprovalErrorMessage(result.error));
-        }
-      } catch (err) {
-        console.error('Error reviewing session:', err);
-        setActionError('Ein Fehler ist aufgetreten.');
-      }
-    });
+    view.invalidate();
+    for (const id of ids) list.remove(id);
+    const result = await write().catch(() => ({ success: false as const, error: 'unexpected_error' }));
+    if (result.success) {
+      showBanner({ variant: 'success', message: confirmation });
+    } else {
+      for (const id of ids) list.rollback(id);
+      setActionError(describeRefusal(result.error));
+    }
+    // Read again: another session may have decided items meanwhile.
+    await view.refresh();
   };
+
+  const reviewPendingSession = (session: PendingSession, decision: 'approved' | 'rejected') =>
+    review(
+      sessionList,
+      [session.id],
+      () => reviewEntries(session.entryIds, decision),
+      decision === 'approved' ? 'Der Zeiteintrag wurde genehmigt.' : 'Der Zeiteintrag wurde abgelehnt.',
+      getEntryReviewErrorMessage,
+    );
 
   // One round trip for the whole backlog; the server re-checks every entry.
-  const approveAllSessions = () => {
-    setActionError(null);
-    return busy.run('all-sessions', async () => {
-      try {
-        const result = await reviewEntries(
+  const approveAllSessions = () =>
+    review(
+      sessionList,
+      sessions.map((session) => session.id),
+      () =>
+        reviewEntries(
           sessions.flatMap((session) => session.entryIds),
-          'approved'
-        );
-        await view.refresh();
-        if (!result.success) {
-          setActionError(getApprovalErrorMessage(result.error));
-        }
-      } catch (err) {
-        console.error('Error approving all sessions:', err);
-        setActionError('Ein Fehler ist aufgetreten.');
-      }
-    });
-  };
-
-  const reviewPendingChangeRequest = (
-    request: ChangeRequestWithDetails,
-    decision: 'approve' | 'reject'
-  ) => {
-    setActionError(null);
-    return busy.run(request.id, async () => {
-      try {
-        const result = await reviewChangeRequest(request.id, decision);
-        if (result.success) {
-          await view.refresh();
-        } else {
-          setActionError(getApprovalErrorMessage(result.error));
-        }
-      } catch (err) {
-        console.error('Error reviewing change request:', err);
-        setActionError('Ein Fehler ist aufgetreten.');
-      }
-    });
-  };
-
-  // Combine and sort all items by creation date
-  const allItems: RequestItem[] = [
-    ...sessions.map((s) => ({ type: 'session' as const, data: s })),
-    ...changeRequests.map((r) => ({
-      type: r.changeType as 'edit' | 'delete',
-      data: r
-    }))
-  ].sort((a, b) => {
-    const dateA =
-      a.type === 'session'
-        ? new Date(a.data.clockIn?.createdAt || a.data.clockOut?.createdAt || 0)
-        : new Date(a.data.createdAt);
-    const dateB =
-      b.type === 'session'
-        ? new Date(b.data.clockIn?.createdAt || b.data.clockOut?.createdAt || 0)
-        : new Date(b.data.createdAt);
-    return dateB.getTime() - dateA.getTime();
-  });
-
-  // Render content based on state
-  const renderContent = () => {
-    if (isInitialLoading) {
-      return (
-        <div className="space-y-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Card key={i}>
-              <CardContent className="flex items-center justify-between p-4">
-                <div className="space-y-2">
-                  <Skeleton className="h-4 w-32" />
-                  <Skeleton className="h-3 w-48" />
-                </div>
-                <div className="flex gap-2">
-                  <Skeleton className="h-8 w-8" />
-                  <Skeleton className="h-8 w-8" />
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      );
-    }
-
-    // Show error only if we have no items (initial load failed)
-    // If we have items, show inline error message below the header
-    if (error && allItems.length === 0) {
-      return (
-        <div className="flex flex-col items-center justify-center py-8 text-center">
-          <ErrorText>{error}</ErrorText>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setActionError(null);
-              void view.refresh();
-            }}
-            className="mt-4"
-          >
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Erneut versuchen
-          </Button>
-        </div>
-      );
-    }
-
-    if (allItems.length === 0) {
-      return (
-        <div className="flex flex-col items-center justify-center py-12 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-            <Check className="h-6 w-6 text-muted-foreground" />
-          </div>
-          <h3 className="text-lg font-semibold">Keine ausstehenden Anträge</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Alle Anträge wurden bearbeitet.
-          </p>
-        </div>
-      );
-    }
-
-    // Info banner explaining the new behavior
-    const infoBanner = (
-      <div className="rounded-lg border border-warning/40 bg-warning-soft px-3 py-2 text-xs text-warning-soft-foreground mb-3">
-        <p>
-          <strong>Hinweis:</strong> Anträge sind bereits in den Kalendern und
-          Arbeitszeiten der Mitarbeiter sichtbar (als &quot;ausstehend&quot;
-          markiert).
-        </p>
-        <p className="mt-1">
-          <span className="text-success-text">
-            ✓ Genehmigen
-          </span>{' '}
-          = Eintrag wird bestätigt und bleibt erhalten.
-          <span className="ml-3 text-destructive">
-            ✗ Ablehnen
-          </span>{' '}
-          = Eintrag wird entfernt und rückgängig gemacht.
-        </p>
-      </div>
+          'approved',
+        ),
+      `${sessions.length} Zeiteinträge wurden genehmigt.`,
+      getEntryReviewErrorMessage,
     );
 
-    return (
-      <div className="space-y-3">
-        {infoBanner}
-        {allItems.map((item) => {
-          if (item.type === 'session') {
-            return (
-              <SessionRequestCard
-                key={`session-${item.data.id}`}
-                session={item.data}
-                isProcessing={busy.isBusy(item.data.id)}
-                onApprove={() => void reviewPendingSession(item.data, 'approved')}
-                onReject={() => void reviewPendingSession(item.data, 'rejected')}
-                onRefresh={() => void view.refresh()}
-                currentUserRole={currentUserRole}
-                currentUserId={currentUserId}
-              />
-            );
-          }
-
-          return (
-            <ChangeRequestCard
-              key={`change-${item.data.id}`}
-              request={item.data}
-              type={item.type}
-              isProcessing={busy.isBusy(item.data.id)}
-              onApprove={() => void reviewPendingChangeRequest(item.data, 'approve')}
-              onReject={() => void reviewPendingChangeRequest(item.data, 'reject')}
-            />
-          );
-        })}
-      </div>
+  const reviewPendingChangeRequest = (request: ChangeRequestWithDetails, decision: 'approve' | 'reject') =>
+    review(
+      changeRequestList,
+      [request.id],
+      () => reviewChangeRequest(request.id, decision),
+      decision === 'approve'
+        ? 'Der Änderungsantrag wurde genehmigt.'
+        : 'Der Änderungsantrag wurde abgelehnt.',
+      getApprovalErrorMessage,
     );
-  };
+
+  const allItems = combinePendingApprovalItems(sessions, changeRequests);
 
   return (
     <div
@@ -429,53 +200,14 @@ export function PendingApprovals({
       data-testid="pending-approvals-panel"
       data-loaded={isInitialLoading ? 'false' : 'true'}
     >
-      {/* Header with refresh button - always visible */}
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          {isInitialLoading ? (
-            <Skeleton className="h-4 w-32 inline-block" />
-          ) : allItems.length > 0 ? (
-            `${allItems.length} ${
-              allItems.length === 1 ? 'Antrag' : 'Anträge'
-            } zur Genehmigung`
-          ) : (
-            'Keine ausstehenden Anträge'
-          )}
-        </p>
-        <div className="flex items-center gap-2">
-          {sessions.length > 1 && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busy.isBusy('all-sessions')}
-                >
-                  <Check className="h-4 w-4" />
-                  Alle genehmigen
-                  <InlinePending active={busy.isBusy('all-sessions')} />
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Alle Zeiteinträge genehmigen?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    {sessions.length} ausstehende Zeiteinträge werden genehmigt.
-                    Änderungsanträge bleiben unberührt.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => void approveAllSessions()}>
-                    Genehmigen
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          )}
-          <RefreshButton onRefresh={view.refresh} label="Anträge aktualisieren" />
-        </div>
-      </div>
+      <PendingApprovalsHeader
+        isInitialLoading={isInitialLoading}
+        loadFailed={Boolean(error) && allItems.length === 0}
+        itemCount={allItems.length}
+        sessionCount={sessions.length}
+        approveAllSessions={approveAllSessions}
+        onRefresh={view.refresh}
+      />
 
       {/* Inline error message for operation failures (when items exist) */}
       {error && allItems.length > 0 && (
@@ -485,6 +217,7 @@ export function PendingApprovals({
             variant="ghost"
             size="sm"
             onClick={() => setActionError(null)}
+            aria-label="Fehlermeldung ausblenden"
             className="h-auto p-1 text-destructive hover:text-destructive"
           >
             <X className="h-4 w-4" />
@@ -492,305 +225,20 @@ export function PendingApprovals({
         </div>
       )}
 
-      {renderContent()}
+      <PendingApprovalsList
+        isInitialLoading={isInitialLoading}
+        error={error}
+        allItems={allItems}
+        onRetry={() => {
+          setActionError(null);
+          void view.refresh();
+        }}
+        onRefresh={() => void view.refresh()}
+        reviewPendingSession={reviewPendingSession}
+        reviewPendingChangeRequest={reviewPendingChangeRequest}
+        currentUserRole={currentUserRole}
+        currentUserId={currentUserId}
+      />
     </div>
-  );
-}
-
-// Helper to convert PendingSession to WorkSession for the dialog
-function pendingSessionToWorkSession(session: PendingSession): WorkSession {
-  let durationMinutes: number | null = null;
-  if (session.clockIn && session.clockOut) {
-    const start = new Date(session.clockIn.timestamp);
-    const end = new Date(session.clockOut.timestamp);
-    durationMinutes = Math.round((end.getTime() - start.getTime()) / 60000);
-  }
-
-  return {
-    clockIn: session.clockIn,
-    clockOut: session.clockOut,
-    durationMinutes,
-    jobId: session.clockIn?.jobId ?? session.clockOut?.jobId ?? null,
-    isOrphan: !session.clockIn || !session.clockOut,
-    pendingState:
-      session.clockIn?.status === 'pending' ||
-      session.clockOut?.status === 'pending'
-        ? 'full'
-        : 'none'
-  };
-}
-
-// Card for session requests (new entry)
-function SessionRequestCard({
-  session,
-  isProcessing,
-  onApprove,
-  onReject,
-  onRefresh,
-  currentUserRole,
-  currentUserId,
-}: {
-  session: PendingSession;
-  isProcessing: boolean;
-  onApprove: () => void;
-  onReject: () => void;
-  onRefresh: () => void;
-  currentUserRole: OrgRole;
-  currentUserId: string;
-}) {
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-
-  const isPair = session.clockIn && session.clockOut;
-
-  const displayName =
-    session.firstName || session.lastName
-      ? `${session.firstName || ''} ${session.lastName || ''}`.trim()
-      : 'Unbekannt';
-
-  // Convert to WorkSession for the dialog
-  const workSession = pendingSessionToWorkSession(session);
-
-  const handleDialogRefresh = () => {
-    setIsEditDialogOpen(false);
-    onRefresh();
-  };
-
-  return (
-    <>
-      <Card
-        data-testid={`pending-session-${session.id}`}
-        data-user-id={session.userId}
-      >
-        <CardContent className="flex items-center justify-between p-4">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <RequestTypeIcon />
-              <span className="font-medium">{displayName}</span>
-              <RequestTypeBadge type="session" />
-              <InlinePending active={isProcessing} />
-            </div>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {formatDate(session.date)}
-            </p>
-            {isPair ? (
-              <p className="text-xs text-muted-foreground">
-                {formatTime(session.clockIn!.timestamp)} –{' '}
-                {formatTime(session.clockOut!.timestamp)}
-                <span className="ml-2 text-foreground/70">
-                  (
-                  {formatDuration(
-                    session.clockIn!.timestamp,
-                    session.clockOut!.timestamp
-                  )}
-                  )
-                </span>
-              </p>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                {session.clockIn
-                  ? `Einstempeln: ${formatTime(session.clockIn.timestamp)}`
-                  : `Ausstempeln: ${formatTime(session.clockOut!.timestamp)}`}
-              </p>
-            )}
-            {session.jobTitle && (
-              <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
-                <Briefcase className="h-3 w-3 shrink-0" />
-                <span className="truncate" title={session.jobTitle}>{session.jobTitle}</span>
-              </p>
-            )}
-          </div>
-
-          <div className="flex gap-2 shrink-0 ml-4">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setIsEditDialogOpen(true)}
-              disabled={isProcessing}
-              title="Bearbeiten"
-              className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            >
-              <Pencil className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={onApprove}
-              disabled={isProcessing}
-              title="Genehmigen - Eintrag bleibt erhalten"
-              className="h-8 w-8 text-success-text hover:bg-success-soft"
-            >
-              <Check className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={onReject}
-              disabled={isProcessing}
-              title="Ablehnen - Eintrag wird entfernt"
-              className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {isEditDialogOpen && (
-        <EntryDetailsDialog
-          open={isEditDialogOpen}
-          onOpenChange={setIsEditDialogOpen}
-          session={workSession}
-          currentUserRole={currentUserRole}
-          currentUserId={currentUserId}
-          onRefresh={handleDialogRefresh}
-          startInEditMode={true}
-        />
-      )}
-    </>
-  );
-}
-
-// Card for change requests (edit/delete)
-function ChangeRequestCard({
-  request,
-  type,
-  isProcessing,
-  onApprove,
-  onReject,
-}: {
-  request: ChangeRequestWithDetails;
-  type: 'edit' | 'delete';
-  isProcessing: boolean;
-  onApprove: () => void;
-  onReject: () => void;
-}) {
-  const displayName =
-    request.requesterFirstName || request.requesterLastName
-      ? `${request.requesterFirstName || ''} ${
-          request.requesterLastName || ''
-        }`.trim()
-      : 'Unbekannt';
-
-  const entryTypeLabel =
-    request.entry.entryType === 'clock_in' ? 'Einstempeln' : 'Ausstempeln';
-
-  // Check if this is a paired delete request (has both clock_in and clock_out)
-  const isPairedDelete = type === 'delete' && request.pairedEntry !== null;
-
-  // For paired deletes, determine which is clock_in and which is clock_out
-  const clockInEntry =
-    request.entry.entryType === 'clock_in'
-      ? request.entry
-      : request.pairedEntry;
-  const clockOutEntry =
-    request.entry.entryType === 'clock_out'
-      ? request.entry
-      : request.pairedEntry;
-
-  // Extract date from clock_in timestamp for paired deletes
-  const dateStr =
-    isPairedDelete && clockInEntry
-      ? toLocalDateString(new Date(clockInEntry.timestamp))
-      : '';
-
-  return (
-    <Card>
-      <CardContent className="flex items-center justify-between p-4">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <RequestTypeIcon />
-            <span className="font-medium">{displayName}</span>
-            <RequestTypeBadge type={type} />
-            <InlinePending active={isProcessing} />
-          </div>
-
-          {type === 'edit' ? (
-            <>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {entryTypeLabel} ändern
-              </p>
-              <div className="text-xs text-muted-foreground space-y-0.5 mt-1">
-                <p>
-                  <span className="text-foreground/70">Aktuell:</span>{' '}
-                  {formatDateTime(request.entry.timestamp)}
-                </p>
-                {request.proposedTimestamp && (
-                  <p>
-                    <span className="text-info-text">
-                      Neu:
-                    </span>{' '}
-                    {formatDateTime(request.proposedTimestamp)}
-                  </p>
-                )}
-              </div>
-            </>
-          ) : isPairedDelete && clockInEntry && clockOutEntry ? (
-            // Paired delete request - show like session requests
-            <>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {formatDate(dateStr)}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {formatTime(clockInEntry.timestamp)} –{' '}
-                {formatTime(clockOutEntry.timestamp)}
-                <span className="ml-2 text-foreground/70">
-                  (
-                  {formatDuration(
-                    clockInEntry.timestamp,
-                    clockOutEntry.timestamp
-                  )}
-                  )
-                </span>
-              </p>
-            </>
-          ) : (
-            // Single entry delete request
-            <>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {entryTypeLabel} löschen
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {formatDateTime(request.entry.timestamp)}
-              </p>
-            </>
-          )}
-        </div>
-
-        <div className="flex gap-2 shrink-0 ml-4">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={onApprove}
-            disabled={isProcessing}
-            title={
-              type === 'edit'
-                ? 'Genehmigen - Änderung wird bestätigt'
-                : type === 'delete'
-                ? 'Genehmigen - Löschung wird bestätigt'
-                : 'Genehmigen'
-            }
-            className="h-8 w-8 text-success-text hover:bg-success-soft"
-          >
-            <Check className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={onReject}
-            disabled={isProcessing}
-            title={
-              type === 'edit'
-                ? 'Ablehnen - Änderung wird rückgängig gemacht'
-                : type === 'delete'
-                ? 'Ablehnen - Eintrag bleibt erhalten'
-                : 'Ablehnen'
-            }
-            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
   );
 }

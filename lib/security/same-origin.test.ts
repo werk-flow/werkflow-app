@@ -15,8 +15,8 @@ describe('verifySameOriginJsonRequest', () => {
           'content-type': 'application/json',
           'sec-fetch-site': 'same-origin',
           origin: 'https://app.werk-flow.app',
-        })
-      )
+        }),
+      ),
     ).toEqual({ allowed: true });
   });
 
@@ -26,8 +26,8 @@ describe('verifySameOriginJsonRequest', () => {
         request({
           'content-type': 'application/json; charset=utf-8',
           origin: 'https://app.werk-flow.app',
-        })
-      )
+        }),
+      ),
     ).toEqual({ allowed: true });
   });
 
@@ -38,24 +38,24 @@ describe('verifySameOriginJsonRequest', () => {
           'content-type': 'application/json',
           'sec-fetch-site': 'cross-site',
           origin: 'https://evil.example',
-        })
-      )
+        }),
+      ),
     ).toEqual({ allowed: false, reason: 'cross_site' });
   });
 
   test('rejects a foreign Origin without fetch metadata', () => {
     expect(
       verifySameOriginJsonRequest(
-        request({ 'content-type': 'application/json', origin: 'https://evil.example' })
-      )
+        request({ 'content-type': 'application/json', origin: 'https://evil.example' }),
+      ),
     ).toEqual({ allowed: false, reason: 'origin_mismatch' });
   });
 
   test('rejects the text/plain form encoding used to smuggle JSON bodies', () => {
     expect(
       verifySameOriginJsonRequest(
-        request({ 'content-type': 'text/plain', origin: 'https://app.werk-flow.app' })
-      )
+        request({ 'content-type': 'text/plain', origin: 'https://app.werk-flow.app' }),
+      ),
     ).toEqual({ allowed: false, reason: 'unsupported_content_type' });
   });
 });

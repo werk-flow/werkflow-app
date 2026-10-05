@@ -1,11 +1,7 @@
 // Pure dispatch derivation rules: recipient acknowledgement state, pending
 // actions, and travel-gap facts. No IO — unit-tested directly.
 
-import type {
-  DispatchAcknowledgementState,
-  DispatchRecipientDerivedState,
-  TravelNote,
-} from './types';
+import type { DispatchAcknowledgementState, DispatchRecipientDerivedState, TravelNote } from './types';
 
 export type AcknowledgementFact = {
   id: string;
@@ -21,7 +17,7 @@ export type AcknowledgementFact = {
  * returned map keys every recipient that has at least one row.
  */
 export function latestAcknowledgementByRecipient(
-  acknowledgements: AcknowledgementFact[]
+  acknowledgements: AcknowledgementFact[],
 ): Map<string, AcknowledgementFact> {
   const latest = new Map<string, AcknowledgementFact>();
   for (const row of acknowledgements) {
@@ -61,9 +57,7 @@ export function deriveRecipientState(input: {
 }
 
 /** Whether the recipient currently has an acknowledgement action to perform. */
-export function isAcknowledgementPending(
-  state: DispatchRecipientDerivedState
-): boolean {
+export function isAcknowledgementPending(state: DispatchRecipientDerivedState): boolean {
   return state === 'ausstehend';
 }
 
@@ -101,15 +95,13 @@ export function deriveTravelNotes(visits: TravelVisitFact[]): TravelNote[] {
   for (const list of byEmployeeDay.values()) {
     list.sort(
       (left, right) =>
-        left.startMinutes - right.startMinutes ||
-        left.occurrenceId.localeCompare(right.occurrenceId)
+        left.startMinutes - right.startMinutes || left.occurrenceId.localeCompare(right.occurrenceId),
     );
     for (let index = 1; index < list.length; index++) {
       const previous = list[index - 1];
       const next = list[index];
       if (!previous || !next) continue;
-      const sameKnownSite =
-        previous.siteId !== null && previous.siteId === next.siteId;
+      const sameKnownSite = previous.siteId !== null && previous.siteId === next.siteId;
       if (sameKnownSite) continue;
       const gapMinutes = next.startMinutes - previous.endMinutes;
       notes.push({

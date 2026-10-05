@@ -38,11 +38,12 @@ const workRow = {
 
 test('resumes the latest non-break segment of the whole session with its job', async () => {
   const { admin, calls } = fakeAdmin({ data: workRow, error: null });
-  const read = await readResumeActivity(admin, 'session-1');
+  const read = await readResumeActivity(admin, 'org-1', 'session-1');
   expect(read).toEqual({
     success: true,
     activity: { kind: 'work', allocationKind: 'job', jobId: 'job-7' },
   });
+  expect(calls).toContainEqual(['eq', ['organization_id', 'org-1']]);
   expect(calls).toContainEqual(['eq', ['session_id', 'session-1']]);
   expect(calls).toContainEqual(['neq', ['kind', 'break']]);
   expect(calls).toContainEqual(['order', ['started_at', { ascending: false }]]);
@@ -51,10 +52,13 @@ test('resumes the latest non-break segment of the whole session with its job', a
 
 test('a session without a prior activity resumes nothing', async () => {
   const { admin } = fakeAdmin({ data: null, error: null });
-  expect(await readResumeActivity(admin, 'session-1')).toEqual({ success: true, activity: null });
+  expect(await readResumeActivity(admin, 'org-1', 'session-1')).toEqual({ success: true, activity: null });
 });
 
 test('a failed read is reported, never mistaken for nothing to resume', async () => {
   const { admin } = fakeAdmin({ data: null, error: { message: 'connection reset' } });
-  expect(await readResumeActivity(admin, 'session-1')).toEqual({ success: false });
+  expect(await readResumeActivity(admin, 'org-1', 'session-1')).toEqual({
+    success: false,
+    error: 'load_failed',
+  });
 });

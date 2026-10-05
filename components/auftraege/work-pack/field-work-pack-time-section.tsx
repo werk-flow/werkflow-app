@@ -1,0 +1,203 @@
+'use client';
+
+import { formatBerlinDateTime as formatDateTime } from '@/lib/utils';
+import { formatDuration } from '@/lib/time-tracking/helpers';
+import { Clock3, Loader2, LogIn, LogOut } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useState, type ReactElement } from 'react';
+
+import { useClockState } from '@/components/clock-state-provider';
+import { useBanner } from '@/components/ui/banner';
+import { Button } from '@/components/ui/button';
+import { useRouterRefresh } from '@/components/ui/refresh-button';
+import { TimeActivityDialog } from '@/components/time-activity-dialog';
+import { SectionError } from '@/components/ui/section-error';
+import { usePendingTask } from '@/hooks/use-server-action';
+import type { TimeEntry } from '@/lib/time-tracking/types';
+import { calculateWorkSessions } from '@/lib/time-tracking/validation';
+import { SectionTitle } from '@/components/shared/section-title';
+
+function formatDurationOrRunning(minutes: number | null): string {
+  return minutes === null ? 'läuft' : formatDuration(Math.max(0, minutes));
+}
+
+function FieldWorkPackTimeSessions({ sessions }: { sessions: ReturnType<typeof calculateWorkSessions> }) {
+  return sessions.length === 0 ? (
+    <p className="mt-4 rounded-md border border-dashed bg-muted/20 px-4 py-5 text-sm text-muted-foreground">
+      Für dich ist noch keine Arbeitszeit mit diesem Auftrag verknüpft.
+    </p>
+  ) : (
+    <div className="mt-4 divide-y rounded-md border">
+      {sessions.map((session, index) => (
+        <div
+          key={session.clockIn?.id ?? session.clockOut?.id ?? index}
+          className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
+        >
+          <div>
+            <p className="font-medium">
+              {session.clockIn ? formatDateTime(session.clockIn.timestamp) : 'Unvollständiger Eintrag'}
+            </p>
+            {session.pendingState && session.pendingState !== 'none' && (
+              <p className="text-xs text-muted-foreground">Änderung wartet auf Prüfung</p>
+            )}
+          </div>
+          <span className="shrink-0 tabular-nums text-muted-foreground">
+            {formatDurationOrRunning(session.durationMinutes)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function FieldWorkPackTimeSection({
+  jobId,
+  currentUserId,
+  entries,
+  loadError,
+  readOnly,
+}: {
+  jobId: string;
+  currentUserId: string;
+  entries: TimeEntry[];
+  loadError: boolean;
+  readOnly: boolean;
+}): ReactElement {
+  const router = useRouter();
+  const { showBanner } = useBanner();
+  const {
+    state,
+    isLoading,
+    isPending,
+    statusError,
+    refresh: refreshStatus,
+    clockIn,
+    clockOut,
+    switchJob,
+  } = useClockState();
+  const { run: runStatusRetry, isPending: isRetryingStatus } = usePendingTask();
+  const { refresh: refreshRoute, isPending: isRefreshing } = useRouterRefresh();
+  // The provider's `isPending` ends with the server call; the clock-state
+  // refresh it awaits afterwards is part of the same click, so the button
+  // stays in its pending state until the new label can be shown.
+  const { run: runClockChange, isPending: isChangingClock } = usePendingTask();
+  const isClockBusy = isLoading || isPending || isChangingClock;
+  const [activityDialogOpen, setActivityDialogOpen] = useState(false);
+  const sessions = calculateWorkSessions(entries.filter((entry) => entry.userId === currentUserId)).filter(
+    (session) => session.jobId === jobId,
+  );
+  const isClockedIntoThisJob = state?.isClockedIn && state.activeJobId === jobId;
+  const isClockedIntoAnotherJob = state?.isClockedIn && state.activeJobId !== jobId;
+
+  async function changeClock(): Promise<void> {
+    const result = isClockedIntoThisJob
+      ? await clockOut()
+      : isClockedIntoAnotherJob
+        ? await switchJob(jobId)
+        : await clockIn(jobId);
+    if (!result.success) {
+      showBanner({
+        variant: 'error',
+        message:
+          'Die Zeiterfassung konnte nicht geändert werden. Bitte prüfe den aktuellen Stand und versuche es erneut.',
+      });
+      return;
+    }
+    if (result.outcome === 'recovery_required') {
+      setActivityDialogOpen(true);
+      showBanner({
+        variant: 'info',
+        message:
+          'Die Erfassung ist ungewöhnlich lang. Bitte prüfe sie, bevor du sie beendest oder fortsetzt.',
+      });
+      return;
+    }
+    showBanner({
+      variant: 'success',
+      message: isClockedIntoThisJob
+        ? 'Die Arbeitszeit wurde beendet.'
+        : isClockedIntoAnotherJob
+          ? 'Die Zeiterfassung läuft jetzt für diesen Auftrag.'
+          : 'Die Arbeitszeit wurde für diesen Auftrag gestartet.',
+    });
+    router.refresh();
+  }
+
+  return (
+    <section
+      id="zeit"
+      className="rounded-lg border bg-card p-4 shadow-xs sm:p-5"
+      aria-labelledby="field-time-heading"
+    >
+      {state?.organizationId && (
+        <TimeActivityDialog
+          open={activityDialogOpen}
+          onOpenChange={setActivityDialogOpen}
+          organizationId={state.organizationId}
+          preferredJobId={jobId}
+        />
+      )}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <SectionTitle as="h2" id="field-time-heading" icon={<Clock3 className="size-4" />}>
+            Meine Zeit
+          </SectionTitle>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Zeiten bleiben von Planung und Material getrennt. Der erste Start kann den Arbeitsstand beginnen.
+          </p>
+        </div>
+        {!readOnly && (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              className="min-h-11"
+              disabled={isClockBusy || Boolean(statusError) || !state?.organizationId}
+              onClick={() => void runClockChange(changeClock)}
+            >
+              {isClockBusy ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : isClockedIntoThisJob ? (
+                <LogOut className="size-4" />
+              ) : (
+                <LogIn className="size-4" />
+              )}
+              {isClockedIntoThisJob
+                ? 'Arbeitszeit beenden'
+                : isClockedIntoAnotherJob
+                  ? 'Zu diesem Auftrag wechseln'
+                  : 'Arbeitszeit starten'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11"
+              disabled={isClockBusy || Boolean(statusError) || !state?.organizationId}
+              onClick={() => setActivityDialogOpen(true)}
+            >
+              <Clock3 className="size-4" />
+              Aktivität wählen
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {statusError && (
+        <SectionError
+          className="mt-3"
+          onRetry={() => void runStatusRetry(refreshStatus)}
+          retryPending={isRetryingStatus}
+        >
+          Der aktuelle Zeitstatus konnte nicht sicher geladen werden. Die Zeiterfassung ist erst nach dem
+          erneuten Laden wieder verfügbar.
+        </SectionError>
+      )}
+      {loadError ? (
+        <SectionError className="mt-4" onRetry={refreshRoute} retryPending={isRefreshing}>
+          Deine bisherigen Zeiten zu diesem Auftrag konnten nicht geladen werden.
+        </SectionError>
+      ) : (
+        <FieldWorkPackTimeSessions sessions={sessions} />
+      )}
+    </section>
+  );
+}

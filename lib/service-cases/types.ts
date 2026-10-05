@@ -1,83 +1,74 @@
-import type { Database, Json } from "@/lib/supabase/database.types";
+import type { ActionResult } from '@/lib/action-result';
+import type { Database, Json } from '@/lib/supabase/database.types';
 
 export const SERVICE_CASE_STATUSES = [
-  "new",
-  "clarification_needed",
-  "visit_required",
-  "follow_up_required",
-  "resolved",
-  "closed_without_visit",
-  "duplicate",
-] as const satisfies readonly Database["public"]["Enums"]["service_case_status"][];
-export type ServiceCaseStatus =
-  Database["public"]["Enums"]["service_case_status"];
+  'new',
+  'clarification_needed',
+  'visit_required',
+  'follow_up_required',
+  'resolved',
+  'closed_without_visit',
+  'duplicate',
+] as const satisfies readonly Database['public']['Enums']['service_case_status'][];
+export type ServiceCaseStatus = Database['public']['Enums']['service_case_status'];
 
 export const SERVICE_CASE_CHARGE_CONTEXTS = [
-  "unknown",
-  "suspected_warranty",
-  "suspected_contract",
-  "suspected_goodwill",
-  "suspected_rework",
-  "expected_chargeable",
-] as const satisfies readonly Database["public"]["Enums"]["service_case_charge_context"][];
-export type ServiceCaseChargeContext =
-  Database["public"]["Enums"]["service_case_charge_context"];
+  'unknown',
+  'suspected_warranty',
+  'suspected_contract',
+  'suspected_goodwill',
+  'suspected_rework',
+  'expected_chargeable',
+] as const satisfies readonly Database['public']['Enums']['service_case_charge_context'][];
+export type ServiceCaseChargeContext = Database['public']['Enums']['service_case_charge_context'];
 
 export const SERVICE_CASE_RELATION_TYPES = [
-  "duplicate_of",
-  "related",
-  "continuation_of",
-] as const satisfies readonly Database["public"]["Enums"]["service_case_relation_type"][];
-export type ServiceCaseRelationType =
-  Database["public"]["Enums"]["service_case_relation_type"];
+  'duplicate_of',
+  'related',
+  'continuation_of',
+] as const satisfies readonly Database['public']['Enums']['service_case_relation_type'][];
+export type ServiceCaseRelationType = Database['public']['Enums']['service_case_relation_type'];
 
 export const SERVICE_CASE_URGENCIES = [
-  "niedrig",
-  "normal",
-  "hoch",
-  "notfall",
-] as const satisfies readonly Database["public"]["Enums"]["request_urgency"][];
+  'niedrig',
+  'normal',
+  'hoch',
+  'notfall',
+] as const satisfies readonly Database['public']['Enums']['request_urgency'][];
 
 export const SERVICE_CASE_STATUS_LABELS: Record<ServiceCaseStatus, string> = {
-  new: "Neu",
-  clarification_needed: "Klärung erforderlich",
-  visit_required: "Einsatz erforderlich",
-  follow_up_required: "Nacharbeit erforderlich",
-  resolved: "Gelöst",
-  closed_without_visit: "Ohne Einsatz geschlossen",
-  duplicate: "Duplikat",
+  new: 'Neu',
+  clarification_needed: 'Klärung erforderlich',
+  visit_required: 'Einsatz erforderlich',
+  follow_up_required: 'Nacharbeit erforderlich',
+  resolved: 'Gelöst',
+  closed_without_visit: 'Ohne Einsatz geschlossen',
+  duplicate: 'Duplikat',
 };
 
-export const SERVICE_CASE_CHARGE_CONTEXT_LABELS: Record<
-  ServiceCaseChargeContext,
-  string
-> = {
-  unknown: "Noch ungeklärt",
-  suspected_warranty: "Gewährleistung vermutet",
-  suspected_contract: "Vertragsabdeckung vermutet",
-  suspected_goodwill: "Kulanz vermutet",
-  suspected_rework: "Nacharbeit vermutet",
-  expected_chargeable: "Voraussichtlich berechenbar",
+export const SERVICE_CASE_CHARGE_CONTEXT_LABELS: Record<ServiceCaseChargeContext, string> = {
+  unknown: 'Noch ungeklärt',
+  suspected_warranty: 'Gewährleistung vermutet',
+  suspected_contract: 'Vertragsabdeckung vermutet',
+  suspected_goodwill: 'Kulanz vermutet',
+  suspected_rework: 'Nacharbeit vermutet',
+  expected_chargeable: 'Voraussichtlich berechenbar',
 };
 
-export const SERVICE_CASE_RELATION_LABELS: Record<
-  ServiceCaseRelationType,
-  string
-> = {
-  duplicate_of: "Duplikat von",
-  related: "Zusammenhängend mit",
-  continuation_of: "Fortsetzung von",
+export const SERVICE_CASE_RELATION_LABELS: Record<ServiceCaseRelationType, string> = {
+  duplicate_of: 'Duplikat von',
+  related: 'Zusammenhängend mit',
+  continuation_of: 'Fortsetzung von',
 };
 
 export const SERVICE_CASE_URGENCY_LABELS = {
-  niedrig: "Niedrig",
-  normal: "Normal",
-  hoch: "Hoch",
-  notfall: "Notfall",
-} satisfies Record<Database["public"]["Enums"]["request_urgency"], string>;
+  niedrig: 'Niedrig',
+  normal: 'Normal',
+  hoch: 'Hoch',
+  notfall: 'Notfall',
+} satisfies Record<Database['public']['Enums']['request_urgency'], string>;
 
-export type ServiceCaseRow =
-  Database["public"]["Tables"]["service_cases"]["Row"];
+export type ServiceCaseRow = Database['public']['Tables']['service_cases']['Row'];
 
 export type ServiceCaseEquipment = {
   id: string;
@@ -91,7 +82,7 @@ export type ServiceCaseEquipment = {
 export type ServiceCaseListItem = {
   id: string;
   caseNumber: string;
-  intakeType: Database["public"]["Enums"]["service_case_intake_type"];
+  intakeType: Database['public']['Enums']['service_case_intake_type'];
   sourceRequestId: string | null;
   clientId: string;
   clientName: string;
@@ -99,7 +90,7 @@ export type ServiceCaseListItem = {
   siteName: string;
   siteAddress: string;
   summary: string;
-  urgency: Database["public"]["Enums"]["request_urgency"];
+  urgency: Database['public']['Enums']['request_urgency'];
   status: ServiceCaseStatus;
   chargeContext: ServiceCaseChargeContext;
   jobId: string | null;
@@ -112,7 +103,7 @@ export type ServiceCaseListItem = {
 
 export type ServiceCaseEvent = {
   id: string;
-  eventType: Database["public"]["Enums"]["service_case_event_type"];
+  eventType: Database['public']['Enums']['service_case_event_type'];
   actorName: string;
   reason: string | null;
   beforeSnapshot: Json | null;
@@ -136,7 +127,7 @@ type ServiceCaseEvidence = {
   artifactId: string;
   revisionNumber: number;
   title: string;
-  kind: Database["public"]["Enums"]["work_artifact_kind"];
+  kind: Database['public']['Enums']['work_artifact_kind'];
   createdAt: string;
 };
 
@@ -145,7 +136,7 @@ export type ServiceCaseEvidenceOption = {
   artifactId: string;
   revisionNumber: number;
   title: string;
-  kind: Database["public"]["Enums"]["work_artifact_kind"];
+  kind: Database['public']['Enums']['work_artifact_kind'];
 };
 
 export type ServiceCaseDocument = {
@@ -179,7 +170,7 @@ export type ServiceCaseClientOption = {
     name: string;
     address: string;
     isActive: boolean;
-    equipment: ServiceCaseEquipment[];
+    equipment: Array<ServiceCaseEquipment & { parentEquipmentId: string | null }>;
   }>;
   contacts: Array<{ id: string; name: string }>;
 };
@@ -192,22 +183,18 @@ export type ServiceCaseJobOption = {
   siteId: string | null;
 };
 
-type ServiceCaseWorkspace = {
-  cases: ServiceCaseListItem[];
-  clients: ServiceCaseClientOption[];
-};
-
 export type ServiceCaseDetailWorkspace = {
   serviceCase: ServiceCaseDetail;
   currentActorId: string;
-  clients: ServiceCaseClientOption[];
+  /** The case's own customer with its sites, contacts and equipment. */
+  client: ServiceCaseClientOption | null;
   jobs: ServiceCaseJobOption[];
   relatedCases: Array<{ id: string; caseNumber: string; summary: string }>;
   evidenceOptions: ServiceCaseEvidenceOption[];
   followUpOwners: Array<{
     userId: string;
     name: string;
-    role: "admin" | "buero";
+    role: 'admin' | 'buero';
   }>;
 };
 
@@ -221,7 +208,7 @@ export type ServiceCaseCreateInput = {
   originalStatement?: string | null;
   originalDetails?: string | null;
   summary?: string | null;
-  urgency?: Database["public"]["Enums"]["request_urgency"];
+  urgency?: Database['public']['Enums']['request_urgency'];
   chargeContext: ServiceCaseChargeContext;
   accessInstructions?: string | null;
   triageNote?: string | null;
@@ -232,7 +219,7 @@ export type ServiceCaseUpdateInput = {
   serviceCaseId: string;
   expectedVersion: number;
   summary: string;
-  urgency: Database["public"]["Enums"]["request_urgency"];
+  urgency: Database['public']['Enums']['request_urgency'];
   status: ServiceCaseStatus;
   chargeContext: ServiceCaseChargeContext;
   accessInstructions?: string | null;
@@ -260,26 +247,16 @@ export type ServiceCaseEvidenceInput = {
   idempotencyKey: string;
 };
 
-export type ServiceCaseMutationResult =
-  | { success: true; serviceCase: ServiceCaseRow }
-  | { success: false; error: string };
+export type ServiceCaseMutationResult = ActionResult<{ serviceCase: ServiceCaseRow }>;
 
-export type ServiceCaseListResult =
-  | { success: true; workspace: ServiceCaseWorkspace }
-  | { success: false; error: string };
-
-export type ServiceCaseDetailResult =
-  | { success: true; workspace: ServiceCaseDetailWorkspace }
-  | { success: false; error: string };
+export type ServiceCaseDetailResult = ActionResult<{ workspace: ServiceCaseDetailWorkspace }>;
 
 export type FieldServiceContext = {
   caseNumber: string;
   summary: string;
-  urgency: Database["public"]["Enums"]["request_urgency"];
+  urgency: Database['public']['Enums']['request_urgency'];
   accessInstructions: string | null;
   equipment: ServiceCaseEquipment[];
 };
 
-export type FieldServiceContextResult =
-  | { success: true; contexts: FieldServiceContext[] }
-  | { success: false; error: string };
+export type FieldServiceContextResult = ActionResult<{ contexts: FieldServiceContext[] }>;

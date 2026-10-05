@@ -1,184 +1,168 @@
 # Jobs And Projects
 
-Status: living — last reviewed 2026-09-17
+Status: living — last reviewed 2026-10-04
 
-Jobs (`Aufträge`) and projects (`Projekte`) are WerkFlow's central operational work objects. A job represents work that a team can plan, perform, document, and complete. A project groups related work when the business needs a larger delivery context, but it must never be required for a simple service visit or small order.
+Jobs (`Aufträge`) and projects (`Projekte`) are WerkFlow's central work objects. A job is work a team plans, performs, documents, and completes. A project groups related work when the business needs a larger delivery context. A simple service visit or small order never needs a project.
 
 ## Product Goal
 
-WerkFlow should give an SHK business one reliable operational path from a customer request to documented completion and handover. At every point, the people involved should be able to answer:
+WerkFlow gives an SHK business one path from a customer request to documented completion and handover. At every point the people involved can answer:
 
 - What was requested and what outcome was agreed?
-- Is this a standalone job or part of a larger project?
-- What must happen next, what is blocked, and who is responsible?
-- When and where will the work happen?
-- Which employees, instructions, materials, tools, documents, and customer decisions are relevant?
+- Is this a standalone job or part of a project?
+- What happens next, what is blocked, and who is responsible?
+- When and where does the work happen, and with which people, instructions, material, documents, and customer decisions?
 - What actually happened on site?
-- Is the work complete enough for handover, service follow-up, and commercial processing?
+- Is the work ready for handover, service follow-up, and commercial processing?
 
-The goal is not generic project-management breadth. It is an operational record that reduces duplicate entry, missing documentation, forgotten materials, disputed change work, and the office effort required to reconstruct a job after the fact.
-
-The [competitive landscape](../product/competitive-landscape.md) supplies the external market evidence behind this direction. This document defines WerkFlow's product choices and does not repeat vendor-by-vendor research.
+The goal is not a generic project-management suite. It is an operational record that cuts duplicate entry, missing documentation, forgotten material, disputed change work, and the office effort of reconstructing a job afterwards. [Competitive landscape](../product/competitive-landscape.md) holds the market evidence.
 
 ## Current Product Baseline
 
-As of 2026-09-02, Admin and Büro create and steer jobs and projects from request handoff through an explicit execution lifecycle, structured site evidence, and an office-reviewed handover. Assigned field workers work from one focused job view. The behavior below is the baseline future work must preserve unless a deliberate migration replaces it.
+Admin and Büro create and steer jobs and projects from request handoff through an explicit execution lifecycle, structured site evidence, and an office-reviewed handover. Assigned field workers work from one focused job view. Future work preserves this behavior unless a deliberate migration replaces it.
 
-- **Paging (Step 2, 2026-09-08).** The `/auftraege` list uses server-selected pages of 50 top-level jobs or projects. Search, customer/employee/date/type filters, status counts, and sorting cover the full authorized dataset before paging. Active work, parked work, and the archive retain independent URL state; no date window hides older jobs. Project children load on expansion in their own pages, while project progress and assignment summaries cover every authorized child. The list's page is never the option catalog for a create/edit dialog. [The performance reference](../technical/realtime-and-caching.md#server-paginated-lists) owns the implementation and verification rules.
-
-- **Work structure.** Managers create, edit, and delete jobs and projects with title, description, number, customer or project context, priority, planned date and time, estimated duration, planned total working time, location, status, and actual completion date. A job is standalone or belongs to one project; a project can exist without jobs and receive existing or new jobs later. Jobs and projects have organization-scoped numbers and dedicated detail routes. A standalone job has its own customer; jobs inside a project use the project's customer, and changing the project customer synchronizes its jobs. Deleting a project removes only the project association from its jobs. Once a job has planning occurrences or event history, hard deletion is refused with a manager-facing explanation ([P1-11](../plans/phase-1/slices/p1-11-planning-occurrences.md)).
-- **Request and service handoff.** A captured `Anfrage` converts exactly once into a new job or project with customer, contact, site, summary, details, urgency, and attachments carried over; the work shows „Entstanden aus Anfrage …“ to managers, and direct creation without a request stays first-class ([P1-02](../plans/phase-1/slices/p1-02-client-requests.md)). A reactive service case can link to exactly one existing job; the case stays the intake, triage, and outcome record while the job owns scheduling, dispatch, execution, evidence, material, and completion ([P1-19](../plans/phase-1/slices/p1-19-reactive-service.md)).
-- **Site and contact references.** A job can reference one `Einsatzort` and one `Ansprechpartner` of its customer; a project default prefills new jobs and stays overridable per job ([P1-01](../plans/phase-1/slices/p1-01-customer-contacts-and-sites.md)). Selecting a site copies its current address into the job's location as a snapshot that later site edits never rewrite. Changing the customer clears the previous customer's references, including on child jobs. The assigned field worker sees site address, access notes, and a click-to-call contact.
-- **Execution lifecycle.** Work uses the fixed states `not_started`, `in_progress`, `interrupted`, `execution_complete`, `handed_over`, and `cancelled` with audited, version-checked transitions ([P1-14](../plans/phase-1/slices/p1-14-work-lifecycle.md)). Planning, readiness, blockers, and parking are separate facets, so scheduled work can still be blocked and field-complete work can still await handover. Work that existed before P1-14 keeps its legacy status until the first explicit lifecycle action. Detail pages show execution state, planned or unplanned, start readiness, blockers, prerequisites, next action, completion gates, and recent history together; active list filters are „Nicht begonnen“, „In Ausführung“, and „Unterbrochen“. Completion records the actual date and reopening clears it. The first job-linked clock-in or break-end moves `not_started` or `interrupted` work to `in_progress` in the same transaction as the time event; a blocked or terminal target rejects the time event. Project execution derives from its children unless a manager sets a reasoned override. Overrides never cascade; parking a project parks its unfinished children.
-- **Blockers, dependencies, and gates.** Work can carry several blockers at once, each with a bounded reason, details, a responsible person, a next-review date, and a resolution ([P1-14](../plans/phase-1/slices/p1-14-work-lifecycle.md)). Parking is a blocker kind, not an execution state; it cancels the schedule and dispatch context without rewriting execution, and context-free legacy parked work shows „Kontext fehlt (Altbestand)“. Dependencies declare job, project, instruction, approval, delivery, site, or external-trade prerequisites with a start, completion, or warning effect; instruction prerequisites are enforced when instructions and work complete ([P1-13](../plans/phase-1/slices/p1-13-work-templates.md)). Start and completion gates check current facts; a manager exception needs a reason and is recorded.
-- **Readiness and dispatch.** Readiness is shown per dimension as `ok`, `warning`, or `unknown` with no stored ready flag; material stays „nicht reserviert“ and tools „nicht bewertet“ ([P1-12](../plans/phase-1/slices/p1-12-dispatch.md)). Handing work to the field is a distinct auditable fact: a versioned dispatch instruction targets one scheduled visit or one unscheduled job, and assigned employees confirm or challenge the current revision under „Mein Einsatz“. Parking cancels active dispatches visibly. Acknowledgement never stands in for attendance, recorded time, or a customer promise; the calendar spec and [decision 0002](../decisions/0002-dispatch-revision-acknowledgement-identity.md) hold the details.
-- **Planning occurrences.** One job can have several planned visits, and recurring planning materializes occurrences rather than synthetic jobs ([P1-11](../plans/phase-1/slices/p1-11-planning-occurrences.md)). The job's planned date, time, duration, and assignments stay aligned with its current visit plan so lists, detail, and field access keep working. Planned occurrences and actual job-linked time stay separate. Parked jobs are excluded from scheduled calendar work.
-- **Assignment and qualifications.** Managers assign one or more members to a job; employees see work through assignments, and project access is reached through assigned work. Managers can attach skill and certification requirements to a job; the detail explains whether the selected people cover each one, and an uncovered selection is possible only through a reasoned assessment ([P1-09](../plans/phase-1/slices/p1-09-teams-and-qualifications.md)). Requirements guide planning and claim no legal authorization. Before an employment transition, active assignments are inventoried and reassigned explicitly; access suspension removes operational access without deleting assignments ([P1-24](../plans/phase-1/slices/p1-24-controlled-people-lifecycle.md)).
-- **Field work pack.** Assigned employees get one mobile-first composition on standalone and project-child job routes: pre-arrival customer, site, and contact context, one dispatch or lifecycle next action, instructions, structured evidence, contextual documents, own time, operational material, and unresolved issues ([P1-16](../plans/phase-1/slices/p1-16-field-work-pack.md)). It excludes sibling and project-wide detail, coworker drafts, document governance, and commercial facts. Employees get start, interrupt, resume, and execution-complete actions, their own blocker report, and the customer-safe handover summary of their job. Managers keep creation, editing, assignment, cancellation, handover, parking, dependencies, gate exceptions, and project overrides.
-- **Instructions and work templates.** Jobs and projects have ordered instruction items with task or checklist kind, required or optional state, group, notes, expected evidence, prerequisites, and template origin; managers manage them, assigned employees complete or reopen them, and the last actor and time are kept ([P1-13](../plans/phase-1/slices/p1-13-work-templates.md)). Admin and Büro manage Auftrag and Projekt templates under `/arbeitsvorlagen`. A template has one editable draft; every published version is immutable, and archive hides a template from pickers without deleting applied work. Applying a published version at creation, request conversion, or later materializes editable instruction, material, and capability rows that record the exact version; later template edits never rewrite the work, and the same version cannot be applied twice to the same target. Application is planning only: no stock movement, occurrence, dispatch, assignment, time, document, approval, or message.
-- **Structured work artifacts.** Job and project detail share one `Arbeitsnachweise` section for Bautagebuch, Arbeitsbericht, Aufmaß, Mangel, and Regie-/Änderungsnachweis ([P1-15](../plans/phase-1/slices/p1-15-structured-site-evidence.md)). One artifact owns immutable numbered revisions; review decisions, customer outcomes, signatures, document relations, and exports bind to an exact revision. A decided record is corrected by a new revision and voided, never deleted. Field workers capture on their assigned work; managers capture, review, export, record customer outcomes, and void with a reason. Required evidence, formal approvals, and required customer outcomes feed the completion gates.
-- **Office handover.** Execution-complete jobs and projects get an office-reviewed handover: Büro and Admin select exact artifact revisions, exact document versions, and, for projects, exact child releases; gates classify hard blockers, reasoned exceptions, warnings, and explicitly unassessed areas ([P1-17](../plans/phase-1/slices/p1-17-office-handover.md)). One release freezes the customer-safe package, renders a deterministic HTML document, and moves the target to `handed_over`. Releases are immutable; withdrawal returns the work to `execution_complete`, keeps the old release, and opens a successor draft. The recorded `ready_for_commercial_review` or `ready_with_exceptions` result is not billing approval.
-- **Installed equipment.** Service-owned equipment can record installation, commissioning, service, removal, or replacement links to a job, project, artifact revision, or handover release; work stays the operational owner ([P1-18](../plans/phase-1/slices/p1-18-installed-equipment.md)). Assigned field workers see only equipment linked to their exact job, and the link grants no project, customer, or library access.
-- **Time, documents, and material.** Work, travel, and call-out segments reference one job or stay explicitly unallocated; starting work or call-out on a job can start or resume its lifecycle, travel never does ([P1-21](../plans/phase-1/slices/p1-21-time-segments.md)). Job and project detail show linked time, and projects aggregate their jobs. `Dokumente & Bilder` links work to the central document system; assigned employees upload and view on their jobs, managers have the full document actions. `Material & Inventar` lets managers plan material without changing stock and lets users take or return stock explicitly, including unplanned takes; project views show direct, inherited, and total material, and lines keep planned, taken, returned, billable, and unplanned quantities distinct.
+- **Lists.** Search, filters, status counts, and sorting cover all authorized work, not only the visible page. Active, parked, and archived work have separate filters. No date window hides older jobs. Project summaries cover every child. A failed read shows the failure with a retry, never an empty list. [Server-paginated lists](../technical/realtime-and-caching.md#server-paginated-lists) owns the technical rules.
+- **Numbers.** Jobs, projects and requests get a yearly number such as `AUF-2026-001`. The count keeps at least three digits and grows past 999 without a collision. Lists and the equipment and dependency pickers order numbers by value, so `AUF-2026-1000` follows `AUF-2026-999`. The [data model](../technical/data-model.md) owns the numbering rule for every record type.
+- **Work structure.** A job is standalone or belongs to one project. A project can exist without jobs and receive jobs later. A standalone job has its own customer. Jobs in a project use the project's customer, and changing it changes their customer too. Creating a job saves it with its assignments and its work template, and creating a project saves it with its template, all or nothing. Editing a job saves its fields and its assignments together. Editing a project's customer moves its jobs in the same save. A refused step leaves the work unchanged. Deleting a project only unlinks its jobs. A job with planned visits or event history cannot be hard-deleted, and the manager sees why.
+- **Request and service handoff.** An `Anfrage` converts exactly once into a new job or project and carries customer, contact, site, summary, urgency, and attachments over. Managers see the originating request. Creating work without a request stays a first-class path. A service case links to one existing job. The case owns intake, triage, and outcome. The job owns scheduling, dispatch, execution, evidence, material, and completion.
+- **Site and contact.** A job references one `Einsatzort` and one `Ansprechpartner` of its customer. A project default prefills new jobs, and each job can override it. Selecting a site copies its address into the job as a snapshot that later site edits never change. Changing the customer clears the old customer's references, also on child jobs. The assigned field worker sees the address, access notes, and a contact to call with one tap.
+- **Execution lifecycle.** Work is not started, in progress, interrupted, execution complete, handed over, or cancelled. Every transition is audited. Planning, readiness, blockers, and parking are separate facets, so scheduled work can be blocked and field-complete work can await handover. Work created before the lifecycle existed keeps its legacy status until its first explicit lifecycle action. Lists, headers and detail fields show one label per state: the work state, or the legacy status marked „Altbestand“ while no work state exists. Completion records the actual date, and reopening clears it.
+- **Time drives the lifecycle.** The first job-linked clock-in, break end, or call-out start moves not-started or interrupted work to in progress, together with the time event. A blocked or finished job rejects the time event. Travel never starts the lifecycle.
+- **Projects.** Project execution derives from its children unless a manager sets an override with a reason. Overrides never cascade. Parking a project parks its unfinished children. An employee with a job in the project sees the project's work state read-only.
+- **Blockers, dependencies, and gates.** Work can carry several blockers, each with a reason, a responsible person, a review date, and a resolution. Parking is a blocker kind, not an execution state. It cancels the schedule and active dispatches and leaves execution alone. Unparking a job into the schedule lifts the parking and saves the new plan together, so a refused plan leaves the job parked. Dependencies on a job, project, instruction, approval, delivery, site, or other trade block the start, block completion, or warn. Start and completion gates check current facts. A manager exception needs a reason and is recorded.
+- **Readiness and dispatch.** Readiness shows each dimension as ok, warning, or unknown. WerkFlow stores no ready flag. Material shows as not reserved and tools as not assessed. Dispatch is a separate, audited step: a versioned dispatch targets one scheduled visit or one unscheduled job, and assigned employees confirm or challenge the current revision in `Mein Einsatz`. Acknowledgement never stands in for attendance, recorded time, or a customer promise. [Calendar and resource planning](./calendar-and-resource-planning.md) and [decision 0002](../decisions/0002-dispatch-revision-acknowledgement-identity.md) own the details.
+- **Planned visits.** A job can have several planned visits. Recurring planning creates visits, not extra jobs. The job's planned date, duration, and assignees follow its current visit plan. Planned visits and actual time stay separate. Parked jobs leave the scheduled calendar.
+- **Assignment and qualifications.** Managers assign one or more members to a job. Employees see work through assignments and reach a project only through assigned work. When a job's skill or certification requirements are not covered by the assignees, the assignment needs a reasoned assessment. Requirements guide planning and claim no legal authorization. Before an employment change, managers reassign active work explicitly. Suspending access removes operational access and keeps assignments.
+- **Field work pack.** Assigned employees get one mobile-first view of their job: customer, site, and contact, one next action, instructions, evidence, documents, own time, material, and open issues. It leaves out sibling and project-wide detail, coworker drafts, document governance, and commercial facts. Employees start, interrupt, resume, and complete execution, report their own blocker, and see the customer-safe handover summary. Creation, editing, assignment, cancellation, handover, parking, dependencies, gate exceptions, and project overrides stay with managers.
+- **Instructions and templates.** Jobs and projects have ordered, required or optional instruction items. Managers maintain them. Adding, deleting, or reordering an item renumbers the list in the same save. Assigned employees complete or reopen them, and WerkFlow keeps the last actor and time. Admin and Büro manage templates in `Arbeitsvorlagen`. Every published template version is immutable. Applying a version creates editable instructions, material, and requirements that record the exact version. Later template edits never rewrite the work, and the same version cannot be applied twice to one target. Applying a template only plans: it moves no stock and creates no visit, dispatch, assignment, time, document, approval, or message.
+- **Site evidence.** Jobs and projects share one `Arbeitsnachweise` section for Bautagebuch, Arbeitsbericht, Aufmaß, Mangel, and Regie- or Änderungsnachweis. Each record keeps numbered revisions that never change. Reviews, customer outcomes, signatures, document links, and exports bind to one exact revision. A decided record is corrected by a new revision or voided, never deleted. Field workers capture evidence on their assigned work and export the reports of their own jobs. Managers also review, record customer outcomes, void with a reason, and export project reports. An export stores the report as a document linked to the work and to the exact revision in one step. Exporting an unchanged revision again returns the existing document. Required evidence and outcomes feed the completion gates.
+- **Office handover.** Büro and Admin hand over execution-complete work by picking exact evidence revisions, document versions, and, for projects, child handovers. Gates sort hard blockers, reasoned exceptions, warnings, and unassessed areas. One release freezes the customer-safe package and marks the work handed over. A release never changes. Withdrawing it returns the work to execution complete and opens a new draft. The commercial-readiness result is not billing approval.
+- **Installed equipment.** Service equipment links installation, commissioning, service, removal, or replacement to a job, project, evidence revision, or handover. The work stays the operational owner. Field workers see only equipment linked to their own job, and the link grants no further access.
+- **Time, documents, and material.** Time references one job or stays unallocated, and projects sum their jobs. `Dokumente & Bilder` links work to the central documents. Assigned employees upload and view on their jobs, and view the project's own documents on a project in which they have a job. `Material & Inventar` follows the [inventory baseline](./inventory.md#current-product-baseline).
 
 ### Important Current Limitations
 
-- Converting a request into an update of existing work is deferred.
-- Delivery or public access to a handover package, billing, material consumption, and offline or mobile behavior remain later scope.
-- Work artifacts are operational evidence, not a handover package, commercial acceptance, invoice basis, or qualified electronic signature.
-- Visit-level planning and actual time records exist, but there is no operational variance or profitability view.
-- Structured offers, contracts, invoices, payments, and accounting are not implemented.
-- There is no offline job pack and no React Native employee app yet.
+- A request cannot yet update existing work.
+- Customer delivery of a handover package, billing, material consumption, and offline or mobile behavior are later scope.
+- Site evidence is not a handover package, commercial acceptance, invoice basis, or qualified electronic signature.
+- There is no planned-versus-actual or profitability view.
+- Offers, contracts, invoices, payments, and accounting do not exist.
+- There is no offline job pack and no React Native employee app.
 
 ## Phase 1 — Complete Operational Core
 
-Phase 1 is not an MVP list. It describes the complete high-value operational capability expected before WerkFlow treats jobs and projects as a mature core for an SHK business. Delivery can be incremental, but partial implementation should not be confused with completion of the phase.
+This section describes what jobs and projects need before they count as a mature core. Delivery can come in steps. A partial delivery is not the completed phase.
 
 ### 1. Request-To-Work Handoff
 
-- A validated customer request can become a standalone job, a project, or an item attached to existing work without retyping the customer, site, source, request summary, urgency, attachments, or promised next action.
-- Office users can also create work directly when there is no prior request. A CRM funnel must not become mandatory overhead for known repeat work.
-- The work record shows the originating request and what changed during qualification so the field team receives the accepted operational scope rather than an unfiltered message transcript.
-- Urgent faults, scheduled service, quoted installation work, planned construction work, warranty issues, and internal work can be distinguished in ways that improve planning and reporting.
-- Commercial acceptance or order confirmation can release work for execution, but quote, contract, and order-document rules remain owned by the commercial feature area.
+- A request becomes a job, a project, or an addition to existing work without retyping anything.
+- Office users create work directly when there is no request. A CRM funnel never becomes mandatory for repeat work.
+- The work shows the original request and what changed during qualification, so the field team gets the accepted scope, not a raw message thread.
+- Urgent faults, scheduled service, quoted installations, construction work, warranty issues, and internal work are distinguishable for planning and reporting.
+- Commercial acceptance can release work for execution. The commercial feature owns quote, contract, and order rules.
 
 ### 2. Standalone Jobs And Project Structure
 
-- A small repair or inspection remains a complete first-class standalone job with the same documentation, time, material, completion, and handover capabilities as a job inside a project.
-- A project can stand on its own as the overall delivery context before any detailed jobs exist.
-- Projects can group phases, areas, systems, trades, or work packages without forcing every business into a complex hierarchy.
-- Jobs can be added to, moved between, or removed from projects with an explicit preview of customer, site, schedule, document, material, and reporting consequences.
-- The product preserves a clear distinction between project-level information shared by all work and job-specific instructions or evidence.
-- Managers can copy an existing job or project when repetition is faster than starting empty, while copied assignments, dates, customer data, private notes, and completed evidence require deliberate confirmation.
+- A small repair is a complete job with the same documentation, time, material, completion, and handover as a job inside a project.
+- Projects can group phases, areas, trades, or work packages without forcing a complex hierarchy on every business.
+- Jobs move into, between, and out of projects with a preview of the effect on customer, site, schedule, documents, material, and reporting.
+- Project-level information stays separate from job-specific instructions and evidence.
+- Managers can copy a job or project. Copied assignments, dates, customer data, private notes, and evidence need deliberate confirmation.
 
 ### 3. Templates, Checklists, And Tasks
 
-- Organizations can maintain practical templates for recurring SHK work such as heating maintenance, boiler replacement, bathroom installation, commissioning, fault diagnosis, site setup, and handover.
-- A template can prepare the expected scope, work steps, required evidence, planned roles, material demand, safety checks, forms, and completion conditions without silently committing stock or calendar capacity.
-- Applying a template creates an editable work plan; later template changes do not rewrite completed or active work without a reviewed update.
-- Checklists support required and optional items, clear completion evidence, notes, attachments, and accountable completion.
-- Tasks can have an owner, due context, status, and relation to the relevant job, project phase, defect, measurement, approval, or change-work item.
-- Field workers see only the next practical actions and their dependencies. Office users can inspect the fuller plan, responsibility, and exceptions.
-- Reusable text and checklist content uses natural German and can be organization-specific without requiring extensive configuration.
+- Templates prepare scope, steps, required evidence, roles, material demand, safety checks, and completion conditions for recurring SHK work. They never commit stock or calendar capacity.
+- Later template changes never rewrite active or completed work without a reviewed update.
+- Tasks have an owner, due context, status, and a link to the job, phase, defect, measurement, approval, or change work.
+- Field workers see the next practical actions. Office users see the full plan, responsibility, and exceptions.
+- Template texts are natural German and organization-specific without heavy configuration.
 
 ### 4. Status, Readiness, Dependencies, And Exceptions
 
-- The status model distinguishes operationally different situations instead of overloading one generic open state: not yet planned, planned, ready, in progress, interrupted, waiting for customer, waiting for material, blocked, parked, execution complete, handed over, cancelled, and archived where validated.
-- `P1-14` settled the execution vocabulary and its separation from planning, readiness, blockers, and parking. The current baseline above defines that model. Every visible state must imply a clear next action and responsible role; additional states require a new product decision.
-- Users can record why work is blocked or interrupted, who must resolve it, and the next review date. A blocked record cannot disappear into a passive status.
-- Dependencies can express that one job, task, approval, delivery, site condition, or external trade must finish before another step starts.
-- Readiness makes missing prerequisites visible before dispatch: confirmed site/access, customer availability, required employee skill, material/tool readiness, approved scope, documents, and safety information.
-- Completion gates identify required instructions, time/material capture, measurements, defect resolution, customer decision, and handover evidence. Managers can override a gate only with a reason and audit visibility.
-- Cancellation, postponement, and parking remain distinct. Each preserves the history and explains what should happen next.
+- Each status means one operational situation. Every visible state implies a next action and a responsible role. A new state needs a new product decision.
+- A blocked record names why, who resolves it, and when it is reviewed next. Blocked work never vanishes into a passive status.
+- Readiness shows missing prerequisites before dispatch: site access, customer availability, skills, material and tools, approved scope, documents, and safety information.
+- Completion gates check instructions, time and material, measurements, defects, customer decisions, and handover evidence. A manager overrides a gate only with an audited reason.
+- Cancellation, postponement, and parking stay distinct. Each keeps the history and says what happens next.
 
 ### 5. Scheduling, Capacity, And Assignment
 
-- Office users can plan jobs and project phases in the calendar with dates, time windows, expected duration, travel/site context, and the people needed.
-- Assignment supports individuals and practical teams while retaining the responsible lead.
-- Planning exposes conflicts with absence, overlapping work, required skills, and unavailable tools or vehicles without making the calendar a full workforce-optimization suite.
-- Multi-day and split work is represented as actual planned visits or work periods rather than one misleading single date.
-- Rescheduling preserves the former commitment, reason, and communication requirement so office and field teams do not work from different plans.
-- Employees receive timely, understandable assignment changes and can see what changed.
-- The calendar, work detail, employee view, and customer communication all reference the same current plan.
+[Calendar and resource planning](./calendar-and-resource-planning.md) owns scheduling. Jobs and projects add these rules:
+
+- Assignment supports individuals and teams and keeps the responsible lead.
+- Multi-day and split work shows as real planned visits, not one misleading date.
+- Rescheduling keeps the former commitment, the reason, and whether the customer must be told.
+- Calendar, work detail, employee view, and customer messages reference one current plan.
 
 ### 6. Field-Ready Work Pack
 
-- Before arrival, the assigned employee can see the customer, contact, correct site, access notes, requested outcome, planned time, responsible people, relevant installation/equipment, instructions, hazards, documents, photos, materials, tools, and unresolved questions.
-- Sensitive commercial or internal customer notes are excluded unless the employee needs them to perform the work.
-- Navigation and calling the relevant contact are immediate actions, not buried in metadata.
-- The future employee app provides one role-aware work surface for jobs, time, documents, photos, tasks, material, and communication.
-- Offline support is defined per action. The field worker can see what data is available offline, what is queued, what failed, what conflicts, and when the job pack last synchronized.
+- Before arrival, the assigned employee sees everything the job needs, including equipment, hazards, tools, and open questions.
+- Commercial and internal customer notes stay hidden unless the employee needs them for the work.
+- The future employee app is one role-aware place for jobs, time, documents, photos, tasks, material, and communication.
+- Offline support is defined per action. The field worker sees what is available offline, queued, failed, or in conflict, and when the job last synced.
 
 ### 7. Execution And Site Documentation
 
-- Field workers can start, pause, resume, and document work without duplicating time-tracking actions or manually reconciling an unrelated status.
-- A site diary (`Bautagebuch`) can capture daily progress, people present, weather or site conditions when relevant, deliveries, impediments, decisions, notable events, and supporting media.
-- Photos and files retain their job/project/site context, meaningful capture time, author, description, and relation to a task, defect, measurement, change, or handover.
-- Structured measurements (`Aufmaß`) capture quantities, units, locations/areas, notes, evidence, revisions, and approval state. They can later feed commercial calculations without the job feature owning billing rules.
-- Defects (`Mängel`) capture the problem, severity, location, responsibility, due date, evidence, status, proposed resolution, and proof of closure.
-- Change work (`Nachtrag` or `Regiearbeit`) records what changed, why it was outside or different from the current scope, who requested it, expected/actual labor and material, evidence, authorization state, and any impact on schedule.
-- Daily or visit reports summarize performed work, outstanding work, materials, time, measurements, defects, customer statements, and the next visit. They remain reviewable artifacts, not AI-generated text accepted without a responsible person.
-- Corrections preserve who changed an operational fact and why, especially after customer approval or completion.
+- Field workers start, pause, resume, and document work without duplicate time actions.
+- Photos and files keep their work context, capture time, author, and link to a task, defect, measurement, change, or handover.
+- An `Aufmaß` can feed commercial calculation later. Billing rules stay with the commercial feature.
+- A `Mangel` carries severity, responsibility, due date, proposed fix, and proof of closure.
+- Change work (`Nachtrag` or `Regiearbeit`) records what differs from the agreed scope, who asked for it, labor and material, authorization, and schedule impact.
+- A responsible person reviews daily and visit reports. AI text is never accepted unreviewed.
+- Corrections keep who changed an operational fact and why, especially after customer approval or completion.
 
 ### 8. Approvals And Signatures
 
-- The appropriate person can approve or reject clearly identified artifacts such as the work performed, a service report, measurement, change work, defect resolution, commissioning result, or final handover.
-- A signature is attached to the exact artifact revision and records signer identity/context, time, and any reservation or refusal.
-- A customer can refuse to sign or add a qualification without blocking the team from recording what occurred.
-- Internal approval and customer acknowledgement are separate concepts.
-- High-risk work can require office or project-lead review before it becomes commercially usable or customer-visible.
-- The product never describes a signature as legally sufficient for a specific purpose until the applicable identity, evidence, retention, and German legal requirements have been validated.
+- The right person approves or rejects an exact artifact revision. A signature records signer, context, time, and any reservation or refusal.
+- A customer can refuse to sign or add a reservation. The team can still record what happened.
+- Internal approval and customer acknowledgement are separate.
+- High-risk work can require office or project-lead review before it becomes commercially usable or visible to the customer.
+- WerkFlow never calls a signature legally sufficient until identity, evidence, retention, and German legal requirements are validated.
 
 ### 9. Planned-Versus-Actual Labor
 
-- Work planning shows expected effort by job, phase, task, visit, team, or role at the level needed for reliable capacity and costing.
-- Actual job-linked work, travel, and relevant supplements come from the time feature rather than duplicate job-local timers.
-- Managers can compare planned and actual labor while work is active, not only after completion.
-- Variances explain enough context to be actionable: added scope, waiting, rework, travel, access problems, missing material, underestimated effort, or data corrections.
-- Employee time corrections continue through the time feature's approval and audit rules.
-- The job/project view can supply approved labor quantities and cost inputs to commercial profitability calculations without owning payroll or wage logic.
+- Planning shows expected effort at the depth capacity and costing need.
+- Actual labor comes from [time tracking](./time-tracking.md), never from job-local timers, and corrections follow its approval rules.
+- Managers compare planned and actual labor while work is active. A variance carries its cause, such as added scope, waiting, rework, or missing material.
+- Jobs and projects supply approved labor quantities and cost inputs to profitability. Payroll and wage logic stay elsewhere.
 
-### 10. Planned-Versus-Actual Material, Tools, And External Work
+### 10. Material, Tools, And External Work
 
-- Planned demand, preferred source, reserved quantity, physical stock, ordered quantity, taken quantity, returned quantity, consumed quantity, and commercially billable quantity remain visibly distinct.
-- Employees can record unplanned material use quickly while the office retains a review path for stock, cost, and billability.
-- Material shortages and required procurement are visible early enough to influence readiness and scheduling.
-- Project totals can be traced back to the specific job or project-level demand that produced them.
-- Tools, assets, vehicles, subcontracted work, and external services can be associated with the work when they affect readiness, execution evidence, cost, or handover.
-- Inventory remains the authority for catalog, location, reservation, movement, and procurement state. Work records provide the operational reason and destination.
+- [Inventory](./inventory.md) is the authority for material quantities, stock, and procurement. Work records give the reason and destination.
+- Employees record unplanned material quickly. The office reviews stock, cost, and billability.
+- Shortages show early enough to affect readiness and scheduling.
+- Project totals trace back to the job or project demand that produced them.
+- Tools, vehicles, subcontractors, and external services link to work when they affect readiness, evidence, cost, or handover.
 
 ### 11. Completion, Handover, And Reopening
 
-- `Execution complete` means field work has stopped; `handed over` means the required evidence, unresolved items, customer acknowledgement, and office review have reached the agreed state. These must not be collapsed accidentally.
-- Completion shows outstanding instructions, open defects, missing measurements, running time, material still out, unsigned required artifacts, and incomplete change-work decisions.
-- A handover package can contain approved reports, measurements, photos, commissioning data, manuals, warranties, maintenance recommendations, and remaining-work/defect lists.
-- The office can generate the customer-visible package from approved artifacts without exposing internal notes or drafts.
-- Reopening completed or handed-over work requires a reason and preserves the previous completion/handover history.
-- Cancelled work retains the request, decisions, incurred effort/material, and commercial handoff required to close it correctly.
+- Execution complete means field work has stopped. Handed over means required evidence, open items, customer acknowledgement, and office review have reached the agreed state. The two never merge.
+- Completion shows everything still open: instructions, defects, measurements, running time, material still out, unsigned artifacts, and undecided change work.
+- The office builds the customer package from approved artifacts, without internal notes or drafts.
+- Reopening completed or handed-over work needs a reason and keeps the earlier history.
+- Cancelled work keeps the request, decisions, effort, material, and commercial handoff needed to close it.
 
 ### 12. Service Handoff
 
-- Installation and project work can hand over installed equipment, commissioning information, warranty dates, maintenance requirements, responsible contacts, documents, and open service commitments to the service/maintenance area.
-- The handoff prevents the next technician from reconstructing an installation from PDFs and memory.
-- A resulting maintenance visit or fault job links back to the equipment and original project while remaining its own operational work record.
-- Recurring maintenance plans, contracts, service intervals, and asset lifecycle rules belong to the service feature area, not to the generic project hierarchy.
-- Since P1-20, the office deliberately turns one service-owned due item into one ordinary job with the plan revision's exact published work-template version. The due item stores the exact job link; job creation keeps its existing customer/site, qualification, checklist, evidence and lifecycle owners. Scheduling that job creates a separate P1-11 occurrence, and completing the job does not by itself claim that maintenance evidence or the next-due decision is complete.
+- Installation work hands equipment, commissioning data, warranty dates, maintenance requirements, documents, and open commitments to service, so the next technician never rebuilds an installation from memory.
+- A maintenance visit or fault job links back to the equipment and original project and stays its own work record.
+- [Service and maintenance](./service-and-maintenance.md) owns plans, contracts, intervals, and asset lifecycle, not the project hierarchy.
+- The office turns one due maintenance item into one ordinary job from the exact template version of the plan. Completing that job does not by itself settle the maintenance evidence or the next due date.
 
 ### 13. Commercial Readiness And Profitability Inputs
 
-- Work can be marked commercially ready only when the required scope evidence, approved time, material usage, measurements, change work, customer acknowledgements, and completion state are available.
-- The operational view identifies items that may need commercial review: unplanned labor/material, approved changes, rejected work, external costs, warranty work, goodwill, and non-billable corrections.
-- Profitability inputs include planned and actual labor quantities/cost basis, planned and actual material quantities/cost basis, external work, equipment/tool allocation where relevant, and operational variance reasons.
-- Revenue, taxes, payment terms, invoice numbering, partial/final invoice construction, corrections, dunning, payment matching, and accounting remain owned by the commercial/finance feature area.
-- Every amount or quantity shown in later post-calculation must be traceable to its operational or commercial source rather than copied into an unowned project total.
+- Work is commercially ready only when scope evidence, approved time, material use, measurements, change work, customer acknowledgements, and completion state are present.
+- The work view flags items for commercial review, such as unplanned labor or material, approved changes, warranty work, and goodwill.
+- Every amount in post-calculation traces to its operational or commercial source. Nothing is copied into an unowned project total.
+- [Commercial and finance](./commercial-and-finance.md) owns prices, tax, invoices, payments, and accounting.
 
 ### 14. Search, Oversight, Audit, And Export
 
-- Office users can find work by customer, contact, site, equipment, job/project number, status, responsible employee, date, request, document, defect, material, and relevant free text.
-- Dashboards highlight work needing action: unplanned, overdue, blocked, waiting, at risk, missing evidence, ready for dispatch, ready for handover, and ready for commercial review.
-- Project views summarize progress without hiding the job-level exceptions that determine whether the summary is trustworthy.
-- Material changes to status, schedule, assignment, scope, approvals, completion, and handover are attributable and time-ordered.
-- The organization can export usable work records and their linked evidence while preserving identifiers and relationships needed for migration or audit.
+- Office users find work by any linked fact: customer, site, equipment, number, status, employee, date, request, document, defect, material, or free text.
+- Dashboards show work that needs action, such as overdue, blocked, missing evidence, or ready for dispatch, handover, or commercial review.
+- Project summaries never hide the job-level exceptions behind them.
+- Changes to status, schedule, assignment, scope, approvals, completion, and handover are attributed and in time order.
+- The organization can export work records and evidence with the identifiers and links that migration or audit needs.
 
 ## Connected Workflow Contracts
 
@@ -196,89 +180,55 @@ Phase 1 is not an MVP list. It describes the complete high-value operational cap
 
 ## Role And UX Principles
 
-### Admin, Office, And Project Leads
-
-- Optimize for exception handling and overview, not repeated navigation through every child record.
-- Provide fast creation, copying, bulk assignment, filtering, scheduling, and status correction while making the consequences visible.
-- Use progressive disclosure: simple jobs should stay simple; project, dependency, measurement, defect, and change-work depth appears when needed.
-- Make derived summaries explainable. A project status, risk, or progress value must reveal the underlying jobs and blockers.
-
-### Field Workers
-
-- The job detail prioritizes today's place, time, contact, requested outcome, next steps, hazards, materials/tools, and the simplest route to document work.
-- Field users should not need to understand the office's commercial process, project hierarchy, or configuration model.
-- Capture should favor structured defaults, voice/photo assistance where useful, large touch targets, and recovery from interruption.
-- The UI must clearly separate required completion items from optional detail and show what is saved, queued, failed, or awaiting review.
-
-### Apprentices And Less Experienced Employees
-
-- Templates and checklists guide the sequence without suggesting they replace supervision or trade competence.
-- Instructions use practical German and make escalation paths obvious.
-- Risky completion, change-work, material, or approval actions require the appropriate responsible person.
-
-### Customers And External Participants
-
-- Customer-visible views and approval moments expose only intentionally shared artifacts.
-- Internal notes, labor cost, margin, employee evaluation, and unapproved evidence never leak through a shared report or future portal.
-
-### Cross-Cutting UX
-
-- Use natural German trade language and organization defaults rather than generic software terminology.
-- Preserve organization boundaries and role-scoped access.
-- Avoid a wall of fields. Ask for information at the point it becomes useful and reuse facts already captured.
-- Accessibility, mobile ergonomics, and explicit offline/sync behavior are acceptance criteria, not later polish.
+- **Office and project leads.** Build for exceptions and overview, not for clicking through every child record. Simple jobs stay simple, and project, dependency, and change-work depth appears when needed. A project status, risk, or progress value reveals the jobs and blockers behind it.
+- **Field workers.** The job detail leads with today's place, time, contact, outcome, next steps, hazards, and material. Field users never need the office's commercial process, project hierarchy, or configuration. The UI separates required completion items from optional detail and shows what is saved, queued, failed, or awaiting review.
+- **Apprentices.** Templates and checklists guide the sequence and never replace supervision or trade skill. Risky completion, change-work, material, or approval actions need the responsible person.
+- **Customers.** Customer views show only artifacts shared on purpose. Internal notes, labor cost, margin, employee evaluation, and unapproved evidence never leak through a shared report or a future portal.
+- **Everyone.** Ask for information when it becomes useful and reuse facts already captured. Accessibility, mobile ergonomics, and explicit offline and sync behavior are acceptance criteria, not later polish.
 
 ## Phase 2 — Intelligence And Automation
 
-Phase 2 should use the structured operational core to reduce coordination work. It must not compensate for missing core states with opaque AI guesses.
+Phase 2 uses the structured core to reduce coordination work. AI never papers over missing core states with guesses.
 
-- Turn calls, emails, messages, photos, or dictated notes into a proposed request, scope, checklist, site report, measurement, defect, or change-work artifact with source evidence.
-- Suggest the appropriate existing customer, site, equipment, template, responsible team, duration, and required material while showing confidence and alternatives.
-- Detect missing prerequisites, schedule conflicts, likely material shortages, stalled blockers, overdue customer decisions, and completion evidence gaps.
-- Forecast labor/material variance, completion risk, and operational profitability using explainable current data.
-- Prepare daily site summaries, handover packages, service handoffs, and commercial-readiness packets from approved artifacts.
-- Translate or rewrite field notes for customer-facing reports while retaining the original and requiring review.
-- Propose follow-up tasks or customer updates after delay, visit, completion, defect resolution, or handover; communication remains subject to preferences, consent, template, and human-control rules.
-- Learn useful organization defaults from reviewed choices without silently changing templates, status rules, assignments, stock, or customer commitments.
-- Every proposal shows its sources, proposed changes, confidence/limitations, approval point, actor, and audit outcome. Low-confidence cases fall back to manual review.
+- Turn calls, emails, photos, or dictated notes into a proposed request, scope, checklist, report, measurement, defect, or change-work record with its source.
+- Suggest customer, site, equipment, template, team, duration, and material, with confidence and alternatives.
+- Detect missing prerequisites, schedule conflicts, likely shortages, stalled blockers, overdue customer decisions, and evidence gaps.
+- Forecast labor and material variance, completion risk, and profitability from explainable data.
+- Prepare site summaries, handover packages, service handoffs, and commercial-readiness packets from approved artifacts.
+- Rewrite field notes for customer reports, keep the original, and require review.
+- Propose follow-up tasks or customer updates. Messages follow preferences, consent, templates, and human control.
+- Learn organization defaults from reviewed choices without silently changing templates, status rules, assignments, stock, or customer commitments.
+- Every proposal follows the [source-visibility rules](./ai-automations.md#data-quality-and-source-visibility) of AI Automations. Low-confidence cases fall back to manual review.
 
 ## Boundaries And Decision Gates
 
-- **No generic project-management suite:** portfolio roadmaps, broad agile boards, arbitrary custom workflows, and advanced critical-path tooling require evidence that they solve common SHK operations.
-- **No invoice logic here:** this feature supplies approved operational facts. Structured offers, contracts, invoices, payments, accounting, and tax compliance require their own product specification.
-- **No CRM duplication:** customer/contact/site/request master data belongs in CRM. Work may retain an audit-safe snapshot of what was true at execution time.
-- **No service-module shortcut:** equipment, recurring maintenance, contracts, warranties, and emergency-service logic require a dedicated service model even though work links to them.
-- **No ambiguous “material” field:** catalog data, planned demand, reservation, physical stock, procurement, consumption, and billability remain distinct.
-- **No automatic high-impact actions by default:** scope, customer promises, employee schedules, stock movements, signatures, completion, and commercial release need explicit authority and review.
-- **Offline is workflow-specific:** implementation must decide available data, queued mutations, attachments, conflicts, last-sync visibility, and recovery for each supported field action.
-- **Signatures and regulated records need validation:** the product must not promise VOB, REB, GoBD, legal-signature, retention, or evidentiary compliance without a versioned, legally reviewed scope.
-- **Location and workforce privacy need validation:** GPS, route history, presence, and employee-performance analytics require a clear necessity, role model, transparency, and retention decision.
-- **Configurability has a cost:** custom statuses, fields, templates, and gates should be added only with safe defaults, migration behavior, reporting semantics, and mobile usability.
-- **Migration and export are part of readiness:** customer acceptance testing must include imports, open work, identifiers, linked artifacts, correction history, and usable organization export.
+- **No generic project-management suite.** Portfolio roadmaps, agile boards, custom workflows, and critical-path tooling need evidence that they solve common SHK work.
+- **No invoice logic here.** This feature supplies approved operational facts.
+- **No CRM duplication.** Customer, contact, site, and request data belong to CRM. Work may keep a snapshot of what was true at execution time.
+- **No service shortcut.** Equipment, recurring maintenance, contracts, warranties, and emergency service need the dedicated service model.
+- **No automatic high-impact actions by default.** Scope, customer promises, employee schedules, stock movements, signatures, completion, and commercial release need explicit authority and review.
+- **Offline is per workflow.** Each field action defines its offline data, queued changes, conflicts, last-sync display, and recovery.
+- **Signatures and regulated records need validation.** WerkFlow promises no VOB, REB, GoBD, legal-signature, retention, or evidentiary compliance without a legally reviewed scope.
+- **Location and workforce privacy need validation.** GPS, route history, presence, and performance analytics need a clear necessity, role model, transparency, and retention decision.
+- **Configurability has a cost.** Custom statuses, fields, templates, and gates come only with safe defaults, migration behavior, reporting meaning, and mobile usability.
+- **Migration and export are part of readiness.** Customer acceptance covers imports, open work, identifiers, linked artifacts, correction history, and export.
 
 ## Open Product Decisions
 
-- Which additional lifecycle cases, if any, do real service, installation, construction, warranty, or internal jobs expose beyond the fixed `P1-14` model?
-- Which blocking reasons and readiness checks are defaults, and which may organizations configure?
-- How deep should project structure go beyond project and job: phases, work packages, tasks, or only tagged/grouped jobs?
-- Can a job belong to more than one site, equipment item, or service case, and how should the primary context be shown?
-- How do team assignments, lead responsibility, required skills, tools, vehicles, and subcontractors fit without duplicating employee or inventory ownership?
-- Should applying a newer template to existing work ever offer a reviewed update, beyond the current immutable-version application in `P1-13`?
+- Do real service, installation, construction, warranty, or internal jobs need lifecycle cases beyond the fixed execution model?
+- Which blocking reasons and readiness checks are defaults, and which can organizations configure?
+- How deep does project structure go beyond project and job: phases, work packages, tasks, or only grouped jobs?
+- Can a job belong to more than one site, equipment item, or service case, and how is the primary context shown?
+- How do teams, lead responsibility, skills, tools, vehicles, and subcontractors fit without duplicating employee or inventory ownership?
+- Should applying a newer template to existing work ever offer a reviewed update?
 - What evidence is mandatory for common SHK work types, and who may override missing evidence?
-- What is the minimum useful structured `Bautagebuch`, `Aufmaß`, defect, and change-work artifact?
-- Which measurement standards and future GAEB/REB/VOB directions are required, for which workflows and versions?
-- What identity and evidence level is required for customer signatures and internal approvals?
+- What is the minimum useful `Bautagebuch`, `Aufmaß`, defect, and change-work record?
+- Which measurement standards and future GAEB, REB, or VOB directions are required, for which workflows and versions?
+- What identity and evidence level do customer signatures and internal approvals need?
 - How are customer refusal, partial acceptance, reservations, open defects, and later warranty claims represented?
-- When does taken material become consumed, returned, lost, damaged, or commercially billable, and who reviews unplanned use?
-- Which labor and cost inputs can field workers see, and which remain office-only?
-- What exact facts release work to commercial processing, and can commercial correction reopen an operational review without changing completed field evidence?
+- When does taken material become consumed, returned, lost, damaged, or billable, and who reviews unplanned use?
+- Which labor and cost inputs can field workers see, and which stay office-only?
+- Which facts release work to commercial processing, and can a commercial correction reopen an operational review without changing completed field evidence?
 - What data and actions must work offline in the first React Native release?
-- Which completion artifacts become customer-visible, service-visible, or exportable by default?
-- What retention, archive, deletion, and export rules apply to cancelled and completed work?
-
-## Related Docs
-
-- [Product capability map](../product/product-capability-map.md) — feature ownership, shared objects, and cross-feature handoff rules.
-- [Phase 1 roadmap](../plans/phase-1/roadmap.md) — slice order, current status, and links to per-slice acceptance records.
-- [User-flow catalog](../product/user-flow-catalog.md) — this feature's accepted user-visible flows by stable ID.
-- Connected feature specs: the **Connected Workflow Contracts** table above names every cross-feature contract; load only the specs the current slice names.
+- Which completion artifacts are visible to the customer, visible to service, or exportable by default?
+- Which retention, archive, deletion, and export rules apply to cancelled and completed work?

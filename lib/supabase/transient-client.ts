@@ -1,6 +1,6 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-import { getSupabasePublishableKey, getSupabaseUrl } from '@/lib/env/public'
+import { getSupabasePublishableKey, getSupabaseUrl } from '@/lib/env/public';
 
 export function createSupabaseTransientBrowserClient(): SupabaseClient {
   return createClient(getSupabaseUrl(), getSupabasePublishableKey(), {
@@ -9,5 +9,5 @@ export function createSupabaseTransientBrowserClient(): SupabaseClient {
       autoRefreshToken: false,
       detectSessionInUrl: false,
     },
-  })
+  });
 }

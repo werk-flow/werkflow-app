@@ -8,9 +8,8 @@ import { getLocalDayKey } from './day-utils';
  * a clock-in opens a session, breaks attach to the open session and a
  * clock-out closes it. Rows that never pair stay single-entry sessions.
  *
- * The earlier rule paired any two opposite-type rows of a user created within
- * five seconds, regardless of day; a bulk insert therefore welded hundreds of
- * unrelated rows into bogus multi-day sessions (2026-09-18).
+ * Pairing is never by creation time: rows of one bulk insert share it, and
+ * pairing them would weld unrelated rows into bogus multi-day sessions.
  */
 export type PendingEntryGroup = {
   /** Id of the row that opened the session (the clock-in when there is one). */

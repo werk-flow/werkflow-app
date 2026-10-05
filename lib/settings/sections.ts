@@ -106,7 +106,8 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     slug: 'auftraege-projekte',
     label: 'Aufträge & Projekte',
     shortDescription: 'Persönliche Tabellenansicht',
-    description: 'Steuert, welche Spalten du in der Aufträge-Ansicht innerhalb der aktiven Organisation sehen möchtest.',
+    description:
+      'Steuert, welche Spalten du in der Aufträge-Ansicht innerhalb der aktiven Organisation sehen möchtest.',
     icon: Briefcase,
     group: 'organization',
     scope: 'organization',

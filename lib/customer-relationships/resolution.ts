@@ -31,12 +31,9 @@ const TIMELINE_KINDS = new Set<TimelineKind>([
 ]);
 const TIMELINE_SOURCE_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const TIMELINE_TIMESTAMP_PATTERN =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+const TIMELINE_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 
-export function isTimelineCursorSafe(
-  cursor: Pick<TimelineCursor, 'occurredAt' | 'stableKey'>
-): boolean {
+export function isTimelineCursorSafe(cursor: Pick<TimelineCursor, 'occurredAt' | 'stableKey'>): boolean {
   const separatorIndex = cursor.stableKey.indexOf(':');
   if (separatorIndex <= 0) return false;
   const kind = cursor.stableKey.slice(0, separatorIndex) as TimelineKind;
@@ -55,16 +52,14 @@ export function timelineItemKey(kind: TimelineKind, sourceId: string): string {
 
 export function compareTimelineItems(
   left: Pick<TimelineItem, 'occurredAt' | 'stableKey'>,
-  right: Pick<TimelineItem, 'occurredAt' | 'stableKey'>
+  right: Pick<TimelineItem, 'occurredAt' | 'stableKey'>,
 ): number {
   const timeOrder = right.occurredAt.localeCompare(left.occurredAt);
   if (timeOrder !== 0) return timeOrder;
   return right.stableKey.localeCompare(left.stableKey);
 }
 
-function encodeTimelineCursor(
-  item: Pick<TimelineItem, 'occurredAt' | 'stableKey'>
-): string {
+function encodeTimelineCursor(item: Pick<TimelineItem, 'occurredAt' | 'stableKey'>): string {
   const cursor: TimelineCursor = {
     version: 1,
     occurredAt: item.occurredAt,
@@ -73,20 +68,14 @@ function encodeTimelineCursor(
   if (!isTimelineCursorSafe(cursor)) {
     throw new Error('Cannot encode an invalid timeline cursor.');
   }
-  return btoa(JSON.stringify(cursor))
-    .replaceAll('+', '-')
-    .replaceAll('/', '_')
-    .replace(/=+$/, '');
+  return btoa(JSON.stringify(cursor)).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
 }
 
 export function decodeTimelineCursor(value?: string | null): TimelineCursor | null {
   if (!value) return null;
   try {
     const normalized = value.replaceAll('-', '+').replaceAll('_', '/');
-    const padded = normalized.padEnd(
-      normalized.length + ((4 - (normalized.length % 4)) % 4),
-      '='
-    );
+    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
     const parsed = JSON.parse(atob(padded)) as Partial<TimelineCursor>;
     if (
       parsed.version !== 1 ||
@@ -104,7 +93,7 @@ export function decodeTimelineCursor(value?: string | null): TimelineCursor | nu
 
 function isTimelineItemAfterCursor(
   item: Pick<TimelineItem, 'occurredAt' | 'stableKey'>,
-  cursor: TimelineCursor
+  cursor: TimelineCursor,
 ): boolean {
   if (item.occurredAt < cursor.occurredAt) return true;
   if (item.occurredAt > cursor.occurredAt) return false;
@@ -114,7 +103,7 @@ function isTimelineItemAfterCursor(
 export function buildTimelinePage(
   candidates: TimelineItem[],
   cursorValue: string | null | undefined,
-  pageSize: number
+  pageSize: number,
 ): TimelinePage {
   const cursor = decodeTimelineCursor(cursorValue);
   const unique = new Map<string, TimelineItem>();
@@ -129,20 +118,14 @@ export function buildTimelinePage(
     .filter((item) => !cursor || isTimelineItemAfterCursor(item, cursor))
     .sort(compareTimelineItems);
   const items = ordered.slice(0, pageSize);
+  const lastItem = items.at(-1);
   return {
     items,
-    nextCursor:
-      ordered.length > pageSize && items.length > 0
-        ? encodeTimelineCursor(items[items.length - 1]!)
-        : null,
+    nextCursor: ordered.length > pageSize && lastItem ? encodeTimelineCursor(lastItem) : null,
   };
 }
 
-export function isFollowUpOverdue(
-  dueAt: string,
-  status: string,
-  now: Date = new Date()
-): boolean {
+export function isFollowUpOverdue(dueAt: string, status: string, now: Date = new Date()): boolean {
   return status === 'open' && Date.parse(dueAt) < now.getTime();
 }
 
@@ -155,10 +138,7 @@ export function resolveCommunicationGuidance(input: {
 }): CommunicationGuidance {
   const warnings: CommunicationGuidance['warnings'] = [];
   if (input.settings?.doNotContactInstruction) warnings.push('do_not_contact');
-  if (
-    input.settings?.preferredContactId &&
-    input.contactId !== input.settings.preferredContactId
-  ) {
+  if (input.settings?.preferredContactId && input.contactId !== input.settings.preferredContactId) {
     warnings.push('wrong_contact');
   }
 
@@ -169,13 +149,10 @@ export function resolveCommunicationGuidance(input: {
           (rule) =>
             rule.contactId === input.contactId &&
             rule.channel === input.channel &&
-            rule.purpose === input.purpose
+            rule.purpose === input.purpose,
         );
   const customerRule = input.preferences.find(
-    (rule) =>
-      rule.contactId === null &&
-      rule.channel === input.channel &&
-      rule.purpose === input.purpose
+    (rule) => rule.contactId === null && rule.channel === input.channel && rule.purpose === input.purpose,
   );
   const resolved = contactRule ?? customerRule ?? null;
   if (resolved?.state === 'disallowed') warnings.push('disallowed_channel');

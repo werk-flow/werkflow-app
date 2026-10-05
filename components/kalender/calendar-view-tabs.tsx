@@ -27,55 +27,121 @@ interface CalendarViewTabsProps {
   children?: ReactNode;
 }
 
-export function CalendarViewTabs({ view, onViewChange, members, selectedMemberIds, onSelectedMemberIdsChange, isAdminOrManager, showWorkingHours, onShowWorkingHoursChange, showJobs, onShowJobsChange, children }: CalendarViewTabsProps) {
+export function CalendarViewTabs({
+  view,
+  onViewChange,
+  members,
+  selectedMemberIds,
+  onSelectedMemberIdsChange,
+  isAdminOrManager,
+  showWorkingHours,
+  onShowWorkingHoursChange,
+  showJobs,
+  onShowJobsChange,
+  children,
+}: CalendarViewTabsProps) {
   const selectedCount = selectedMemberIds ? selectedMemberIds.length : members.length;
   return (
     // The tabs never give ground: the row wraps, and the active view's toolbar sits on its own row below.
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <Tabs value={view} onValueChange={(value) => onViewChange(value as CalendarView)} className="shrink-0">
-          <TabsList>
-            <TabsTrigger value="day">Tag</TabsTrigger>
-            <TabsTrigger value="week">{isAdminOrManager ? 'Plantafel' : 'Woche'}</TabsTrigger>
-            <TabsTrigger value="month">Monat</TabsTrigger>
+        <Tabs
+          value={view}
+          onValueChange={(value) => onViewChange(value as CalendarView)}
+          className="shrink-0"
+        >
+          <TabsList className="h-11 p-0 sm:h-9 sm:p-0.5">
+            <TabsTrigger className="h-11 sm:h-8" value="day">
+              Tag
+            </TabsTrigger>
+            <TabsTrigger className="h-11 sm:h-8" value="week">
+              {isAdminOrManager ? 'Plantafel' : 'Woche'}
+            </TabsTrigger>
+            <TabsTrigger className="h-11 sm:h-8" value="month">
+              Monat
+            </TabsTrigger>
           </TabsList>
         </Tabs>
 
-        <div role="group" aria-label="Angezeigte Einträge" className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-          <label className="flex cursor-pointer select-none items-center gap-2">
-            <Checkbox checked={showWorkingHours} onCheckedChange={(checked) => onShowWorkingHoursChange(checked === true)} />
-            <span className={cn('transition-colors', showWorkingHours ? 'text-foreground' : 'text-muted-foreground')}>Arbeitszeiten</span>
+        <div
+          role="group"
+          aria-label="Angezeigte Einträge"
+          className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm"
+        >
+          <label className="flex min-h-11 cursor-pointer select-none items-center gap-2 sm:min-h-0">
+            <Checkbox
+              checked={showWorkingHours}
+              onCheckedChange={(checked) => onShowWorkingHoursChange(checked === true)}
+            />
+            <span
+              className={cn(
+                'transition-colors',
+                showWorkingHours ? 'text-foreground' : 'text-muted-foreground',
+              )}
+            >
+              Arbeitszeiten
+            </span>
           </label>
-          <label className="flex cursor-pointer select-none items-center gap-2">
-            <Checkbox checked={showJobs} onCheckedChange={(checked) => onShowJobsChange(checked === true)} className="data-[state=checked]:border-calendar-planning-strong data-[state=checked]:bg-calendar-planning-strong data-[state=checked]:text-white" />
-            <span className={cn('transition-colors', showJobs ? 'text-foreground' : 'text-muted-foreground')}>Termine</span>
+          <label className="flex min-h-11 cursor-pointer select-none items-center gap-2 sm:min-h-0">
+            <Checkbox
+              checked={showJobs}
+              onCheckedChange={(checked) => onShowJobsChange(checked === true)}
+              className="data-[state=checked]:border-calendar-planning-strong data-[state=checked]:bg-calendar-planning-strong data-[state=checked]:text-white"
+            />
+            <span className={cn('transition-colors', showJobs ? 'text-foreground' : 'text-muted-foreground')}>
+              Termine
+            </span>
           </label>
         </div>
 
         {isAdminOrManager && members.length > 0 && (
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" size="sm" className="ml-auto h-9">
-              <Filter className="mr-2 size-4" aria-hidden="true" />
-              Mitarbeiter ({selectedCount})
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[min(20rem,calc(100vw-1rem))] space-y-3 p-3 sm:w-80" align="end" collisionPadding={8}>
-            <SearchableMultiSelect
-              options={members.map((member) => ({ value: member.user_id, label: memberDisplayName(member), description: member.email }))}
-              selectedIds={selectedMemberIds ?? members.map((member) => member.user_id)}
-              onSelectionChange={(ids) => onSelectedMemberIdsChange(ids.length === members.length ? null : ids)}
-              placeholder="Mitarbeiter wählen"
-              ariaLabel="Mitarbeiter filtern"
-              searchPlaceholder="Mitarbeiter suchen …"
-              emptyMessage="Keine Mitarbeiter gefunden"
-            />
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => onSelectedMemberIdsChange(null)}>Alle auswählen</Button>
-              <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => onSelectedMemberIdsChange([])}>Keine auswählen</Button>
-            </div>
-          </PopoverContent>
-        </Popover>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="ml-auto h-11 sm:h-9">
+                <Filter className="mr-2 size-4" aria-hidden="true" />
+                Mitarbeiter ({selectedCount})
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent
+              className="w-[min(20rem,calc(100vw-1rem))] space-y-3 p-3 sm:w-80"
+              align="end"
+              collisionPadding={8}
+            >
+              <SearchableMultiSelect
+                options={members.map((member) => ({
+                  value: member.user_id,
+                  label: memberDisplayName(member),
+                  description: member.email,
+                }))}
+                selectedIds={selectedMemberIds ?? members.map((member) => member.user_id)}
+                onSelectionChange={(ids) =>
+                  onSelectedMemberIdsChange(ids.length === members.length ? null : ids)
+                }
+                placeholder="Mitarbeiter wählen"
+                ariaLabel="Mitarbeiter filtern"
+                searchPlaceholder="Mitarbeiter suchen …"
+                emptyMessage="Keine Mitarbeiter gefunden"
+              />
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 text-xs"
+                  onClick={() => onSelectedMemberIdsChange(null)}
+                >
+                  Alle auswählen
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 text-xs"
+                  onClick={() => onSelectedMemberIdsChange([])}
+                >
+                  Keine auswählen
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
         )}
       </div>
       {children}

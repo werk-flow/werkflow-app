@@ -1,5 +1,11 @@
 begin;
 
+create function pg_temp.timeline_fence() returns jsonb language sql as $$
+  select jsonb_build_object('timelineRevision', coalesce((select revision from public.time_timeline_revisions
+    where organization_id = '22000000-0000-0000-0000-000000000010'), 0));
+$$;
+
+
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
   raw_app_meta_data, raw_user_meta_data, created_at, updated_at
@@ -94,6 +100,8 @@ begin
       'kind', 'legacy_entry', 'id', '22000000-0000-0000-0000-000000000020',
       'version', v_source_version
     ))
+  ,
+    p_responsibility_snapshot => pg_temp.timeline_fence()
   );
   v_request_id := (v_result->>'requestId')::uuid;
   if v_result->>'status' <> 'submitted' then
@@ -101,6 +109,8 @@ begin
   end if;
   if (select status from public.time_entries where id = '22000000-0000-0000-0000-000000000020') <> 'approved'
   then raise exception 'pending proposal mutated its source'; end if;
+  if exists (select 1 from public.time_correction_applications where request_id = v_request_id)
+  then raise exception 'a submitted proposal created an application before any decision'; end if;
 
   v_result := public.create_time_correction_request(
     p_organization_id => '22000000-0000-0000-0000-000000000010',
@@ -115,6 +125,8 @@ begin
       'kind', 'legacy_entry', 'id', '22000000-0000-0000-0000-000000000020',
       'version', v_source_version
     ))
+  ,
+    p_responsibility_snapshot => pg_temp.timeline_fence()
   );
   if (v_result->>'replayed')::boolean is not true
     or (v_result->>'requestId')::uuid <> v_request_id
@@ -123,8 +135,8 @@ begin
   begin
     perform public.decide_time_correction(
       v_request_id, '22000000-0000-0000-0000-000000000003',
-      '22000000-0000-0000-0000-000000000031', 1, 'approve', null, '{}'
-    );
+      '22000000-0000-0000-0000-000000000031', 1, 'approve', null, ('{}')::jsonb || pg_temp.timeline_fence()
+  );
     raise exception 'self approval was accepted';
   exception when others then
     if sqlerrm not like '%time_correction_self_approval_forbidden%' then raise; end if;
@@ -133,10 +145,12 @@ begin
   perform public.decide_time_correction(
     v_request_id, '22000000-0000-0000-0000-000000000001',
     '22000000-0000-0000-0000-000000000032', 1, 'clarify',
-    'Bitte den Grund genauer beschreiben.', '{}'
+    'Bitte den Grund genauer beschreiben.', ('{}')::jsonb || pg_temp.timeline_fence()
   );
   if (select count(*) from public.time_correction_request_revisions where request_id = v_request_id) <> 1
   then raise exception 'clarification changed immutable revision'; end if;
+  if (select status from public.time_correction_requests where id = v_request_id) <> 'clarification_required'
+  then raise exception 'clarification did not return the request to its requester'; end if;
 
   v_result := public.revise_time_correction_request(
     v_request_id, '22000000-0000-0000-0000-000000000003',
@@ -150,15 +164,40 @@ begin
   if (v_result->>'revision')::bigint <> 2
     or (select count(*) from public.time_correction_request_revisions where request_id = v_request_id) <> 2
   then raise exception 'clarification revision was not appended'; end if;
+  if (
+    select reason from public.time_correction_request_revisions
+    where request_id = v_request_id and revision = 1
+  ) <> 'Doppelter Eintrag'
+  then raise exception 'the answer rewrote the original revision'; end if;
+  if (select status from public.time_correction_requests where id = v_request_id) <> 'submitted'
+    or not exists (
+      select 1 from public.time_correction_events
+      where request_id = v_request_id and revision = 1 and event_type = 'submitted'
+    ) or not exists (
+      select 1 from public.time_correction_events
+      where request_id = v_request_id and revision = 1 and event_type = 'clarification_requested'
+        and comment = 'Bitte den Grund genauer beschreiben.'
+    ) or not exists (
+      select 1 from public.time_correction_events
+      where request_id = v_request_id and revision = 2 and event_type = 'resubmitted'
+        and actor_id = '22000000-0000-0000-0000-000000000003'
+    ) or exists (
+      select 1 from public.time_correction_applications where request_id = v_request_id
+    )
+  then raise exception 'the clarification round trip lost an event or applied the proposal'; end if;
 
   perform public.decide_time_correction(
     v_request_id, '22000000-0000-0000-0000-000000000001',
-    '22000000-0000-0000-0000-000000000034', 2, 'approve', null,
-    '{"mode":"role_default","role":"admin"}'
+    '22000000-0000-0000-0000-000000000034', 2, 'approve', null, ('{"mode":"role_default","role":"admin"}')::jsonb || pg_temp.timeline_fence()
   );
+  if (
+    select count(*) from public.time_correction_applications where request_id = v_request_id
+  ) <> 1 then raise exception 'approved snapshot was not applied exactly once'; end if;
   if not exists (
-    select 1 from public.time_correction_applications where request_id = v_request_id
-  ) then raise exception 'approved snapshot was not applied'; end if;
+    select 1 from public.time_entries
+    where id = '22000000-0000-0000-0000-000000000020'
+      and timestamp = '2026-09-01T06:00:00Z' and status = 'approved'
+  ) then raise exception 'applying a correction rewrote its original source entry'; end if;
 
   v_result := public.create_time_correction_request(
     p_organization_id => '22000000-0000-0000-0000-000000000010',
@@ -173,13 +212,15 @@ begin
       'kind', 'legacy_entry', 'id', '22000000-0000-0000-0000-000000000020',
       'version', v_source_version
     ))
+  ,
+    p_responsibility_snapshot => pg_temp.timeline_fence()
   );
   v_duplicate_request_id := (v_result->>'requestId')::uuid;
   begin
     perform public.decide_time_correction(
       v_duplicate_request_id, '22000000-0000-0000-0000-000000000001',
-      '22000000-0000-0000-0000-000000000047', 1, 'approve', null, '{}'
-    );
+      '22000000-0000-0000-0000-000000000047', 1, 'approve', null, ('{}')::jsonb || pg_temp.timeline_fence()
+  );
     raise exception 'the same source was applied twice';
   exception when others then
     if sqlerrm not like '%time_correction_source_already_applied%' then raise; end if;
@@ -214,7 +255,7 @@ begin
         'jobId', null, 'activityKind', null, 'isManual', true
       )
     )),
-    '[]', '{"mode":"role_default","role":"buero"}'
+    '[]', ('{"mode":"role_default","role":"buero"}')::jsonb || pg_temp.timeline_fence()
   );
   v_direct_request_id := (v_result->>'requestId')::uuid;
   if v_result->>'status' <> 'approved' or not exists (
@@ -235,8 +276,8 @@ begin
           'entryType', 'clock_in', 'timestamp', '2026-09-01T15:00:00Z',
           'jobId', null, 'activityKind', null, 'isManual', true
         )
-      )), '[]', '{"mode":"role_default","role":"buero"}'
-    );
+      )), '[]', ('{"mode":"role_default","role":"buero"}')::jsonb || pg_temp.timeline_fence()
+  );
     raise exception 'out-of-scope reassignment was accepted';
   exception when others then
     if sqlerrm not like '%time_correction_reassignment_not_responsible%' then raise; end if;
@@ -248,7 +289,7 @@ begin
     '22000000-0000-0000-0000-000000000036', 'add', 'Erster Nachtrag',
     repeat('e', 64), repeat('f', 64),
     '{"schemaVersion":1,"facts":[]}', '{"schemaVersion":1,"facts":[]}',
-    '[]', '{}'
+    '[]', ('{}')::jsonb || pg_temp.timeline_fence()
   );
   v_request_two_id := (v_result->>'requestId')::uuid;
   v_result := public.create_time_correction_request(
@@ -257,7 +298,7 @@ begin
     '22000000-0000-0000-0000-000000000037', 'add', 'Zweiter Nachtrag',
     repeat('1', 64), repeat('2', 64),
     '{"schemaVersion":1,"facts":[]}', '{"schemaVersion":1,"facts":[]}',
-    '[]', '{}'
+    '[]', ('{}')::jsonb || pg_temp.timeline_fence()
   );
   v_request_three_id := (v_result->>'requestId')::uuid;
   begin
@@ -267,8 +308,8 @@ begin
       '22000000-0000-0000-0000-000000000045', 'add', 'Null-Quelle',
       repeat('9', 64), repeat('0', 64),
       '{"schemaVersion":1,"facts":[]}', '{"schemaVersion":1,"facts":[]}',
-      null, '{}'
-    );
+      null, ('{}')::jsonb || pg_temp.timeline_fence()
+  );
     raise exception 'null source array was accepted';
   exception when others then
     if sqlerrm not like '%time_correction_invalid_input%' then raise; end if;
@@ -290,7 +331,7 @@ begin
           'timestamp', '2026-09-01T16:00:00Z', 'jobId', null,
           'activityKind', null, 'isManual', true
         )
-      )), '{}'
+      )), pg_temp.timeline_fence()
     );
     raise exception 'application with a missing target user was accepted';
   exception when others then
@@ -306,7 +347,7 @@ begin
       '22000000-0000-0000-0000-000000000001',
       '22000000-0000-0000-0000-000000000044', repeat('8', 64),
       '{"schemaVersion":1,"facts":[]}',
-      '{"schemaVersion":1,"facts":{}}', '{}'
+      '{"schemaVersion":1,"facts":{}}', pg_temp.timeline_fence()
     );
     raise exception 'application with non-array facts was accepted';
   -- P1-23's period guard rejects malformed snapshots before target validation.
@@ -324,8 +365,8 @@ begin
       array[
         '22000000-0000-0000-0000-000000000038'::uuid,
         '22000000-0000-0000-0000-000000000039'::uuid
-      ], array[1::bigint, 9::bigint], 'approve', null, '{}'
-    );
+      ], array[1::bigint, 9::bigint], 'approve', null, ('{}')::jsonb || pg_temp.timeline_fence()
+  );
     raise exception 'stale batch was accepted';
   exception when others then
     if sqlerrm not like '%time_correction_stale_revision%' then raise; end if;
@@ -366,8 +407,8 @@ begin
       '22000000-0000-0000-0000-000000000041', 'add', 'Fremder Nachtrag',
       repeat('3', 64), repeat('4', 64),
       '{"schemaVersion":1,"facts":[]}', '{"schemaVersion":1,"facts":[]}',
-      '[]', '{}'
-    );
+      '[]', ('{}')::jsonb || pg_temp.timeline_fence()
+  );
     raise exception 'non-member request was accepted';
   exception when others then
     if sqlerrm not like '%time_correction_not_a_member%' then raise; end if;
@@ -401,6 +442,148 @@ begin
   ) then raise exception 'request root was not published'; end if;
 end;
 $$;
+
+-- The server validates a composed timeline before calling the write RPC. A raw
+-- write between validation and approval must invalidate that result, including
+-- when a preceding batch already established a transaction-local fence.
+do $$
+declare
+  v_employee uuid;
+  v_requests uuid[] := '{}';
+  v_result jsonb;
+  v_fence jsonb;
+  v_snapshot jsonb;
+  v_index integer;
+begin
+  select id into v_employee from public.employee_records
+  where organization_id = '22000000-0000-0000-0000-000000000010'
+    and user_id = '22000000-0000-0000-0000-000000000003';
+  v_snapshot := jsonb_build_object('schemaVersion', 1, 'facts', jsonb_build_array(
+    jsonb_build_object('factId', 'start', 'employeeRecordId', v_employee,
+      'userId', '22000000-0000-0000-0000-000000000003', 'entryType', 'clock_in',
+      'timestamp', '2026-08-10T20:00:00Z', 'jobId', null, 'activityKind', 'work', 'isManual', true),
+    jsonb_build_object('factId', 'end', 'employeeRecordId', v_employee,
+      'userId', '22000000-0000-0000-0000-000000000003', 'entryType', 'clock_out',
+      'timestamp', '2026-08-11T04:00:00Z', 'jobId', null, 'activityKind', 'work', 'isManual', true)
+  ));
+  for v_index in 1..3 loop
+    v_result := public.create_time_correction_request(
+      '22000000-0000-0000-0000-000000000010', v_employee,
+      '22000000-0000-0000-0000-000000000003', gen_random_uuid(), 'add', 'SQL revision test',
+      md5('fence-scope-' || v_index)::text || md5('fence-scope-' || v_index)::text,
+      repeat('f', 64), '{"schemaVersion":1,"facts":[]}', v_snapshot, '[]', pg_temp.timeline_fence()
+    );
+    v_requests := array_append(v_requests, (v_result->>'requestId')::uuid);
+  end loop;
+  v_fence := pg_temp.timeline_fence();
+  perform public.decide_time_correction_batch(v_requests[1:2],
+    '22000000-0000-0000-0000-000000000001', array[gen_random_uuid(), gen_random_uuid()],
+    array[1::bigint, 1::bigint], 'approve', null, v_fence);
+  if (select count(*) from public.time_correction_applications where request_id = any(v_requests)) <> 2
+  then raise exception 'one validated batch did not apply both requests'; end if;
+  update public.time_entries set timestamp = timestamp
+  where id = '22000000-0000-0000-0000-000000000020';
+  begin
+    perform public.decide_time_correction(v_requests[3],
+      '22000000-0000-0000-0000-000000000001', gen_random_uuid(), 1, 'approve', null, v_fence);
+    raise exception 'stale timeline revision was accepted';
+  exception when others then
+    if sqlerrm <> 'time_correction_timeline_changed' then raise; end if;
+  end;
+  if exists (select 1 from public.time_correction_applications where request_id = v_requests[3])
+  then raise exception 'stale timeline rejection left an application'; end if;
+  perform public.decide_time_correction(v_requests[3],
+    '22000000-0000-0000-0000-000000000001', gen_random_uuid(), 1, 'approve', null, pg_temp.timeline_fence());
+  if (select count(*) from public.read_time_correction_applications(
+    '22000000-0000-0000-0000-000000000010', array['22000000-0000-0000-0000-000000000003'::uuid],
+    '2026-08-10T23:00:00Z', '2026-08-11T01:00:00Z') where request_id = any(v_requests)) <> 3
+  then raise exception 'window read lost overnight intervals with endpoints outside the window'; end if;
+  if exists (select 1 from public.read_time_correction_applications(
+    '22000000-0000-0000-0000-000000000010', array['22000000-0000-0000-0000-000000000004'::uuid]))
+  then raise exception 'scoped projection included another employee'; end if;
+  if has_table_privilege('authenticated', 'public.time_timeline_revisions', 'SELECT')
+    or has_function_privilege('authenticated', 'public.read_time_correction_applications(uuid,uuid[],timestamptz,timestamptz)', 'EXECUTE')
+  then raise exception 'private timeline context is client-readable'; end if;
+end;
+$$;
+
+do $$
+declare
+  v_original_employee uuid;
+  v_recipient_employee uuid;
+  v_snapshot jsonb;
+  v_request jsonb;
+  v_application uuid;
+  v_sources jsonb;
+begin
+  select id into v_original_employee from public.employee_records
+  where organization_id = '22000000-0000-0000-0000-000000000010' and user_id = '22000000-0000-0000-0000-000000000003';
+  select id into v_recipient_employee from public.employee_records
+  where organization_id = '22000000-0000-0000-0000-000000000010' and user_id = '22000000-0000-0000-0000-000000000002';
+  v_snapshot := jsonb_build_object('schemaVersion', 1, 'facts', jsonb_build_array(jsonb_build_object(
+    'factId', 'reassigned', 'employeeRecordId', v_recipient_employee,
+    'userId', '22000000-0000-0000-0000-000000000002', 'entryType', 'clock_in',
+    'timestamp', '2026-08-12T06:00:00Z', 'jobId', null, 'activityKind', 'work', 'isManual', true)));
+  v_request := public.create_time_correction_request(
+    '22000000-0000-0000-0000-000000000010', v_original_employee,
+    '22000000-0000-0000-0000-000000000001', gen_random_uuid(), 'add', 'Reassigned owner fixture',
+    repeat('8', 64), repeat('9', 64), '{"schemaVersion":1,"facts":[]}', v_snapshot, '[]', pg_temp.timeline_fence());
+  select id into v_application from public.time_correction_applications where request_id = (v_request->>'requestId')::uuid;
+  if v_application is null then raise exception 'reassignment fixture was not applied'; end if;
+  v_sources := jsonb_build_array(jsonb_build_object('kind', 'correction_application', 'id', v_application, 'version', repeat('9', 64)));
+  v_request := public.create_time_correction_request(
+    '22000000-0000-0000-0000-000000000010', v_recipient_employee,
+    '22000000-0000-0000-0000-000000000002', gen_random_uuid(), 'edit', 'Recipient corrects own time',
+    repeat('6', 64), repeat('5', 64), v_snapshot, v_snapshot, v_sources, pg_temp.timeline_fence());
+  if v_request->>'status' <> 'submitted' then raise exception 'recipient approved their own correction'; end if;
+  if not exists (select 1 from public.read_time_correction_applications(
+    '22000000-0000-0000-0000-000000000010', array['22000000-0000-0000-0000-000000000002'::uuid]) where id = v_application)
+  then raise exception 'recipient projection omitted reassigned time'; end if;
+end;
+$$;
+
+-- P1-22-F44/F45: the requester reads their own corrections; a member of a
+-- foreign organization reads no request, revision, source, event or application.
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"22000000-0000-0000-0000-000000000003","role":"authenticated"}',
+  true
+);
+do $$
+begin
+  if not exists (
+    select 1 from public.time_correction_requests
+    where organization_id = '22000000-0000-0000-0000-000000000010'
+  ) then raise exception 'requester cannot read their own corrections'; end if;
+end;
+$$;
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"22000000-0000-0000-0000-000000000004","role":"authenticated"}',
+  true
+);
+do $$
+begin
+  if exists (
+    select 1 from public.time_correction_requests
+    where organization_id = '22000000-0000-0000-0000-000000000010'
+  ) or exists (
+    select 1 from public.time_correction_request_revisions
+    where organization_id = '22000000-0000-0000-0000-000000000010'
+  ) or exists (
+    select 1 from public.time_correction_request_sources
+    where organization_id = '22000000-0000-0000-0000-000000000010'
+  ) or exists (
+    select 1 from public.time_correction_events
+    where organization_id = '22000000-0000-0000-0000-000000000010'
+  ) or exists (
+    select 1 from public.time_correction_applications
+    where organization_id = '22000000-0000-0000-0000-000000000010'
+  ) then raise exception 'outsider read correction rows of another organization'; end if;
+end;
+$$;
+set local role service_role;
 
 delete from public.organizations
 where id = '22000000-0000-0000-0000-000000000010';

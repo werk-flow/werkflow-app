@@ -3,24 +3,17 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-import {
-  MetadataSection,
-  type MetadataField,
-} from '@/components/shared/metadata-section';
-import {
-  updatePersonnelMasterData,
-  type PersonnelMasterDataPatch,
-} from '@/lib/personnel/actions';
+import { MetadataSection, type MetadataField } from '@/components/shared/metadata-section';
+import { updatePersonnelMasterData, type PersonnelMasterDataPatch } from '@/lib/personnel/actions';
 import type { EmployeeRecord } from '@/lib/personnel/types';
 import { ErrorText } from '@/components/ui/error-text';
+import { describeFailure } from '@/lib/action-messages';
 
-const SAVE_ERROR_MESSAGES: Record<string, string> = {
+const SAVE_ERROR_MESSAGES: Readonly<Record<string, string>> = {
   number_taken: 'Diese Personalnummer ist in der Organisation bereits vergeben.',
   exit_before_entry: 'Das Austrittsdatum darf nicht vor dem Eintrittsdatum liegen.',
   invalid_date: 'Bitte gib ein gültiges Datum ein.',
-  name_managed_by_profile:
-    'Der Name wird über das Profil des Mitarbeiters verwaltet.',
-  not_authorized: 'Du bist nicht berechtigt, Personaldaten zu ändern.',
+  name_managed_by_profile: 'Der Name wird über das Profil des Mitarbeiters verwaltet.',
   record_not_found: 'Die Personalakte wurde nicht gefunden.',
 };
 
@@ -41,8 +34,11 @@ export function PersonalienSection({ record, canEdit }: PersonalienSectionProps)
       });
       if (!result.success) {
         setSaveError(
-          SAVE_ERROR_MESSAGES[result.error ?? ''] ??
-            'Die Änderung konnte nicht gespeichert werden.'
+          describeFailure(
+            result.error ?? '',
+            SAVE_ERROR_MESSAGES,
+            'Die Änderung konnte nicht gespeichert werden.',
+          ),
         );
         throw new Error(result.error ?? 'update_failed');
       }
@@ -54,7 +50,7 @@ export function PersonalienSection({ record, canEdit }: PersonalienSectionProps)
     label: string,
     key: keyof PersonnelMasterDataPatch,
     value: string | null,
-    options?: { placeholder?: string }
+    options?: { placeholder?: string },
   ): MetadataField => ({
     label,
     value: value || '—',
@@ -72,7 +68,7 @@ export function PersonalienSection({ record, canEdit }: PersonalienSectionProps)
   const dateField = (
     label: string,
     key: keyof PersonnelMasterDataPatch,
-    value: string | null
+    value: string | null,
   ): MetadataField => ({
     label,
     value: value
@@ -103,7 +99,7 @@ export function PersonalienSection({ record, canEdit }: PersonalienSectionProps)
   if (!record.userId) {
     fields.push(
       textField('Vorname', 'firstName', record.firstName),
-      textField('Nachname', 'lastName', record.lastName)
+      textField('Nachname', 'lastName', record.lastName),
     );
   }
 
@@ -113,17 +109,8 @@ export function PersonalienSection({ record, canEdit }: PersonalienSectionProps)
     textField('Straße', 'street', record.street),
     textField('PLZ', 'postalCode', record.postalCode),
     textField('Ort', 'city', record.city),
-    textField(
-      'Notfallkontakt',
-      'emergencyContactName',
-      record.emergencyContactName,
-      { placeholder: 'Name' }
-    ),
-    textField(
-      'Notfallkontakt Telefon',
-      'emergencyContactPhone',
-      record.emergencyContactPhone
-    ),
+    textField('Notfallkontakt', 'emergencyContactName', record.emergencyContactName, { placeholder: 'Name' }),
+    textField('Notfallkontakt Telefon', 'emergencyContactPhone', record.emergencyContactPhone),
     dateField('Eintrittsdatum', 'entryDate', record.entryDate),
     dateField('Austrittsdatum', 'exitDate', record.exitDate),
     {
@@ -137,7 +124,7 @@ export function PersonalienSection({ record, canEdit }: PersonalienSectionProps)
             nullable: true,
           }
         : undefined,
-    }
+    },
   );
 
   return (

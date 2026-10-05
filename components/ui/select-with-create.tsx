@@ -3,10 +3,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Plus } from 'lucide-react';
 
-import {
-  SearchableSelect,
-  type SearchableSelectOption,
-} from '@/components/ui/searchable-select';
+import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
 
 /**
  * Entity select with an inline „Neu erstellen" action (component registry in
@@ -56,7 +53,10 @@ export function SelectWithCreate<T>({
   placeholder,
   searchPlaceholder,
   emptyMessage,
-  onSearchChange, loading, loadError, onLoadMore,
+  onSearchChange,
+  loading,
+  loadError,
+  onLoadMore,
   disabled,
   allowNone,
   noneLabel,
@@ -77,10 +77,7 @@ export function SelectWithCreate<T>({
     return merged;
   }, [items, localItems, getOption]);
 
-  const options = useMemo(
-    () => mergedItems.map(getOption),
-    [mergedItems, getOption]
-  );
+  const options = useMemo(() => mergedItems.map(getOption), [mergedItems, getOption]);
 
   function handleCreated(item: T) {
     setLocalItems((current) => [...current, item]);
@@ -98,7 +95,10 @@ export function SelectWithCreate<T>({
         placeholder={placeholder}
         searchPlaceholder={searchPlaceholder}
         emptyMessage={emptyMessage}
-        onSearchChange={onSearchChange} loading={loading} loadError={loadError} onLoadMore={onLoadMore}
+        onSearchChange={onSearchChange}
+        loading={loading}
+        loadError={loadError}
+        onLoadMore={onLoadMore}
         disabled={disabled}
         allowNone={allowNone}
         noneLabel={noneLabel}

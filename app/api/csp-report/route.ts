@@ -27,6 +27,7 @@ export async function POST(request: NextRequest) {
   }
   const violation = summarizeCspReport(body);
   if (violation) {
+    // eslint-disable-next-line no-restricted-properties -- the summary is reviewed and redacted by summarizeCspReport (no sample, no query string); logError from lib/logging.ts would drop the directive and blocked origin the nonce backlog needs
     console.warn('[csp-report]', JSON.stringify(violation));
   }
   return new NextResponse(null, { status: 204 });

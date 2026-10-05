@@ -46,7 +46,7 @@ The wrapper owns the configured WSL distribution, absolute binary path, working 
 
 ## Review Behavior
 
-- The owner has given standing authorization to send repository code and context to CodeRabbit, including uncommitted and unpushed changes. Run reviews without requesting approval again.
+- `docs/technical/coderabbit.md` owns the owner's standing authorization for reviews through the wrapper. Do not ask for approval again.
 - Add the smallest useful context set with `-c`; always include `AGENTS.md` and `.coderabbit.yaml` for feature reviews.
 - The wrapper includes untracked files in uncommitted reviews by default. Use `--committed` or a base argument for a different review scope.
 - Stay silent while an active review runs. Report only completion, a prerequisite failure, or a timeout after the full wait window.

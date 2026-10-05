@@ -14,7 +14,7 @@ function segment(
   kind: TimeSegmentFact['kind'],
   startedAt: string,
   endedAt: string | null,
-  jobId: string | null = null
+  jobId: string | null = null,
 ): TimeSegmentFact {
   return {
     ...createActivitySelection(kind, jobId),
@@ -51,41 +51,47 @@ describe('canonical time segment projections', () => {
       travelRoute: 'site_to_site',
       travelRole: 'driver',
     });
-    expect(toTimeSegmentFact({
-      ...baseRow,
-      kind: 'standby',
-      allocation_kind: 'none',
-      travel_route: null,
-      travel_role: null,
-      standby_context: 'remote',
-    })).toMatchObject({
+    expect(
+      toTimeSegmentFact({
+        ...baseRow,
+        kind: 'standby',
+        allocation_kind: 'none',
+        travel_route: null,
+        travel_role: null,
+        standby_context: 'remote',
+      }),
+    ).toMatchObject({
       kind: 'standby',
       allocationKind: 'none',
       standbyContext: 'remote',
     });
-    expect(toTimeSegmentFact({
-      ...baseRow,
-      kind: 'internal_activity',
-      allocation_kind: 'internal_activity',
-      internal_type: 'training',
-      travel_route: null,
-      travel_role: null,
-    })).toMatchObject({
+    expect(
+      toTimeSegmentFact({
+        ...baseRow,
+        kind: 'internal_activity',
+        allocation_kind: 'internal_activity',
+        internal_type: 'training',
+        travel_route: null,
+        travel_role: null,
+      }),
+    ).toMatchObject({
       kind: 'internal_activity',
       allocationKind: 'internal_activity',
       internalType: 'training',
     });
-    expect(() => toTimeSegmentFact({
-      ...baseRow,
-      allocation_kind: 'none',
-    })).toThrow('Invalid canonical time segment shape: segment');
+    expect(() =>
+      toTimeSegmentFact({
+        ...baseRow,
+        allocation_kind: 'none',
+      }),
+    ).toThrow('Invalid canonical time segment shape: segment');
   });
 
   test('clamps duration to the requested range', () => {
     const minutes = getSegmentDurationMinutes(
       segment('work', '2026-08-30T21:00:00.000Z', '2026-08-31T06:00:00.000Z'),
       new Date('2026-08-30T22:00:00.000Z'),
-      new Date('2026-08-31T22:00:00.000Z')
+      new Date('2026-08-31T22:00:00.000Z'),
     );
     expect(minutes).toBe(480);
   });
@@ -95,8 +101,8 @@ describe('canonical time segment projections', () => {
       splitSegmentAtLocalDayBoundaries(
         segment('work', '2026-08-30T21:30:00.000Z', '2026-08-31T01:30:00.000Z'),
         new Date('2026-08-30T00:00:00.000Z'),
-        new Date('2026-09-01T00:00:00.000Z')
-      )
+        new Date('2026-09-01T00:00:00.000Z'),
+      ),
     ).toEqual([
       {
         startedAt: '2026-08-30T21:30:00.000Z',
@@ -114,8 +120,8 @@ describe('canonical time segment projections', () => {
       splitSegmentAtLocalDayBoundaries(
         segment('work', '2026-03-28T22:30:00.000Z', '2026-03-29T02:30:00.000Z'),
         new Date('2026-03-28T00:00:00.000Z'),
-        new Date('2026-03-30T00:00:00.000Z')
-      )
+        new Date('2026-03-30T00:00:00.000Z'),
+      ),
     ).toEqual([
       {
         startedAt: '2026-03-28T22:30:00.000Z',
@@ -134,8 +140,8 @@ describe('canonical time segment projections', () => {
         segment('work', '2026-08-31T08:00:00.000Z', null),
         new Date('2026-08-31T00:00:00.000Z'),
         new Date('2026-08-31T10:00:00.000Z'),
-        new Date('2026-08-31T12:00:00.000Z')
-      )
+        new Date('2026-08-31T12:00:00.000Z'),
+      ),
     ).toEqual([
       {
         startedAt: '2026-08-31T08:00:00.000Z',
@@ -179,8 +185,8 @@ describe('canonical time segment projections', () => {
         segments,
         new Date('2026-08-31T00:00:00.000Z'),
         new Date('2026-09-01T00:00:00.000Z'),
-        new Date('2026-08-31T11:00:00.000Z')
-      ).map(({ entryType, timestamp }) => ({ entryType, timestamp }))
+        new Date('2026-08-31T11:00:00.000Z'),
+      ).map(({ entryType, timestamp }) => ({ entryType, timestamp })),
     ).toEqual([
       { entryType: 'clock_in', timestamp: '2026-08-31T08:00:00.000Z' },
       { entryType: 'break_start', timestamp: '2026-08-31T10:00:00.000Z' },
@@ -198,8 +204,8 @@ describe('canonical time segment projections', () => {
       projectTimeSegmentsToLegacyTransitions(
         segments,
         new Date('2026-08-31T00:00:00.000Z'),
-        new Date('2026-09-01T00:00:00.000Z')
-      ).map(({ entryType }) => entryType)
+        new Date('2026-09-01T00:00:00.000Z'),
+      ).map(({ entryType }) => entryType),
     ).toEqual(['clock_in', 'break_start', 'break_end', 'clock_out']);
   });
 
@@ -217,7 +223,7 @@ describe('canonical time segment projections', () => {
     const points = projectTimeSegmentsToLegacyTransitions(
       [overnight, second],
       new Date('2026-08-30T00:00:00.000Z'),
-      new Date('2026-09-01T00:00:00.000Z')
+      new Date('2026-09-01T00:00:00.000Z'),
     );
 
     const overnightTypes = points
@@ -226,12 +232,7 @@ describe('canonical time segment projections', () => {
     const secondTypes = points
       .filter((point) => point.segmentId === second.id)
       .map((point) => point.entryType);
-    expect(overnightTypes).toEqual([
-      'clock_in',
-      'clock_out',
-      'clock_in',
-      'clock_out',
-    ]);
+    expect(overnightTypes).toEqual(['clock_in', 'clock_out', 'clock_in', 'clock_out']);
     expect(secondTypes).toEqual(['clock_in', 'clock_out']);
   });
 
@@ -245,8 +246,8 @@ describe('canonical time segment projections', () => {
       projectTimeSegmentsToLegacyTransitions(
         segments,
         new Date('2026-08-31T00:00:00.000Z'),
-        new Date('2026-09-01T00:00:00.000Z')
-      ).map((point) => point.entryType)
+        new Date('2026-09-01T00:00:00.000Z'),
+      ).map((point) => point.entryType),
     ).toEqual(['clock_in', 'clock_out', 'clock_in', 'clock_out']);
   });
 });

@@ -4,21 +4,13 @@ import type { Database } from '@/lib/supabase/database.types';
 // Database Row Aliases
 // ============================================
 
-export type EmployeeRecordRow =
-  Database['public']['Tables']['employee_records']['Row'];
-export type EmploymentConditionRow =
-  Database['public']['Tables']['employment_conditions']['Row'];
-export type EmployeeRecordEventRow =
-  Database['public']['Tables']['employee_record_events']['Row'];
+export type EmployeeRecordRow = Database['public']['Tables']['employee_records']['Row'];
+export type EmploymentConditionRow = Database['public']['Tables']['employment_conditions']['Row'];
+export type EmployeeRecordEventRow = Database['public']['Tables']['employee_record_events']['Row'];
 
 // employment_type is a text column with a CHECK constraint; keep this union in
 // sync with the database constraint (migration add_employee_records_and_conditions).
-export type EmploymentType =
-  | 'vollzeit'
-  | 'teilzeit'
-  | 'ausbildung'
-  | 'minijob'
-  | 'sonstiges';
+export type EmploymentType = 'vollzeit' | 'teilzeit' | 'ausbildung' | 'minijob' | 'sonstiges';
 
 export const EMPLOYMENT_TYPES: EmploymentType[] = [
   'vollzeit',
@@ -102,9 +94,7 @@ export function toEmployeeRecord(row: EmployeeRecordRow): EmployeeRecord {
   };
 }
 
-export function toEmploymentCondition(
-  row: EmploymentConditionRow
-): EmploymentCondition {
+export function toEmploymentCondition(row: EmploymentConditionRow): EmploymentCondition {
   return {
     id: row.id,
     organizationId: row.organization_id,
@@ -120,9 +110,7 @@ export function toEmploymentCondition(
   };
 }
 
-export function toEmployeeRecordEvent(
-  row: EmployeeRecordEventRow
-): EmployeeRecordEvent {
+export function toEmployeeRecordEvent(row: EmployeeRecordEventRow): EmployeeRecordEvent {
   return {
     id: row.id,
     organizationId: row.organization_id,
@@ -197,7 +185,7 @@ export function shiftIsoDateByDays(dateIso: string, days: number): string {
 
 export function getEmploymentState(
   record: Pick<EmployeeRecord, 'entryDate' | 'exitDate'>,
-  today: Date = new Date()
+  today: Date = new Date(),
 ): EmploymentState {
   const todayIso = toBusinessIsoDate(today);
   // A person counts as exited from their exit date on — a member removed today
@@ -209,7 +197,7 @@ export function getEmploymentState(
 
 export function getAccessState(
   record: Pick<EmployeeRecord, 'userId' | 'inviteId'>,
-  hasPendingInvite: boolean
+  hasPendingInvite: boolean,
 ): AccessState {
   if (record.userId) return 'mit_zugang';
   if (record.inviteId && hasPendingInvite) return 'eingeladen';
@@ -221,7 +209,7 @@ export function getAccessState(
 // time must use the conditions effective on that date; P1-04 is the first consumer).
 export function getEffectiveCondition(
   conditions: EmploymentCondition[],
-  onDate: Date = new Date()
+  onDate: Date = new Date(),
 ): EmploymentCondition | null {
   const dateIso = toBusinessIsoDate(onDate);
   const applicable = conditions
@@ -232,10 +220,8 @@ export function getEffectiveCondition(
 
 export function formatEmployeeRecordName(
   record: Pick<EmployeeRecord, 'firstName' | 'lastName'>,
-  profileName?: string | null
+  profileName?: string | null,
 ): string {
   if (profileName) return profileName;
-  return (
-    [record.firstName, record.lastName].filter(Boolean).join(' ') || 'Unbekannt'
-  );
+  return [record.firstName, record.lastName].filter(Boolean).join(' ') || 'Unbekannt';
 }

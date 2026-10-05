@@ -16,13 +16,21 @@ export function CalendarLiveRegion({ children }: { children: ReactNode }): React
     if (!region) return;
     // Clearing first makes an identical second announcement audible again.
     region.textContent = '';
-    window.setTimeout(() => { region.textContent = text; }, 30);
+    window.setTimeout(() => {
+      region.textContent = text;
+    }, 30);
   }, []);
   const value = useMemo(() => announce, [announce]);
   return (
     <AnnounceContext.Provider value={value}>
       {children}
-      <div ref={regionRef} aria-live="polite" aria-atomic="true" className="sr-only" data-calendar-live-region="" />
+      <div
+        ref={regionRef}
+        aria-live="polite"
+        aria-atomic="true"
+        className="sr-only"
+        data-calendar-live-region=""
+      />
     </AnnounceContext.Provider>
   );
 }

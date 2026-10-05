@@ -1,17 +1,14 @@
 import type { Database } from '@/lib/supabase/database.types';
 
-export type CustomerCommitmentSource =
-  Database['public']['Enums']['customer_commitment_source'];
-type CustomerCommitmentStatus =
-  Database['public']['Enums']['customer_commitment_status'];
+export type CustomerCommitmentSource = Database['public']['Enums']['customer_commitment_source'];
+type CustomerCommitmentStatus = Database['public']['Enums']['customer_commitment_status'];
 
-export const COMMITMENT_SOURCE_LABELS: Record<CustomerCommitmentSource, string> =
-  {
-    telefonisch: 'Telefonisch vereinbart',
-    vor_ort: 'Vor Ort vereinbart',
-    schriftlich_manuell: 'Schriftlich vereinbart (manuell erfasst)',
-    sonstige: 'Sonstige Vereinbarung',
-  };
+export const COMMITMENT_SOURCE_LABELS: Record<CustomerCommitmentSource, string> = {
+  telefonisch: 'Telefonisch vereinbart',
+  vor_ort: 'Vor Ort vereinbart',
+  schriftlich_manuell: 'Schriftlich vereinbart (manuell erfasst)',
+  sonstige: 'Sonstige Vereinbarung',
+};
 
 // A commitment is a manually recorded fact: WHO recorded WHEN that WHICH
 // window was agreed via WHICH channel. It proves nothing about delivery,
@@ -45,11 +42,8 @@ export type CommitmentScheduleFacts = {
  * then requires an explicit re-commit or withdrawal.
  */
 export function isCommitmentMismatch(
-  commitment: Pick<
-    CustomerCommitment,
-    'committedDate' | 'windowStartTime' | 'windowEndTime'
-  >,
-  schedule: CommitmentScheduleFacts
+  commitment: Pick<CustomerCommitment, 'committedDate' | 'windowStartTime' | 'windowEndTime'>,
+  schedule: CommitmentScheduleFacts,
 ): boolean {
   if (commitment.committedDate !== schedule.localStartDate) return true;
   if (
@@ -69,10 +63,7 @@ export function isCommitmentMismatch(
 }
 
 export function formatCommitmentWindow(
-  commitment: Pick<
-    CustomerCommitment,
-    'committedDate' | 'windowStartTime' | 'windowEndTime'
-  >
+  commitment: Pick<CustomerCommitment, 'committedDate' | 'windowStartTime' | 'windowEndTime'>,
 ): string {
   const [year, month, day] = commitment.committedDate.split('-');
   const dateText = `${day}.${month}.${year}`;
@@ -83,9 +74,7 @@ export function formatCommitmentWindow(
 }
 
 export function commitmentErrorMessage(error: string): string {
-  return (
-    COMMITMENT_ERROR_MESSAGES[error] ?? COMMITMENT_ERROR_MESSAGES.unexpected_error
-  );
+  return COMMITMENT_ERROR_MESSAGES[error] ?? COMMITMENT_ERROR_MESSAGES.unexpected_error;
 }
 
 const COMMITMENT_ERROR_MESSAGES: Record<string, string> & {
@@ -93,11 +82,9 @@ const COMMITMENT_ERROR_MESSAGES: Record<string, string> & {
 } = {
   invalid_input: 'Die Eingaben sind unvollständig oder ungültig.',
   commitment_occurrence_not_found: 'Der geplante Besuch wurde nicht gefunden.',
-  commitment_occurrence_not_scheduled:
-    'Nur eingeplante Besuche können eine Kundenzusage erhalten.',
+  commitment_occurrence_not_scheduled: 'Nur eingeplante Besuche können eine Kundenzusage erhalten.',
   commitment_not_found: 'Die Kundenzusage wurde nicht gefunden.',
-  withdrawal_reason_invalid:
-    'Bitte eine Begründung mit 3 bis 1000 Zeichen angeben.',
+  withdrawal_reason_invalid: 'Bitte eine Begründung mit 3 bis 1000 Zeichen angeben.',
   not_authorized: 'Keine Berechtigung für diese Aktion.',
   load_failed: 'Die Kundenzusagen konnten nicht geladen werden.',
   update_failed: 'Die Änderung konnte nicht gespeichert werden.',

@@ -1,7 +1,7 @@
-import { AuftraegeContentSkeleton } from '@/components/loading-states/auftraege-content-skeleton'
-import { PageHeader } from '@/components/shared/page-header'
-import { PageBody, PageShell } from '@/components/shared/page-shell'
-import { Skeleton } from '@/components/ui/skeleton'
+import { AuftraegeContentSkeleton } from '@/components/loading-states/auftraege-content-skeleton';
+import { PageHeader } from '@/components/shared/page-header';
+import { PageBody, PageShell } from '@/components/shared/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export function AuftraegePageSkeleton() {
   return (
@@ -11,5 +11,5 @@ export function AuftraegePageSkeleton() {
         <AuftraegeContentSkeleton />
       </PageBody>
     </PageShell>
-  )
+  );
 }

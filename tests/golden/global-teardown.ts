@@ -1,5 +1,9 @@
 import { loadEnvLocal } from './support/env';
-import { completedWorldCleanup, finishOwnedWorldCleanup, retainUnreadableOwnedWorld } from '../../lib/testing/owned-world-lifecycle';
+import {
+  completedWorldCleanup,
+  finishOwnedWorldCleanup,
+  retainUnreadableOwnedWorld,
+} from '../../lib/testing/local-stack/owned-world-lifecycle';
 import {
   activeRunFailed,
   archiveActiveState,
@@ -12,15 +16,33 @@ import { destroyTestWorld } from './support/seed';
 import { loadWorld } from './support/world';
 
 export default async function globalTeardown(): Promise<void> {
+  // Playwright has not yet qualified candidate identity, sample completeness or
+  // performance comparisons. Its teardown can archive, but cannot delete data.
+  const manifest = readRunManifest(currentRunKey());
+  if (manifest.world && !manifest.cleanedAt) {
+    updateRunManifest(currentRunKey(), { retainedAt: new Date().toISOString() });
+  }
+  archiveActiveState();
+}
+
+/** Only the parent runner calls this, after every execution-evidence check. */
+export async function finalizeQualifiedWorld(): Promise<void> {
   loadEnvLocal();
-  const failed = activeRunFailed();
+  const manifest = readRunManifest(currentRunKey());
+  const failed = activeRunFailed() || !['passed', 'diagnostic_passed'].includes(manifest.status);
   const diagnostic = Boolean(process.env.WERKFLOW_REUSE_RUN_KEY);
   const keepRequested = process.env.KEEP_WORLD === '1';
   const recordOwnedFailure = (error: unknown): void => {
     updateRunManifest(currentRunKey(), {
-      status: 'failed_retained', retainedAt: new Date().toISOString(), cleanedAt: null,
+      status: 'failed_retained',
+      retainedAt: new Date().toISOString(),
+      cleanedAt: null,
     });
-    markRunFailed({ title: 'Owned-world cleanup incomplete', file: null, message: error instanceof Error ? error.message : String(error) });
+    markRunFailed({
+      title: 'Owned-world cleanup incomplete',
+      file: null,
+      message: error instanceof Error ? error.message : String(error),
+    });
   };
 
   let world;
@@ -28,9 +50,7 @@ export default async function globalTeardown(): Promise<void> {
     world = loadWorld();
   } catch (error) {
     console.log(
-      `[golden] no readable active world: ${
-        error instanceof Error ? error.message : String(error)
-      }`
+      `[golden] no readable active world: ${error instanceof Error ? error.message : String(error)}`,
     );
     let manifestWorld;
     try {
@@ -38,12 +58,13 @@ export default async function globalTeardown(): Promise<void> {
     } catch (manifestError) {
       console.log(
         `[golden] run manifest unreadable: ${
-          manifestError instanceof Error
-            ? manifestError.message
-            : String(manifestError)
-        }`
+          manifestError instanceof Error ? manifestError.message : String(manifestError)
+        }`,
       );
-      throw new AggregateError([error, manifestError], 'Active test world and ownership manifest are unreadable. No leftover sweep was attempted.');
+      throw new AggregateError(
+        [error, manifestError],
+        'Active test world and ownership manifest are unreadable. No leftover sweep was attempted.',
+      );
     }
     retainUnreadableOwnedWorld(manifestWorld, error, {
       retain: recordOwnedFailure,
@@ -62,7 +83,7 @@ export default async function globalTeardown(): Promise<void> {
     console.log(
       `[golden] retained world ${world.runId} for ${
         failed ? 'failure diagnosis' : keepRequested ? 'KEEP_WORLD request' : 'diagnostic reuse'
-      }`
+      }`,
     );
     return;
   }
@@ -71,7 +92,7 @@ export default async function globalTeardown(): Promise<void> {
     destroy: () => destroyTestWorld(world),
     recordCleaned: () => {
       updateRunManifest(currentRunKey(), (manifest) =>
-        completedWorldCleanup(world, manifest, new Date().toISOString())
+        completedWorldCleanup(world, manifest, new Date().toISOString()),
       );
       console.log(`[golden] destroyed world ${world.runId}`);
     },

@@ -15,8 +15,8 @@ describe('customer commitment mismatch', () => {
           timeKind: 'timed',
           localStartDate: '2026-09-07',
           localStartTime: '09:30',
-        }
-      )
+        },
+      ),
     ).toBe(false);
   });
 
@@ -24,8 +24,8 @@ describe('customer commitment mismatch', () => {
     expect(
       isCommitmentMismatch(
         { committedDate: '2026-09-07', windowStartTime: null, windowEndTime: null },
-        { timeKind: 'timed', localStartDate: '2026-09-08', localStartTime: '09:00' }
-      )
+        { timeKind: 'timed', localStartDate: '2026-09-08', localStartTime: '09:00' },
+      ),
     ).toBe(true);
   });
 
@@ -40,21 +40,21 @@ describe('customer commitment mismatch', () => {
         timeKind: 'timed',
         localStartDate: '2026-09-07',
         localStartTime: '07:30',
-      })
+      }),
     ).toBe(true);
     expect(
       isCommitmentMismatch(window, {
         timeKind: 'timed',
         localStartDate: '2026-09-07',
         localStartTime: '08:00',
-      })
+      }),
     ).toBe(false);
     expect(
       isCommitmentMismatch(window, {
         timeKind: 'timed',
         localStartDate: '2026-09-07',
         localStartTime: '10:00',
-      })
+      }),
     ).toBe(false);
   });
 
@@ -70,8 +70,8 @@ describe('customer commitment mismatch', () => {
           timeKind: 'timed',
           localStartDate: '2026-09-07',
           localStartTime: '10:30',
-        }
-      )
+        },
+      ),
     ).toBe(true);
   });
 
@@ -83,8 +83,8 @@ describe('customer commitment mismatch', () => {
           windowStartTime: '08:00:00',
           windowEndTime: '10:00:00',
         },
-        { timeKind: 'all_day', localStartDate: '2026-09-07', localStartTime: null }
-      )
+        { timeKind: 'all_day', localStartDate: '2026-09-07', localStartTime: null },
+      ),
     ).toBe(false);
   });
 
@@ -94,14 +94,14 @@ describe('customer commitment mismatch', () => {
         committedDate: '2026-09-07',
         windowStartTime: '08:00:00',
         windowEndTime: '12:00:00',
-      })
+      }),
     ).toBe('07.09.2026, 08:00–12:00 Uhr');
     expect(
       formatCommitmentWindow({
         committedDate: '2026-09-07',
         windowStartTime: null,
         windowEndTime: null,
-      })
+      }),
     ).toBe('07.09.2026');
   });
 });

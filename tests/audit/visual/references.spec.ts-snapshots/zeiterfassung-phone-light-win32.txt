@@ -1,0 +1,25 @@
+Menü öffnen
+Zeiterfassung
+Manuelle Eintragung
+Zeiterfassung
+Zeitkonto
+Perioden
+Regeln & Export
+Übersicht
+Anträge
+Verlauf
+08:00:00
+Gesamtzeit
+Du bist nicht eingestempelt.
+Tagesziel:
+8 Std.
+Arbeitszeit
+(0% erreicht)
+Kein Arbeitszeitmodell hinterlegt – Standardziel 8 Stunden.
+Arbeitszeit
+0 Min.
+Pause
+0 Min.
+Überstunden heute
+0 Min.
+Schnellzugriff

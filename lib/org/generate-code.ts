@@ -1,21 +1,24 @@
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import {
-  ORGANIZATION_CODE_CHARSET,
-  ORGANIZATION_CODE_LENGTH,
-} from '@/lib/org/schemas';
+import { ORGANIZATION_CODE_CHARSET, ORGANIZATION_CODE_LENGTH } from '@/lib/org/schemas';
 
-// Characters that are unambiguous (no 0/O, 1/I/L confusion)
 const MAX_RETRIES = 10;
+// Largest multiple of the charset size that fits a byte; bytes at or above it
+// are drawn again so every character stays equally likely.
+const UNBIASED_BYTE_LIMIT = 256 - (256 % ORGANIZATION_CODE_CHARSET.length);
 
 /**
- * Generates a random alphanumeric code of specified length
+ * Generates an organization code from the cryptographic random source. The
+ * code is the only secret a person needs to join a company, so it must not be
+ * predictable from earlier codes.
  */
-function generateRandomCode(length: number = ORGANIZATION_CODE_LENGTH): string {
+export function generateRandomCode(length: number = ORGANIZATION_CODE_LENGTH): string {
   let code = '';
-  for (let i = 0; i < length; i++) {
-    code += ORGANIZATION_CODE_CHARSET.charAt(
-      Math.floor(Math.random() * ORGANIZATION_CODE_CHARSET.length)
-    );
+  while (code.length < length) {
+    for (const byte of crypto.getRandomValues(new Uint8Array(length))) {
+      if (byte < UNBIASED_BYTE_LIMIT && code.length < length) {
+        code += ORGANIZATION_CODE_CHARSET.charAt(byte % ORGANIZATION_CODE_CHARSET.length);
+      }
+    }
   }
   return code;
 }
@@ -51,12 +54,8 @@ export async function generateUniqueOrgCode(): Promise<string> {
       // Code is unique
       return code;
     }
-
-    // Code exists, retry
-    console.warn(`Code collision on attempt ${attempt + 1}, retrying...`);
+    // The code exists already: draw again. A collision is expected and no failure.
   }
 
-  throw new Error(
-    `Failed to generate unique organization code after ${MAX_RETRIES} attempts`
-  );
+  throw new Error(`Failed to generate unique organization code after ${MAX_RETRIES} attempts`);
 }

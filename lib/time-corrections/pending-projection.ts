@@ -1,38 +1,42 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from '@supabase/supabase-js';
 
-import type { EffectiveResponsibilityHolder } from "@/lib/responsibilities/resolution";
-import { canHolderApproveTarget } from "@/lib/responsibilities/resolution";
-import type { Database } from "@/lib/supabase/database.types";
-import { LIST_ROW_CAP, readCompleteRows, readInBatches } from "@/lib/supabase/query-batches";
-import type { OrgRole } from "@/lib/time-tracking/types";
+import type { EffectiveResponsibilityHolder } from '@/lib/responsibilities/resolution';
+import { canHolderApproveTarget } from '@/lib/responsibilities/resolution';
+import type { Database } from '@/lib/supabase/database.types';
+import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
+import type { OrgRole } from '@/lib/time-tracking/types';
 
-import { isTimeCorrectionSnapshot, type TimeCorrectionSnapshot } from "./types";
+import { isTimeCorrectionSnapshot, type TimeCorrectionSnapshot } from './types';
 
 /**
- * Pending-only read behind the provisional time projection (Step 2, PF-19).
+ * Pending-only read behind the provisional time projection.
  * This module takes the admin client as a parameter and creates none, so
  * unit tests exercise the real query plan through a fake port.
- * Every calendar and time read used to load the organization's 300 newest
- * correction requests with names and memberships and filter them in memory.
- * This module pushes the pending status and the subject filter into the
- * query and loads only the current revisions and sources of those requests.
+ * The pending status and the subject filter are part of the query, and only
+ * the current revisions and sources of those requests are loaded; nothing is
+ * filtered in memory.
  * The visibility rule is the one `getTimeCorrectionRequests` applies: a
  * manager sees every request, an employee sees requests they raised, are the
  * subject of, or may review as the effective time-approval holder.
  */
 
-type Tables = Database["public"]["Tables"];
+type Tables = Database['public']['Tables'];
 export type PendingRequestRow = Pick<
-  Tables["time_correction_requests"]["Row"],
-  "id" | "kind" | "status" | "subject_user_id" | "requested_by" | "current_revision" | "updated_at"
+  Tables['time_correction_requests']['Row'],
+  'id' | 'kind' | 'status' | 'subject_user_id' | 'requested_by' | 'current_revision' | 'updated_at'
 >;
 export type RevisionRow = Pick<
-  Tables["time_correction_request_revisions"]["Row"],
-  "request_id" | "revision" | "proposed_snapshot"
+  Tables['time_correction_request_revisions']['Row'],
+  'request_id' | 'revision' | 'proposed_snapshot'
 >;
-export type SourceRow = Tables["time_correction_request_sources"]["Row"];
+export type SourceRow = Tables['time_correction_request_sources']['Row'];
 
-const PENDING_CORRECTION_STATUSES = ["submitted", "clarification_required"] as const;
+/** The open statuses: a decision is still due, so the request projects time. */
+export const PENDING_CORRECTION_STATUSES = ['submitted', 'clarification_required'] as const;
+// One `and(request_id.eq.<uuid>,revision.eq.<n>)` pair is about 70 characters,
+// twice an id, so a pair filter carries fewer entries than an id batch to stay
+// under the URL limit (lib/conventions/id-list-string-filters.test.ts).
+const REVISION_PAIR_BATCH_SIZE = 40;
 /** Read completely up to the shared bound; overflow must not appear as an empty calendar. */
 export const PENDING_CORRECTION_LIMIT = LIST_ROW_CAP;
 
@@ -57,55 +61,82 @@ export type PendingProjectionPort = {
   }) => Promise<SourceRow[] | null>;
 };
 
-export function createPendingProjectionPort(
-  admin: SupabaseClient<Database>,
-): PendingProjectionPort {
+export function createPendingProjectionPort(admin: SupabaseClient<Database>): PendingProjectionPort {
   return {
     listPendingRequests: async ({ organizationId, subjectUserId, limit }) => {
       const { data, error } = await readCompleteRows((from, to) => {
-      let query = admin
-        .from("time_correction_requests")
-        .select("id, kind, status, subject_user_id, requested_by, current_revision, updated_at")
-        .eq("organization_id", organizationId)
-        .in("status", [...PENDING_CORRECTION_STATUSES])
-        .order("created_at", { ascending: false }).order("id")
-        .range(from, to);
-      if (subjectUserId) query = query.eq("subject_user_id", subjectUserId);
-      return query;
+        let query = admin
+          .from('time_correction_requests')
+          .select('id, kind, status, subject_user_id, requested_by, current_revision, updated_at')
+          .eq('organization_id', organizationId)
+          .in('status', [...PENDING_CORRECTION_STATUSES])
+          .order('created_at', { ascending: false })
+          .order('id')
+          .range(from, to);
+        if (subjectUserId) query = query.eq('subject_user_id', subjectUserId);
+        return query;
       }, limit);
       return error ? null : data;
     },
     listMemberRoles: async ({ organizationId, userIds }) => {
-      const { data, error } = await readInBatches(userIds, (batch) => admin
-        .from("organization_members")
-        .select("user_id, role")
-        .eq("organization_id", organizationId)
-        .in("user_id", [...batch]).order("user_id"));
+      const { data, error } = await readInBatches(userIds, (batch) =>
+        admin
+          .from('organization_members')
+          .select('user_id, role')
+          .eq('organization_id', organizationId)
+          .in('user_id', [...batch])
+          .order('user_id'),
+      );
       return error ? null : data;
     },
     listCurrentRevisions: async ({ organizationId, requests }) => {
       const revisionByRequest = new Map(requests.map((request) => [request.id, request.currentRevision]));
-      const { data, error } = await readInBatches(requests.map((request) => request.id), (batch) => readCompleteRows((from, to) => admin
-        .from("time_correction_request_revisions")
-        .select("request_id, revision, proposed_snapshot")
-        .eq("organization_id", organizationId)
-        // Exact (request, revision) pairs: two independent `in` filters would read
-        // the cross product and could spend the row cap on rows nobody asked for.
-        .or(batch.map((id) => {
-          const revision = revisionByRequest.get(id);
-          if (revision === undefined) throw new Error("Pending correction revision is missing from its requested batch.");
-          return `and(request_id.eq.${id},revision.eq.${revision})`;
-        }).join(","))
-        .order("request_id").order("revision").range(from, to), LIST_ROW_CAP));
+      const { data, error } = await readInBatches(
+        requests.map((request) => request.id),
+        (batch) =>
+          readCompleteRows(
+            (from, to) =>
+              admin
+                .from('time_correction_request_revisions')
+                .select('request_id, revision, proposed_snapshot')
+                .eq('organization_id', organizationId)
+                // Exact (request, revision) pairs: two independent `in` filters would read
+                // the cross product and could spend the row cap on rows nobody asked for.
+                .or(
+                  batch
+                    .map((id) => {
+                      const revision = revisionByRequest.get(id);
+                      if (revision === undefined)
+                        throw new Error('Pending correction revision is missing from its requested batch.');
+                      return `and(request_id.eq.${id},revision.eq.${revision})`;
+                    })
+                    .join(','),
+                )
+                .order('request_id')
+                .order('revision')
+                .range(from, to),
+            LIST_ROW_CAP,
+          ),
+        REVISION_PAIR_BATCH_SIZE,
+      );
       return error || data.length > LIST_ROW_CAP ? null : data;
     },
     listSources: async ({ organizationId, requestIds }) => {
-      const { data, error } = await readInBatches(requestIds, (batch) => readCompleteRows((from, to) => admin
-        .from("time_correction_request_sources")
-        .select("*")
-        .eq("organization_id", organizationId)
-        .in("request_id", [...batch])
-        .order("request_id").order("revision").order("ordinal").range(from, to), LIST_ROW_CAP));
+      const { data, error } = await readInBatches(requestIds, (batch) =>
+        readCompleteRows(
+          (from, to) =>
+            admin
+              .from('time_correction_request_sources')
+              .select('*')
+              .eq('organization_id', organizationId)
+              .in('request_id', [...batch])
+              .order('request_id')
+              .order('revision')
+              .order('ordinal')
+              .range(from, to),
+          LIST_ROW_CAP,
+        ),
+      );
       return error || data.length > LIST_ROW_CAP ? null : data;
     },
   };
@@ -113,7 +144,7 @@ export function createPendingProjectionPort(
 
 export type PendingCorrectionRequest = {
   id: string;
-  kind: PendingRequestRow["kind"];
+  kind: PendingRequestRow['kind'];
   currentRevision: number;
   updatedAt: string;
   subjectUserId: string;
@@ -133,7 +164,7 @@ export type PendingCorrectionProjectionInput = {
 };
 
 function isOrgRole(value: string): value is OrgRole {
-  return value === "admin" || value === "buero" || value === "employee";
+  return value === 'admin' || value === 'buero' || value === 'employee';
 }
 
 /**
@@ -146,7 +177,7 @@ export async function loadPendingCorrectionProjection(
   input: PendingCorrectionProjectionInput,
 ): Promise<{ requests: PendingCorrectionRequest[]; sources: SourceRow[] } | null> {
   const { organizationId, subjectUserId, caller } = input;
-  if (caller.role === "employee" && subjectUserId && subjectUserId !== caller.userId && !caller.holder) {
+  if (caller.role === 'employee' && subjectUserId && subjectUserId !== caller.userId && !caller.holder) {
     return { requests: [], sources: [] };
   }
   const rows = await port.listPendingRequests({
@@ -157,7 +188,7 @@ export async function loadPendingCorrectionProjection(
   if (!rows) return null;
 
   let visible = rows;
-  if (caller.role === "employee") {
+  if (caller.role === 'employee') {
     const own = rows.filter(
       (row) => row.requested_by === caller.userId || row.subject_user_id === caller.userId,
     );
@@ -178,7 +209,8 @@ export async function loadPendingCorrectionProjection(
         if (own.includes(row)) return true;
         const targetRole = roleByUser.get(row.subject_user_id);
         return Boolean(
-          targetRole && isOrgRole(targetRole) &&
+          targetRole &&
+            isOrgRole(targetRole) &&
             canHolderApproveTarget(holder, row.subject_user_id, targetRole),
         );
       });

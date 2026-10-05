@@ -1,17 +1,11 @@
 import type { Metadata } from 'next';
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 import { ForgotPasswordForm } from './forgot-password-form';
 
 export const metadata: Metadata = {
-  title: 'Passwort vergessen'
+  title: 'Passwort vergessen',
 };
 
 function getErrorMessage(error: string | undefined) {
@@ -39,12 +33,9 @@ export default async function ForgotPasswordPage({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-2xl font-semibold tracking-tight">
-          Passwort zurücksetzen
-        </CardTitle>
+        <CardTitle className="text-2xl font-semibold tracking-tight">Passwort zurücksetzen</CardTitle>
         <CardDescription>
-          Gib deine E-Mail-Adresse ein und wir senden dir einen Link zum
-          Zurücksetzen deines Passworts.
+          Gib deine E-Mail-Adresse ein und wir senden dir einen Link zum Zurücksetzen deines Passworts.
         </CardDescription>
       </CardHeader>
       <CardContent>

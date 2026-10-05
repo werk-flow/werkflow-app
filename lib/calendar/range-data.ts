@@ -1,7 +1,7 @@
-import { rangeCovers, type CalendarFetchRange } from "./navigation";
+import { rangeCovers, type CalendarFetchRange } from './navigation';
 
 /**
- * The calendar's one data owner (Step 2, PF-02/PF-03). Each dataset records
+ * The calendar's one data owner. Each dataset records
  * the range its array is authoritative for, the generation of the newest
  * request that may still commit, and its last read outcome. A response can
  * only commit when it carries the current generation, so an older range,
@@ -11,9 +11,9 @@ import { rangeCovers, type CalendarFetchRange } from "./navigation";
  */
 
 type DatasetRead =
-  | { kind: "idle" }
-  | { kind: "in-flight"; generation: number; range: CalendarFetchRange }
-  | { kind: "failed"; range: CalendarFetchRange };
+  | { kind: 'idle' }
+  | { kind: 'in-flight'; generation: number; range: CalendarFetchRange }
+  | { kind: 'failed'; range: CalendarFetchRange };
 
 export type DatasetState<TData> = {
   data: TData;
@@ -36,71 +36,70 @@ type PerDataset<TData extends DatasetMap, TAction> = {
 }[keyof TData];
 
 type CalendarDatasetAction<TData extends DatasetMap> =
-  | PerDataset<TData, { type: "read-started"; generation: number; range: CalendarFetchRange }>
+  | PerDataset<TData, { type: 'read-started'; generation: number; range: CalendarFetchRange }>
   | {
       [K in keyof TData]: {
-        type: "read-committed";
+        type: 'read-committed';
         dataset: K;
         generation: number;
         range: CalendarFetchRange;
         data: TData[K];
       };
     }[keyof TData]
-  | PerDataset<TData, { type: "read-failed"; generation: number; range: CalendarFetchRange }>
-  | PerDataset<TData, { type: "reads-invalidated"; generation: number }>
+  | PerDataset<TData, { type: 'read-failed'; generation: number; range: CalendarFetchRange }>
+  | PerDataset<TData, { type: 'reads-invalidated'; generation: number }>
   | {
       [K in keyof TData]: {
-        type: "data-updated";
+        type: 'data-updated';
         dataset: K;
         update: (previous: TData[K]) => TData[K];
       };
-    }[keyof TData]
-;
+    }[keyof TData];
 
 export type CalendarRangeAction<TData extends DatasetMap> =
   | (CalendarDatasetAction<TData> & { scopeKey: string })
-  | { type: "scope-reset"; scopeKey: string; empty: TData };
+  | { type: 'scope-reset'; scopeKey: string; empty: TData };
 
 export function createDatasetState<TData>(
   data: TData,
   coverage: CalendarFetchRange | null = null,
 ): DatasetState<TData> {
-  return { data, coverage, generation: 0, read: { kind: "idle" } };
+  return { data, coverage, generation: 0, read: { kind: 'idle' } };
 }
 
 function reduceDataset<TData>(
   state: DatasetState<TData>,
-  action: Exclude<CalendarRangeAction<Record<string, TData>>, { type: "scope-reset" }>,
+  action: Exclude<CalendarRangeAction<Record<string, TData>>, { type: 'scope-reset' }>,
 ): DatasetState<TData> {
   switch (action.type) {
-    case "read-started":
+    case 'read-started':
       if (action.generation <= state.generation) return state;
       return {
         ...state,
         generation: action.generation,
-        read: { kind: "in-flight", generation: action.generation, range: action.range },
+        read: { kind: 'in-flight', generation: action.generation, range: action.range },
       };
-    case "read-committed":
+    case 'read-committed':
       if (action.generation !== state.generation) return state;
       return {
         data: action.data,
         coverage: action.range,
         generation: state.generation,
-        read: { kind: "idle" },
+        read: { kind: 'idle' },
       };
-    case "read-failed":
+    case 'read-failed':
       if (action.generation !== state.generation) return state;
-      return { ...state, read: { kind: "failed", range: action.range } };
-    case "reads-invalidated":
+      return { ...state, read: { kind: 'failed', range: action.range } };
+    case 'reads-invalidated':
       return {
         ...state,
         generation: Math.max(state.generation, action.generation),
         // A mutation supersedes the last outcome: an in-flight response can no
         // longer commit and a failure is no longer current, so the next read
         // (the settlement's catch-up) decides the presentation.
-        read: { kind: "idle" },
+        read: { kind: 'idle' },
       };
-    case "data-updated":
+    case 'data-updated':
       return { ...state, data: action.update(state.data) };
     default: {
       const exhaustive: never = action;
@@ -113,7 +112,7 @@ export function reduceCalendarRange<TData extends DatasetMap>(
   state: CalendarRangeState<TData>,
   action: CalendarRangeAction<TData>,
 ): CalendarRangeState<TData> {
-  if (action.type === "scope-reset") {
+  if (action.type === 'scope-reset') {
     const datasets = {} as { [K in keyof TData]: DatasetState<TData[K]> };
     for (const key of Object.keys(state.datasets) as (keyof TData)[]) {
       datasets[key] = {
@@ -121,7 +120,7 @@ export function reduceCalendarRange<TData extends DatasetMap>(
         coverage: null,
         // Every in-flight response predates the new scope: move past it.
         generation: state.datasets[key].generation + 1,
-        read: { kind: "idle" },
+        read: { kind: 'idle' },
       };
     }
     return { scopeKey: action.scopeKey, datasets };
@@ -131,7 +130,7 @@ export function reduceCalendarRange<TData extends DatasetMap>(
   const current = state.datasets[key];
   const next = reduceDataset(
     current,
-    action as Exclude<CalendarRangeAction<Record<string, TData[typeof key]>>, { type: "scope-reset" }>,
+    action as Exclude<CalendarRangeAction<Record<string, TData[typeof key]>>, { type: 'scope-reset' }>,
   );
   if (next === current) return state;
   return { ...state, datasets: { ...state.datasets, [key]: next } };
@@ -147,13 +146,7 @@ export function reduceCalendarRange<TData extends DatasetMap>(
  * - `loading`: the range is not covered and the dataset holds no data yet.
  * - `unavailable`: the range is not covered and its read failed.
  */
-export type DatasetPresentation =
-  | "ready"
-  | "refreshing"
-  | "stale"
-  | "reloading"
-  | "loading"
-  | "unavailable";
+export type DatasetPresentation = 'ready' | 'refreshing' | 'stale' | 'reloading' | 'loading' | 'unavailable';
 
 export function presentDataset(
   state: DatasetState<unknown>,
@@ -161,49 +154,44 @@ export function presentDataset(
 ): DatasetPresentation {
   const covered = state.coverage !== null && rangeCovers(state.coverage, needed);
   if (covered) {
-    if (state.read.kind === "in-flight") return "refreshing";
-    if (state.read.kind === "failed") return "stale";
-    return "ready";
+    if (state.read.kind === 'in-flight') return 'refreshing';
+    if (state.read.kind === 'failed') return 'stale';
+    return 'ready';
   }
-  if (state.read.kind === "failed" && rangeCovers(state.read.range, needed)) {
-    return "unavailable";
+  if (state.read.kind === 'failed' && rangeCovers(state.read.range, needed)) {
+    return 'unavailable';
   }
-  return state.coverage === null ? "loading" : "reloading";
+  return state.coverage === null ? 'loading' : 'reloading';
 }
 
 /** True when the effect must start a read to cover `needed`. */
-export function datasetNeedsRead(
-  state: DatasetState<unknown>,
-  needed: CalendarFetchRange,
-): boolean {
+export function datasetNeedsRead(state: DatasetState<unknown>, needed: CalendarFetchRange): boolean {
   if (state.coverage !== null && rangeCovers(state.coverage, needed)) return false;
-  if (state.read.kind === "in-flight" && rangeCovers(state.read.range, needed)) return false;
-  if (state.read.kind === "failed" && rangeCovers(state.read.range, needed)) return false;
+  if (state.read.kind === 'in-flight' && rangeCovers(state.read.range, needed)) return false;
+  if (state.read.kind === 'failed' && rangeCovers(state.read.range, needed)) return false;
   return true;
 }
 
 export type CalendarReadiness =
-  | { kind: "ready"; isRefreshing: boolean; isStale: boolean }
+  | { kind: 'ready'; isRefreshing: boolean; isStale: boolean }
   /**
    * The window is not covered. `hasData` is true when every required dataset
    * holds data for some other window: the grid stays mounted and marked busy
    * instead of being replaced by the skeleton (navigation must not unmount
    * the calendar, which is what the golden month steps and users rely on).
    */
-  | { kind: "loading"; hasData: boolean }
-  | { kind: "unavailable" };
+  | { kind: 'loading'; hasData: boolean }
+  | { kind: 'unavailable' };
 
 /** Composes the datasets a view requires; one uncovered dataset blocks readiness. */
-export function composeCalendarReadiness(
-  presentations: readonly DatasetPresentation[],
-): CalendarReadiness {
-  if (presentations.includes("unavailable")) return { kind: "unavailable" };
-  if (presentations.includes("loading")) return { kind: "loading", hasData: false };
-  if (presentations.includes("reloading")) return { kind: "loading", hasData: true };
+export function composeCalendarReadiness(presentations: readonly DatasetPresentation[]): CalendarReadiness {
+  if (presentations.includes('unavailable')) return { kind: 'unavailable' };
+  if (presentations.includes('loading')) return { kind: 'loading', hasData: false };
+  if (presentations.includes('reloading')) return { kind: 'loading', hasData: true };
   return {
-    kind: "ready",
-    isRefreshing: presentations.includes("refreshing"),
-    isStale: presentations.includes("stale"),
+    kind: 'ready',
+    isRefreshing: presentations.includes('refreshing'),
+    isStale: presentations.includes('stale'),
   };
 }
 
@@ -219,5 +207,5 @@ export function readCommitted<TData extends DatasetMap, K extends keyof TData>(i
   range: CalendarFetchRange;
   data: TData[K];
 }): CalendarRangeAction<TData> {
-  return { type: "read-committed", ...input } as CalendarRangeAction<TData>;
+  return { type: 'read-committed', ...input } as CalendarRangeAction<TData>;
 }

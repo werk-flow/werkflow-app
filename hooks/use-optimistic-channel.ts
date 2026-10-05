@@ -45,7 +45,7 @@ type OptimisticListWriter<Item> = Pick<
 /** Applies a channel's events to the list that owns the optimistic overlay. */
 export function useOptimisticChannel<Item>(
   channel: OptimisticChannel<Item>,
-  list: OptimisticListWriter<Item>
+  list: OptimisticListWriter<Item>,
 ): void {
   const { insert, commit, rollback } = list;
   useEffect(
@@ -55,6 +55,6 @@ export function useOptimisticChannel<Item>(
         else if (event.kind === 'commit') commit(event.tempId, event.confirmed);
         else rollback(event.tempId);
       }),
-    [channel, insert, commit, rollback]
+    [channel, insert, commit, rollback],
   );
 }

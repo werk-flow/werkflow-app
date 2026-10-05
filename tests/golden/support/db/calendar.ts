@@ -1,5 +1,5 @@
-import { formatBerlinLocalDate } from "../../../../lib/planning/date-time";
-import { createAdminClient, withRoleClient } from './shared';
+import { formatBerlinLocalDate } from '../../../../lib/planning/date-time';
+import { createAdminClient } from './shared';
 
 export type PlanningDbState = {
   jobId: string | null;
@@ -34,15 +34,15 @@ export async function getPlanningState(
 ): Promise<PlanningDbState> {
   const admin = createAdminClient();
   if (!subject.jobNumber && !subject.internalTitle) {
-    throw new Error("getPlanningState requires jobNumber or internalTitle");
+    throw new Error('getPlanningState requires jobNumber or internalTitle');
   }
   let jobId: string | null = null;
   if (subject.jobNumber) {
     const { data: job, error } = await admin
-      .from("jobs")
-      .select("id")
-      .eq("organization_id", orgId)
-      .eq("job_number", subject.jobNumber)
+      .from('jobs')
+      .select('id')
+      .eq('organization_id', orgId)
+      .eq('job_number', subject.jobNumber)
       .single();
     if (error || !job) {
       throw new Error(`Planning job lookup failed: ${error?.message}`);
@@ -51,87 +51,64 @@ export async function getPlanningState(
   }
 
   let occurrenceQuery = admin
-    .from("planning_occurrences")
+    .from('planning_occurrences')
     .select(
-      "id, series_id, original_start_local, start_at, end_at, start_date, end_date_exclusive, status, is_exception, legacy_source_job_id",
+      'id, series_id, original_start_local, start_at, end_at, start_date, end_date_exclusive, status, is_exception, legacy_source_job_id',
     )
-    .eq("organization_id", orgId)
-    .order("original_start_local", { ascending: true, nullsFirst: false })
+    .eq('organization_id', orgId)
+    .order('original_start_local', { ascending: true, nullsFirst: false })
     .limit(1001);
-  if (jobId) occurrenceQuery = occurrenceQuery.eq("job_id", jobId);
+  if (jobId) occurrenceQuery = occurrenceQuery.eq('job_id', jobId);
   if (subject.internalTitle) {
-    occurrenceQuery = occurrenceQuery
-      .eq("entry_kind", "internal")
-      .eq("title", subject.internalTitle);
+    occurrenceQuery = occurrenceQuery.eq('entry_kind', 'internal').eq('title', subject.internalTitle);
   }
-  const { data: occurrenceRows, error: occurrenceError } =
-    await occurrenceQuery;
+  const { data: occurrenceRows, error: occurrenceError } = await occurrenceQuery;
   if (occurrenceError) {
-    throw new Error(
-      `Planning occurrence lookup failed: ${occurrenceError?.message}`,
-    );
+    throw new Error(`Planning occurrence lookup failed: ${occurrenceError?.message}`);
   }
   if ((occurrenceRows?.length ?? 0) > 1000) {
-    throw new Error(
-      "Planning occurrence lookup exceeded the 1000-row safety limit",
-    );
+    throw new Error('Planning occurrence lookup exceeded the 1000-row safety limit');
   }
 
   const occurrenceIds = (occurrenceRows ?? []).map((row) => row.id as string);
   const seriesIds = [
-    ...new Set(
-      (occurrenceRows ?? []).flatMap((row) =>
-        row.series_id ? [row.series_id as string] : [],
-      ),
-    ),
+    ...new Set((occurrenceRows ?? []).flatMap((row) => (row.series_id ? [row.series_id as string] : []))),
   ];
-  const [
-    seriesResult,
-    assignmentResult,
-    assessmentResult,
-    eventResult,
-    timeResult,
-  ] = await Promise.all([
+  const [seriesResult, assignmentResult, assessmentResult, eventResult, timeResult] = await Promise.all([
     seriesIds.length
-      ? admin
-          .from("planning_series")
-          .select("id")
-          .eq("organization_id", orgId)
-          .in("id", seriesIds)
+      ? admin.from('planning_series').select('id').eq('organization_id', orgId).in('id', seriesIds)
       : Promise.resolve({ data: [], error: null }),
     occurrenceIds.length
       ? admin
-          .from("planning_occurrence_assignments")
-          .select("id")
-          .eq("organization_id", orgId)
-          .in("occurrence_id", occurrenceIds)
+          .from('planning_occurrence_assignments')
+          .select('id')
+          .eq('organization_id', orgId)
+          .in('occurrence_id', occurrenceIds)
           .limit(10_001)
       : Promise.resolve({ data: [], error: null }),
     occurrenceIds.length
       ? admin
-          .from("planning_occurrence_assessments")
-          .select(
-            "id, capacity_snapshot, qualification_snapshot, override_reason",
-          )
-          .eq("organization_id", orgId)
-          .in("occurrence_id", occurrenceIds)
+          .from('planning_occurrence_assessments')
+          .select('id, capacity_snapshot, qualification_snapshot, override_reason')
+          .eq('organization_id', orgId)
+          .in('occurrence_id', occurrenceIds)
           .limit(10_001)
       : Promise.resolve({ data: [], error: null }),
     occurrenceIds.length
       ? admin
-          .from("planning_events")
-          .select("event_type")
-          .eq("organization_id", orgId)
-          .in("occurrence_id", occurrenceIds)
-          .order("created_at")
+          .from('planning_events')
+          .select('event_type')
+          .eq('organization_id', orgId)
+          .in('occurrence_id', occurrenceIds)
+          .order('created_at')
           .limit(10_001)
       : Promise.resolve({ data: [], error: null }),
     jobId
       ? admin
-          .from("time_entries")
-          .select("id", { count: "exact", head: true })
-          .eq("organization_id", orgId)
-          .eq("job_id", jobId)
+          .from('time_entries')
+          .select('id', { count: 'exact', head: true })
+          .eq('organization_id', orgId)
+          .eq('job_id', jobId)
       : Promise.resolve({ count: 0, error: null }),
   ]);
   const firstError =
@@ -148,7 +125,7 @@ export async function getPlanningState(
     (assessmentResult.data?.length ?? 0) > 10_000 ||
     (eventResult.data?.length ?? 0) > 10_000
   ) {
-    throw new Error("Planning related-record lookup exceeded its safety limit");
+    throw new Error('Planning related-record lookup exceeded its safety limit');
   }
 
   return {
@@ -163,21 +140,16 @@ export async function getPlanningState(
           const snapshot = row.capacity_snapshot as {
             conflicts?: Array<{ kind?: string }>;
           } | null;
-          return (snapshot?.conflicts ?? []).flatMap((conflict) =>
-            conflict.kind ? [conflict.kind] : [],
-          );
+          return (snapshot?.conflicts ?? []).flatMap((conflict) => (conflict.kind ? [conflict.kind] : []));
         }),
       ),
     ].sort(),
-    qualificationEvaluationCount: (assessmentResult.data ?? []).reduce(
-      (count, row) => {
-        const snapshot = row.qualification_snapshot as {
-          evaluations?: unknown[];
-        } | null;
-        return count + (snapshot?.evaluations?.length ?? 0);
-      },
-      0,
-    ),
+    qualificationEvaluationCount: (assessmentResult.data ?? []).reduce((count, row) => {
+      const snapshot = row.qualification_snapshot as {
+        evaluations?: unknown[];
+      } | null;
+      return count + (snapshot?.evaluations?.length ?? 0);
+    }, 0),
     overrideReasons: (assessmentResult.data ?? []).flatMap((row) =>
       row.override_reason ? [row.override_reason as string] : [],
     ),
@@ -198,62 +170,57 @@ export async function getPlanningState(
   };
 }
 
-/** The stored calendar preferences of one member (the `calendar` key), or null before the first save. */
-export async function getCalendarPreferencesFor(orgId: string, userId: string): Promise<Record<string, unknown> | null> {
+/** The employee records assigned to the active occurrences of one job, sorted. */
+export async function getJobOccurrenceAssigneeRecordIds(orgId: string, jobNumber: string): Promise<string[]> {
+  const scheduledIds = (await getPlanningState(orgId, { jobNumber })).occurrences
+    .filter((occurrence) => occurrence.status === 'scheduled')
+    .map((occurrence) => occurrence.id);
+  if (scheduledIds.length === 0) return [];
   const { data, error } = await createAdminClient()
-    .from("organization_user_preferences")
-    .select("preferences")
-    .eq("organization_id", orgId)
-    .eq("user_id", userId)
+    .from('planning_occurrence_assignments')
+    .select('employee_record_id')
+    .eq('organization_id', orgId)
+    .in('occurrence_id', scheduledIds);
+  if (error) throw new Error(`Occurrence assignment lookup failed: ${error.message}`);
+  return (data ?? []).map((row) => row.employee_record_id).sort();
+}
+
+/** An organization closure day; setup only, the settings flow is proven elsewhere. */
+export async function seedClosureDay(input: {
+  organizationId: string;
+  actorUserId: string;
+  date: string;
+  label: string;
+}): Promise<void> {
+  const { error } = await createAdminClient().from('organization_closure_days').insert({
+    organization_id: input.organizationId,
+    closure_date: input.date,
+    label: input.label,
+    created_by: input.actorUserId,
+  });
+  if (error) throw new Error(`Closure day setup failed: ${error.message}`);
+}
+
+/** The stored calendar preferences of one member (the `calendar` key), or null before the first save. */
+export async function getCalendarPreferencesFor(
+  orgId: string,
+  userId: string,
+): Promise<Record<string, unknown> | null> {
+  const { data, error } = await createAdminClient()
+    .from('organization_user_preferences')
+    .select('preferences')
+    .eq('organization_id', orgId)
+    .eq('user_id', userId)
     .maybeSingle();
   if (error) throw new Error(`Calendar preference read failed: ${error.message}`);
   const stored = (data?.preferences as { calendar?: unknown } | null)?.calendar;
-  return stored && typeof stored === "object" ? (stored as Record<string, unknown>) : null;
+  return stored && typeof stored === 'object' ? (stored as Record<string, unknown>) : null;
 }
 
 /** The Berlin date an occurrence starts on: the all-day date or the timed instant's local date. */
-export function occurrenceLocalDate(occurrence: { startDate: string | null; startAt: string | null } | undefined): string | null {
+export function occurrenceLocalDate(
+  occurrence: { startDate: string | null; startAt: string | null } | undefined,
+): string | null {
   if (!occurrence) return null;
   return occurrence.startDate ?? (occurrence.startAt ? formatBerlinLocalDate(occurrence.startAt) : null);
-}
-
-export async function getVisiblePlanningStateAs(
-  user: { email: string; password: string },
-  orgId: string,
-): Promise<
-  Record<
-    | "planning_series"
-    | "planning_occurrences"
-    | "planning_occurrence_assignments"
-    | "planning_occurrence_assessments"
-    | "planning_events",
-    number
-  >
-> {
-  return withRoleClient(user, async (client) => {
-    const tables = [
-      "planning_series",
-      "planning_occurrences",
-      "planning_occurrence_assignments",
-      "planning_occurrence_assessments",
-      "planning_events",
-    ] as const;
-    const results = await Promise.all(
-      tables.map((table) =>
-        client
-          .from(table)
-          .select("id", { count: "exact", head: true })
-          .eq("organization_id", orgId),
-      ),
-    );
-    const error = results.find((result) => result.error)?.error;
-    if (error) throw new Error(`Planning RLS lookup failed: ${error.message}`);
-    return Object.fromEntries(
-      tables.map((table, index) => {
-        const result = results[index];
-        if (!result) throw new Error(`Planning RLS lookup returned no result for ${table}`);
-        return [table, result.count ?? 0];
-      }),
-    ) as Record<(typeof tables)[number], number>;
-  });
 }

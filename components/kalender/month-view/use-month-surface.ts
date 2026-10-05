@@ -1,7 +1,12 @@
 'use client';
 
 import { useCallback, useLayoutEffect, useMemo, useRef } from 'react';
-import { checkParkedContext, checkOccurrenceMovable, checkParkable, checkTimeBlockTarget } from '@/lib/calendar/refusal-checks';
+import {
+  checkParkedContext,
+  checkOccurrenceMovable,
+  checkParkable,
+  checkTimeBlockTarget,
+} from '@/lib/calendar/refusal-checks';
 import { calendarRefusalMessage, formatRefusalDate } from '@/lib/calendar/messages';
 import { shiftedBlockUpdates } from '@/lib/calendar/day-layout';
 import type { CalendarJob } from '@/lib/jobs/types';
@@ -12,7 +17,14 @@ import type { CalendarMutations } from '../mutations/use-calendar-mutations';
 
 type CellRect = { date: string; top: number; bottom: number; left: number; right: number };
 
-type SlotMap = { cells: CellRect[]; scroller: HTMLElement | null; scrollTop: number; scrollLeft: number; contentTop: number; contentLeft: number };
+type SlotMap = {
+  cells: CellRect[];
+  scroller: HTMLElement | null;
+  scrollTop: number;
+  scrollLeft: number;
+  contentTop: number;
+  contentLeft: number;
+};
 
 export type MonthSurfaceInput = {
   rootRef: React.RefObject<HTMLDivElement | null>;
@@ -39,7 +51,9 @@ function dayDelta(fromIso: string, toIso: string): number {
 export function useMonthSurface(input: MonthSurfaceInput): DragSurface {
   const mapRef = useRef<SlotMap | null>(null);
   const inputRef = useRef(input);
-  useLayoutEffect(() => { inputRef.current = input; });
+  useLayoutEffect(() => {
+    inputRef.current = input;
+  });
 
   const prepare = useCallback(() => {
     const { rootRef, verticalScroller } = inputRef.current;
@@ -49,9 +63,22 @@ export function useMonthSurface(input: MonthSurfaceInput): DragSurface {
     const rootRect = root.getBoundingClientRect();
     const cells = [...root.querySelectorAll<HTMLElement>('[data-month-cell]')].map((element) => {
       const rect = element.getBoundingClientRect();
-      return { date: element.dataset.monthCell ?? '', top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right };
+      return {
+        date: element.dataset.monthCell ?? '',
+        top: rect.top,
+        bottom: rect.bottom,
+        left: rect.left,
+        right: rect.right,
+      };
     });
-    mapRef.current = { cells, scroller, scrollTop: scroller?.scrollTop ?? 0, scrollLeft: scroller?.scrollLeft ?? 0, contentTop: rootRect.top, contentLeft: rootRect.left };
+    mapRef.current = {
+      cells,
+      scroller,
+      scrollTop: scroller?.scrollTop ?? 0,
+      scrollLeft: scroller?.scrollLeft ?? 0,
+      contentTop: rootRect.top,
+      contentLeft: rootRect.left,
+    };
   }, []);
 
   const cellAt = (map: SlotMap, point: { x: number; y: number }): CellRect | null => {
@@ -59,18 +86,28 @@ export function useMonthSurface(input: MonthSurfaceInput): DragSurface {
     const dx = (map.scroller?.scrollLeft ?? 0) - map.scrollLeft;
     const x = point.x + dx;
     const y = point.y + dy;
-    return map.cells.find((cell) => x >= cell.left && x < cell.right && y >= cell.top && y < cell.bottom) ?? null;
+    return (
+      map.cells.find((cell) => x >= cell.left && x < cell.right && y >= cell.top && y < cell.bottom) ?? null
+    );
   };
 
-  const resolveTarget = useCallback((point: { x: number; y: number }, payload: CalendarDragPayload): CalendarDragTarget | null => {
-    const map = mapRef.current;
-    if (!map) return null;
-    const cell = cellAt(map, point);
-    if (!cell) return null;
-    const employeeRecordId = payload.kind === 'occurrence' ? payload.sourceEmployeeRecordId : null;
-    const userId = payload.kind === 'occurrence' ? payload.sourceUserId : payload.kind === 'timeBlock' ? payload.sourceUserId : null;
-    return { kind: 'cell', employeeRecordId, userId, date: cell.date };
-  }, []);
+  const resolveTarget = useCallback(
+    (point: { x: number; y: number }, payload: CalendarDragPayload): CalendarDragTarget | null => {
+      const map = mapRef.current;
+      if (!map) return null;
+      const cell = cellAt(map, point);
+      if (!cell) return null;
+      const employeeRecordId = payload.kind === 'occurrence' ? payload.sourceEmployeeRecordId : null;
+      const userId =
+        payload.kind === 'occurrence'
+          ? payload.sourceUserId
+          : payload.kind === 'timeBlock'
+            ? payload.sourceUserId
+            : null;
+      return { kind: 'cell', employeeRecordId, userId, date: cell.date };
+    },
+    [],
+  );
 
   const checkTarget = useCallback((target: CalendarDragTarget, payload: CalendarDragPayload): DragVerdict => {
     const { blocksByUserDate, nowMs, parkingContexts } = inputRef.current;
@@ -79,7 +116,8 @@ export function useMonthSurface(input: MonthSurfaceInput): DragSurface {
       if (!parked.ok) return { ok: false, message: parked.message };
     }
     if (target.kind === 'zone') {
-      if (payload.kind !== 'occurrence') return { ok: false, message: calendarRefusalMessage('only_occurrences_park') ?? '' };
+      if (payload.kind !== 'occurrence')
+        return { ok: false, message: calendarRefusalMessage('only_occurrences_park') ?? '' };
       const parkable = checkParkable(payload.job);
       return parkable.ok ? { ok: true, label: 'Parken' } : { ok: false, message: parkable.message };
     }
@@ -93,12 +131,21 @@ export function useMonthSurface(input: MonthSurfaceInput): DragSurface {
         return { ok: true, label: dateLabel };
       case 'timeBlock': {
         const { session } = payload;
-        if (!session.clockIn || !session.clockOut) return { ok: false, message: 'Offene Arbeitszeit lässt sich nicht verschieben.' };
+        if (!session.clockIn || !session.clockOut)
+          return { ok: false, message: 'Offene Arbeitszeit lässt sich nicht verschieben.' };
         const delta = dayDelta(payload.sourceDate, target.date) * 86_400_000;
         const startMs = new Date(session.clockIn.timestamp).getTime() + delta;
         const endMs = new Date(session.clockOut.timestamp).getTime() + delta;
-        const others = (blocksByUserDate.get(`${payload.sourceUserId}:${target.date}`) ?? []).filter((block) => block.id !== session.calendarBlockId);
-        const check = checkTimeBlockTarget({ startMs, endMs, nowMs: nowMs(), targetName: null, otherBlocks: others });
+        const others = (blocksByUserDate.get(`${payload.sourceUserId}:${target.date}`) ?? []).filter(
+          (block) => block.id !== session.calendarBlockId,
+        );
+        const check = checkTimeBlockTarget({
+          startMs,
+          endMs,
+          nowMs: nowMs(),
+          targetName: null,
+          otherBlocks: others,
+        });
         return check.ok ? { ok: true, label: dateLabel } : { ok: false, message: check.message };
       }
       case 'untimed':
@@ -117,8 +164,12 @@ export function useMonthSurface(input: MonthSurfaceInput): DragSurface {
     const highlight = inputRef.current.highlightRef.current;
     const map = mapRef.current;
     if (!highlight) return;
-    const cell = target?.kind === 'cell' && map ? map.cells.find((candidate) => candidate.date === target.date) : null;
-    if (!cell || !map) { highlight.hidden = true; return; }
+    const cell =
+      target?.kind === 'cell' && map ? map.cells.find((candidate) => candidate.date === target.date) : null;
+    if (!cell || !map) {
+      highlight.hidden = true;
+      return;
+    }
     highlight.hidden = false;
     highlight.dataset.state = verdict?.ok ? 'valid' : 'refused';
     highlight.style.transform = `translate3d(${Math.round(cell.left - map.contentLeft)}px, ${Math.round(cell.top - map.contentTop)}px, 0)`;
@@ -136,35 +187,60 @@ export function useMonthSurface(input: MonthSurfaceInput): DragSurface {
     if (payload.kind === 'occurrence') {
       const { job } = payload;
       if (job.plannedDate === target.date) return;
-      void mutations.moveJob({ job, changes: { plannedDate: target.date }, successMessage: `Termin wurde auf ${dateLabel} verschoben.`, context: { date: dateLabel } });
+      void mutations.moveJob({
+        job,
+        changes: { plannedDate: target.date },
+        successMessage: `Termin wurde auf ${dateLabel} verschoben.`,
+        context: { date: dateLabel },
+      });
       return;
     }
     if (payload.kind === 'parked') {
       const context = parkingContexts?.get(payload.job.jobId ?? payload.job.id);
-      if (!context) { onParkedContextMissing(); return; }
-      void mutations.unparkJob({ job: payload.job, parkingContext: context, plannedDate: target.date, successMessage: `Auftrag wurde am ${dateLabel} eingeplant.`, context: { date: dateLabel } });
+      if (!context) {
+        onParkedContextMissing();
+        return;
+      }
+      void mutations.unparkJob({
+        job: payload.job,
+        parkingContext: context,
+        plannedDate: target.date,
+        successMessage: `Auftrag wurde am ${dateLabel} eingeplant.`,
+        context: { date: dateLabel },
+      });
       return;
     }
     if (payload.kind === 'timeBlock') {
       const { session } = payload;
       if (!session.clockIn || target.date === payload.sourceDate) return;
-      const sourceEntries = session.sourceEntries ?? [session.clockIn, ...(session.clockOut ? [session.clockOut] : [])];
+      const sourceEntries = session.sourceEntries ?? [
+        session.clockIn,
+        ...(session.clockOut ? [session.clockOut] : []),
+      ];
       void mutations.moveTimeBlock({
         sourceEntries,
-        updates: shiftedBlockUpdates(sourceEntries, dayDelta(payload.sourceDate, target.date) * 86_400_000, payload.sourceUserId),
-        successMessage: `Arbeitszeit wurde auf ${dateLabel} verschoben.`,
-        context: { date: dateLabel },
+        updates: shiftedBlockUpdates(
+          sourceEntries,
+          dayDelta(payload.sourceDate, target.date) * 86_400_000,
+          payload.sourceUserId,
+        ),
       });
     }
   }, []);
 
-  return useMemo<DragSurface>(() => ({
-    prepare,
-    resolveTarget,
-    checkTarget,
-    onTargetChange,
-    onDrop,
-    onEnd: () => { const highlight = inputRef.current.highlightRef.current; if (highlight) highlight.hidden = true; },
-    scrollContainer: () => inputRef.current.verticalScroller(),
-  }), [checkTarget, onDrop, onTargetChange, prepare, resolveTarget]);
+  return useMemo<DragSurface>(
+    () => ({
+      prepare,
+      resolveTarget,
+      checkTarget,
+      onTargetChange,
+      onDrop,
+      onEnd: () => {
+        const highlight = inputRef.current.highlightRef.current;
+        if (highlight) highlight.hidden = true;
+      },
+      scrollContainer: () => inputRef.current.verticalScroller(),
+    }),
+    [checkTarget, onDrop, onTargetChange, prepare, resolveTarget],
+  );
 }

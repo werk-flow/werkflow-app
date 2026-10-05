@@ -36,10 +36,7 @@ export function FormDisclosure({
         className="flex items-center gap-1.5 rounded-sm text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
       >
         <ChevronRight
-          className={cn(
-            'size-4 shrink-0 transition-transform duration-200',
-            open && 'rotate-90'
-          )}
+          className={cn('size-4 shrink-0 transition-transform duration-200', open && 'rotate-90')}
         />
         {label}
       </button>

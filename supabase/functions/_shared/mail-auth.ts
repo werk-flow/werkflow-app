@@ -16,9 +16,7 @@ function timingSafeEquals(a: string, b: string): boolean {
 
 function collectSecretKeys(value: unknown): string[] {
   if (typeof value === 'string') {
-    return value.startsWith('sb_secret_') || /^[a-f0-9]{64}$/i.test(value)
-      ? [value]
-      : [];
+    return value.startsWith('sb_secret_') || /^[a-f0-9]{64}$/i.test(value) ? [value] : [];
   }
 
   if (Array.isArray(value)) {
@@ -59,9 +57,7 @@ function getPresentedApiKey(req: Request): string | null {
 async function sha256Hex(value: string): Promise<string> {
   const bytes = new TextEncoder().encode(value);
   const digest = await crypto.subtle.digest('SHA-256', bytes);
-  return [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('');
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 export function createMailAuthorizer(dependencies: MailDependencies): {
@@ -75,9 +71,9 @@ export function createMailAuthorizer(dependencies: MailDependencies): {
       const presentedApiKey = getPresentedApiKey(request);
       if (!presentedApiKey) return false;
       const presentedApiKeyHash = await sha256Hex(presentedApiKey);
-      return allowedSecretKeys.some((secretKey) =>
-        timingSafeEquals(presentedApiKey, secretKey) ||
-        timingSafeEquals(presentedApiKeyHash, secretKey)
+      return allowedSecretKeys.some(
+        (secretKey) =>
+          timingSafeEquals(presentedApiKey, secretKey) || timingSafeEquals(presentedApiKeyHash, secretKey),
       );
     },
   };

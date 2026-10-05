@@ -1,6 +1,6 @@
 # Wave 2 Flow Audit (per-slice model)
 
-Status: living — last reviewed 2026-09-06; all Wave 2 slices accepted, formal wave-end certification remains unrecorded
+Status: living — last reviewed 2026-10-02; all Wave 2 slices accepted, formal wave-end certification remains unrecorded
 
 Wave 2 audits work differently from Wave 1: **every slice ships its own exhaustive flow coverage as part of slice acceptance.** There are no wave-end discovery sessions. This document is the wave's coverage ledger and the certification-gate record; current process rules live in [`phase-1/protocol.md`](../protocol.md), [testing.md](../../../technical/testing.md), and [decision 0007](../../../decisions/0007-independent-test-groups.md). Historical acceptance rows below keep the evidence recorded at that time.
 
@@ -9,7 +9,7 @@ Wave 2 audits work differently from Wave 1: **every slice ships its own exhausti
 Wave 1 enumerated and tested catalog flows after all twelve slices were done. That worked, but the retroactive R1 reconciliation (four extra sessions repairing A1–A4 coverage) was the direct cost of enumerating flows after the fact, and defects surfaced weeks after the context that produced them was gone. From Wave 2 on, the flow inventory is part of the slice itself. Decision 0007 preserves this obligation and replaces its execution policy:
 
 1. **Pre-implementation:** the slice's numbered report proposes the complete user-flow list as German catalog bullets with provisional `P1-XX-FNN` IDs. The owner confirms product design and flow inventory in one gate. Flows discovered during implementation are added; the catalog is finalized at acceptance.
-2. **Acceptance:** the slice maps every catalog clause to reviewed assertions in `lib/testing/coverage-map.json`, registers its executable groups, and closes its ledger rows with `X/X mapped; X/X fully evidenced; 0 partial; 0 unmapped`. Evidence can combine browser, domain, SQL, and component tests as the contract requires.
+2. **Acceptance:** the slice maps every catalog clause to reviewed assertions in `lib/testing/selection/coverage-map.json`, registers its executable groups, and closes its ledger rows with `X/X mapped; X/X fully evidenced; 0 partial; 0 unmapped`. Evidence can combine browser, domain, SQL, and component tests as the contract requires.
 3. **Wave end:** verify the complete local release plan and cloud canary. Scope and result qualification follow decision 0007.
 
 Golden groups prove connected business outcomes. Detailed audit groups prove the browser-visible clauses that need the real app. A catalog flow remains required when its assertion moves to a cheaper layer.
@@ -24,42 +24,25 @@ Golden groups prove connected business outcomes. Detailed audit groups prove the
 
 ### Fixture-date ownership
 
-Wave 1 owns run-day offsets +20 … +69. Wave 2 slices own **+70 onward**, five days per slice, assigned when the slice starts. The default time of day is 06:00 Europe/Berlin; P1-22, P1-23, and P1-24 use 07:00, as their left-behind entries below record.
-
-| Slice                                                     | Owned run-day offsets |
-| --------------------------------------------------------- | --------------------- |
-| P1-13                                                     | +70 … +74             |
-| P1-14                                                     | +75 … +79             |
-| P1-15                                                     | +80 … +84             |
-| P1-16                                                     | +85 … +89             |
-| P1-17                                                     | +90 … +94             |
-| P1-18                                                     | +95 … +99             |
-| P1-19                                                     | +100 … +104           |
-| P1-20                                                     | +105 … +109           |
-| P1-21                                                     | +110 … +114           |
-| P1-22                                                     | +115 … +119           |
-| P1-23                                                     | +120 … +124           |
-| P1-24                                                     | +125 … +129           |
-
-The next unassigned block starts at +130. It belongs to the Wave 3 audit doc, not to this table.
+The registry `AUDIT_DATE_WINDOWS` in `tests/golden/support/date-ownership.ts` owns the run-day offsets of every audit group, and it throws on an overlap. [Integrated test state](../../../technical/integrated-test-state.md#choose-fixture-dates) owns the rule for claiming a window.
 
 ## Slice and wave verification
 
 Slice acceptance follows the complete selected local change plan, with provider checks where applicable. Review the mapped clauses and changed dependencies before execution. Reuse results only when the owning and shared inputs remain qualified. An explicit subset run proves only that subset.
 
-For wave end or beta handoff, run `bun run test:verify --mode release` against the recorded local production build, then the cloud canary against its recorded DEV build. The release plan includes all audit groups and the integrated Golden journey. Separate passing group runs can qualify the release when their inputs match. The integrated journey itself must run from beginning to end.
+For wave end or beta handoff, run `bun run test:verify --mode release` against the recorded local production build, then the cloud canary against its recorded DEV build. The release plan includes all audit groups and independently registered Golden groups. Separate passing group runs can qualify the release when their inputs match. The September 30 amendment to decision 0007 removed integrated cross-file execution.
 
 Confirm catalog-to-mapping equality and review the complete clauses. Record the report, selected scope, target, input identities, fresh and reused results, retained-state disposition, and remaining limitations in [golden-gate-log.md](golden-gate-log.md) as `AUDIT-W2`.
 
 ## Wave-end certification gate
 
-As of 2026-09-05, every Wave 2 slice is accepted, but the formal `AUDIT-W2` gate remains unrecorded. The [2026-09-04 UI/UX closure](../hardening-2026-09/02-uiux-hardening.md#verification-record) subsequently passed the full local audit and Golden batteries against unchanged application code and one product build, followed by the rebuilt DEV canary. A Golden harness correction changed the source fingerprint after the audit; the closure explicitly records that limit. It does not claim the complete wave-end gate or a full cloud battery. The requirement for a full cloud battery has since been superseded by decision 0007. Resolve the current local-release-plus-canary scope during the owner-directed handoff; do not infer missing evidence from slice acceptance or rerun complete batteries solely to update this ledger.
+As of 2026-09-05, every Wave 2 slice is accepted, but the formal `AUDIT-W2` gate remains unrecorded. The 2026-09-04 UI/UX closure subsequently passed the full local audit and Golden batteries against unchanged application code and one product build, followed by the rebuilt DEV canary. A Golden harness correction changed the source fingerprint after the audit; the closure explicitly records that limit. It does not claim the complete wave-end gate or a full cloud battery. The requirement for a full cloud battery has since been superseded by decision 0007. Resolve the current local-release-plus-canary scope during the owner-directed handoff; do not infer missing evidence from slice acceptance or rerun complete batteries solely to update this ledger.
 
 Documentation reconciliation, 2026-09-05: a read-only comparison expanded the compressed ranges in each ledger's first column and compared their union with the catalog bullet IDs. All twelve slice sets match, totaling `850/850` IDs with no missing or extra ID. This proves mapping equality only; it does not re-certify assertion-body coverage or replace browser evidence.
 
 ## Coverage ledger
 
-One section per slice, added at slice acceptance. Same row format and status vocabulary as Wave 1 ([wave-1-audit.md](wave-1-audit.md)): catalog flow IDs, coverage mapping, status, whole-bullet clause evidence, closed with the invariant line.
+One section per slice, added at slice acceptance. Same row format and status vocabulary as the Wave 1 ledger: catalog flow IDs, coverage mapping, status, whole-bullet clause evidence, closed with the invariant line.
 
 ### P1-13 — Versioned work templates
 

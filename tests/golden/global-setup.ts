@@ -1,8 +1,7 @@
 import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { chromium, type FullConfig } from '@playwright/test';
-import { assertWorkspaceTestLock } from "../../lib/testing/workspace-test-lock";
+import { assertWorkspaceTestLock } from '../../lib/testing/runner/workspace-test-lock';
 
 import { loadEnvLocal } from './support/env';
 import {
@@ -16,10 +15,7 @@ import {
   updateRunManifest,
 } from './support/run-state';
 import { createTestWorld } from './support/seed';
-import { ensureFreshRoleSession, type SessionRole } from './support/sessions';
 import { artifactsDirectory, saveWorld, type TestWorld } from './support/world';
-
-const SESSION_ROLES: SessionRole[] = ['admin', 'buero', 'employee', 'outsider'];
 
 function createUploadFixture(): void {
   mkdirSync(artifactsDirectory(), { recursive: true });
@@ -31,10 +27,9 @@ function createUploadFixture(): void {
   writeFileSync(largePdfPath, buffer);
 }
 
-export default async function globalSetup(config: FullConfig): Promise<void> {
+export default async function globalSetup(): Promise<void> {
   assertWorkspaceTestLock();
   loadEnvLocal();
-  const baseUrl = config.projects[0]?.use?.baseURL ?? 'http://localhost:3000';
   const reuseRunKey = process.env.WERKFLOW_REUSE_RUN_KEY;
   ensureRunManifest();
 
@@ -58,15 +53,6 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
 
     attachWorldToRun(world);
     createUploadFixture();
-    const browser = await chromium.launch();
-    try {
-      for (const role of SESSION_ROLES) {
-        await ensureFreshRoleSession({ browser, baseUrl, world, role, force: true });
-      }
-    } finally {
-      await browser.close();
-    }
-    console.log('[golden] all four role sessions refreshed and protected-route checked');
   } catch (error) {
     const failure = {
       title: 'Global setup',

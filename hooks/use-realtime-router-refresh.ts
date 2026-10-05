@@ -12,10 +12,7 @@ import {
   REALTIME_MAX_DEFER_MS,
   shouldScheduleRealtimeRefresh,
 } from '@/lib/realtime/events';
-import {
-  createTrailingScheduler,
-  type TrailingScheduler,
-} from '@/lib/realtime/scheduler';
+import { createTrailingScheduler, type TrailingScheduler } from '@/lib/realtime/scheduler';
 import { useAnyDialogOpen } from '@/components/ui/open-dialog-context';
 
 type UseRealtimeRouterRefreshOptions = {
@@ -61,10 +58,7 @@ export function useRealtimeRouterRefresh({
 
   const scheduleRefresh = useCallback(
     (event?: RealtimeChangeEvent) => {
-      if (
-        !enabledRef.current ||
-        (event && !shouldScheduleRealtimeRefresh(event, eventFilterRef.current))
-      ) {
+      if (!enabledRef.current || (event && !shouldScheduleRealtimeRefresh(event, eventFilterRef.current))) {
         return;
       }
 
@@ -73,7 +67,7 @@ export function useRealtimeRouterRefresh({
         return;
       }
 
-      // Shared debounce with a bounded maximum deferral (PF-12).
+      // Shared debounce with a bounded maximum deferral.
       schedulerRef.current ??= createTrailingScheduler({
         delayMs: REALTIME_DEBOUNCE_MS,
         maxWaitMs: REALTIME_MAX_DEFER_MS,
@@ -81,7 +75,7 @@ export function useRealtimeRouterRefresh({
       });
       schedulerRef.current.schedule();
     },
-    [refresh]
+    [refresh],
   );
 
   useEffect(() => {
@@ -116,9 +110,7 @@ export function useRealtimeRouterRefresh({
   useEffect(() => {
     if (!subscribe || !enabled) return;
     const onEvent = (event: RealtimeChangeEvent) => scheduleRefresh(event);
-    const unsubscribes = tablesRef.current.map((table) =>
-      subscribe(table, onEvent)
-    );
+    const unsubscribes = tablesRef.current.map((table) => subscribe(table, onEvent));
     return () => {
       for (const unsubscribe of unsubscribes) unsubscribe();
     };

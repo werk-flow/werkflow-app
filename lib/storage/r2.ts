@@ -17,6 +17,9 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
+import { logError } from '../logging';
+import { isUuid } from '../validation/uuid';
+
 const SIGNED_UPLOAD_URL_EXPIRES_SECONDS = 60 * 30;
 const SIGNED_DOWNLOAD_URL_EXPIRES_SECONDS = 60 * 10;
 // Signed URLs must stay short-lived; nothing in the app needs more than an hour.
@@ -30,7 +33,7 @@ function clampExpiry(expiresInSeconds: number): number {
   }
   return Math.min(
     Math.max(Math.floor(expiresInSeconds), SIGNED_URL_MIN_EXPIRES_SECONDS),
-    SIGNED_URL_MAX_EXPIRES_SECONDS
+    SIGNED_URL_MAX_EXPIRES_SECONDS,
   );
 }
 
@@ -40,9 +43,8 @@ type R2Config = {
   secretAccessKey: string;
   bucketName: string;
   jurisdiction: string;
-  // Optional full endpoint override (decision D9, docs/plans/phase-1/consolidation-2026-08/platform-hardening.md):
-  // the local test stack serves an S3-compatible endpoint on localhost that the
-  // account/jurisdiction URL scheme cannot express. Cloud environments leave it
+  // Optional full endpoint override (docs/decisions/0006-testing-architecture.md): the local test stack serves an
+  // S3-compatible endpoint on localhost that the account/jurisdiction URL scheme cannot express. Cloud environments leave it
   // unset; the test preflight rejects it outside the local target.
   endpointOverride: string | null;
 };
@@ -68,7 +70,7 @@ function getR2Config(): R2Config {
 
   if (!accountId || !accessKeyId || !secretAccessKey || !bucketName) {
     throw new Error(
-      'Missing R2 configuration. Expected R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, and R2_BUCKET_NAME environment variables.'
+      'Missing R2 configuration. Expected R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, and R2_BUCKET_NAME environment variables.',
     );
   }
 
@@ -117,8 +119,9 @@ function buildContentDisposition(type: 'inline' | 'attachment', fileName?: strin
   if (!fileName) return type;
 
   const fallback = fileName.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
-  const encoded = encodeURIComponent(fileName).replace(/['()*]/g, (char) =>
-    `%${char.charCodeAt(0).toString(16).toUpperCase()}`
+  const encoded = encodeURIComponent(fileName).replace(
+    /['()*]/g,
+    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
   );
 
   return `${type}; filename="${fallback}"; filename*=UTF-8''${encoded}`;
@@ -126,16 +129,15 @@ function buildContentDisposition(type: 'inline' | 'attachment', fileName?: strin
 
 /**
  * Every storage key starts with the owning organization id (document, version
- * and payroll-export paths all build it that way). The signers refuse any other
- * key, so a wrong or forged path can never yield a URL for another
- * organization's object even if a caller is mistaken (pre-Wave-3 step 5,
- * CodeRabbit finding of 2026-09-17; Tier 1). Exported for its unit test.
+ * and payroll-export paths all build it that way). Every exported operation
+ * takes the server-resolved organization id explicitly and refuses any key
+ * outside it, so a wrong or forged path can never reach another organization's
+ * object even if a caller is mistaken. Exported for its unit test.
  */
 export function assertOrganizationStorageKey(organizationId: string, path: string): void {
   const segments = path.split('/');
   if (
-    !organizationId ||
-    organizationId.includes('/') ||
+    !isUuid(organizationId) ||
     segments.length < 2 ||
     segments[0] !== organizationId ||
     segments.some((segment) => segment === '' || segment === '.' || segment === '..')
@@ -144,21 +146,15 @@ export function assertOrganizationStorageKey(organizationId: string, path: strin
   }
 }
 
-/** Keys read without an organization context still may not traverse or contain empty segments. */
-function assertStorageKeyShape(path: string): void {
-  const segments = path.split('/');
-  if (segments.length < 2 || segments.some((segment) => segment === '' || segment === '.' || segment === '..')) {
-    throw new Error('storage_key_malformed');
-  }
-}
+/** The organization scope every storage operation carries. */
+type OrganizationScope = { organizationId: string };
 
 export async function createSignedUploadUrl({
   organizationId,
   path,
   contentType,
   expiresInSeconds = SIGNED_UPLOAD_URL_EXPIRES_SECONDS,
-}: {
-  organizationId: string;
+}: OrganizationScope & {
   path: string;
   contentType: string;
   expiresInSeconds?: number;
@@ -184,8 +180,7 @@ export async function createSignedDownloadUrl({
   disposition = 'inline',
   downloadFileName,
   expiresInSeconds = SIGNED_DOWNLOAD_URL_EXPIRES_SECONDS,
-}: {
-  organizationId: string;
+}: OrganizationScope & {
   path: string;
   disposition?: 'inline' | 'attachment';
   downloadFileName?: string | undefined;
@@ -201,12 +196,13 @@ export async function createSignedDownloadUrl({
   return getSignedUrl(getR2Client(), command, { expiresIn: clampExpiry(expiresInSeconds) });
 }
 
-export async function headStorageObject(path: string): Promise<StorageObjectHead> {
-  assertStorageKeyShape(path);
+export async function headStorageObject({
+  organizationId,
+  path,
+}: OrganizationScope & { path: string }): Promise<StorageObjectHead> {
+  assertOrganizationStorageKey(organizationId, path);
   try {
-    const result = await getR2Client().send(
-      new HeadObjectCommand({ Bucket: getR2BucketName(), Key: path })
-    );
+    const result = await getR2Client().send(new HeadObjectCommand({ Bucket: getR2BucketName(), Key: path }));
 
     return {
       exists: true,
@@ -227,15 +223,19 @@ function isNotFoundError(error: unknown): boolean {
   return candidate.name === 'NotFound' || candidate.$metadata?.httpStatusCode === 404;
 }
 
+/** Copies an object inside one organization: source and target both lie under its prefix. */
 export async function copyStorageObject({
+  organizationId,
   sourcePath,
   targetPath,
   contentType,
-}: {
+}: OrganizationScope & {
   sourcePath: string;
   targetPath: string;
   contentType?: string | null;
 }): Promise<void> {
+  assertOrganizationStorageKey(organizationId, sourcePath);
+  assertOrganizationStorageKey(organizationId, targetPath);
   const bucket = getR2BucketName();
 
   await getR2Client().send(
@@ -245,39 +245,46 @@ export async function copyStorageObject({
       CopySource: `${bucket}/${encodeURIComponent(sourcePath).replace(/%2F/g, '/')}`,
       // Preserve or override metadata explicitly; REPLACE keeps behavior
       // deterministic when a content type is provided.
-      ...(contentType
-        ? { MetadataDirective: 'REPLACE' as const, ContentType: contentType }
-        : {}),
-    })
+      ...(contentType ? { MetadataDirective: 'REPLACE' as const, ContentType: contentType } : {}),
+    }),
   );
 }
 
 export async function putStorageObject({
+  organizationId,
   path,
   body,
   contentType,
-}: {
+}: OrganizationScope & {
   path: string;
   body: Uint8Array | Buffer;
   contentType: string;
 }): Promise<void> {
+  assertOrganizationStorageKey(organizationId, path);
   await getR2Client().send(
     new PutObjectCommand({
       Bucket: getR2BucketName(),
       Key: path,
       Body: body,
       ContentType: contentType,
-    })
+    }),
   );
 }
 
-export async function deleteStorageObjects(paths: string[]): Promise<void> {
+export async function deleteStorageObjects({
+  organizationId,
+  paths,
+}: OrganizationScope & { paths: readonly string[] }): Promise<void> {
+  // The organization id is checked even for an empty batch, so a call with a
+  // forged scope fails the same way whatever it would delete.
+  if (!isUuid(organizationId)) throw new Error('storage_key_outside_organization');
+  for (const path of paths) assertOrganizationStorageKey(organizationId, path);
   if (paths.length === 0) return;
 
   const client = getR2Client();
   const bucket = getR2BucketName();
 
-  const failedKeys: string[] = [];
+  let failedKeyCount = 0;
 
   for (let index = 0; index < paths.length; index += DELETE_BATCH_SIZE) {
     const batch = paths.slice(index, index + DELETE_BATCH_SIZE);
@@ -285,20 +292,38 @@ export async function deleteStorageObjects(paths: string[]): Promise<void> {
       new DeleteObjectsCommand({
         Bucket: bucket,
         Delete: { Objects: batch.map((path) => ({ Key: path })), Quiet: true },
-      })
+      }),
     );
 
-    for (const deleteError of result.Errors ?? []) {
-      if (deleteError.Key) failedKeys.push(deleteError.Key);
-    }
+    failedKeyCount += (result.Errors ?? []).filter((deleteError) => deleteError.Key).length;
   }
 
-  if (failedKeys.length > 0) {
-    throw new Error(`Failed to delete ${failedKeys.length} object(s): ${failedKeys.join(', ')}`);
+  if (failedKeyCount > 0) {
+    throw new Error(`Failed to delete ${failedKeyCount} object(s)`);
   }
 }
 
-export async function listStorageObjectPaths(prefix: string): Promise<string[]> {
+/**
+ * Best-effort removal of objects that no row references: a refused or
+ * abandoned upload, a rolled-back copy. The caller already returns its own
+ * outcome, so a failed removal is logged and leaves an orphan; it never
+ * becomes a second error for the user.
+ */
+export async function discardStorageObjects(
+  scope: OrganizationScope & { paths: readonly string[] },
+): Promise<void> {
+  await deleteStorageObjects(scope).catch((error: unknown) => {
+    logError('storage_cleanup_failed', error);
+  });
+}
+
+/** Lists the object keys under a folder of one organization: `<organization>/` or deeper. */
+export async function listStorageObjectPaths({
+  organizationId,
+  prefix,
+}: OrganizationScope & { prefix: string }): Promise<string[]> {
+  if (!prefix.endsWith('/')) throw new Error('storage_key_outside_organization');
+  assertOrganizationStorageKey(organizationId, `${prefix}object`);
   const client = getR2Client();
   const bucket = getR2BucketName();
   const paths: string[] = [];
@@ -310,7 +335,7 @@ export async function listStorageObjectPaths(prefix: string): Promise<string[]> 
         Bucket: bucket,
         Prefix: prefix,
         ContinuationToken: continuationToken,
-      })
+      }),
     );
 
     for (const object of result.Contents ?? []) {

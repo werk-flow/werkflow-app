@@ -1,3 +1,4 @@
+import { compareTimeEntries } from '@/lib/time-tracking/entry-order';
 import type { TimeEntry } from './types';
 import { isSameLocalDay } from './day-utils';
 
@@ -7,17 +8,10 @@ type EffectiveEntryOptions = {
 };
 
 function sortTimeEntries(entries: TimeEntry[]): TimeEntry[] {
-  return [...entries].sort((a, b) => {
-    const diff = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
-    if (diff !== 0) return diff;
-    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-  });
+  return [...entries].sort(compareTimeEntries);
 }
 
-export function getEffectiveTimeEntries(
-  entries: TimeEntry[],
-  options?: EffectiveEntryOptions
-): TimeEntry[] {
+export function getEffectiveTimeEntries(entries: TimeEntry[], options?: EffectiveEntryOptions): TimeEntry[] {
   const referenceDate = options?.referenceDate ?? new Date();
 
   return sortTimeEntries(
@@ -36,6 +30,6 @@ export function getEffectiveTimeEntries(
       }
 
       return true;
-    })
+    }),
   );
 }

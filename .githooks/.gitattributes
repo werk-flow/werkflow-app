@@ -1,0 +1,2 @@
+# Hooks run under sh; a CRLF checkout breaks them.
+* text eol=lf

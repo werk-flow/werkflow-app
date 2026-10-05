@@ -7,7 +7,8 @@ export type BarTone = 'absence' | 'absence-pending' | 'holiday' | 'closure' | 'n
 
 const TONE_CLASS: Record<BarTone, string> = {
   absence: 'bg-calendar-absence text-calendar-absence-foreground',
-  'absence-pending': 'border border-dashed border-calendar-absence-pending-border bg-calendar-cell-off text-calendar-absence-foreground',
+  'absence-pending':
+    'border border-dashed border-calendar-absence-pending-border bg-calendar-cell-off text-calendar-absence-foreground',
   holiday: 'bg-calendar-holiday text-calendar-holiday-foreground',
   closure: 'bg-calendar-holiday text-calendar-holiday-foreground',
   note: 'border border-dashed border-calendar-note-border bg-calendar-note text-calendar-note-foreground',
@@ -46,7 +47,12 @@ export function BarSegment({
 }): React.JSX.Element {
   return (
     <div
-      className={cn('flex h-5 min-w-0 items-center px-1.5 text-[11px] font-medium leading-none', TONE_CLASS[tone], EDGE_CLASS[edge], className)}
+      className={cn(
+        'flex h-5 min-w-0 items-center px-1.5 text-[11px] font-medium leading-none',
+        TONE_CLASS[tone],
+        EDGE_CLASS[edge],
+        className,
+      )}
       title={title ?? label}
       data-calendar-bar={tone}
       data-bar-start={startDate}

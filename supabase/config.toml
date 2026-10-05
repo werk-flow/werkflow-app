@@ -116,9 +116,8 @@ enabled = true
 # The maximum file size allowed (e.g. "5MB", "500KB").
 file_size_limit = "50MiB"
 
-# Local stand-in for the R2 buckets (decision D9 in
-# docs/plans/phase-1/consolidation-2026-08/platform-hardening.md): the app reaches it through the bundled
-# S3-compatible endpoint via the R2_ENDPOINT override in .env.local.
+# Local stand-in for the R2 buckets (docs/decisions/0006-testing-architecture.md): the app reaches it
+# through the bundled S3-compatible endpoint via the R2_ENDPOINT override in .env.local.
 [storage.buckets.werkflow-documents-local]
 public = false
 file_size_limit = "50MiB"

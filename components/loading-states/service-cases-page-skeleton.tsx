@@ -1,11 +1,11 @@
-"use client";
+'use client';
 
-import { ContextualDocumentsSkeleton } from "@/components/dokumente/contextual-documents-layout";
-import type { ReactNode } from "react";
+import { ContextualDocumentsSkeleton } from '@/components/dokumente/contextual-documents-layout';
+import type { ReactNode } from 'react';
 
-import { SERVICE_CASE_COLUMNS } from "@/components/service/service-case-list-content";
-import { Skeleton } from "@/components/ui/skeleton";
-import { SkeletonList, SkeletonTable } from "@/components/ui/skeleton-table";
+import { SERVICE_CASE_COLUMNS } from '@/components/service/service-case-list-content';
+import { Skeleton } from '@/components/ui/skeleton';
+import { SkeletonList, SkeletonTable } from '@/components/ui/skeleton-table';
 
 // Content-only skeletons: the service layout keeps the h1 and the area nav on
 // screen, so these mirror what a subpage renders below it. Client module
@@ -13,7 +13,7 @@ import { SkeletonList, SkeletonTable } from "@/components/ui/skeleton-table";
 
 /** The subpage toolbar: h2 and description on the left, the primary action on the right. */
 export function ServiceToolbarSkeleton({
-  actions = <Skeleton className="hidden h-9 w-44 md:block" />,
+  actions = <Skeleton className="h-9 w-44" />,
 }: {
   actions?: ReactNode;
 }) {
@@ -37,22 +37,14 @@ export function ServiceCaseListSkeleton() {
         <Skeleton className="h-9 w-full md:w-60" />
       </div>
       <SkeletonList interactive className="md:hidden" />
-      <SkeletonTable
-        columns={SERVICE_CASE_COLUMNS}
-        interactive
-        className="hidden shadow-xs md:block"
-      />
+      <SkeletonTable columns={SERVICE_CASE_COLUMNS} interactive className="hidden shadow-xs md:block" />
     </>
   );
 }
 
 export function ServiceCasesPageSkeleton() {
   return (
-    <div
-      className="space-y-6"
-      role="status"
-      aria-label="Servicefälle werden geladen"
-    >
+    <div className="space-y-6" role="status" aria-label="Servicefälle werden geladen">
       <span className="sr-only">Servicefälle werden geladen.</span>
       <ServiceToolbarSkeleton />
       <ServiceCaseListSkeleton />
@@ -62,11 +54,7 @@ export function ServiceCasesPageSkeleton() {
 
 export function ServiceCaseDetailSkeleton() {
   return (
-    <div
-      className="space-y-6"
-      role="status"
-      aria-label="Servicefall wird geladen"
-    >
+    <div className="space-y-6" role="status" aria-label="Servicefall wird geladen">
       <span className="sr-only">Servicefall wird geladen.</span>
       <div className="space-y-2">
         <Skeleton className="h-4 w-28" />

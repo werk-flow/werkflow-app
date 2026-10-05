@@ -39,9 +39,7 @@ function parseLocalDateTime(value: string): LocalParts | null {
     hour: Number(hour),
     minute: Number(minute),
   };
-  const candidate = new Date(
-    Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute)
-  );
+  const candidate = new Date(Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute));
   if (
     candidate.getUTCFullYear() !== parts.year ||
     candidate.getUTCMonth() !== parts.month - 1 ||
@@ -62,7 +60,7 @@ export function formatBerlinLocalDateTime(instant: Date | string): string {
     berlinFormatter
       .formatToParts(date)
       .filter((part) => part.type !== 'literal')
-      .map((part) => [part.type, part.value])
+      .map((part) => [part.type, part.value]),
   );
   return `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}`;
 }
@@ -71,25 +69,15 @@ export function formatBerlinLocalDate(instant: Date | string): string {
   return formatBerlinLocalDateTime(instant).slice(0, 10);
 }
 
-export function resolveBerlinWallTime(
-  localDateTime: string
-): ResolvedBerlinWallTime | null {
+export function resolveBerlinWallTime(localDateTime: string): ResolvedBerlinWallTime | null {
   const parts = parseLocalDateTime(localDateTime);
   if (!parts) return null;
 
-  const wallClockEpoch = Date.UTC(
-    parts.year,
-    parts.month - 1,
-    parts.day,
-    parts.hour,
-    parts.minute
-  );
+  const wallClockEpoch = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute);
   // Europe/Berlin uses UTC+01:00 or UTC+02:00 for the supported modern dates.
   const candidates = [60, 120]
     .map((offsetMinutes) => new Date(wallClockEpoch - offsetMinutes * MINUTE_MS))
-    .filter(
-      (candidate) => formatBerlinLocalDateTime(candidate) === localDateTime
-    )
+    .filter((candidate) => formatBerlinLocalDateTime(candidate) === localDateTime)
     .sort((left, right) => left.getTime() - right.getTime());
 
   const [firstCandidate] = candidates;
@@ -108,13 +96,7 @@ export function resolveBerlinWallTime(
       rendered: formatBerlinLocalDateTime(instant),
     }))
     .filter((candidate) => candidate.rendered > localDateTime)
-    .sort((left, right) =>
-      left.rendered < right.rendered
-        ? -1
-        : left.rendered > right.rendered
-          ? 1
-          : 0
-    );
+    .sort((left, right) => (left.rendered < right.rendered ? -1 : left.rendered > right.rendered ? 1 : 0));
   const shifted = shiftedCandidates[0];
   if (!shifted) return null;
 
@@ -128,9 +110,7 @@ export function resolveBerlinWallTime(
 export function addLocalDays(localDate: string, days: number): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(localDate);
   if (!match) throw new Error('invalid_local_date');
-  const date = new Date(
-    Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
-  );
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
 }
@@ -140,9 +120,7 @@ export function addLocalMonths(localDate: string, months: number): string | null
   if (!match) throw new Error('invalid_local_date');
   const day = Number(match[3]);
   const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1 + months, 1));
-  const lastDay = new Date(
-    Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)
-  ).getUTCDate();
+  const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
   if (day > lastDay) return null;
   date.setUTCDate(day);
   return date.toISOString().slice(0, 10);
@@ -152,15 +130,9 @@ export function addLocalMonthsClamped(localDate: string, months: number): string
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(localDate);
   if (!match) throw new Error('invalid_local_date');
   const requestedDay = Number(match[3]);
-  const firstOfMonth = new Date(
-    Date.UTC(Number(match[1]), Number(match[2]) - 1 + months, 1)
-  );
+  const firstOfMonth = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1 + months, 1));
   const lastDay = new Date(
-    Date.UTC(
-      firstOfMonth.getUTCFullYear(),
-      firstOfMonth.getUTCMonth() + 1,
-      0
-    )
+    Date.UTC(firstOfMonth.getUTCFullYear(), firstOfMonth.getUTCMonth() + 1, 0),
   ).getUTCDate();
   firstOfMonth.setUTCDate(Math.min(requestedDay, lastDay));
   return firstOfMonth.toISOString().slice(0, 10);
@@ -177,7 +149,7 @@ export function getLocalWeekday(localDate: string): number {
 
 export function splitTimedIntervalByBerlinDate(
   startAt: Date,
-  endAt: Date
+  endAt: Date,
 ): Array<{ localDate: string; minutes: number }> {
   if (endAt.getTime() <= startAt.getTime()) return [];
 
@@ -188,9 +160,7 @@ export function splitTimedIntervalByBerlinDate(
     const nextLocalDate = addLocalDays(localDate, 1);
     const nextMidnight = resolveBerlinWallTime(`${nextLocalDate}T00:00`);
     if (!nextMidnight) throw new Error('invalid_berlin_midnight');
-    const segmentEnd = new Date(
-      Math.min(endAt.getTime(), nextMidnight.instant.getTime())
-    );
+    const segmentEnd = new Date(Math.min(endAt.getTime(), nextMidnight.instant.getTime()));
     if (segmentEnd.getTime() <= cursor.getTime()) {
       throw new Error('non_advancing_berlin_interval');
     }

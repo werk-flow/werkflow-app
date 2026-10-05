@@ -7,16 +7,12 @@ import {
   resolveCommunicationGuidance,
   timelineItemKey,
 } from './resolution';
-import type {
-  CommunicationPreference,
-  CommunicationSettings,
-  TimelineItem,
-} from './types';
+import type { CommunicationPreference, CommunicationSettings, TimelineItem } from './types';
 
 function timelineItem(
   stableKey: string,
   occurredAt: string,
-  overrides: Partial<TimelineItem> = {}
+  overrides: Partial<TimelineItem> = {},
 ): TimelineItem {
   return {
     stableKey,
@@ -36,9 +32,7 @@ function timelineItem(
   };
 }
 
-function preference(
-  overrides: Partial<CommunicationPreference>
-): CommunicationPreference {
+function preference(overrides: Partial<CommunicationPreference>): CommunicationPreference {
   return {
     id: 'preference-1',
     clientId: 'client-1',
@@ -69,11 +63,9 @@ const SETTINGS: CommunicationSettings = {
 
 describe('customer timeline resolution', () => {
   test('uses source kind and source id as stable identity', () => {
-    expect(timelineItemKey('job_created', 'source-1')).toBe(
-      'job_created:source-1'
-    );
+    expect(timelineItemKey('job_created', 'source-1')).toBe('job_created:source-1');
     expect(timelineItemKey('project_created', 'source-1')).not.toBe(
-      timelineItemKey('job_created', 'source-1')
+      timelineItemKey('job_created', 'source-1'),
     );
   });
 
@@ -85,23 +77,16 @@ describe('customer timeline resolution', () => {
         timelineItem('job:c', '2026-08-11T08:00:00.000Z'),
       ],
       null,
-      10
+      10,
     );
-    expect(page.items.map((item) => item.stableKey)).toEqual([
-      'job:c',
-      'job:b',
-      'job:a',
-    ]);
+    expect(page.items.map((item) => item.stableKey)).toEqual(['job:c', 'job:b', 'job:a']);
   });
 
   test('deduplicates source identities and keeps the newest projection', () => {
     const page = buildTimelinePage(
-      [
-        timelineItem('job:a', '2026-08-09T08:00:00.000Z'),
-        timelineItem('job:a', '2026-08-10T08:00:00.000Z'),
-      ],
+      [timelineItem('job:a', '2026-08-09T08:00:00.000Z'), timelineItem('job:a', '2026-08-10T08:00:00.000Z')],
       null,
-      10
+      10,
     );
     expect(page.items).toHaveLength(1);
     expect(page.items[0]?.occurredAt).toBe('2026-08-10T08:00:00.000Z');
@@ -125,9 +110,7 @@ describe('customer timeline resolution', () => {
       `job_created:${sourceIds[0]}`,
       `job_created:${sourceIds[1]}`,
     ]);
-    expect(decodeTimelineCursor(first.nextCursor)?.stableKey).toBe(
-      `job_created:${sourceIds[1]}`
-    );
+    expect(decodeTimelineCursor(first.nextCursor)?.stableKey).toBe(`job_created:${sourceIds[1]}`);
 
     const second = buildTimelinePage(candidates, first.nextCursor, 2);
     expect(second.items.map((item) => item.stableKey)).toEqual([
@@ -139,12 +122,9 @@ describe('customer timeline resolution', () => {
 
   test('emits no cursor when the page consumes every candidate', () => {
     const page = buildTimelinePage(
-      [
-        timelineItem('job:b', '2026-08-10T08:00:00.000Z'),
-        timelineItem('job:a', '2026-08-10T08:00:00.000Z'),
-      ],
+      [timelineItem('job:b', '2026-08-10T08:00:00.000Z'), timelineItem('job:a', '2026-08-10T08:00:00.000Z')],
       null,
-      2
+      2,
     );
     expect(page.items).toHaveLength(2);
     expect(page.nextCursor).toBeNull();
@@ -153,7 +133,7 @@ describe('customer timeline resolution', () => {
   test('rejects malformed and unsupported cursors', () => {
     expect(decodeTimelineCursor('not-a-cursor')).toBeNull();
     const unsupported = Buffer.from(
-      JSON.stringify({ version: 2, occurredAt: '2026-08-10T08:00:00Z', stableKey: 'a' })
+      JSON.stringify({ version: 2, occurredAt: '2026-08-10T08:00:00Z', stableKey: 'a' }),
     ).toString('base64url');
     expect(decodeTimelineCursor(unsupported)).toBeNull();
   });
@@ -163,9 +143,8 @@ describe('customer timeline resolution', () => {
       JSON.stringify({
         version: 1,
         occurredAt: '2026-08-10T08:00:00Z',
-        stableKey:
-          'job_created:00000000-0000-4000-8000-000000000001,or(created_at.gt.2000-01-01T00:00:00Z)',
-      })
+        stableKey: 'job_created:00000000-0000-4000-8000-000000000001,or(created_at.gt.2000-01-01T00:00:00Z)',
+      }),
     ).toString('base64url');
 
     expect(decodeTimelineCursor(injected)).toBeNull();
@@ -192,7 +171,7 @@ describe('communication guidance', () => {
         purpose: 'appointment_service',
         settings: null,
         preferences: [],
-      })
+      }),
     ).toEqual({ state: 'unknown', source: 'unconfigured', warnings: [] });
   });
 

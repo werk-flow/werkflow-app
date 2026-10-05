@@ -12,15 +12,23 @@ interface EmailChangeOtpParams {
   kind?: EmailChangeOtpKind;
 }
 
-
 function isEmailParams(value: unknown): value is EmailChangeOtpParams {
-  return !!value && typeof value === 'object' &&
-    'to' in value && typeof value.to === 'string' && value.to.length > 0 &&
-    'code' in value && typeof value.code === 'string' && /^\d{6}$/.test(value.code) &&
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    'to' in value &&
+    typeof value.to === 'string' &&
+    value.to.length > 0 &&
+    'code' in value &&
+    typeof value.code === 'string' &&
+    /^\d{6}$/.test(value.code) &&
     (!('kind' in value) || value.kind === 'current' || value.kind === 'new') &&
     (!('firstName' in value) || value.firstName === null || typeof value.firstName === 'string') &&
-    (!('expiresInMinutes' in value) || (typeof value.expiresInMinutes === 'number' &&
-      Number.isFinite(value.expiresInMinutes) && value.expiresInMinutes > 0));
+    (!('expiresInMinutes' in value) ||
+      (typeof value.expiresInMinutes === 'number' &&
+        Number.isFinite(value.expiresInMinutes) &&
+        value.expiresInMinutes > 0))
+  );
 }
 
 function getCopy(kind: EmailChangeOtpKind) {
@@ -30,8 +38,7 @@ function getCopy(kind: EmailChangeOtpKind) {
       subject: 'Bestätige deine neue E-Mail-Adresse',
       intro:
         'wir haben eine Anfrage erhalten, diese E-Mail-Adresse für dein WerkFlow-Konto zu hinterlegen. Bitte gib den folgenden sechsstelligen Code in der App ein, um die neue Adresse zu bestätigen.',
-      outro:
-        'Wenn du diese Änderung nicht selbst gestartet hast, kannst du diese E-Mail ignorieren.',
+      outro: 'Wenn du diese Änderung nicht selbst gestartet hast, kannst du diese E-Mail ignorieren.',
     };
   }
 
@@ -40,8 +47,7 @@ function getCopy(kind: EmailChangeOtpKind) {
     subject: 'Bestätige die Änderung deiner E-Mail-Adresse',
     intro:
       'wir haben eine Anfrage erhalten, die E-Mail-Adresse deines WerkFlow-Kontos zu ändern. Bitte gib den folgenden sechsstelligen Code in der App ein, um mit der Änderung fortzufahren.',
-    outro:
-      'Wenn du diese Änderung nicht selbst gestartet hast, musst du nichts weiter tun.',
+    outro: 'Wenn du diese Änderung nicht selbst gestartet hast, musst du nichts weiter tun.',
   };
 }
 
@@ -122,7 +128,9 @@ WerkFlow
   `.trim();
 }
 
-export function createEmailChangeOtpHandler(dependencies: MailDependencies): (request: Request) => Promise<Response> {
+export function createEmailChangeOtpHandler(
+  dependencies: MailDependencies,
+): (request: Request) => Promise<Response> {
   const authorization = createMailAuthorizer(dependencies);
   const logError = dependencies.logError ?? console.error;
   return async (req: Request): Promise<Response> => {
@@ -139,17 +147,14 @@ export function createEmailChangeOtpHandler(dependencies: MailDependencies): (re
 
     if (!authorization.configured) {
       logError('mail_auth_not_configured');
-      return new Response(
-        JSON.stringify({ error: 'Email service is not configured' }),
-        { status: 500, headers: jsonHeaders }
-      );
+      return new Response(JSON.stringify({ error: 'Email service is not configured' }), {
+        status: 500,
+        headers: jsonHeaders,
+      });
     }
 
     if (!(await authorization.authorize(req))) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: jsonHeaders }
-      );
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: jsonHeaders });
     }
 
     try {
@@ -168,10 +173,10 @@ export function createEmailChangeOtpHandler(dependencies: MailDependencies): (re
       });
     } catch {
       logError('mail_request_invalid');
-      return new Response(
-        JSON.stringify({ error: 'Invalid email parameters' }),
-        { status: 400, headers: jsonHeaders }
-      );
+      return new Response(JSON.stringify({ error: 'Invalid email parameters' }), {
+        status: 400,
+        headers: jsonHeaders,
+      });
     }
   };
 }

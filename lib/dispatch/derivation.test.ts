@@ -24,7 +24,12 @@ function fact(overrides: Partial<AcknowledgementFact>): AcknowledgementFact {
 describe('dispatch acknowledgement derivation', () => {
   test('latest row per recipient wins, ties broken by id', () => {
     const latest = latestAcknowledgementByRecipient([
-      fact({ id: 'a', state: 'challenged', reason: 'Termin passt nicht.', createdAt: '2026-09-01T08:00:00Z' }),
+      fact({
+        id: 'a',
+        state: 'challenged',
+        reason: 'Termin passt nicht.',
+        createdAt: '2026-09-01T08:00:00Z',
+      }),
       fact({ id: 'b', state: 'acknowledged', createdAt: '2026-09-01T09:00:00Z' }),
       fact({ id: 'c', employeeRecordId: 'record-2', state: 'carried_forward' }),
     ]);
@@ -43,38 +48,40 @@ describe('dispatch acknowledgement derivation', () => {
     // than "…08:00:01Z" would.
     const mixed = latestAcknowledgementByRecipient([
       fact({ id: 'a', createdAt: '2026-09-01T08:00:00.100Z' }),
-      fact({ id: 'b', state: 'challenged', reason: 'Grund mit acht Zeichen.', createdAt: '2026-09-01T08:00:00Z' }),
+      fact({
+        id: 'b',
+        state: 'challenged',
+        reason: 'Grund mit acht Zeichen.',
+        createdAt: '2026-09-01T08:00:00Z',
+      }),
     ]);
     expect(mixed.get('record-1')?.id).toBe('a');
     const sameInstant = latestAcknowledgementByRecipient([
       fact({ id: 'a', createdAt: '2026-09-01T08:00:00.000Z' }),
-      fact({ id: 'b', state: 'challenged', reason: 'Grund mit acht Zeichen.', createdAt: '2026-09-01T08:00:00Z' }),
+      fact({
+        id: 'b',
+        state: 'challenged',
+        reason: 'Grund mit acht Zeichen.',
+        createdAt: '2026-09-01T08:00:00Z',
+      }),
     ]);
     expect(sameInstant.get('record-1')?.id).toBe('b');
   });
 
   test('a record without an active login is a labeled fact, never pending or approved', () => {
-    expect(deriveRecipientState({ hasLogin: false, latest: null })).toBe(
-      'nicht_moeglich'
-    );
-    expect(
-      deriveRecipientState({ hasLogin: false, latest: fact({}) })
-    ).toBe('nicht_moeglich');
+    expect(deriveRecipientState({ hasLogin: false, latest: null })).toBe('nicht_moeglich');
+    expect(deriveRecipientState({ hasLogin: false, latest: fact({}) })).toBe('nicht_moeglich');
     expect(isAcknowledgementPending('nicht_moeglich')).toBe(false);
   });
 
   test('state matrix: none → ausstehend, acknowledged → bestätigt, carried → übernommen', () => {
-    expect(deriveRecipientState({ hasLogin: true, latest: null })).toBe(
-      'ausstehend'
-    );
-    expect(
-      deriveRecipientState({ hasLogin: true, latest: fact({}) })
-    ).toBe('bestaetigt');
+    expect(deriveRecipientState({ hasLogin: true, latest: null })).toBe('ausstehend');
+    expect(deriveRecipientState({ hasLogin: true, latest: fact({}) })).toBe('bestaetigt');
     expect(
       deriveRecipientState({
         hasLogin: true,
         latest: fact({ state: 'carried_forward' }),
-      })
+      }),
     ).toBe('uebernommen');
   });
 
@@ -83,7 +90,7 @@ describe('dispatch acknowledgement derivation', () => {
       deriveRecipientState({
         hasLogin: true,
         latest: fact({ state: 'challenged', reason: 'Begründung lang genug.' }),
-      })
+      }),
     ).toBe('rueckfrage');
     expect(
       deriveRecipientState({
@@ -93,7 +100,7 @@ describe('dispatch acknowledgement derivation', () => {
           reason: 'Begründung lang genug.',
           challengeResolvedAt: '2026-09-01T10:00:00Z',
         }),
-      })
+      }),
     ).toBe('ausstehend');
     expect(isAcknowledgementPending('ausstehend')).toBe(true);
     expect(isAcknowledgementPending('rueckfrage')).toBe(false);
@@ -119,8 +126,13 @@ describe('travel-gap facts', () => {
     expect(
       deriveTravelNotes([
         visit({}),
-        visit({ occurrenceId: 'occurrence-2', title: 'Besuch B', startMinutes: 10 * 60, endMinutes: 12 * 60 }),
-      ])
+        visit({
+          occurrenceId: 'occurrence-2',
+          title: 'Besuch B',
+          startMinutes: 10 * 60,
+          endMinutes: 12 * 60,
+        }),
+      ]),
     ).toEqual([]);
 
     const notes = deriveTravelNotes([

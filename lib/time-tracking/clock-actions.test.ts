@@ -75,14 +75,19 @@ describe('clock actions per state', () => {
     ]);
     const travel = actions[1];
     expect(travel?.kind === 'transition' ? travel.selection : null).toEqual(
-      createActivitySelection('travel', 'job-1')
+      createActivitySelection('travel', 'job-1'),
     );
     expect(selectClockHotKeys(actions).map((action) => action.label)).toEqual(['Pause', 'Fahrt starten']);
   });
 
   test('hides the break under the automatic rule and asks to assign a job when unallocated', () => {
     const actions = deriveClockActions(
-      state({ breakMode: 'automatic', activeJobId: null, activeJobInfo: null, currentActivity: createActivitySelection('work') })
+      state({
+        breakMode: 'automatic',
+        activeJobId: null,
+        activeJobInfo: null,
+        currentActivity: createActivitySelection('work'),
+      }),
     );
     expect(actions.map((action) => action.label)).toEqual([
       'Fahrt starten',
@@ -100,7 +105,7 @@ describe('clock actions per state', () => {
         activeJobId: null,
         activeJobInfo: null,
         currentActivity: createActivitySelection('break'),
-      })
+      }),
     );
     expect(actions.map((action) => action.label)).toEqual([
       'Weiter: Arbeit · Heizungswartung Müller',
@@ -111,7 +116,7 @@ describe('clock actions per state', () => {
     ]);
     const resume = actions[0];
     expect(resume?.kind === 'transition' ? resume.selection : null).toEqual(
-      createActivitySelection('work', 'job-1')
+      createActivitySelection('work', 'job-1'),
     );
     expect(selectClockHotKeys(actions).map((action) => action.id)).toEqual(['resume', 'resume-unallocated']);
   });
@@ -126,14 +131,22 @@ describe('clock actions per state', () => {
         currentActivity: createActivitySelection('break'),
         resumeActivity: null,
         resumeJobInfo: null,
-      })
+      }),
     ).map((action) => action.label);
-    expect(labels).toEqual(['Weiter: Arbeit', 'Anderer Auftrag …', 'Erfassung beenden', 'Weitere Aktivitäten …']);
+    expect(labels).toEqual([
+      'Weiter: Arbeit',
+      'Anderer Auftrag …',
+      'Erfassung beenden',
+      'Weitere Aktivitäten …',
+    ]);
   });
 
   test('a drive arrives at its job in one action', () => {
     const actions = deriveClockActions(
-      state({ currentActivity: createActivitySelection('travel', 'job-1'), resumeActivity: createActivitySelection('travel', 'job-1') })
+      state({
+        currentActivity: createActivitySelection('travel', 'job-1'),
+        resumeActivity: createActivitySelection('travel', 'job-1'),
+      }),
     );
     expect(actions.map((action) => action.label)).toEqual([
       'Arbeit an Heizungswartung Müller',
@@ -147,21 +160,34 @@ describe('clock actions per state', () => {
 
   test('an unchanged selection is recognized, a changed qualifier or job is not', () => {
     const travel = createActivitySelection('travel', 'job-1');
-    const driven: TimeActivitySelection = { kind: 'travel', allocationKind: 'job', jobId: 'job-1', travelRoute: 'unspecified', travelRole: 'driver' };
+    const driven: TimeActivitySelection = {
+      kind: 'travel',
+      allocationKind: 'job',
+      jobId: 'job-1',
+      travelRoute: 'unspecified',
+      travelRole: 'driver',
+    };
     expect(isSameActivitySelection(travel, createActivitySelection('travel', 'job-1'))).toBe(true);
     expect(isSameActivitySelection(travel, driven)).toBe(false);
-    expect(isSameActivitySelection(createActivitySelection('work', 'job-1'), createActivitySelection('work', 'job-2'))).toBe(false);
-    expect(isSameActivitySelection(createActivitySelection('work'), createActivitySelection('work'))).toBe(true);
+    expect(
+      isSameActivitySelection(
+        createActivitySelection('work', 'job-1'),
+        createActivitySelection('work', 'job-2'),
+      ),
+    ).toBe(false);
+    expect(isSameActivitySelection(createActivitySelection('work'), createActivitySelection('work'))).toBe(
+      true,
+    );
     expect(isSameActivitySelection(createActivitySelection('break'), null)).toBe(false);
   });
 
   test('a picked job continues a running drive but otherwise starts work', () => {
-    expect(selectionForPickedJob(state({ currentActivity: createActivitySelection('travel', 'job-1') }), 'job-2')).toEqual(
-      createActivitySelection('travel', 'job-2')
-    );
-    expect(selectionForPickedJob(state({ currentActivity: createActivitySelection('break') }), 'job-2')).toEqual(
-      createActivitySelection('work', 'job-2')
-    );
+    expect(
+      selectionForPickedJob(state({ currentActivity: createActivitySelection('travel', 'job-1') }), 'job-2'),
+    ).toEqual(createActivitySelection('travel', 'job-2'));
+    expect(
+      selectionForPickedJob(state({ currentActivity: createActivitySelection('break') }), 'job-2'),
+    ).toEqual(createActivitySelection('work', 'job-2'));
     expect(selectionForPickedJob(null, null)).toEqual(createActivitySelection('work'));
   });
 });

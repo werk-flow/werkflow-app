@@ -4,11 +4,7 @@ import * as React from 'react';
 import { useFieldContext } from '@/components/ui/field';
 import { cn } from '@/lib/utils';
 
-interface TimeInputProps
-  extends Omit<
-    React.ComponentProps<'div'>,
-    'onChange' | 'defaultValue' | 'value'
-  > {
+interface TimeInputProps extends Omit<React.ComponentProps<'div'>, 'onChange' | 'defaultValue' | 'value'> {
   value: string; // Format: "HH:MM"
   onChange: (value: string) => void;
   disabled?: boolean;
@@ -18,12 +14,7 @@ interface TimeInputProps
 type Segment = 'hours' | 'minutes';
 
 function EmptySegmentLine() {
-  return (
-    <span
-      aria-hidden
-      className="inline-block h-px w-4 rounded-full bg-muted-foreground align-middle"
-    />
-  );
+  return <span aria-hidden className="inline-block h-px w-4 rounded-full bg-muted-foreground align-middle" />;
 }
 
 /**
@@ -34,18 +25,31 @@ function EmptySegmentLine() {
  * for consistent cross-browser behavior (especially Safari).
  */
 const TimeInput = React.forwardRef<HTMLDivElement, TimeInputProps>(
-  ({ className, value, onChange, disabled, id: idProp, onBlur, onFocus, onKeyDown,
-    'aria-label': ariaLabel, 'aria-labelledby': ariaLabelledBy,
-    'aria-describedby': ariaDescribedBy, 'aria-invalid': ariaInvalid, ...props }, ref) => {
+  (
+    {
+      className,
+      value,
+      onChange,
+      disabled,
+      id: idProp,
+      onBlur,
+      onFocus,
+      onKeyDown,
+      'aria-label': ariaLabel,
+      'aria-labelledby': ariaLabelledBy,
+      'aria-describedby': ariaDescribedBy,
+      'aria-invalid': ariaInvalid,
+      ...props
+    },
+    ref,
+  ) => {
     const field = useFieldContext();
     const id = idProp ?? field?.controlId;
     const containerRef = React.useRef<HTMLDivElement>(null);
-    const [activeSegment, setActiveSegment] = React.useState<Segment | null>(
-      null
-    );
+    const [activeSegment, setActiveSegment] = React.useState<Segment | null>(null);
     const [isFocused, setIsFocused] = React.useState(false);
     // Combine refs
-    React.useImperativeHandle(ref, () => containerRef.current!);
+    React.useImperativeHandle<HTMLDivElement | null, HTMLDivElement | null>(ref, () => containerRef.current);
 
     // Parse value into hours and minutes
     const parseValue = (val: string): { hours: number; minutes: number } => {
@@ -191,8 +195,7 @@ const TimeInput = React.forwardRef<HTMLDivElement, TimeInputProps>(
       }
     };
 
-    const segmentBaseClass =
-      'px-1.5 py-1 rounded-sm cursor-pointer transition-colors select-none';
+    const segmentBaseClass = 'px-1.5 py-1 rounded-sm cursor-pointer transition-colors select-none';
     const segmentActiveClass = 'bg-primary text-primary-foreground';
     const segmentInactiveClass = 'hover:bg-accent';
 
@@ -202,7 +205,10 @@ const TimeInput = React.forwardRef<HTMLDivElement, TimeInputProps>(
         role="group"
         aria-label={ariaLabel ?? (field ? undefined : 'Uhrzeit')}
         aria-labelledby={ariaLabelledBy ?? (ariaLabel ? undefined : field?.labelId)}
-        aria-describedby={ariaDescribedBy ?? ([field?.describedBy, field?.requiredDescriptionId].filter(Boolean).join(' ') || undefined)}
+        aria-describedby={
+          ariaDescribedBy ??
+          ([field?.describedBy, field?.requiredDescriptionId].filter(Boolean).join(' ') || undefined)
+        }
         data-invalid={ariaInvalid ?? (field?.invalid || undefined)}
         aria-disabled={disabled || undefined}
         tabIndex={disabled ? -1 : 0}
@@ -217,11 +223,11 @@ const TimeInput = React.forwardRef<HTMLDivElement, TimeInputProps>(
         }}
         onKeyDown={handleKeyDown}
         className={cn(
-          'inline-flex h-9 w-full items-center gap-0.5 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm',
+          'inline-flex h-9 w-full items-center gap-0.5 rounded-md border bg-transparent px-3 py-1 text-base transition-[color,box-shadow] outline-none md:text-sm',
           'border-input dark:bg-input/30',
-          isFocused && 'border-ring ring-ring/50 ring-2',
+          isFocused && 'ring-ring/50 ring-2',
           disabled && 'pointer-events-none cursor-not-allowed opacity-50',
-          className
+          className,
         )}
         {...props}
       >
@@ -230,9 +236,7 @@ const TimeInput = React.forwardRef<HTMLDivElement, TimeInputProps>(
           onClick={() => handleSegmentClick('hours')}
           className={cn(
             segmentBaseClass,
-            activeSegment === 'hours'
-              ? segmentActiveClass
-              : segmentInactiveClass
+            activeSegment === 'hours' ? segmentActiveClass : segmentInactiveClass,
           )}
         >
           {!hasValue && activeSegment !== 'hours' ? <EmptySegmentLine /> : pad(hours)}
@@ -246,19 +250,16 @@ const TimeInput = React.forwardRef<HTMLDivElement, TimeInputProps>(
           onClick={() => handleSegmentClick('minutes')}
           className={cn(
             segmentBaseClass,
-            activeSegment === 'minutes'
-              ? segmentActiveClass
-              : segmentInactiveClass
+            activeSegment === 'minutes' ? segmentActiveClass : segmentInactiveClass,
           )}
         >
           {!hasValue && activeSegment !== 'minutes' ? <EmptySegmentLine /> : pad(minutes)}
         </span>
       </div>
     );
-  }
+  },
 );
 
 TimeInput.displayName = 'TimeInput';
 
 export { TimeInput };
-

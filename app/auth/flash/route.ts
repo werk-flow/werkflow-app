@@ -14,8 +14,8 @@ function getCookieOptions() {
 }
 
 export async function POST(req: Request) {
-  const body = (await req.json().catch(() => null)) as { message?: unknown } | null;
-  const message = body?.message;
+  const body: unknown = await req.json().catch(() => null);
+  const message = typeof body === 'object' && body !== null && 'message' in body ? body.message : undefined;
 
   if (!isAuthFlashKey(message)) {
     return NextResponse.json({ error: 'Invalid auth flash message.' }, { status: 400 });

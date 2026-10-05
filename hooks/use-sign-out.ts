@@ -6,7 +6,22 @@ import { useBanner } from '@/components/ui/banner';
 
 import { clearEmailChangeChallengeBeforeSignOut } from '@/lib/settings/email-change-actions';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { logError } from '@/lib/logging';
 import { clockOutBeforeSignOut } from '@/lib/time-tracking/actions';
+
+/**
+ * Best-effort step before every sign-out: a pending email-change challenge
+ * must not outlive the session. A failure must not block the sign-out, so it
+ * only reaches the log.
+ */
+export async function clearEmailChangeChallengeQuietly(): Promise<void> {
+  try {
+    const cleanupResult = await clearEmailChangeChallengeBeforeSignOut();
+    if (!cleanupResult.success) logError('auth.sign_out.email_change_cleanup_failed');
+  } catch (error) {
+    logError('auth.sign_out.email_change_cleanup_failed', error);
+  }
+}
 
 export function useSignOut() {
   const router = useRouter();
@@ -25,18 +40,11 @@ export function useSignOut() {
       // Best-effort: ensure any open working session is clocked out before sign-out.
       try {
         await clockOutBeforeSignOut();
-      } catch {
-        console.error('Failed to clock out before sign out.');
+      } catch (error) {
+        logError('auth.sign_out.clock_out_failed', error);
       }
 
-      try {
-        const cleanupResult = await clearEmailChangeChallengeBeforeSignOut();
-        if (!cleanupResult.success) {
-          console.error('Failed to clear email change challenge before sign out.');
-        }
-      } catch {
-        console.error('Failed to clear email change challenge before sign out.');
-      }
+      await clearEmailChangeChallengeQuietly();
 
       // Explicit global: the menu sign-out currently ends the user's sessions
       // on every device (pre-existing behavior, made explicit by the scope
@@ -58,7 +66,10 @@ export function useSignOut() {
       router.replace('/login');
       router.refresh();
     } catch {
-      showBanner({ variant: 'error', message: 'Die Abmeldung konnte nicht vollständig abgeschlossen werden. Bitte versuche es erneut.' });
+      showBanner({
+        variant: 'error',
+        message: 'Die Abmeldung konnte nicht vollständig abgeschlossen werden. Bitte versuche es erneut.',
+      });
     } finally {
       setIsSigningOut(false);
     }

@@ -1,23 +1,25 @@
 import Link from 'next/link';
+
+import { PageHeader } from '@/components/shared/page-header';
+import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { Button } from '@/components/ui/button';
 
+/** An unknown address inside the app: the shell, the sidebar and the clock button stay usable. */
 export default function AppNotFoundPage() {
   return (
-    <main className="flex h-full items-center justify-center p-6">
-      <div className="w-full max-w-lg rounded-lg border bg-card p-8 text-center shadow-sm">
-        <h1 className="text-3xl font-semibold tracking-tight">
-          Seite nicht gefunden
-        </h1>
-        <p className="mt-3 text-muted-foreground">
-          Die angeforderte Seite existiert nicht oder wurde verschoben.
-          Überprüfe die eingegebene Adresse oder kehre zum Dashboard zurück.
-        </p>
-        <div className="mt-6 flex justify-center">
+    <PageShell>
+      <PageHeader title="Seite nicht gefunden" />
+      <PageBody maxWidth="content">
+        <div className="space-y-4">
+          <p className="text-muted-foreground">
+            Die angeforderte Seite existiert nicht oder wurde verschoben. Überprüfe die eingegebene Adresse
+            oder kehre zum Dashboard zurück.
+          </p>
           <Button asChild>
             <Link href="/dashboard">Zurück zum Dashboard</Link>
           </Button>
         </div>
-      </div>
-    </main>
+      </PageBody>
+    </PageShell>
   );
 }

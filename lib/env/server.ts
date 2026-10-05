@@ -1,4 +1,5 @@
 import 'server-only';
+import { readRequiredEnv } from '@/lib/env/required';
 
 function readOptionalEnv(keys: string[]): string | undefined {
   for (const key of keys) {
@@ -11,19 +12,10 @@ function readOptionalEnv(keys: string[]): string | undefined {
   return undefined;
 }
 
-function readRequiredEnv(keys: string[], message: string): string {
-  const value = readOptionalEnv(keys);
-  if (!value) {
-    throw new Error(message);
-  }
-
-  return value;
-}
-
 export function getSupabaseSecretKey(): string {
   return readRequiredEnv(
-    ['SUPABASE_SECRET_KEY'],
-    'Missing SUPABASE_SECRET_KEY environment variable.'
+    readOptionalEnv(['SUPABASE_SECRET_KEY']),
+    'Missing SUPABASE_SECRET_KEY environment variable.',
   );
 }
 
@@ -38,7 +30,7 @@ export function getSiteUrl(): string | undefined {
  */
 export function getEmailOtpHashSecret(): string {
   return readRequiredEnv(
-    ['EMAIL_OTP_HASH_SECRET'],
-    'Missing EMAIL_OTP_HASH_SECRET environment variable.'
+    readOptionalEnv(['EMAIL_OTP_HASH_SECRET']),
+    'Missing EMAIL_OTP_HASH_SECRET environment variable.',
   );
 }

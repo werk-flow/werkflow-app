@@ -1,3 +1,4 @@
+import { RegionLoadError } from '@/components/shared/region-load-error';
 import { loadDocumentPageContext } from '@/lib/documents/page-context';
 import { parseListPage } from '@/lib/ui/list-pagination';
 import { Suspense } from 'react';
@@ -5,16 +6,15 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { DocumentLibraryContent } from '@/components/dokumente/document-library-content';
-import { DokumenteContentSkeleton } from '@/components/loading-states/dokumente-page-skeleton';
+import {
+  DOKUMENTE_SUBTITLE,
+  DokumenteContentSkeleton,
+} from '@/components/loading-states/dokumente-page-skeleton';
+import { PageHeaderSlot, PageHeaderSlotProvider } from '@/components/shared/page-action';
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { getCachedMemberships, getCachedUser } from '@/lib/data/cached';
-import {
-  getDocumentFolderOptions,
-  getDocumentDetails,
-
-  getDocumentLibrary,
-} from '@/lib/documents/actions';
+import { getDocumentFolderOptions, getDocumentDetails, getDocumentLibrary } from '@/lib/documents/actions';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import type { OrgRole } from '@/lib/members/actions';
 import type {
@@ -107,7 +107,8 @@ function getDocumentLinkFilter(value?: string): DocumentLibraryLinkFilter {
 }
 
 async function DokumenteData({
-  page, folderPage,
+  page,
+  folderPage,
   folderId,
   view,
   searchQuery,
@@ -116,7 +117,8 @@ async function DokumenteData({
   linkFilter,
   initialDocumentId,
 }: {
-  page: number; folderPage: number;
+  page: number;
+  folderPage: number;
   folderId: string | null;
   view: DocumentLibraryView;
   searchQuery: string;
@@ -125,14 +127,10 @@ async function DokumenteData({
   linkFilter: DocumentLibraryLinkFilter;
   initialDocumentId: string | null;
 }) {
-  const [
-    libraryResult,
-    folderOptionsResult,
-
-    initialDocumentResult,
-  ] = await Promise.all([
+  const [libraryResult, folderOptionsResult, initialDocumentResult] = await Promise.all([
     getDocumentLibrary({
-      page, folderPage,
+      page,
+      folderPage,
       folderId,
       view,
       searchQuery,
@@ -141,25 +139,31 @@ async function DokumenteData({
       linkFilter,
     }),
     getDocumentFolderOptions(),
-    initialDocumentId
-      ? getDocumentDetails(initialDocumentId)
-      : Promise.resolve(null),
+    initialDocumentId ? getDocumentDetails(initialDocumentId) : Promise.resolve(null),
   ]);
 
-  if (!libraryResult.success) {
+  // The folder list feeds the move dialog; without it every folder would look empty.
+  if (!libraryResult.success || !folderOptionsResult.success) {
     return (
-      <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">
-        Dokumente konnten nicht geladen werden.
-      </div>
+      <RegionLoadError title="Dokumente konnten nicht geladen werden">
+        Die Dokumentenbibliothek ist gerade nicht erreichbar. Deine Dateien sind davon nicht betroffen.
+      </RegionLoadError>
     );
   }
 
-  const allFolders = folderOptionsResult.success ? folderOptionsResult.folders : [];
-  const { jobs, projects, clients, employees } = view === 'work' ? await loadDocumentPageContext(libraryResult.documents) : { jobs: [], projects: [], clients: [], employees: [] };
+  const allFolders = folderOptionsResult.folders;
+  const { jobs, projects, clients, employees } =
+    view === 'work'
+      ? await loadDocumentPageContext(libraryResult.documents)
+      : { jobs: [], projects: [], clients: [], employees: [] };
   const initialDocument = initialDocumentResult?.document ?? null;
 
   return (
-    <DocumentLibraryContent page={page} total={libraryResult.total} folderPage={folderPage} folderTotal={libraryResult.folderTotal}
+    <DocumentLibraryContent
+      page={page}
+      total={libraryResult.total}
+      folderPage={folderPage}
+      folderTotal={libraryResult.folderTotal}
       view={view}
       searchQuery={searchQuery}
       category={category}
@@ -175,20 +179,18 @@ async function DokumenteData({
       employees={employees}
       initialDocumentId={initialDocumentId}
       initialDocument={initialDocument}
-      initialDocumentUnavailable={
-        Boolean(initialDocumentId) && !initialDocument
-      }
+      initialDocumentUnavailable={Boolean(initialDocumentId) && !initialDocument}
     />
   );
 }
 
-export default async function DokumentePage({
-  searchParams,
-}: DokumentePageProps) {
-  const [{ data: { user } }, cookieStore] = await Promise.all([
-    getCachedUser(),
-    cookies(),
-  ]);
+export default async function DokumentePage({ searchParams }: DokumentePageProps) {
+  const [
+    {
+      data: { user },
+    },
+    cookieStore,
+  ] = await Promise.all([getCachedUser(), cookies()]);
 
   if (!user) redirect('/login');
 
@@ -203,9 +205,7 @@ export default async function DokumentePage({
       <PageShell>
         <PageHeader title="Dokumente" />
         <PageBody>
-          <p className="text-muted-foreground">
-            Bitte wähle zuerst eine Organisation aus.
-          </p>
+          <p className="text-muted-foreground">Bitte wähle zuerst eine Organisation aus.</p>
         </PageBody>
       </PageShell>
     );
@@ -213,8 +213,7 @@ export default async function DokumentePage({
 
   const currentMembership = memberships.find((member) => member.orgId === activeOrgId);
   const currentUserRole = currentMembership?.role as OrgRole | undefined;
-  const isAdminOrManager =
-    currentUserRole === 'admin' || currentUserRole === 'buero';
+  const isAdminOrManager = currentUserRole === 'admin' || currentUserRole === 'buero';
 
   if (!isAdminOrManager) {
     redirect('/dashboard');
@@ -228,24 +227,28 @@ export default async function DokumentePage({
   const linkFilter = getDocumentLinkFilter(resolvedSearchParams.link);
   const initialDocumentId = resolvedSearchParams.document?.trim() || null;
 
-  // The library renders its own title block inside the body
-  // (document-library-content.tsx), so the page contributes column and scroll
-  // region only.
+  // The header paints before the data. Its action menu needs the loaded
+  // library, so the suspended content fills the header slot.
   return (
-    <PageShell>
-      <PageBody>
-        <Suspense fallback={<DokumenteContentSkeleton />}>
-          <DokumenteData page={parseListPage(resolvedSearchParams.page)} folderPage={parseListPage(resolvedSearchParams.folderPage)}
-            folderId={folderId}
-            view={view}
-            searchQuery={searchQuery}
-            sort={sort}
-            category={category}
-            linkFilter={linkFilter}
-            initialDocumentId={initialDocumentId}
-          />
-        </Suspense>
-      </PageBody>
-    </PageShell>
+    <PageHeaderSlotProvider>
+      <PageShell>
+        <PageHeader title="Dokumente" subtitle={DOKUMENTE_SUBTITLE} actions={<PageHeaderSlot />} />
+        <PageBody>
+          <Suspense fallback={<DokumenteContentSkeleton />}>
+            <DokumenteData
+              page={parseListPage(resolvedSearchParams.page)}
+              folderPage={parseListPage(resolvedSearchParams.folderPage)}
+              folderId={folderId}
+              view={view}
+              searchQuery={searchQuery}
+              sort={sort}
+              category={category}
+              linkFilter={linkFilter}
+              initialDocumentId={initialDocumentId}
+            />
+          </Suspense>
+        </PageBody>
+      </PageShell>
+    </PageHeaderSlotProvider>
   );
 }

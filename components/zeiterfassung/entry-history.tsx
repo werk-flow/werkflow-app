@@ -1,58 +1,31 @@
 'use client';
 
-import { useState } from 'react';
-import {
-  Clock,
-  Pencil,
-  Plus,
-} from 'lucide-react';
+import { EmptyState } from '@/components/ui/empty-state';
+import { useRef, useState } from 'react';
+import { Clock, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { ErrorText } from '@/components/ui/error-text';
-import { Field } from '@/components/ui/field';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { ListRow } from '@/components/ui/list-row';
-import { RefreshButton } from '@/components/ui/refresh-button';
-import { SearchableSelect } from '@/components/ui/searchable-select';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '@/components/ui/select';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from '@/components/ui/table';
+import { SectionError } from '@/components/ui/section-error';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SkeletonList, SkeletonRows, type SkeletonColumn } from '@/components/ui/skeleton-table';
-import { cn } from '@/lib/utils';
-import { DatePicker } from '@/components/ui/date-picker';
+import { cn, formatGermanDateTime, parseIsoLocalDate } from '@/lib/utils';
+import { getBusinessTodayIso, shiftIsoDateByDays } from '@/lib/personnel/types';
 import { readInBackground } from '@/lib/data/background-read-client';
 import type { TimeEntry, TimeEntryStatus } from '@/lib/time-tracking/types';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useHydrated } from '@/hooks/use-hydrated';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { TimeCorrectionDialog } from './time-correction-dialog';
+import { EntryHistoryFilters, type EntryHistoryMemberInfo } from './entry-history-filters';
 
 // Settle key for a correction that adds time (no row yet); entry ids are UUIDs.
 const NEW_ENTRY_ID = 'new';
 
-interface MemberInfo {
-  user_id: string;
-  first_name: string | null;
-  last_name: string | null;
-  email: string;
-  role: string;
-}
-
 interface EntryHistoryProps {
   organizationId: string;
-  members?: MemberInfo[];
+  members?: EntryHistoryMemberInfo[];
 }
 
 interface EntryWithProfile extends TimeEntry {
@@ -88,37 +61,24 @@ function EntryHistoryHeaderRow() {
   );
 }
 
-const STATUS_LABELS: Record<
-  TimeEntryStatus,
-  { label: string; className: string }
-> = {
+const STATUS_LABELS: Record<TimeEntryStatus, { label: string; className: string }> = {
   approved: {
     label: 'Genehmigt',
-    className: 'bg-success-soft text-success-soft-foreground'
+    className: 'bg-success-soft text-success-soft-foreground',
   },
   pending: {
     label: 'Ausstehend',
-    className: 'bg-warning-soft text-warning-soft-foreground'
+    className: 'bg-warning-soft text-warning-soft-foreground',
   },
   rejected: {
     label: 'Abgelehnt',
-    className: 'bg-destructive-soft text-destructive-soft-foreground'
+    className: 'bg-destructive-soft text-destructive-soft-foreground',
   },
   pending_delete: {
     label: 'Löschung ausstehend',
-    className: 'bg-warning-soft text-warning-soft-foreground'
-  }
+    className: 'bg-warning-soft text-warning-soft-foreground',
+  },
 };
-
-function formatDateTime(timestamp: string): string {
-  return new Date(timestamp).toLocaleString('de-DE', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-}
 
 function getEntryTypeLabel(entry: TimeEntry): string {
   const activityLabels = {
@@ -129,322 +89,336 @@ function getEntryTypeLabel(entry: TimeEntry): string {
     callout: 'Notdienst',
     internal_activity: 'Interne Tätigkeit',
   } as const;
-  const direction = entry.entryType === 'clock_in' || entry.entryType === 'break_start'
-    ? 'Start'
-    : 'Ende';
+  const direction = entry.entryType === 'clock_in' || entry.entryType === 'break_start' ? 'Start' : 'Ende';
   if (entry.activityKind) return `${activityLabels[entry.activityKind]} · ${direction}`;
   if (entry.entryType === 'break_start') return 'Pause starten';
   if (entry.entryType === 'break_end') return 'Pause beenden';
   return entry.entryType === 'clock_in' ? 'Einstempeln' : 'Ausstempeln';
 }
 
-export function EntryHistory({
-  organizationId,
-  members = []
-}: EntryHistoryProps) {
+function getEntryHistoryDisplayName(entry: EntryWithProfile): string {
+  if (entry.firstName || entry.lastName) {
+    return `${entry.firstName || ''} ${entry.lastName || ''}`.trim();
+  }
+  return 'Unbekannt';
+}
+
+type EntryHistoryQuery = {
+  organizationId: string;
+  dateFrom: Date | undefined;
+  dateTo: Date | undefined;
+  statusFilter: string;
+  memberFilter: string;
+};
+
+type ProfileNames = Map<string, { firstName: string | null; lastName: string | null }>;
+
+/**
+ * `knownNames` keeps the names this view already read: a live refresh after
+ * an approval reads the entries only, and names follow in a second request
+ * only for people the view has not shown yet.
+ */
+async function readEntryHistory(
+  { organizationId, dateFrom, dateTo, statusFilter, memberFilter }: EntryHistoryQuery,
+  knownNames: ProfileNames,
+  signal: AbortSignal,
+): Promise<LiveViewResult<EntryWithProfile[]>> {
+  // The view reads only with a complete date range (`enabled` below).
+  if (!dateFrom || !dateTo) return { ok: false };
+  try {
+    const fromDate = new Date(dateFrom);
+    fromDate.setHours(0, 0, 0, 0);
+    const toDate = new Date(dateTo);
+    toDate.setHours(23, 59, 59, 999);
+
+    const result = await readInBackground(
+      'time-entries',
+      {
+        organizationId,
+        from: fromDate.toISOString(),
+        to: toDate.toISOString(),
+        ...(statusFilter !== 'all' ? { status: statusFilter as TimeEntryStatus } : {}),
+        ...(memberFilter !== 'all' ? { userId: memberFilter } : {}),
+      },
+      signal,
+    );
+
+    if (!result.success) return { ok: false };
+
+    const unknownUserIds = [...new Set(result.entries.map((e) => e.userId))].filter(
+      (userId) => !knownNames.has(userId),
+    );
+    if (unknownUserIds.length > 0) {
+      const profiles = await readInBackground('profiles-by-ids', { userIds: unknownUserIds }, signal);
+      if (!profiles.success) return { ok: false };
+      // A name the server did not return is asked for again on the next read.
+      for (const userId of unknownUserIds) {
+        const profile = profiles.profiles[userId];
+        if (profile) knownNames.set(userId, profile);
+      }
+    }
+
+    // Merge profile data with entries
+    const entriesWithProfiles: EntryWithProfile[] = result.entries.map((entry) => ({
+      ...entry,
+      firstName: knownNames.get(entry.userId)?.firstName ?? null,
+      lastName: knownNames.get(entry.userId)?.lastName ?? null,
+    }));
+
+    // Sort by reviewedAt descending (most recent first), fallback to createdAt
+    return {
+      ok: true,
+      data: entriesWithProfiles.sort((a, b) => {
+        const dateA = a.reviewedAt ? new Date(a.reviewedAt).getTime() : new Date(a.createdAt).getTime();
+        const dateB = b.reviewedAt ? new Date(b.reviewedAt).getTime() : new Date(b.createdAt).getTime();
+        return dateB - dateA;
+      }),
+    };
+  } catch {
+    // A transport failure; the server logs its own failures.
+    return { ok: false };
+  }
+}
+
+function EntryHistorySkeleton() {
+  return (
+    <>
+      <SkeletonList count={5} className="md:hidden">
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-5 w-20 rounded-full" />
+          </div>
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-4 w-40" />
+        </div>
+      </SkeletonList>
+      <div className="hidden md:block">
+        <Table>
+          <TableHeader>
+            <EntryHistoryHeaderRow />
+          </TableHeader>
+          <TableBody>
+            <SkeletonRows columns={ENTRY_HISTORY_COLUMNS} rows={5} />
+          </TableBody>
+        </Table>
+      </div>
+    </>
+  );
+}
+
+type EntryHistoryRowsProps = {
+  entries: EntryWithProfile[];
+  settling: { isBusy: (id: string) => boolean };
+  hydrated: boolean;
+  setCorrectionEntry: (entry: TimeEntry) => void;
+};
+
+/* Mobile cards */
+function EntryHistoryCards({ entries, settling, hydrated, setCorrectionEntry }: EntryHistoryRowsProps) {
+  return (
+    <div className="space-y-2 md:hidden">
+      {entries.map((entry) => (
+        <ListRow
+          key={entry.id}
+          className="block space-y-2"
+          data-time-entry={entry.id}
+          data-time-entry-status={entry.status}
+        >
+          <div className="flex items-center justify-between">
+            <span className="font-medium">{getEntryTypeLabel(entry)}</span>
+            <span
+              className={cn(
+                'rounded-full px-2 py-0.5 text-xs font-medium',
+                STATUS_LABELS[entry.status].className,
+              )}
+            >
+              {STATUS_LABELS[entry.status].label}
+            </span>
+          </div>
+          <p className="text-sm font-medium">{getEntryHistoryDisplayName(entry)}</p>
+          <p className="text-sm text-muted-foreground">{formatGermanDateTime(entry.timestamp)}</p>
+          {entry.isManual && (
+            <span className="inline-block rounded bg-muted px-1.5 py-0.5 text-xs">Manuell</span>
+          )}
+          {settling.isBusy(entry.id) ? (
+            <InlinePending active />
+          ) : entry.pendingCorrectionRequestId ? (
+            <Button variant="ghost" size="sm" disabled>
+              <Clock className="mr-1.5 size-4" /> Korrektur in Prüfung
+            </Button>
+          ) : entry.status === 'approved' ? (
+            <Button variant="ghost" size="sm" disabled={!hydrated} onClick={() => setCorrectionEntry(entry)}>
+              <Pencil className="mr-1.5 size-4" /> Korrigieren
+            </Button>
+          ) : null}
+        </ListRow>
+      ))}
+    </div>
+  );
+}
+
+/* Desktop table */
+function EntryHistoryTable({ entries, settling, hydrated, setCorrectionEntry }: EntryHistoryRowsProps) {
+  return (
+    <div className="hidden md:block">
+      <Table>
+        <TableHeader>
+          <EntryHistoryHeaderRow />
+        </TableHeader>
+        <TableBody>
+          {entries.map((entry) => (
+            <TableRow key={entry.id} data-time-entry={entry.id} data-time-entry-status={entry.status}>
+              <TableCell className="font-medium">{getEntryHistoryDisplayName(entry)}</TableCell>
+              <TableCell>{getEntryTypeLabel(entry)}</TableCell>
+              <TableCell>{formatGermanDateTime(entry.timestamp)}</TableCell>
+              <TableCell>
+                <span
+                  className={cn(
+                    'rounded-full px-2 py-0.5 text-xs font-medium',
+                    STATUS_LABELS[entry.status].className,
+                  )}
+                >
+                  {STATUS_LABELS[entry.status].label}
+                </span>
+              </TableCell>
+              <TableCell>{entry.isManual ? 'Ja' : 'Nein'}</TableCell>
+              <TableCell className="text-muted-foreground">
+                {entry.reviewedAt ? formatGermanDateTime(entry.reviewedAt) : '-'}
+              </TableCell>
+              <TableCell className="text-right">
+                {settling.isBusy(entry.id) ? (
+                  <InlinePending active className="ml-auto" />
+                ) : entry.pendingCorrectionRequestId ? (
+                  <Button variant="ghost" size="sm" disabled>
+                    <Clock className="mr-1.5 size-4" /> Korrektur in Prüfung
+                  </Button>
+                ) : entry.status === 'approved' ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={!hydrated}
+                    onClick={() => setCorrectionEntry(entry)}
+                  >
+                    <Pencil className="mr-1.5 size-4" /> Korrigieren
+                  </Button>
+                ) : null}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+export function EntryHistory({ organizationId, members = [] }: EntryHistoryProps) {
   const hydrated = useHydrated();
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [memberFilter, setMemberFilter] = useState<string>('all');
-  const [dateFrom, setDateFrom] = useState<Date | undefined>(() => {
-    const date = new Date();
-    date.setDate(date.getDate() - 30);
-    return date;
-  });
-  const [dateTo, setDateTo] = useState<Date | undefined>(() => {
-    const date = new Date();
-    date.setDate(date.getDate() + 14);
-    return date;
-  });
-  const [correctionEntry, setCorrectionEntry] = useState<TimeEntry | null | undefined>(
-    undefined
+  // The default range starts from the Berlin business date, which the server
+  // render and the browser agree on; the runtime's local date would differ
+  // around midnight and the date fields would not hydrate.
+  const [dateFrom, setDateFrom] = useState<Date | undefined>(() =>
+    parseIsoLocalDate(shiftIsoDateByDays(getBusinessTodayIso(), -30)),
   );
+  const [dateTo, setDateTo] = useState<Date | undefined>(() =>
+    parseIsoLocalDate(shiftIsoDateByDays(getBusinessTodayIso(), 14)),
+  );
+  const hasRange = dateFrom !== undefined && dateTo !== undefined;
+  const [correctionEntry, setCorrectionEntry] = useState<TimeEntry | null | undefined>(undefined);
   // The corrected row (or the toolbar for an added time) shows the settle
   // spinner from the dialog's close until the live read carries the change.
   const settling = useBusyIds();
 
-  // Helper to get member display name
-  const getMemberDisplayName = (member: MemberInfo): string => {
-    if (member.first_name || member.last_name) {
-      return `${member.first_name || ''} ${member.last_name || ''}`.trim();
-    }
-    return member.email;
-  };
-
+  const knownNames = useRef<ProfileNames>(new Map());
   const view = useLiveView<EntryWithProfile[]>({
     tables: ['time_entries', 'time_sessions', 'time_segments', 'time_correction_requests'],
-    read: async ({ signal }): Promise<LiveViewResult<EntryWithProfile[]>> => {
-      // Without a complete date range there is nothing to read; keep whatever
-      // was shown last.
-      if (!dateFrom || !dateTo) return { ok: false };
-      try {
-        const fromDate = new Date(dateFrom);
-        fromDate.setHours(0, 0, 0, 0);
-        const toDate = new Date(dateTo);
-        toDate.setHours(23, 59, 59, 999);
-
-        const result = await readInBackground('time-entries', {
-          organizationId,
-          from: fromDate.toISOString(),
-          to: toDate.toISOString(),
-          ...(statusFilter !== 'all'
-            ? { status: statusFilter as TimeEntryStatus }
-            : {}),
-          ...(memberFilter !== 'all' ? { userId: memberFilter } : {})
-        }, signal);
-
-        if (!result.success) return { ok: false, error: 'Die Einträge konnten nicht geladen werden.' };
-
-        const userIds = [...new Set(result.entries.map((e) => e.userId))];
-        const profiles = await readInBackground('profiles-by-ids', { userIds }, signal);
-        if (!profiles.success) return { ok: false, error: 'Die Einträge konnten nicht geladen werden.' };
-        const profileMap = profiles.profiles;
-
-        // Merge profile data with entries
-        const entriesWithProfiles: EntryWithProfile[] = result.entries.map(
-          (entry) => ({
-            ...entry,
-            firstName: profileMap[entry.userId]?.firstName || null,
-            lastName: profileMap[entry.userId]?.lastName || null
-          })
-        );
-
-        // Sort by reviewedAt descending (most recent first), fallback to createdAt
-        return {
-          ok: true,
-          data: entriesWithProfiles.sort((a, b) => {
-            const dateA = a.reviewedAt
-              ? new Date(a.reviewedAt).getTime()
-              : new Date(a.createdAt).getTime();
-            const dateB = b.reviewedAt
-              ? new Date(b.reviewedAt).getTime()
-              : new Date(b.createdAt).getTime();
-            return dateB - dateA;
-          })
-        };
-      } catch (err) {
-        console.error('Error fetching entries:', err);
-        return { ok: false, error: 'Fehler beim Laden' };
-      }
-    },
+    read: ({ signal }) =>
+      readEntryHistory(
+        { organizationId, dateFrom, dateTo, statusFilter, memberFilter },
+        knownNames.current,
+        signal,
+      ),
+    enabled: hasRange,
     // A filter change is a new view of the data: discard and read fresh.
     resetKey: [
       organizationId,
       statusFilter,
       memberFilter,
       dateFrom?.toISOString() ?? '',
-      dateTo?.toISOString() ?? ''
-    ].join('|')
+      dateTo?.toISOString() ?? '',
+    ].join('|'),
   });
 
   const entries = view.data ?? [];
-  const error = view.error;
-
-  const getDisplayName = (entry: EntryWithProfile): string => {
-    if (entry.firstName || entry.lastName) {
-      return `${entry.firstName || ''} ${entry.lastName || ''}`.trim();
-    }
-    return 'Unbekannt';
-  };
+  const loadError = (
+    <SectionError onRetry={() => void view.refresh()} retryPending={view.isRefreshing}>
+      Die Einträge konnten nicht geladen werden.
+    </SectionError>
+  );
 
   return (
-    <div className="space-y-4">
+    <section className="space-y-4" aria-labelledby="entry-history-heading">
+      <h2 id="entry-history-heading" className="font-semibold">
+        Zeiteinträge
+      </h2>
       {/* Filters */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:flex-wrap">
-        <Field label="Von" className="flex-1 min-w-[140px] gap-1">
-          <DatePicker
-            value={dateFrom}
-            onChange={setDateFrom}
-            placeholder="Von"
-            ariaLabel="Von"
-          />
-        </Field>
-        <Field label="Bis" className="flex-1 min-w-[140px] gap-1">
-          <DatePicker
-            value={dateTo}
-            onChange={setDateTo}
-            placeholder="Bis"
-            ariaLabel="Bis"
-          />
-        </Field>
-        {members.length > 0 && (
-          <Field label="Mitarbeiter" className="flex-1 min-w-[180px] gap-1">
-            <SearchableSelect
-              ariaLabel="Nach Mitarbeiter filtern"
-              options={[
-                { value: 'all', label: 'Alle Mitarbeiter' },
-                ...members.map((member) => ({
-                  value: member.user_id,
-                  label: getMemberDisplayName(member),
-                })),
-              ]}
-              value={memberFilter}
-              onChange={setMemberFilter}
-              searchPlaceholder="Mitarbeiter suchen …"
-              emptyMessage="Kein Mitarbeiter gefunden"
-            />
-          </Field>
-        )}
-        <Field label="Status" className="flex-1 min-w-[140px] gap-1">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Alle</SelectItem>
-              <SelectItem value="approved">Genehmigt</SelectItem>
-              <SelectItem value="pending">Ausstehend</SelectItem>
-              <SelectItem value="rejected">Abgelehnt</SelectItem>
-              <SelectItem value="pending_delete">
-                Löschung ausstehend
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </Field>
-        <RefreshButton onRefresh={view.refresh} label="Einträge aktualisieren" />
-        <Button variant="outline" size="sm" disabled={!hydrated} onClick={() => setCorrectionEntry(null)}>
-          <Plus className="mr-1.5 size-4" /> Zeit nachtragen
-        </Button>
-        <InlinePending active={settling.isBusy(NEW_ENTRY_ID)} />
-      </div>
+      <EntryHistoryFilters
+        dateFrom={dateFrom}
+        setDateFrom={setDateFrom}
+        dateTo={dateTo}
+        setDateTo={setDateTo}
+        members={members}
+        memberFilter={memberFilter}
+        setMemberFilter={setMemberFilter}
+        statusFilter={statusFilter}
+        setStatusFilter={setStatusFilter}
+        onRefresh={view.refresh}
+        hydrated={hydrated}
+        onAddTime={() => setCorrectionEntry(null)}
+        isSettlingNewEntry={settling.isBusy(NEW_ENTRY_ID)}
+      />
 
-      {/* Results */}
-      <ErrorText>{error}</ErrorText>
+      {/* Results: a failed refresh keeps the last rows below its retry. */}
+      {view.isStale ? loadError : null}
 
-      {view.isLoading ? (
-        <>
-          <SkeletonList count={5} className="md:hidden">
-            <div className="min-w-0 flex-1 space-y-2">
-              <div className="flex items-center justify-between">
-                <Skeleton className="h-4 w-24" />
-                <Skeleton className="h-5 w-20 rounded-full" />
-              </div>
-              <Skeleton className="h-4 w-32" />
-              <Skeleton className="h-4 w-40" />
-            </div>
-          </SkeletonList>
-          <div className="hidden md:block">
-            <Table>
-              <TableHeader>
-                <EntryHistoryHeaderRow />
-              </TableHeader>
-              <TableBody>
-                <SkeletonRows columns={ENTRY_HISTORY_COLUMNS} rows={5} />
-              </TableBody>
-            </Table>
-          </div>
-        </>
+      {!hasRange ? (
+        <EmptyState
+          icon={Clock}
+          title="Zeitraum wählen"
+          description="Wähle ein Von- und ein Bis-Datum, um die Einträge zu sehen."
+        />
+      ) : view.isLoading ? (
+        <EntryHistorySkeleton />
+      ) : view.data === undefined ? (
+        loadError
       ) : entries.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-            <Clock className="h-6 w-6 text-muted-foreground" />
-          </div>
-          <h3 className="text-lg font-semibold">Keine Einträge gefunden</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Für den ausgewählten Zeitraum gibt es keine Einträge.
-          </p>
-        </div>
+        <EmptyState
+          icon={Clock}
+          title="Keine Einträge gefunden"
+          description="Für den ausgewählten Zeitraum gibt es keine Einträge. Wähle einen anderen Zeitraum."
+        />
       ) : (
         <>
           <p className="text-sm text-muted-foreground">
-            {entries.length} {entries.length === 1 ? 'Eintrag' : 'Einträge'}{' '}
-            gefunden
+            {entries.length} {entries.length === 1 ? 'Eintrag' : 'Einträge'} gefunden
           </p>
 
-          {/* Mobile cards */}
-          <div className="space-y-2 md:hidden">
-            {entries.map((entry) => (
-              <ListRow
-                key={entry.id}
-                className="block space-y-2"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">
-                    {getEntryTypeLabel(entry)}
-                  </span>
-                  <span
-                    className={cn(
-                      'rounded-full px-2 py-0.5 text-xs font-medium',
-                      STATUS_LABELS[entry.status].className
-                    )}
-                  >
-                    {STATUS_LABELS[entry.status].label}
-                  </span>
-                </div>
-                <p className="text-sm font-medium">{getDisplayName(entry)}</p>
-                <p className="text-sm text-muted-foreground">
-                  {formatDateTime(entry.timestamp)}
-                </p>
-                {entry.isManual && (
-                  <span className="inline-block rounded bg-muted px-1.5 py-0.5 text-xs">
-                    Manuell
-                  </span>
-                )}
-                {settling.isBusy(entry.id) ? (
-                  <InlinePending active />
-                ) : entry.pendingCorrectionRequestId ? (
-                  <Button variant="ghost" size="sm" disabled>
-                    <Clock className="mr-1.5 size-4" /> Korrektur in Prüfung
-                  </Button>
-                ) : entry.status === 'approved' ? (
-                  <Button variant="ghost" size="sm" disabled={!hydrated} onClick={() => setCorrectionEntry(entry)}>
-                    <Pencil className="mr-1.5 size-4" /> Korrigieren
-                  </Button>
-                ) : null}
-              </ListRow>
-            ))}
-          </div>
+          <EntryHistoryCards
+            entries={entries}
+            settling={settling}
+            hydrated={hydrated}
+            setCorrectionEntry={setCorrectionEntry}
+          />
 
-          {/* Desktop table */}
-          <div className="hidden md:block">
-            <Table>
-              <TableHeader>
-                <EntryHistoryHeaderRow />
-              </TableHeader>
-              <TableBody>
-                {entries.map((entry) => (
-                  <TableRow key={entry.id}>
-                    <TableCell className="font-medium">
-                      {getDisplayName(entry)}
-                    </TableCell>
-                    <TableCell>
-                      {getEntryTypeLabel(entry)}
-                    </TableCell>
-                    <TableCell>{formatDateTime(entry.timestamp)}</TableCell>
-                    <TableCell>
-                      <span
-                        className={cn(
-                          'rounded-full px-2 py-0.5 text-xs font-medium',
-                          STATUS_LABELS[entry.status].className
-                        )}
-                      >
-                        {STATUS_LABELS[entry.status].label}
-                      </span>
-                    </TableCell>
-                    <TableCell>{entry.isManual ? 'Ja' : 'Nein'}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {entry.reviewedAt
-                        ? formatDateTime(entry.reviewedAt)
-                        : '-'}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {settling.isBusy(entry.id) ? (
-                        <InlinePending active className="ml-auto" />
-                      ) : entry.pendingCorrectionRequestId ? (
-                        <Button variant="ghost" size="sm" disabled>
-                          <Clock className="mr-1.5 size-4" /> Korrektur in Prüfung
-                        </Button>
-                      ) : entry.status === 'approved' ? (
-                        <Button variant="ghost" size="sm" disabled={!hydrated} onClick={() => setCorrectionEntry(entry)}>
-                          <Pencil className="mr-1.5 size-4" /> Korrigieren
-                        </Button>
-                      ) : null}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+          <EntryHistoryTable
+            entries={entries}
+            settling={settling}
+            hydrated={hydrated}
+            setCorrectionEntry={setCorrectionEntry}
+          />
         </>
       )}
       {correctionEntry !== undefined ? (
@@ -457,11 +431,9 @@ export function EntryHistory({
           onOpenChange={(nextOpen) => {
             if (!nextOpen) setCorrectionEntry(undefined);
           }}
-          onSubmitted={() =>
-            void settling.run(correctionEntry?.id ?? NEW_ENTRY_ID, view.refresh)
-          }
+          onSubmitted={() => void settling.run(correctionEntry?.id ?? NEW_ENTRY_ID, view.refresh)}
         />
       ) : null}
-    </div>
+    </section>
   );
 }

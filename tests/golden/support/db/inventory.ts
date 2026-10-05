@@ -18,34 +18,29 @@ export async function getInventoryLedgerState(
   const admin = createAdminClient();
 
   const { data: stockLevel, error: stockError } = await admin
-    .from("inventory_stock_levels")
-    .select("quantity_on_hand")
-    .eq("organization_id", orgId)
-    .eq("item_id", itemId)
-    .eq("location_id", locationId)
+    .from('inventory_stock_levels')
+    .select('quantity_on_hand')
+    .eq('organization_id', orgId)
+    .eq('item_id', itemId)
+    .eq('location_id', locationId)
     .maybeSingle();
   if (stockError) {
     throw new Error(`Failed to read stock level: ${stockError.message}`);
   }
 
   const { data: movements, error: movementError } = await admin
-    .from("inventory_movements")
-    .select("quantity_delta, quantity_after, created_at")
-    .eq("organization_id", orgId)
-    .eq("item_id", itemId)
-    .eq("location_id", locationId)
-    .order("created_at", { ascending: true });
+    .from('inventory_movements')
+    .select('quantity_delta, quantity_after, created_at')
+    .eq('organization_id', orgId)
+    .eq('item_id', itemId)
+    .eq('location_id', locationId)
+    .order('created_at', { ascending: true });
   if (movementError) {
-    throw new Error(
-      `Failed to read inventory movements: ${movementError.message}`,
-    );
+    throw new Error(`Failed to read inventory movements: ${movementError.message}`);
   }
 
   const rows = movements ?? [];
-  const movementTotal = rows.reduce(
-    (sum, row) => sum + Number(row.quantity_delta),
-    0,
-  );
+  const movementTotal = rows.reduce((sum, row) => sum + Number(row.quantity_delta), 0);
   const lastRow = rows.at(-1);
   const lastQuantityAfter = lastRow ? Number(lastRow.quantity_after) : 0;
 

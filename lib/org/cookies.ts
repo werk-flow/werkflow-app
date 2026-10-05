@@ -1,6 +1,6 @@
 import type { ReadonlyRequestCookies } from 'next/dist/server/web/spec-extension/adapters/request-cookies';
 import { getCachedMemberships } from '@/lib/data/cached';
-import type { UserOrg } from '@/components/organization/organization-context';
+import type { UserOrg } from './types';
 
 export const CURRENT_ORG_COOKIE = 'current_org_id';
 export const CURRENT_ORG_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
@@ -12,7 +12,7 @@ export const CURRENT_ORG_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
  */
 export async function resolveActiveOrgId(
   cookieStore: ReadonlyRequestCookies,
-  userId: string
+  userId: string,
 ): Promise<string | null> {
   return (await resolveActiveMembership(cookieStore, userId))?.orgId ?? null;
 }
@@ -26,4 +26,3 @@ export async function resolveActiveMembership(
   const memberships = await getCachedMemberships(userId);
   return memberships.find((membership) => membership.orgId === stored) ?? memberships[0] ?? null;
 }
-

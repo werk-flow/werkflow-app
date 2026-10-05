@@ -8,7 +8,7 @@ import type {
   TimeTravelRole,
   TimeTravelRoute,
 } from './types';
-import { getLocalDayEnd } from './day-utils';
+import { getLocalDayEnd, getLocalDayKey } from './day-utils';
 
 export type TimeSegmentFact = TimeActivitySelection & {
   id: string;
@@ -57,54 +57,57 @@ export function toTimeSegmentFact(row: SegmentRow): TimeSegmentFact {
   switch (row.kind) {
     case 'work':
     case 'callout':
-      selection = row.allocation_kind === 'job' && row.job_id
-        ? { kind: row.kind, allocationKind: 'job', jobId: row.job_id }
-        : row.allocation_kind === 'unallocated' && row.job_id === null
-          ? { kind: row.kind, allocationKind: 'unallocated', jobId: null }
-          : invalidSegmentShape(row);
+      selection =
+        row.allocation_kind === 'job' && row.job_id
+          ? { kind: row.kind, allocationKind: 'job', jobId: row.job_id }
+          : row.allocation_kind === 'unallocated' && row.job_id === null
+            ? { kind: row.kind, allocationKind: 'unallocated', jobId: null }
+            : invalidSegmentShape(row);
       break;
     case 'travel':
       if (!row.travel_route || !row.travel_role) return invalidSegmentShape(row);
-      selection = row.allocation_kind === 'job' && row.job_id
-        ? {
-            kind: 'travel',
-            allocationKind: 'job',
-            jobId: row.job_id,
-            travelRoute: row.travel_route,
-            travelRole: row.travel_role,
-          }
-        : row.allocation_kind === 'unallocated' && row.job_id === null
+      selection =
+        row.allocation_kind === 'job' && row.job_id
           ? {
               kind: 'travel',
-              allocationKind: 'unallocated',
-              jobId: null,
+              allocationKind: 'job',
+              jobId: row.job_id,
               travelRoute: row.travel_route,
               travelRole: row.travel_role,
             }
-          : invalidSegmentShape(row);
+          : row.allocation_kind === 'unallocated' && row.job_id === null
+            ? {
+                kind: 'travel',
+                allocationKind: 'unallocated',
+                jobId: null,
+                travelRoute: row.travel_route,
+                travelRole: row.travel_role,
+              }
+            : invalidSegmentShape(row);
       break;
     case 'break':
-      selection = row.allocation_kind === 'none'
-        ? { kind: 'break', allocationKind: 'none' }
-        : invalidSegmentShape(row);
+      selection =
+        row.allocation_kind === 'none' ? { kind: 'break', allocationKind: 'none' } : invalidSegmentShape(row);
       break;
     case 'standby':
-      selection = row.allocation_kind === 'none' && row.standby_context
-        ? {
-            kind: 'standby',
-            allocationKind: 'none',
-            standbyContext: row.standby_context,
-          }
-        : invalidSegmentShape(row);
+      selection =
+        row.allocation_kind === 'none' && row.standby_context
+          ? {
+              kind: 'standby',
+              allocationKind: 'none',
+              standbyContext: row.standby_context,
+            }
+          : invalidSegmentShape(row);
       break;
     case 'internal_activity':
-      selection = row.allocation_kind === 'internal_activity' && row.internal_type
-        ? {
-            kind: 'internal_activity',
-            allocationKind: 'internal_activity',
-            internalType: row.internal_type,
-          }
-        : invalidSegmentShape(row);
+      selection =
+        row.allocation_kind === 'internal_activity' && row.internal_type
+          ? {
+              kind: 'internal_activity',
+              allocationKind: 'internal_activity',
+              internalType: row.internal_type,
+            }
+          : invalidSegmentShape(row);
       break;
     default:
       return invalidSegmentShape(row);
@@ -129,13 +132,10 @@ export function getSegmentDurationMinutes(
   segment: Pick<TimeSegmentFact, 'startedAt' | 'endedAt'>,
   rangeStart: Date,
   rangeEnd: Date,
-  now = new Date()
+  now = new Date(),
 ): number {
   const startMs = Math.max(new Date(segment.startedAt).getTime(), rangeStart.getTime());
-  const endMs = Math.min(
-    new Date(segment.endedAt ?? now.toISOString()).getTime(),
-    rangeEnd.getTime()
-  );
+  const endMs = Math.min(new Date(segment.endedAt ?? now.toISOString()).getTime(), rangeEnd.getTime());
   return Math.max(0, (endMs - startMs) / 60_000);
 }
 
@@ -143,7 +143,7 @@ export function calculateTimeActivityTotals(
   segments: readonly TimeSegmentFact[],
   rangeStart: Date,
   rangeEnd: Date,
-  now = new Date()
+  now = new Date(),
 ): TimeActivityTotals {
   const totals: TimeActivityTotals = {
     presenceMinutes: 0,
@@ -185,7 +185,7 @@ export function calculateTimeActivityTotals(
 
 export function createActivitySelection(
   kind: TimeActivitySelection['kind'],
-  jobId: string | null = null
+  jobId: string | null = null,
 ): TimeActivitySelection {
   if (kind === 'break') {
     return { kind, allocationKind: 'none' };
@@ -196,7 +196,13 @@ export function createActivitySelection(
   if (kind === 'travel') {
     return jobId
       ? { kind, allocationKind: 'job', jobId, travelRoute: 'unspecified', travelRole: 'unspecified' }
-      : { kind, allocationKind: 'unallocated', jobId: null, travelRoute: 'unspecified', travelRole: 'unspecified' };
+      : {
+          kind,
+          allocationKind: 'unallocated',
+          jobId: null,
+          travelRoute: 'unspecified',
+          travelRole: 'unspecified',
+        };
   }
   if (kind === 'internal_activity') {
     return { kind, allocationKind: 'internal_activity', internalType: 'internal_work' };
@@ -206,9 +212,7 @@ export function createActivitySelection(
     : { kind, allocationKind: 'unallocated', jobId: null };
 }
 
-export function toTimeActivitySelection(
-  segment: TimeSegmentFact
-): TimeActivitySelection {
+export function toTimeActivitySelection(segment: TimeSegmentFact): TimeActivitySelection {
   switch (segment.kind) {
     case 'work':
     case 'callout':
@@ -252,22 +256,17 @@ export function splitSegmentAtLocalDayBoundaries(
   segment: Pick<TimeSegmentFact, 'startedAt' | 'endedAt'>,
   rangeStart: Date,
   rangeEnd: Date,
-  now = new Date()
+  now = new Date(),
 ): Array<{ startedAt: string; endedAt: string | null }> {
   let cursorMs = Math.max(new Date(segment.startedAt).getTime(), rangeStart.getTime());
-  const segmentEndMs = Math.min(
-    new Date(segment.endedAt ?? now.toISOString()).getTime(),
-    rangeEnd.getTime()
-  );
+  const segmentEndMs = Math.min(new Date(segment.endedAt ?? now.toISOString()).getTime(), rangeEnd.getTime());
   const slices: Array<{ startedAt: string; endedAt: string | null }> = [];
 
   while (cursorMs < segmentEndMs) {
     const nextDayStartMs = getLocalDayEnd(new Date(cursorMs)).getTime() + 1;
     const sliceEndMs = Math.min(segmentEndMs, nextDayStartMs);
     const isOpenTail =
-      segment.endedAt === null &&
-      now.getTime() <= rangeEnd.getTime() &&
-      sliceEndMs === segmentEndMs;
+      segment.endedAt === null && now.getTime() <= rangeEnd.getTime() && sliceEndMs === segmentEndMs;
     slices.push({
       startedAt: new Date(cursorMs).toISOString(),
       endedAt: isOpenTail ? null : new Date(sliceEndMs).toISOString(),
@@ -286,7 +285,7 @@ export function projectTimeSegmentsToLegacyTransitions(
   segments: readonly TimeSegmentFact[],
   rangeStart: Date,
   rangeEnd: Date,
-  now = new Date()
+  now = new Date(),
 ): TimeSegmentProjectionPoint[] {
   const points: TimeSegmentProjectionPoint[] = [];
   const segmentsBySession = new Map<string, TimeSegmentFact[]>();
@@ -299,14 +298,13 @@ export function projectTimeSegmentsToLegacyTransitions(
 
   for (const sessionSegments of segmentsBySession.values()) {
     const slices = sessionSegments
-      .sort(
-        (left, right) =>
-          new Date(left.startedAt).getTime() - new Date(right.startedAt).getTime()
-      )
+      .sort((left, right) => new Date(left.startedAt).getTime() - new Date(right.startedAt).getTime())
       .flatMap((segment) =>
-        splitSegmentAtLocalDayBoundaries(segment, rangeStart, rangeEnd, now).map(
-          (slice, sliceIndex) => ({ segment, slice, sliceIndex })
-        )
+        splitSegmentAtLocalDayBoundaries(segment, rangeStart, rangeEnd, now).map((slice, sliceIndex) => ({
+          segment,
+          slice,
+          sliceIndex,
+        })),
       );
 
     for (const [index, current] of slices.entries()) {
@@ -315,7 +313,9 @@ export function projectTimeSegmentsToLegacyTransitions(
       const followsPreviousSegment = Boolean(
         previous &&
           previous.segment.id !== current.segment.id &&
-          previous.slice.endedAt === current.slice.startedAt
+          getLocalDayKey(new Date(previous.slice.startedAt)) ===
+            getLocalDayKey(new Date(current.slice.startedAt)) &&
+          previous.slice.endedAt === current.slice.startedAt,
       );
 
       if (!previous || !followsPreviousSegment) {
@@ -336,7 +336,9 @@ export function projectTimeSegmentsToLegacyTransitions(
       const continuesWithNextSegment = Boolean(
         next &&
           next.segment.id !== current.segment.id &&
-          next.slice.startedAt === current.slice.endedAt
+          getLocalDayKey(new Date(next.slice.startedAt)) ===
+            getLocalDayKey(new Date(current.slice.startedAt)) &&
+          next.slice.startedAt === current.slice.endedAt,
       );
       if (continuesWithNextSegment) continue;
 
@@ -348,8 +350,7 @@ export function projectTimeSegmentsToLegacyTransitions(
   }
 
   return points.sort(
-    (left, right) =>
-      new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime()
+    (left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime(),
   );
 }
 
@@ -360,7 +361,7 @@ function pushProjectionPoint(
     sliceIndex: number;
   },
   entryType: TimeEntryType,
-  timestamp: string
+  timestamp: string,
 ): void {
   points.push({
     segmentId: slice.segment.id,

@@ -2,6 +2,7 @@
 
 import { ClockAlert } from 'lucide-react';
 
+import { SectionError } from '@/components/ui/section-error';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { readInBackground } from '@/lib/data/background-read-client';
 
@@ -9,10 +10,7 @@ function formatMinutes(value: number): string {
   const absolute = Math.abs(value);
   const hours = Math.floor(absolute / 60);
   const minutes = absolute % 60;
-  const parts = [
-    hours > 0 ? `${hours} Std.` : '',
-    minutes > 0 ? `${minutes} Min.` : '',
-  ].filter(Boolean);
+  const parts = [hours > 0 ? `${hours} Std.` : '', minutes > 0 ? `${minutes} Min.` : ''].filter(Boolean);
   return `${value >= 0 ? '+' : '−'}${parts.join(' ') || '0 Min.'}`;
 }
 
@@ -29,18 +27,31 @@ export function ProvisionalTimeSummary({
     proposedMinutes: number;
   }>({
     tables: ['time_correction_requests'],
-    read: async ({ signal }): Promise<LiveViewResult<{
-      count: number;
-      beforeMinutes: number;
-      proposedMinutes: number;
-    }>> => {
+    read: async ({
+      signal,
+    }): Promise<
+      LiveViewResult<{
+        count: number;
+        beforeMinutes: number;
+        proposedMinutes: number;
+      }>
+    > => {
       const result = await readInBackground('provisional-time-summary', { organizationId, userId }, signal);
       return result.success ? { ok: true, data: result } : { ok: false };
     },
     resetKey: `${organizationId}:${userId}`,
   });
   const summary = view.data;
-  if (!summary || summary.count === 0) return null;
+  if (view.isLoading) return null;
+  // A failed read is not "no pending corrections": say so and offer a retry.
+  if (!summary) {
+    return (
+      <SectionError className="mb-4" onRetry={() => void view.refresh()} retryPending={view.isRefreshing}>
+        Offene Zeitkorrekturen konnten nicht geladen werden.
+      </SectionError>
+    );
+  }
+  if (summary.count === 0) return null;
   const delta = summary.proposedMinutes - summary.beforeMinutes;
   return (
     <div className="mb-4 flex items-start gap-3 rounded-lg border border-warning/30 bg-warning-soft p-3 text-sm">
@@ -48,7 +59,8 @@ export function ProvisionalTimeSummary({
       <div>
         <p className="font-medium">Vorgemerkte Zeit: {formatMinutes(delta)}</p>
         <p className="text-muted-foreground">
-          {summary.count === 1 ? 'Eine Korrektur wartet' : `${summary.count} Korrekturen warten`} auf eine Entscheidung. Diese Änderung ist noch nicht in den freigegebenen Summen enthalten.
+          {summary.count === 1 ? 'Eine Korrektur wartet' : `${summary.count} Korrekturen warten`} auf eine
+          Entscheidung. Diese Änderung ist noch nicht in den freigegebenen Summen enthalten.
         </p>
       </div>
     </div>

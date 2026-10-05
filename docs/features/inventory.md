@@ -1,52 +1,48 @@
 # Inventory Management
 
-Status: living — last reviewed 2026-09-17
+Status: living — last reviewed 2026-10-04
 
-Inventory is WerkFlow's operational system for SHK materials, consumables, tools, assets, Lager locations, stock movements, and job material usage.
-
-This document separates the current V1 baseline from the complete product direction. Phase 1 below is not an MVP checklist or an implementation sequence. It describes the complete operational core that the product should eventually provide before inventory is treated as mature. It deliberately defines outcomes and domain boundaries rather than tables, APIs, or a database design.
+Inventory is WerkFlow's operational system for SHK materials, consumables, tools, assets, Lager locations, stock movements, and job material usage. This spec separates the current baseline from the complete product direction. It defines outcomes and domain boundaries, not a database design.
 
 ## Product Goal
 
-Inventory should tell an SHK business, with as little manual work as possible:
+Inventory tells an SHK business, with as little manual work as possible:
 
 - which articles, materials, tools, and individually tracked assets it works with;
-- what is physically on hand, where it is, and whether that quantity can be trusted;
-- what upcoming work needs, what has been reserved, and what is still missing;
-- what must be purchased, what was ordered, and what was actually received;
+- what is on hand, where, and whether that quantity can be trusted;
+- what upcoming work needs, what is reserved, and what is missing;
+- what must be bought, what was ordered, and what arrived;
 - what employees took, installed, consumed, returned, transferred, lost, or corrected;
 - which consumed quantities are billable and which costs belong in post-calculation;
-- which stock, pricing, supplier, or equipment exceptions require action.
+- which stock, price, supplier, or equipment exceptions need action.
 
-The module should reduce paper lists, duplicate entry, emergency wholesaler trips, lost tools, missed invoice positions, and owner dependence. It should remain understandable to a field worker while providing the office with an auditable end-to-end material flow.
+The module replaces paper lists, duplicate entry, emergency trips to the wholesaler, lost tools, missed invoice positions, and owner dependence. A field worker must understand it. The office gets an auditable material flow from demand to billing.
 
 ## Current Product Baseline
 
-As of 2026-09-02, Inventory V1 gives Admin and Büro an organization-scoped catalog, self-defined Lager locations, manual stock movements, CSV import, and material planning on jobs and projects. Assigned field workers take and return material on their jobs. V1 is a native foundation, not the complete operational core described below.
+Admin and Büro get an organization-scoped catalog, their own Lager locations, manual stock movements, CSV import, and material planning on jobs and projects. Assigned field workers take and return material on their jobs. The baseline is a foundation, not the complete operational core described below.
 
-- **Paging (Step 2, 2026-09-08).** The catalog and planned-material views page in sets of 50. Search, item type, stock status, location filtering, and summary counts cover the whole organization. The Lager view pages 12 locations with the existing six-item preview; movements retain the explicit latest-40 view. Creating an item confirms the saved record even when its name or active filter places it on another page. The Step 2 record owns browser acceptance.
-
-- **Central inventory.** Admin and Büro use `/inventar` with the `Alle Artikel`, `Lager`, `Geplant`, and `Bewegungen` views plus search and filters for type, stock status, and location; the views refresh live. Field workers do not see the route. The overview shows stock by item and by location, open planned quantity, and `Verfügbar` as total stock minus open planned demand. `Verfügbar` is not a committed reservation.
-- **Stock movements.** Managers record manual additions and removals at a location; stock corrections are manager-only, and an employee cannot correct their own last movement (settled with V1). Stock cannot be booked below zero. Every movement keeps quantity before and after, movement type, location, time, reason, and the linked job or project where applicable. Transfer movement types exist in the domain, but there is no user-facing transfer flow.
-- **Locations and categories.** Managers create their own locations labeled Lager, room, shelf, vehicle, or other; WerkFlow invents no default warehouse. Default editable SHK categories are seeded per organization, and category names carry no product logic. The source of truth for the seed is `app_private.seed_inventory_defaults` (last defined in migration `20260706122024_inventory_v1_1_workflow_defaults_and_project_materials.sql`), which inserts twelve categories: `Installation / Rohre & Fittings`, `Sanitär`, `Heizung`, `Klima / Lüftung`, `Pumpen, Armaturen & Ventile`, `Befestigung & Verbrauchsmaterial`, `Dichtstoffe, Chemie & Pflege`, `Werkzeuge & Maschinen`, `Mess- & Prüfgeräte`, `Elektro & Regelung`, `Sicherheit & Arbeitskleidung`, `Sonstiges`. Units are the thirteen entries of `INVENTORY_UNIT_OPTIONS` in `lib/inventory/types.ts` (stable English keys, German labels: Stück, Meter, Rolle, Packung, Karton, Set, Paar, Liter, Kilogramm, Sack, Kartusche, Bund, Palette). The V1 plan's per-unit input rule (decimals only for Meter, Liter and Kilogramm, whole numbers elsewhere, gently enforced) was not implemented: every unit accepts a decimal quantity with two fraction digits and no validation depends on the unit.
-- **Catalog.** Item types are material, consumable, tool, and asset. An item has name, description, category, unit, internal SKU, one or more barcodes, manufacturer, supplier and supplier article number, purchase and sale price, tax rate, billable default, global minimum and target stock, notes, and active and tracking flags. The web app has no camera scanning or scanner-first workflow.
-- **CSV import.** Managers map columns for catalog, location, supplier, price, barcode, threshold, billability, and initial-quantity fields; missing categories, suppliers, and locations are created during import. Matching checks the internal SKU first, then a barcode. Imported initial quantities become stock movements.
-- **Job and project material.** `Material & Inventar` on job and project detail lets managers plan catalog items without changing stock, and lets managers and authorized users take items from a location or return them; take and return create movements immediately, and unplanned takes are supported: an employee may take an existing item that was never planned, and the line is marked `is_unplanned` (settled with V1). Direct project material, material inherited from child jobs, and the project total stay visible separately. Lines distinguish planned, taken, returned, unplanned, preferred location, billable, and status.
-- **Field material actions.** An assigned employee sees material for the assigned job, takes planned material, takes an unplanned existing item, and returns material inside the field work pack; unplanned search is bounded and hides supplier, price, valuation, and billability ([P1-16](../plans/phase-1/slices/p1-16-field-work-pack.md)). Employees cannot create items, open `/inventar`, or use project-level material.
-- **Read-only consumers.** Work templates prepare planned material lines with provenance and never move or reserve stock ([P1-13](../plans/phase-1/slices/p1-13-work-templates.md)). Dispatch readiness and the work lifecycle compare open demand with on-hand stock, label planned material „nicht reserviert“, and label tools „nicht bewertet“ until `P1-32` ([P1-12](../plans/phase-1/slices/p1-12-dispatch.md), [P1-14](../plans/phase-1/slices/p1-14-work-lifecycle.md)). Handover releases, service cases, and maintenance plans show or freeze existing material facts without reinterpreting them as reservation, consumption, billability, or cost ([P1-17](../plans/phase-1/slices/p1-17-office-handover.md), [P1-19](../plans/phase-1/slices/p1-19-reactive-service.md), [P1-20](../plans/phase-1/slices/p1-20-maintenance-plans.md)). None of these actions creates, reserves, consumes, returns, or repairs stock.
-- **Tools and assets.** Tools and assets are catalog items, and individual asset-instance records exist, but there is no instance register, checkout, custody, maintenance, inspection, loss, or retirement workflow yet. In V1 an asset instance carries only a status, a location, `assigned_to_user_id` and `current_job_id`; assigning it to a person or job is a plain field edit with no checkout event, which `P1-32` replaces.
+- **Catalog.** Item types are material, consumable, tool, and asset. An item can carry several barcodes. The barcode entered on the item becomes its primary barcode, and the previous primary barcode stays attached. A barcode that belongs to another item refuses the save. Saving an item, its barcode, and its first stock count is all or nothing. Minimum and target stock are set once per item and apply across all locations. The web app has no camera scanning.
+- **Central inventory.** Only Admin and Büro open `/inventar`, with views for all items, Lager, planned material, and movements. Search, filters, and summary counts cover the whole organization, not only the visible page.
+- **Availability.** The overview shows stock by item and by location, open planned quantity, and `Verfügbar`. Today `Verfügbar` is total stock minus open planned demand. It is not a reservation.
+- **Stock movements.** Managers record additions and removals at a location. Only managers correct stock. An employee cannot correct their own last movement. Stock cannot go below zero. Every movement keeps quantity before and after, type, location, time, reason, and the linked job or project. There is no transfer flow for users.
+- **Locations and categories.** Managers create their own locations labeled Lager, room, shelf, vehicle, or other. WerkFlow creates no default warehouse, so the inventory mirrors the real rooms, shelves, and vehicles of the business. Each organization starts with editable SHK categories. Category names carry no product logic.
+- **Units.** Every unit accepts a decimal quantity. The planned rule that only Meter, Liter, and Kilogramm accept decimals is not implemented.
+- **CSV import.** The initial inventory audit at onboarding goes through CSV import with column mapping. Import creates missing categories, suppliers, and locations. Matching checks the internal SKU first, then a barcode. Each row's quantity becomes a stock movement at the row's Lager. A matched row adds its quantity to the existing item as an `Eingang`. Each row imports completely or not at all: a row whose lookup or write fails, or whose barcode belongs to another item, is counted as failed and leaves nothing behind. A row with a quantity but without a Lager keeps its item, books no quantity, and the result counts it separately.
+- **Job and project material.** Managers plan catalog items on jobs and projects without changing stock. Managers and assigned employees take items from a location or return them. A take or return changes stock immediately, with no approval step. An employee may take an existing item that was never planned, and the line is marked unplanned. A refused take creates no unplanned line. Projects show direct material, material from child jobs, and the total separately. Lines keep planned, taken, returned, and billable quantities apart.
+- **Field material actions.** An assigned employee works with the material of the job inside the field work pack. The unplanned-item search hides supplier, price, valuation, and billability. Employees cannot create items, open `/inventar`, or use project-level material.
+- **Read-only consumers.** Templates, dispatch readiness, the work lifecycle, handover, service cases, and maintenance plans show material facts and never create, reserve, consume, or return stock. Readiness labels planned material as not reserved and tools as not assessed until `P1-32`.
+- **Tools and assets.** Tools and assets are catalog items, and individual asset instances exist. Assigning an instance to a person or job is a plain field edit without a checkout event. There is no checkout, custody, maintenance, inspection, loss, or retirement workflow. `P1-32` adds it.
 
 ### Important Current Limitations
 
-- There is no reservation, picking, approval, procurement, invoice, or full post-calculation workflow. Billable defaults and billable quantities exist, but no offer or invoice module consumes them.
-- There is no paired transfer flow, purchase requisition, supplier order, goods receipt, supplier return, reorder worklist, formal stock count, valuation report, or wholesale-standard integration.
-- The CSV flow has no row-by-row preview, duplicate-resolution workspace, reconciliation total, downloadable error report, or created/updated/skipped summary. Excel import is not implemented.
-
-The V1 planning record is the [Inventory V1 implementation plan](../plans/phase-1/consolidation-2026-08/inventory-v1-implementation-plan.md). Current code and live database state override older plan wording where they differ.
+- There is no reservation, picking, approval, procurement, invoice, or post-calculation workflow. Billable quantities exist, but nothing commercial uses them yet.
+- There is no paired transfer, purchase order, goods receipt, supplier return, reorder worklist, formal stock count, valuation report, or wholesale-standard integration.
+- The CSV import books every row as soon as it starts. It has no confirmation step, no row preview, no warning for a file that was already imported, and no duplicate resolution, reconciliation total, or error report. The result names only the counts of imported rows, rows without a Lager, and failed rows. Excel import does not exist.
 
 ## Phase 1 — Complete Operational Core
 
-Phase 1 is the complete expected operational product, not a quick MVP. Individual releases may deliver it incrementally, but the concepts below must stay distinct throughout product design, UI language, permissions, reporting, and integrations.
+Releases may deliver this core in steps. The concepts below stay distinct in product design, UI language, permissions, reporting, and integrations throughout.
 
 ### Domain Semantics
 
@@ -65,206 +61,158 @@ Phase 1 is the complete expected operational product, not a quick MVP. Individua
 | Valuation | Internal cost view of inventory and material use | Customer sale price or formal accounting ledger |
 | Tool / asset custody | Responsibility and lifecycle of reusable or individually identified equipment | Consumable stock |
 
-Every user-facing quantity should say which of these meanings it represents. A generic `Material` total is not sufficient.
+Every quantity a user sees says which of these meanings it represents. A generic `Material` total is not enough.
 
 ### Catalog And Supplier Master Data
 
-The catalog should support:
+- Each item type gets its own workflow. Non-stocked order articles are catalog items too.
+- An item has several suppliers, each with article number, pack size, minimum order, delivery time, price validity, and rebate context, plus a preferred and an alternative source.
+- Internal cost, list price, purchase price, sale price, tax treatment, and billable default stay separate.
+- Unit and pack conversions are explicit and reviewable, such as ordering a carton and consuming pieces.
+- A substitute never silently replaces an approved specification.
+- Commercial values are versioned, so an old offer, purchase, consumption, or invoice stays explainable after prices change. Archived articles keep their history and can name a successor.
 
-- materials, consumables, non-stocked order articles, tools, and individually tracked assets without forcing identical workflows on all types;
-- clear names, descriptions, categories, units, manufacturer identities, internal identifiers, GTIN/EAN and other barcodes, supplier article numbers, images, technical documents, and safety or handling notes;
-- multiple suppliers and supplier article references per item, including preferred supplier, alternative source, pack size, minimum order quantity, delivery time, price validity, rebate or discount context, and discontinued/replacement status;
-- separate internal cost, supplier list price, negotiated purchase price, customer sale-price logic, tax treatment, and billable default;
-- unit and pack conversions that are explicit and reviewable, such as ordering a carton while consuming pieces;
-- equivalent and substitute articles without silently replacing an approved specification;
-- versioned commercial values so an old offer, purchase, receipt, consumption, or invoice remains explainable after catalog prices change;
-- archive and successor flows that preserve historical references;
-- customer-assisted CSV/Excel onboarding, safe updates, exports, duplicate detection, and reconciliation reports.
-
-An article used in an offer need not be physically stocked. A stocked material need not be billable. A tool or asset must not be treated as consumed merely because it was assigned to a job.
+An article in an offer need not be stocked. A stocked material need not be billable. Assigning a tool or asset to a job never counts as consuming it.
 
 ### Locations And Physical Stock
 
-The stock view should support:
-
-- organization-defined warehouses, rooms, shelves, bins, vehicles, temporary site stores, and other practical SHK locations;
-- an `Alle Artikel` view plus location-specific views and optional location hierarchy;
-- on-hand, reserved, available, expected incoming, in-transit, and count-discrepancy quantities shown separately;
-- location-specific minimum and target levels where the global item default is insufficient;
-- an explainable movement history for every physical change, including actor, time, source, destination, linked work, reason, and related document;
-- stock additions, removals, corrections, scrapping, loss, damage, supplier returns, customer returns, job consumption, job returns, transfer, and initial count with distinct meanings;
-- atomic updates so the current stock and movement record cannot drift apart;
-- a deliberate organization policy for negative stock. If allowed later, negative stock must be visible as an exception and never hidden by clamping a value to zero.
+- Locations include warehouses, rooms, shelves, bins, vehicles, and temporary site stores, with an optional hierarchy.
+- On-hand, reserved, available, incoming, in-transit, and count-discrepancy quantities show separately.
+- Minimum and target levels can be set per location where the item default is not enough.
+- Every physical change is a distinct movement type with actor, time, source, destination, linked work, reason, and document. Stock and its movement record are updated atomically and cannot drift apart.
+- Negative stock stays blocked. If that policy ever changes, negative stock shows as an exception and is never clamped to zero.
 
 ### Job Planning, Availability, And Reservation
 
-Office users should be able to:
+- Office users plan material on a job or directly on a project without changing stock.
+- Estimated, approved, reserved, picked, consumed, returned, and remaining quantities stay distinct.
+- A preferred source location never hides organization-wide availability.
+- Full or partial reservations, releases, and reallocations of shortages are audited.
+- Demand shows as covered, partly covered, late, substituted, ordered, or blocked.
+- Material plans can be copied and imported from an accepted offer or template, with revisions.
+- Project demand keeps the job that owns each requirement.
+- Two planners never count the same unreserved stock as available.
+- Planning stays reversible until a physical or commercial follow-up makes a change consequential.
 
-- plan material on a job or directly on a project without changing on-hand stock;
-- distinguish estimated demand, approved demand, reserved quantity, picked quantity, consumed quantity, returned quantity, and remaining requirement;
-- choose a preferred source location while still seeing organization-wide availability;
-- reserve complete or partial quantities, release reservations, and reallocate shortages with an audit trail;
-- see whether planned demand is covered, partly covered, late, substituted, ordered, or blocked;
-- group and copy material plans, import them from an accepted offer or standard work package, and preserve revisions;
-- aggregate project demand without losing the job that owns each requirement;
-- prevent two planners from believing the same unreserved stock is available;
-- keep planning reversible until physical or commercial follow-on actions make a change consequential.
-
-A job status change must not silently reserve, consume, or return stock. Any optional automation around job state needs an explicit rule, visible effect, and recovery path.
+A job status change never silently reserves, consumes, or returns stock. Any automation tied to job state needs an explicit rule, a visible effect, and a recovery path.
 
 ### Picking, Consumption, Return, And Billability
 
-The execution flow should make it easy to:
+- Users pick reserved or planned material from a suggested location, and record unplanned existing articles with an exception marker.
+- Users take, consume, return, report scrap or damage, and correct mistakes, also in partial quantities and across several locations.
+- A return never exceeds the quantity still outside stock unless a manager handles the exception.
+- Corrections keep the actor and the original value.
+- Net consumed quantity and billable quantity stay separate. Authorized office users review warranty, goodwill, rework, waste, customer-supplied, and other exceptional material.
+- Approved billable quantities go to commercial workflows without creating an invoice. Cost quantities and cost-price snapshots go to post-calculation independently of the customer price.
 
-- pick reserved or planned material from a suggested location;
-- record an unplanned existing article with a clear exception marker;
-- take material to a job, consume or install it, return unused quantity, report scrap/damage, or correct a mistake;
-- support partial actions and more than one source or return location;
-- prevent returns greater than the quantity still outside stock unless a manager deliberately handles the exception;
-- capture who performed the action and retain original and corrected values;
-- separate net consumed quantity from billable quantity;
-- let authorized office users review non-billable, included, warranty, goodwill, rework, waste, customer-supplied, or otherwise exceptional material;
-- hand approved billable quantities to commercial workflows without creating or issuing an invoice automatically;
-- hand cost quantities and cost-price snapshots to job post-calculation independently of the customer price.
-
-The field flow should remain short: identify item, confirm action, choose or accept location, enter quantity, and save. Commercial exceptions should normally be reviewed in the office rather than forcing complex decisions on the technician.
+The field flow stays short: identify the item, confirm the action, accept the location, enter the quantity, save. The office reviews commercial exceptions. The technician does not.
 
 ### Transfers
 
-A complete transfer should provide:
-
-- a source and destination, responsible person, quantities, and status;
-- paired, auditable source and destination effects rather than two unrelated manual corrections;
-- immediate transfers for simple cases and an optional dispatched/in-transit/received flow for vehicles or remote stores;
-- partial receipt, discrepancy, cancellation, loss, and correction handling;
-- barcode-supported picking and receiving;
-- visibility of stock in transit so it is neither shown as available at the source nor prematurely available at the destination;
-- links to the responsible job, route, person, or transfer document where useful.
+- A transfer has a source, a destination, a responsible person, quantities, and a status, with paired effects instead of two unrelated corrections.
+- Simple cases transfer immediately. Vehicles and remote stores can use a dispatched, in-transit, and received flow with partial receipt, discrepancy, cancellation, and loss handling.
+- Stock in transit counts as available at neither the source nor the destination.
 
 ### Procurement, Ordering, And Receipt
 
-The procurement flow should cover:
+- Demand from shortages, reorder levels, offers, jobs, and manual requests flows into one worklist that prevents duplicate buying.
+- Purchase requests get role-based approval where required.
+- Suppliers are compared by price, pack size, availability, delivery time, and minimum order.
+- Purchase orders track revisions, confirmations, backorders, partial deliveries, and cancellations.
+- Direct delivery to a vehicle or job records whether the material ever became general stock.
+- Goods receipt records accepted, damaged, short, excess, substituted, and rejected quantities. Stock increases only after quantity and destination are confirmed.
+- A supplier return records the expected credit without pretending the credit exists.
+- Demand, order, receipt, delivery note, incoming invoice, and movement are matched.
+- A manual fallback works when a wholesaler interface is down.
 
-- demand from shortages, reorder levels, accepted offers, jobs, projects, manual requests, and replacement needs;
-- a consolidated demand worklist that avoids duplicate buying;
-- purchase requests and role-appropriate approval where required;
-- supplier comparison based on current price, pack size, availability, delivery time, minimum order, preferred supplier, and service considerations;
-- purchase orders with revisions, statuses, expected dates, supplier confirmations, backorders, partial deliveries, cancellations, and notes;
-- direct delivery to a warehouse, vehicle, or job while preserving who owns the material and whether it ever became general stock;
-- goods receipt with accepted, damaged, short, excess, substituted, and rejected quantities;
-- receipt into physical stock only after the quantity and destination are confirmed;
-- supplier returns and the expected commercial credit without pretending that the credit already exists;
-- clear matching between demand, order, receipt, delivery note, incoming invoice, and stock movement;
-- manual fallback when a wholesaler interface is unavailable.
-
-Receipt and incoming-invoice approval are separate controls. A supplier invoice must not create stock merely because it contains an article line.
+Receipt and incoming-invoice approval are separate controls. A supplier invoice never creates stock because it contains an article line.
 
 ### Reorder And Shortage Management
 
-The operational core should provide:
+- Low-stock and uncovered demand appear as worklists, not only as badges.
+- A proposed order quantity accounts for on-hand, reserved, incoming, open demand, pack size, lead time, and target level.
+- Discontinued items, missing suppliers, uncertain conversions, stale prices, late orders, and duplicate orders are exceptions.
+- Every snooze, dismissal, substitution, transfer, or order addition carries a reason.
+- Notifications avoid repeated noise and name the owner of the next action.
 
-- global or location-specific minimum, target, and reorder quantities;
-- low-stock and uncovered-demand worklists rather than only passive warning badges;
-- proposed order quantity that considers on-hand, reserved, expected incoming, open demand, pack size, lead time, and target level;
-- exceptions for discontinued items, missing suppliers, uncertain unit conversion, stale price, delayed orders, and conflicting duplicate orders;
-- snooze, dismiss, substitute, transfer-from-another-location, or add-to-order actions with a reason;
-- notification rules that avoid repeated noise and show who owns the next action.
-
-Automatic submission to a supplier is not required for the core. A reviewed, dependable reorder worklist creates value before autonomous ordering is safe.
+The core does not submit orders to suppliers automatically. A reviewed reorder worklist creates value long before autonomous ordering is safe.
 
 ### Wholesaler Data And Transaction Standards
 
-WerkFlow should treat standards as explicit workflow contracts, not marketing checkboxes:
+Each standard is a workflow contract, not a marketing checkbox:
 
-- **DATANORM:** import and update article and price master data, with version, supplier, effective date, rebate context, rejected rows, and customer-specific overrides visible.
-- **IDS / IDS Connect:** open the correct supplier context, transfer a reviewed cart or article selection, and bring the result back into the intended WerkFlow demand or order workflow.
-- **UGL:** exchange the supported commercial documents in the supported direction and version, with a clear fallback for rejected or partial data.
-- **Open Masterdata:** enrich or synchronize product master data while preserving source, freshness, licensing, and customer overrides.
-- **SHK Connect:** use only supported services and partners, with the exact service, direction, authentication, and failure behavior documented.
+- **DATANORM.** Import and update article and price data, with version, supplier, effective date, rebate context, rejected rows, and customer overrides visible.
+- **IDS Connect.** Open the right supplier shop, transfer a reviewed cart, and bring the result back into the intended demand or order.
+- **UGL.** Exchange the supported commercial documents in the supported direction and version, with a fallback for rejected or partial data.
+- **Open Masterdata.** Refresh product data while keeping source, freshness, licensing, and customer overrides.
+- **SHK Connect.** Use only supported services and partners, with direction, authentication, and failure behavior documented.
 
-For every integration, the product must state supported partner, standard version, data direction, objects, plan entitlement, setup responsibility, synchronization timing, error recovery, and whether a supplier contract is also required. Supplier connectivity must never be the only way to complete an urgent operational action.
+For every integration the product states partner, version, direction, objects, plan entitlement, setup responsibility, sync timing, error recovery, and whether a supplier contract is needed. Supplier connectivity is never the only way to complete an urgent action.
 
-Research facts (2026-09-17, sources in [pre-Wave-3 step 4](../plans/phase-1/pre-wave-3/04-wave-3-4-and-phase-2-planning.md#research-digest-2026-09-17)) that `P1-25` and `P1-34` start from:
+Research facts that `P1-25` and `P1-34` start from:
 
-- **DATANORM** is not an open standard (the specification is sold as a book; format documentation was removed from GitHub after a takedown, so WerkFlow must not republish it). Versions 3 (1990), 4 (1994) and 5 (1999); wholesalers still ship version 4. Files: `DATANORM.001` to `.999` (articles), `DATPREIS.*` (prices), `DATANORM.WRG` (Warengruppen), `DATANORM.RAB` (Rabattgruppen: the real customer price is list price minus the rebate group), `DATATEXT.*` (long text); CP850 encoding, mixed fixed-width and semicolon records with `V`, `K`, `S`, `R`, `A`, `B`, `C`, `D`, `T`, `E`, `J`, `P`, `Z`, `G` record types. Open parsers exist in Ruby (`halo/datanorm`, MIT) and Python (`FahrJo/datanorm-python`, MIT), none in TypeScript; the in-house reader is one to two days from the public record layouts. The customer's own wholesaler files are an onboarding prerequisite, not a WerkFlow cost.
-- **IDS Connect 2.5** (ITEK for BVBS, DG Haustechnik and ZVSHK): a `multipart/form-data` POST to the shop with Kundennummer, Benutzername, Passwort, Version, Hook-URL and Target; actions `warenkorbUebergabe`, `warenkorbUebernahme` (the cart returns to the Hook-URL), `artikelSuche` and the deep link with live price and availability; two public XSDs; no certification. Shops named publicly: GC-Gruppe, G.U.T., Pfeiffer & May, Reisser, Richter+Frenzel, Lotter, Mainmetall. Shop endpoints come from ITEK's Open Connect directory, free for craft-software vendors.
-- **UGL 5.0** (GC-Gruppe, public specification): fixed 350-byte ASCII records `KOP`, `ADR`, `POA`, `POZ`, `POT`, `END`, `RGD`; document types `AN` (price request), `BE` (order), `AB` (confirmation), `LS` and `LF` (delivery notes), `RG` (invoice); moved by FTP or shop upload with wholesaler-specific naming. The only path today for an automatic goods receipt from a delivery note. ITEK's ODX is the JSON successor; do not build on it yet.
-- **Open Masterdata** 1.0.5 (2020): on-demand master data per article or GTIN; documentation behind a paywall for non-members; a wholesaler-issued key per customer; providers include GC houses, Lotter, Mainmetall, Sanitär-Heinze, Richter+Frenzel. Its use is single-article refresh, not bulk sync.
-- **SHK Connect and Open Connect** are ITEK's directory of who supports which process at which URL (Open Masterdata, ODX, ELBRIDGE, IDS Connect, DATANORM distribution); free for craft-software vendors, 600 € setup and 790 € per year for other data suppliers.
-- **Scanning**: the native `BarcodeDetector` is full on Chrome for Android, disabled by default on Safari through 26.x and absent on Firefox, so the `barcode-detector` polyfill (zxing-wasm, MIT) is mandatory for field phones; `html5-qrcode` is frozen since 2023, `quagga2` is 1D only; `bwip-js` (MIT) renders labels, `gtin` (MIT) checks digits; pack conversion ("Packung = 10 Stück") is a domain table, not a library; React Native later through `react-native-vision-camera` with its MLKit scanner package or `expo-camera`.
-- **Law**: §240 HGB requires an `Inventar` per fiscal year; §241 allows a `permanente Inventur` from a gapless ledger plus one physical count per article and year, and a `verlegte Inventur` in a window around the balance date; §241a exempts sole traders under 800,000 € revenue and 80,000 € profit, never a GmbH; count records are kept ten years (§257 HGB). The `Steuerberater` expects signed count lists, the valuation basis, a procedure description and a difference analysis.
-- **Market**: HERO launched a stock ledger in August 2025 (29 € per month); plancraft, Craftboxx and Meisterwerk have no stock ledger; ToolTime orders through IDS without stock; Labelwin, STREIT, pds, KWP and TAIFUN have ledgers, counts, vehicle or site stock and file-based UGL and DATANORM. Nobody documents reservations with concurrency rules.
+- **DATANORM** is not an open standard. The specification is sold as a book, and WerkFlow must not republish format documentation. Wholesalers still ship version 4. The real customer price is list price minus the rebate group in `DATANORM.RAB`. Files use CP850 encoding. No TypeScript parser exists, so WerkFlow writes its own reader. The customer's wholesaler files are an onboarding prerequisite, not a WerkFlow cost.
+- **IDS Connect 2.5** is a form POST to the shop with customer credentials and a callback URL that receives the cart. It has public XSDs and no certification. ITEK's Open Connect directory lists shop endpoints for free.
+- **UGL 5.0** has a public specification with fixed-width records for price requests, orders, confirmations, delivery notes, and invoices, moved by FTP or shop upload. It is the only path today to an automatic goods receipt from a delivery note. Its JSON successor ODX is not ready to build on.
+- **Open Masterdata** serves data per article or GTIN with a key the wholesaler issues per customer. It fits single-article refresh, not bulk sync.
+- **Scanning.** Safari and Firefox lack a usable native `BarcodeDetector`, so field phones need the `barcode-detector` polyfill. Pack conversion is a domain table, not a library.
+- **Law.** §240 HGB requires an `Inventar` per fiscal year. §241 allows a `permanente Inventur` from a gapless ledger plus one physical count per article and year. §241a exempts small sole traders, never a GmbH. Count records are kept ten years (§257 HGB). The `Steuerberater` expects signed count lists, the valuation basis, a procedure description, and a difference analysis.
 
 ### Barcode, QR, And Identification
 
-Barcode-supported workflows should:
-
-- identify an item, supplier article, location, transfer, order, delivery, tool, or asset without assuming one code type means the same thing everywhere;
-- allow multiple identifiers and preserve collisions or ambiguous matches for review;
-- support external GTIN/EAN, supplier codes, internal labels, and QR codes;
-- use the same validated actions as manual search rather than creating a second stock logic;
-- make quantity, unit, location, and intended action visible before confirmation;
-- support printable labels and replacement of damaged labels;
-- expose offline and last-sync state once mobile offline support exists;
-- avoid claiming that every barcode can be resolved through a universal public database.
+- One code type does not mean the same thing everywhere. A scan can identify an item, supplier article, location, transfer, order, delivery, tool, or asset.
+- An item can carry several identifiers. Collisions and ambiguous matches go to review.
+- A scan calls the same validated actions as manual search, never a second stock logic.
+- Quantity, unit, location, and action show before confirmation.
+- Labels can be printed and replaced.
+- Offline and last-sync state show once mobile offline support exists.
+- WerkFlow never claims that a public database resolves every barcode.
 
 ### Counts, Reconciliation, And Audit
 
-The stock-count capability should provide:
+- Counts can be full, cycle, location, category, or spot counts, on paper or mobile, with scanner help.
+- Blind counts are optional where the expected quantity would bias the result.
+- Counts can pause, resume, be assigned, show progress, and take a second count.
+- Discrepancies are reviewed before any correction. Each accepted variance has a reason, evidence, approver, and movement link.
+- Locations under count can be frozen or restricted.
+- A count ends with reconciliation totals and a signed completion record.
+- An office user can read stock and catalog history.
 
-- full, cycle, location, category, and spot counts;
-- printable or mobile count sheets and scanner-assisted counting;
-- optional blind counts where the expected quantity would bias the result;
-- pause, resume, assignment, progress, and second-count handling;
-- explicit discrepancy review before stock correction;
-- reason categories, notes, evidence, approver, and movement links for every accepted variance;
-- freeze or controlled-movement policies for locations under count;
-- reconciliation totals and a signed completion record;
-- stock and catalog audit history that is readable by an office user, not only by a developer.
-
-Edits and corrections should not erase the original event. The product should make mistakes repairable without making history mutable.
+A correction never erases the original event. Mistakes stay repairable and history stays immutable.
 
 ### Inventory Valuation And Operational Reporting
 
-The module should provide operational valuation and cost insight:
+- Reports show quantity and cost by item and location, value over time, and high-value concentration.
+- Slow-moving, obsolete, damaged, missing, and negative-stock items are exceptions.
+- Consumption, waste, return, and unplanned use show as trends by item, job, project, location, and employee where appropriate.
+- Price changes and purchase-price variance are visible.
+- Expected and actual job material cost feed post-calculation. Snapshots keep historical job costs stable when supplier prices change.
 
-- current quantity and selected cost basis by item and location;
-- inventory-value trend and high-value concentration;
-- slow-moving, obsolete, damaged, missing, and negative-stock exceptions;
-- consumption, waste, return, and unplanned-use trends by item, job, project, location, and employee where appropriate;
-- price-change and purchase-price variance views;
-- expected versus actual job material cost and explainable post-calculation handoff;
-- snapshots that keep historical job costs stable when today's supplier price changes.
-
-The precise valuation policy—such as standard cost, moving average, FIFO, or another accepted method—is a product and accounting decision gate. Operational valuation must not be represented as a general-ledger inventory account unless a native accounting scope is explicitly approved.
+The valuation basis is a moving average per item and location. It is labeled operational and is never a general-ledger inventory account unless native accounting scope is approved.
 
 ### Tools And Individually Tracked Assets
 
-Reusable equipment needs a lifecycle distinct from quantity stock:
+Reusable equipment has a lifecycle separate from quantity stock:
 
-- item models plus individual instances with asset tag, serial number, status, location, custodian, and condition;
-- checkout, handover, return, reassignment, job allocation, and chain of custody;
-- available, in use, reserved, maintenance, inspection due, damaged, lost, retired, and disposed states;
-- QR/barcode identification and optional NFC where supported;
-- purchase, warranty, documents, instructions, photos, repair, calibration, statutory inspection, and maintenance history;
-- issue reporting and a safe rule for blocking unsafe equipment;
-- reminders and an operational overview of overdue return, inspection, maintenance, or missing assets;
-- optional vehicle-related equipment lists without treating a vehicle as ordinary quantity stock.
+- Instances carry asset tag, serial number, status, location, custodian, and condition.
+- Checkout, handover, return, reassignment, and job allocation form a chain of custody.
+- States cover available, in use, reserved, maintenance, inspection due, damaged, lost, retired, and disposed.
+- Instances keep purchase, warranty, documents, repair, calibration, statutory inspection, and maintenance history.
+- Issue reports can block unsafe equipment.
+- Reminders cover overdue returns, inspections, maintenance, and missing assets.
 
-Whether vehicles themselves belong here or in a future fleet module is a decision gate.
+A vehicle is a location, with an optional asset instance for inspection and custody in `P1-32`. A vehicle is never quantity stock. A separate fleet module is a decision gate.
 
 ### Onboarding, Migration, Export, And Support
 
-Inventory adoption should include:
+- Onboarding offers a documented self-service import and an assisted initial inventory audit.
+- Import states formats, required fields, matching order, unit normalization, and recovery. It offers preview, duplicate resolution, location mapping, count reconciliation, and a result report.
+- Before an import books anything, a confirmation step shows per row whether it creates a new item or matches an existing one, the quantity it adds per Lager, and the totals. A warning appears when a file with the same content was already imported.
+- Price and catalog updates never add physical stock by accident.
+- The organization can export catalog, supplier references, locations, stock, movements, open demand, orders, and assets.
+- Support channels, entitlement, and escalation are visible for a blocked stock or import operation.
 
-- a documented self-service import and an assisted initial inventory-audit option;
-- clear accepted formats, required fields, matching order, unit normalization, validation ownership, and rollback/recovery behavior;
-- preview, duplicate resolution, location mapping, initial-count reconciliation, and a downloadable result report;
-- repeatable price/catalog updates that do not accidentally add physical stock;
-- complete export of catalog, supplier references, locations, stock, movements, open demand, orders, and assets in usable formats;
-- visible support channels, service entitlement, expected response path, and escalation for a blocked stock or import operation.
-
-Competitor research shows that migration effort, unclear support entitlement, integration add-ons, and surprise implementation cost can outweigh an attractive headline price. WerkFlow packaging should make required office seats, field access, imports, standards, onboarding, support, storage, and data exit understandable for a real team scenario. The research evidence stays in [Competitive landscape](../product/competitive-landscape.md); this feature spec does not duplicate vendor claims.
+Migration effort, unclear support, integration add-ons, and surprise setup costs can outweigh a low headline price. WerkFlow packaging makes office seats, field access, imports, standards, onboarding, support, storage, and data exit clear for a real team. The evidence lives in [Competitive landscape](../product/competitive-landscape.md).
 
 ## Connected Workflow Contracts
 
@@ -275,108 +223,88 @@ Competitor research shows that migration effort, unclear support entitlement, in
 | Documents | Product sheets, supplier offers, orders, confirmations, delivery notes, receipts, photos, count records, warranties, inspections, and invoices remain accessible from both operational context and the central document system. |
 | Employees and roles | Employee actions use assignment and organization context. Price, valuation, supplier negotiation, correction, and approval data remain limited to authorized roles. |
 | Time tracking | Job time and material cost meet in post-calculation, but correcting time must not rewrite material history and vice versa. |
-| Mobile and offline | Manual search and scan call the same domain actions. Each offline-capable workflow must define available data, queued action, conflict behavior, visible sync state, and recovery. “Offline inventory” is not one binary promise. |
+| Mobile and offline | Manual search and scan call the same domain actions. Each offline-capable workflow must define available data, queued action, conflict behavior, visible sync state, and recovery. "Offline inventory" is not one binary promise. |
 | AI automations | Suggestions may prepare mappings, matches, demand forecasts, or exceptions. The inventory ledger changes only through a validated domain action with the source and responsible actor recorded. |
 
-See [Commercial and finance](./commercial-and-finance.md) for the invoice, incoming-bill, payment, and post-calculation side of these contracts.
+[Commercial and finance](./commercial-and-finance.md) owns the invoice, incoming-bill, payment, and post-calculation side of these contracts.
 
 ## Role And UX Principles
 
-### Admin
+- **Admin** controls inventory policy, valuation and pricing, imports, integrations, approvals, correction rights, count rules, and lifecycle settings. Admin repairs exceptional states without deleting history.
+- **Büro** maintains catalog and suppliers, plans and reserves material, buys, receives, corrects, counts, reviews billability, and sees operational cost. Only `buero` and `admin` reserve stock. The office works from exception worklists, not a dense ERP screen.
+- **Employees** see only the material of assigned work and permitted tool or vehicle stock. They use short mobile flows to take, return, transfer, count, receive, and report issues. They see no purchase prices, sale-price strategy, inventory value, supplier terms, or unrelated stock unless explicitly authorized. They never create free-text stock in the field. Unknown material becomes a reviewable request or comes from an existing controlled source.
 
-- Controls organization-wide inventory policy, sensitive valuation and pricing, imports, integrations, approvals, correction rights, count rules, and lifecycle settings.
-- Can investigate and repair exceptional states without deleting history.
+Shared UX rules:
 
-### Büro / Manager
-
-- Maintains catalog and suppliers, plans and reserves material, buys shortages, receives goods, performs or approves corrections and counts, reviews billability, and sees operational cost.
-- Gets exception-oriented worklists instead of a dense ERP screen.
-
-### Employee / Handwerker/in
-
-- Sees only relevant assigned-work material and permitted tool/vehicle stock.
-- Uses short, mobile-friendly take, return, transfer, count, receipt, and issue-reporting flows.
-- Does not see purchase prices, sale-price strategy, inventory value, supplier terms, or unrelated stock unless explicitly authorized.
-- Cannot create uncontrolled free-text stock from the field. Unknown material becomes a reviewable request or is selected from a controlled existing source.
-
-### Shared UX Rules
-
-- Use natural German labels that name the action: `Planen`, `Reservieren`, `Aus Lager entnehmen`, `Verbraucht`, `Zurücklegen`, `Umlagern`, `Wareneingang prüfen`.
+- Use German labels that name the action: `Planen`, `Reservieren`, `Aus Lager entnehmen`, `Verbraucht`, `Zurücklegen`, `Umlagern`, `Wareneingang prüfen`.
 - Show source, destination, unit, quantity, and consequence before confirmation.
-- Keep an explicit cancel action in every multi-step flow.
-- Make sync, partial completion, shortage, substitution, and correction state visible.
-- Use progressive disclosure: the field worker should not navigate accounting concepts, and the office user should not need a specialist app for every inventory task.
-- Provide safe undo through compensating/correction actions, not history deletion.
-- Keep price and support/plan entitlement clear. A customer should not discover during rollout that a required import, employee access, standard, or support channel is an unexpected add-on.
+- Show sync, partial completion, shortage, substitution, and correction state.
+- Keep accounting concepts away from field workers, and keep the office out of specialist apps.
+- Undo through correction actions, never by deleting history.
+- Make price and plan entitlement clear, so a customer never discovers during rollout that an import, employee access, standard, or support channel costs extra.
 
 ## Phase 2 — Intelligence And Automation
 
-Phase 2 should automate preparation and detection before it automates consequential decisions.
+Phase 2 automates preparation and detection before it automates consequential decisions. Candidates:
 
-Safe high-value capabilities include:
+- forecast job and seasonal demand from approved history;
+- propose reorder quantity, supplier, transfer, or substitute;
+- detect unusual consumption, repeated unplanned use, count drift, duplicate orders, stale prices, and likely missed billable material;
+- extract delivery notes, confirmations, product data, and incoming invoices and match them to orders and receipts;
+- suggest import column mappings and duplicate resolutions;
+- recommend tool maintenance or replacement;
+- summarize shortages, late supply, inventory exposure, and job-cost variance for office review;
+- draft supplier messages or order changes without sending them.
 
-- forecast job and seasonal demand using approved historical signals;
-- propose reorder quantities, supplier, transfer, or substitute based on availability, lead time, pack size, price, and delivery performance;
-- detect unusual consumption, repeated unplanned use, count drift, duplicate orders, stale catalog prices, and likely missed billable material;
-- extract and match delivery notes, supplier confirmations, product data, and incoming invoices to orders and receipts;
-- suggest CSV/Excel column mappings and duplicate resolutions during onboarding;
-- recommend tool maintenance or replacement from use, age, inspection, and failure history;
-- summarize shortages, delayed supply, inventory exposure, and job-cost variance for an office review queue;
-- draft supplier communication or an order change without sending it.
+AI-assisted actions follow the [source-visibility rules](./ai-automations.md#data-quality-and-source-visibility) and [human-control levels](./ai-automations.md#human-control-levels) of AI Automations, respect price permissions, and have a manual fallback. Purchase submission, supplier substitution, stock correction, billability, write-off, and retirement always need human review. AI never invents a barcode match, article equivalence, receipt, movement, or supplier confirmation.
 
-Every AI-assisted action must:
-
-- show the source records, proposed change, confidence or uncertainty, and affected quantities or money;
-- require human review for purchase submission, supplier substitution, stock correction, billability, write-off, or lifecycle retirement;
-- preserve who accepted, changed, or rejected the proposal;
-- respect organization boundaries and price/role permissions;
-- provide a deterministic manual fallback;
-- never fabricate a barcode match, article equivalence, receipt, movement, or supplier confirmation.
-
-Rule-based automation may later perform narrowly bounded actions—such as creating a draft reorder or escalating a delayed delivery—when an admin has explicitly enabled the rule, set thresholds, assigned an owner, and can inspect or pause it. Fully autonomous supplier ordering is a separate decision gate.
+Rule-based automation may later perform narrow actions, such as drafting a reorder or escalating a late delivery, once an admin has enabled the rule, set thresholds, assigned an owner, and can inspect or pause it. Fully autonomous supplier ordering is a separate decision gate.
 
 ## Boundaries And Decision Gates
 
-The following are not automatic commitments:
+These are not commitments:
 
 - native double-entry accounting, payroll, or tax filing;
-- a full warehouse-management system with wave picking, dock scheduling, robotics, manufacturing, or broad logistics optimization;
-- batch, lot, serial, expiry, hazardous-material, or regulated-medical traceability beyond confirmed SHK requirements;
-- FIFO, moving-average, standard-cost, or other formal inventory accounting policy;
-- multi-company stock ownership, consignment, customer-owned stock, drop shipment, or intercompany transfers;
-- manufacturing bills of material, assemblies, prefabrication, or production planning;
+- a full warehouse-management system with wave picking, dock scheduling, robotics, or logistics optimization;
+- batch, lot, serial, expiry, hazardous-material, or medical traceability beyond confirmed SHK needs;
+- a formal inventory accounting policy such as FIFO or standard cost;
+- multi-company stock, consignment, customer-owned stock, drop shipment, or intercompany transfers;
+- bills of material, assemblies, prefabrication, or production planning;
 - fully autonomous reordering, supplier payment, or supplier substitution;
 - universal barcode lookup;
-- building a wholesaler marketplace or replacing supplier-specific commercial relationships;
-- treating tools, calibrated equipment, vehicles, rentals, and consumables as one identical domain;
-- claiming legal, tax, GoBD, safety, or standards compliance without current expert verification and acceptance evidence.
+- a wholesaler marketplace or a replacement for supplier relationships;
+- one identical domain for tools, calibrated equipment, vehicles, rentals, and consumables;
+- legal, tax, GoBD, safety, or standards compliance claims without current expert verification.
 
-Each supplier standard or API needs a partner, version, direction, support model, fallback, and commercial-access decision before commitment. Each offline flow needs a separate conflict and recovery design.
+Each supplier standard needs a partner, version, direction, support model, fallback, and commercial-access decision before WerkFlow commits to it. Each offline flow needs its own conflict and recovery design.
 
 ## Open Product Decisions
 
-Decided by the owner on 2026-09-17 (reasoning in [pre-Wave-3 step 4](../plans/phase-1/pre-wave-3/04-wave-3-4-and-phase-2-planning.md#round-1-asked-and-answered-2026-09-17)): `Verfügbar` is on hand minus reservations, with planned demand shown as a separate value; only `buero` and `admin` reserve, and parking or cancelling a job releases its reservations with a visible event; the operational valuation basis is a moving average per item and location, labelled operational and never an accounting ledger; negative stock stays blocked; a vehicle is a location, with an optional asset instance for inspection and custody in `P1-32`, and a fleet module stays a decision gate. Still open:
+Decided by the owner:
 
-- Which inventory outcomes matter first in user testing: reliable counts, job availability, reduced buying trips, procurement speed, missed-billing prevention, or tool custody?
-- Should preferred source locations be strict allocations or suggestions?
-- Which location hierarchy and vehicle-stock model matches real SHK businesses without excessive setup?
+- `Verfügbar` will be on hand minus reservations, with planned demand shown as a separate value.
+- Only `buero` and `admin` reserve. Parking or cancelling a job releases its reservations with a visible event.
+- Valuation is a moving average per item and location, labeled operational.
+- Negative stock stays blocked.
+- A vehicle is a location. A fleet module stays a decision gate.
+- Wholesaler integrations come in this order: IDS Connect 2.5 first, UGL 5.0 where a beta wholesaler uses it, Open Masterdata after IDS for single-article refresh, and Open Connect only as the endpoint directory.
+- `P1-25` imports DATANORM version 4 files with rebate groups as first-class data.
+- Employee takes and returns change stock immediately. There is no approval queue for employee stock movements.
+- An imported row that matches an existing item, by internal SKU and then barcode, adds its quantity and is never skipped. A business often exports its stock per Lager or vehicle and imports the files one after the other, so five screws in the first file and five in the second make ten. The import confirmation step protects against an accidental double import.
+
+Still open:
+
+- Which inventory outcomes matter first in user testing: reliable counts, job availability, fewer buying trips, procurement speed, missed-billing prevention, or tool custody?
+- Are preferred source locations strict allocations or suggestions?
+- Which location hierarchy and vehicle-stock model fits real SHK businesses without heavy setup?
 - Which unit and pack conversions are required, and who approves ambiguous supplier data?
-- Which article replacements or substitutes require customer or project-manager approval?
+- Which substitutes need customer or project-lead approval?
 - What are the first procurement approval thresholds and roles?
-- How should direct-to-job delivery, customer-owned material, consignment, and supplier returns behave?
-- Which DATANORM versions and rebate structures are required by the first target wholesalers? (The 2026-09-17 research: wholesalers still ship version 4, the format is not open, the real price is list price minus the `.RAB` rebate group; `P1-25` imports version 4 files with rebate groups as first-class data.)
-- Which IDS, UGL, Open Masterdata, and SHK Connect workflows and partners have enough customer demand to justify implementation? (Decided order 2026-09-17: IDS Connect 2.5 first, UGL 5.0 where a beta wholesaler uses it, Open Masterdata after IDS for single-article refresh, Open Connect only as the endpoint directory; the beta customer's wholesalers are still unknown, see the [expert-review agenda](../plans/phase-1/pre-wave-3/04-wave-3-4-and-phase-2-planning.md#expert-review-agenda-for-wave-4-answer-to-q4).)
-- Which scanner hardware and mobile barcode formats must be supported?
-- What must work offline for a technician, warehouse employee, or vehicle count?
-- Which count cadence, blind-count policy, and correction approval are practical for small businesses?
-- When do tools require individual tracking, checkout, inspection, calibration, or maintenance?
+- How do direct-to-job delivery, customer-owned material, consignment, and supplier returns behave?
+- Which wholesalers does the beta customer buy from, and which DATANORM rebate structures do they ship?
+- Which scanner hardware and barcode formats must be supported?
+- What must work offline for a technician, a warehouse employee, or a vehicle count?
+- Which count cadence, blind-count policy, and correction approval suit small businesses?
+- When do tools need individual tracking, checkout, inspection, calibration, or maintenance?
 - Which material event creates a billable suggestion, and who reviews warranty, goodwill, rework, and waste?
-- What migration service, reconciliation acceptance criteria, support entitlement, and data-exit promise are included in each product package?
-
-## Related Docs
-
-- [Product capability map](../product/product-capability-map.md) — feature ownership, shared objects, and cross-feature handoff rules.
-- [Phase 1 roadmap](../plans/phase-1/roadmap.md) — slice order, current status, and links to per-slice acceptance records.
-- [User-flow catalog](../product/user-flow-catalog.md) — this feature's accepted user-visible flows by stable ID.
-- Connected feature specs: the **Connected Workflow Contracts** table above names every cross-feature contract; load only the specs the current slice names.
-- [Inventory V1 implementation plan (closed)](../plans/phase-1/consolidation-2026-08/inventory-v1-implementation-plan.md) — the historical V1 planning record.
+- Which migration service, reconciliation criteria, support entitlement, and data-exit promise does each package include?

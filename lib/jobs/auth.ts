@@ -1,3 +1,4 @@
+import type { ActionResult } from '@/lib/action-result';
 import { cookies } from 'next/headers';
 import { resolveActiveMembership } from '@/lib/org/cookies';
 import { getAuthenticatedUser } from '@/lib/data/cached';
@@ -11,19 +12,14 @@ export type AuthContext = {
   isManagerOrAbove: boolean;
 };
 
-type AuthResult =
-  | { success: true; context: AuthContext }
-  | { success: false; error: string };
+type AuthResult = ActionResult<{ context: AuthContext }>;
 
 /**
  * Shared auth + org + role resolution for all jobs/projects/clients actions.
  * Resolves the organization and role from one fresh membership snapshot.
  */
 export async function authenticateAndAuthorize(): Promise<AuthResult> {
-  const [user, cookieStore] = await Promise.all([
-    getAuthenticatedUser(),
-    cookies()
-  ]);
+  const [user, cookieStore] = await Promise.all([getAuthenticatedUser(), cookies()]);
 
   if (!user) {
     return { success: false, error: 'not_authenticated' };

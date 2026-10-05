@@ -2,7 +2,7 @@
 
 Status: closed (2026-09-01) — accepted P1-23 acceptance record; canonical home for the slice's evidence
 
-Navigation amendment, 2026-09-05: the [accepted UI/UX hardening pass](../hardening-2026-09/02-uiux-hardening.md) moved time-account rules and payroll mapping from `/einstellungen/zeiterfassung` to `/zeiterfassung/einstellungen`. The plan below preserves the route used at P1-23 acceptance. Current navigation belongs to the [time-tracking baseline](../../../features/time-tracking.md).
+Navigation amendment, 2026-09-05: the accepted UI/UX hardening pass moved time-account rules and payroll mapping from `/einstellungen/zeiterfassung` to `/zeiterfassung/einstellungen`. The plan below preserves the route used at P1-23 acceptance. Current navigation belongs to the [time-tracking baseline](../../../features/time-tracking.md).
 
 ## Bounded outcome
 

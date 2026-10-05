@@ -1,258 +1,253 @@
-# Realtime And Caching
+# Realtime and caching
 
-Status: living — last reviewed 2026-09-17
+Status: living — last reviewed 2026-10-04
 
-WerkFlow should feel fast, modern, and operationally fresh. The app combines server-rendered data, cache tags, and Supabase Realtime to avoid slow legacy-software behavior while reducing stale data.
+This doc owns virtue 2 in `AGENTS.md`: immediate feedback, complete reads, caching and freshness. The app renders on the server, caches a few identity-keyed reads behind tags, and uses Supabase Realtime events as signals to read again.
 
-## Current Building Blocks
+## How to work
 
-- Next.js App Router and Server Components.
-- Cache Components enabled in `next.config.ts`.
-- React request memoization through `react.cache()`.
-- Cross-request caching through `unstable_cache()`.
-- Function-level caching through the Next.js 16 `'use cache'` directive with `cacheTag()`; `lib/work-templates/server.ts` is the current user.
-- Cache tag names from the `CACHE_TAGS` registry in `lib/data/cached.ts`, the single list.
-- Supabase Realtime through `components/realtime/realtime-provider.tsx`; the published table list lives in `lib/realtime/tables.ts`.
-- The live-view family: `hooks/use-live-view.ts` (client refetch views) and `hooks/use-realtime-router-refresh.ts` (route refresh).
-- Pending state for server actions through `hooks/use-server-action.ts`.
+Decide the feedback, the freshness and the read shape before you write the component.
 
-## Caching Layers
+### Add a mutation
+
+1. Write the Server Action in its domain's `actions.ts` in this order: parse the input, then [establish the caller and the permission](security.md#add-a-server-action-or-route-handler), then write. Rows that change together change in one database function call ([write related rows](code-quality.md#write-related-rows)). Use the admin client only when RLS cannot express the write.
+2. Call `updateTag()` only for a `CACHE_TAGS` entry that a cached reader of the changed data carries. Otherwise call no tag function.
+3. Pick the first-frame feedback from the pending-feedback matrix in the `werkflow-design` skill: `useOptimisticList` for a list edit, `InlinePending` with `useBusyIds` for a row action, the `isPending` of `useServerAction` otherwise.
+4. Name every view that shows the changed rows. After a confirmed write, start `router.refresh()` and finish with `view.refresh()`, or pass the view's read as the `settle` option of `useServerAction`. The own write never waits for Realtime.
+5. Name the sessions that must see the change. The changed table is published, or the mutation touches a published owning root.
+6. Write a contract that holds the write open with `holdWrite` and checks the screen before and after the answer, as `tests/ui-contracts/team-qualifications.spec.ts` does. Run `bun run test:ui tests/ui-contracts/<file>.spec.ts` and `bun run test:unit lib/conventions/cache-tags.test.ts`.
+
+Wrong turn: a button that waits for the server, or pending state from `useTransition`. The user sees nothing for a round trip, and a transition stays pending through unrelated refreshes.
+
+### Add Realtime data
+
+1. Confirm that the UI needs live updates and that a route refresh does not serve better than a client view.
+2. In the migration, add the table to the `supabase_realtime` publication, create the unique `(id, organization_id)` index `<table>_replident_idx`, set `REPLICA IDENTITY USING INDEX` on it, and add its `emit_realtime_deletion` trigger as `20260907010200_private_realtime_deletions.sql` does. Publish INSERT and UPDATE only.
+3. Add the table to `REALTIME_TABLES` in `lib/realtime/tables.ts`, and run `bun run realtime:check`. It fails until the migration and the list agree.
+
+Wrong turn: publishing a ledger or a link table. Publish the mutable owning root, so that one row signals one authoritative read.
+
+### Add a list
+
+1. A list a person pages through is server-paginated. Copy `lib/requests/list-page.ts` and `lib/requests/list-page-server.ts`: the URL state, then a service-only paging function (`list_request_page`) that applies search, filters, counts and order before the page boundary.
+2. A reader that needs every row reads through `readAllRows` or `readCompleteRows` and shows the overflow as a failure.
+3. Send every organization-sized id list through `readInBatches`.
+4. Run `bun run test:unit lib/conventions/id-list-batches.test.ts lib/ui/list-pagination.test.ts`. For a paging function, run `bun run test:verify --group sql:list-pagination`.
+
+Wrong turn: one `.select()` without pages. PostgREST cuts the response at its cap without an error, and rows vanish.
+
+### Add a reader
+
+1. Read per request. Wrap repeated work of one render in `react.cache()`.
+2. Cache across requests only when every condition under [cross-request caching](#cross-request-caching) holds. Tag the reader with a `CACHE_TAGS` entry, and throw through `failCachedRead` on a failed read.
+3. A read that starts on mount, on channel join or beside a save is a kind in `lib/data/background-reads.ts`. Read [read-request authorization reuse](security.md#read-request-authorization-reuse) first.
+4. Run `bun run test:unit lib/data lib/conventions/live-view-reads.test.ts`.
+
+Wrong turn: a Server Action for a background read. One client's actions run one after another, so the read delays the next save.
+
+### Add a live view
+
+1. Use `useRealtimeRouterRefresh({ tables })` when server props stay the authority, and `useLiveView({ tables, read })` when a client view owns the data.
+2. Seed the view with `initialData`, and key the component by entity id.
+3. On a failed read, keep the rows and render dependent actions inert while `isStale` is true.
+4. Build every dialog on the registry's `Dialog`, `AlertDialog` or `Sheet`, so that reads suspend while it is open.
+5. Run `bun run lint <files>`.
+
+Wrong turn: a channel, an interval or a focus listener of your own. It races the shared debounce and the provider's catch-up.
+
+### Decide on a measured scenario
+
+1. Add one for a step that people repeat many times a day, a view switch over a large window, or a change that another session waits for.
+2. Register it in the `audit:performance:*` group whose scopes cover the area, with the budget of its boundary ([testing](testing.md#deadlines-and-measured-scenarios)).
+3. Record the decision and its reason in the slice record.
+
+### Check for a regression while you work
+
+1. After each change to an action, a reader or a live view, run its pending-feedback contract with `bun run test:ui`.
+2. Run `bun run test:plan`. It names each measured group whose scopes own a changed file, with the command to run it. Before the change is done, serve the build with `bun run test:server local` and run that group: `bun run test:verify --group audit:performance:<name>`. An explicit run enforces the deadlines.
+3. Open the change in two signed-in sessions and watch the second one.
+
+Wrong turn: leaving the measurement to the release run. By then other changes sit on top, and the cause is hard to isolate.
+
+## Checklist
+
+A `[judgment]` item is a Tier 3 default: diverge only with the note that `AGENTS.md` describes under "How to read the virtues".
+
+- An action shows pending feedback in its first frame, bound to the awaited server call through `useServerAction`. The field worker's clock tap is measured. [code `hooks/use-server-action.ts`, test `lib/conventions/server-action-feedback.test.ts`, group `ui:contracts`, group `audit:performance:field`]
+- A list edit appears at once through `useOptimisticList` and leaves the list only after an authoritative read confirms it. [code `hooks/use-optimistic-list.ts`, test `lib/ui/optimistic-overlay.test.ts`, test `lib/ui/change-settlement.test.ts`]
+- Success shows only after the write is accepted. Failure keeps the user's input and offers retry. [group `ui:contracts`, judgment]
+- A saved result reaches every view that shows it, and another signed-in session within the live target. The measured scenarios cover the calendar and the time approval; for any other flow the reviewer checks a second session in the browser. [group `audit:performance:calendar-live`, group `audit:performance:field`, judgment]
+- A live surface consumes Realtime through `useLiveView` or `useRealtimeRouterRefresh`, never a channel, an auth listener or a focus listener of its own. [lint `realtimeSelectors`, lint `channelSelector`, lint `authListenerSelector`, lint `visibilitySelector`, lint `focusSelector`, lint `importRestrictions`]
+- A new published table is registered in the migration and in `REALTIME_TABLES` together, with its deletion trigger. [script `realtime:check`, group `sql:security`]
+- A reader that needs a whole collection reads it in ordered pages through `readAllRows` or `readCompleteRows` and reports an overflow as a failure. [code `lib/supabase/query-batches.ts`, group `sql:list-pagination`]
+- An organization-sized id list goes through `readInBatches`. [test `lib/conventions/id-list-batches.test.ts`]
+- An id list written into a PostgREST filter string (`.not`, `.filter`, `.or`) is a literal or a reviewed bounded site. [test `lib/conventions/id-list-string-filters.test.ts`]
+- A server-paginated list applies search, filters, counts and order before the page boundary. [group `sql:list-pagination`, test `lib/ui/list-pagination.test.ts`, group `audit:list-pagination`]
+- A picker that offers records by number selects its window in natural number order in the database. [group `sql:list-pagination`]
+- A reader cached across requests meets every condition under [cross-request caching](#cross-request-caching). A failed read, in any product module, goes through `failCachedRead` and throws `CachedReadError`, so it is never stored. [judgment, test `lib/data/membership-freshness.test.ts`, test `lib/data/cached-read-failures.test.ts`]
+- An invalidation names a `CACHE_TAGS` entry that a cached reader carries. [test `lib/conventions/cache-tags.test.ts`]
+- A read that starts on mount or beside a save goes through the background-read registry, not the Server Action queue. [test `lib/data/background-read-http.test.ts`, test `lib/conventions/live-view-reads.test.ts`]
+- Client state adopts new server props during render, never in an effect. Inside a hydrated Suspense boundary a mount effect runs at idle priority; its update starves behind a pending route transition, React rebases every later functional update into a new value on each render, and an effect keyed on that value commits forever. After a page settles, its main thread goes idle. [lint `ui/no-derived-state-effect`, test `tests/ui-contracts/hydration-settle.spec.ts`, group `audit:layout`, judgment]
+- The authenticated layout waits for identity, organization, profile and subscription only. Optional shell reads load in their own providers. [test `lib/ui/app-layout-runtime.test.ts`]
+- Sidebar links prefetch on intent only. [test `lib/ui/sidebar-prefetch.test.ts`]
+- A new flow whose speed matters gets a measured scenario: a step that people repeat many times a day, a view switch over a large window, or a change another session waits for. The reviewer names the flow and the decision in the slice record. [judgment]
+
+## Never
+
+- Wait for the network before you acknowledge an action. The shared hooks show feedback at once, and a held-write contract proves it for each mutation that has one. A client write outside an owner hook, a pending flag or an optimistic change fails a convention test. [code `hooks/use-server-action.ts`, code `hooks/use-optimistic-list.ts`, test `lib/conventions/server-action-feedback.test.ts`, group `ui:contracts`]
+- Bind pending state to a router transition: no `useTransition` and no async `startTransition` callback in product code. [lint `transitionSelectors`, lint `asyncTransitionSelectors`]
+- Poll. `setInterval` is banned in product code. [lint `pollingSelectors`]
+- Show a toast. Feedback goes through `Banner` and the inline states. [lint `sonnerImportPath`]
+- Truncate a list silently, or turn an overflow or a failed related read into an empty list. [code `lib/supabase/query-batches.ts`, test `lib/conventions/read-error-visibility.test.ts`, judgment]
+- Pass an organization-sized list to `.in()`. [test `lib/conventions/id-list-batches.test.ts`]
+- Call `updateTag` or `revalidateTag` on a tag that no cached reader carries. [test `lib/conventions/cache-tags.test.ts`]
+- Cache a permission fact across requests. [test `lib/data/membership-freshness.test.ts`]
+- Shorten `REALTIME_DEBOUNCE_MS` or give a surface its own debounce. [lint `realtimeSelectors`, judgment]
+- Raise a budget, a reference or a timeout to make a slow build pass. [group `audit:performance:<name>`, judgment]
+- Reopen a rejected performance hypothesis without new measured evidence. The rejected ones are: widening `REALTIME_DEBOUNCE_MS` or the two-second target, pointing HTTP clients at pooler URLs, treating `async` as CPU offload, indexing every filter, caching every read, removing fallbacks, and adding Broadcast, polling or read replicas without a measured need. [judgment]
+
+## Verify your work
+
+These steps run once, on the final code. The in-work checks, including the measured group and the second session, belong to [check for a regression while you work](#check-for-a-regression-while-you-work).
+
+1. Run `bun run test:unit` and `bun run test:ui`.
+2. For a change to a list reader or a paging function, run `bun run test:verify --group sql:list-pagination`.
+3. For a published table, run `bun run realtime:check`.
+4. Look at the change in the browser: the first frame after the click, the confirmed state and a failed write.
+5. Record in the slice record whether the flow needs a measured scenario and whether a new reader may be cached across requests, with the reason.
+
+## Caching layers
+
+### Request-level deduplication
+
+Use `react.cache()` for repeated work within one Server Component render pass, such as the authenticated user, membership and organization reads. React render caching does not deduplicate calls in a GET handler. GET handlers use the `withReadRequest` scope that [security](security.md#read-request-authorization-reuse) owns.
+
+### Cross-request caching
+
+Use `unstable_cache()` with tags, or the `'use cache'` directive with `cacheTag()` when a whole function result is the cache unit. A reader may be cached across requests only when all of these hold:
+
+- Its key holds every identity the result depends on, such as the user id or the organization id.
+- It runs without a cookie-bearing database client.
+- Its result is not a permission fact. Membership, role, lifecycle, access blockers and responsibilities are read fresh on every request.
+- Every write that changes the result invalidates the reader's tag.
+- A failed read throws. It never caches an empty or default result.
+- The surface does not need the live value. Calendar windows, list pages and attention derivations read per request after authorization.
+
+The caller establishes identity and current permission before it uses the data. A cache hit is never an authorization proof. `CACHE_TAGS` in `lib/data/cached.ts` is the one list of tag names. A call on a tag without a reader invalidates nothing and re-renders the route inside the action response. `updateTag()` works only inside a Server Action. A route handler calls `revalidateTag(tag, 'max')`.
+
+### Permission facts
+
+`loadMembershipCandidates` shares membership facts only within one GET request or one React render. Every later request reloads membership, role, lifecycle and access blockers. Responsibility facts follow the same rule: every approval action reloads the stored configuration and uses the current server timestamp and the Berlin business date. A stale render around midnight can affect display freshness. It can never extend an expired substitute's authority.
 
 ### Sidebar prefetch
 
-`components/sidebar/sidebar-link.tsx` owns persistent sidebar and logo navigation. Its Next Link always disables automatic prefetch. Hover or keyboard focus requests only that destination through `router.prefetch`, without an invalidation callback. Do not re-enable viewport prefetch after intent: cache invalidation would then schedule every visible sidebar route again. Planning traces showed these speculative layout reads competing with live calendar updates. Normal click navigation, route invalidation and authorization stay unchanged. The sidebar component contract checks mount, intent and rerender behavior; the structural unit check keeps the shell on this owner.
-
-### Request-Level Deduplication
-
-Use `react.cache()` for repeated work within the same Server Component render pass. This is useful for authenticated user, membership, and organization reads that multiple server components need. GET handlers use the separately reviewed `withReadRequest` scope described in [security](security.md#read-request-authorization-reuse); React render caching does not deduplicate their calls.
-
-### Cross-Request Caching
-
-Use `unstable_cache()` for data that can be reused across requests and invalidated by tags, or the `'use cache'` directive with `cacheTag()` where a whole function result is the cache unit.
-
-The `CACHE_TAGS` registry in `lib/data/cached.ts` is the single list of tag names; this document does not repeat it. Server Actions that mutate a cached area call `updateTag()` for the affected tags. `updateTag()` is Server-Action-only and throws inside a route handler, so route handlers such as `app/api/redeem-invite/route.ts` call `revalidateTag(tag, 'max')` instead.
-
-### Cross-request reader inventory
-
-Cross-request caches are keyed by the identities below and execute without a cookie-bearing database client. The `unstable_cache` readers in `lib/data/cached.ts` set `REVALIDATE_SECONDS` (300 seconds) as their fallback. The work-template `use cache` reader has no explicit `cacheLife` override; do not assume it shares that five-minute expiry. The reader returns data; the caller establishes identity and current permission before using it. A cache hit is never an authorization proof.
-
-| Reader | Key | Invalidated by | Sensitive use |
-| --- | --- | --- | --- |
-| `getCachedSubscriptionStatus` | user id | subscription writes | Gate only; no data payload. |
-| `getCachedMemberCount` | organization id | membership writes | Display count. |
-| `getCachedOrganizationSettings` | organization id | settings writes | Break policy; not personal data. |
-| `getCachedOrganizationCalendar` | organization id | settings and closure-day writes | Holiday region and closure days for server prefetch. Calendar live reads bypass this cache through the range owner; read failures never become empty holiday context. |
-| `getCachedOrganizationUserPreferences` | organization id and user id | preference writes | Column visibility. |
-| `getCachedUserProfile` | user id | profile writes | Name and avatar path of the caller only. |
-| `loadWorkTemplateSummaries` (`'use cache'`) | organization id | template writes through `CACHE_TAGS.workTemplates` | Template names; callers authorize before reading. |
-
-All other server reads run per request with the admin client after identity and membership checks; the calendar, list pages, and attention derivations are not cross-request cached. The September 12 repair removes cross-request membership candidates. `loadMembershipCandidates`, used by operational and prestart membership readers, shares facts only within a GET request or React render. Every later request reloads membership, role, lifecycle and access blockers in one relational query. Named composite foreign keys bind lifecycle/blocker rows to the employee and organization; nested employee filtering binds them to the caller. The response validator rejects ambiguous or mismatched identity data. `lib/data/membership-freshness.test.ts` exercises creation, cookie fallback, role changes, removal, suspension, failure and within-request deduplication through the actual readers. Membership tags remain at write sites for dependent rendered content; they no longer govern permission-fact freshness.
-
-Action authorization uses `resolveActiveMembership` to select the organization and role from one current membership query. The ID-only resolver delegates to it. React request memoization is not assumed outside a render or explicit GET scope. The actual membership test checks the single-query action path, anonymous denial, stale-cookie fallback, role changes and suspended access. This remains a permission snapshot, not a transaction-wide guarantee against a concurrent later revocation.
+Sidebar and logo links prefetch only the destination under hover or keyboard focus. Do not re-enable viewport prefetch. Cache invalidation would then schedule every visible sidebar route again, and those reads compete with live updates.
 
 ### Backend request capacity
 
-`lib/supabase/fetch-with-timeout.ts` schedules Supabase fetches through one `request-scheduler` per server process. At most eight fetches await responses concurrently, with at most four from background scopes. The attention-count and time-tracking-state GET handlers explicitly use background priority. Calendar reads, page rendering and Server Actions keep foreground priority. A waiting eligible background request gets a turn after at most eight foreground admissions, so sustained navigation cannot indefinitely starve the clock.
+One scheduler per server process (`lib/supabase/request-scheduler.ts`) caps concurrent Supabase fetches and reserves part of that capacity for foreground work. Page rendering, Server Actions and calendar window reads run at foreground priority. A GET handler that serves optional shell or section data passes `{ priority: 'background' }` to `withReadRequest`. The fetch timeout includes time in the queue. The scheduler limits one process. It is not a connection pool, a rate limit or a provider capacity guarantee.
 
-The existing 30-second timeout includes queueing. An aborted queued read is removed without starting it. Each operation resumes in its own asynchronous request context after receiving capacity; another caller releasing capacity must not transfer its identity, request cache or rendering context. Scheduler tests cover limits, priority, background progress, failures, cancellation and context isolation. This limits one application process's backend pressure; it is not a project-wide connection pool, rate limit or provider capacity guarantee.
+## Complete reads and id lists
+
+PostgREST caps every response and truncates without an error. The gateway rejects a long `.in()` query string. A reader that needs a whole collection therefore reads ordered pages that end with an `id` tiebreaker, and above its declared cap it returns an overflow that the caller shows as a failure. An organization-sized id list goes through `readInBatches` and is never a reviewed bounded site.
 
 ## Server-paginated lists
 
-`/auftraege`, `/kunden`, and `/dokumente` select and count matching identities in the database before fetching page rows. The service-only functions in `20260908192618_paginate_operational_lists.sql` receive an already-authorized organization and, for jobs, the caller's role and identity. Every joined tenant table remains organization-scoped. Literal search, filters, aggregate counts, and deterministic ordering apply before the page boundary. Client slicing of a complete organization is not server pagination.
+The Aufträge, Kunden, Dokumente, Anfragen, Anlagen and Servicefälle lists, the three lists of the Wartung workspace and the correction history in Zeiterfassung select and count the matching identities in the database before they fetch page rows. These rules apply:
 
-Job sections resolve hidden-column sort preferences before querying the database, then display the returned global order. Equal sort values retain the existing newest-created-first order, followed by identity for equal creation timestamps. The forward migration `20260908210716_preserve_job_list_sort_order.sql` restores this tie rule; the Step 2 plan owns its rollout record. `operational_list_pages.sql` verifies both directions across page boundaries for equal dates and undated rows. A per-page client sort cannot repair an incorrectly selected global page.
+- Search, filters, aggregate counts and deterministic ordering apply before the page boundary. Slicing a complete organization in the client is not server pagination.
+- A generated record number such as `ANL-2026-1000` orders by prefix, year and numeric sequence, never as text. A reader that sorts in TypeScript uses `compareRecordNumbers` in `lib/format/record-number.ts`. A picker that offers a window of records by number selects that window in the database in the same order; a `.range` or `.limit` on a text-ordered number column picks the wrong records before any sort.
+- The paging functions are service-only. They receive an already-authorized organization and, for jobs, the caller's role and identity. Every joined tenant table stays organization-scoped.
+- Pagination does not authorize broader cached reuse. Realtime re-reads the current selection.
+- Document link predicates use database existence checks. Never send a whole organization's link ids as a URL filter.
 
-`LIST_PAGE_SIZE`, `ListPagination`, and `useListNavigation` own page size, navigation feedback, and URL updates. A filter/search change resets that section to page one. Browser history restores URL selections; a pending read keeps existing content while its pager reports activity. Pagination does not authorize broader cached reuse. Realtime re-reads the current selection, and shared optimistic feedback still acknowledges the caller's own mutations.
+A list page is not the option catalog. Entity selectors search the whole permitted scope on the server and return one page of choices with an explicit continuation. Selected identities are loaded separately and stay selected across searches.
 
-The jobs page selects top-level projects and standalone jobs. Each expanded project fetches its own child page; its status/progress and assignment summary come from every child visible to the caller, not from the displayed child page. Active project indicators use the live active-project identity set. Entity pickers fetch their own scoped options rather than treating displayed rows as complete choices. Document link predicates use database existence checks; never send a whole organization's link IDs as a URL filter.
+## Realtime model
 
-`operational_list_pages.sql` checks exact counts, page separation, tenant and employee scope, child-search grouping, literal contact/site search, and linked/unlinked document selection beyond 1,000 rows. Browser groups separately prove navigation, mutation feedback, live convergence, and timings. Related sections that still need a complete collection use `readCompleteRows` with deterministic ordering and an explicit failure bound, plus `readInBatches` for long ID lists. An overflow or failed related read must not silently become an empty or incomplete list.
+### Transport posture
 
-## Realtime Model
+- The transport is `postgres_changes` on one channel per organization. The provider in `components/realtime/realtime-provider.tsx` owns the channel and binds every table in `REALTIME_TABLES`.
+- Events are invalidation signals. They never authorize a record read. A client-supplied organization filter is not an authorization boundary.
+- Published organization-scoped tables use `REPLICA IDENTITY USING INDEX` on `(id, organization_id)`. `bun run realtime:check` rejects FULL identity.
+- The provider contains the transport. A move to Broadcast or private topics keeps the consumer hooks unchanged.
 
-### Transport posture (Stage B research, 2026-08-28)
+### Deletion transport
 
-Recorded from current Supabase primary sources before the Stage B consolidation was implemented:
-
-- The transport is `postgres_changes` on one channel per organization (`org-<orgId>`); all table bindings ride a single channel join, which is quota-efficient (one join, one of 100 channels per connection). Supabase applies per-subscriber RLS checks to INSERT and UPDATE events.
-- Published organization-scoped tables use `REPLICA IDENTITY USING INDEX` on `(id, organization_id)`, reducing the old-row data available to logical replication. Keep this minimal identity and treat events as invalidation signals. A client-supplied organization filter is not an authorization boundary.
-- Supabase recommends evaluating Broadcast for higher subscriber counts. The provider contains the transport implementation, so a future move to private topics should preserve the consumer hooks. The documented subscriber guidance is a sizing heuristic, not a measured WerkFlow capacity limit. Revisit transport with measured workload and permission requirements before broad multi-tenant launch.
-- `supabase.realtime.setAuth(<user JWT>)` remains required (also on token refresh); Realtime ignores `sb_*` API keys as channel auth.
-
-The September 7 owned DEV capture disproved the earlier claim that the minimal replica identity established safe DELETE delivery. Foreign and revoked subscribers received `{id}` from raw DELETE even when client filters differed. INSERT and UPDATE respected RLS. The [Supabase DELETE documentation](https://supabase.com/docs/guides/realtime/postgres-changes#delete-events) does not promise RLS protection for deleted rows.
-
-The protected deletion transport therefore disables DELETE and TRUNCATE in `supabase_realtime`. Database triggers insert minimal `realtime_deletions` notifications. Their SELECT policy checks current operational organization membership before delivery. The provider converts permitted notifications into the existing `{table, eventType: 'DELETE', old: {id, organization_id}}` invalidation shape. It ignores raw DELETE callbacks. No business columns are copied. Current members can observe organization-level deletion identities; a notification does not grant access to the deleted record or change protected document permissions.
-
-`REALTIME_TABLES` contains domain subscriptions, and `REALTIME_PUBLISHED_TABLES` adds the transport table. Profiles have no organization column, so profile deletion and membership deletion emit scoped profile invalidations. Organization teardown emits no unusable notifications. Rows become unreadable after one hour; a scheduled cleanup removes at most 10,000 expired rows every five minutes. Physical cleanup can lag during exceptional volume, while RLS expiry still applies. Reconnection refreshes current state; notifications are not a replay log or audit history.
-
-Application and publication changes must roll out together. An old app receives no DELETE refresh after raw publication is disabled. The transport reached PROD on 2026-09-18 inside the release cutover; the [step 5 run log](../plans/phase-1/pre-wave-3/05-beta-acceptance-and-production-rollout.md#run-log-2026-09-17-2314-utc-onwards-the-night-of-2026-09-18-in-berlin) holds the rollout and the live receiver capture on PROD, the [Step 1 record](../plans/phase-1/hardening-2026-09/05-step-1-security-infrastructure.md#final-repair-verification) the DEV evidence. `canary:security` checks foreign/revoked delivery and cloud grant/trigger drift independently of the freshness canary.
-
-Subscriptions remain centralized in `components/realtime/realtime-provider.tsx`. To add a domain table, add its publication, minimal replica identity, and `emit_realtime_deletion` trigger in the migration, then add its name to `REALTIME_TABLES`. The provider generates the binding. `bun run realtime:check` runs in local preflight and checks the complete publication, identity, exact deletion triggers, and INSERT/UPDATE-only operations. It rejects FULL identity. The three recorded DEFAULT identity exceptions remain in the registry.
-
-The provider delivers every authorized event immediately, preserving its table and row identity. Each live-view hook coalesces its complete table set once, using `REALTIME_DEBOUNCE_MS` (150 ms) and `REALTIME_MAX_DEFER_MS` (1,000 ms) from `lib/realtime/events.ts`. There is no second provider delay. The provider also owns the focus/visibility catch-up: returning to the tab dispatches one coalesced synthetic event per table to every subscriber, so consumers get gap recovery without their own listeners.
-
-Every successful channel join dispatches a synthetic catch-up after the subscription is active. A read made during a disconnected gap cannot cover later writes in that gap. `useLiveView` passes the latest delivered invalidation time to its reader and preserves that time through suspension. The calendar may reuse a current-generation read only when it belongs to the same caller scope and window and started strictly after that invalidation. A failed or superseded read never qualifies as successful recovery. `tests/ui-contracts/calendar.spec.ts` exercises the actual provider and hook with held reads, failed reads, and reconnects. The database-readiness catch-up itself stays as designed: narrowing it to views whose read started after the subscription attempt would remove most of the post-load read burst, but the owner declined that speculative scheduling change on 2026-09-12; the reference decision of the Step 2 record removed the need.
+Supabase applies RLS to INSERT and UPDATE events but not to raw DELETE events. The publication therefore carries INSERT and UPDATE only. Database triggers insert minimal rows into `realtime_deletions`, whose SELECT policy checks current membership before delivery. The provider turns a permitted notification into a DELETE invalidation that holds only `id` and `organization_id`. A notification copies no business columns and grants no access. Notifications expire and are not a replay log. Application and publication changes roll out together.
 
 ### Domain invalidation ownership
 
-Each feature chooses the mutable rows that signal a new authoritative read. Most immutable revisions, links, and event ledgers stay unpublished; their mutations touch an owning root. Some earlier domains, including ordinary documents and attention, publish history tables too. The exact set belongs to `REALTIME_TABLES`, not a second list in this document.
+Each feature chooses the mutable rows that signal a new authoritative read. Most immutable revisions, links and event ledgers stay unpublished, and their mutations touch an owning root. A published row must not become a second cache, task list or copied domain model. The [conceptual data model](data-model.md) explains root and history ownership. A provider mounted on every page filters events to the rows it shows.
 
-`components/realtime/attention-count-provider.tsx` owns sidebar and approval counts. It and the Aufgaben page derive current items through `lib/attention`; they do not store or cross-request-cache a second inbox. Their subscribed tables live at the call sites and in the shared registry. The provider reads through the route handler `app/api/attention-counts/route.ts` rather than a Server Action: one client's Server Actions and router refreshes run one after another, and the derivation (about 800 ms on the local stack) occupied that queue on every mount and channel join, delaying the content reads behind it by that much (Step 2, PF-29, trace of run `2026-09-08T170426578Z-85a08a`). The handler delegates authorization to `getAttentionCounts` and is listed in the route inventory test. The app layout never waits for the derivation: the sidebar badge is empty until the first client read completes, and a failed first read shows no badge (PF-09, 2026-09-08). For the same reason `components/clock-state-provider.tsx` filters `jobs` events to the running session's job (`lib/time-tracking/clock-state-events.ts`): planning writes touch `jobs` on every save, and the clock state was re-read on every open page for each of them.
+## Refresh patterns
 
-For a feature change, inspect its `useLiveView` or `useRealtimeRouterRefresh` call and the mutation's cache invalidation. The [conceptual data model](data-model.md) explains root and history ownership, and the [slice records](../plans/phase-1/roadmap.md) retain acceptance-era integration evidence. New rows must not become a second cache, task list, or copied domain model.
+Every live surface consumes Realtime through one of two hooks. Neither takes a debounce option.
 
-## Refresh Patterns
+- `useRealtimeRouterRefresh({ tables })` refreshes the route when server-rendered data should reload. Server props stay the authority.
+- `useLiveView({ tables, read })` owns a narrower client view. One reader is the authority.
 
-Every live surface consumes Realtime through one of the two live-view family members; neither takes a debounce knob (the shared boundary is the point):
+The recorded exception to the raw-event ban is the project-detail delete-exit watcher, which needs the event itself. Both hooks schedule through one trailing scheduler: a burst produces one read, and `REALTIME_MAX_DEFER_MS` caps how long a stream can postpone it.
 
-- `useRealtimeRouterRefresh({ tables })` (`hooks/use-realtime-router-refresh.ts`) refreshes the route when server-rendered data should reload. Server props stay the authority; local state re-syncs from them.
-- `useLiveView({ tables, read, ... })` (`hooks/use-live-view.ts`) owns a narrower client view: one reader (usually a server action) is the authority, events are invalidation signals. The hook carries the whole refetch discipline — shared debounce, generation guard, keep-last-known with visible staleness, dialog suspension with one queued catch-up, focus/visibility catch-up, `enabled`/`resetKey` scoping, plus `invalidate()`/`setData()` for surfaces with optimistic own-action echoes (the clock).
+### Reads outside the Server Action queue
 
-Direct `useRealtimeEvent()` consumption is lint-banned for surfaces; the recorded exception is the project-detail delete-exit watcher, which needs the event itself (navigation away from a deleted record), not a refetch.
+One browser client's Server Actions and router refreshes run one after another. A read that starts on mount, on channel join or beside a save must not occupy that queue. It goes through a GET handler:
 
-Both consumer hooks schedule through `createTrailingScheduler` in `lib/realtime/scheduler.ts`: the trailing delay is `REALTIME_DEBOUNCE_MS`, and `REALTIME_MAX_DEFER_MS` (1,000 ms) caps postponement by a sustained event stream while the consumer can read. The provider delivers each authorized event immediately, preserving its identity. A burst produces one scheduled read. Read completion and suspension remain separate from that scheduling bound. The scheduler has its own tests; neither hook exposes either value.
+- `lib/data/background-reads.ts` is the closed registry of readers a page may run in the background. Each kind pairs an input schema with a reader that keeps its own membership and subject checks. Adding a kind adds a public read endpoint. Follow [security](security.md#read-request-authorization-reuse) first.
+- Every such GET authenticates the session, requires the requested organization to equal the active organization, and returns a private, non-cacheable response.
+- Mutations keep their Server Actions and permission checks.
 
-The route consumer uses the existing `useRouterRefresh` transition owner. Events received during its pending render queue one follow-up instead of interrupting the render. That queue survives disabling until the hook is enabled and idle again. Dialogs retain the same suspension rule; unmount cancels scheduled work. `tests/ui-contracts/route-refresh.spec.ts` holds an actual React Suspense render across multiple events and across disable, settlement and re-enable. These tests prove ordering, not server latency. Application freshness measurements keep their original start and deadline.
+### Live list pages
 
-### Paginated customer live reads
+A paginated live list reads through the same server reader for its first render and its GET refresh, so search, total and page selection stay database-owned. A same-scope event during a read queues one follow-up. A failed refresh keeps the rows, marks them stale and disables row actions while retry stays available. A create dialog on a list page issues no `router.refresh()` of its own: one save is one route render. A confirmed creation leaves the overlay only after a successful read that started after the confirmation.
 
-The customer list uses the same live-view family with its own bounded `GET /api/customer-page` reader. Initial server rendering and that GET share `readCustomerPage`; search, total and page selection remain database-owned. `list_customer_page` returns its bounded `clients` payload together with `ids` and `total` in one database snapshot. The server validates the payload and organization before returning it; it does not add a second hydration request. Existing ID-only callers remain compatible. The GET verifies the current manager and matching active organization, returns private/no-store responses and preserves cancellation. Component identity includes organization, caller, role, page and search: `KundenContent` keys its inner `KundenList` by those values, while the search text, the URL navigation hook and the input's focus marker stay in the outer component so a committed search does not drop a keystroke, the pending navigation or focus. A late creation confirmation from another organization is rejected before entering the list. This consumer enables `coalesceWhileReading`: same-scope events preserve the current read and queue one follow-up. Explicit refresh, mutation invalidation and scope/unmount changes retain cancellation. Other consumers keep their existing replacement behavior. A later same-page route snapshot triggers a fresh read instead of replacing a newer live result. A failed refresh retains rows, marks them stale and disables row actions while retry remains available.
+### Range-scoped data owner
 
-The list-page create dialog issues no `router.refresh()` of its own, and since the owner's 2026-09-13 decision the customer actions no longer call `updateTag` for a `clients` tag either: no cached reader ever carried that tag, so its only effect was a route re-render inside every action response. On this page the post-save read is the route-first refresh of rule 4, and other users receive the Realtime event; customer detail, request and equipment pages keep their own `router.refresh()` calls and route-refresh hooks. Every render or read on this page costs three sequential backend requests, and the handoff diagnostic measured those requests slowing from about 100 ms to over 400 ms while eight were in flight on the DEV instance, so one save should not multiply them.
+A surface that reads a window of data owns that window through one typed range state. The calendar's owner builds on `useLiveView` and the pure state in `lib/calendar/range-data.ts`. These rules apply:
 
-For paginated optimistic creation, a successful save does not guarantee that the new record belongs on the current page. The customer owner records confirmed creation IDs and clears their overlays only after a successful accepted read that started after confirmation. Pending creations survive; failed and obsolete reads cannot settle them. Rollback resumes any read cancelled by that operation. The actual customer component contract covers this alongside private transport and reader checks in `lib/clients/list-page.test.ts`.
+- Each dataset records its authoritative range, its newest request generation and its last outcome. The reducer rejects a response with a foreign scope or an obsolete generation.
+- A view that returns to a covered window before a read for another window lands cancels that read, so it cannot replace the covered data. A cancelled catch-up or settlement read is replaced by a read of the covered window, because that data predates the invalidation (`planRunningWindowRead` in `lib/calendar/window-read-plan.ts`).
+- Readiness is derived per needed window and never stored. An uncovered window keeps the grid mounted and inert while data for another window exists, and shows the skeleton only when a required dataset has no data yet. A failed read shows `SectionError` with retry. Old data never counts as coverage of dates it was not read for.
+- All datasets of one window commit together under one generation. One failed read fails the window.
+- Window reads use private, uncached GET handlers that verify the requested organization. Every collection in the window is a complete read.
 
-### Range-scoped data owner (calendar)
+The user's own calendar mutations show pending feedback before the write resolves, and Confirmation and Undo appear only after persistence. A mutation holds the shared mutation owner until it settles, including rollback, failed Undo and transport failure. Range navigation, manual refresh and Realtime queue behind it. Repeated moves of one entry persist in gesture order. When an earlier write fails, the owner discards the dependent queued gestures and restores the last confirmed position with visible feedback. This ordering covers job moves and their Undo. Resizing recorded time and parking have separate mutation paths that still need their own overlap assessment.
 
-The calendar reads six datasets (time entries with provisional corrections, planning occurrences, vacation, sickness, holiday/closure context, and since `P1-24a` the board context: rows, daily targets with absence and pending vacation, dispatch states per recipient, material demand) for a window that depends on the selected date, view and board horizon. `components/kalender/use-calendar-range-data.ts` is that surface's one data owner, built on the live-view family and on the pure state in `lib/calendar/range-data.ts`:
+## Client freshness contract
 
-- Each dataset records its authoritative range, newest request generation, and last read outcome. Every action carries the organization, caller, and role scope. The reducer rejects a response with a foreign scope or obsolete generation. Scope changes cancel the previous mutation timer and resolve its queued reads without committing data. `CalendarContainer` also remounts its inner state at an organization, caller, or role change; auxiliary Parkplatz reads, timers, and callbacks cannot restore the previous scope.
-- Readiness is derived per needed window, never stored. A covered window shows its data (refreshing or stale while a newer read runs or failed); an uncovered window keeps the grid mounted, marked `aria-busy`, and `inert` while every required dataset holds data for another window, and shows the skeleton only when a required dataset has no data yet (first open, first month open, organization switch); an uncovered window whose read failed shows `SectionError` with retry. Retained uncovered or stale grids cannot receive pointer or keyboard actions. Header navigation and retry remain available. Old data never masquerades as coverage of dates it was not read for.
-- The user's own mutations call `beginMutation`, which returns an idempotent release function for that operation. Call that release in `finally`, including rollback, failed Undo, and transport failure. The hook exposes no shared decrement operation; a success callback or manual refresh cannot release another pending save. In-flight reads are discarded. Range navigation, manual refresh, and Realtime all queue behind the same mutation owner. The last settlement reads the current needed window. A queued invalidation may reuse that read only if the read started after the signal. This preserves the optimistic state while the save is pending and avoids redundant reads without suppressing recovery.
-- The server prefetch computes its window from Berlin wall time (`lib/calendar/business-range.ts`) and sends that range with the data, so a browser in Europe/Berlin starts covered and does not read again on mount; the provider's first-join catch-up is the single convergence read.
-- The window itself comes from `getCalendarFetchRange` in `lib/calendar/navigation.ts`; the absence readers accept the same window through `parseIsoDateRange` (`lib/calendar/date-range.ts`, at most 400 days).
-- The first five datasets arrive through one private, uncached GET to `/api/calendar-window`; the board context through `/api/calendar-board` (`getCalendarBoardContext` in `lib/calendar/board-actions.ts`, same organization check, employees receive their own row only). The range owner fires both reads under one generation and commits all six datasets together, so one failed read fails the window. `lib/calendar/client.ts` validates the JSON response. The handler delegates to `getCalendarWindow` in `lib/calendar/actions.ts`, which verifies that the requested organization matches the authenticated active organization before running the existing readers in parallel. Each reader retains its role and object authorization. The independent GET keeps calendar navigation out of the browser's serialized Server Action queue. A newer range can start while an obsolete range is still reading; scope and generation guards decide which response may commit. Mutations retain their existing Server Actions and per-operation ownership.
+The contract is the behavior of the two live-view hooks. A surface does not re-implement it. ESLint messages cite these rules by number.
 
-The container writes `data-calendar-state`, `data-calendar-view`, `data-calendar-range-start`, `data-calendar-horizon` and `data-calendar-stale` from an effect. Since `P1-24a` every view is a plain React render of the range owner's data (no FullCalendar), so readiness is data coverage alone. `tests/ui-contracts/calendar-board.spec.ts`, `calendar-day.spec.ts` and `calendar-month.spec.ts` prove the optimistic owner against the real range owner: the drop is on screen before the write settles, a refusal restores it with the sentence, Undo writes the inverse, and a pointer move commits nothing in React. List surfaces use `UsableContent` (`components/shared/usable-content.tsx`). The provider writes the channel join state to `data-realtime-state` and the separate database-listener state to `data-realtime-postgres-state` on the root element. A joined socket does not establish database readiness. These markers describe specific client boundaries, not every server render or every usable child control. Measurements must also identify the actual updated control when their scenario requires it.
+1. **The provider owns subscriptions.** Components consume the hooks and open no channels. Each hook owns one shared debounce across its tables. Shorter waits raced server cache invalidation. The recorded `onAuthStateChange` exception is `app/**/reset-password-form.tsx`, which must react to `PASSWORD_RECOVERY`.
+2. **Focus and visibility catch-up belong to the provider.** A return to the tab after a minimum absence dispatches one coalesced catch-up to every subscriber. A shorter absence dispatches nothing, because the open socket delivered every event. A reconnect always catches up.
+3. **Server props are mount-time data for live components.** `initialData` seeds the first paint. After mount, the reader is authoritative. Key a live component by entity id, or pass `resetKey` where a remount is not an option.
+4. **Mutations refresh route-first, then refetch.** Start `router.refresh()` and finish with `view.refresh()`. In the reverse order a stale server payload overwrites the fresh read.
+5. **Refetches use generation guards and keep the last known data.** An older success never commits over a newer one. A failed read keeps the data and sets `isStale`. Render dependent actions non-interactive while the view is stale.
+6. **Dialogs suspend, then catch up once.** Open dialogs, sheets and dropdown menus suspend reads and route refreshes through `components/ui/open-dialog-context.tsx`, and one catch-up fires after close. Render `RegisterOpenDialog` inside the presence-gated content, never in a wrapper body, or every closed dialog counts as open and suspends every refresh. Pending state binds to the server call through `useServerAction`, never to a router transition.
 
-The aggregate window and SSR prefetch use `completeCalendarEntryRead`: correction metadata starts as soon as entries arrive, alongside the other window reads. Entry readiness requires that metadata to succeed. The metadata reader batches entry filters and keeps the organization and pending-status constraints on every batch; no pending requests means no owner lookup. A metadata failure keeps the previous complete window stale; it cannot publish fresh entries with missing correction badges. Day-view drag success and Undo appear only after the forward save succeeds. Failed Undo reports an error and releases its own operation before recovery reads.
+An `eventFilter` that inspects payload columns treats a missing column as relevant, because a deletion notification carries only `id` and `organization_id`. Synthetic catch-up events bypass every filter.
 
-Calendar time entries, canonical segments, vacation and sickness use complete range pages with deterministic ordering. Employee visibility constrains the query before paging; identity hydration uses bounded batches. Approved and pending correction projections also page their requests and dependent history instead of treating the first response as complete. Pending reads preserve exact current-revision and reviewer rules. Each collection has the shared 10,000-row guard; query failure, invalid projection data or overflow fails the read visibly. The guard is a supported-workload limit, not permission to show a partial calendar. `complete-reads.test.ts` and `projection-reads.test.ts` exercise the actual readers or Supabase query builder beyond the 1,000-row response cap and check failure propagation.
+Connection catch-up runs after database readiness, not after channel join: the database listener can start after the `SUBSCRIBED` callback, and a read at join cannot cover a write in that gap. The provider dispatches synthetic invalidations when the `system` message reports `postgres_changes` ready. A read counts as recovery only when it has the same scope and window and started after that invalidation. `tests/ui-contracts/calendar.spec.ts` checks these orderings through the real provider.
 
-The calendar accepts an optional `?date=YYYY-MM-DD` bookmark. Only a real, single ISO date is accepted; missing, invalid, or repeated parameters use the Berlin business date. SSR prefetch and the client's initial date use the same resolved anchor. This also lets performance tests compare an unchanged historical workload without faking the browser clock.
+## Latency targets
 
-### Searchable options
+Correctness and responsiveness are separate results. A correct value that appears too late fails the responsiveness check.
 
-List pages are not the complete option catalog. Customer, project, and job selectors use `useJobEntityOptions` and the authorized `searchJobEntityOptions` action. The server searches the whole permitted scope and returns 50 choices plus an explicit continuation. Selected identities are hydrated separately and remain selected across searches. Project status, customer compatibility, and job assignment constraints still apply. Employee manual-entry choices remain assigned-only.
+- The initiating user gets immediate pending feedback. An optimistic value does not prove persistence or cross-session delivery.
+- A change made in one session is visible in another signed-in session within two seconds (`LIVE_TARGET_MS` in `lib/testing/responsiveness-tolerance.ts`).
+- The time-correction dialog reaches usable form options within five seconds of opening (`TIME_CORRECTION_READY_MS`). This target applies to that dialog only.
 
-The hook rejects obsolete searches and clears retained choices when the organization, caller, or role changes. Loading and failures appear inside the shared selector; load-more never implies that a partial page is complete. Calendar dialogs load their permitted member list when opened. They keep no module-level reference-data cache and do not download all jobs, projects, and customers in advance. The actual hook and shared selector composition is covered by `tests/ui-contracts/options.spec.ts`.
-
-## Client Freshness Contract
-
-Standardized 2026-08-27 from the race classes P1-16 exposed; since Stage B of the platform hardening (2026-08-28) the contract is not a set of rules surfaces re-implement — it is the behavior of the live-view primitive, and every live surface runs on it.
-
-1. **The provider owns subscriptions.** Components consume the live-view family; they do not open their own channels. The provider preserves every event; each family member owns one shared 150 ms debounce across its tables, with a 1,000 ms maximum deferral and no per-surface override. Keep the 150 ms guard: shorter waits raced server cache invalidation in P1-16. The provider adds no delay. The actual-provider component test checks one read after a same-table and cross-table burst; cached-route and calendar browser groups verify real freshness. _Enforced (Tier 2): `eslint.config.mjs` bans `.channel(` and `onAuthStateChange` outside the provider, and bans importing `useRealtimeEvent`/`useRealtimeSubscribe` outside the family. The recorded `onAuthStateChange` exception is the password-recovery form at `app/**/reset-password-form.tsx`, which must react to the `PASSWORD_RECOVERY` event. Tier 1 by construction: the hooks expose no debounce option._
-2. **Focus and visibility catch-up are provider concerns.** Returning to a tab or window after an absence of at least `REALTIME_FOCUS_CATCH_UP_MIN_ABSENCE_MS` (30 seconds, `lib/realtime/events.ts`; decision D5 of pre-Wave-3 step 3) dispatches one coalesced synthetic catch-up to every subscriber; a shorter glance elsewhere dispatches nothing, because the subscribed socket delivered everything meanwhile, and the earlier 50 ms rule serialized five to eight reads on every return. A reconnect keeps its immediate catch-up regardless. `tests/ui-contracts/calendar.spec.ts` proves the 5-second and 40-second cases and the reconnect against the real provider with a fake clock. Components must not register competing focus/visibility listeners. _Enforced (Tier 2): `eslint.config.mjs` bans `addEventListener('visibilitychange'|'focus')` in product code — the Stage B sweep ended the former legacy allowlist at zero. `setInterval` is banned the same way; the named exception is the wall-clock day-rollover tick (`hooks/use-business-day-refresh.ts`), and pure render clocks carry reasoned inline disables._
-3. **Server props are mount-time data for live components.** `useLiveView`'s `initialData` is exactly this: it seeds the first paint and suppresses the mount read; after mount, the reader is authoritative. Key live components by entity id so navigation remounts them cleanly, or pass `resetKey` where remounting is not an option (app-shell providers).
-4. **Mutations refresh route-first, then refetch.** Start `router.refresh()` and finish with the authoritative client refetch (`view.refresh()`); the reverse order let a stale server payload overwrite the fresh read (the P1-16 dispatch-challenge race).
-5. **Refetches use generation guards and keep-last-known.** Built into the primitive: data commits in generation order, so an older successful response never commits over a newer one but is applied when the newer read is still pending (one client's Server Actions run one after another, and a newer read can wait in that queue for seconds), `isStale` and `error` follow the newest completed read, and a failed read keeps the data while `isStale` marks the surface — render dependent actions non-interactive where they rely on it.
-6. **Dialogs suspend, then catch up once.** Open dialogs, sheets and dropdown menus suspend reads and route refreshes through the shared open-dialog context (`components/ui/open-dialog-context.tsx`); exactly one queued catch-up fires after close. Menus joined on 2026-09-13 after the readiness catch-up's route refresh closed the job page's open actions menu. Built into both family members; `suspend` covers non-dialog editors. `RegisterOpenDialog` must render inside the presence-gated primitive content, never in a wrapper body: a wrapper body counts always-rendered closed dialogs (the sidebar organization dialogs) as open and silently suspends every refresh app-wide (caught 2026-08-21); `DropdownMenuContent` follows the same placement. Suspension drops a scheduled refresh timer but cannot cancel an in-flight `router.refresh()`, so a refresh fired just before a dialog opens can still land mid-interaction; [testing.md](testing.md#deadlines-and-measured-scenarios) says how steps treat that. Pending/double-submit state binds to the actual server call through `useServerAction` (`hooks/use-server-action.ts`), never to a router transition — a router-entangled `useTransition` kept controls disabled after unrelated refreshes (the P1-16 `MetadataSection` defect). _Enforced (Tier 2): `eslint.config.mjs` bans async `startTransition` callbacks and, since 2026-09-03, `useTransition` itself in product code; the one router-transition home is `components/ui/refresh-button.tsx`, with the organization switch and the document library's folder navigation as named exceptions._
-
-Events signal a refetch rather than authorize a record read. An `eventFilter` that inspects payload columns must treat a missing column as relevant. Synthetic catch-up events bypass every filter by design.
-
-Initial connection and reconnection catch-up run after the provider receives a `system` message with `extension: postgres_changes` and `status: ok`. The earlier `SUBSCRIBED` callback confirms channel join but can precede the database listener. A read at join cannot cover a later write in that gap. The provider dispatches synthetic invalidations at database readiness, and the existing shared hooks coalesce them. `tests/ui-contracts/calendar.spec.ts` checks this ordering through the actual provider, route-refresh hook and calendar reader, including malformed/unrelated system messages and an obsolete held read. See [Supabase subscription timing](https://supabase.com/docs/guides/troubleshooting/realtime-postgres-changes-troubleshooting#step-6-writing-right-after-subscribed). Queued row, deletion and system callbacks from a removed channel are ignored centrally. The actual-provider test delivers saved callbacks after an organization switch to verify this boundary.
-
-## Latency contract (D4)
-
-Correctness and responsiveness are separate acceptance results. A correct result that appears too late does not qualify as a passing responsiveness check.
-
-- Give the initiating user immediate pending feedback. Show success only after the write is accepted. An optimistic value does not prove persistence or cross-session delivery.
-- The selected cross-session checks require the receiving session to display the new value within `LIVE_TARGET_MS`, currently 2 seconds. A single sample over the target but inside the approved tolerance limit (25% or 250 ms, so 2500 ms) is recorded as over target and does not fail the group; beyond the limit it fails ([testing.md](testing.md)).
-- `LIVE_HARD_BUDGET_MS` allows observation for at most 15 seconds on local and cloud backends. This bounds diagnosis. It does not extend the acceptance deadline.
-
-`expectLiveWithin` in `tests/golden/support/live.ts` first waits for the receiving page to be database-ready (`data-realtime-postgres-state="ready"`) and network-idle, so the event-driven read cannot queue behind the readiness catch-up read (one client's Server Actions run one after another), and for the acting page to be network-idle, so the submit does not wait behind reads that an earlier step triggered. It then checks that the result is absent before submission and starts observation before the producer submits. The clock includes the server response time. A navigation or reload in the receiving page invalidates the observation. Keep the receiver in a separate signed-in session so the producer's optimistic update cannot satisfy the check.
-
-Stages tagged `@FRESHNESS` cover the customer list, follow-ups, dispatch, equipment, service cases, personnel document release and acknowledgement, and cloud canary C3. Group selection must include their setup dependencies. These checks do not measure every screen. Run measured groups without competing test suites or builds, using the workflow in [testing.md](testing.md).
-
-Each observation is archived in `live-latencies.ndjson`. The record distinguishes confirmed correctness, a passed or exceeded responsiveness deadline, and an unconfirmed result. A slow confirmed result throws `ResponsivenessError`. `checkLatencyEvidence` in `lib/testing/latency-evidence.ts` also rejects an archived deadline violation if a caller catches it or a later attempt passes. Missing required evidence and malformed records cannot qualify as passes. Classify backend or connection failures from their original evidence. An invalid environment produces an unconfirmed result, not a performance pass.
-
-Opening readiness has its own contract. The P1-22 time-correction helpers use `expectReadyWithin` and `TIME_CORRECTION_READY_MS`, currently 5 seconds, from opening the dialog through visible and enabled form options. Waiting for the shell does not reset that clock. The helper archives results in `readiness-latencies.ndjson`. This is an explicit P1-22 contract, not a universal two-second rule for dialogs. Both deadlines are defined in `lib/testing/latency-evidence.ts`.
-
-Historical measurements from Stage B on 2026-08-28 were 883 ms for the customer list, 957 ms for follow-ups, and 973 ms for dispatch. Cloud canary C3 measured 4459 ms. That cloud result exceeded the target but passed the former warning-only policy. It does not satisfy the current deadline. [platform-hardening.md](../plans/phase-1/consolidation-2026-08/platform-hardening.md) retains the original evidence.
-
-### Measured scenarios and baselines
-
-Step 2 (2026-09-08) added a third archive beside the two above. `lib/testing/measured-scenarios.ts` registers every measured scenario with a stable id, a version, one of four boundaries (`before-submit-to-visible`, `opening-action-to-usable-control`, `navigation-to-usable-content`, `view-switch-to-usable-content`), an approved budget, the data profile it runs against, the spec that records it, and the number of samples one run must produce. `expectUsableWithin` and `expectScenarioLiveWithin` in `tests/golden/support/live.ts` write `scenario-latencies.ndjson`; the cross-session variant also keeps the existing two-second archive so the group's freshness requirement is unchanged.
-
-`checkLatencyEvidence` validates each record against the registry: an unknown id, an obsolete version, a widened budget, a wrong boundary or profile, a surplus or missing sample, an over-budget value, or an unconfirmed correctness fails the group. The group registry derives each group's required scenario ids from the spec files it executes and refuses a spec whose scenario calls disagree with the registry in either direction, so a measurement cannot quietly stop recording.
-
-`lib/testing/performance-baselines.json` holds reviewed reference values per scenario, version, profile, and backend, with run and build provenance and a review reason. The comparison rule in `performance-baselines.ts` is fixed before any candidate is evaluated: a run regresses when its complete current sample median exceeds the reviewed reference median by both the relative tolerance and the absolute tolerance, so a repeatable below-budget slowdown still fails. Each individual sample must pass correctness and its hard deadline; `latency-evidence.ts` rejects incomplete or mixed-context sets and retains every raw observation. A scenario marked `calibrating` has no baseline yet; its comparison is reported as unverified and is not a passing comparison. A scenario marked `required` fails without a reviewed baseline. Replacing a baseline needs a new review reason; the newest slower run never becomes the reference by itself. Registry, baseline file, and validator are ordinary imports of the specs, so changing any of them changes the group fingerprint and invalidates old passes.
-
-Measured scenarios now cover calendar entry, view switches, month paging, and the two large lists against the typical profile, plus occurrence freshness and two role-specific month openings in the independent fixed-date `audit:performance:planning` world. P1-11 retains its hard freshness and readiness deadlines in standalone and integrated journeys; their different inherited data does not supply interchangeable comparison baselines. They still do not record every Server Component render, database query, or browser rendering step, and a fixed budget does not detect a slowdown inside its tolerance. Browser attribution (navigation timing, request count, transfer bytes, RSC bytes) is recorded beside each scenario for diagnosis, never as an acceptance value. The [Step 2 plan](../plans/phase-1/hardening-2026-09/06-step-2-whole-app-performance.md) records the current values and their limits.
-
-Use shared component checks for pending, disabled, success, and error behavior, and real-application measurements for important routes and update paths. Extend shared observation helpers and migrate affected scenarios rather than adding browser stopwatches to every unit or permission test. Record the covered workflows and remaining gaps; helper coverage alone does not establish application-wide speed. Existing-test repairs follow [the failure procedure](testing.md#failures).
+[Testing](testing.md#deadlines-and-measured-scenarios) owns how these targets are measured, their tolerances, the measured scenarios and their baselines.
 
 ### Shared layout and clock readiness
 
-The authenticated layout waits for identity, organization, profile and subscription checks. Optional clock and active-job reads belong to their independent authorized providers and cannot block page content or a route refresh. An absent clock response is unknown state, not a clocked-out session. `ClockStateProvider.isReady` requires a successful current-organization read; the provider rejects transitions until then, and clock controls use the same readiness flag. Failed reads keep actions disabled and offer retry. Existing state survives ordinary route refreshes; organization changes retain the scope reset and response checks.
-
-The provider guard owns this boundary at Tier 1. `lib/ui/app-layout-runtime.test.ts` invokes the actual layout with unresolved optional reads, and `tests/ui-contracts/clock-readiness.spec.ts` exercises the real provider, clock button and activity dialog with delayed, failed and foreign-organization responses at Tier 2.
-
-`useLiveView` supplies an abort signal to each read and cancels it on replacement, invalidation, scope/enable changes and unmount. Clock, active-job and attention GET readers forward it. Generation checks remain necessary for readers that cannot cancel. The server GET scope carries cancellation to Supabase and shares repeated responsibility reads only within that request, as defined in the [security contract](security.md#read-request-authorization-reuse). This limits obsolete background work without extending permission lifetimes or removing reconnect catch-up.
-
-## Mutation Guidelines
-
-When adding or changing server actions:
-
-1. Validate the authenticated user with Supabase Auth `getUser()` before privileged operations.
-2. Check authorization and organization membership/role.
-3. Write through the server-only admin client when required.
-4. Invalidate relevant cache tags with `updateTag()`.
-5. Confirm whether Realtime already covers the affected table.
-6. After a confirmed write, reconcile the view through its owning freshness pattern. Realtime supplies cross-session invalidation; an own-write completion must not depend solely on its delivery. Reuse the established reader or reconciliation path and avoid competing timers, subscriptions, or refresh loops.
-
-Responsibility writes invalidate `responsibilities-<orgId>` and revalidate settings, personnel, time, and calendar consumers. Authorization does not read a cross-request responsibility cache: every approval action reloads stored configuration and uses the current server action timestamp plus the Europe/Berlin business date. Therefore a stale render around midnight or an overlapping Realtime refresh may affect display freshness, but can never extend an expired substitute's authority. Focused client refetches such as the pending-approval count retain last-known data on transient failure and use a generation guard so an older response cannot overwrite a newer one.
-
-## Adding New Realtime Data
-
-Before adding a new table to Realtime, confirm the UI really needs live updates and that route refresh would not serve better than a client view; keep field-worker views simple and avoid noisy UI changes.
-
-Then add the database and application registrations together:
-
-1. Migration: add the table to the `supabase_realtime` publication, create the unique `(id, organization_id)` index named `<table>_replident_idx`, and set `REPLICA IDENTITY USING INDEX` on it. Add its `emit_realtime_deletion` trigger using the schema-specific patterns in `20260907010200_private_realtime_deletions.sql`. Keep publication operations INSERT/UPDATE only. Minimal replica identity alone does not authorize DELETE delivery.
-2. Add the table name to `REALTIME_TABLES` in `lib/realtime/tables.ts`. The provider binds and org-filters it automatically; `bun run realtime:check` fails until migration and list agree.
-3. Consume it through `useLiveView` or `useRealtimeRouterRefresh`. Debounce, batching, suspension, and catch-up come with the primitive.
-
-## Freshness Principles
-
-- Prefer fast initial page loads with server-rendered data.
-- Prefer explicit invalidation after writes over broad cache disabling.
-- Prefer live updates for operational data that users coordinate around.
-- Do not add polling unless Realtime is not appropriate.
-- Treat exact database state as coming from live Supabase and generated types, not docs.
-- Do not reopen the performance hypotheses Step 2 rejected (2026-09-08 to 2026-09-13) without new measured evidence: widening `REALTIME_DEBOUNCE_MS` or the two-second freshness deadline; pointing HTTP Supabase clients at pooler URLs (that tunes a connection pool, not PostgREST); treating `async` as CPU offload; indexing every filter, caching every read, or removing fallbacks; a Broadcast transport, polling, or read replicas without a measured need (replicas also need a real replica topology and lag handling). PostHog or session replay needs a privacy and cost decision first. Replacing FullCalendar was on this list until 2026-09-18; the owner decided in [`P1-24a`](../plans/phase-1/slices/p1-24a-plantafel.md#product-decisions-required-before-coding) (decision Q2) to rebuild the month view on the shared calendar layer, on the evidence of that record's audit (doubled borders, clipped corners, a header scroller, hidden overflow mounts, a snap-back before every drop, a third drag mechanism), and the month projection stays measured in place through the same scenarios.
-
-
-### Holiday and closure freshness
-
-Closure and holiday-setting events invalidate the existing calendar window owner. Its uncached reader loads the selected window's closure days and effective holiday-region history alongside the other datasets. It does not refresh the entire route for a closure change. The month requires holiday coverage before declaring readiness. A failed read retains known content as stale or shows unavailable coverage, and the existing refresh control retries it.
-
-`lib/personnel/calendar-reader.ts` is the shared server-only reader. It scopes before paging, uses the shared 10,000-row failure bound, and throws on a settings, closure-page or overflow failure. Server-prefetch caching wraps the same reader; it cannot cache a failed read as an empty calendar. The aggregate GET establishes authorization before calling it. Actual reader tests cover more than 1,000 records, range/organization filters and failure paths; the real range-owner component check covers closure invalidation, failure and recovered removal. The live browser owner verifies actual cross-session appearance and removal within two seconds.
-
-### Background clock reads
-
-The global clock and active-job providers use `GET /api/time-tracking-state`, with a closed `clock` or `active-jobs` kind and the organization ID. Both reads start outside the browser's Server Action queue, so a save no longer waits behind them in that queue. The route authenticates the session, verifies the active organization, and delegates to the existing readers. Responses are private and non-cacheable. Each request owns its authorization scope; client parsing preserves every clock field and rejects a foreign organization result. Mutations retain their existing Server Actions and permission checks.
-
-`lib/time-tracking/state-http.test.ts` exercises the real route and authorization helpers with explicit provider/domain seams, rejection after membership removal, response parsing and independently pending fetches. Its import check prevents the two provider homes from reverting to queued read actions. Actual clock transitions and activity badges remain part of the selected A1, dispatch and provider journeys. The shared activity selection schema is also used by time transitions, so transport validation cannot invent a second activity model.
-
-### Background page reads
-
-Decision D3 of pre-Wave-3 step 3 (2026-09-15) generalizes that transport. `lib/data/background-reads.ts` is the closed registry of read-only readers a page may run in the background: each kind pairs a zod input schema with an existing reader that keeps its own membership and subject checks. `GET /api/background-read?kind=…&input=<json>` validates the kind and the input, authenticates the cookie session, requires active-organization equality for inputs that name one, and delegates at background priority; responses are private and non-cacheable and never carry a reader's error message. `lib/data/background-read-client.ts` (`readInBackground`) starts the fetch at once, forwards the live view's abort signal, and checks the response envelope and status; the reader's own result type comes back unchanged. The Zeiterfassung page (week data and targets, own vacation and sickness, the provisional summary, the history with its profiles, pending approvals, correction requests, approver vacation lists), the job page (time entries, dispatch cards, qualification detail, work artifacts, the lifecycle snapshot, material lines) and the member-status hook read through it; the former `POST /api/time-entries` handler is gone. The readers not yet migrated stay in the [backlog row](enforcement-ladder-backlog.md#tier-2-candidates-a-check-catches-it): the `/mitarbeiter` personnel sections, `getAttentionOverview` on `/aufgaben`, the service list and detail readers, and `refreshMemberships` in `components/organization/organization-context.tsx` (used by `organization-realtime-bridge`), which reads memberships through the browser client rather than the registry.
-
-`lib/data/background-read-http.test.ts` exercises the real route with reader seams (denied identities, a foreign organization, invalid kinds and inputs, every kind reaching exactly its reader at background priority, masked reader failures, independently pending fetches) and pins each migrated surface to the client so a reader cannot quietly move back into the Server Action queue. The freshness groups measure the effect in the application; the serialized queue itself is a browser runtime property no component contract can reproduce.
+The authenticated layout waits for identity, organization, profile and subscription checks only. Optional shell reads, such as the clock, active jobs and attention counts, belong to their own providers and never block page content or a route refresh. An absent clock response is unknown state, not a clocked-out session. The clock provider is ready only after a successful read for the current organization, and its controls stay disabled with retry until then.
 
 ## Organization switch confirmation
 
-`OrganizationProvider` publishes a new active organization only after `setActiveOrgCookie` completes. Independent GET readers compare their requested organization with the authenticated cookie, so an optimistic scope change before the cookie response would correctly receive a denial and leave the reader in error. The provider keeps its switch lock until matching server props arrive, and a rejected cookie write retains the current scope with visible failure. Membership fallback follows the same write-before-publish ordering.
+The organization provider publishes a new active organization only after the cookie write completes, and keeps its switch lock until matching server props arrive. A rejected write keeps the current scope with visible failure. GET readers compare the requested organization with the authenticated cookie. Do not relax that check to hide a scope mismatch. `tests/ui-contracts/organization.spec.ts` covers held and rejected writes.
 
-Tier 1 is that shared ordering and the cookie action's explicit rejection of unauthenticated or non-member callers. Tier 2 is the actual provider test with held/rejected writes in `tests/ui-contracts/organization.spec.ts`, the real cookie action authorization fixture, and A1's real cross-organization clock flow. Do not relax the GET organization check to conceal a client/server scope mismatch.
+## Examples
+
+- `lib/supabase/query-batches.ts`: complete paged reads with an explicit overflow and batched id lists, each limit explained once.
+- `hooks/use-server-action.ts`: pending state bound to the awaited call, concurrent calls never dropped, and a separate settling phase for the read that confirms the result.
+- `lib/realtime/tables.ts`: the one table list, with a type derived from it and a parity script that compares it with the database.

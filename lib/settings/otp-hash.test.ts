@@ -13,11 +13,15 @@ test('the same code hashes differently for two users and stays 64 hex characters
 
 test('a different secret yields a different hash, so a leaked table cannot be replayed elsewhere', () => {
   expect(hashEmailChangeOtp({ secret, userId: 'user-1', code: '123456' })).not.toBe(
-    hashEmailChangeOtp({ secret: 'b'.repeat(64), userId: 'user-1', code: '123456' })
+    hashEmailChangeOtp({ secret: 'b'.repeat(64), userId: 'user-1', code: '123456' }),
   );
 });
 
 test('without the secret or the user the hash refuses instead of degrading', () => {
-  expect(() => hashEmailChangeOtp({ secret: '', userId: 'user-1', code: '123456' })).toThrow('email_otp_hash_secret_missing');
-  expect(() => hashEmailChangeOtp({ secret, userId: '', code: '123456' })).toThrow('email_otp_hash_user_missing');
+  expect(() => hashEmailChangeOtp({ secret: '', userId: 'user-1', code: '123456' })).toThrow(
+    'email_otp_hash_secret_missing',
+  );
+  expect(() => hashEmailChangeOtp({ secret, userId: '', code: '123456' })).toThrow(
+    'email_otp_hash_user_missing',
+  );
 });

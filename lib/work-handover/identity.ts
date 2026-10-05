@@ -13,9 +13,7 @@ export function deterministicWorkHandoverUuid(...parts: string[]): string {
 export function workHandoverPackageId(
   organizationId: string,
   targetType: WorkTargetType,
-  targetId: string
+  targetId: string,
 ): string {
-  return deterministicWorkHandoverUuid(
-    'work-handover-package', organizationId, targetType, targetId
-  );
+  return deterministicWorkHandoverUuid('work-handover-package', organizationId, targetType, targetId);
 }

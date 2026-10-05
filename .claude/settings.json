@@ -4,5 +4,19 @@
       "mcp__supabase__apply_migration",
       "mcp__supabase__execute_sql"
     ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|NotebookEdit|Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"$CLAUDE_PROJECT_DIR/scripts/guard-edits-during-verification.ts\"",
+            "timeout": 20
+          }
+        ]
+      }
+    ]
   }
 }

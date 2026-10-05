@@ -10,22 +10,16 @@ import {
   createDocumentVersionUploadTicket,
   finalizeDocumentUpload,
   finalizeDocumentVersionUpload,
-} from "./actions";
-import type {
-  DocumentCategory,
-  DocumentResult,
-  DocumentUploadTarget,
-  VersionResult,
-} from "./types";
+} from './actions';
+import type { ActionResult } from '@/lib/action-result';
+import { logError } from '@/lib/logging';
+import type { DocumentCategory, DocumentResult, DocumentUploadTarget, VersionResult } from './types';
 import {
   cleanupPersonnelDocumentUpload,
   createPersonnelDocumentUploadTicket,
   finalizePersonnelDocumentUpload,
-} from "@/lib/personnel/lifecycle-actions";
-import type {
-  PersonnelDocumentAccessClass,
-  PersonnelDocumentEvidenceState,
-} from "@/lib/personnel/lifecycle";
+} from '@/lib/personnel/lifecycle-actions';
+import type { PersonnelDocumentAccessClass, PersonnelDocumentEvidenceState } from '@/lib/personnel/lifecycle';
 
 export type UploadProgressHandler = (fraction: number) => void;
 
@@ -33,21 +27,14 @@ export type UploadProgressHandler = (fraction: number) => void;
 // fails visibly instead of hanging until the signature expires.
 const UPLOAD_TIMEOUT_MS = 25 * 60 * 1000;
 
-function putFileWithProgress(
-  url: string,
-  file: File,
-  onProgress?: UploadProgressHandler,
-): Promise<void> {
+function putFileWithProgress(url: string, file: File, onProgress?: UploadProgressHandler): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     // XMLHttpRequest instead of fetch because fetch has no upload progress.
     const xhr = new XMLHttpRequest();
-    xhr.open("PUT", url);
+    xhr.open('PUT', url);
     xhr.timeout = UPLOAD_TIMEOUT_MS;
     // Must match the content type the signed URL was created for.
-    xhr.setRequestHeader(
-      "Content-Type",
-      file.type || "application/octet-stream",
-    );
+    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
 
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable && onProgress) {
@@ -61,9 +48,9 @@ function putFileWithProgress(
         reject(new Error(`storage_put_failed_${xhr.status}`));
       }
     };
-    xhr.onerror = () => reject(new Error("storage_put_network_error"));
-    xhr.onabort = () => reject(new Error("storage_put_aborted"));
-    xhr.ontimeout = () => reject(new Error("storage_put_timeout"));
+    xhr.onerror = () => reject(new Error('storage_put_network_error'));
+    xhr.onabort = () => reject(new Error('storage_put_aborted'));
+    xhr.ontimeout = () => reject(new Error('storage_put_timeout'));
 
     xhr.send(file);
   });
@@ -99,8 +86,8 @@ export async function uploadDocumentDirect({
       ...target,
     });
   } catch (error) {
-    console.error("Direct document upload failed:", error);
-    return { success: false, error: "upload_failed" };
+    logError('Direct document upload failed', error);
+    return { success: false, error: 'upload_failed' };
   }
 }
 
@@ -131,8 +118,8 @@ export async function uploadDocumentVersionDirect({
       fileName: file.name,
     });
   } catch (error) {
-    console.error("Direct version upload failed:", error);
-    return { success: false, error: "upload_failed" };
+    logError('Direct version upload failed', error);
+    return { success: false, error: 'upload_failed' };
   }
 }
 
@@ -154,7 +141,7 @@ export async function uploadPersonnelDocumentDirect({
   validUntil: string | null;
   operationId: string;
   onProgress?: UploadProgressHandler;
-}): Promise<{ success: true; data: { documentId: string } } | { success: false; error: string }> {
+}): Promise<ActionResult<{ data: { documentId: string } }>> {
   let issuedTicket: { documentId: string; cleanupToken: string } | null = null;
   try {
     const ticket = await createPersonnelDocumentUploadTicket({
@@ -190,11 +177,12 @@ export async function uploadPersonnelDocumentDirect({
         accessClass,
         operationId,
         cleanupToken: ticket.data.cleanupToken,
+        // eslint-disable-next-line no-restricted-syntax -- best-effort cleanup of a refused upload; the caller returns the upload failure itself
       }).catch(() => undefined);
     }
     return finalized;
   } catch (error) {
-    console.error("Direct personnel document upload failed:", error);
+    logError('Direct personnel document upload failed', error);
     if (issuedTicket) {
       await cleanupPersonnelDocumentUpload({
         employeeRecordId,
@@ -203,8 +191,9 @@ export async function uploadPersonnelDocumentDirect({
         accessClass,
         operationId,
         cleanupToken: issuedTicket.cleanupToken,
+        // eslint-disable-next-line no-restricted-syntax -- best-effort cleanup of a refused upload; the caller returns the upload failure itself
       }).catch(() => undefined);
     }
-    return { success: false, error: "upload_failed" };
+    return { success: false, error: 'upload_failed' };
   }
 }

@@ -4,24 +4,13 @@ import * as React from 'react';
 import * as TabsPrimitive from '@radix-ui/react-tabs';
 
 import { cn } from '@/lib/utils';
+import { useHydrated } from '@/hooks/use-hydrated';
 
-function Tabs({
-  className,
-  ...props
-}: React.ComponentProps<typeof TabsPrimitive.Root>) {
-  return (
-    <TabsPrimitive.Root
-      data-slot="tabs"
-      className={cn('flex flex-col gap-2', className)}
-      {...props}
-    />
-  );
+function Tabs({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Root>) {
+  return <TabsPrimitive.Root data-slot="tabs" className={cn('flex flex-col gap-2', className)} {...props} />;
 }
 
-function TabsList({
-  className,
-  ...props
-}: React.ComponentProps<typeof TabsPrimitive.List>) {
+function TabsList({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.List>) {
   return (
     <TabsPrimitive.List
       data-slot="tabs-list"
@@ -29,39 +18,35 @@ function TabsList({
         // max-w-full + overflow-x-auto: a strip with many tabs scrolls within itself on
         // phones instead of widening the page (design canon: no page-level
         // horizontal scroll). justify-start keeps the first tab reachable.
-        'bg-muted/50 inline-flex h-9 w-fit max-w-full shrink-0 items-center justify-start overflow-x-auto rounded-md p-0.5 gap-1 [scrollbar-width:none]',
-        className
+        'bg-muted/60 inline-flex h-9 w-fit max-w-full shrink-0 items-center justify-start overflow-x-auto rounded-md p-0.5 gap-0.5 [scrollbar-width:none]',
+        className,
       )}
       {...props}
     />
   );
 }
 
-function TabsTrigger({
-  className,
-  ...props
-}: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
+function TabsTrigger({ className, disabled, ...props }: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
+  const hydrated = useHydrated();
   return (
     <TabsPrimitive.Trigger
       data-slot="tabs-trigger"
+      disabled={disabled || !hydrated}
       className={cn(
-        'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-all',
+        'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors',
         'text-muted-foreground hover:text-foreground',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
         'disabled:pointer-events-none disabled:opacity-50',
-        'data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm',
+        'data-[state=active]:bg-background data-[state=active]:text-foreground',
         '[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*="size-"])]:size-4',
-        className
+        className,
       )}
       {...props}
     />
   );
 }
 
-function TabsContent({
-  className,
-  ...props
-}: React.ComponentProps<typeof TabsPrimitive.Content>) {
+function TabsContent({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Content>) {
   return (
     <TabsPrimitive.Content
       data-slot="tabs-content"

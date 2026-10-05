@@ -29,26 +29,10 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
           aria-label={isVisible ? 'Passwort verbergen' : 'Passwort anzeigen'}
           className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground transition-colors hover:text-foreground"
         >
-          {isVisible ? (
-            <EyeOff className="h-4 w-4" aria-hidden />
-          ) : (
-            <Eye className="h-4 w-4" aria-hidden />
-          )}
+          {isVisible ? <EyeOff className="h-4 w-4" aria-hidden /> : <Eye className="h-4 w-4" aria-hidden />}
         </button>
       </div>
     );
-  }
+  },
 );
 PasswordInput.displayName = 'PasswordInput';
-
-
-
-
-
-
-
-
-
-
-
-

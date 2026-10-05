@@ -4,19 +4,14 @@ import {
   calculateBreakMinutes,
   calculateBreakSessions,
   deriveCurrentClockState,
-  calculateTotalMinutes
+  calculateTotalMinutes,
 } from '@/lib/time-tracking/helpers';
+import { logError } from '@/lib/logging';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 import { readInBackground, type BackgroundReadFailure } from '@/lib/data/background-read-client';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
-import {
-  computeBreakdownForSettings,
-  type OrgBreakMode,
-} from '@/lib/time-tracking/settings';
-import type {
-  GetTimeEntriesParams,
-  GetTimeEntriesResult,
-} from '@/lib/time-tracking/types';
+import { computeBreakdownForSettings, type OrgBreakMode } from '@/lib/time-tracking/settings';
+import type { GetTimeEntriesParams, GetTimeEntriesResult } from '@/lib/time-tracking/types';
 
 export type MemberStatus = {
   breakMode: OrgBreakMode;
@@ -39,7 +34,7 @@ const EMPTY_STATUS_MAP: MemberStatusMap = {};
 
 function fetchTimeEntries(
   params: GetTimeEntriesParams,
-  signal: AbortSignal
+  signal: AbortSignal,
 ): Promise<GetTimeEntriesResult | BackgroundReadFailure> {
   return readInBackground('time-entries', params, signal);
 }
@@ -60,7 +55,7 @@ export function useMemberStatus({
   breakMode = 'manual',
   autoBreakThresholdMinutes = 360,
   autoBreakDurationMinutes = 30,
-  enabled = true
+  enabled = true,
 }: UseMemberStatusOptions): {
   statusMap: MemberStatusMap;
   isLoading: boolean;
@@ -68,12 +63,7 @@ export function useMemberStatus({
   refetch: () => Promise<void>;
 } {
   const view = useLiveView<MemberStatusMap>({
-    tables: [
-      'time_entries',
-      'time_sessions',
-      'time_segments',
-      'organization_settings',
-    ],
+    tables: ['time_entries', 'time_sessions', 'time_segments', 'organization_settings'],
     read: async ({ signal }): Promise<LiveViewResult<MemberStatusMap>> => {
       if (!organizationId || memberIds.length === 0) {
         return { ok: true, data: EMPTY_STATUS_MAP };
@@ -90,11 +80,14 @@ export function useMemberStatus({
         // A route handler keeps this live client read independent from the
         // current React Server Component tree. A server-action read can
         // complete after a link click and restore the page it started from.
-        const result = await fetchTimeEntries({
-          organizationId,
-          from: today.toISOString(),
-          to: tomorrow.toISOString()
-        }, signal);
+        const result = await fetchTimeEntries(
+          {
+            organizationId,
+            from: today.toISOString(),
+            to: tomorrow.toISOString(),
+          },
+          signal,
+        );
 
         if (!result.success) {
           return { ok: false, error: result.error };
@@ -104,9 +97,7 @@ export function useMemberStatus({
         const newStatusMap: MemberStatusMap = {};
 
         for (const memberId of memberIds) {
-          const memberEntries = result.entries.filter(
-            (e) => e.userId === memberId
-          );
+          const memberEntries = result.entries.filter((e) => e.userId === memberId);
 
           const currentState = deriveCurrentClockState(memberEntries);
           const workSessions = calculateWorkSessions(memberEntries);
@@ -129,10 +120,7 @@ export function useMemberStatus({
             // Exclude rejected and pending_delete entries
             const clockInEntry = memberEntries
               .filter(
-                (e) =>
-                  e.entryType === 'clock_in' &&
-                  e.status !== 'rejected' &&
-                  e.status !== 'pending_delete'
+                (e) => e.entryType === 'clock_in' && e.status !== 'rejected' && e.status !== 'pending_delete',
               )
               .sort((a, b) => {
                 const diff = new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
@@ -156,13 +144,13 @@ export function useMemberStatus({
             statusStartedAt: currentState.statusStartedAt,
             todayMinutes,
             workMinutes: breakdown.workMinutes,
-            breakMinutes: breakdown.breakMinutes
+            breakMinutes: breakdown.breakMinutes,
           };
         }
 
         return { ok: true, data: newStatusMap };
       } catch (err) {
-        console.error('Error fetching member status:', err);
+        logError('member_status.read_failed', err);
         return { ok: false, error: 'Failed to fetch status' };
       }
     },
@@ -176,6 +164,6 @@ export function useMemberStatus({
     statusMap: view.data ?? EMPTY_STATUS_MAP,
     isLoading: view.isLoading,
     error: view.error,
-    refetch: view.refresh
+    refetch: view.refresh,
   };
 }

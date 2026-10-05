@@ -8,20 +8,19 @@ import { cn } from '@/lib/utils';
  * sections load and fail independently; one failed section shows its own
  * error and retry while the rest of the page stays usable). `ErrorText` is
  * the inline form error; this is the block for a region that could not load.
- * Announces once via `role="alert"`; the optional retry is a real button.
+ * Announces once via `role="alert"`; the optional retry is a real button,
+ * always named „Erneut laden“ so every failed region offers the same step.
  */
 export function SectionError({
   title,
   children,
   onRetry,
-  retryLabel = 'Erneut laden',
   retryPending = false,
   className,
 }: {
   title?: string;
   children: React.ReactNode;
   onRetry?: () => void;
-  retryLabel?: string;
   retryPending?: boolean;
   className?: string;
 }) {
@@ -30,7 +29,7 @@ export function SectionError({
       role="alert"
       className={cn(
         'flex flex-col gap-3 rounded-lg border border-destructive/30 bg-card p-4 text-sm sm:flex-row sm:items-start sm:justify-between',
-        className
+        className,
       )}
     >
       <div className="flex min-w-0 gap-2">
@@ -49,7 +48,7 @@ export function SectionError({
           disabled={retryPending}
           className="shrink-0 self-start"
         >
-          {retryLabel}
+          Erneut laden
         </Button>
       )}
     </div>

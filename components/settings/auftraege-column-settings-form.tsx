@@ -1,111 +1,100 @@
-'use client'
+'use client';
 
-import { zodResolver } from '@hookform/resolvers/zod'
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useForm } from 'react-hook-form'
+import { describeFailure } from '@/lib/action-messages';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useForm } from 'react-hook-form';
 
-import { useBanner } from '@/components/ui/banner'
-import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
-import { ErrorText } from '@/components/ui/error-text'
-import { Form, FormField } from '@/components/ui/form'
-import { InlinePending } from '@/components/ui/inline-pending'
-import { saveAuftraegeColumnPreferences } from '@/lib/jobs/auftraege-column-preferences-actions'
+import { useBanner } from '@/components/ui/banner';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ErrorText } from '@/components/ui/error-text';
+import { Form, FormField } from '@/components/ui/form';
+import { InlinePending } from '@/components/ui/inline-pending';
+import { saveAuftraegeColumnPreferences } from '@/lib/jobs/auftraege-column-preferences-actions';
 import {
   AUFTRAEGE_TABLE_COLUMNS,
   auftraegeColumnPreferencesSchema,
   type AuftraegeColumnId,
   type AuftraegeColumnPreferencesValues,
-} from '@/lib/jobs/auftraege-table-columns'
+} from '@/lib/jobs/auftraege-table-columns';
 
 const ERROR_MESSAGES = {
-  not_authenticated: 'Du bist nicht angemeldet.',
-  no_active_org: 'Es ist keine aktive Organisation ausgewählt.',
-  not_a_member: 'Du bist kein Mitglied der aktiven Organisation.',
   invalid_input: 'Bitte wähle mindestens eine sichtbare Spalte aus.',
   update_failed: 'Die Spalteneinstellungen konnten nicht gespeichert werden.',
-} satisfies Record<string, string>
-const ERROR_MESSAGE_BY_CODE: Record<string, string> = ERROR_MESSAGES
+} satisfies Record<string, string>;
 
 type AuftraegeColumnSettingsFormProps = {
-  initialVisibleColumns: AuftraegeColumnId[]
-  organizationName: string
-}
+  initialVisibleColumns: AuftraegeColumnId[];
+  organizationName: string;
+};
 
 export function AuftraegeColumnSettingsForm({
   initialVisibleColumns,
   organizationName,
 }: AuftraegeColumnSettingsFormProps) {
-  const router = useRouter()
-  const { showBanner } = useBanner()
-  const [isSaving, setIsSaving] = useState(false)
+  const router = useRouter();
+  const { showBanner } = useBanner();
+  const [isSaving, setIsSaving] = useState(false);
 
   const form = useForm<AuftraegeColumnPreferencesValues>({
     resolver: zodResolver(auftraegeColumnPreferencesSchema),
     defaultValues: {
       visibleColumns: initialVisibleColumns,
     },
-  })
+  });
 
   useEffect(() => {
     form.reset({
       visibleColumns: initialVisibleColumns,
-    })
-  }, [form, initialVisibleColumns])
+    });
+  }, [form, initialVisibleColumns]);
 
   const toggleColumn = (columnId: AuftraegeColumnId, checked: boolean) => {
-    const currentColumns = form.getValues('visibleColumns')
+    const currentColumns = form.getValues('visibleColumns');
     const nextColumns = checked
       ? [...currentColumns, columnId]
-      : currentColumns.filter((column) => column !== columnId)
+      : currentColumns.filter((column) => column !== columnId);
 
     form.setValue('visibleColumns', nextColumns, {
       shouldDirty: true,
       shouldValidate: true,
-    })
-  }
+    });
+  };
 
   const onSubmit = form.handleSubmit(async (values) => {
-    setIsSaving(true)
+    setIsSaving(true);
 
     try {
-      const result = await saveAuftraegeColumnPreferences(values)
+      const result = await saveAuftraegeColumnPreferences(values);
 
       if (!result.success) {
         showBanner({
-          message: ERROR_MESSAGE_BY_CODE[result.error] ?? ERROR_MESSAGES.update_failed,
+          message: describeFailure(result.error, ERROR_MESSAGES, ERROR_MESSAGES.update_failed),
           variant: 'error',
-        })
-        return
+        });
+        return;
       }
 
       form.reset({
         visibleColumns: result.visibleColumns,
-      })
-      router.refresh()
+      });
+      router.refresh();
       showBanner({
         message: 'Deine Aufträge-Spalten wurden gespeichert.',
         variant: 'success',
-      })
-    } catch (error) {
-      console.error('Unexpected error saving job-column settings:', error)
-      showBanner({ message: ERROR_MESSAGES.update_failed, variant: 'error' })
+      });
+    } catch {
+      showBanner({ message: ERROR_MESSAGES.update_failed, variant: 'error' });
     } finally {
-      setIsSaving(false)
+      setIsSaving(false);
     }
-  })
+  });
 
   return (
-    <div className="space-y-6 pb-28">
+    <div className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -113,8 +102,7 @@ export function AuftraegeColumnSettingsForm({
             <InlinePending active={isSaving} label="Spaltenansicht wird gespeichert" />
           </CardTitle>
           <CardDescription>
-            Entscheide pro Organisation selbst, welche Spalten deine Aufträge-Tabelle
-            zeigen soll.
+            Entscheide pro Organisation selbst, welche Spalten deine Aufträge-Tabelle zeigen soll.
           </CardDescription>
         </CardHeader>
         <Form {...form}>
@@ -131,7 +119,7 @@ export function AuftraegeColumnSettingsForm({
                     </p>
                     <div className="grid gap-3 sm:grid-cols-2">
                       {AUFTRAEGE_TABLE_COLUMNS.map((column) => {
-                        const isChecked = form.watch('visibleColumns').includes(column.id)
+                        const isChecked = form.watch('visibleColumns').includes(column.id);
 
                         return (
                           <label
@@ -141,17 +129,13 @@ export function AuftraegeColumnSettingsForm({
                             <Checkbox
                               checked={isChecked}
                               disabled={isSaving}
-                              onCheckedChange={(checked) =>
-                                toggleColumn(column.id, checked === true)
-                              }
+                              onCheckedChange={(checked) => toggleColumn(column.id, checked === true)}
                             />
                             <div>
-                              <p className="text-sm font-medium leading-none">
-                                {column.label}
-                              </p>
+                              <p className="text-sm font-medium leading-none">{column.label}</p>
                             </div>
                           </label>
-                        )
+                        );
                       })}
                     </div>
                     <ErrorText>{fieldState.error?.message}</ErrorText>
@@ -161,16 +145,15 @@ export function AuftraegeColumnSettingsForm({
             </CardContent>
             <CardFooter className="flex flex-col items-start gap-3 border-t sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-muted-foreground">
-                Aktionen, Aufklappen und andere strukturelle Bedienelemente bleiben
-                weiterhin immer sichtbar.
+                Aktionen, Aufklappen und andere strukturelle Bedienelemente bleiben weiterhin immer sichtbar.
               </p>
               <Button type="submit" disabled={isSaving || !form.formState.isDirty}>
-                {isSaving ? 'Speichert...' : 'Ansicht speichern'}
+                {isSaving ? 'Speichert…' : 'Ansicht speichern'}
               </Button>
             </CardFooter>
           </form>
         </Form>
       </Card>
     </div>
-  )
+  );
 }

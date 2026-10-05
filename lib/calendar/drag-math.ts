@@ -9,7 +9,8 @@
  * interval starts (`starts[i]` to `starts[i + 1]`), or null outside.
  */
 export function indexAtOffset(starts: readonly number[], position: number): number | null {
-  if (starts.length < 2 || position < (starts[0] ?? 0) || position >= (starts[starts.length - 1] ?? 0)) return null;
+  if (starts.length < 2 || position < (starts[0] ?? 0) || position >= (starts[starts.length - 1] ?? 0))
+    return null;
   let low = 0;
   let high = starts.length - 2;
   while (low < high) {
@@ -79,7 +80,10 @@ export function autoScrollDue(edgeSince: number | null, now: number): boolean {
   return edgeSince !== null && now - edgeSince >= AUTO_SCROLL_DWELL_MS;
 }
 
-export function exceedsDragThreshold(start: { x: number; y: number }, current: { x: number; y: number }): boolean {
+export function exceedsDragThreshold(
+  start: { x: number; y: number },
+  current: { x: number; y: number },
+): boolean {
   const dx = current.x - start.x;
   const dy = current.y - start.y;
   return dx * dx + dy * dy >= DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX;

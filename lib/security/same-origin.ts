@@ -25,10 +25,7 @@ function normalizeOrigin(value: string | null): string | null {
  * it; `Origin` covers older clients. Requiring a JSON content type rejects the
  * `text/plain` form trick that can smuggle a JSON body across sites.
  */
-export function verifySameOriginJsonRequest(request: {
-  headers: Headers;
-  url: string;
-}): SameOriginVerdict {
+export function verifySameOriginJsonRequest(request: { headers: Headers; url: string }): SameOriginVerdict {
   const contentType = request.headers.get('content-type') ?? '';
   if (!contentType.toLowerCase().startsWith('application/json')) {
     return { allowed: false, reason: 'unsupported_content_type' };

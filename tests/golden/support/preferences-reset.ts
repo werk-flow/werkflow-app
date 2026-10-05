@@ -12,7 +12,14 @@ import { requireEnv } from './env';
  * that leak. A test that proves persistence does so inside its own run.
  */
 export async function resetPersistedPreferences(organizationIds: readonly string[]): Promise<void> {
-  const admin = createClient<Database>(requireEnv('NEXT_PUBLIC_SUPABASE_URL'), requireEnv('SUPABASE_SECRET_KEY'), testSupabaseClientOptions);
-  const { error } = await admin.from('organization_user_preferences').delete().in('organization_id', [...organizationIds]);
+  const admin = createClient<Database>(
+    requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
+    requireEnv('SUPABASE_SECRET_KEY'),
+    testSupabaseClientOptions,
+  );
+  const { error } = await admin
+    .from('organization_user_preferences')
+    .delete()
+    .in('organization_id', [...organizationIds]);
   if (error) throw new Error(`Preference reset failed: ${error.message}`);
 }

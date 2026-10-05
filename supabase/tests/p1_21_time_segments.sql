@@ -119,6 +119,9 @@ begin
   if v_result->>'outcome' <> 'active' then raise exception 'start failed'; end if;
   v_session_id := (v_result->>'sessionId')::uuid;
   v_version := (v_result->>'version')::bigint;
+  if v_version <> 1
+    or (select count(*) from public.time_segments where session_id = v_session_id) <> 1
+  then raise exception 'start did not open exactly one segment at session version 1'; end if;
 
   v_result := public.transition_time_activity(
     p_organization_id => '21000000-0000-0000-0000-000000000002',
@@ -209,6 +212,10 @@ begin
     p_internal_type => 'training'
   );
   v_version := (v_result->>'version')::bigint;
+  if v_version <> 6
+  then raise exception 'five accepted switches did not advance the session to version 6'; end if;
+  if (select count(*) from public.time_operations where resulting_session_id = v_session_id) <> 6
+  then raise exception 'each accepted transition did not record exactly one operation'; end if;
 
   select count(*) into v_segment_count from public.time_segments
   where session_id = v_session_id;
@@ -264,6 +271,26 @@ begin
     p_expected_session_id => v_session_id, p_expected_version => v_version
   );
   if v_result->>'outcome' <> 'ended' then raise exception 'end failed'; end if;
+  if (select status from public.time_sessions where id = v_session_id) <> 'closed'
+    or exists (
+      select 1 from public.time_segments where session_id = v_session_id and ended_at is null
+    )
+  then raise exception 'end left the session or one of its segments open'; end if;
+  if (
+      select count(*) from public.time_segment_events
+      where session_id = v_session_id and event_type = 'segment_started'
+    ) <> (select count(*) from public.time_segments where session_id = v_session_id)
+    or (
+      select count(*) from public.time_segment_events
+      where session_id = v_session_id and event_type = 'segment_ended'
+    ) <> (select count(*) from public.time_segments where session_id = v_session_id)
+  then raise exception 'segment start and end events do not match the segments one to one'; end if;
+  if (
+    select event_type from public.time_segment_events
+    where session_id = v_session_id
+    order by event_sequence desc limit 1
+  ) <> 'session_ended'
+  then raise exception 'session_ended is not the last event of the closed session'; end if;
 
   begin
     perform set_config('app.time_capture_write', 'true', true);
@@ -301,6 +328,24 @@ begin
       and capture_source = 'legacy_compatibility'
   )
   then raise exception 'legacy session was not closed'; end if;
+  if (select count(*) from public.time_segments where session_id = v_session_id) <> 1
+    or exists (
+      select 1 from public.time_segments
+      where session_id = v_session_id
+        and (kind <> 'standby' or start_source <> 'legacy_compatibility')
+    )
+  then raise exception 'legacy continuation did not open exactly one attributed standby segment'; end if;
+  if exists (
+    select 1 from public.time_segments segment
+    where segment.session_id = v_session_id
+      and segment.started_at < (
+        select max(entry.timestamp) from public.time_entries entry
+        where entry.organization_id = '21000000-0000-0000-0000-000000000002'
+          and entry.user_id = '21000000-0000-0000-0000-000000000001'
+          and entry.entry_type = 'clock_out'
+          and entry.capture_source = 'legacy_compatibility'
+      )
+  ) then raise exception 'legacy continuation backfilled a segment before the legacy close'; end if;
   perform public.transition_time_activity(
     p_organization_id => '21000000-0000-0000-0000-000000000002',
     p_actor_id => '21000000-0000-0000-0000-000000000001',
@@ -533,6 +578,104 @@ end;
 $$;
 delete from public.organizations
 where id = '21000000-0000-0000-0000-000000000004';
+
+-- P1-21-F57: job-linked travel never starts job execution; a job-linked
+-- call-out starts it with the time actor as the attributed origin.
+insert into public.organizations (id, name, admin_id, unique_code)
+values (
+  '21000000-0000-0000-0000-000000000012', 'P1-21 Job Start',
+  '21000000-0000-0000-0000-000000000001', 'P121JOB'
+);
+insert into public.jobs (id, organization_id, title, job_number, created_by)
+values (
+  '21000000-0000-0000-0000-000000000013', '21000000-0000-0000-0000-000000000012',
+  'P1-21 Ausführung', 'P121-JOB', '21000000-0000-0000-0000-000000000001'
+);
+do $$
+declare
+  v_result jsonb;
+  v_session_id uuid;
+  v_version bigint;
+begin
+  v_result := public.transition_time_activity(
+    p_organization_id => '21000000-0000-0000-0000-000000000012',
+    p_actor_id => '21000000-0000-0000-0000-000000000001',
+    p_operation_id => '21000000-0000-0000-0000-000000000050',
+    p_request_hash => repeat('a', 64), p_action => 'start',
+    p_segment_kind => 'travel', p_allocation_kind => 'job',
+    p_job_id => '21000000-0000-0000-0000-000000000013',
+    p_travel_route => 'home_to_site', p_travel_role => 'passenger'
+  );
+  v_session_id := (v_result->>'sessionId')::uuid;
+  v_version := (v_result->>'version')::bigint;
+  if not exists (
+    select 1 from public.time_segments
+    where session_id = v_session_id and kind = 'travel' and allocation_kind = 'job'
+      and travel_route = 'home_to_site' and travel_role = 'passenger'
+  ) then raise exception 'job-linked travel lost its route, role or allocation'; end if;
+  if exists (
+    select 1 from public.work_execution_events
+    where job_id = '21000000-0000-0000-0000-000000000013'
+  ) then raise exception 'job-linked travel started job execution'; end if;
+  perform public.transition_time_activity(
+    p_organization_id => '21000000-0000-0000-0000-000000000012',
+    p_actor_id => '21000000-0000-0000-0000-000000000001',
+    p_operation_id => '21000000-0000-0000-0000-000000000051',
+    p_request_hash => repeat('b', 64), p_action => 'switch',
+    p_expected_session_id => v_session_id, p_expected_version => v_version,
+    p_segment_kind => 'callout', p_allocation_kind => 'job',
+    p_job_id => '21000000-0000-0000-0000-000000000013'
+  );
+  if not exists (
+    select 1 from public.work_execution_events
+    where job_id = '21000000-0000-0000-0000-000000000013'
+      and event_type = 'automatic_time_start'
+      and created_by = '21000000-0000-0000-0000-000000000001'
+  ) then raise exception 'job-linked call-out did not start attributed job execution'; end if;
+end;
+$$;
+
+-- P1-21-F48/F50: members read their organization's canonical time rows;
+-- a person outside the organization reads none of them.
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"21000000-0000-0000-0000-000000000001","role":"authenticated"}',
+  true
+);
+do $$
+begin
+  if not exists (
+    select 1 from public.time_sessions
+    where organization_id = '21000000-0000-0000-0000-000000000012'
+  ) then raise exception 'organization admin cannot read its own time sessions'; end if;
+end;
+$$;
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"21000000-0000-0000-0000-000000000003","role":"authenticated"}',
+  true
+);
+do $$
+begin
+  if exists (
+    select 1 from public.time_sessions
+    where organization_id = '21000000-0000-0000-0000-000000000012'
+  ) or exists (
+    select 1 from public.time_segments
+    where organization_id = '21000000-0000-0000-0000-000000000012'
+  ) or exists (
+    select 1 from public.time_operations
+    where organization_id = '21000000-0000-0000-0000-000000000012'
+  ) or exists (
+    select 1 from public.time_segment_events
+    where organization_id = '21000000-0000-0000-0000-000000000012'
+  ) then raise exception 'outsider read canonical time rows of another organization'; end if;
+end;
+$$;
+set local role service_role;
+delete from public.organizations
+where id = '21000000-0000-0000-0000-000000000012';
 
 reset role;
 set constraints all immediate;

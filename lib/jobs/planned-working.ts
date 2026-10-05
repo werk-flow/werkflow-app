@@ -8,9 +8,7 @@ export function parseHoursInputToMinutes(value: string): number | null {
   return Math.round(hours * 60);
 }
 
-export function formatMinutesAsHoursInput(
-  minutes: number | null | undefined
-): string {
+export function formatMinutesAsHoursInput(minutes: number | null | undefined): string {
   if (!minutes || minutes <= 0) return '';
 
   const hours = minutes / 60;
@@ -21,7 +19,7 @@ export function formatMinutesAsHoursInput(
 
 export function calculatePlannedWorkingMinutes(
   estimatedDurationMinutes: number | null | undefined,
-  employeeCount: number
+  employeeCount: number,
 ): number | null {
   if (!estimatedDurationMinutes || estimatedDurationMinutes <= 0) return null;
   if (employeeCount <= 0) return null;

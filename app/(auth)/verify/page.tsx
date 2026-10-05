@@ -15,13 +15,10 @@ type VerifyPageProps = {
 };
 
 export const metadata: Metadata = {
-  title: 'E-Mail bestätigen'
+  title: 'E-Mail bestätigen',
 };
 
-function resolveQueryParam(
-  params: Record<string, string | string[] | undefined>,
-  key: string
-) {
+function resolveQueryParam(params: Record<string, string | string[] | undefined>, key: string) {
   const value = params[key];
   if (Array.isArray(value)) {
     return value[0];
@@ -33,18 +30,17 @@ export default async function VerifyPage({ searchParams }: VerifyPageProps) {
   const { session } = await getSupabaseServerSession();
 
   if (session) {
-    const { data: { user } } = await getCachedUser();
+    const {
+      data: { user },
+    } = await getCachedUser();
     if (user) {
       redirect(await getAuthenticatedRedirectPath(user.id));
     }
   }
 
   const resolvedSearchParams =
-    typeof (searchParams as SearchParamsInput & { then?: unknown }).then ===
-    'function'
-      ? await (searchParams as Promise<
-          Record<string, string | string[] | undefined>
-        >)
+    typeof (searchParams as SearchParamsInput & { then?: unknown }).then === 'function'
+      ? await (searchParams as Promise<Record<string, string | string[] | undefined>>)
       : (searchParams as Record<string, string | string[] | undefined>);
 
   const email = resolveQueryParam(resolvedSearchParams, 'email');

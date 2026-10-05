@@ -1,26 +1,17 @@
+import type { ActionFailure } from '@/lib/action-result';
 import type { Database } from '@/lib/supabase/database.types';
 
 // Database types
 export type TimeEntryRow = Database['public']['Tables']['time_entries']['Row'];
 
 // Entry type and status
-export type TimeEntryType =
-  | 'clock_in'
-  | 'clock_out'
-  | 'break_start'
-  | 'break_end';
+export type TimeEntryType = 'clock_in' | 'clock_out' | 'break_start' | 'break_end';
 export type TimeEntryStatus = Database['public']['Enums']['time_entry_status'];
 export type OrgRole = Database['public']['Enums']['org_role'];
 export type OrgBreakMode = Database['public']['Enums']['time_tracking_break_mode'];
 export type ClockStatus = 'clocked_out' | 'working' | 'on_break';
 
-export type TimeSegmentKind =
-  | 'work'
-  | 'travel'
-  | 'break'
-  | 'standby'
-  | 'callout'
-  | 'internal_activity';
+export type TimeSegmentKind = 'work' | 'travel' | 'break' | 'standby' | 'callout' | 'internal_activity';
 
 export const TIME_ACTIVITY_LABELS = {
   work: 'Arbeit',
@@ -31,17 +22,9 @@ export const TIME_ACTIVITY_LABELS = {
   internal_activity: 'Intern',
 } as const satisfies Record<TimeSegmentKind, string>;
 
-export type TimeAllocationKind =
-  | 'job'
-  | 'internal_activity'
-  | 'unallocated'
-  | 'none';
+export type TimeAllocationKind = 'job' | 'internal_activity' | 'unallocated' | 'none';
 
-export type TimeInternalActivity =
-  | 'internal_work'
-  | 'meeting'
-  | 'training'
-  | 'other';
+export type TimeInternalActivity = 'internal_work' | 'meeting' | 'training' | 'other';
 
 export type TimeTravelRoute =
   | 'company_to_site'
@@ -156,6 +139,7 @@ export const TIME_TRANSITION_ERROR_CODES = [
   'not_a_member',
   'no_active_org',
   'on_approved_vacation',
+  'period_closed',
 ] as const;
 
 export type TimeTransitionError = (typeof TIME_TRANSITION_ERROR_CODES)[number];
@@ -172,7 +156,7 @@ export type TimeTransitionResult =
       legacyBridged: boolean;
       notice?: 'sickness_reported_today';
     }
-  | { success: false; error: TimeTransitionError };
+  | ActionFailure<TimeTransitionError>;
 
 /**
  * Application-level time entry type with camelCase properties
@@ -192,6 +176,7 @@ export type TimeEntry = {
   updatedAt: string;
   /** Present for P1-21 compatibility projections from canonical segments. */
   activityKind?: TimeSegmentKind | undefined;
+  activitySelection?: TimeActivitySelection | undefined;
   canonicalSegmentId?: string | undefined;
   /** Stable optimistic-lock source for a correction request. */
   sourceKind?: 'legacy_entry' | 'canonical_segment' | 'correction_application' | undefined;
@@ -380,25 +365,14 @@ export type ZeiterfassungOverview = {
 
 export type AddManualEntryResult =
   | { success: true; entries: TimeEntry[] }
-  | {
-      success: false;
-      error: 'working_in_other_org';
-      otherOrgId: string;
-      otherOrgName: string;
-    }
-  | { success: false; error: string };
+  | (ActionFailure<'working_in_other_org'> & { otherOrgId: string; otherOrgName: string })
+  | ActionFailure;
 
-export type ReviewEntryResult =
-  | { success: true; reviewed: number }
-  | { success: false; error: string };
+export type ReviewEntryResult = { success: true; reviewed: number } | ActionFailure;
 
-export type UpdateEntryResult =
-  | { success: true; entry: TimeEntry }
-  | { success: false; error: string };
+export type UpdateEntryResult = { success: true; entry: TimeEntry } | ActionFailure;
 
-export type DeleteEntryResult =
-  | { success: true }
-  | { success: false; error: string };
+export type DeleteEntryResult = { success: true } | ActionFailure;
 
 export type GetTimeEntriesResult =
   | {
@@ -408,7 +382,7 @@ export type GetTimeEntriesResult =
       provisionalEntries?: TimeEntry[];
       participants?: JobTimeParticipant[];
     }
-  | { success: false; error: string };
+  | ActionFailure;
 
 export type JobTimeParticipant = {
   userId: string;
@@ -438,9 +412,7 @@ export type PendingSession = {
   jobTitle: string | null;
 };
 
-export type GetPendingSessionsResult =
-  | { success: true; sessions: PendingSession[] }
-  | { success: false; error: string };
+export type GetPendingSessionsResult = { success: true; sessions: PendingSession[] } | ActionFailure;
 
 /**
  * Validation result for overlap checks
@@ -473,7 +445,7 @@ export function toTimeEntry(row: TimeEntryRow): TimeEntry {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     sourceKind: 'legacy_entry',
-    sourceVersion: row.updated_at
+    sourceVersion: row.updated_at,
   };
 }
 
@@ -488,12 +460,9 @@ export function toTimeEntries(rows: TimeEntryRow[]): TimeEntry[] {
 // Change Request Types
 // ============================================
 
-export type ChangeRequestRow =
-  Database['public']['Tables']['entry_change_requests']['Row'];
-type ChangeRequestType =
-  Database['public']['Enums']['entry_change_type'];
-type ChangeRequestStatus =
-  Database['public']['Enums']['change_request_status'];
+export type ChangeRequestRow = Database['public']['Tables']['entry_change_requests']['Row'];
+type ChangeRequestType = Database['public']['Enums']['entry_change_type'];
+type ChangeRequestStatus = Database['public']['Enums']['change_request_status'];
 
 /**
  * Application-level change request type with camelCase properties
@@ -528,17 +497,11 @@ export type ChangeRequestWithDetails = ChangeRequest & {
 /**
  * Result types for change request actions
  */
-export type RequestChangeResult =
-  | { success: true; request: ChangeRequest }
-  | { success: false; error: string };
+export type RequestChangeResult = { success: true; request: ChangeRequest } | ActionFailure;
 
-export type ReviewChangeRequestResult =
-  | { success: true; request: ChangeRequest }
-  | { success: false; error: string };
+export type ReviewChangeRequestResult = { success: true; request: ChangeRequest } | ActionFailure;
 
-export type GetChangeRequestsResult =
-  | { success: true; requests: ChangeRequestWithDetails[] }
-  | { success: false; error: string };
+export type GetChangeRequestsResult = { success: true; requests: ChangeRequestWithDetails[] } | ActionFailure;
 
 /**
  * Convert database row to application type
@@ -557,7 +520,7 @@ export function toChangeRequest(row: ChangeRequestRow): ChangeRequest {
     reviewedBy: row.reviewed_by,
     reviewedAt: row.reviewed_at,
     createdAt: row.created_at,
-    updatedAt: row.updated_at
+    updatedAt: row.updated_at,
   };
 }
 

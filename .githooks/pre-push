@@ -1,0 +1,29 @@
+#!/bin/sh
+# The one gate before publication (docs/technical/testing.md, "Publication gate").
+# Refuses a push unless the newest local verification report passed on the tree
+# being pushed and a CodeRabbit review completed on it.
+# Enable once per clone: git config core.hooksPath .githooks
+# Owner override: WERKFLOW_PUSH_OVERRIDE="<reason>" git push ...
+
+root=$(git rev-parse --show-toplevel) || exit 1
+cd "$root" || exit 1
+refs=$(cat)
+
+if output=$(printf '%s\n' "$refs" | bun scripts/check-publication-gate.ts 2>&1); then
+  printf '%s\n' "$output"
+  exit 0
+fi
+printf '%s\n' "$output" >&2
+
+if [ -n "${WERKFLOW_PUSH_OVERRIDE:-}" ]; then
+  # An override that leaves no record is refused, so every bypass stays visible.
+  reason=$(printf '%s' "$WERKFLOW_PUSH_OVERRIDE" | tr '\n\t' '  ')
+  if ! mkdir -p .agent-logs/review ||
+    ! printf '%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(git rev-parse HEAD)" "$reason" "$(printf '%s' "$output" | tr '\n\t' '  ')" >> .agent-logs/review/overrides.log; then
+    echo "[publication-gate] Owner override refused: .agent-logs/review/overrides.log could not be written." >&2
+    exit 1
+  fi
+  echo "[publication-gate] Owner override logged to .agent-logs/review/overrides.log: $WERKFLOW_PUSH_OVERRIDE" >&2
+  exit 0
+fi
+exit 1

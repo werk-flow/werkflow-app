@@ -4,14 +4,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { AuthFlashCleanup } from '@/components/auth/auth-flash-cleanup';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { getSupabaseServerSession } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { AUTH_FLASH_COOKIE, getAuthFlashMessage, isAuthFlashKey } from '@/lib/auth/flash';
@@ -21,21 +14,20 @@ import { getAuthenticatedRedirectPath } from '@/lib/auth/redirects';
 import { LoginForm } from './login-form';
 
 export const metadata: Metadata = {
-  title: 'Anmelden'
+  title: 'Anmelden',
 };
 
 const SUCCESS_MESSAGES: Record<string, string> = {
   account_deleted: 'Dein Konto wurde erfolgreich gelöscht.',
   password_reset_success:
-    'Dein Passwort wurde erfolgreich zurückgesetzt. Bitte melde dich mit deinem neuen Passwort an.'
+    'Dein Passwort wurde erfolgreich zurückgesetzt. Bitte melde dich mit deinem neuen Passwort an.',
 };
 
 export default async function LoginPage({
-  searchParams
+  searchParams,
 }: {
   searchParams: Promise<{ message?: string; invite_code?: string }>;
 }) {
-
   const { session } = await getSupabaseServerSession();
   const params = await searchParams;
   const inviteCode = params.invite_code || '';
@@ -43,11 +35,13 @@ export default async function LoginPage({
   // If user is already logged in and there's an invite code,
   // redirect to auth/callback to process the invite
   if (session && inviteCode) {
-    redirect(`/auth/callback?invite_code=${inviteCode}`);
+    redirect(`/auth/callback?invite_code=${encodeURIComponent(inviteCode)}`);
   }
 
   if (session) {
-    const { data: { user } } = await getCachedUser();
+    const {
+      data: { user },
+    } = await getCachedUser();
     if (user) {
       redirect(await getAuthenticatedRedirectPath(user.id));
     }
@@ -55,9 +49,7 @@ export default async function LoginPage({
 
   const cookieStore = await cookies();
   const authFlash = cookieStore.get(AUTH_FLASH_COOKIE)?.value;
-  const flashMessage = isAuthFlashKey(authFlash)
-    ? getAuthFlashMessage(authFlash)
-    : undefined;
+  const flashMessage = isAuthFlashKey(authFlash) ? getAuthFlashMessage(authFlash) : undefined;
   const successMessage =
     flashMessage ??
     (params.message && isAuthFlashKey(params.message)
@@ -73,7 +65,7 @@ export default async function LoginPage({
     // Use the RPC function to look up invite by code (bypasses RLS)
     const { data: inviteData, error: inviteError } = await createSupabaseAdminClient().rpc(
       'get_invite_by_code',
-      { p_invite_code: inviteCode }
+      { p_invite_code: inviteCode },
     );
 
     // The RPC returns an array, get the first result
@@ -111,9 +103,7 @@ export default async function LoginPage({
     <Card>
       <CardHeader>
         <CardTitle className="text-2xl font-semibold tracking-tight">
-          {organizationName
-            ? `Tritt ${organizationName} bei`
-            : 'Willkommen zurück'}
+          {organizationName ? `Tritt ${organizationName} bei` : 'Willkommen zurück'}
         </CardTitle>
         <CardDescription>
           {organizationName
@@ -129,7 +119,7 @@ export default async function LoginPage({
         <p className="text-sm text-muted-foreground">
           Noch kein Konto?{' '}
           <Link
-            href={inviteCode ? `/signup?invite_code=${inviteCode}` : '/signup'}
+            href={inviteCode ? `/signup?invite_code=${encodeURIComponent(inviteCode)}` : '/signup'}
             className="text-primary-text underline-offset-4 hover:underline"
           >
             Registrieren

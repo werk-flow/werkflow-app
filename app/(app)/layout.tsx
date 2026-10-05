@@ -18,24 +18,36 @@ import {
   getCachedMemberships,
   getCachedSubscriptionStatus,
   getCachedUserProfile,
+  type UserProfile,
 } from '@/lib/data/cached';
 import { getAuthenticatedRedirectPath } from '@/lib/auth/redirects';
 import { CURRENT_ORG_COOKIE, resolveActiveOrgId } from '@/lib/org/cookies';
 
+// The profile reader logs its failure and caches nothing. The shell then
+// renders without the profile, and UserProfileProvider reads it once in the
+// browser, so a failed read degrades this one request only.
+async function readShellProfile(userId: string, email: string): Promise<UserProfile | null> {
+  const profile = await getCachedUserProfile(userId, email).catch(() => null);
+  return profile;
+}
+
 async function AppProviders({ children }: { children: React.ReactNode }) {
-  const [{ data: { user } }, cookieStore] = await Promise.all([
-    getCachedUser(),
-    cookies(),
-  ]);
+  const [
+    {
+      data: { user },
+    },
+    cookieStore,
+  ] = await Promise.all([getCachedUser(), cookies()]);
 
   if (!user) redirect('/login');
 
-
+  // A failed subscription read rejects the render into app/error.tsx with its
+  // retry, like an unavailable identity check: it is never "not subscribed".
   const [memberships, isSubscribed, activeOrgId, profile] = await Promise.all([
     getCachedMemberships(user.id),
     getCachedSubscriptionStatus(user.id),
     resolveActiveOrgId(cookieStore, user.id),
-    getCachedUserProfile(user.id, user.email!),
+    readShellProfile(user.id, user.email ?? ''),
   ]);
 
   if (memberships.length === 0) {
@@ -43,8 +55,7 @@ async function AppProviders({ children }: { children: React.ReactNode }) {
   }
 
   const activeOrgCookieNeedsSync =
-    activeOrgId !== null &&
-    cookieStore.get(CURRENT_ORG_COOKIE)?.value !== activeOrgId;
+    activeOrgId !== null && cookieStore.get(CURRENT_ORG_COOKIE)?.value !== activeOrgId;
 
   return (
     <BannerProvider>
@@ -61,11 +72,7 @@ async function AppProviders({ children }: { children: React.ReactNode }) {
               {/* Optional runtime reads must not hold every route refresh. */}
               <ActiveJobsProvider>
                 <ClockStateProvider>
-                  <AppShell
-                    initialOrganizationId={activeOrgId}
-                  >
-                    {children}
-                  </AppShell>
+                  <AppShell initialOrganizationId={activeOrgId}>{children}</AppShell>
                   <ClockFAB />
                 </ClockStateProvider>
               </ActiveJobsProvider>
@@ -77,11 +84,7 @@ async function AppProviders({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function AppLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <Suspense fallback={<AppShellSkeleton />}>
       <AppProviders>{children}</AppProviders>

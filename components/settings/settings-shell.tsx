@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 
 import { useOrganization } from '@/components/organization/organization-context';
 import { AreaNav } from '@/components/shared/area-nav';
+import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -36,58 +37,31 @@ export function SettingsShell({ children }: SettingsShellProps) {
   const organizationSections = getSettingsSectionsByGroup('organization');
   const isAdmin = activeOrg?.role === 'admin';
   const isOrganizationSection = currentSection?.scope === 'organization';
-  const isReadOnlyForCurrentSection =
-    isOrganizationSection && currentSection.adminOnlyWrites && !isAdmin;
+  const isReadOnlyForCurrentSection = isOrganizationSection && currentSection.adminOnlyWrites && !isAdmin;
 
   return (
     <PageShell className="bg-background">
-      <header className="sticky top-0 z-10 shrink-0 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="flex flex-col gap-4 px-4 py-4 sm:px-6">
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-muted-foreground">
-              Einstellungen
-            </p>
-            <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-              <div className="space-y-1">
-                <h1 className="text-2xl font-semibold tracking-tight">
-                  {currentSection?.label ?? 'Einstellungen'}
-                </h1>
-                <p className="max-w-3xl text-sm text-muted-foreground sm:text-base">
-                  {currentSection?.description}
-                </p>
-              </div>
-
-              {currentSection ? (
-                <div className="text-sm text-muted-foreground lg:text-right">
-                  <p>
-                    {currentSection.scope === 'user'
-                      ? 'Persönliche Einstellungen'
-                      : `Gilt für ${activeOrg?.name ?? 'die aktive Organisation'}`}
-                  </p>
-                  {isReadOnlyForCurrentSection ? (
-                    <p className="text-warning-text">
-                      Du kannst diesen Bereich einsehen, aber nur Admins können ihn später bearbeiten.
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
+      {/* Phones: the section list is route navigation, so it is an AreaNav
+          strip that scrolls within itself, not a select (thirteen sections
+          exceed the raw-Select cap and a select hides the current place).
+          From md the sidebar below takes over and the slot keeps the
+          header's bottom padding. */}
+      <PageHeader
+        title="Einstellungen"
+        nav={
+          <div className="md:pb-2">
+            <div className="md:hidden">
+              <AreaNav
+                ariaLabel="Einstellungsbereiche"
+                items={[...accountSections, ...organizationSections].map((section) => ({
+                  href: getSettingsHref(section.slug),
+                  label: section.label,
+                }))}
+              />
             </div>
           </div>
-
-          {/* Phones: the section list is route navigation, so it is an AreaNav
-              strip that scrolls within itself, not a select (thirteen sections
-              exceed the raw-Select cap and a select hides the current place). */}
-          <div className="md:hidden">
-            <AreaNav
-              ariaLabel="Einstellungsbereiche"
-              items={[...accountSections, ...organizationSections].map((section) => ({
-                href: getSettingsHref(section.slug),
-                label: section.label,
-              }))}
-            />
-          </div>
-        </div>
-      </header>
+        }
+      />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <aside className="hidden w-72 shrink-0 border-r bg-card/40 md:block">
@@ -108,6 +82,26 @@ export function SettingsShell({ children }: SettingsShellProps) {
 
         <PageBody>
           <div className="mx-auto w-full max-w-5xl">
+            {currentSection ? (
+              <div className="mb-6 flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                <div className="space-y-1">
+                  <h2 className="text-lg font-semibold">{currentSection.label}</h2>
+                  <p className="max-w-3xl text-sm text-muted-foreground">{currentSection.description}</p>
+                </div>
+                <div className="text-sm text-muted-foreground lg:text-right">
+                  <p>
+                    {currentSection.scope === 'user'
+                      ? 'Persönliche Einstellungen'
+                      : `Gilt für ${activeOrg?.name ?? 'die aktive Organisation'}`}
+                  </p>
+                  {isReadOnlyForCurrentSection ? (
+                    <p className="text-warning-text">
+                      Du kannst diesen Bereich einsehen, aber nur Admins können ihn später bearbeiten.
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
             {children}
           </div>
         </PageBody>
@@ -127,9 +121,7 @@ function SettingsNavGroup({
 }) {
   return (
     <div className="space-y-2">
-      <p className="px-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-        {label}
-      </p>
+      <p className="px-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
       <nav className="space-y-1">
         {slugs.map((slug) => {
           const section = getSettingsSectionBySlug(slug);
@@ -149,15 +141,13 @@ function SettingsNavGroup({
                 'flex items-start gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors',
                 isActive
                   ? 'bg-accent text-accent-foreground'
-                  : 'text-muted-foreground hover:bg-accent/70 hover:text-foreground'
+                  : 'text-muted-foreground hover:bg-accent/70 hover:text-foreground',
               )}
             >
               <Icon className="mt-0.5 size-4 shrink-0" />
               <div className="min-w-0">
                 <p className="font-medium">{section.label}</p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {section.shortDescription}
-                </p>
+                <p className="truncate text-xs text-muted-foreground">{section.shortDescription}</p>
               </div>
             </Link>
           );

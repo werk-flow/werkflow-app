@@ -1,6 +1,6 @@
-import { DashboardContentSkeleton } from '@/components/loading-states/dashboard-content-skeleton'
-import { PageHeader } from '@/components/shared/page-header'
-import { PageBody, PageShell } from '@/components/shared/page-shell'
+import { DashboardContentSkeleton } from '@/components/loading-states/dashboard-content-skeleton';
+import { PageHeader } from '@/components/shared/page-header';
+import { PageBody, PageShell } from '@/components/shared/page-shell';
 
 export function DashboardPageSkeleton() {
   return (
@@ -10,5 +10,5 @@ export function DashboardPageSkeleton() {
         <DashboardContentSkeleton />
       </PageBody>
     </PageShell>
-  )
+  );
 }

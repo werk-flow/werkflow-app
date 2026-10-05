@@ -1,6 +1,6 @@
 # User Flow Catalog
 
-Status: living — last reviewed 2026-09-17
+Status: living — last reviewed 2026-09-27
 
 ## Purpose And Rules (for agents)
 
@@ -9,7 +9,7 @@ This file is the tactical, exhaustive answer to one question per slice: **what c
 It exists for two planned uses:
 
 1. **Handover:** after Phase 1 (possibly in steps), this list explains every new capability to the customer in plain German without roadmap terminology.
-2. **Verification coverage:** every supported flow and observable clause maps to evidence in `lib/testing/coverage-map.json`. The mapping can combine domain, SQL, component browser, application browser, and reviewed inspection evidence. [Decision 0007](../decisions/0007-independent-test-groups.md) owns this allocation and [testing.md](../technical/testing.md) owns the workflow. Since Wave 2, coverage ships with each slice rather than being discovered at wave end.
+2. **Verification coverage:** every supported flow and observable clause maps to evidence in `lib/testing/selection/coverage-map.json`. The mapping can combine domain, SQL, component browser, application browser, and reviewed inspection evidence. [Decision 0007](../decisions/0007-independent-test-groups.md) owns this allocation and [testing.md](../technical/testing.md) owns the workflow. Since Wave 2, coverage ships with each slice rather than being discovered at wave end.
 
 Rules for maintaining this file:
 
@@ -24,7 +24,7 @@ The IDs below are authoritative, including the lowercase suffix in `P1-00a-F01` 
 - If a later slice changes an earlier flow, correct the earlier flow in place and note the changing slice in parentheses. The catalog describes the app as it is now, per the slice that introduced each capability.
 - A material wording change reopens the affected flow ID's audit mapping until the assertion bodies have been rechecked against the complete revised bullet.
 - This catalog intentionally repeats things that also live in feature docs. Feature docs describe the product model for agents; this file describes concrete user actions for humans. Do not "deduplicate" it away.
-- For audit traceability, the set of relevant IDs here must equal the union of IDs mapped in the owning coverage ledger (a Wave 1 session's, or since Wave 2 a slice's). Mapping is many-to-many: one ledger row/test may cover multiple flow IDs, and one flow ID may need multiple rows/tests. Test count never needs to equal flow count. See testing rule 12, [wave-1-audit.md](../plans/phase-1/audits/wave-1-audit.md), and [wave-2-audit.md](../plans/phase-1/audits/wave-2-audit.md).
+- For audit traceability, the set of relevant IDs here must equal the union of IDs mapped in the owning coverage ledger (a Wave 1 session's, or since Wave 2 a slice's). Mapping is many-to-many: one ledger row/test may cover multiple flow IDs, and one flow ID may need multiple rows/tests. Test count never needs to equal flow count. See [wave-2-audit.md](../plans/phase-1/audits/wave-2-audit.md).
 - The next section to add is `P1-25`, when that slice starts.
 
 ---
@@ -113,7 +113,7 @@ Dieser Slice hat bewusst fast keine neuen Bedienflächen — er hat den Bestand 
 
 ## Wave 1 — Kunden, Personal, Planung und gemeinsame Koordination
 
-Wave 0 and Wave 1 flows were enumerated retroactively at a coarser grain (see [wave-1-audit.md](../plans/phase-1/audits/wave-1-audit.md)); from Wave 2 onward every slice enumerates its flows at acceptance.
+Wave 0 and Wave 1 flows were enumerated retroactively at a coarser grain; from Wave 2 onward every slice enumerates its flows at acceptance.
 
 ### `P1-01` — Ansprechpartner und Einsatzorte (2026-08-04)
 
@@ -1159,7 +1159,7 @@ Wave 0 and Wave 1 flows were enumerated retroactively at a coarser grain (see [w
 - `P1-24a-F14` — Büro/Admin: Ein Termin mit mehreren Personen zeigt eine Karte je Zeile; beim Überfahren sind die Karten verbunden; Ziehen verschiebt nur diese Zuweisung, die andere Person bleibt. Mit gedrückter Alt-Taste kopiert das Ziehen den Termin als neuen Termin auf die Zielperson oder den Zieltag.
 - `P1-24a-F15` — Alle: Jede Ablage wirkt sofort in der Ansicht; nach dem Speichern erscheint ein grüner Hinweis mit „Rückgängig“; schlägt das Speichern fehl, springt die Karte zurück und der Hinweis nennt die Regel und den nächsten Schritt; schlägt „Rückgängig“ fehl, sagt der Hinweis das mit derselben Regel.
 - `P1-24a-F16` — Büro/Admin: Karten sind per Tab erreichbar; Enter öffnet die Terminübersicht mit „Termin bearbeiten“, „Verschieben …“ (Tag und Person als Formular) und „Parken“; Escape schließt sie und der Fokus kehrt auf die Karte zurück; Pfeiltasten bewegen den Fokus zwischen Zellen. Nach einer Ablage liegt der Fokus auf der verschobenen Karte, und ein Vorlese-Hinweis nennt das Ergebnis.
-- `P1-24a-F17` — Büro/Admin: „Notiz“ an einer Zelle öffnet in zwei Klicks den Eintragsdialog vorbelegt als ganztägiger interner Eintrag „Sonstiges“ für diese Person und diesen Tag; die Notiz erscheint als eigene gestrichelte Notizkarte ohne Einsatzchip und ohne Kapazitätswirkung. „Termin“ an einer Zelle öffnet denselben Dialog für einen Auftragsbesuch.
+- `P1-24a-F17` — Büro/Admin: „Eintrag am … anlegen“ an einer Zelle öffnet den gemeinsamen Eintragsdialog für diese Person und diesen Tag. Dort kann man einen Auftragsbesuch oder einen internen Termin wählen. Ein ganztägiger interner Eintrag „Sonstiges“ erscheint als eigene gestrichelte Notizkarte ohne Einsatzchip und ohne Kapazitätswirkung. Der getrennte Notiz-Schnellzugriff und seine Vorbelegung entfallen gemäß der Eigentümerprüfung vom 25.09.2026.
 - `P1-24a-F18` — Alle: Begonnene oder vergangene Termine sind in allen drei Ansichten festgeschrieben, bevor jemand es versucht: die Karte ist keine Zugquelle und trägt ein Schloss, die Terminübersicht bietet weder „Termin bearbeiten“ noch „Verschieben …“ und nennt den Grund; die Regel ist dieselbe, die der Server prüft (P1-11).
 - `P1-24a-F19` — Büro/Admin: Filter nach Team, Einsatzstatus und „Nur Konflikte“ (überbuchte Tage oder Rückfragen); der Mitarbeiterfilter des Kalenders gilt; die Suche findet Titel, Kunde, Auftragsnummer, Ort und Projekt; ein Klick auf einen Namen isoliert die Zeile, ein zweiter hebt das wieder auf.
 - `P1-24a-F20` — Alle: Tastenkürzel `t` heute, `j` und `k` weiter und zurück, `d`, `w`, `m` Ansicht, `c` öffnet den Dialog „Kalendereintrag erstellen“ für den angezeigten Tag, `z` macht die letzte Ablage rückgängig solange der Hinweis sichtbar ist, `+` und `-` zoomen die Tagesansicht, `?` zeigt die Liste; jede Zeile der Liste gilt in jeder Ansicht oder nennt die eine, in der sie gilt; in Eingabefeldern und offenen Dialogen passiert nichts.

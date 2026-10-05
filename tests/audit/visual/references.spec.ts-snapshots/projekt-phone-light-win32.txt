@@ -1,0 +1,27 @@
+Menü öffnen
+Aufträge
+P-2026-0007
+Sanierung Wohnanlage Uferweg
+Nicht begonnen
+Auftrag hinzufügen
+Arbeitsstand
+Nächster Schritt:
+Arbeit starten
+Nicht begonnen
+Nicht geplant
+Startbereit
+Automatisch abgeleitet
+Ausführung starten
+Stornieren
+Parken
+Einsatzbereitschaft
+Projektweite Einsatzbereitschaft wird aus den einzelnen Aufträgen beurteilt.
+Blocker & Parkplatz
+Blocker hinzufügen
+Keine offenen Blocker.
+Voraussetzungen
+Voraussetzung hinzufügen
+Keine zusätzlichen Voraussetzungen.
+Abschlussprüfungen und Verlauf
+Übergabe an das Büro
+Noch kein Übergabepaket

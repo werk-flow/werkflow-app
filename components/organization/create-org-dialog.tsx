@@ -7,28 +7,29 @@ import { Loader2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogDescription,
   DialogHeader,
-  DialogTitle
+  DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
+import { logError } from '@/lib/logging';
+import { loadDocument } from '@/lib/navigation/document-load';
 import { createOrganization } from '@/lib/org/actions';
 
-const ERROR_MESSAGES = {
+const ERROR_MESSAGES: Readonly<Record<string, string>> = {
   name_required: 'Bitte gib einen Namen ein.',
   name_too_short: 'Der Name muss mindestens 2 Zeichen lang sein.',
   name_too_long: 'Der Name darf maximal 100 Zeichen lang sein.',
   name_taken: 'Du hast bereits eine Organisation mit diesem Namen.',
-  not_authenticated: 'Du musst angemeldet sein.',
-  subscription_required:
-    'Du benötigst ein aktives Abonnement, um eine Organisation zu erstellen.',
+  subscription_required: 'Du benötigst ein aktives Abonnement, um eine Organisation zu erstellen.',
   organization_creation_failed: 'Organisation konnte nicht erstellt werden.',
   member_creation_failed: 'Mitgliedschaft konnte nicht erstellt werden.',
-  unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.'
-} satisfies Record<string, string>;
-const ERROR_MESSAGE_BY_CODE: Record<string, string> = ERROR_MESSAGES;
+};
+const UNEXPECTED_MESSAGE = SHARED_FAILURE_MESSAGES.unexpected_error;
 
 interface CreateOrgDialogProps {
   open: boolean;
@@ -49,23 +50,14 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
       const result = await createOrganization(name);
 
       if (result.success && result.organizationId) {
-        // Use hard navigation to ensure cookies are properly read on the new page
-        // This is critical for production environments where cookie timing can be an issue
-        window.location.href = `/dashboard?created=${result.organizationId}`;
+        // A full load: the new organization is the active one, and the shell starts from its cookie.
+        loadDocument(`/dashboard?created=${result.organizationId}`);
       } else {
-        // Check if it's a subscription error - show upgrade prompt
-        if (result.error === 'subscription_required') {
-          setError(ERROR_MESSAGES.subscription_required);
-        } else {
-          setError(
-            ERROR_MESSAGE_BY_CODE[result.error ?? 'unexpected_error'] ??
-              ERROR_MESSAGES.unexpected_error
-          );
-        }
+        setError(describeFailure(result.error ?? 'unexpected_error', ERROR_MESSAGES, UNEXPECTED_MESSAGE));
       }
     } catch (submitError) {
-      console.error('Unexpected error creating an organization:', submitError);
-      setError(ERROR_MESSAGES.unexpected_error);
+      logError('CreateOrgDialog: organization creation failed', submitError);
+      setError(UNEXPECTED_MESSAGE);
     } finally {
       setIsLoading(false);
     }
@@ -89,9 +81,7 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Neue Organisation erstellen</DialogTitle>
-          <DialogDescription>
-            Erstelle eine neue Organisation und werde automatisch Admin.
-          </DialogDescription>
+          <DialogDescription>Erstelle eine neue Organisation und werde automatisch Admin.</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -110,7 +100,7 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
 
           <ErrorText>{error}</ErrorText>
 
-          <div className="flex justify-end gap-2">
+          <DialogFooter>
             <Button
               type="button"
               variant="outline"
@@ -119,21 +109,23 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
             >
               Abbrechen
             </Button>
-            <Button type="submit" disabled={!isValid || isLoading}>
+            <Button
+              type="submit"
+              // eslint-disable-next-line ui/submit-disabled-only-while-pending -- canon exception: a form with one required field enables on completeness
+              disabled={!isValid || isLoading}
+            >
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 size-4 animate-spin" />
-                  Wird erstellt...
+                  Wird erstellt…
                 </>
               ) : (
                 'Erstellen'
               )}
             </Button>
-          </div>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
   );
 }
-
-

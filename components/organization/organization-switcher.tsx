@@ -11,13 +11,7 @@ import { JoinOrgDialog } from './join-org-dialog';
 import { getRoleLabel } from '@/lib/roles';
 
 export function OrganizationSwitcher() {
-  const {
-    memberships,
-    activeOrgId,
-    setActiveOrg,
-    isLoading,
-    isSwitchingOrg
-  } = useOrganization();
+  const { memberships, activeOrgId, setActiveOrg, isLoading, isSwitchingOrg } = useOrganization();
   const { setIsOpen: setSidebarOpen } = useSidebar();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false);
@@ -74,14 +68,8 @@ export function OrganizationSwitcher() {
         </Button>
       )}
 
-      <CreateOrgDialog
-        open={isCreateDialogOpen}
-        onOpenChange={setIsCreateDialogOpen}
-      />
-      <JoinOrgDialog
-        open={isJoinDialogOpen}
-        onOpenChange={setIsJoinDialogOpen}
-      />
+      <CreateOrgDialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen} />
+      <JoinOrgDialog open={isJoinDialogOpen} onOpenChange={setIsJoinDialogOpen} />
     </div>
   );
 }

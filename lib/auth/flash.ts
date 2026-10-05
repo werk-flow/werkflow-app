@@ -1,12 +1,10 @@
 export const AUTH_FLASH_COOKIE = 'auth_flash';
 
 const AUTH_FLASH_MESSAGES = {
-  passwordResetRequested:
-    'Wenn eine E-Mail existiert, haben wir dir einen Link geschickt.',
+  passwordResetRequested: 'Wenn eine E-Mail existiert, haben wir dir einen Link geschickt.',
   passwordResetRequestedKnownUser:
     'Wir haben dir einen Link zum Zurücksetzen deines Passworts geschickt. Bitte prüfe dein E-Mail-Postfach.',
-  passwordResetSuccess:
-    'Passwort erfolgreich aktualisiert. Bitte erneut einloggen.',
+  passwordResetSuccess: 'Passwort erfolgreich aktualisiert. Bitte erneut einloggen.',
 } as const;
 
 export type AuthFlashKey =

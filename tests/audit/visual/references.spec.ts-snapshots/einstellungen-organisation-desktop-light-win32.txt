@@ -1,0 +1,68 @@
+Haustechnik Krämer GmbH
+Organisation erstellen
+Dashboard
+Aufgaben
+3
+3 offene Aufgaben und Benachrichtigungen
+Kalender
+Zeiterfassung
+Qualifikationen
+Anfragen
+Aufträge
+Dokumente
+Inventar
+Service
+Arbeitsvorlagen
+Mitarbeiter
+Kunden
+MK
+Martin Krämer
+martin.kraemer@haustechnik-kraemer.de
+Einstellungen
+Persönlich
+Profil
+Name und Profilbild
+Konto & Sicherheit
+E-Mail und Passwort
+Abonnement & Abrechnung
+Plan und Abrechnung
+Organisation
+Dashboard
+Startansicht und Widgets
+Organisation
+Allgemeine Organisationsdaten
+Kalender
+Kalenderansichten und Regeln
+Zeiterfassung
+Arbeitszeiten und Freigaben
+Aufträge & Projekte
+Persönliche Tabellenansicht
+Mitarbeiter
+Freigaben und Vertretungen
+Kunden
+Kundenverwaltung und Defaults
+Organisation
+Organisationweite Grundeinstellungen und Standardwerte.
+Gilt für Haustechnik Krämer GmbH
+Organisationsdetails
+Die wichtigsten Stammdaten deiner aktiven Organisation auf einen Blick.
+Deine Rolle
+Admin
+Erstellt am
+1. Januar 2026
+Allgemeine Angaben
+Admins können den Organisationsnamen und den Code für den Beitritt pflegen.
+Name der Organisation
+*
+Pflichtfeld
+Pro Admin darf jeder Organisationsname nur einmal vergeben sein.
+Organisationscode
+*
+Pflichtfeld
+Dieser Code muss organisationsweit eindeutig sein, damit neue Nutzer gezielt beitreten können.
+Änderungen wirken sich direkt auf alle Mitglieder dieser Organisation aus.
+Organisation speichern
+Gefahrenzone
+Löscht die Organisation dauerhaft inklusive Mitgliedschaften und Einladungen.
+Diese Aktion sollte nur genutzt werden, wenn die Organisation wirklich nicht mehr benötigt wird.
+Organisation löschen

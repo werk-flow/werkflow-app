@@ -3,6 +3,8 @@
 import { updateTag } from 'next/cache';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { getAuthenticatedUser, getCachedMemberships, CACHE_TAGS } from '@/lib/data/cached';
+import { logError } from '@/lib/logging';
+import type { ActionResult } from '@/lib/action-result';
 
 /**
  * Invalidate the authenticated caller's cached profile.
@@ -15,9 +17,7 @@ export async function invalidateProfileCache(): Promise<void> {
   updateTag(CACHE_TAGS.profile(user.id));
 }
 
-export type DeleteAccountResult =
-  | { success: true }
-  | { success: false; error: string };
+export type DeleteAccountResult = ActionResult;
 
 /**
  * Deletes the current user's account.
@@ -36,29 +36,21 @@ export async function deleteAccount(): Promise<DeleteAccountResult> {
     return { success: false, error: 'has_memberships' };
   }
 
-  // Use admin client to delete the user
   const admin = createSupabaseAdminClient();
 
-  // Delete the profile first (if it exists)
-  const { error: profileDeleteError } = await admin
-    .from('profiles')
-    .delete()
-    .eq('id', user.id);
+  const { error: profileDeleteError } = await admin.from('profiles').delete().eq('id', user.id);
 
   if (profileDeleteError) {
-    console.error('Error deleting profile:', profileDeleteError);
-    // Continue anyway - profile might not exist
+    logError('Error deleting profile:', profileDeleteError);
+    // The profile may not exist; the auth user is deleted regardless.
   }
 
-  // Note: We intentionally do NOT delete pending invitations for this user's email.
-  // Admins should retain the full invitation history for their organizations.
-  // Pending invites will expire naturally or can be manually revoked by admins.
-
-  // Delete the user from auth.users
+  // Pending invitations for this email stay: admins keep the full invitation
+  // history of their organization, and open invites expire or are revoked.
   const { error: deleteError } = await admin.auth.admin.deleteUser(user.id);
 
   if (deleteError) {
-    console.error('Error deleting user:', deleteError);
+    logError('Error deleting user:', deleteError);
     return { success: false, error: 'delete_failed' };
   }
 

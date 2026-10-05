@@ -27,14 +27,18 @@ export function resolveProjectHandoverExecutionState(
 
   const childStates = children.map(resolveChildState);
   if (childStates.every((state) => state === 'cancelled')) return 'cancelled';
-  if (childStates.every((state) => (
-    state === 'execution_complete' || state === 'handed_over' || state === 'cancelled'
-  ))) {
+  if (
+    childStates.every(
+      (state) => state === 'execution_complete' || state === 'handed_over' || state === 'cancelled',
+    )
+  ) {
     return 'execution_complete';
   }
-  if (childStates.some((state) => (
-    state === 'in_progress' || state === 'execution_complete' || state === 'handed_over'
-  ))) {
+  if (
+    childStates.some(
+      (state) => state === 'in_progress' || state === 'execution_complete' || state === 'handed_over',
+    )
+  ) {
     return 'in_progress';
   }
   if (childStates.some((state) => state === 'interrupted')) return 'interrupted';

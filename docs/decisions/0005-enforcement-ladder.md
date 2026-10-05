@@ -34,6 +34,14 @@ The three-part audit (code comments, docs, skills) that seeded this adoption pro
 
 ## Amendment 2026-09-05: current enforcement labels and follow-up ownership
 
-The consolidation named above completed in the [platform-hardening phase](../plans/phase-1/consolidation-2026-08/platform-hardening.md). Remaining conversions stay in the living backlog for later work.
+The consolidation named above completed in the platform-hardening phase. Remaining conversions stay in the living backlog for later work.
 
 Apply the tier definitions to the mechanism, even where historical run records used a different label. Runtime routing checks, certification preflight, and an exclusive-lock check are Tier 2 because they reject an attempted operation. A type or API that removes an invalid state is Tier 1. A rule awaiting an achievable check is temporarily Tier 3 with an open conversion, not a claim that enforcement is impossible.
+
+## Amendment 2026-09-25: design judgment and evidence
+
+A mechanically checked rule proves only its named invariant. Radius, token, overflow and focus checks cannot decide whether an operational screen is well composed or intuitive. Tier 3 rendered review remains a required acceptance activity for major UI changes under [standards audit](../technical/standards-audit.md#rendered-design-acceptance). Promote repeatable geometry or interaction defects to Tier 1 or Tier 2; preserve the design judgment and its observed evidence. Adding more checks is not itself an improvement if they freeze an unaccepted design or make tests dictate product behavior.
+
+## Amendment 2026-10-02: hard rules and defaults
+
+The owner decided this on 2026-10-02. A Tier 1 or Tier 2 rule is a hard rule: its mechanism enforces it, and changing it means changing the mechanism in the same change, with the owner. A Tier 3 rule is a verified default. An agent may diverge when the default clearly does not fit, and records the default, the reason, what it did instead and whether the default should change. Each virtue's owner doc lists its rules as a checklist with one mechanism per item, and `docs:check` verifies that every named mechanism exists. `AGENTS.md` owns the wording and names the place where a divergence is recorded.

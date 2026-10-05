@@ -1,8 +1,9 @@
 'use client';
 
+import { PlainButton } from '@/components/ui/plain-button';
 import { memo, useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { boardDayKey, dispatchStateFor, type CalendarBoardDay } from '@/lib/calendar/board';
+import { boardDayKey, type CalendarBoardDay } from '@/lib/calendar/board';
 import { packLanes, type BoardColumn, type BoardSpanItem } from '@/lib/calendar/board-layout';
 import { absenceItems, occurrenceSpan, type BoardRowModel } from '@/lib/calendar/board-model';
 import type { CalendarJob } from '@/lib/jobs/types';
@@ -11,14 +12,22 @@ import type { VacationCalendarEntry } from '@/lib/vacation/actions';
 import type { DispatchRecipientDerivedState } from '@/lib/dispatch/types';
 import { getRoleLabel } from '@/lib/roles';
 import { BarSegment } from '../surface/bar-segment';
-import { isNoteEntry, isStartedOccurrence } from '@/lib/calendar/board';
-import { CalendarCard, dispatchChip, readinessChips } from '../surface/calendar-card';
 import { CALENDAR_LAYER_CLASS } from '../surface/layers';
 import type { DragSession } from '../drag-engine/drag-engine';
 import { BoardCell } from './board-cell';
-import { BOARD_COLUMN_MIN_PX, BOARD_LANE_HEIGHT, BOARD_NAME_COLUMN_PX, type CalendarSurfaceActions } from './types';
+import { BoardRowCard } from './board-row-card';
+import {
+  BOARD_COLUMN_MIN_PX,
+  BOARD_LANE_HEIGHT,
+  BOARD_NAME_COLUMN_PX,
+  type CalendarSurfaceActions,
+} from './types';
 
-type LaneEntry = BoardSpanItem & ({ kind: 'job'; job: CalendarJob } | { kind: 'absence'; label: string; pending: boolean; absenceKind: 'vacation' | 'sickness' });
+type LaneEntry = BoardSpanItem &
+  (
+    | { kind: 'job'; job: CalendarJob }
+    | { kind: 'absence'; label: string; pending: boolean; absenceKind: 'vacation' | 'sickness' }
+  );
 
 export type BoardRowProps = {
   model: BoardRowModel;
@@ -50,7 +59,27 @@ export type BoardRowProps = {
  * content and a multi-day occurrence is one element.
  */
 export const BoardRow = memo(function BoardRow(props: BoardRowProps) {
-  const { model, rowIndex, columns, jobs, vacation, sickness, days, planned, actual, dispatch, materialDemandJobIds, compact, scrollable, nowMs, actions, startDrag, hoveredOccurrenceId, onHoverLink, isolate } = props;
+  const {
+    model,
+    rowIndex,
+    columns,
+    jobs,
+    vacation,
+    sickness,
+    days,
+    planned,
+    actual,
+    dispatch,
+    materialDemandJobIds,
+    compact,
+    scrollable,
+    nowMs,
+    actions,
+    startDrag,
+    hoveredOccurrenceId,
+    onHoverLink,
+    isolate,
+  } = props;
   const row = model.kind === 'person' ? model.row : null;
   const laneHeight = compact ? BOARD_LANE_HEIGHT.compact : BOARD_LANE_HEIGHT.comfortable;
 
@@ -62,7 +91,13 @@ export const BoardRow = memo(function BoardRow(props: BoardRowProps) {
     }
     if (row) {
       for (const absence of absenceItems({ vacation, sickness, employeeRecordId: row.employeeRecordId })) {
-        items.push({ ...absence, kind: 'absence', label: absence.label, pending: absence.pending, absenceKind: absence.kind });
+        items.push({
+          ...absence,
+          kind: 'absence',
+          label: absence.label,
+          pending: absence.pending,
+          absenceKind: absence.kind,
+        });
       }
     }
     return packLanes(items, columns);
@@ -77,23 +112,26 @@ export const BoardRow = memo(function BoardRow(props: BoardRowProps) {
       className="grid"
       style={{
         gridTemplateColumns: `${BOARD_NAME_COLUMN_PX}px repeat(${columns.length}, minmax(${scrollable ? BOARD_COLUMN_MIN_PX : 0}px, 1fr))`,
-        gridTemplateRows: `repeat(${Math.max(1, laneCount)}, minmax(${laneHeight}px, auto))`,
+        gridTemplateRows: `repeat(${Math.max(1, laneCount)}, minmax(${laneHeight}px, auto))${row ? ' 20px' : ''}`,
       }}
     >
       <div
         role="rowheader"
-        className={cn('sticky left-0 flex min-w-0 flex-col justify-center border-b border-r border-calendar-grid-strong bg-calendar-gutter px-3 py-1', CALENDAR_LAYER_CLASS.sticky)}
+        className={cn(
+          'sticky left-0 flex min-w-0 flex-col justify-center border-b border-r border-calendar-grid-strong bg-calendar-gutter px-3 py-1',
+          CALENDAR_LAYER_CLASS.sticky,
+        )}
         style={{ gridColumn: 1, gridRow: '1 / -1' }}
       >
         {row ? (
-          <button
+          <PlainButton
             type="button"
             className="min-w-0 truncate text-left text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
             title="Nur diese Zeile anzeigen"
             onClick={() => isolate(row.employeeRecordId)}
           >
             {row.displayName}
-          </button>
+          </PlainButton>
         ) : (
           <span className="truncate text-sm font-medium">Ohne Zuweisung</span>
         )}
@@ -105,7 +143,10 @@ export const BoardRow = memo(function BoardRow(props: BoardRowProps) {
       </div>
       {columns.map((column, columnIndex) => {
         const key = row ? boardDayKey(row.employeeRecordId, column.date) : '';
-        const employed = !row || ((!row.entryDate || column.date >= row.entryDate) && (!row.exitDate || column.date <= row.exitDate));
+        const employed =
+          !row ||
+          ((!row.entryDate || column.date >= row.entryDate) &&
+            (!row.exitDate || column.date <= row.exitDate));
         return (
           <BoardCell
             key={column.date}
@@ -114,7 +155,7 @@ export const BoardRow = memo(function BoardRow(props: BoardRowProps) {
             rowIndex={rowIndex}
             row={row}
             day={row ? days.get(key) : undefined}
-            plannedMinutes={row ? planned.get(key) ?? 0 : 0}
+            plannedMinutes={row ? (planned.get(key) ?? 0) : 0}
             actual={row?.userId && actual ? actual.get(`${row.userId}:${column.date}`) : undefined}
             compact={compact}
             actions={actions}
@@ -127,58 +168,32 @@ export const BoardRow = memo(function BoardRow(props: BoardRowProps) {
         if (item.kind === 'absence') {
           return (
             <div key={item.key} className="min-w-0 p-0.5" style={style}>
-              <BarSegment tone={item.pending ? 'absence-pending' : 'absence'} edge="single" label={item.label} startDate={item.startDate} className="h-full min-h-5" />
+              <BarSegment
+                tone={item.pending ? 'absence-pending' : 'absence'}
+                edge="single"
+                label={item.label}
+                startDate={item.startDate}
+                className="h-full min-h-5"
+              />
             </div>
           );
         }
-        const { job } = item;
-        const state = dispatchStateFor(dispatch, job.occurrenceId, row?.employeeRecordId ?? null);
-        const note = isNoteEntry(job);
-        const chips = note || job.entryKind === 'internal' ? [] : [dispatchChip(state), ...readinessChips(materialDemandJobIds.has(job.jobId ?? ''))];
-        const linked = hoveredOccurrenceId !== null && hoveredOccurrenceId === job.occurrenceId && (job.assignedEmployeeRecordIds?.length ?? 0) > 1;
-        // A started or past occurrence is history (P1-11): no drag source, no edge handles.
-        const locked = isStartedOccurrence(job, nowMs);
-        const draggable = actions.isManager && !locked;
-        const allDay = !job.plannedTime;
         return (
-          <div key={item.key} data-board-item-date={item.startDate} className="relative min-w-0 p-0.5" style={style}>
-            <CalendarCard
-              job={job}
-              size="board"
-              compact={compact}
-              chips={chips}
-              linked={linked}
-              draggable={draggable}
-              locked={locked}
-              className="h-full w-full"
-              {...(row ? { 'data-employee-record-id': row.employeeRecordId } : {})}
-              onHoverLink={onHoverLink}
-              onOpen={(element) => actions.onOpenCard(job, element, row)}
-              onPointerDown={(event) => {
-                const rect = event.currentTarget.getBoundingClientRect();
-                startDrag(event, {
-                  payload: { kind: 'occurrence', job, sourceEmployeeRecordId: row?.employeeRecordId ?? null, sourceUserId: row?.userId ?? null, sourceDate: item.startDate },
-                  ghost: { label: job.title, secondary: job.plannedTime ? `${job.plannedTime} · ${job.clientName ?? ''}`.trim() : job.clientName ?? undefined, width: Math.min(rect.width, 240), height: rect.height },
-                  pointerOffset: { x: Math.min(event.clientX - rect.left, 240), y: event.clientY - rect.top },
-                });
-              }}
-            >
-              {draggable && allDay && job.occurrenceId && (
-                <>
-                  <span
-                    role="presentation"
-                    className="absolute inset-y-0 left-0 w-2 cursor-ew-resize hover:bg-calendar-planning-strong/30"
-                    onPointerDown={(event) => { event.stopPropagation(); startDrag(event, { payload: { kind: 'barEdge', job, edge: 'start', sourceEmployeeRecordId: row?.employeeRecordId ?? null }, ghost: { label: 'Beginn ändern', width: 120, height: 24 }, pointerOffset: { x: 60, y: 12 } }); }}
-                  />
-                  <span
-                    role="presentation"
-                    className="absolute inset-y-0 right-0 w-2 cursor-ew-resize hover:bg-calendar-planning-strong/30"
-                    onPointerDown={(event) => { event.stopPropagation(); startDrag(event, { payload: { kind: 'barEdge', job, edge: 'end', sourceEmployeeRecordId: row?.employeeRecordId ?? null }, ghost: { label: 'Ende ändern', width: 120, height: 24 }, pointerOffset: { x: 60, y: 12 } }); }}
-                  />
-                </>
-              )}
-            </CalendarCard>
-          </div>
+          <BoardRowCard
+            key={item.key}
+            job={item.job}
+            startDate={item.startDate}
+            style={style}
+            row={row}
+            dispatch={dispatch}
+            materialDemandJobIds={materialDemandJobIds}
+            compact={compact}
+            nowMs={nowMs}
+            actions={actions}
+            startDrag={startDrag}
+            hoveredOccurrenceId={hoveredOccurrenceId}
+            onHoverLink={onHoverLink}
+          />
         );
       })}
     </div>

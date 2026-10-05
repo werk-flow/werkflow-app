@@ -1,5 +1,6 @@
 'use client';
 
+import { REASON_MIN_8_MESSAGE } from '@/lib/ui/field-validation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 
@@ -15,14 +16,12 @@ import {
 import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import type { PlanningConflict } from '@/lib/planning/types';
+import { formatGermanDate } from '@/lib/utils';
 
 type PlanningApproval = { fingerprint: string; reason: string };
 
 export function usePlanningWarningConfirmation(): {
-  requestApproval: (
-    conflicts: PlanningConflict[],
-    fingerprint: string
-  ) => Promise<PlanningApproval | null>;
+  requestApproval: (conflicts: PlanningConflict[], fingerprint: string) => Promise<PlanningApproval | null>;
   warningDialog: React.ReactNode;
 } {
   const [request, setRequest] = useState<{
@@ -30,9 +29,8 @@ export function usePlanningWarningConfirmation(): {
     fingerprint: string;
   } | null>(null);
   const [reason, setReason] = useState('');
-  const resolverRef = useRef<
-    ((approval: PlanningApproval | null) => void) | null
-  >(null);
+  const [reasonError, setReasonError] = useState<string | null>(null);
+  const resolverRef = useRef<((approval: PlanningApproval | null) => void) | null>(null);
 
   const requestApproval = useCallback(
     (conflicts: PlanningConflict[], fingerprint: string) =>
@@ -40,9 +38,10 @@ export function usePlanningWarningConfirmation(): {
         resolverRef.current?.(null);
         resolverRef.current = resolve;
         setReason('');
+        setReasonError(null);
         setRequest({ conflicts, fingerprint });
       }),
-    []
+    [],
   );
   const finish = useCallback((approval: PlanningApproval | null) => {
     const resolve = resolverRef.current;
@@ -55,22 +54,22 @@ export function usePlanningWarningConfirmation(): {
       resolverRef.current?.(null);
       resolverRef.current = null;
     },
-    []
+    [],
   );
 
   return {
     requestApproval,
     warningDialog: request ? (
       <Dialog open onOpenChange={(open) => !open && finish(null)}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="size-4 text-warning-text" />
               Planungshinweise prüfen
             </DialogTitle>
             <DialogDescription>
-              Die Änderung bleibt möglich. WerkFlow dokumentiert eine bewusste
-              Abweichung mit ihrer Begründung.
+              Die Änderung bleibt möglich. WerkFlow dokumentiert eine bewusste Abweichung mit ihrer
+              Begründung.
             </DialogDescription>
           </DialogHeader>
           <ul className="max-h-64 space-y-2 overflow-y-auto text-sm">
@@ -84,9 +83,7 @@ export function usePlanningWarningConfirmation(): {
                   {conflict.message}
                 </p>
                 {conflict.localDate && (
-                  <p className="text-xs text-muted-foreground">
-                    {conflict.localDate}
-                  </p>
+                  <p className="text-xs text-muted-foreground">{formatGermanDate(conflict.localDate)}</p>
                 )}
               </li>
             ))}
@@ -96,6 +93,7 @@ export function usePlanningWarningConfirmation(): {
             htmlFor="planning-warning-reason"
             required
             description="Mindestens 8 Zeichen."
+            error={reasonError}
           >
             <Textarea
               value={reason}
@@ -109,13 +107,17 @@ export function usePlanningWarningConfirmation(): {
               Änderung zurücknehmen
             </Button>
             <Button
-              disabled={reason.trim().length < 8}
-              onClick={() =>
+              onClick={() => {
+                if (reason.trim().length < 8) {
+                  setReasonError(REASON_MIN_8_MESSAGE);
+                  document.getElementById('planning-warning-reason')?.focus();
+                  return;
+                }
                 finish({
                   fingerprint: request.fingerprint,
                   reason: reason.trim(),
-                })
-              }
+                });
+              }}
             >
               Mit Begründung speichern
             </Button>

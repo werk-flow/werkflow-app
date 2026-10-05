@@ -22,7 +22,13 @@ describe('uuidSchema', () => {
   });
 
   test('rejects malformed values', () => {
-    for (const value of ['', 'not-a-uuid', '351e9e05b8c64d5cb29fb33b2f1f04de', `${RANDOM_V4}x`, `${RANDOM_V4}; drop table`]) {
+    for (const value of [
+      '',
+      'not-a-uuid',
+      '351e9e05b8c64d5cb29fb33b2f1f04de',
+      `${RANDOM_V4}x`,
+      `${RANDOM_V4}; drop table`,
+    ]) {
       expect(uuidSchema.safeParse(value).success).toBe(false);
       expect(isUuid(value)).toBe(false);
     }

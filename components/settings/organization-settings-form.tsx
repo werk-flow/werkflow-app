@@ -1,5 +1,6 @@
 'use client';
 
+import { describeFailure } from '@/lib/action-messages';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -8,14 +9,7 @@ import { useForm } from 'react-hook-form';
 import { DeleteOrgDialog } from '@/components/org/delete-org-dialog';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
@@ -29,7 +23,6 @@ import {
 import { getRoleLabel } from '@/lib/roles';
 
 const ERROR_MESSAGES = {
-  not_authenticated: 'Du bist nicht angemeldet.',
   org_not_found: 'Die Organisation konnte nicht gefunden werden.',
   not_authorized: 'Nur Admins können diese Organisationsdaten bearbeiten.',
   name_required: 'Bitte gib einen Namen ein.',
@@ -43,7 +36,6 @@ const ERROR_MESSAGES = {
   no_changes: 'Es wurden keine Änderungen vorgenommen.',
   update_failed: 'Die Organisation konnte nicht gespeichert werden.',
 } satisfies Record<string, string>;
-const ERROR_MESSAGE_BY_CODE: Record<string, string> = ERROR_MESSAGES;
 
 type OrganizationSettingsFormProps = {
   initialOrganization: {
@@ -54,9 +46,7 @@ type OrganizationSettingsFormProps = {
   };
 };
 
-export function OrganizationSettingsForm({
-  initialOrganization,
-}: OrganizationSettingsFormProps) {
+export function OrganizationSettingsForm({ initialOrganization }: OrganizationSettingsFormProps) {
   const router = useRouter();
   const { showBanner } = useBanner();
   const [isSaving, setIsSaving] = useState(false);
@@ -97,7 +87,7 @@ export function OrganizationSettingsForm({
 
         if (result.error === 'code_taken' || result.error === 'code_invalid') {
           form.setError('uniqueCode', {
-            message: ERROR_MESSAGES[result.error],
+            message: describeFailure(result.error, ERROR_MESSAGES, ERROR_MESSAGES.update_failed),
           });
           return;
         }
@@ -108,7 +98,7 @@ export function OrganizationSettingsForm({
           result.error === 'name_too_long'
         ) {
           form.setError('name', {
-            message: ERROR_MESSAGES[result.error],
+            message: describeFailure(result.error, ERROR_MESSAGES, ERROR_MESSAGES.update_failed),
           });
           return;
         }
@@ -121,7 +111,7 @@ export function OrganizationSettingsForm({
         }
 
         showBanner({
-          message: ERROR_MESSAGE_BY_CODE[result.error] ?? ERROR_MESSAGES.update_failed,
+          message: describeFailure(result.error, ERROR_MESSAGES, ERROR_MESSAGES.update_failed),
           variant: 'error',
         });
         return;
@@ -136,8 +126,7 @@ export function OrganizationSettingsForm({
         message: 'Die Organisation wurde gespeichert.',
         variant: 'success',
       });
-    } catch (error) {
-      console.error('Unexpected error saving organization settings:', error);
+    } catch {
       showBanner({ message: ERROR_MESSAGES.update_failed, variant: 'error' });
     } finally {
       setIsSaving(false);
@@ -145,7 +134,7 @@ export function OrganizationSettingsForm({
   });
 
   return (
-    <div className="space-y-6 pb-28">
+    <div className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle>Organisationsdetails</CardTitle>
@@ -156,15 +145,11 @@ export function OrganizationSettingsForm({
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1">
             <p className="text-sm font-medium text-foreground">Deine Rolle</p>
-            <p className="text-sm text-muted-foreground">
-              {getRoleLabel(initialOrganization.role)}
-            </p>
+            <p className="text-sm text-muted-foreground">{getRoleLabel(initialOrganization.role)}</p>
           </div>
           <div className="space-y-1">
             <p className="text-sm font-medium text-foreground">Erstellt am</p>
-            <p className="text-sm text-muted-foreground">
-              {initialOrganization.createdAtLabel}
-            </p>
+            <p className="text-sm text-muted-foreground">{initialOrganization.createdAtLabel}</p>
           </div>
         </CardContent>
       </Card>
@@ -221,9 +206,7 @@ export function OrganizationSettingsForm({
                       disabled={!canEdit || isSaving}
                       maxLength={ORGANIZATION_CODE_LENGTH}
                       onChange={(event) =>
-                        field.onChange(
-                          event.target.value.toUpperCase().replace(/\s+/g, '')
-                        )
+                        field.onChange(event.target.value.toUpperCase().replace(/\s+/g, ''))
                       }
                       placeholder="ABC123"
                       spellCheck={false}
@@ -238,11 +221,8 @@ export function OrganizationSettingsForm({
                   ? 'Änderungen wirken sich direkt auf alle Mitglieder dieser Organisation aus.'
                   : 'Du kannst diese Daten einsehen, aber nur der Admin kann sie ändern.'}
               </p>
-              <Button
-                type="submit"
-                disabled={!canEdit || isSaving || !form.formState.isDirty}
-              >
-                {isSaving ? 'Speichert...' : 'Organisation speichern'}
+              <Button type="submit" disabled={!canEdit || isSaving || !form.formState.isDirty}>
+                {isSaving ? 'Speichert…' : 'Organisation speichern'}
               </Button>
             </CardFooter>
           </form>
@@ -258,17 +238,11 @@ export function OrganizationSettingsForm({
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Diese Aktion sollte nur genutzt werden, wenn die Organisation wirklich nicht mehr
-            benötigt wird.
+            Diese Aktion sollte nur genutzt werden, wenn die Organisation wirklich nicht mehr benötigt wird.
           </p>
-          <DeleteOrgDialog
-            disabled={!canEdit}
-            orgName={initialOrganization.name}
-          />
+          <DeleteOrgDialog disabled={!canEdit} orgName={initialOrganization.name} />
           {!canEdit ? (
-            <p className="text-sm text-muted-foreground">
-              Nur Admins können die Organisation löschen.
-            </p>
+            <p className="text-sm text-muted-foreground">Nur Admins können die Organisation löschen.</p>
           ) : null}
         </CardContent>
       </Card>

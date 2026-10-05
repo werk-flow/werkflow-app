@@ -3,37 +3,33 @@ import type {
   TimeStandbyContext,
   TimeTravelRole,
   TimeTravelRoute,
-} from "@/lib/time-tracking/types";
+} from '@/lib/time-tracking/types';
 
-const TIME_CREDIT_PERCENTAGES = [0, 50, 100] as const;
-export type TimeCreditPercentage = (typeof TIME_CREDIT_PERCENTAGES)[number];
-type TimeAbsenceTreatment = "paid" | "unpaid" | "informational";
-export type TimeSupplementKind = "night" | "sunday" | "public_holiday";
-type TimeFindingSeverity =
-  | "informational"
-  | "approval_required"
-  | "close_blocked";
+export type TimeCreditPercentage = 0 | 50 | 100;
+type TimeAbsenceTreatment = 'paid' | 'unpaid' | 'informational';
+export type TimeSupplementKind = 'night' | 'sunday' | 'public_holiday';
+type TimeFindingSeverity = 'informational' | 'approval_required' | 'close_blocked';
 type TimeWarningKind =
-  | "break_duration"
-  | "daily_duration"
-  | "rest_duration"
-  | "night_work"
-  | "sunday_work"
-  | "public_holiday_work";
+  | 'break_duration'
+  | 'daily_duration'
+  | 'rest_duration'
+  | 'night_work'
+  | 'sunday_work'
+  | 'public_holiday_work';
 
 export type TimeCreditRule =
   | {
-      activityKind: Exclude<TimeSegmentKind, "travel" | "standby">;
+      activityKind: Exclude<TimeSegmentKind, 'travel' | 'standby'>;
       percentage: TimeCreditPercentage;
     }
   | {
-      activityKind: "travel";
+      activityKind: 'travel';
       travelRoute: TimeTravelRoute;
       travelRole: TimeTravelRole;
       percentage: TimeCreditPercentage;
     }
   | {
-      activityKind: "standby";
+      activityKind: 'standby';
       standbyContext: TimeStandbyContext;
       percentage: TimeCreditPercentage;
     };
@@ -82,7 +78,7 @@ export type TimeActivityInterval = TimeActivityContext & {
 export type DailyTargetInput = {
   localDate: string;
   targetMinutes: number;
-  source: "schedule" | "employment_condition" | "default";
+  source: 'schedule' | 'employment_condition' | 'default';
   vacationMinutes: number;
   sicknessMinutes: number;
 };
@@ -109,7 +105,7 @@ export type SupplementBucket = {
 
 type AccountEventInput = {
   id: string;
-  kind: "opening_balance" | "manual_adjustment" | "expiry" | "payout";
+  kind: 'opening_balance' | 'manual_adjustment' | 'expiry' | 'payout';
   effectiveDate: string;
   minutes: number;
 };
@@ -149,21 +145,21 @@ export type EmployeePeriodCalculation = {
 };
 
 export type PayrollValueKind =
-  | "target"
-  | "source_attendance"
-  | "effective_attendance"
-  | "credited_activity"
-  | "vacation"
-  | "sickness"
-  | "overtime"
-  | "night_supplement"
-  | "sunday_supplement"
-  | "public_holiday_supplement"
-  | "manual_adjustment"
-  | "expiry"
-  | "payout"
-  | "opening_balance"
-  | "closing_balance";
+  | 'target'
+  | 'source_attendance'
+  | 'effective_attendance'
+  | 'credited_activity'
+  | 'vacation'
+  | 'sickness'
+  | 'overtime'
+  | 'night_supplement'
+  | 'sunday_supplement'
+  | 'public_holiday_supplement'
+  | 'manual_adjustment'
+  | 'expiry'
+  | 'payout'
+  | 'opening_balance'
+  | 'closing_balance';
 
 export type PayrollExportValueRow = {
   rowId: string;
@@ -214,7 +210,7 @@ type PayrollExportManifest = {
   mappingVersion: number;
   generatorVersion: string;
   generatedAt: string;
-  scope: "organization_period";
+  scope: 'organization_period';
 };
 
 export type PayrollExportInput = {

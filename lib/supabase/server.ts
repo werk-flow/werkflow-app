@@ -7,58 +7,46 @@ import { fetchWithTimeout } from './fetch-with-timeout';
 export async function createSupabaseServerClient(): Promise<SupabaseClient> {
   const cookieStore = await cookies();
 
-  return createServerClient(
-    getSupabaseUrl(),
-    getSupabasePublishableKey(),
-    {
-      global: {
-        // A stalled request must reject instead of hanging the server action.
-        fetch: fetchWithTimeout
+  return createServerClient(getSupabaseUrl(), getSupabasePublishableKey(), {
+    global: {
+      // A stalled request must reject instead of hanging the server action.
+      fetch: fetchWithTimeout,
+    },
+    cookies: {
+      get(name) {
+        return cookieStore.get(name)?.value;
       },
-      cookies: {
-        get(name) {
-          return cookieStore.get(name)?.value;
-        },
-        set(name, value, options) {
-          try {
-            cookieStore.set({
-              name,
-              value,
-              ...options,
-              sameSite: options?.sameSite as
-                | 'lax'
-                | 'strict'
-                | 'none'
-                | undefined
-            });
-          } catch {
-            // The `set` method was called from a Server Component.
-            // This can be ignored if you have middleware refreshing
-            // user sessions.
-          }
-        },
-        remove(name, options) {
-          try {
-            cookieStore.set({
-              name,
-              value: '',
-              ...options,
-              sameSite: options?.sameSite as
-                | 'lax'
-                | 'strict'
-                | 'none'
-                | undefined,
-              maxAge: 0
-            });
-          } catch {
-            // The `delete` method was called from a Server Component.
-            // This can be ignored if you have middleware refreshing
-            // user sessions.
-          }
+      set(name, value, options) {
+        try {
+          cookieStore.set({
+            name,
+            value,
+            ...options,
+            sameSite: options?.sameSite as 'lax' | 'strict' | 'none' | undefined,
+          });
+        } catch {
+          // The `set` method was called from a Server Component.
+          // This can be ignored if you have middleware refreshing
+          // user sessions.
         }
-      }
-    }
-  );
+      },
+      remove(name, options) {
+        try {
+          cookieStore.set({
+            name,
+            value: '',
+            ...options,
+            sameSite: options?.sameSite as 'lax' | 'strict' | 'none' | undefined,
+            maxAge: 0,
+          });
+        } catch {
+          // The `delete` method was called from a Server Component.
+          // This can be ignored if you have middleware refreshing
+          // user sessions.
+        }
+      },
+    },
+  });
 }
 
 /**
@@ -75,7 +63,7 @@ export async function getSupabaseServerSession(): Promise<{ supabase: SupabaseCl
 
   const {
     data: { session },
-    error
+    error,
   } = await supabase.auth.getSession();
 
   return { supabase, session: !error && !!session };

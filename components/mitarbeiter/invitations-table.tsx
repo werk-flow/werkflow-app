@@ -1,15 +1,9 @@
 'use client';
 
+import { EmptyState } from '@/components/ui/empty-state';
 import { Mail } from 'lucide-react';
 
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { ListRow } from '@/components/ui/list-row';
 import { PendingRow } from '@/components/ui/pending-row';
@@ -106,8 +100,7 @@ function InvitationsTableHeader() {
 
 function displayStatusFor(invite: Invite) {
   const statusInfo = STATUS_LABEL_BY_CODE[invite.status] || STATUS_LABELS.pending;
-  const isExpired =
-    invite.status === 'pending' && new Date(invite.expires_at) < new Date();
+  const isExpired = invite.status === 'pending' && new Date(invite.expires_at) < new Date();
   return { isExpired, displayStatus: isExpired ? STATUS_LABELS.expired : statusInfo };
 }
 
@@ -180,7 +173,8 @@ function InviteCard({
           <RoleBadge role={invite.invited_role} compact />
           <span className="text-muted-foreground/60">·</span>
           <span>
-            Eingeladen: {new Date(invite.created_at).toLocaleDateString('de-DE', {
+            Eingeladen:{' '}
+            {new Date(invite.created_at).toLocaleDateString('de-DE', {
               day: '2-digit',
               month: '2-digit',
               year: '2-digit',
@@ -188,7 +182,8 @@ function InviteCard({
           </span>
           <span className="text-muted-foreground/60">·</span>
           <span>
-            Läuft ab: {new Date(invite.expires_at).toLocaleDateString('de-DE', {
+            Läuft ab:{' '}
+            {new Date(invite.expires_at).toLocaleDateString('de-DE', {
               day: '2-digit',
               month: '2-digit',
               year: '2-digit',
@@ -229,16 +224,11 @@ export function InvitationsTable({ rows }: InvitationsTableProps) {
 
   if (rows.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
-        <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-muted">
-          <Mail className="size-6 text-muted-foreground" />
-        </div>
-        <h2 className="text-lg font-semibold">Keine Einladungen</h2>
-        <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-          Du hast noch keine Einladungen versendet. Klicke auf &quot;Mitarbeiter
-          hinzufügen&quot; um jemanden einzuladen.
-        </p>
-      </div>
+      <EmptyState
+        icon={Mail}
+        title="Noch keine Einladungen"
+        description="Lade jemanden über „Mitarbeiter hinzufügen“ ein. Offene Einladungen erscheinen hier."
+      />
     );
   }
 
@@ -256,7 +246,7 @@ export function InvitationsTable({ rows }: InvitationsTableProps) {
               busy={rowBusy(invite.id)}
               waitForChange={waitForChange}
             />
-          )
+          ),
         )}
       </div>
 

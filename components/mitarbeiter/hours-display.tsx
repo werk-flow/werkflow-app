@@ -28,7 +28,7 @@ function calculateTotalMinutes(
   status: 'clocked_out' | 'working' | 'on_break',
   statusStartedAt: string | null,
   baseMinutes: number,
-  nowMs: number
+  nowMs: number,
 ): number {
   if (status !== 'working' || !statusStartedAt) return baseMinutes;
 
@@ -60,12 +60,10 @@ export function HoursDisplay({
   statusStartedAt,
   workMinutes,
   canViewStatus = true,
-  target
+  target,
 }: HoursDisplayProps) {
   const effectiveStatus = status ?? (isClockedIn ? 'working' : 'clocked_out');
-  const [nowMs, setNowMs] = useState(() =>
-    statusStartedAt ? new Date(statusStartedAt).getTime() : 0
-  );
+  const [nowMs, setNowMs] = useState(() => (statusStartedAt ? new Date(statusStartedAt).getTime() : 0));
 
   // Live update when clocked in
   useEffect(() => {
@@ -90,9 +88,8 @@ export function HoursDisplay({
   }, [effectiveStatus, statusStartedAt]);
 
   const totalMinutes = useMemo(
-    () =>
-      calculateTotalMinutes(effectiveStatus, statusStartedAt, workMinutes, nowMs),
-    [effectiveStatus, nowMs, statusStartedAt, workMinutes]
+    () => calculateTotalMinutes(effectiveStatus, statusStartedAt, workMinutes, nowMs),
+    [effectiveStatus, nowMs, statusStartedAt, workMinutes],
   );
 
   const goalMinutes = target?.targetMinutes ?? DAILY_GOAL_MINUTES;
@@ -114,7 +111,7 @@ export function HoursDisplay({
 
   const percentage = useMemo(
     () => calculatePercentage(totalMinutes, goalMinutes),
-    [goalMinutes, totalMinutes]
+    [goalMinutes, totalMinutes],
   );
 
   // Determine indicator color based on progress
@@ -133,28 +130,21 @@ export function HoursDisplay({
           className="h-2 flex-1 bg-muted/30"
           indicatorClassName="bg-muted-foreground/30"
         />
-        <span className="text-xs font-medium text-muted-foreground/50 w-8 text-right">
-          —
-        </span>
+        <span className="text-xs font-medium text-muted-foreground/50 w-8 text-right">—</span>
       </div>
     );
   }
 
   if (zeroTargetReason) {
     return (
-      <div
-        className="flex items-center gap-2 min-w-[100px]"
-        title={zeroTargetReason}
-      >
+      <div className="flex items-center gap-2 min-w-[100px]" title={zeroTargetReason}>
         <Progress
           value={0}
           aria-label={`Tagesfortschritt: ${zeroTargetReason}`}
           className="h-2 flex-1 bg-muted/30"
           indicatorClassName="bg-muted-foreground/30"
         />
-        <span className="truncate text-xs font-medium text-muted-foreground">
-          {zeroTargetReason}
-        </span>
+        <span className="truncate text-xs font-medium text-muted-foreground">{zeroTargetReason}</span>
       </div>
     );
   }
@@ -165,17 +155,12 @@ export function HoursDisplay({
         value={percentage}
         aria-label={`Tagesfortschritt: ${formatPercentage(percentage)}`}
         className={cn('h-2 flex-1 bg-muted/50')}
-        indicatorClassName={cn(
-          getIndicatorColor(),
-          effectiveStatus === 'working' && 'opacity-80'
-        )}
+        indicatorClassName={cn(getIndicatorColor(), effectiveStatus === 'working' && 'opacity-80')}
       />
       <span
         className={cn(
           'text-xs font-medium tabular-nums w-8 text-right',
-          percentage >= 100
-            ? 'text-success-text'
-            : 'text-muted-foreground'
+          percentage >= 100 ? 'text-success-text' : 'text-muted-foreground',
         )}
       >
         {formatPercentage(percentage)}

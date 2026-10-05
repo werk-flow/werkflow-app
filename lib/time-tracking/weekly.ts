@@ -1,65 +1,61 @@
 import type { TimeEntry, WeeklyTimeDataPoint, WeeklyTimeLabel } from './types';
 import type { DailyTarget } from '@/lib/personnel/targets';
-import {
-  calculateBreakMinutes,
-  calculateTotalMinutes,
-  groupEntriesByDate,
-} from './helpers';
+import { calculateBreakMinutes, calculateTotalMinutes, groupEntriesByDate } from './helpers';
 import {
   computeBreakdownForSettings,
   resolveBreakPolicyAtTimestamp,
   type OrganizationTimeTrackingSettings,
 } from './settings';
 import { calculateBreakSessions, calculateWorkSessions } from './validation';
+import { getLocalDayEnd, getLocalDayKey, getLocalDayStart } from './day-utils';
+import { shiftIsoDateByDays } from '@/lib/personnel/types';
 
 const DAY_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 
+// The week is the Berlin calendar week wherever this runs: the server renders
+// in UTC, and the runtime's local date there starts the week two hours late
+// and moves "today" to the previous day after 22:00 or 23:00 Berlin time.
+
+/** Noon UTC of a Berlin calendar date: an instant inside that Berlin day. */
+function berlinNoon(dateKey: string): Date {
+  return new Date(`${dateKey}T12:00:00Z`);
+}
+
+/** Monday-first index (0 = Montag) of a Berlin calendar date. */
+function weekdayIndex(dateKey: string): number {
+  const day = berlinNoon(dateKey).getUTCDay();
+  return day === 0 ? 6 : day - 1;
+}
+
+/** Monday 00:00 and Sunday 23:59:59.999 of the Berlin week that contains `baseDate`. */
 export function getWeekBounds(baseDate = new Date()): {
   monday: Date;
   sunday: Date;
 } {
-  const day = baseDate.getDay();
-  const diffToMon = day === 0 ? -6 : 1 - day;
-  const monday = new Date(
-    baseDate.getFullYear(),
-    baseDate.getMonth(),
-    baseDate.getDate() + diffToMon
-  );
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-  sunday.setHours(23, 59, 59, 999);
-
-  return { monday, sunday };
+  const todayKey = getLocalDayKey(baseDate);
+  const mondayKey = shiftIsoDateByDays(todayKey, -weekdayIndex(todayKey));
+  return {
+    monday: getLocalDayStart(berlinNoon(mondayKey)),
+    sunday: getLocalDayEnd(berlinNoon(shiftIsoDateByDays(mondayKey, 6))),
+  };
 }
 
 export function getTodayIndex(baseDate = new Date()): number {
-  const day = baseDate.getDay();
-  return day === 0 ? 6 : day - 1;
+  return weekdayIndex(getLocalDayKey(baseDate));
 }
 
 export function computeWeekLabel(monday: Date): WeeklyTimeLabel {
-  const monDay = String(monday.getDate()).padStart(2, '0');
-  const monMonth = String(monday.getMonth() + 1).padStart(2, '0');
+  const mondayKey = getLocalDayKey(monday);
+  const fridayKey = shiftIsoDateByDays(mondayKey, 4);
+  const dayMonth = (dateKey: string): string => `${dateKey.slice(8, 10)}.${dateKey.slice(5, 7)}.`;
 
-  const friday = new Date(monday);
-  friday.setDate(monday.getDate() + 4);
-
-  const friDay = String(friday.getDate()).padStart(2, '0');
-  const friMonth = String(friday.getMonth() + 1).padStart(2, '0');
-
-  const isoWeekDate = new Date(
-    Date.UTC(monday.getFullYear(), monday.getMonth(), monday.getDate())
-  );
-  isoWeekDate.setUTCDate(
-    isoWeekDate.getUTCDate() + 4 - (isoWeekDate.getUTCDay() || 7)
-  );
+  const isoWeekDate = new Date(`${mondayKey}T00:00:00Z`);
+  isoWeekDate.setUTCDate(isoWeekDate.getUTCDate() + 4 - (isoWeekDate.getUTCDay() || 7));
   const yearStart = new Date(Date.UTC(isoWeekDate.getUTCFullYear(), 0, 1));
-  const weekNum = Math.ceil(
-    ((isoWeekDate.getTime() - yearStart.getTime()) / 86400000 + 1) / 7
-  );
+  const weekNum = Math.ceil(((isoWeekDate.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
 
   return {
-    dateRange: `Diese Woche (${monDay}.${monMonth}. - ${friDay}.${friMonth}.)`,
+    dateRange: `Diese Woche (${dayMonth(mondayKey)} - ${dayMonth(fridayKey)})`,
     kw: `KW ${weekNum}`,
   };
 }
@@ -70,23 +66,23 @@ export function buildWeeklyTimeData(
   settings: OrganizationTimeTrackingSettings,
   // Monday-first resolved targets (P1-04); joined by index so a server/client
   // date-key drift can never mis-assign a day's target.
-  weekTargets?: DailyTarget[]
+  weekTargets?: DailyTarget[],
 ): WeeklyTimeDataPoint[] {
   const grouped = groupEntriesByDate(entries);
   const days: WeeklyTimeDataPoint[] = [];
 
+  const mondayKey = getLocalDayKey(monday);
   for (const [i, label] of DAY_LABELS.entries()) {
-    const day = new Date(monday);
-    day.setDate(monday.getDate() + i);
-    const key = formatDateKey(day);
+    // The same Berlin day key that groupEntriesByDate assigns.
+    const key = shiftIsoDateByDays(mondayKey, i);
     const dayEntries = grouped[key] || [];
     const workSessions = calculateWorkSessions(dayEntries);
     const breakSessions = calculateBreakSessions(dayEntries);
     const productiveMinutes = calculateTotalMinutes(
-      workSessions.filter((session) => session.clockIn?.activityKind !== 'standby')
+      workSessions.filter((session) => session.clockIn?.activityKind !== 'standby'),
     );
     const standbyMinutes = calculateTotalMinutes(
-      workSessions.filter((session) => session.clockIn?.activityKind === 'standby')
+      workSessions.filter((session) => session.clockIn?.activityKind === 'standby'),
     );
     const trackedBreakMinutes = calculateBreakMinutes(breakSessions);
     const policyMinutes = productiveMinutes + trackedBreakMinutes;
@@ -98,7 +94,7 @@ export function buildWeeklyTimeData(
       policyMinutes,
       trackedBreakMinutes,
       effectiveSettings,
-      target?.targetMinutes
+      target?.targetMinutes,
     );
 
     days.push({
@@ -111,25 +107,18 @@ export function buildWeeklyTimeData(
       // Category minutes explain totalMinutes; they do not add to it. Travel,
       // call-out and internal activity are productive, while standby is not.
       travelMinutes: calculateTotalMinutes(
-        workSessions.filter((session) => session.clockIn?.activityKind === 'travel')
+        workSessions.filter((session) => session.clockIn?.activityKind === 'travel'),
       ),
       standbyMinutes,
       calloutMinutes: calculateTotalMinutes(
-        workSessions.filter((session) => session.clockIn?.activityKind === 'callout')
+        workSessions.filter((session) => session.clockIn?.activityKind === 'callout'),
       ),
       internalMinutes: calculateTotalMinutes(
-        workSessions.filter((session) => session.clockIn?.activityKind === 'internal_activity')
+        workSessions.filter((session) => session.clockIn?.activityKind === 'internal_activity'),
       ),
       target,
     });
   }
 
   return days;
-}
-
-function formatDateKey(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
 }

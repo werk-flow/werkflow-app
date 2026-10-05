@@ -1,4 +1,5 @@
 import { Skeleton } from '@/components/ui/skeleton';
+import { PageHeaderActions } from '@/components/shared/page-action';
 import { ZeiterfassungDashboardSkeleton } from './zeiterfassung-dashboard-skeleton';
 
 /** Suspense fallback inside the overview: the `h-9` state-tab strip and the dashboard. */
@@ -15,9 +16,9 @@ export function ZeiterfassungContentSkeleton() {
 export function ZeiterfassungOverviewSkeleton() {
   return (
     <>
-      <div className="mb-4 flex items-center justify-end">
+      <PageHeaderActions>
         <Skeleton className="h-9 w-40" />
-      </div>
+      </PageHeaderActions>
       <ZeiterfassungContentSkeleton />
     </>
   );

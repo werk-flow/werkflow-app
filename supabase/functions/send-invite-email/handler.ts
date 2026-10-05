@@ -10,14 +10,25 @@ interface EmailParams {
   isExistingUser: boolean;
 }
 
-
 function isEmailParams(value: unknown): value is EmailParams {
-  return !!value && typeof value === 'object' &&
-    'to' in value && typeof value.to === 'string' && value.to.length > 0 &&
-    'inviterName' in value && typeof value.inviterName === 'string' && value.inviterName.length > 0 &&
-    'organizationName' in value && typeof value.organizationName === 'string' && value.organizationName.length > 0 &&
-    'inviteUrl' in value && typeof value.inviteUrl === 'string' && value.inviteUrl.length > 0 &&
-    'isExistingUser' in value && typeof value.isExistingUser === 'boolean';
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    'to' in value &&
+    typeof value.to === 'string' &&
+    value.to.length > 0 &&
+    'inviterName' in value &&
+    typeof value.inviterName === 'string' &&
+    value.inviterName.length > 0 &&
+    'organizationName' in value &&
+    typeof value.organizationName === 'string' &&
+    value.organizationName.length > 0 &&
+    'inviteUrl' in value &&
+    typeof value.inviteUrl === 'string' &&
+    value.inviteUrl.length > 0 &&
+    'isExistingUser' in value &&
+    typeof value.isExistingUser === 'boolean'
+  );
 }
 
 function generateEmailHtml(params: EmailParams): string {
@@ -25,9 +36,7 @@ function generateEmailHtml(params: EmailParams): string {
   const inviterName = escapeHtml(params.inviterName);
   const organizationName = escapeHtml(params.organizationName);
 
-  const actionText = isExistingUser
-    ? 'Einladung annehmen'
-    : 'Konto erstellen & beitreten';
+  const actionText = isExistingUser ? 'Einladung annehmen' : 'Konto erstellen & beitreten';
 
   const descriptionText = isExistingUser
     ? 'Klicke auf den Button unten, um der Organisation beizutreten.'
@@ -108,7 +117,9 @@ WerkFlow
   `.trim();
 }
 
-export function createInviteEmailHandler(dependencies: MailDependencies): (request: Request) => Promise<Response> {
+export function createInviteEmailHandler(
+  dependencies: MailDependencies,
+): (request: Request) => Promise<Response> {
   const authorization = createMailAuthorizer(dependencies);
   const logError = dependencies.logError ?? console.error;
   return async (req: Request): Promise<Response> => {
@@ -125,17 +136,14 @@ export function createInviteEmailHandler(dependencies: MailDependencies): (reque
 
     if (!authorization.configured) {
       logError('mail_auth_not_configured');
-      return new Response(
-        JSON.stringify({ error: 'Email service is not configured' }),
-        { status: 500, headers: jsonHeaders }
-      );
+      return new Response(JSON.stringify({ error: 'Email service is not configured' }), {
+        status: 500,
+        headers: jsonHeaders,
+      });
     }
 
     if (!(await authorization.authorize(req))) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: jsonHeaders }
-      );
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: jsonHeaders });
     }
 
     try {
@@ -154,10 +162,10 @@ export function createInviteEmailHandler(dependencies: MailDependencies): (reque
       });
     } catch {
       logError('mail_request_invalid');
-      return new Response(
-        JSON.stringify({ error: 'Invalid email parameters' }),
-        { status: 400, headers: jsonHeaders }
-      );
+      return new Response(JSON.stringify({ error: 'Invalid email parameters' }), {
+        status: 400,
+        headers: jsonHeaders,
+      });
     }
   };
 }

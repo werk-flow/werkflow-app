@@ -5,8 +5,7 @@ type WorkHandoverRelease = Database['public']['Tables']['work_handover_releases'
 type WorkHandoverEvent = Database['public']['Tables']['work_handover_events']['Row'];
 export type WorkHandoverCommercialReadiness =
   Database['public']['Enums']['work_handover_commercial_readiness_state'];
-export type WorkHandoverPackageState =
-  Database['public']['Enums']['work_handover_package_state'];
+export type WorkHandoverPackageState = Database['public']['Enums']['work_handover_package_state'];
 
 export type WorkHandoverSourceOption = {
   key: string;
@@ -52,15 +51,19 @@ export type WorkHandoverWorkspace = {
   availableSources: WorkHandoverSourceOption[];
   gateSnapshot: Json;
   gateFingerprint: string;
-  releases: Array<Pick<
-    WorkHandoverRelease,
-    'id' | 'release_number' | 'commercial_readiness' | 'reviewed_at' |
-    'package_document_id' | 'overridden_gates' | 'override_reason'
-  >>;
-  events: Array<Pick<
-    WorkHandoverEvent,
-    'id' | 'event_type' | 'reason' | 'created_at' | 'release_id'
-  >>;
+  releases: Array<
+    Pick<
+      WorkHandoverRelease,
+      | 'id'
+      | 'release_number'
+      | 'commercial_readiness'
+      | 'reviewed_at'
+      | 'package_document_id'
+      | 'overridden_gates'
+      | 'override_reason'
+    >
+  >;
+  events: Array<Pick<WorkHandoverEvent, 'id' | 'event_type' | 'reason' | 'created_at' | 'release_id'>>;
 };
 
 export type WorkHandoverFieldStatus = {
@@ -70,20 +73,14 @@ export type WorkHandoverFieldStatus = {
   documentId: string | null;
 };
 
-export const WORK_HANDOVER_STATE_LABELS: Record<
-  WorkHandoverPackageState | 'missing',
-  string
-> = {
+export const WORK_HANDOVER_STATE_LABELS: Record<WorkHandoverPackageState | 'missing', string> = {
   missing: 'Noch kein Übergabepaket',
   draft: 'Übergabe wird vorbereitet',
   released: 'An das Büro übergeben',
   reopened: 'Zur Korrektur geöffnet',
 };
 
-export const WORK_HANDOVER_READINESS_LABELS: Record<
-  WorkHandoverCommercialReadiness,
-  string
-> = {
+export const WORK_HANDOVER_READINESS_LABELS: Record<WorkHandoverCommercialReadiness, string> = {
   not_ready: 'Noch nicht kaufmännisch prüfbar',
   ready_for_commercial_review: 'Bereit zur kaufmännischen Prüfung',
   ready_with_exceptions: 'Mit begründeten Ausnahmen prüfbar',

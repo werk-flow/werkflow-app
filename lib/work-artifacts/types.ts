@@ -1,3 +1,4 @@
+import type { ActionFailure } from '@/lib/action-result';
 import type { Database, Json } from '@/lib/supabase/database.types';
 
 export type WorkArtifactKind = Database['public']['Enums']['work_artifact_kind'];
@@ -122,7 +123,7 @@ export type WorkArtifactActionInput = {
 
 export type WorkArtifactMutationResult =
   | { success: true; artifactId: string; version: number; status: WorkArtifactStatus; data?: Json }
-  | { success: false; error: string };
+  | ActionFailure;
 
 export type WorkArtifactTimeSourceOption = {
   id: string;
@@ -131,11 +132,20 @@ export type WorkArtifactTimeSourceOption = {
 };
 
 export const WORK_ARTIFACT_KINDS = [
-  'site_diary', 'work_report', 'measurement', 'defect', 'change_work',
+  'site_diary',
+  'work_report',
+  'measurement',
+  'defect',
+  'change_work',
 ] as const satisfies readonly WorkArtifactKind[];
 
 export const WORK_ARTIFACT_STATUSES = [
-  'draft', 'submitted', 'approved', 'rejected', 'correction_requested', 'voided',
+  'draft',
+  'submitted',
+  'approved',
+  'rejected',
+  'correction_requested',
+  'voided',
 ] as const satisfies readonly WorkArtifactStatus[];
 
 export const WORK_ARTIFACT_KIND_LABELS: Record<WorkArtifactKind, string> = {
@@ -147,13 +157,23 @@ export const WORK_ARTIFACT_KIND_LABELS: Record<WorkArtifactKind, string> = {
 };
 
 export const WORK_ARTIFACT_STATUS_LABELS: Record<WorkArtifactStatus, string> = {
-  draft: 'Entwurf', submitted: 'Zur Prüfung', approved: 'Intern freigegeben',
-  rejected: 'Abgelehnt', correction_requested: 'Korrektur angefordert', voided: 'Ungültig',
+  draft: 'Entwurf',
+  submitted: 'Zur Prüfung',
+  approved: 'Intern freigegeben',
+  rejected: 'Abgelehnt',
+  correction_requested: 'Korrektur angefordert',
+  voided: 'Ungültig',
 };
 
 export const WORK_ARTIFACT_UNIT_LABELS: Record<WorkArtifactMeasurementUnit, string> = {
-  piece: 'Stk.', meter: 'm', square_meter: 'm²', cubic_meter: 'm³',
-  liter: 'l', kilogram: 'kg', hour: 'Std.', flat_rate: 'Pauschale',
+  piece: 'Stk.',
+  meter: 'm',
+  square_meter: 'm²',
+  cubic_meter: 'm³',
+  liter: 'l',
+  kilogram: 'kg',
+  hour: 'Std.',
+  flat_rate: 'Pauschale',
 };
 
 export const WORK_ARTIFACT_LEGAL_NOTICE =

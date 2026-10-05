@@ -1,74 +1,51 @@
-import { cache, Suspense } from "react";
-import { redirect } from "next/navigation";
+import { RegionLoadError } from '@/components/shared/region-load-error';
+import { SubpageHeader } from '@/components/shared/subpage-header';
+import { Suspense } from 'react';
+import { redirect } from 'next/navigation';
 
-import { EquipmentListSkeleton } from "@/components/loading-states/equipment-page-skeleton";
-import {
-  EquipmentCreateButton,
-  EquipmentListContent,
-} from "@/components/service/equipment-list-content";
-import { Skeleton } from "@/components/ui/skeleton";
-import { getInstalledEquipmentList } from "@/lib/installed-equipment/actions";
+import { EquipmentListSkeleton } from '@/components/loading-states/equipment-page-skeleton';
+import { EquipmentCreateButton, EquipmentListContent } from '@/components/service/equipment-list-content';
+import { getInstalledEquipmentPage } from '@/lib/installed-equipment/list-page-server';
+import { parseEquipmentListQuery } from '@/lib/installed-equipment/list-page';
 
-// One request-scoped read shared by the toolbar action and the list, so the
-// static toolbar paints before the data and the list still loads once.
-const loadEquipment = cache(getInstalledEquipmentList);
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-export default function InstalledEquipmentPage() {
+export default function InstalledEquipmentPage({
+  searchParams = Promise.resolve({}),
+}: {
+  searchParams?: SearchParams;
+}) {
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold">Anlagen & Geräte</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Installierte Anlagen an Kundeneinsatzorten mit Kennungen, Dokumenten
-            und Servicehistorie.
-          </p>
-        </div>
-        <div className="hidden md:block">
-          <Suspense fallback={<Skeleton className="h-9 w-40" />}>
-            <EquipmentCreateAction />
-          </Suspense>
-        </div>
-      </div>
+      <SubpageHeader
+        title="Anlagen & Geräte"
+        description="Installierte Anlagen an Kundeneinsatzorten mit Kennungen, Dokumenten und Servicehistorie."
+        actions={<EquipmentCreateButton />}
+      />
       <Suspense fallback={<EquipmentListSkeleton />}>
-        <EquipmentList />
+        <EquipmentList searchParams={searchParams} />
       </Suspense>
     </div>
   );
 }
 
-async function EquipmentCreateAction() {
-  const result = await loadEquipment();
-  if (!result.success) return null;
-  return (
-    <EquipmentCreateButton
-      equipment={result.equipment}
-      clients={result.clients}
-    />
-  );
-}
-
-async function EquipmentList() {
-  const result = await loadEquipment();
+async function EquipmentList({ searchParams }: { searchParams: SearchParams }) {
+  const query = parseEquipmentListQuery(await searchParams);
+  const result = await getInstalledEquipmentPage(query);
   if (!result.success) {
-    if (result.error === "not_authorized") redirect("/auftraege");
+    if (result.error === 'not_authorized') redirect('/auftraege');
     if (
-      result.error === "not_authenticated" ||
-      result.error === "no_active_org" ||
-      result.error === "not_a_member"
+      result.error === 'not_authenticated' ||
+      result.error === 'no_active_org' ||
+      result.error === 'not_a_member'
     ) {
-      redirect("/login");
+      redirect('/login');
     }
     return (
-      <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-        Anlagen und Geräte konnten nicht geladen werden.
-      </div>
+      <RegionLoadError title="Anlagen und Geräte konnten nicht geladen werden">
+        Die Liste ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
+      </RegionLoadError>
     );
   }
-  return (
-    <EquipmentListContent
-      initialEquipment={result.equipment}
-      clients={result.clients}
-    />
-  );
+  return <EquipmentListContent initialPage={result.page} query={query} />;
 }

@@ -1,8 +1,10 @@
 import 'server-only';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { LIST_ROW_CAP, readCompleteRows } from '@/lib/supabase/query-batches';
 import type { ApprovedAbsenceSpan } from '@/lib/personnel/targets';
 import { toSicknessReport, type SicknessReport } from './types';
+import { logError } from '@/lib/logging';
 
 // Server-only shared loaders for the sickness domain. Server actions and the
 // target loaders consume these; nothing here performs authorization — callers
@@ -11,7 +13,7 @@ import { toSicknessReport, type SicknessReport } from './types';
 /** All sickness reports of one employee record, newest first. */
 export async function loadSicknessReportsForRecord(
   organizationId: string,
-  employeeRecordId: string
+  employeeRecordId: string,
 ): Promise<SicknessReport[] | null> {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
@@ -22,7 +24,7 @@ export async function loadSicknessReportsForRecord(
     .order('start_date', { ascending: false });
 
   if (error) {
-    console.error('Failed to load sickness reports:', error);
+    logError('Failed to load sickness reports:', error);
     return null;
   }
   return (data ?? []).map(toSicknessReport);
@@ -33,37 +35,37 @@ export async function loadSicknessReportsForRecord(
  * second variant of the `resolveDailyTarget` absence input (P1-08). Only
  * `reported` rows qualify; cancelled reports never reach targets. Open-ended
  * reports (end_date null) are clamped to the window end: while a report is
- * open, every day from its start counts as absent.
+ * open, every day from its start counts as absent. A failed read returns
+ * null: "no absence" would silently raise every target.
  */
 export async function loadActiveSicknessSpansByRecord(
   organizationId: string,
   windowStartIso: string,
   windowEndIso: string,
   /** Narrows the read to one record (single-person target surfaces). */
-  employeeRecordId?: string
-): Promise<Map<string, ApprovedAbsenceSpan[]>> {
+  employeeRecordId?: string,
+): Promise<Map<string, ApprovedAbsenceSpan[]> | null> {
   const admin = createSupabaseAdminClient();
-  let query = admin
-    .from('sickness_reports')
-    .select('employee_record_id, start_date, end_date, day_portion')
-    .eq('organization_id', organizationId)
-    .eq('status', 'reported')
-    .lte('start_date', windowEndIso)
-    .or(`end_date.gte.${windowStartIso},end_date.is.null`);
-  if (employeeRecordId) {
-    query = query.eq('employee_record_id', employeeRecordId);
-  }
-  const { data, error } = await query;
+  const { data, error } = await readCompleteRows((from, to) => {
+    const query = admin
+      .from('sickness_reports')
+      .select('employee_record_id, start_date, end_date, day_portion')
+      .eq('organization_id', organizationId)
+      .eq('status', 'reported')
+      .lte('start_date', windowEndIso)
+      .or(`end_date.gte.${windowStartIso},end_date.is.null`);
+    return (employeeRecordId ? query.eq('employee_record_id', employeeRecordId) : query)
+      .order('id')
+      .range(from, to);
+  }, LIST_ROW_CAP);
 
   if (error) {
-    // Absence must never break the target surfaces: degrade to "no absence"
-    // (targets stay pre-P1-08 correct) and log for diagnosis.
-    console.error('Failed to load active sickness spans:', error);
-    return new Map();
+    logError('Failed to load active sickness spans:', error);
+    return null;
   }
 
   const spansByRecord = new Map<string, ApprovedAbsenceSpan[]>();
-  for (const row of data ?? []) {
+  for (const row of data) {
     const spans = spansByRecord.get(row.employee_record_id) ?? [];
     spans.push({
       type: 'sickness',
@@ -87,7 +89,7 @@ export async function loadActiveSicknessSpansByRecord(
 export async function hasActiveSicknessOn(
   organizationId: string,
   userId: string,
-  dateIso: string
+  dateIso: string,
 ): Promise<boolean> {
   const admin = createSupabaseAdminClient();
   const { data: record, error: recordError } = await admin
@@ -97,7 +99,7 @@ export async function hasActiveSicknessOn(
     .eq('user_id', userId)
     .maybeSingle();
   if (recordError) {
-    console.error('Failed to load record for sickness clock check:', recordError);
+    logError('Failed to load record for sickness clock check:', recordError);
     return false;
   }
   if (!record) return false;
@@ -114,7 +116,7 @@ export async function hasActiveSicknessOn(
   if (error) {
     // Fail open: a transient read failure must not degrade time capture; the
     // notice is informational and the office sees contradictions either way.
-    console.error('Failed sickness clock check:', error);
+    logError('Failed sickness clock check:', error);
     return false;
   }
   return (data ?? []).length > 0;

@@ -1,0 +1,18 @@
+Menü öffnen
+Einstellungen
+Profil
+Konto & Sicherheit
+Abonnement & Abrechnung
+Profil
+Persönliche Angaben, die appweit als Anzeigename verwendet werden.
+Persönliche Einstellungen
+Profilbild
+Lade ein Bild hoch und passe den Ausschnitt vor dem Speichern genau so an, wie es später in der App erscheinen soll.
+MK
+Unterstützt werden gängige Bildformate bis 5 MB. Vor dem Speichern kannst du dein Bild zuschneiden und heranzoomen.
+Profilbild hochladen
+Anzeigename
+Diese Angaben erscheinen in der Sidebar und an weiteren Stellen der App als dein Name.
+Vorname
+*
+Pflichtfeld

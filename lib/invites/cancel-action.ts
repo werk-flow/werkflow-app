@@ -1,87 +1,44 @@
 'use server';
 
-import { cookies } from 'next/headers';
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { resolveActiveOrgId } from '@/lib/org/cookies';
-import { getAuthenticatedUser, getCachedMemberships } from '@/lib/data/cached';
+import type { ActionResult } from '@/lib/action-result';
+import { requireManagedInvite } from '@/lib/invites/managed-invite';
+import { uuidSchema } from '@/lib/validation/uuid';
+import { logError } from '@/lib/logging';
 
-export type CancelInviteResult = {
-  success: boolean;
-  error?: string;
-};
+export type CancelInviteResult = ActionResult;
 
-export async function cancelInvite(
-  inviteId: string
-): Promise<CancelInviteResult> {
+export async function cancelInvite(inviteIdInput: string): Promise<CancelInviteResult> {
+  const parsedInviteId = uuidSchema.safeParse(inviteIdInput);
+  if (!parsedInviteId.success) return { success: false, error: 'invalid_input' };
   try {
-    const [user, cookieStore] = await Promise.all([
-      getAuthenticatedUser(),
-      cookies()
-    ]);
-    if (!user) {
-      return { success: false, error: 'not_authenticated' };
-    }
+    const managed = await requireManagedInvite(parsedInviteId.data);
+    if (!managed.success) return managed;
+    const { admin, orgId, inviteId, status } = managed.invite;
 
-    const orgId = await resolveActiveOrgId(cookieStore, user.id);
+    // Only a pending invite can be cancelled; each other status has its own code.
+    if (status === 'cancelled') return { success: false, error: 'already_cancelled' };
+    if (status === 'accepted') return { success: false, error: 'already_accepted' };
+    if (status === 'expired') return { success: false, error: 'already_expired' };
+    if (status !== 'pending') return { success: false, error: 'invite_not_pending' };
 
-    if (!orgId) {
-      return { success: false, error: 'no_active_org' };
-    }
-
-    const memberships = await getCachedMemberships(user.id);
-    const membership = memberships.find((m) => m.orgId === orgId);
-
-    if (!membership) {
-      return { success: false, error: 'not_a_member' };
-    }
-
-    if (membership.role !== 'admin' && membership.role !== 'buero') {
-      return { success: false, error: 'not_authorized' };
-    }
-
-    const admin = createSupabaseAdminClient();
-
-    // Verify the invite belongs to this organization
-    // Use admin client to bypass RLS (SELECT is allowed but UPDATE is not)
-    const { data: invite, error: inviteErr } = await admin
-      .from('organization_invites')
-      .select('id, status')
-      .eq('id', inviteId)
-      .eq('organization_id', orgId)
-      .single();
-
-    if (inviteErr || !invite) {
-      return { success: false, error: 'invite_not_found' };
-    }
-
-    // Only allow cancelling pending invites - provide specific error messages
-    if (invite.status === 'cancelled') {
-      return { success: false, error: 'already_cancelled' };
-    }
-    if (invite.status === 'accepted') {
-      return { success: false, error: 'already_accepted' };
-    }
-    if (invite.status === 'expired') {
-      return { success: false, error: 'already_expired' };
-    }
-    if (invite.status !== 'pending') {
-      return { success: false, error: 'invite_not_pending' };
-    }
-
-    // Update invite status to cancelled using admin client (no UPDATE policy)
-    const { error: updateErr } = await admin
+    // The status filter keeps an invite accepted after the read from turning cancelled.
+    const { data: cancelledRows, error: updateErr } = await admin
       .from('organization_invites')
       .update({ status: 'cancelled' })
-      .eq('id', inviteId);
+      .eq('id', inviteId)
+      .eq('organization_id', orgId)
+      .eq('status', 'pending')
+      .select('id');
 
     if (updateErr) {
-      console.error('Error cancelling invite:', updateErr);
+      logError('Error cancelling invite:', { code: updateErr.code });
       return { success: false, error: 'cancel_failed' };
     }
+    if (cancelledRows.length !== 1) return { success: false, error: 'invite_not_pending' };
 
     return { success: true };
   } catch (error) {
-    console.error('Unexpected error cancelling invite:', error);
+    logError('Unexpected error cancelling invite:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }

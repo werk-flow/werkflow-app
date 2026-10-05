@@ -8,27 +8,35 @@ async function measureButtonContrast(button: Locator): Promise<ButtonContrast> {
     type Color = [number, number, number, number];
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = 1;
-    const context = canvas.getContext('2d', { colorSpace: 'srgb', willReadFrequently: true });
-    if (!context) throw new Error('Cannot resolve rendered button colors to sRGB.');
+    const canvasContext = canvas.getContext('2d', { colorSpace: 'srgb', willReadFrequently: true });
+    if (!canvasContext) throw new Error('Cannot resolve rendered button colors to sRGB.');
+    const context: CanvasRenderingContext2D = canvasContext;
 
     function parseColor(value: string): Color {
-      const components = /^rgba?\(([^)]+)\)$/.exec(value)?.[1]
-        ?.split(/[\s,/]+/).filter(Boolean);
+      const components = /^rgba?\(([^)]+)\)$/
+        .exec(value)?.[1]
+        ?.split(/[\s,/]+/)
+        .filter(Boolean);
       if (components && (components.length === 3 || components.length === 4)) {
         const [red, green, blue, alpha] = components;
-        if (red === undefined || green === undefined || blue === undefined) throw new Error(`Malformed computed color: ${value}`);
+        if (red === undefined || green === undefined || blue === undefined)
+          throw new Error(`Malformed computed color: ${value}`);
         const channel = (part: string): number =>
           part.endsWith('%') ? Number.parseFloat(part) / 100 : Number(part) / 255;
-        return [channel(red), channel(green), channel(blue), alpha === undefined ? 1 :
-          alpha.endsWith('%') ? Number.parseFloat(alpha) / 100 : Number(alpha)];
+        return [
+          channel(red),
+          channel(green),
+          channel(blue),
+          alpha === undefined ? 1 : alpha.endsWith('%') ? Number.parseFloat(alpha) / 100 : Number(alpha),
+        ];
       }
       // Tailwind color-mix may compute to color(srgb ...). The browser's
       // sRGB canvas performs the same color-space conversion used to render it.
       if (!CSS.supports('color', value)) throw new Error(`Unsupported computed color: ${value}`);
-      context!.clearRect(0, 0, 1, 1);
-      context!.fillStyle = value;
-      context!.fillRect(0, 0, 1, 1);
-      const [red, green, blue, alpha] = context!.getImageData(0, 0, 1, 1).data;
+      context.clearRect(0, 0, 1, 1);
+      context.fillStyle = value;
+      context.fillRect(0, 0, 1, 1);
+      const [red, green, blue, alpha] = context.getImageData(0, 0, 1, 1).data;
       if (red === undefined || green === undefined || blue === undefined || alpha === undefined) {
         throw new Error('Canvas pixel readback returned no color channels.');
       }
@@ -50,13 +58,20 @@ async function measureButtonContrast(button: Locator): Promise<ButtonContrast> {
     }
 
     const ancestors: Element[] = [];
-    for (let current: Element | null = element; current; current = current.parentElement) ancestors.unshift(current);
+    for (let current: Element | null = element; current; current = current.parentElement)
+      ancestors.unshift(current);
     let background: Color = [1, 1, 1, 1];
     for (const ancestor of ancestors) {
       const style = getComputedStyle(ancestor);
-      if (style.backgroundImage !== 'none' || Number(style.opacity) !== 1 ||
-          style.filter !== 'none' || style.mixBlendMode !== 'normal') {
-        throw new Error('Button contrast probe only supports solid backgrounds without opacity groups, filters or blend modes.');
+      if (
+        style.backgroundImage !== 'none' ||
+        Number(style.opacity) !== 1 ||
+        style.filter !== 'none' ||
+        style.mixBlendMode !== 'normal'
+      ) {
+        throw new Error(
+          'Button contrast probe only supports solid backgrounds without opacity groups, filters or blend modes.',
+        );
       }
       background = composite(parseColor(style.backgroundColor), background);
     }
@@ -76,19 +91,30 @@ export async function expectButtonTextContrast(page: Page, button: Locator): Pro
   await expect(button).toBeVisible();
   await expect(button).toBeEnabled();
   await expect(button).not.toHaveAttribute('aria-disabled', 'true');
-  const originalScheme = await page.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  const originalScheme = await page.evaluate(() =>
+    matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+  );
   async function check(scheme: string, state: string): Promise<void> {
-    await expect.poll(() => button.evaluate((element) => {
-      let pending = 0;
-      for (let current: Element | null = element; current; current = current.parentElement) {
-        pending += current.getAnimations().filter(
-          (animation) => animation.playState === 'running' || animation.pending,
-        ).length;
-      }
-      return pending;
-    }), { timeout: 5_000 }).toBe(0);
+    await expect
+      .poll(
+        () =>
+          button.evaluate((element) => {
+            let pending = 0;
+            for (let current: Element | null = element; current; current = current.parentElement) {
+              pending += current
+                .getAnimations()
+                .filter((animation) => animation.playState === 'running' || animation.pending).length;
+            }
+            return pending;
+          }),
+        { timeout: 5_000 },
+      )
+      .toBe(0);
     const measured = await measureButtonContrast(button);
-    expect(measured.ratio, `${scheme}/${state}: ${measured.foreground} on ${measured.background}`).toBeGreaterThanOrEqual(4.5);
+    expect(
+      measured.ratio,
+      `${scheme}/${state}: ${measured.foreground} on ${measured.background}`,
+    ).toBeGreaterThanOrEqual(4.5);
   }
   try {
     for (const scheme of ['light', 'dark'] as const) {

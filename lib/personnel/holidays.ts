@@ -76,7 +76,7 @@ export type PublicHoliday = {
   name: string;
 };
 
-function toIsoDate(year: number, month: number, day: number): string {
+function isoDateFromParts(year: number, month: number, day: number): string {
   return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
@@ -107,21 +107,17 @@ function easterOffsetIso(year: number, offsetDays: number): string {
   // Date.UTC arithmetic keeps this independent of the host time zone.
   const ms = Date.UTC(year, easter.month - 1, easter.day) + offsetDays * 86_400_000;
   const date = new Date(ms);
-  return toIsoDate(
-    date.getUTCFullYear(),
-    date.getUTCMonth() + 1,
-    date.getUTCDate()
-  );
+  return isoDateFromParts(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate());
 }
 
 /** Buß- und Bettag: the Wednesday before November 23. */
 function bussUndBettagIso(year: number): string {
   const nov23Weekday = new Date(Date.UTC(year, 10, 23)).getUTCDay(); // 0 = Sunday
   // Days back from Nov 23 to the previous Wednesday (weekday 3), at least 1.
-  const daysBack = ((nov23Weekday - 3 + 7) % 7) || 7;
+  const daysBack = (nov23Weekday - 3 + 7) % 7 || 7;
   const ms = Date.UTC(year, 10, 23) - daysBack * 86_400_000;
   const date = new Date(ms);
-  return toIsoDate(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate());
+  return isoDateFromParts(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate());
 }
 
 const ALL_REGIONS = new Set<HolidayRegion>(HOLIDAY_REGIONS);
@@ -136,17 +132,17 @@ const HOLIDAY_RULES: HolidayRule[] = [
   {
     name: 'Neujahr',
     regions: ALL_REGIONS,
-    resolve: (year) => toIsoDate(year, 1, 1),
+    resolve: (year) => isoDateFromParts(year, 1, 1),
   },
   {
     name: 'Heilige Drei Könige',
     regions: new Set(['BW', 'BY', 'BY_OHNE_MARIAE', 'ST']),
-    resolve: (year) => toIsoDate(year, 1, 6),
+    resolve: (year) => isoDateFromParts(year, 1, 6),
   },
   {
     name: 'Internationaler Frauentag',
     regions: new Set(['BE', 'MV']),
-    resolve: (year) => toIsoDate(year, 3, 8),
+    resolve: (year) => isoDateFromParts(year, 3, 8),
   },
   {
     name: 'Karfreitag',
@@ -166,7 +162,7 @@ const HOLIDAY_RULES: HolidayRule[] = [
   {
     name: 'Tag der Arbeit',
     regions: ALL_REGIONS,
-    resolve: (year) => toIsoDate(year, 5, 1),
+    resolve: (year) => isoDateFromParts(year, 5, 1),
   },
   {
     name: 'Christi Himmelfahrt',
@@ -191,27 +187,27 @@ const HOLIDAY_RULES: HolidayRule[] = [
   {
     name: 'Mariä Himmelfahrt',
     regions: new Set(['BY', 'SL']),
-    resolve: (year) => toIsoDate(year, 8, 15),
+    resolve: (year) => isoDateFromParts(year, 8, 15),
   },
   {
     name: 'Weltkindertag',
     regions: new Set(['TH']),
-    resolve: (year) => toIsoDate(year, 9, 20),
+    resolve: (year) => isoDateFromParts(year, 9, 20),
   },
   {
     name: 'Tag der Deutschen Einheit',
     regions: ALL_REGIONS,
-    resolve: (year) => toIsoDate(year, 10, 3),
+    resolve: (year) => isoDateFromParts(year, 10, 3),
   },
   {
     name: 'Reformationstag',
     regions: new Set(['BB', 'HB', 'HH', 'MV', 'NI', 'SN', 'ST', 'SH', 'TH']),
-    resolve: (year) => toIsoDate(year, 10, 31),
+    resolve: (year) => isoDateFromParts(year, 10, 31),
   },
   {
     name: 'Allerheiligen',
     regions: new Set(['BW', 'BY', 'BY_OHNE_MARIAE', 'NW', 'RP', 'SL']),
-    resolve: (year) => toIsoDate(year, 11, 1),
+    resolve: (year) => isoDateFromParts(year, 11, 1),
   },
   {
     name: 'Buß- und Bettag',
@@ -221,22 +217,19 @@ const HOLIDAY_RULES: HolidayRule[] = [
   {
     name: '1. Weihnachtstag',
     regions: ALL_REGIONS,
-    resolve: (year) => toIsoDate(year, 12, 25),
+    resolve: (year) => isoDateFromParts(year, 12, 25),
   },
   {
     name: '2. Weihnachtstag',
     regions: ALL_REGIONS,
-    resolve: (year) => toIsoDate(year, 12, 26),
+    resolve: (year) => isoDateFromParts(year, 12, 26),
   },
 ];
 
 const holidayCache = new Map<string, Map<string, string>>();
 
 /** Map of ISO date → holiday name for one region and year (memoized). */
-function getHolidayMapForYear(
-  region: HolidayRegion,
-  year: number
-): Map<string, string> {
+function getHolidayMapForYear(region: HolidayRegion, year: number): Map<string, string> {
   const cacheKey = `${region}-${year}`;
   const cached = holidayCache.get(cacheKey);
   if (cached) return cached;
@@ -250,20 +243,14 @@ function getHolidayMapForYear(
   return map;
 }
 
-export function getPublicHolidaysForYear(
-  region: HolidayRegion,
-  year: number
-): PublicHoliday[] {
+export function getPublicHolidaysForYear(region: HolidayRegion, year: number): PublicHoliday[] {
   return [...getHolidayMapForYear(region, year).entries()]
     .map(([date, name]) => ({ date, name }))
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 /** Holiday name for an ISO date in the given region, or null. */
-export function getHolidayName(
-  region: HolidayRegion,
-  dateIso: string
-): string | null {
+export function getHolidayName(region: HolidayRegion, dateIso: string): string | null {
   const year = Number(dateIso.slice(0, 4));
   if (!Number.isInteger(year)) return null;
   return getHolidayMapForYear(region, year).get(dateIso) ?? null;

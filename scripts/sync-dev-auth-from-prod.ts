@@ -52,7 +52,7 @@ const SECRET_PATTERN = /(pass|secret|key|token)/i;
 const token = process.env.SUPABASE_ACCESS_TOKEN;
 if (!token) {
   console.error(
-    'SUPABASE_ACCESS_TOKEN is not set. Export the Supabase PAT first (see docs/technical/environments.md, onboarding step 1).'
+    'SUPABASE_ACCESS_TOKEN is not set. Export the Supabase PAT first (see docs/technical/environments.md, onboarding step 1).',
   );
   process.exit(1);
 }
@@ -101,7 +101,9 @@ for (const line of divergent) console.log(line.length > 0 ? line : '  none');
 if (divergent.length === 0) console.log('  none — dev matches prod outside the expected fields.');
 
 if (!apply) {
-  console.log('\nRead-only run. Re-run with --apply to sync mailer_* fields (templates, subjects, OTP expiry) prod -> dev.');
+  console.log(
+    '\nRead-only run. Re-run with --apply to sync mailer_* fields (templates, subjects, OTP expiry) prod -> dev.',
+  );
   process.exit(divergent.length === 0 ? 0 : 2);
 }
 
@@ -121,7 +123,9 @@ if (Object.keys(mailerPatch).length === 0) {
   process.exit(0);
 }
 
-console.log(`\nPatching dev with ${Object.keys(mailerPatch).length} mailer_* fields: ${Object.keys(mailerPatch).join(', ')}`);
+console.log(
+  `\nPatching dev with ${Object.keys(mailerPatch).length} mailer_* fields: ${Object.keys(mailerPatch).join(', ')}`,
+);
 const patchResponse = await fetch(`${API}/${DEV_REF}/config/auth`, {
   method: 'PATCH',
   headers,
@@ -135,7 +139,7 @@ if (!patchResponse.ok) {
 await new Promise((resolve) => setTimeout(resolve, 8000));
 const devAfter = await getAuthConfig(DEV_REF);
 const stillDifferent = Object.keys(mailerPatch).filter(
-  (key) => JSON.stringify(devAfter[key]) !== JSON.stringify(prod[key])
+  (key) => JSON.stringify(devAfter[key]) !== JSON.stringify(prod[key]),
 );
 if (stillDifferent.length > 0) {
   console.error(`Verification failed — still divergent after PATCH: ${stillDifferent.join(', ')}`);

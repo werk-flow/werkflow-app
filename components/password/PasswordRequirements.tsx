@@ -10,7 +10,7 @@ const REQUIREMENT_ITEMS: Array<{
   { key: 'length', label: 'Mindestens 8 Zeichen' },
   { key: 'uppercase', label: 'Mindestens ein Großbuchstabe' },
   { key: 'lowercase', label: 'Mindestens ein Kleinbuchstabe' },
-  { key: 'number', label: 'Mindestens eine Zahl' }
+  { key: 'number', label: 'Mindestens eine Zahl' },
 ];
 
 type PasswordRequirementsProps = {
@@ -18,30 +18,19 @@ type PasswordRequirementsProps = {
   className?: string;
 };
 
-export function PasswordRequirements({
-  requirements,
-  className
-}: PasswordRequirementsProps) {
+export function PasswordRequirements({ requirements, className }: PasswordRequirementsProps) {
   return (
-    <ul
-      aria-live="polite"
-      className={cn('space-y-1 text-sm', className)}
-      role="list"
-    >
+    <ul aria-live="polite" className={cn('space-y-1 text-sm', className)} role="list">
       {REQUIREMENT_ITEMS.map((item) => {
         const met = requirements[item.key];
         return (
-          <li
-            key={item.key}
-            className="flex items-center gap-2"
-            role="listitem"
-          >
+          <li key={item.key} className="flex items-center gap-2" role="listitem">
             <span
               className={cn(
                 'flex h-5 w-5 items-center justify-center rounded-full border text-[11px] font-semibold transition-colors',
                 met
                   ? 'border-success/40 bg-success-soft text-success-soft-foreground'
-                  : 'border-destructive/30 bg-destructive/10 text-destructive'
+                  : 'border-destructive/30 bg-destructive/10 text-destructive',
               )}
             >
               {met ? (
@@ -53,7 +42,7 @@ export function PasswordRequirements({
             <span
               className={cn(
                 'leading-tight transition-colors',
-                met ? 'text-success-text' : 'text-muted-foreground'
+                met ? 'text-success-text' : 'text-muted-foreground',
               )}
             >
               {item.label}
@@ -64,14 +53,3 @@ export function PasswordRequirements({
     </ul>
   );
 }
-
-
-
-
-
-
-
-
-
-
-

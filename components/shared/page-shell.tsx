@@ -15,18 +15,8 @@ const MAX_WIDTH_CLASS = {
 
 export type PageBodyMaxWidth = keyof typeof MAX_WIDTH_CLASS;
 
-export function PageShell({
-  className,
-  children,
-}: {
-  className?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className={cn('flex h-full min-w-0 flex-col overflow-hidden', className)}>
-      {children}
-    </div>
-  );
+export function PageShell({ className, children }: { className?: string; children: ReactNode }) {
+  return <div className={cn('flex h-full min-w-0 flex-col overflow-hidden', className)}>{children}</div>;
 }
 
 /**
@@ -48,10 +38,7 @@ export function PageBody({
   return (
     <div
       data-page-body=""
-      className={cn(
-        'min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-28',
-        className
-      )}
+      className={cn('min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-28', className)}
     >
       {maxWidth ? (
         <div className={cn('mx-auto w-full', MAX_WIDTH_CLASS[maxWidth])}>{children}</div>

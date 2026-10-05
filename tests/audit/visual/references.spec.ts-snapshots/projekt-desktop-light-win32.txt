@@ -1,0 +1,80 @@
+Haustechnik Krämer GmbH
+Organisation erstellen
+Dashboard
+Aufgaben
+3
+3 offene Aufgaben und Benachrichtigungen
+Kalender
+Zeiterfassung
+Qualifikationen
+Anfragen
+Aufträge
+Dokumente
+Inventar
+Service
+Arbeitsvorlagen
+Mitarbeiter
+Kunden
+MK
+Martin Krämer
+martin.kraemer@haustechnik-kraemer.de
+Aufträge
+P-2026-0007
+Sanierung Wohnanlage Uferweg
+Nicht begonnen
+Auftrag hinzufügen
+Arbeitsstand
+Nächster Schritt:
+Arbeit starten
+Nicht begonnen
+Nicht geplant
+Startbereit
+Automatisch abgeleitet
+Ausführung starten
+Stornieren
+Parken
+Einsatzbereitschaft
+Projektweite Einsatzbereitschaft wird aus den einzelnen Aufträgen beurteilt.
+Blocker & Parkplatz
+Blocker hinzufügen
+Keine offenen Blocker.
+Voraussetzungen
+Voraussetzung hinzufügen
+Keine zusätzlichen Voraussetzungen.
+Abschlussprüfungen und Verlauf
+Übergabe an das Büro
+Noch kein Übergabepaket
+Übergabestand ansehen
+Details
+Projektnummer
+P-2026-0007
+Titel
+Sanierung Wohnanlage Uferweg
+Beschreibung
+Keine Beschreibung
+Status
+Nicht begonnen
+Geplanter Beginn
+—
+Geplantes Ende
+—
+Fortschritt
+0
+%
+0
+von
+2
+Aufträgen abgeschlossen
+Aufträge in diesem Projekt
+(
+2
+)
+Zuweisen
+A-2026-0202
+Strangsanierung Trinkwasser Haus A
+Nicht begonnen
+Mittel
+A-2026-0201
+Heizungsverteilung Haus B erneuern
+Nicht begonnen
+Mittel

@@ -1,4 +1,4 @@
-import { AuftraegeTableSkeleton } from '@/components/auftraege/unified-auftraege-table';
+import { AuftraegeTableSkeleton } from '@/components/auftraege/list/unified-auftraege-table';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export function AuftraegeContentSkeleton() {

@@ -32,7 +32,7 @@ export function useBatchProgress<Item>(): {
   start: (
     items: ReadonlyArray<{ id: string; item: Item }>,
     worker: (item: Item, reportProgress: (percent: number) => void) => Promise<void>,
-    errorMessage?: (error: unknown) => string
+    errorMessage?: (error: unknown) => string,
   ) => Promise<{ failures: number }>;
   reset: () => void;
 } {
@@ -56,7 +56,7 @@ export function useBatchProgress<Item>(): {
     async (
       items: ReadonlyArray<{ id: string; item: Item }>,
       worker: (item: Item, reportProgress: (percent: number) => void) => Promise<void>,
-      errorMessage: (error: unknown) => string = () => 'Der Schritt ist fehlgeschlagen.'
+      errorMessage: (error: unknown) => string = () => 'Der Schritt ist fehlgeschlagen.',
     ) => {
       setRows(items.map(({ id, item }) => ({ id, item, status: 'queued', progress: 0, error: null })));
       setIsRunning(true);
@@ -65,9 +65,7 @@ export function useBatchProgress<Item>(): {
         for (const { id, item } of items) {
           updateRow(id, { status: 'running' });
           try {
-            await worker(item, (percent) =>
-              updateRow(id, { progress: Math.max(0, Math.min(100, percent)) })
-            );
+            await worker(item, (percent) => updateRow(id, { progress: Math.max(0, Math.min(100, percent)) }));
             updateRow(id, { status: 'done', progress: 100 });
           } catch (error) {
             failures += 1;
@@ -79,7 +77,7 @@ export function useBatchProgress<Item>(): {
       }
       return { failures };
     },
-    [updateRow]
+    [updateRow],
   );
 
   const reset = useCallback(() => {
@@ -95,8 +93,8 @@ export function useBatchProgress<Item>(): {
       : Math.round(
           rows.reduce(
             (sum, row) => sum + (row.status === 'done' || row.status === 'error' ? 100 : row.progress),
-            0
-          ) / rows.length
+            0,
+          ) / rows.length,
         );
   const isComplete = rows.length > 0 && !isRunning && doneCount + failureCount === rows.length;
 

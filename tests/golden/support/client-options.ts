@@ -1,5 +1,5 @@
 import type { SupabaseClientOptions } from '@supabase/supabase-js';
-import { createTransportDiagnosticFetch } from '../../../lib/testing/transport-diagnostics';
+import { createTransportDiagnosticFetch } from '../../../lib/testing/spec-support/transport-diagnostics';
 
 export const testSupabaseClientOptions: SupabaseClientOptions<'public'> = {
   auth: { persistSession: false, autoRefreshToken: false },

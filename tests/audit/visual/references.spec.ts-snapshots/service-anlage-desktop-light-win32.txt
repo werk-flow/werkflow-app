@@ -1,0 +1,77 @@
+Haustechnik Krämer GmbH
+Organisation erstellen
+Dashboard
+Aufgaben
+3
+3 offene Aufgaben und Benachrichtigungen
+Kalender
+Zeiterfassung
+Qualifikationen
+Anfragen
+Aufträge
+Dokumente
+Inventar
+Service
+Arbeitsvorlagen
+Mitarbeiter
+Kunden
+MK
+Martin Krämer
+martin.kraemer@haustechnik-kraemer.de
+Service
+Servicefälle
+Anlagen & Geräte
+Wartung
+Anlagen & Geräte
+Gas-Brennwerttherme
+Aktiv
+ANL-2026-001
+·
+Wärmeerzeugung
+Bearbeiten
+Ersetzen
+Zustand ändern
+Anlagendaten
+Kategorie
+Wärmeerzeugung
+Untertyp
+Nicht erfasst
+Hersteller
+Vaillant
+Modell
+ecoTEC plus VC 206/5-5
+Position
+Nicht erfasst
+Installation
+Nicht erfasst
+Inbetriebnahme
+Nicht erfasst
+Gewährleistungsgeber
+Nicht erfasst
+Gewährleistungszeitraum
+Nicht erfasst
+Dokumente & Bilder
+Dokumente werden aus der zentralen Dokumentenablage verknüpft. Es entsteht keine Dateikopie.
+Verknüpfen
+Hochladen
+Noch keine Dokumente vorhanden.
+Lade Dateien hoch oder verknüpfe vorhandene Dokumente aus der Dokumentenablage.
+Servicehistorie
+Strukturierte Änderungen und exakte Bezüge, neueste zuerst.
+Anlage erfasst
+01.01.2026, 08:00
+Martin Krämer
+· erfasst
+01.01.2026, 08:00
+Kunde & Einsatzort
+Familie Hoffmann
+Einfamilienhaus
+Lindenstraße 4, 71032 Böblingen
+Kennungen
+Seriennummer
+VA-21-448812 · Vaillant
+Verknüpfte Arbeit
+Verknüpfen
+Noch kein Auftrag oder Projekt verknüpft.
+Herkunftsnachweis verknüpfen
+Archivieren

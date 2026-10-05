@@ -1,0 +1,30 @@
+Menü öffnen
+Aufträge
+Auftrag A-2026-0101
+Gastherme warten und Abgasmessung
+Nicht begonnen
+Auftrag A-2026-0101
+Vor dem Einsatz
+Priorität
+Mittel
+Termin
+Noch kein Termin geplant
+Kontakt
+Familie Hoffmann
+Einsatzort
+Einfamilienhaus
+Lindenstraße 4, 71032 Böblingen
+Zugang:
+Heizungsraum im Keller, Schlüssel bei den Nachbarn (Nr. 6).
+Route
+Adresse
+Arbeitsstand
+Nächster Schritt:
+Arbeit starten
+Nicht begonnen
+Nicht geplant
+Startbereit
+Ausführung starten
+Einsatzbereitschaft
+Kapazität & Verfügbarkeit
+Erfüllt

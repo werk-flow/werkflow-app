@@ -9,14 +9,7 @@ export type ConfirmationStatus = (typeof CONFIRMATION_STATUSES)[number];
 export const EVIDENCE_STATES = ['not_required', 'pending', 'received'] as const;
 export type EvidenceState = (typeof EVIDENCE_STATES)[number];
 
-const COVERAGE_STATUSES = [
-  'covered',
-  'unconfirmed',
-  'expired',
-  'not_yet_valid',
-  'missing',
-] as const;
-export type CoverageStatus = (typeof COVERAGE_STATUSES)[number];
+export type CoverageStatus = 'covered' | 'unconfirmed' | 'expired' | 'not_yet_valid' | 'missing';
 
 export type CapabilityDefinition = {
   id: string;

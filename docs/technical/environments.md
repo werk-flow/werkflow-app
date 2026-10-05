@@ -1,140 +1,109 @@
 # Environments
 
-Status: living — last reviewed 2026-09-25
+Status: living — last reviewed 2026-10-01
 
-WerkFlow runs on two fully separated cloud backend environments since 2026-08-18 (decision [0003](../decisions/0003-dev-prod-environment-split.md)), plus a local Supabase stack for the browser-test harness since 2026-08-28 (decision [0006](../decisions/0006-testing-architecture.md)). This document is the operational reference: which backend is which, who owns which env file, how tools reach each project, and how a new machine gets onboarded.
+WerkFlow runs on two separate cloud backends ([decision 0003](../decisions/0003-dev-prod-environment-split.md)) and a local Supabase stack for the application tests ([decision 0006](../decisions/0006-testing-architecture.md)). This page owns which backend is which, who owns which env file, how tools reach each project, the migration rule, and how to set up a new machine.
 
 ## The two cloud backends
 
-|                             | Production                                                              | Dev / Test                                                                                                                                        |
-| --------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Supabase project            | `jbgaqpdjauzoocplgdsn`                                                  | `mbkkzuqjbdvzelqvuzcn` ("WerkFlow App Dev")                                                                                                       |
-| Supabase org                | "WerkFlow" (`svxdwqapsmvfkchswonc`)                                     | same org since 2026-08-20 (transfer verified: refs/keys unchanged)                                                                                |
-| Region / compute            | AWS eu-central-1, Postgres 17                                           | AWS eu-central-1 (same, deliberate), Postgres 17, Micro compute since 2026-08-21                                                                  |
-| R2 bucket (EU jurisdiction) | `werkflow-documents-prod`                                               | `werkflow-documents-dev` (CORS: localhost and the partner-preview branch URL)                                                                                                   |
-| Serves                      | Deployed app on Vercel, real customers                                  | Local development, the cloud canary, and explicitly scoped provider checks. Application test groups use the local stack under decision 0007 |
-| Edge functions              | `send-invite-email`, `send-email-change-current-otp`                    | Same two, deployed from `supabase/functions/`                                                                                                     |
-| Auth                        | Site URL `https://app.werk-flow.app`, custom SMTP via Resend (prod key) | Site URL `http://localhost:3000`, custom SMTP via Resend ("werkflow-dev" key)                                                                     |
+|  | Production | Dev |
+| --- | --- | --- |
+| Supabase project | `jbgaqpdjauzoocplgdsn` | `mbkkzuqjbdvzelqvuzcn` ("WerkFlow App Dev") |
+| Supabase organization | "WerkFlow" (`svxdwqapsmvfkchswonc`), Pro plan | The same organization |
+| Region | AWS eu-central-1 | The same region, on purpose |
+| R2 bucket (EU jurisdiction) | `werkflow-documents-prod` | `werkflow-documents-dev` (CORS allows localhost and the partner-preview URL) |
+| Serves | The deployed app on Vercel and real customers | Local development, the cloud canary, the partner preview, and explicitly scoped provider checks |
+| Auth site URL | `https://app.werk-flow.app` | `http://localhost:3000` |
 
-Both projects live in the one "WerkFlow" org since 2026-08-20 (the separate "WerkFlow Dev" org was deleted after the transfer). **The org is on the Pro plan since 2026-08-21**, so both projects run under Pro quotas. The same day the dev project's compute was raised from Nano to Micro (covered by the plan's compute credits, no additional cost per the owner). The recorded change removed the free-tier auto-pause and shared free-egress cap for DEV. Historical timing evidence lives in the [gate log](../plans/phase-1/audits/golden-gate-log.md). Compare matching group scope, target, and host conditions before calling a duration change a regression; do not run another full suite merely to refresh a timing baseline.
+Both projects deploy the edge functions from `supabase/functions/`. Each project's secret store holds its own Resend key. The production key never leaves production.
 
-**Known temporary bottleneck (recorded 2026-09-13):** both projects run Micro compute, and query latency on that tier rises steeply with concurrency. The Step 2 handoff diagnostic measured the per-request membership read at a median 96 ms with two backend requests in flight and 438 ms with eight, on DEV, with the same curve for identity and list queries. One beta business is the only production traffic today, so this is accepted for now. The owner's decision is to raise the production compute tier once user traffic grows beyond that business; DEV can stay on Micro. Until then, expect several office users saving and navigating at the same moment to see slower responses, and do not read cloud canary timings as capacity proof. The [Step 2 plan](../plans/phase-1/hardening-2026-09/06-step-2-whole-app-performance.md#handoff-diagnosis-and-closure-2026-09-13) holds the measurements.
+Both projects run Micro compute. Query latency on that tier rises steeply with concurrent requests. The owner accepts this while one beta business is the only production traffic and raises the production tier when traffic grows. Do not read cloud canary timings as capacity proof.
 
-**Vercel environments (scoped by the owner on 2026-09-18 under [decision 0008](../decisions/0008-development-workflow.md)):** every variable exists twice, one row for Production and one for "All Pre-Production Environments" (Preview and Development). Production rows carry the PROD project, `werkflow-documents-prod` and `https://app.werk-flow.app`; the pre-production rows carry the DEV project, `werkflow-documents-dev` and the branch URL `https://werkflow-app-git-partner-preview-werkflows-projects.vercel.app` as `NEXT_PUBLIC_SITE_URL`. The nine names: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `NEXT_PUBLIC_SITE_URL`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `EMAIL_OTP_HASH_SECRET` (one value per backend, unused until the step 5 code lands; the local copies live in the three backup files). `SUPABASE_ACCESS_TOKEN` is never on Vercel. Verified on the `partner-preview` build of `0abbaf8` on 2026-09-18: the page and all its script chunks name the DEV project; production on `origin/main` runs against PROD. Two DEV-side settings follow from it: the dev bucket's CORS must allow the branch URL beside localhost (the prod bucket no longer needs it), and DEV's auth redirect list must allow `https://werkflow-app-git-partner-preview-werkflows-projects.vercel.app/**` so invite and password links work on the preview.
+### Vercel
 
-`NEXT_PUBLIC_SITE_URL` is read in two places only: the origin of invite links (`lib/invites/actions.ts`) and the password-reset redirect; the harness never follows an emailed link, it opens the callback path itself. So the local backups point at `http://localhost:3000` (dev and local-stack) and only `.env.live-backup` carries the production domain.
+Every variable exists twice: one row for Production and one for all pre-production environments. Production rows carry the PROD project, the production bucket and the production domain. Pre-production rows carry the DEV project, the dev bucket and the partner-preview branch URL as `NEXT_PUBLIC_SITE_URL`. The names: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `NEXT_PUBLIC_SITE_URL`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` and `EMAIL_OTP_HASH_SECRET` (one value per backend). `SUPABASE_ACCESS_TOKEN` is never on Vercel. DEV's auth redirect list must allow the partner-preview URL so that invite and password links work on the preview. Recheck the scopes when deployment configuration changes.
 
-**Production configuration posture (since 2026-08-23, applied to BOTH projects so dev mirrors prod):** leaked-password protection (HaveIBeenPwned) ON — the app's `translateSupabasePasswordError` already maps the rejection to German copy; server `password_min_length` 8 (matches the app's `MIN_PASSWORD_LENGTH`); OTP length 6, expiry 5 minutes; custom SMTP via Resend; auth email rate limit 25/hour; SSL enforcement ON for direct database connections (app traffic is PostgREST/HTTP and unaffected; the CLI's `db push` already uses SSL). Spend cap ON (org default). Daily backups with 7-day retention come with Pro automatically. Deliberately NOT adopted, each a future decision: PITR (paid add-on — revisit at first real customer onboarding), signup CAPTCHA (would add friction and break harness signup; revisit at public exposure), database network restrictions (would pin `db push` to fixed IPs), Supabase branching and the GitHub deploy integration (our two-project migration-file workflow from decision 0003 fills that role). Owner-side duties the API cannot cover: MFA on the Supabase account itself and a second organization owner.
+### Provider configuration
 
-**Provider posture verified on 2026-09-06 (security hardening pass):** Supabase Auth on both projects uses JWT expiry 3600 s, refresh-token rotation with a 10 s reuse interval, OTP 30/h, verify 30/h, token refresh 150/h, anonymous sign-in off, CAPTCHA off, TOTP MFA enrol/verify enabled, and password update requiring re-authentication. The public `profile-avatars` bucket (5 MiB, image types only, upload and delete scoped to the user's own folder) is now created by migration `20260906214500_add_profile_avatars_bucket.sql` on every backend; before that it existed only in production. Vercel: project `werkflow-app` in team `werkflows-projects`, Node 24, Vercel Authentication enabled for every deployment except the custom domain (previews need a Vercel login), no password or trusted-IP protection, region `fra1`, HSTS set by the platform. The team is on the **hobby** plan; the upgrade decision lives in the [hardening plan](../plans/phase-1/hardening-2026-09/05-step-1-security-infrastructure.md#decisions-for-the-owner). Response hardening headers come from `next.config.ts`, so they apply to every environment that runs the app. Security invariants are mapped in [security.md](security.md); backup and incident facts in [recovery-and-incidents.md](recovery-and-incidents.md).
+Project configuration (auth settings, mail templates, SMTP, rate limits) is not schema, and no migration carries it. Both projects carry the same posture so that DEV mirrors PROD. Read the current values through the Management API or the dashboard. `bun scripts/sync-dev-auth-from-prod.ts` prints the difference between the two auth configurations and, with `--apply`, copies the mail fields from PROD to DEV. Run it after every auth change on the production dashboard.
 
-**Auth/config parity:** project configuration (auth email templates, SMTP, rate limits) is not schema and is not covered by migrations or the decision-0003 object comparison. `bun scripts/sync-dev-auth-from-prod.ts` diffs the complete auth config of both projects and with `--apply` syncs the `mailer_*` fields prod → dev (this fixed the 2026-08-20 gap where dev sent confirmation links instead of the app's 6-digit OTP). Run the diff after any dashboard-side auth change on prod.
+Decided and in force: leaked-password protection, custom SMTP through Resend, SSL enforcement for direct database connections, the organization spend cap, daily backups from the plan, anonymous sign-in off, Vercel Authentication on every deployment except the custom domain.
+
+Not adopted, each a future owner decision: point-in-time recovery, signup CAPTCHA, database network restrictions, Supabase branching, the GitHub deploy integration. Owner duties that no API covers: MFA on the Supabase account and a second organization owner.
 
 ## The local test stack
 
-PostgREST answers every request with at most `max_rows` rows and truncates the rest without an error: 1,000 in `supabase/config.toml` for the local stack and the default for hosted projects (an API setting in the dashboard, unchanged). A whole-organization read that can exceed that reads 1,000-row `range` pages through `readAllRows` in `lib/supabase/query-batches.ts` up to a declared cap and reports an overflow instead (Step 2, PF-25). Do not raise the setting to hide the bound.
+The application test groups run against the Supabase CLI's Docker composition inside WSL Ubuntu (Docker Engine, not Docker Desktop). `supabase/config.toml` owns its ports, auth posture, storage bucket and mail capture.
 
-The [platform-hardening phase](../plans/phase-1/consolidation-2026-08/platform-hardening.md) established the local Supabase test stack. Application test groups continue to use it under [decision 0007](../decisions/0007-independent-test-groups.md). Cloud DEV owns the canary, live-state inspection, and explicitly scoped provider checks. Wave and release acceptance use the local release plan plus the cloud canary, not routine full cloud batteries. The stack is the Supabase CLI's Docker composition, running on Docker Engine (docker-ce) inside WSL Ubuntu — not Docker Desktop.
+- `supabase db reset` replays the committed migration history. A failing reset is a finding about that history.
+- The keys are the CLI's shared local defaults. They are not secrets.
+- Auth mail lands in Mailpit, never in a real inbox. Cloud functions reject the local capture configuration.
+- Leaked-password protection needs the internet and has no local equivalent. The canary owns that check.
+- PostgREST truncates a response at its row limit without an error, locally and on the hosted projects. A read that can exceed the limit reads in pages and reports an overflow ([Realtime and caching](realtime-and-caching.md) owns the rule). Do not raise the limit to hide the bound.
 
-|                             | Local stack                                                                                                                                                                                                                                                              |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Runs                        | `supabase start` from the repo root inside WSL (config: `supabase/config.toml`)                                                                                                                                                                                          |
-| API / DB / Studio / Mailpit | ports 54321 / 54322 / 54323 / 54324                                                                                                                                                                                                                                      |
-| Schema                      | `supabase db reset` replays the committed `supabase/migrations/` history — a failing reset is a finding about that history                                                                                                                                               |
-| Keys                        | the CLI's shared local defaults (`sb_publishable_…`/`sb_secret_…`), printed by `supabase status`; not secrets                                                                                                                                                            |
-| Storage                     | bundled S3-compatible endpoint (`/storage/v1/s3`), bucket `werkflow-documents-local` declared in `config.toml`; the app reaches it through the `R2_ENDPOINT` override                                                                                                    |
-| Auth posture                | mirrors the cloud posture in `config.toml` (password min length 8, OTP 6 digits / 5 minutes, confirmations on); auth mail lands in Mailpit, never real inboxes. Leaked-password protection (HIBP) needs internet and has no local equivalent — the canary owns that copy |
-| Edge functions              | Served from `supabase/functions/`. Explicit `WERKFLOW_LOCAL_MAIL_CAPTURE='mailpit'` under `[edge_runtime.secrets]` in `config.toml`, together with the exact local gateway `http://kong:8000`, routes mail to private Mailpit. The handlers require a successful capture response. Cloud functions reject local capture configuration and fail when Resend is unavailable or unconfigured. |
+Facts for this workstation:
 
-Operational facts for this workstation:
-
-- Windows reaches the stack via the WSL VM's NAT address, not `localhost`: the Windows→WSL localhost relay drops connections under sustained traffic (observed 2026-08-28; mirrored networking is blocked by the corporate IPv6 policy). `bun run env:local` resolves the current WSL address and rewrites `.env.local` — rerun it after every WSL restart, and rebuild before the next browser run because `NEXT_PUBLIC_*` values are baked into the build. The preflight fails with a clear remedy when the address is stale. A restart no longer invalidates recorded group proofs: the proof identity in `lib/testing/proof-environment.ts` replaces the address with a token, and only the build receipt is tied to the exact address (pre-Wave-3 step 1, 2026-09-14).
-- `supabase db reset` leaves the edge-runtime container stopped (CLI 2.116.0). The preflight detects it; the remedy is `wsl docker start supabase_edge_runtime_werkflow-app`.
-- Starting an existing edge-runtime container restores its previous configuration. After changing `[edge_runtime.secrets]`, reload the runtime through the local Supabase CLI and verify the capture endpoint before an email browser group. Coordinate this operation with the test workspace lock; a successful container start alone does not prove that new secrets loaded.
-- WSL shuts down completely between agent commands when nothing holds it: every `wsl` call then boots the VM and restarts all containers, the address changes, and Kong answers 503 for about ten seconds, so a `bun run test:server local` started right after such a call fails its preflight (release run of 2026-09-18). Hold the VM with a background WSL process and probe the gateway before starting the server; the repository-side probe is a backlog row. Since 2026-09-18 `.wslconfig` caps the VM at 12 GB with gradual memory reclaim, because the VM had held 13 GB of the 32 GB host during the release run.
-- Systemd restarts Docker and the containers when WSL starts, but those services do not keep the distribution alive. The September 5 test investigation observed orderly idle shutdowns and changing addresses. `bun run test:server local` owns a WSL process from environment generation through the production build and server lifetime; local browser runs also hold a lease. Keep the test-server process alive for the campaign. This changes no global WSL settings. See [Microsoft's systemd guidance](https://learn.microsoft.com/en-us/windows/wsl/systemd) and the [incident record](test-incident-log.md#2026-09-05-shared-ui-contracts-and-wsl-lifetime).
-- A full `supabase stop` / `supabase start` cold start can report healthy HTTP before tenant change replication is ready. The verification run probes tenant readiness before every timing-sensitive group and restarts the Realtime container once when the answer is slow or missing (`scripts/realtime-probe.ts`, `lib/testing/realtime-health.ts`, Tier 2); `bun run test:server local` holds a warm subscription for its lifetime.
+- Windows reaches the stack through the WSL address, not `localhost`. `bun run env:local` resolves the current address and rewrites `.env.local`. Run it again after every WSL restart, and rebuild before the next browser run, because `NEXT_PUBLIC_*` values are baked into the build. The preflight fails with the remedy when the address is stale.
+- WSL shuts down when it idles. `bun run test:server local` holds WSL alive from environment generation through the build and the server's lifetime, and waits for the stack to become healthy. Keep that process alive while you verify.
+- `supabase db reset` can leave the edge-runtime container stopped. The preflight detects it and prints the remedy.
+- A restarted edge-runtime container keeps its old configuration. After you change `[edge_runtime.secrets]`, reload the runtime through the local Supabase CLI and verify the capture endpoint before an email browser group.
 
 ## Dependency installation
 
-Dependency installation is pinned separately from environment selection. `vercel.json` uses `bun install --frozen-lockfile`, matching local `bun.lock` resolution while the application keeps the Node runtime. Preserve the existing `package-lock.json` compatibility artifact without regenerating it. The Popper override in `package.json` prevents the old anchor-registration defect documented in the [incident log](test-incident-log.md#certification-follow-up-unpositioned-project-menu); the resolved-dependency unit check catches stale nested installations.
+`vercel.json` installs with `bun install --frozen-lockfile`, which resolves from `bun.lock`. The application runtime stays Node. Keep the existing `package-lock.json` without regenerating it.
 
 ## Env-file ownership
 
-The repository switches its local backend through the gitignored `.env.local`. Next.js also supports its standard `.env` and mode-specific env files; `.env.local` is not its only possible input. The switch scripts replace `.env.local` with the selected local-stack, cloud DEV, or production backup. Vercel holds deployment environment variables independently, so a local file change cannot affect the deployed app. `NEXT_PUBLIC_*` values are baked into each build.
-
-Gitignored backups next to it:
-
-- `.env.local-stack-backup` — the local test stack (normal state for harness work; `env:local` refreshes its WSL address on every switch)
-- `.env.dev-backup` — the cloud dev configuration (normal state for dev-server work and canary runs)
-- `.env.live-backup` — the production configuration (Supabase prod + `werkflow-documents-prod`)
-
-All three are outside Next.js's env loading chain (only `.env`, `.env.local`, `.env.development*`, `.env.production*`, `.env.test*` are loaded), so their presence changes nothing.
-
-Swapping:
+The repository selects its backend through the gitignored `.env.local`. Three gitignored backups sit beside it: `.env.local-stack-backup`, `.env.dev-backup` and `.env.live-backup`. Next.js loads none of the backups.
 
 ```bash
-bun run env:local  # .env.local -> local Supabase stack (golden/audit batteries)
+bun run env:local  # .env.local -> the local Supabase stack (application tests)
+bun run env:dev    # .env.local -> the cloud dev backend (canary, live inspection)
+bun run env:prod   # .env.local -> PRODUCTION (loud warning; no tests)
 ```
 
-```bash
-bun run env:dev    # .env.local -> cloud dev backend (canary, live inspection)
-```
-
-```bash
-bun run env:prod   # .env.local -> LIVE PRODUCTION backend (loud warning; no tests!)
-```
-
-Never run the Playwright harness or destructive scripts while `.env.local` points at prod. Switch back immediately after the prod-local task is done. The test preflight additionally refuses any run whose `.env.local` routing does not match the requested target, so a forgotten switch fails loudly instead of sweeping the wrong backend.
+Vercel holds its own variables, so a local file never affects the deployed app. Never run the test harness or a destructive script while `.env.local` points at production. Switch back as soon as the production task is done. The test preflight refuses a run whose `.env.local` does not match the requested target.
 
 ## Which tool reaches what
 
-| Access path                                      | Prod                         | Dev                                                 | Notes                                                                                                                                                                                                                                                               |
-| ------------------------------------------------ | ---------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| claude.ai Supabase connector (OAuth, org-scoped) | read/write                   | read/write (since the 2026-08-20 org consolidation) | Scoped to the "WerkFlow" org, which now contains both projects. Address projects by ref; prod writes remain forbidden outside the migration rule.                                                                                                                   |
-| Account-wide Supabase MCP server (`.mcp.json`)   | yes                          | yes                                                 | Official `@supabase/mcp-server-supabase` via `npx`, authenticated by `SUPABASE_ACCESS_TOKEN` (PAT) from the shell environment. Routine writes belong on dev only.                                                                                                   |
-| Supabase CLI (`bunx supabase`)                   | yes (forbidden to link/push) | yes                                                 | With `SUPABASE_ACCESS_TOKEN` exported. The repo links to the **dev** ref only; never `link`/`db push` against prod.                                                                                                                                                 |
-| Management API (`api.supabase.com`)              | yes                          | yes                                                 | Same PAT. Used for read-only prod inspection and dev configuration.                                                                                                                                                                                                 |
-| R2 API tokens (S3 credentials)                   | prod token: prod bucket only | dev token: dev bucket only                          | Cloud backups carry their matching bucket-scoped credentials; `.env.local` receives the selected backup. Local-stack credentials target local storage. Cloud runtime tokens cannot manage bucket settings; `scripts/setup-r2-cors.ts` needs a separately supplied bucket-admin token or dashboard access. |
+| Access path | Prod | Dev | Notes |
+| --- | --- | --- | --- |
+| claude.ai Supabase connector (OAuth) | read and write | read and write | Scoped to the "WerkFlow" organization. Address projects by ref. Production writes are forbidden outside the migration rule. |
+| Supabase MCP server (`.mcp.json`) | yes | yes | Authenticated by `SUPABASE_ACCESS_TOKEN` from the shell environment. Routine writes go to DEV only. |
+| Supabase CLI (`bunx supabase`) | never link or push | yes | The repository links to the DEV ref only. |
+| Management API | yes | yes | Read-only production inspection and DEV configuration. |
+| R2 tokens | prod bucket only | dev bucket only | Each backup carries its own bucket-scoped credentials. Runtime tokens cannot manage bucket settings. `scripts/setup-r2-cors.ts` needs a bucket-admin token. |
+| Local stack | n/a | n/a | The Supabase CLI inside WSL and direct psql. MCP does not reach it. |
 
 ## The migration rule
 
-Every schema change is **a file in `supabase/migrations/` first**, and is applied **dev-first, prod-second** — via the MCP `apply_migration` or the CLI, but always both projects and always from the same committed file. Details and the repair-migration story: [decision 0003](../decisions/0003-dev-prod-environment-split.md).
+This section is the one home of the rule. Skills and decision records link here.
 
-The two additive list-reader migrations in commit `0be451c` reached DEV and local Supabase on 2026-09-08 after rollback-only SQL tests. Commit `61ca347` adds the job-order follow-up, applied to DEV and local on 2026-09-09 after cross-page tie-order checks. DEV history and generated types match. All three reached PROD on 2026-09-18 in the beta release ([pre-Wave-3 step 5](../plans/phase-1/pre-wave-3/05-beta-acceptance-and-production-rollout.md)).
+1. Every schema change is a committed file in `supabase/migrations/` first. No DDL exists only in a database.
+2. A migration that creates a table follows [security rule 9](security.md#checklist): RLS, policies and explicit grants in the same file.
+3. Apply to DEV with `bunx supabase db push`. The push records the committed file's exact version in the remote history. If a migration reached DEV through MCP `apply_migration` instead, align its history key to the committed file name afterwards, because MCP stamps its own version. `bun run migrations:check` and the canary fail on a divergence.
+4. Run `bun run types:generate` after the push and commit the result. `bun run types:check` fails when the committed types differ from a fresh DEV generation.
+5. Apply to PROD only as part of a production release that the owner requested ([decision 0008](../decisions/0008-development-workflow.md)): MCP `apply_migration` against the production ref with the identical SQL, inside the maintenance window, before `origin/main` advances. Compare name and statement, then align the history key to the committed file name. Never `supabase link` or `db push` against production.
+6. The `*baseline*` repair migrations reconcile drift from before the split. Never edit them.
+7. Coordinate a schema change that the running app cannot tolerate with the app release that consumes it. For a change of a Realtime transport: pause writes, drain requests from the old app, change the database, deploy the compatible app, make open tabs reload, verify an authorized receiver, then reopen writes. A rollback keeps app and database compatible.
+8. A migration never drops or changes the signature of a function, column or table that the deployed build still uses. Add the replacement first. A later migration drops the old object after that build is replaced.
 
-Coordinate incompatible schema behavior with the application release that consumes it. The three security-repair migrations in commit `1d4e994` and the fourth send-window migration in commit `136f529` reached DEV. Both final mail Edge Functions were deployed to DEV. DEV `types:check` and `migrations:check` passed; local `realtime:check` passed for 95 published tables. These checks establish their named boundaries, not a completed cloud behavior run. All four repairs reached PROD on 2026-09-18 with the beta release, the private Realtime deletion transport inside the cutover window with the matching app; the [step 5 run log](../plans/phase-1/pre-wave-3/05-beta-acceptance-and-production-rollout.md#run-log-2026-09-17-2314-utc-onwards-the-night-of-2026-09-18-in-berlin) holds the apply, alignment and receiver evidence. The same release retired the `organization-documents` Supabase bucket on every backend (migration `20260918063500`; the empty bucket removed through the Storage API, the only way Supabase allows). PROD carries every committed migration under its committed key since then.
+Between releases, migrations wait on DEV. Read the two migration ledgers before you claim parity. `bun run migrations:check`, `bun run types:check` and `bun run realtime:check` each compare one thing against the committed files. None compares the complete DEV and PROD schemas, and a matching migration name does not prove an identical function body. When production parity matters, compare the live object definitions with the procedure in the `supabase-live-workflow` skill.
 
-For a cutover that changes a Realtime transport again, pause writes and drain requests from the old app before changing the shared database, deploy the compatible app, require existing tabs to reload, and verify an authorized receiver through the new transport before reopening writes; a rollback must keep the app and database transport compatible. The 2026-09-18 release is the worked example.
+## Set up a new machine
 
-- Dev: prefer `bunx supabase db push` (repo is linked to the dev ref) — it records the committed file's exact version in the remote history. MCP `apply_migration` works but stamps its own apply-time version: 23 pre-Stage-A migrations diverged that way from the committed filenames until the history was repaired by a name-keyed version update on 2026-08-28. Canary C9 now fails on any new divergence, so an MCP-applied dev migration must be followed by the same history alignment.
-- Prod: MCP `apply_migration` against `jbgaqpdjauzoocplgdsn` with the identical SQL, after the change is verified on dev. Never `supabase link`/`db push` against prod. MCP may stamp an apply-time version, so compare the name and statement before aligning the ledger key to the committed filename. P1-20's rollout required exact parity and aligned only its fourteen guarded version keys in PROD; schema objects and business data were unchanged.
-- After a schema change, run `bun run types:generate`. The repository command reads DEV, includes `graphql_public` and `public`, and uses the pinned tools from `package.json`. Run `bun run types:check` to fail when the committed file differs from a fresh DEV generation. DEV is the generation source; generated types do not prove function-body or production parity.
+1. Make the owner's Supabase personal access token available as `SUPABASE_ACCESS_TOKEN` to the CLI and the scripts. Keep a copy in every env backup, because a switch overwrites `.env.local`. Never commit or print the token.
+2. Get `.env.local` with the DEV values from the owner's password manager and copy it to `.env.dev-backup`. Add `.env.live-backup` only when production sessions are expected.
+3. Claude Code: approve the project's `.mcp.json` server on first start. Codex: add the same server to `~/.codex/config.toml`.
+4. Local stack: install Docker Engine and the Supabase CLI inside WSL Ubuntu. From the repository root in WSL run `supabase start` and `supabase db reset`. Create `.env.local-stack-backup` from the values that `supabase status` prints.
+5. Run `bunx playwright install chromium` once.
+6. Run `git config core.hooksPath .githooks` to enable the [publication gate](testing.md#publication-gate).
+7. Verify: `bunx supabase projects list` shows both cloud projects, and `bun scripts/check-r2.ts` passes against the dev bucket. Start `bun run test:server local`, then run `bun run test:verify --group golden:gg-00` in another terminal.
 
-Parity checkpoints belong in the slice or cross-slice record and the gate log. `bun run migrations:check` compares DEV history with committed files, and `bun run types:check` compares DEV-generated types. `bun run realtime:check` always inspects the local stack's publication flags, replica identities and deletion triggers, regardless of `.env.local`. The DEV security canary checks cloud publication state and actual delivery. None compares the complete DEV and PROD schemas. Compare live object definitions separately when production parity matters. The [2026-09-05 documentation audit](../plans/phase-1/hardening-2026-09/01-documentation-audit.md) records a function-body difference requiring follow-up.
+## Work on production
 
-## Per-machine onboarding checklist
-
-1. **PAT**: make the owner's Supabase Personal Access Token available as `SUPABASE_ACCESS_TOKEN` to the CLI and management scripts. Use the environment or the established local secret-loading setup and restart the agent session after changing its inherited environment. The current workstation also keeps the token in its gitignored backend backups so switching `.env.local` does not remove script access. Keep those copies consistent across every backup you use. Never commit or print the token.
-2. **Env file**: obtain `.env.local` (dev values) from the owner's password manager / another machine; place it in the repo root. Since 2026-09-18 it also carries `EMAIL_OTP_HASH_SECRET`, one value per backend, so each of the three backup files holds its own. Optionally also `.env.live-backup` if prod-local sessions are expected. Copy `.env.local` to `.env.dev-backup`.
-3. **Claude Code**: approve the project-scoped `.mcp.json` server on first start. Project permissions travel via git (`.claude/settings.json`); the autoMode environment note about the dev project lives in the user-level `~/.claude/settings.json`.
-4. **Codex**: add the same account-wide server to `~/.codex/config.toml`:
-
-   ```toml
-   [mcp_servers.supabase]
-   command = "npx"
-   args = ["-y", "@supabase/mcp-server-supabase@latest"]
-   env = { "SUPABASE_ACCESS_TOKEN" = "…" }
-   ```
-
-5. **Local stack**: install Docker Engine inside WSL Ubuntu (`docker-ce` via Docker's apt repo; corporate proxies permitting), install the Supabase CLI in WSL (pinned to the version in use — 2.116.0 as of Stage A), then from the repo root in WSL: `supabase start` and `supabase db reset`. Create `.env.local-stack-backup` from another machine or from the values `supabase status` prints (the keys are shared CLI defaults; copy `SUPABASE_ACCESS_TOKEN` in from `.env.local` — a swap overwrites `.env.local`, so the PAT must live in every backup).
-6. **Browser**: `bunx playwright install chromium` once per machine; rerun it only when `playwright test` reports a missing browser.
-7. **Verify**: `bunx supabase projects list` shows both cloud projects; `bun scripts/check-r2.ts` passes the EU round-trip against the dev bucket. Start `bun run test:server local`, then run `bun run test:verify --group golden:gg-00` from another terminal. This proves the onboarding group, not release acceptance.
-
-## Escape hatches for prod work
-
-- **Reads**: the org-scoped claude.ai connector or the account-wide MCP/Management API (read-only queries).
-- **Preview publishing**: when the owner requests a push, use `git push origin main:partner-preview` from local `main`. This creates a Vercel preview deployment (on DEV data once the decision 0008 scoping is done). It does not advance `origin/main` or deploy production.
-- **Production release**: advance `origin/main` only on an explicit release request, after the pending migrations reached PROD inside the maintenance window and the edge functions are deployed, in the order the migration rule sets; `origin/main` is the same commit the preview showed, nothing is merged. A hotfix takes the same path without the preview. The whole flow, including what was rejected, is [decision 0008](../decisions/0008-development-workflow.md). Recheck environment scopes and branch overrides when deployment configuration changes.
-- **Prod-local session**: `bun run env:prod`, do the task, `bun run env:dev`. No tests, no bulk scripts, in between.
-- **Owner demo data**: `bun scripts/seed-demo-data.ts --target dev|prod` (PROD adds `--confirm-prod`) reads the env backups directly, deletes every organization owned by `tamay@coban.cc` together with its R2 objects and orphaned member users, and recreates two SHK companies with employees, customers, requests, projects, jobs, time entries, absences, inventory, equipment, service cases, maintenance plans and dispatches for August to November 2026. The data is disposable and undocumented by decision (2026-09-18); extend the script when a feature needs demo rows. It refuses Willert Haustechnik's organization by id and only ever deletes organizations the owner's user administrates.
+- Reads: the connector, the MCP server or the Management API, read-only.
+- Preview: when the owner asks for a push, run `git push origin main:partner-preview`. Vercel builds a preview on DEV data. `origin/main` does not move.
+- Release: `origin/main` advances only on the owner's explicit release request, after the pending migrations and edge functions reached PROD in the order of the migration rule. [Decision 0008](../decisions/0008-development-workflow.md) owns the flow.
+- A production-local session: `bun run env:prod`, do the task, `bun run env:dev`. No tests and no bulk scripts in between.
+- Owner demo data: `bun scripts/seed-demo-data.ts --target dev|prod` (production adds `--confirm-prod`) deletes and recreates the owner's demo organizations. It refuses the beta partner's organization. The data is disposable.

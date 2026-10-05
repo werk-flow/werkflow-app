@@ -1,10 +1,7 @@
 import type { TimeEntry } from './types';
 import { isSameLocalDay } from './day-utils';
 
-export function isBreakEndFollowedByClockIn(
-  entries: TimeEntry[],
-  index: number
-): boolean {
+export function isBreakEndFollowedByClockIn(entries: TimeEntry[], index: number): boolean {
   const entry = entries[index];
   const nextEntry = entries[index + 1];
 

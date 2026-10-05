@@ -4,11 +4,7 @@
 // resolution.test.ts; browser specs assert the surface, not these rules.
 
 import type { VacationRequest } from '@/lib/vacation/types';
-import {
-  attentionItemKey,
-  type AttentionItemIdentity,
-  type AttentionNotification,
-} from './types';
+import { attentionItemKey, type AttentionItemIdentity, type AttentionNotification } from './types';
 
 export type FollowUpAttentionCandidate = {
   id: string;
@@ -25,7 +21,7 @@ export function selectFollowUpAttentionRows(
   userId: string,
   rows: FollowUpAttentionCandidate[],
   activeManagerIds: ReadonlySet<string>,
-  capacity = FOLLOW_UP_ATTENTION_CAPACITY
+  capacity = FOLLOW_UP_ATTENTION_CAPACITY,
 ): {
   rows: Array<FollowUpAttentionCandidate & { ownerUnavailable: boolean }>;
   capacityExceeded: boolean;
@@ -34,17 +30,16 @@ export function selectFollowUpAttentionRows(
     return { rows: [], capacityExceeded: false };
   }
   const visibleRows = rows.filter(
-    (row) =>
-      row.owner_user_id === userId || !activeManagerIds.has(row.owner_user_id)
+    (row) => row.owner_user_id === userId || !activeManagerIds.has(row.owner_user_id),
   );
   if (visibleRows.length > capacity) {
     return { rows: [], capacityExceeded: true };
   }
   return {
     rows: visibleRows.map((row) => ({
-        ...row,
-        ownerUnavailable: !activeManagerIds.has(row.owner_user_id),
-      })),
+      ...row,
+      ownerUnavailable: !activeManagerIds.has(row.owner_user_id),
+    })),
     capacityExceeded: false,
   };
 }
@@ -54,9 +49,7 @@ export function selectFollowUpAttentionRows(
  * authorization paths produced it (e.g. a substitute who is also role-eligible
  * must never see a request twice). First occurrence wins; order is preserved.
  */
-export function dedupeAttentionItems<T extends AttentionItemIdentity>(
-  items: T[]
-): T[] {
+export function dedupeAttentionItems<T extends AttentionItemIdentity>(items: T[]): T[] {
   const seen = new Set<string>();
   const result: T[] = [];
   for (const item of items) {
@@ -85,10 +78,7 @@ export type VacationDecisionFacts = {
  * to notify about (pending/withdrawn — the person acted themselves).
  */
 export function resolveVacationDecisionFacts(
-  request: Pick<
-    VacationRequest,
-    'status' | 'decidedAt' | 'cancelledAt'
-  >
+  request: Pick<VacationRequest, 'status' | 'decidedAt' | 'cancelledAt'>,
 ): VacationDecisionFacts | null {
   if (request.status === 'approved' || request.status === 'rejected') {
     if (!request.decidedAt) return null;
@@ -134,10 +124,7 @@ export function resolveSicknessReportFacts(report: {
   return {
     status: report.status,
     stateVersion: `${report.status}:${report.startDate}:${report.endDate ?? 'open'}:${report.dayPortion}`,
-    occurredAt:
-      report.status === 'cancelled'
-        ? (report.cancelledAt ?? report.updatedAt)
-        : report.updatedAt,
+    occurredAt: report.status === 'cancelled' ? (report.cancelledAt ?? report.updatedAt) : report.updatedAt,
   };
 }
 
@@ -145,10 +132,7 @@ export function resolveSicknessReportFacts(report: {
  * A notification is unread until the user has seen exactly the current state
  * version; any later domain state change makes it unread again.
  */
-export function isNotificationUnread(
-  currentStateVersion: string,
-  readStateVersion: string | null
-): boolean {
+export function isNotificationUnread(currentStateVersion: string, readStateVersion: string | null): boolean {
   return readStateVersion !== currentStateVersion;
 }
 
@@ -162,11 +146,10 @@ const NOTIFICATION_WINDOW_DAYS = 60;
  */
 export function notificationWindowStartIso(
   businessTodayIso: string,
-  windowDays: number = NOTIFICATION_WINDOW_DAYS
+  windowDays: number = NOTIFICATION_WINDOW_DAYS,
 ): string {
   return new Date(
-    Date.parse(`${businessTodayIso}T00:00:00Z`) -
-      windowDays * 24 * 60 * 60 * 1000
+    Date.parse(`${businessTodayIso}T00:00:00Z`) - windowDays * 24 * 60 * 60 * 1000,
   ).toISOString();
 }
 
@@ -177,23 +160,18 @@ export function notificationWindowStartIso(
 export function isWithinNotificationWindow(
   occurredAtIso: string,
   businessTodayIso: string,
-  windowDays: number = NOTIFICATION_WINDOW_DAYS
+  windowDays: number = NOTIFICATION_WINDOW_DAYS,
 ): boolean {
   const occurredMs = Date.parse(occurredAtIso);
   if (Number.isNaN(occurredMs)) return false;
-  return (
-    occurredMs >= Date.parse(notificationWindowStartIso(businessTodayIso, windowDays))
-  );
+  return occurredMs >= Date.parse(notificationWindowStartIso(businessTodayIso, windowDays));
 }
 
 /**
  * Whole calendar days a request has been open, measured between two ISO
  * business dates (Europe/Berlin). Same day → 0.
  */
-export function computeOpenSinceDays(
-  openedBusinessDateIso: string,
-  businessTodayIso: string
-): number {
+export function computeOpenSinceDays(openedBusinessDateIso: string, businessTodayIso: string): number {
   const opened = Date.parse(`${openedBusinessDateIso}T00:00:00Z`);
   const today = Date.parse(`${businessTodayIso}T00:00:00Z`);
   if (Number.isNaN(opened) || Number.isNaN(today)) return 0;
@@ -206,9 +184,7 @@ export function computeOpenSinceDays(
  * pinning — the list stays chronologically explainable).
  */
 export function sortNotificationsNewestFirst(
-  notifications: AttentionNotification[]
+  notifications: AttentionNotification[],
 ): AttentionNotification[] {
-  return notifications.toSorted(
-    (left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt)
-  );
+  return notifications.toSorted((left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt));
 }

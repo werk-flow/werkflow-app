@@ -11,10 +11,8 @@ import {
   REALTIME_MAX_DEFER_MS,
   shouldScheduleRealtimeRefresh,
 } from '@/lib/realtime/events';
-import {
-  createTrailingScheduler,
-  type TrailingScheduler,
-} from '@/lib/realtime/scheduler';
+import { logError } from '@/lib/logging';
+import { createTrailingScheduler, type TrailingScheduler } from '@/lib/realtime/scheduler';
 import { useAnyDialogOpen } from '@/components/ui/open-dialog-context';
 
 /**
@@ -34,10 +32,9 @@ import { useAnyDialogOpen } from '@/components/ui/open-dialog-context';
  *   follow the newest completed read, so a failed newer read cannot be
  *   overwritten by an older success and an older failure never hides a
  *   newer success. One client's Server Actions run one after another, so a
- *   newer read can wait in that queue for seconds; discarding the older
- *   result meanwhile left a surface on mount-time data (P1-24 access
- *   transition), and applying an older failure hid the post-review result
- *   (A3-11 approvals), both 2026-09-13.
+ *   newer read can wait in that queue for seconds: discarding the older
+ *   result meanwhile would leave the surface on mount-time data, and
+ *   applying an older failure would hide the newer result.
  * - Keep-last-known: a failed read keeps the previous data and marks the
  *   surface stale instead of clearing it.
  * - Dialog suspension: while any overlay is open (or `suspend` is true),
@@ -50,9 +47,7 @@ import { useAnyDialogOpen } from '@/components/ui/open-dialog-context';
  * a filter must treat a missing column as relevant.
  */
 
-export type LiveViewResult<T> =
-  | { ok: true; data: T }
-  | { ok: false; error?: string };
+export type LiveViewResult<T> = { ok: true; data: T } | { ok: false; error?: string };
 
 export type UseLiveViewOptions<T> = {
   /** Tables whose events invalidate this view. */
@@ -186,7 +181,10 @@ export function useLiveView<T>(options: UseLiveViewOptions<T>): LiveViewState<T>
     setIsRefreshing(true);
     const obsolete = () => generation <= floorGenerationRef.current;
     try {
-      const result = await readRef.current({ invalidatedAt: invalidatedAtRef.current, signal: controller.signal });
+      const result = await readRef.current({
+        invalidatedAt: invalidatedAtRef.current,
+        signal: controller.signal,
+      });
       if (obsolete()) return;
       // A read cancelled by a newer one reports the abort as a failure when
       // its transport honours the signal (the clock GET); that is not a
@@ -213,11 +211,11 @@ export function useLiveView<T>(options: UseLiveViewOptions<T>): LiveViewState<T>
     } catch (readError) {
       if (obsolete() || controller.signal.aborted || generation <= statusGenerationRef.current) return;
       statusGenerationRef.current = generation;
-      console.error('[LiveView] read failed:', readError);
+      logError('live_view.read_failed', readError);
       setIsStale(hasDataRef.current);
       // A thrown read carries no structured reason; clear any previous one so
       // surfaces fall back to their own generic message instead of rendering
-      // an outdated error (owner audit 2026-08-29).
+      // an outdated error.
       setError(null);
     } finally {
       if (readControllerRef.current === controller) readControllerRef.current = null;
@@ -228,22 +226,25 @@ export function useLiveView<T>(options: UseLiveViewOptions<T>): LiveViewState<T>
     }
   }, []);
 
-  const scheduleRead = useCallback((recordInvalidation = true) => {
-    if (!enabledRef.current) return;
-    if (recordInvalidation) invalidatedAtRef.current = performance.now();
-    if (suspendedRef.current) {
-      pendingWhileSuspendedRef.current = true;
-      return;
-    }
-    // The shared debounce with a bounded maximum deferral (PF-12): a burst
-    // lands as one read, a sustained stream reads at least once a second.
-    schedulerRef.current ??= createTrailingScheduler({
-      delayMs: REALTIME_DEBOUNCE_MS,
-      maxWaitMs: REALTIME_MAX_DEFER_MS,
-      run: () => void runRead(),
-    });
-    schedulerRef.current.schedule();
-  }, [runRead]);
+  const scheduleRead = useCallback(
+    (recordInvalidation = true) => {
+      if (!enabledRef.current) return;
+      if (recordInvalidation) invalidatedAtRef.current = performance.now();
+      if (suspendedRef.current) {
+        pendingWhileSuspendedRef.current = true;
+        return;
+      }
+      // The shared debounce with a bounded maximum deferral: a burst
+      // lands as one read, a sustained stream reads at least once a second.
+      schedulerRef.current ??= createTrailingScheduler({
+        delayMs: REALTIME_DEBOUNCE_MS,
+        maxWaitMs: REALTIME_MAX_DEFER_MS,
+        run: () => void runRead(),
+      });
+      schedulerRef.current.schedule();
+    },
+    [runRead],
+  );
 
   // Suspension boundary: entering drops a pending timer into the queue flag;
   // leaving fires exactly one catch-up read.
@@ -271,9 +272,7 @@ export function useLiveView<T>(options: UseLiveViewOptions<T>): LiveViewState<T>
       if (!shouldScheduleRealtimeRefresh(event, eventFilterRef.current)) return;
       scheduleRead();
     };
-    const unsubscribes = tablesRef.current.map((table) =>
-      subscribe(table, onEvent)
-    );
+    const unsubscribes = tablesRef.current.map((table) => subscribe(table, onEvent));
     return () => {
       for (const unsubscribe of unsubscribes) unsubscribe();
     };
@@ -331,19 +330,16 @@ export function useLiveView<T>(options: UseLiveViewOptions<T>): LiveViewState<T>
     setIsRefreshing(false);
   }, [clearTimer, supersedeReads]);
 
-  const setDataExternally = useCallback(
-    (updater: (previous: T | undefined) => T | undefined) => {
-      setData((previous) => {
-        const next = updater(previous);
-        hasDataRef.current = next !== undefined;
-        return next;
-      });
-      setIsStale(false);
-      setError(null);
-      setHasSettled(true);
-    },
-    []
-  );
+  const setDataExternally = useCallback((updater: (previous: T | undefined) => T | undefined) => {
+    setData((previous) => {
+      const next = updater(previous);
+      hasDataRef.current = next !== undefined;
+      return next;
+    });
+    setIsStale(false);
+    setError(null);
+    setHasSettled(true);
+  }, []);
 
   return useMemo<LiveViewState<T>>(
     () => ({
@@ -356,16 +352,6 @@ export function useLiveView<T>(options: UseLiveViewOptions<T>): LiveViewState<T>
       invalidate,
       setData: setDataExternally,
     }),
-    [
-      data,
-      enabled,
-      hasSettled,
-      isRefreshing,
-      isStale,
-      error,
-      refresh,
-      invalidate,
-      setDataExternally,
-    ]
+    [data, enabled, hasSettled, isRefreshing, isStale, error, refresh, invalidate, setDataExternally],
   );
 }

@@ -11,15 +11,16 @@ export function createChangeSettlement(): {
     for (const settle of pending) settle(outcome);
   }
   return {
-    wait: (timeoutMs) => new Promise((resolve) => {
-      const settle = (outcome: ChangeSettlement): void => {
-        clearTimeout(timer);
-        pending.delete(settle);
-        resolve(outcome);
-      };
-      const timer = setTimeout(() => settle('timed-out'), timeoutMs);
-      pending.add(settle);
-    }),
+    wait: (timeoutMs) =>
+      new Promise((resolve) => {
+        const settle = (outcome: ChangeSettlement): void => {
+          clearTimeout(timer);
+          pending.delete(settle);
+          resolve(outcome);
+        };
+        const timer = setTimeout(() => settle('timed-out'), timeoutMs);
+        pending.add(settle);
+      }),
     changed: () => finish('changed'),
     cancel: () => finish('cancelled'),
   };

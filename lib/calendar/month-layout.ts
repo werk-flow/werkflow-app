@@ -13,10 +13,21 @@ export const MONTH_MAX_VISIBLE_ITEMS = 3;
  * makes the browser drop the whole template, which misplaces every cell.
  */
 export function monthRowTemplate(laneCount: number): string {
-  return ['auto', ...Array.from({ length: Math.max(0, laneCount) }, () => 'minmax(22px, auto)'), 'minmax(64px, auto)'].join(' ');
+  return [
+    'auto',
+    ...Array.from({ length: Math.max(0, laneCount) }, () => 'minmax(22px, auto)'),
+    'minmax(64px, 1fr)',
+  ].join(' ');
 }
 
-export type MonthCell = { date: string; weekday: number; isToday: boolean; inMonth: boolean; isPast: boolean; isWeekend: boolean };
+export type MonthCell = {
+  date: string;
+  weekday: number;
+  isToday: boolean;
+  inMonth: boolean;
+  isPast: boolean;
+  isWeekend: boolean;
+};
 
 /** The weeks that cover the month of `anchorIso`, each seven cells from Monday. */
 export function monthWeeks(anchorIso: string, todayIso: string): MonthCell[][] {
@@ -27,7 +38,14 @@ export function monthWeeks(anchorIso: string, todayIso: string): MonthCell[][] {
   do {
     const week: MonthCell[] = [];
     for (let weekday = 0; weekday < 7; weekday += 1) {
-      week.push({ date: cursor, weekday, isToday: cursor === todayIso, inMonth: cursor.slice(0, 7) === month, isPast: cursor < todayIso, isWeekend: weekday >= 5 });
+      week.push({
+        date: cursor,
+        weekday,
+        isToday: cursor === todayIso,
+        inMonth: cursor.slice(0, 7) === month,
+        isPast: cursor < todayIso,
+        isWeekend: weekday >= 5,
+      });
       cursor = addLocalDays(cursor, 1);
     }
     weeks.push(week);

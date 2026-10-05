@@ -2,10 +2,7 @@
 
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import {
-  computeRingSegments,
-  computeRingSegmentsFromTimeline
-} from '@/lib/time-tracking/helpers';
+import { computeRingSegments, computeRingSegmentsFromTimeline } from '@/lib/time-tracking/helpers';
 import type { ClockTimelineSegment } from '@/lib/time-tracking/types';
 
 interface TimeProgressRingProps {
@@ -38,7 +35,7 @@ export function TimeProgressRing({
   isActive = false,
   glowVariant = 'work',
   children,
-  className
+  className,
 }: TimeProgressRingProps) {
   const center = size / 2;
   const mainRadius = (size - strokeWidth) / 2;
@@ -55,7 +52,7 @@ export function TimeProgressRing({
       timelineSegments && timelineSegments.length > 0
         ? computeRingSegmentsFromTimeline(timelineSegments, targetMinutes)
         : computeRingSegments(totalMinutes, breakMinutes, targetMinutes),
-    [breakMinutes, targetMinutes, timelineSegments, totalMinutes]
+    [breakMinutes, targetMinutes, timelineSegments, totalMinutes],
   );
 
   const viewBox = `${center - outerSize / 2} ${center - outerSize / 2} ${outerSize} ${outerSize}`;
@@ -64,12 +61,7 @@ export function TimeProgressRing({
     <div className={cn('relative inline-flex', className)} style={{ width: size, height: size }}>
       {/* Layer 1 (bottom): overtime empty track – sits BELOW the green glow */}
       {overtimeFraction > 0 && (
-        <svg
-          width={size}
-          height={size}
-          viewBox={viewBox}
-          className="absolute inset-0 -rotate-90"
-        >
+        <svg width={size} height={size} viewBox={viewBox} className="absolute inset-0 -rotate-90">
           <circle
             cx={center}
             cy={center}
@@ -88,10 +80,7 @@ export function TimeProgressRing({
         viewBox={viewBox}
         className={cn(
           'absolute inset-0 -rotate-90',
-          isActive &&
-            (glowVariant === 'break'
-              ? 'animate-yellow-glow'
-              : 'animate-green-glow')
+          isActive && (glowVariant === 'break' ? 'animate-yellow-glow' : 'animate-green-glow'),
         )}
       >
         {/* Main ring background */}
@@ -143,9 +132,7 @@ export function TimeProgressRing({
       </svg>
 
       {/* Center content */}
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        {children}
-      </div>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">{children}</div>
     </div>
   );
 }

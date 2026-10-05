@@ -1,11 +1,10 @@
-// Fixture-date ownership for the audit battery (Tier 1, Stage C 2026-08-29).
+// Fixture-date ownership for the audit battery (Tier 1).
 //
 // Audit spec groups own separate worlds. Date windows still keep integration
 // fixtures explicit where dates affect uniqueness, employment conditions,
-// closure days, absence overlaps, or planning. The windows
-// below encode the partition from docs/plans/phase-1/audits/wave-1-audit.md (+20…+69,
-// including the R1 reconciliation reserve) and docs/plans/phase-1/audits/wave-2-audit.md
-// (+70 onward, five days per slice). The module throws on overlapping
+// closure days, absence overlaps, or planning. The registry below is the one
+// home of the partition (docs/technical/integrated-test-state.md owns the
+// rule for claiming a window). The module throws on overlapping
 // registry entries at import and on any out-of-window claim at call time,
 // so a new spec cannot silently squat on another spec's dates.
 //
@@ -14,46 +13,55 @@
 // when one exists. Dispatch-visible visit dates use the panel-window helper
 // below. Other facts, such as expiry horizons, use the unchecked formatter.
 
-import { DISPATCH_OVERVIEW_MAX_OFFSET_DAYS } from "@/lib/dispatch/types";
-import { testBusinessDate } from "../../../lib/testing/business-date";
+import { DISPATCH_OVERVIEW_MAX_OFFSET_DAYS } from '@/lib/dispatch/types';
+import { testBusinessDate } from '../../../lib/testing/runner/business-date';
 
 type OffsetRange = { readonly from: number; readonly to: number };
 
 const AUDIT_DATE_WINDOWS = {
-  "a1-grundstock": [
-    { from: 20, to: 24 },
-    { from: 65, to: 65 },
+  'a1-auftraege': [
+    { from: 20, to: 21 },
+    { from: 150, to: 150 },
   ],
-  "a2-kunden": [
-    { from: 25, to: 29 },
+  'a1-kalender': [
+    { from: 22, to: 24 },
+    { from: 151, to: 151 },
+  ],
+  'a1-kunden': [{ from: 65, to: 65 }],
+  'a2-stammdaten': [{ from: 25, to: 26 }],
+  'a2-anfragen': [{ from: 27, to: 27 }],
+  'a2-beziehungen': [
+    { from: 28, to: 29 },
     { from: 66, to: 66 },
   ],
-  "a3-personal": [
+  'a3-personal': [
     { from: 30, to: 34 },
     { from: 67, to: 67 },
   ],
-  "a4-abwesenheit": [
+  'a4-abwesenheit': [
     { from: 35, to: 39 },
     { from: 68, to: 69 },
   ],
-  "a5-aufgaben-qualifikationen": [{ from: 40, to: 44 }],
-  "a6-planung": [{ from: 45, to: 54 }],
-  "a7-einsaetze": [{ from: 55, to: 64 }],
-  "p1-13": [{ from: 70, to: 74 }],
-  "p1-14": [{ from: 75, to: 79 }],
-  "p1-15": [{ from: 80, to: 84 }],
-  "p1-16": [{ from: 85, to: 89 }],
-  "p1-17": [{ from: 90, to: 94 }],
-  "p1-18": [{ from: 95, to: 99 }],
-  "p1-19": [{ from: 100, to: 104 }],
-  "p1-20": [{ from: 105, to: 109 }],
-  "p1-21": [{ from: 110, to: 114 }],
-  "p1-22": [{ from: 115, to: 119 }],
-  "p1-23": [{ from: 120, to: 124 }],
-  "p1-24": [{ from: 125, to: 129 }],
-  "performance-calendar-live": [{ from: -7, to: -7 }, { from: 130, to: 130 }],
-  "performance-calendar": [{ from: 141, to: 147 }],
-  "p1-24a": [{ from: 131, to: 140 }],
+  'a5-aufgaben-qualifikationen': [{ from: 40, to: 44 }],
+  'a6-planung': [{ from: 45, to: 54 }],
+  'a7-einsaetze': [{ from: 55, to: 64 }],
+  'p1-13': [{ from: 70, to: 74 }],
+  'p1-14': [{ from: 75, to: 79 }],
+  'p1-15': [{ from: 80, to: 84 }],
+  'p1-16': [{ from: 85, to: 89 }],
+  'p1-17': [{ from: 90, to: 94 }],
+  'p1-18': [{ from: 95, to: 99 }],
+  'p1-20': [{ from: 105, to: 109 }],
+  'p1-21': [{ from: 110, to: 114 }],
+  'p1-22': [{ from: 115, to: 119 }],
+  'p1-23': [{ from: 120, to: 124 }],
+  'p1-24': [{ from: 125, to: 129 }],
+  'performance-calendar-live': [
+    { from: -7, to: -7 },
+    { from: 130, to: 130 },
+  ],
+  'performance-calendar': [{ from: 141, to: 147 }],
+  'p1-24a': [{ from: 131, to: 140 }],
 } as const satisfies Record<string, readonly OffsetRange[]>;
 
 export type AuditSpecName = keyof typeof AUDIT_DATE_WINDOWS;
@@ -86,11 +94,7 @@ export function berlinDateAtOffset(offsetDays: number): string {
 
 /** Formats a date that the manager dispatch overview can display. */
 export function dispatchOverviewBerlinDateAtOffset(offsetDays: number): string {
-  if (
-    !Number.isInteger(offsetDays) ||
-    offsetDays < 0 ||
-    offsetDays > DISPATCH_OVERVIEW_MAX_OFFSET_DAYS
-  ) {
+  if (!Number.isInteger(offsetDays) || offsetDays < 0 || offsetDays > DISPATCH_OVERVIEW_MAX_OFFSET_DAYS) {
     throw new Error(
       `Dispatch overview offset must be an integer from 0 through ${DISPATCH_OVERVIEW_MAX_OFFSET_DAYS}; received ${offsetDays}.`,
     );
@@ -102,23 +106,14 @@ export function dispatchOverviewBerlinDateAtOffset(offsetDays: number): string {
  * The checked variant for uniqueness-constrained fixtures: throws unless the
  * claiming spec owns the offset in the registry above.
  */
-export function ownedBerlinDateAtOffset(
-  spec: AuditSpecName,
-  offsetDays: number,
-): string {
-  const owned = AUDIT_DATE_WINDOWS[spec].some(
-    (range) => offsetDays >= range.from && offsetDays <= range.to,
-  );
+export function ownedBerlinDateAtOffset(spec: AuditSpecName, offsetDays: number): string {
+  const owned = AUDIT_DATE_WINDOWS[spec].some((range) => offsetDays >= range.from && offsetDays <= range.to);
   if (!owned) {
     const windows = AUDIT_DATE_WINDOWS[spec]
-      .map((range) =>
-        range.from === range.to
-          ? `+${range.from}`
-          : `+${range.from}…+${range.to}`,
-      )
-      .join(", ");
+      .map((range) => (range.from === range.to ? `+${range.from}` : `+${range.from}…+${range.to}`))
+      .join(', ');
     throw new Error(
-      `Spec "${spec}" claimed run-day offset +${offsetDays} for a uniqueness-constrained fixture, but owns only ${windows} (docs/plans/phase-1/audits/wave-1-audit.md / wave-2-audit.md). Pick a date inside the owned window or renegotiate the partition in the docs first.`,
+      `Spec "${spec}" claimed run-day offset +${offsetDays} for a uniqueness-constrained fixture, but owns only ${windows} (docs/technical/integrated-test-state.md#choose-fixture-dates). Pick a date inside the owned window or renegotiate the partition in the docs first.`,
     );
   }
   return berlinDateAtOffset(offsetDays);

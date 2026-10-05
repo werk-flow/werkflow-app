@@ -17,22 +17,34 @@ function Reader(): React.JSX.Element {
   useRealtimeRouterRefresh({ tables: ['clients'], enabled });
   useEffect(() => {
     const completions: Array<(value: string) => void> = [];
-    window.routeRefreshContract = { complete: (index, result) => {
-      const settle = completions[index];
-      if (!settle) throw new Error(`no pending route refresh read ${index}`);
-      settle(result);
-    } };
+    window.routeRefreshContract = {
+      complete: (index, result) => {
+        const settle = completions[index];
+        if (!settle) throw new Error(`no pending route refresh read ${index}`);
+        settle(result);
+      },
+    };
     const read = (): void => {
-      setValue(new Promise<string>(resolve => completions.push(resolve)));
+      setValue(new Promise<string>((resolve) => completions.push(resolve)));
     };
     window.addEventListener(ROUTE_REFRESH_EVENT, read);
     return () => window.removeEventListener(ROUTE_REFRESH_EVENT, read);
   }, []);
-  return <>
-    <button onClick={() => setEnabled(current => !current)}>{enabled ? 'Aktualisierung pausieren' : 'Aktualisierung fortsetzen'}</button>
-    <Suspense fallback={<p>Lädt</p>}><Result value={value} /></Suspense>
-  </>;
+  return (
+    <>
+      <button onClick={() => setEnabled((current) => !current)}>
+        {enabled ? 'Aktualisierung pausieren' : 'Aktualisierung fortsetzen'}
+      </button>
+      <Suspense fallback={<p>Lädt</p>}>
+        <Result value={value} />
+      </Suspense>
+    </>
+  );
 }
 export function RouteRefreshFixture(): React.JSX.Element {
-  return <RealtimeProvider><Reader /></RealtimeProvider>;
+  return (
+    <RealtimeProvider>
+      <Reader />
+    </RealtimeProvider>
+  );
 }

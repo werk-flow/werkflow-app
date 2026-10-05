@@ -10,12 +10,7 @@ export type InventoryMovementType =
   | 'correction'
   | 'transfer_in'
   | 'transfer_out';
-export type JobMaterialStatus =
-  | 'planned'
-  | 'partially_taken'
-  | 'taken'
-  | 'returned'
-  | 'cancelled';
+export type JobMaterialStatus = 'planned' | 'partially_taken' | 'taken' | 'returned' | 'cancelled';
 export type InventoryStockStatus = 'in_stock' | 'low_stock' | 'out_of_stock';
 
 export type InventoryCategoryRow = {
@@ -253,7 +248,13 @@ export type InventoryMovementListItem = {
 };
 
 export type InventoryOverview = {
-  page: { query: InventoryPageQuery; ids: string[]; total: number; locationIds: string[]; locationCounts: Record<string,number> };
+  page: {
+    query: InventoryPageQuery;
+    ids: string[];
+    total: number;
+    locationIds: string[];
+    locationCounts: Record<string, number>;
+  };
   categories: InventoryCategory[];
   locations: InventoryLocation[];
   suppliers: InventorySupplier[];
@@ -269,6 +270,9 @@ export type InventoryOverview = {
     totalOnHand: number;
   };
 };
+
+/** One page of picker choices; a search reaches the rest of the catalog. */
+export const INVENTORY_PICKER_PAGE_SIZE = 50;
 
 export type InventoryPickerOption = {
   id: string;
@@ -458,8 +462,7 @@ export function toInventoryItem(row: InventoryItemRow): InventoryItem {
     taxRateBasisPoints: row.tax_rate_basis_points,
     isBillable: row.is_billable,
     globalMinimumStock: toNumber(row.global_minimum_stock),
-    globalTargetStock:
-      row.global_target_stock === null ? null : toNumber(row.global_target_stock),
+    globalTargetStock: row.global_target_stock === null ? null : toNumber(row.global_target_stock),
     trackQuantity: row.track_quantity,
     trackIndividualAssets: row.track_individual_assets,
     notes: row.notes,

@@ -29,7 +29,7 @@
   --secondary: #f1eff5;
   --secondary-foreground: #4b4266;
   --border: #e6e4ea;
-  --input: #f3f2f6;
+  --input: #dedce3;
   --ring: #ff7900;
   --radius: 8px;
   --selection: #d8d2e4;
@@ -70,6 +70,12 @@
   --info-soft-foreground: #1e40af;
   --destructive-soft: #fee2e2;
   --destructive-soft-foreground: #991b1b;
+  /* Work that is being done (job and project „In Bearbeitung“, work „In
+     Ausführung“). Teal keeps it apart from waiting yellow, info blue and
+     finished green (owner decision 2026-10-03). Only the tinted pair exists;
+     the owner of the status colors is components/auftraege/status-classes.ts. */
+  --ongoing-soft: #ccfbf1;
+  --ongoing-soft-foreground: #115e59;
   /* The document viewer's stage is black in both themes; its error text
      needs a light red that no theme-flipping token provides. */
   --viewer-error: #fca5a5;
@@ -88,12 +94,12 @@
      it; alpha only for lines and tints without text. */
   --calendar-grid: color-mix(in oklab, var(--foreground) 8%, transparent);
   --calendar-grid-strong: color-mix(in oklab, var(--foreground) 16%, transparent);
-  --calendar-gutter: #f6f5f8;
+  --calendar-gutter: #faf9fb;
   --calendar-cell-off: #f1f0f4;
   --calendar-today: #f2f0f7;
   --calendar-now: #dc2626;
-  --calendar-planning: #e9e7ef;
-  --calendar-planning-border: #c6bfd6;
+  --calendar-planning: #f4f2f8;
+  --calendar-planning-border: #ded9e8;
   --calendar-planning-foreground: #3e3659;
   --calendar-planning-strong: #6f5f94;
   --calendar-planning-strong-foreground: #ffffff;
@@ -156,6 +162,8 @@
   --color-info-text: var(--info-text);
   --color-info-soft: var(--info-soft);
   --color-info-soft-foreground: var(--info-soft-foreground);
+  --color-ongoing-soft: var(--ongoing-soft);
+  --color-ongoing-soft-foreground: var(--ongoing-soft-foreground);
   --color-viewer-error: var(--viewer-error);
   --color-primary-text: var(--primary-text);
   --color-primary-text-hover: var(--primary-text-hover);
@@ -238,7 +246,7 @@
     --secondary: #252230;
     --secondary-foreground: #c7c1d6;
     --border: #262330;
-    --input: #1a1920;
+    --input: #393543;
     --ring: #ff8c1a;
     --selection: #3b3648;
     --selection-foreground: #ece9f0;
@@ -259,6 +267,8 @@
     --info-soft-foreground: #93c5fd;
     --destructive-soft: #450a0a;
     --destructive-soft-foreground: #fca5a5;
+    --ongoing-soft: #042f2e;
+    --ongoing-soft-foreground: #5eead4;
     --calendar-gutter: #131218;
     --calendar-cell-off: #16151c;
     --calendar-today: #171522;
@@ -385,8 +395,14 @@ textarea::-moz-selection,
 
 /* Marquee animation for overflowing text in mobile cards */
 @keyframes marquee-scroll {
-  0%, 10% { transform: translateX(0); }
-  90%, 100% { transform: translateX(var(--marquee-distance)); }
+  0%,
+  10% {
+    transform: translateX(0);
+  }
+  90%,
+  100% {
+    transform: translateX(var(--marquee-distance));
+  }
 }
 
 .animate-marquee {
@@ -395,7 +411,8 @@ textarea::-moz-selection,
 
 /* Green glow pulsation for active work ring */
 @keyframes green-glow {
-  0%, 100% {
+  0%,
+  100% {
     filter: drop-shadow(0 0 12px color-mix(in oklab, var(--success) 35%, transparent));
   }
   50% {
@@ -408,7 +425,8 @@ textarea::-moz-selection,
 }
 
 @keyframes yellow-glow {
-  0%, 100% {
+  0%,
+  100% {
     filter: drop-shadow(0 0 12px color-mix(in oklab, var(--warning) 35%, transparent));
   }
   50% {
@@ -433,8 +451,16 @@ body.is-dragging * {
    variables come from the day view (hour width and the sub-line interval). */
 .calendar-hour-grid {
   background-image:
-    repeating-linear-gradient(to right, var(--calendar-grid-strong) 0 1px, transparent 1px var(--calendar-hour-width)),
-    repeating-linear-gradient(to right, var(--calendar-grid) 0 1px, transparent 1px var(--calendar-subline-width));
+    repeating-linear-gradient(
+      to right,
+      var(--calendar-grid-strong) 0 1px,
+      transparent 1px var(--calendar-hour-width)
+    ),
+    repeating-linear-gradient(
+      to right,
+      var(--calendar-grid) 0 1px,
+      transparent 1px var(--calendar-subline-width)
+    );
 }
 
 /* Hide native time picker indicators for all browsers */

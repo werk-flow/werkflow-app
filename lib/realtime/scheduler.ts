@@ -1,5 +1,5 @@
 /**
- * Trailing scheduler with a bounded maximum deferral (Step 2, PF-12). Each
+ * Trailing scheduler with a bounded maximum deferral. Each
  * call restarts the trailing delay so a burst lands as one run, but the run
  * can be deferred by at most `maxWaitMs` from the first call of the burst. A
  * sustained event stream therefore produces a read at least every
@@ -21,7 +21,7 @@ export function createTrailingScheduler(input: {
   clearTimer?: (handle: unknown) => void;
 }): TrailingScheduler {
   if (input.maxWaitMs < input.delayMs) {
-    throw new Error("A maximum wait cannot be shorter than the trailing delay.");
+    throw new Error('A maximum wait cannot be shorter than the trailing delay.');
   }
   const now = input.now ?? (() => Date.now());
   const setTimer = input.setTimer ?? ((callback, delayMs) => setTimeout(callback, delayMs));

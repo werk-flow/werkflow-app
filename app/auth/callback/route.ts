@@ -1,17 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidateTag } from 'next/cache';
 
 import { createServerClient } from '@supabase/ssr';
-import { type EmailOtpType } from '@supabase/supabase-js';
+import { type EmailOtpType, type PostgrestError } from '@supabase/supabase-js';
 import { getSupabasePublishableKey, getSupabaseUrl } from '@/lib/env/public';
 import { resolveSafeReturnPath } from '@/lib/auth/return-path';
+import { CACHE_TAGS } from '@/lib/data/cached';
 import { CURRENT_ORG_COOKIE, CURRENT_ORG_MAX_AGE } from '@/lib/org/cookies';
+import { logError } from '@/lib/logging';
+import { consumeRateLimit, inviteRedemptionChecks } from '@/lib/security/rate-limit';
 import { verifySameOriginJsonRequest } from '@/lib/security/same-origin';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { isUuid } from '@/lib/validation/uuid';
 
-function isSessionPayload(
-  value: unknown
-): value is { access_token: string; refresh_token: string } {
+function isSessionPayload(value: unknown): value is { access_token: string; refresh_token: string } {
   return (
     typeof value === 'object' &&
     value !== null &&
@@ -20,11 +22,79 @@ function isSessionPayload(
   );
 }
 
-function redeemInviteForUser(inviteCode: string, userId: string) {
-  return createSupabaseAdminClient().rpc('redeem_organization_invite_for_user', {
+// Redemption is limited per account and per client address before the RPC
+// runs. A limit reached sends the caller to the invite error page; a limiter
+// that cannot decide redeems nothing and is handled like a failed redemption,
+// which sends the caller to the redeem_failed invite error page.
+async function redeemInviteForUser(req: NextRequest, inviteCode: string, userId: string) {
+  const verdict = await consumeRateLimit(...inviteRedemptionChecks(userId, req.headers));
+  if (verdict !== 'allowed') return { verdict, data: null, error: null };
+  const { data, error } = await createSupabaseAdminClient().rpc('redeem_organization_invite_for_user', {
     p_invite_code: inviteCode,
-    p_user_id: userId
+    p_user_id: userId,
   });
+  return { verdict, data, error };
+}
+
+function createCookieBoundSupabaseClient(req: NextRequest, res: NextResponse) {
+  return createServerClient(getSupabaseUrl(), getSupabasePublishableKey(), {
+    cookies: {
+      get(name) {
+        return req.cookies.get(name)?.value;
+      },
+      set(name, value, options) {
+        res.cookies.set({ name, value, ...(options ?? {}) });
+      },
+      remove(name, options) {
+        if (options) {
+          res.cookies.delete({ name, ...options });
+        } else {
+          res.cookies.delete(name);
+        }
+      },
+    },
+  });
+}
+
+// Carries the session cookies the code exchange wrote on `res` over to another
+// redirect, with their options, so the invite error page sees the signed-in user.
+function withSessionCookies(redirect: NextResponse, res: NextResponse): NextResponse {
+  for (const cookie of res.cookies.getAll()) redirect.cookies.set(cookie);
+  return redirect;
+}
+
+// Maps the invite errors the RPC names to their error page; null for any other error.
+function redirectForInviteRedemptionError(
+  redeemError: PostgrestError,
+  origin: string,
+  inviteCode: string,
+): NextResponse | null {
+  if (redeemError.message?.includes('email_mismatch')) {
+    // Extract the invited email from the error message (format: "email_mismatch::email@example.com")
+    const emailMatch = redeemError.message.match(/email_mismatch::(.+)/);
+    const invitedEmail = emailMatch?.[1] ?? '';
+    return NextResponse.redirect(
+      `${origin}/invite-error?error=email_mismatch&email=${encodeURIComponent(
+        invitedEmail,
+      )}&invite_code=${encodeURIComponent(inviteCode)}`,
+    );
+  }
+  if (redeemError.message?.includes('admin_mismatch')) {
+    return NextResponse.redirect(`${origin}/invite-error?error=admin_mismatch`);
+  }
+  if (redeemError.message?.includes('invalid_invite')) {
+    return NextResponse.redirect(`${origin}/invite-error?error=invalid_invite`);
+  }
+  if (redeemError.message?.includes('invite_expired')) {
+    return NextResponse.redirect(`${origin}/invite-error?error=invite_expired`);
+  }
+  if (redeemError.message?.includes('invite_cancelled')) {
+    return NextResponse.redirect(`${origin}/invite-error?error=invite_cancelled`);
+  }
+  if (redeemError.message?.includes('invite_already_used')) {
+    return NextResponse.redirect(`${origin}/invite-error?error=invite_already_used`);
+  }
+  return null;
 }
 
 export async function GET(req: NextRequest) {
@@ -50,47 +120,25 @@ export async function GET(req: NextRequest) {
   if (tokenHash && type) {
     const res = NextResponse.redirect(`${origin}${redirectTo}`);
 
-    const supabase = createServerClient(
-      getSupabaseUrl(),
-      getSupabasePublishableKey(),
-      {
-        cookies: {
-          get(name) {
-            return req.cookies.get(name)?.value;
-          },
-          set(name, value, options) {
-            res.cookies.set({ name, value, ...(options ?? {}) });
-          },
-          remove(name, options) {
-            if (options) {
-              res.cookies.delete({ name, ...options });
-            } else {
-              res.cookies.delete(name);
-            }
-          }
-        }
-      }
-    );
+    const supabase = createCookieBoundSupabaseClient(req, res);
 
     // Verify the OTP token_hash server-side
     const { error } = await supabase.auth.verifyOtp({
       token_hash: tokenHash,
-      type
+      type,
     });
 
     if (error) {
-      console.error('Token hash verification error:', error);
+      logError('Token hash verification error:', error);
       // Redirect to reset-password with error for recovery, otherwise forgot-password
       if (type === 'recovery') {
         return NextResponse.redirect(
           `${origin}/reset-password?error=invalid_token&error_description=${encodeURIComponent(
-            error.message
-          )}`
+            error.message,
+          )}`,
         );
       }
-      return NextResponse.redirect(
-        `${origin}/forgot-password?error=invalid_token`
-      );
+      return NextResponse.redirect(`${origin}/forgot-password?error=invalid_token`);
     }
 
     // Successfully verified - session is now established in cookies
@@ -100,109 +148,64 @@ export async function GET(req: NextRequest) {
   if (code) {
     const res = NextResponse.redirect(`${origin}${redirectTo}`);
 
-    const supabase = createServerClient(
-      getSupabaseUrl(),
-      getSupabasePublishableKey(),
-      {
-        cookies: {
-          get(name) {
-            return req.cookies.get(name)?.value;
-          },
-          set(name, value, options) {
-            res.cookies.set({ name, value, ...(options ?? {}) });
-          },
-          remove(name, options) {
-            if (options) {
-              res.cookies.delete({ name, ...options });
-            } else {
-              res.cookies.delete(name);
-            }
-          }
-        }
-      }
-    );
+    const supabase = createCookieBoundSupabaseClient(req, res);
 
     // Exchange the code for a session
     const { error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (error) {
-      console.error('Code exchange error:', error);
-      return NextResponse.redirect(
-        `${origin}/forgot-password?error=invalid_code`
-      );
+      logError('Code exchange error:', error);
+      return NextResponse.redirect(`${origin}/forgot-password?error=invalid_code`);
     }
 
     // If there's an invite code, try to redeem it
     if (inviteCode) {
       const {
-        data: { user }
+        data: { user },
       } = await supabase.auth.getUser();
 
       if (!user) {
-        return NextResponse.redirect(`${origin}/login?invite_code=${inviteCode}`);
+        return NextResponse.redirect(`${origin}/login?invite_code=${encodeURIComponent(inviteCode)}`);
       }
 
-      const { data: redeemResult, error: redeemError } =
-        await redeemInviteForUser(inviteCode, user.id);
+      const {
+        verdict,
+        data: redeemResult,
+        error: redeemError,
+      } = await redeemInviteForUser(req, inviteCode, user.id);
 
+      if (verdict === 'limited') {
+        return withSessionCookies(
+          NextResponse.redirect(`${origin}/invite-error?error=too_many_attempts`),
+          res,
+        );
+      }
+      if (verdict === 'unavailable') {
+        return withSessionCookies(NextResponse.redirect(`${origin}/invite-error?error=redeem_failed`), res);
+      }
+      const redemption = redeemResult?.[0];
       if (redeemError) {
-        console.error('Invite redemption error:', redeemError);
+        logError('Invite redemption error:', redeemError);
 
         // Handle specific error cases
-        if (redeemError.message?.includes('email_mismatch')) {
-          // Extract the invited email from the error message (format: "email_mismatch::email@example.com")
-          const emailMatch = redeemError.message.match(/email_mismatch::(.+)/);
-          const invitedEmail = emailMatch?.[1] ?? '';
-          return NextResponse.redirect(
-            `${origin}/invite-error?error=email_mismatch&email=${encodeURIComponent(
-              invitedEmail
-            )}&invite_code=${inviteCode}`
-          );
-        }
-        if (redeemError.message?.includes('admin_mismatch')) {
-          return NextResponse.redirect(
-            `${origin}/invite-error?error=admin_mismatch`
-          );
-        }
-        if (redeemError.message?.includes('invalid_invite')) {
-          return NextResponse.redirect(
-            `${origin}/invite-error?error=invalid_invite`
-          );
-        }
-        if (redeemError.message?.includes('invite_expired')) {
-          return NextResponse.redirect(
-            `${origin}/invite-error?error=invite_expired`
-          );
-        }
-        if (redeemError.message?.includes('invite_cancelled')) {
-          return NextResponse.redirect(
-            `${origin}/invite-error?error=invite_cancelled`
-          );
-        }
-        if (redeemError.message?.includes('invite_already_used')) {
-          return NextResponse.redirect(
-            `${origin}/invite-error?error=invite_already_used`
-          );
-        }
-
-        // For other errors, continue to dashboard but log the error
-        console.error('Unknown invite error, continuing to dashboard');
-      } else if (redeemResult && redeemResult.length > 0) {
+        const knownErrorRedirect = redirectForInviteRedemptionError(redeemError, origin, inviteCode);
+        return withSessionCookies(
+          knownErrorRedirect ?? NextResponse.redirect(`${origin}/invite-error?error=redeem_failed`),
+          res,
+        );
+      } else if (redemption) {
         // Successfully redeemed - set the org cookie and redirect to dashboard with success flag
         // Use the new column names from the updated RPC function
-        const orgId = redeemResult[0].org_id;
-        const alreadyMember = redeemResult[0].already_member;
+        const orgId = redemption.org_id;
+        const alreadyMember = redemption.already_member;
+        // The dashboard reads a cached member count; a route handler invalidates with revalidateTag.
+        revalidateTag(CACHE_TAGS.memberCount(orgId), 'max');
 
         // Create the redirect response with the correct URL
         const redirectUrl = alreadyMember
           ? `${origin}/dashboard?already_member=${orgId}`
           : `${origin}/dashboard?joined=${orgId}`;
-        const redirectRes = NextResponse.redirect(redirectUrl);
-
-        // Copy auth cookies from the original response to the redirect response
-        res.cookies.getAll().forEach((cookie) => {
-          redirectRes.cookies.set(cookie.name, cookie.value);
-        });
+        const redirectRes = withSessionCookies(NextResponse.redirect(redirectUrl), res);
 
         // Set the org cookie on the redirect response
         redirectRes.cookies.set({
@@ -211,7 +214,7 @@ export async function GET(req: NextRequest) {
           httpOnly: true,
           sameSite: 'lax',
           maxAge: CURRENT_ORG_MAX_AGE,
-          path: '/'
+          path: '/',
         });
 
         return redirectRes;
@@ -226,86 +229,40 @@ export async function GET(req: NextRequest) {
     // Check if user is already logged in
     const res = NextResponse.redirect(`${origin}/dashboard`);
 
-    const supabase = createServerClient(
-      getSupabaseUrl(),
-      getSupabasePublishableKey(),
-      {
-        cookies: {
-          get(name) {
-            return req.cookies.get(name)?.value;
-          },
-          set(name, value, options) {
-            res.cookies.set({ name, value, ...(options ?? {}) });
-          },
-          remove(name, options) {
-            if (options) {
-              res.cookies.delete({ name, ...options });
-            } else {
-              res.cookies.delete(name);
-            }
-          }
-        }
-      }
-    );
+    const supabase = createCookieBoundSupabaseClient(req, res);
 
     const {
-      data: { user }
+      data: { user },
     } = await supabase.auth.getUser();
 
     if (user) {
       // User is logged in - redeem the invite
-      const { data: redeemResult, error: redeemError } =
-        await redeemInviteForUser(inviteCode, user.id);
+      const {
+        verdict,
+        data: redeemResult,
+        error: redeemError,
+      } = await redeemInviteForUser(req, inviteCode, user.id);
 
+      if (verdict === 'limited') {
+        return NextResponse.redirect(`${origin}/invite-error?error=too_many_attempts`);
+      }
+      if (verdict === 'unavailable') {
+        return NextResponse.redirect(`${origin}/invite-error?error=redeem_failed`);
+      }
       if (redeemError) {
-        console.error(
-          'Invite redemption error for existing user:',
-          redeemError
-        );
+        logError('Invite redemption error for existing user:', redeemError);
 
-        if (redeemError.message?.includes('email_mismatch')) {
-          // Extract the invited email from the error message (format: "email_mismatch::email@example.com")
-          const emailMatch = redeemError.message.match(/email_mismatch::(.+)/);
-          const invitedEmail = emailMatch?.[1] ?? '';
-          return NextResponse.redirect(
-            `${origin}/invite-error?error=email_mismatch&email=${encodeURIComponent(
-              invitedEmail
-            )}&invite_code=${inviteCode}`
-          );
-        }
-        if (redeemError.message?.includes('admin_mismatch')) {
-          return NextResponse.redirect(
-            `${origin}/invite-error?error=admin_mismatch`
-          );
-        }
-        if (redeemError.message?.includes('invalid_invite')) {
-          return NextResponse.redirect(
-            `${origin}/invite-error?error=invalid_invite`
-          );
-        }
-        if (redeemError.message?.includes('invite_expired')) {
-          return NextResponse.redirect(
-            `${origin}/invite-error?error=invite_expired`
-          );
-        }
-        if (redeemError.message?.includes('invite_cancelled')) {
-          return NextResponse.redirect(
-            `${origin}/invite-error?error=invite_cancelled`
-          );
-        }
-        if (redeemError.message?.includes('invite_already_used')) {
-          return NextResponse.redirect(
-            `${origin}/invite-error?error=invite_already_used`
-          );
-        }
-
-        return NextResponse.redirect(`${origin}/dashboard`);
+        const knownErrorRedirect = redirectForInviteRedemptionError(redeemError, origin, inviteCode);
+        return knownErrorRedirect ?? NextResponse.redirect(`${origin}/invite-error?error=redeem_failed`);
       }
 
-      if (redeemResult && redeemResult.length > 0) {
+      const redemption = redeemResult?.[0];
+      if (redemption) {
         // Use the new column names from the updated RPC function
-        const orgId = redeemResult[0].org_id;
-        const alreadyMember = redeemResult[0].already_member;
+        const orgId = redemption.org_id;
+        const alreadyMember = redemption.already_member;
+        // The dashboard reads a cached member count; a route handler invalidates with revalidateTag.
+        revalidateTag(CACHE_TAGS.memberCount(orgId), 'max');
 
         // Create the redirect response with the correct URL
         const redirectUrl = alreadyMember
@@ -320,7 +277,7 @@ export async function GET(req: NextRequest) {
           httpOnly: true,
           sameSite: 'lax',
           maxAge: CURRENT_ORG_MAX_AGE,
-          path: '/'
+          path: '/',
         });
 
         return redirectRes;
@@ -329,7 +286,7 @@ export async function GET(req: NextRequest) {
       return res;
     } else {
       // User is not logged in - redirect to login with invite code preserved
-      return NextResponse.redirect(`${origin}/login?invite_code=${inviteCode}`);
+      return NextResponse.redirect(`${origin}/login?invite_code=${encodeURIComponent(inviteCode)}`);
     }
   }
 
@@ -346,43 +303,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'forbidden_origin' }, { status: 403 });
   }
 
-  const body = (await req.json().catch(() => undefined)) as
-    | { event?: unknown; session?: unknown }
-    | undefined;
-  if (body === undefined || typeof body !== 'object' || body === null) {
+  const parsedBody: unknown = await req.json().catch(() => null);
+  if (typeof parsedBody !== 'object' || parsedBody === null) {
     return NextResponse.json({ error: 'invalid_body' }, { status: 400 });
   }
+  const body: { event?: unknown; session?: unknown } = parsedBody;
   const event = typeof body.event === 'string' ? body.event : null;
   const session = body.session;
 
   const res = NextResponse.json({ success: true });
 
-  const supabase = createServerClient(
-    getSupabaseUrl(),
-    getSupabasePublishableKey(),
-    {
-      cookies: {
-        get(name) {
-          return req.cookies.get(name)?.value;
-        },
-        set(name, value, options) {
-          res.cookies.set({ name, value, ...(options ?? {}) });
-        },
-        remove(name, options) {
-          if (options) {
-            res.cookies.delete({ name, ...options });
-          } else {
-            res.cookies.delete(name);
-          }
-        }
-      }
-    }
-  );
+  const supabase = createCookieBoundSupabaseClient(req, res);
 
-  if (
-    (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') &&
-    isSessionPayload(session)
-  ) {
+  if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && isSessionPayload(session)) {
     await supabase.auth.setSession(session);
   }
 

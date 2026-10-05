@@ -1,85 +1,99 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 
+import { JoinOrgCodeForm } from '@/components/organization/join-org-code-form';
+import {
+  JoinRequestLiveWatch,
+  PendingJoinRequest,
+  type SettledJoinRequestStatus,
+} from '@/components/organization/pending-join-request';
 import { Button } from '@/components/ui/button';
-import { ErrorText } from '@/components/ui/error-text';
-import { Field } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
-import { joinOrganization } from '@/lib/org/actions';
+import { loadDocument } from '@/lib/navigation/document-load';
+import type { OwnJoinRequest } from '@/lib/org/types';
 
-const ERROR_MESSAGES = {
-  code_required: 'Bitte gib einen Organisationscode ein.',
-  invalid_code: 'Ungültiger Organisationscode.',
-  admin_mismatch:
-    'Du kannst keiner Organisation beitreten, die nicht vom gleichen Admin stammt wie deine bestehenden Organisationen.',
-  already_member: 'Du bist bereits Mitglied dieser Organisation.',
-  not_authenticated: 'Du musst angemeldet sein.',
-  join_failed: 'Beitritt fehlgeschlagen. Bitte versuche es erneut.',
-  unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.'
-} satisfies Record<string, string>;
-const ERROR_MESSAGE_BY_CODE: Record<string, string> = ERROR_MESSAGES;
+type FlowState =
+  | { kind: 'form'; declinedBy: string | null }
+  | { kind: 'pending'; request: OwnJoinRequest }
+  | { kind: 'approved'; request: OwnJoinRequest };
 
-export function JoinOrganizationForm() {
-  const [code, setCode] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+/**
+ * The way into an organization by its code for a person without one: enter
+ * the code, wait for the approval, and enter the app by themselves once Admin
+ * or Büro approved. A declined request says so and offers the code field again.
+ */
+export function JoinOrganizationForm({
+  pendingRequest,
+  declinedBy,
+}: {
+  pendingRequest: OwnJoinRequest | null;
+  declinedBy: string | null;
+}) {
+  const [state, setState] = useState<FlowState>(
+    pendingRequest ? { kind: 'pending', request: pendingRequest } : { kind: 'form', declinedBy },
+  );
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError(null);
+  if (state.kind === 'approved') {
+    return (
+      <p className="flex items-center gap-2 text-sm font-medium" role="status">
+        <Loader2 className="size-4 animate-spin" />
+        {state.request.organizationName} hat deine Anfrage freigegeben. Du wirst weitergeleitet …
+      </p>
+    );
+  }
 
-    const result = await joinOrganization(code);
-
-    if (result.success && result.organizationId) {
-      // Use hard navigation to ensure cookies are properly read on the new page
-      // This is critical for production environments where cookie timing can be an issue
-      window.location.href = `/dashboard?joined=${result.organizationId}`;
-    } else {
-      setError(
-        ERROR_MESSAGE_BY_CODE[result.error ?? 'unexpected_error'] ??
-          ERROR_MESSAGES.unexpected_error
-      );
-      setIsLoading(false);
-    }
-  };
-
-  const isValid = code.trim().length > 0;
+  if (state.kind === 'pending') {
+    const { request } = state;
+    const handleSettled = (status: SettledJoinRequestStatus) => {
+      if (status === 'approved') {
+        setState({ kind: 'approved', request });
+        // A full load: the person is a member now, and the app shell starts from that membership.
+        loadDocument(`/dashboard?joined=${request.organizationId}`);
+        return;
+      }
+      setState({ kind: 'form', declinedBy: status === 'declined' ? request.organizationName : null });
+    };
+    return (
+      <>
+        <PendingJoinRequest
+          request={request}
+          hint="Sobald ein Admin oder das Büro sie freigibt, geht es hier von selbst weiter. Du musst die Seite nicht neu laden."
+          onWithdrawn={() => setState({ kind: 'form', declinedBy: null })}
+        />
+        <JoinRequestLiveWatch request={request} onSettled={handleSettled} />
+      </>
+    );
+  }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <Field label="Organisationscode" htmlFor="org-code" required>
-        <Input
-          type="text"
-          placeholder="z. B. ABC123"
-          value={code}
-          onChange={(e) => setCode(e.target.value.toUpperCase())}
-          disabled={isLoading}
-          autoFocus
-          autoComplete="off"
-          className="uppercase"
-        />
-      </Field>
-
-      <ErrorText>{error}</ErrorText>
-
-      <Button
-        type="submit"
-        className="w-full"
-        disabled={!isValid || isLoading}
-      >
-        {isLoading ? (
-          <>
-            <Loader2 className="mr-2 size-4 animate-spin" />
-            Wird beigetreten...
-          </>
-        ) : (
-          'Beitreten'
+    <div className="space-y-4">
+      {state.declinedBy && (
+        <p className="rounded-md border px-3 py-2 text-sm" data-join-request-state="declined">
+          {state.declinedBy} hat deine Anfrage abgelehnt. Wenn das ein Versehen war, sprich mit deinem Admin.
+          Du kannst auch einen anderen Code eingeben.
+        </p>
+      )}
+      <JoinOrgCodeForm
+        inputId="org-code"
+        onRequest={(request) => setState({ kind: 'pending', request })}
+        renderActions={(isPending) => (
+          <Button type="submit" className="w-full" disabled={isPending}>
+            {isPending && <Loader2 className="size-4 animate-spin" />}
+            Beitritt anfragen
+          </Button>
         )}
-      </Button>
-    </form>
+      />
+      <div className="text-center">
+        <Link
+          href="/onboarding/start"
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="size-4" />
+          Zurück
+        </Link>
+      </div>
+    </div>
   );
 }
-

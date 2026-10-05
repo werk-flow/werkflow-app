@@ -28,9 +28,11 @@ export function NowIndicator({
       aria-hidden="true"
       data-calendar-now=""
       className={cn('pointer-events-none absolute', CALENDAR_LAYER_CLASS.overlay, className)}
-      style={orientation === 'vertical'
-        ? { left: position, top: 0, bottom: 0, width: 2 }
-        : { top: position, left: 0, right: 0, height: 2 }}
+      style={
+        orientation === 'vertical'
+          ? { left: position, top: 0, bottom: 0, width: 2 }
+          : { top: position, left: 0, right: 0, height: 2 }
+      }
     >
       <div className="h-full w-full bg-calendar-now" />
       <div

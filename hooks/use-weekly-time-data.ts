@@ -3,10 +3,7 @@
 import { useRef } from 'react';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
-import type {
-  WeeklyTimeDataPoint,
-  WeeklyTimeLabel,
-} from '@/lib/time-tracking/types';
+import type { WeeklyTimeDataPoint, WeeklyTimeLabel } from '@/lib/time-tracking/types';
 import type { DailyTarget } from '@/lib/personnel/targets';
 import {
   buildWeeklyTimeData,
@@ -14,10 +11,7 @@ import {
   getTodayIndex,
   getWeekBounds,
 } from '@/lib/time-tracking/weekly';
-import {
-  normalizeTimeTrackingSettings,
-  type OrgBreakMode,
-} from '@/lib/time-tracking/settings';
+import { normalizeTimeTrackingSettings, type OrgBreakMode } from '@/lib/time-tracking/settings';
 
 export type DayData = WeeklyTimeDataPoint;
 
@@ -56,9 +50,7 @@ export function useWeeklyTimeData({
   // Last successfully resolved targets: a transiently failed targets refetch
   // must not silently degrade the surface back to the fixed eight-hour
   // fallback while the entries fetch succeeded.
-  const lastKnownTargetsRef = useRef<DailyTarget[] | undefined>(
-    initialWeekTargets
-  );
+  const lastKnownTargetsRef = useRef<DailyTarget[] | undefined>(initialWeekTargets);
 
   const view = useLiveView<WeekSnapshot>({
     tables: [
@@ -89,12 +81,16 @@ export function useWeeklyTimeData({
       }
 
       const [result, targetsResult] = await Promise.all([
-        readInBackground('time-entries', {
-          organizationId,
-          from: monday.toISOString(),
-          to: sunday.toISOString(),
-          userId,
-        }, signal),
+        readInBackground(
+          'time-entries',
+          {
+            organizationId,
+            from: monday.toISOString(),
+            to: sunday.toISOString(),
+            userId,
+          },
+          signal,
+        ),
         readInBackground('weekly-targets', { userId }, signal),
       ]);
 
@@ -102,9 +98,7 @@ export function useWeeklyTimeData({
         return { ok: false, error: result.error };
       }
 
-      const nextTargets = targetsResult.success
-        ? targetsResult.targets
-        : lastKnownTargetsRef.current;
+      const nextTargets = targetsResult.success ? targetsResult.targets : lastKnownTargetsRef.current;
       lastKnownTargetsRef.current = nextTargets;
 
       return {
@@ -119,7 +113,7 @@ export function useWeeklyTimeData({
               autoBreakThresholdMinutes,
               autoBreakDurationMinutes,
             }),
-            nextTargets
+            nextTargets,
           ),
           weekTargets: nextTargets,
           todayIndex: getTodayIndex(),

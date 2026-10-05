@@ -6,14 +6,10 @@ import type { ChangeRequest, EntryChangeRequestMap, TimeEntry } from './types';
  * paint carries the same correction badges as every later read.
  */
 export function changeRequestEntryIds(entries: readonly TimeEntry[]): string[] {
-  return entries
-    .filter((entry) => !entry.canonicalSegmentId)
-    .map((entry) => entry.id);
+  return entries.filter((entry) => !entry.canonicalSegmentId).map((entry) => entry.id);
 }
 
-export function toEntryChangeRequestMap(
-  requests: readonly ChangeRequest[]
-): EntryChangeRequestMap {
+export function toEntryChangeRequestMap(requests: readonly ChangeRequest[]): EntryChangeRequestMap {
   const map: EntryChangeRequestMap = {};
   for (const request of requests) {
     map[request.entryId] = request;

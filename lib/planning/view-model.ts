@@ -22,14 +22,14 @@ export function toCalendarJob(entry: PlanningCalendarEntry): CalendarJob {
     title: entry.title,
     status: entry.jobStatus ?? 'nicht_bearbeitet',
     executionVersion: entry.jobExecutionVersion,
+    executionState: entry.jobExecutionState,
     priority: entry.priority ?? 'mittel',
     plannedDate: entry.plannedDate,
     plannedTime: entry.plannedTime,
     estimatedDurationMinutes: entry.estimatedDurationMinutes,
     plannedWorkingMinutes:
       entry.estimatedDurationMinutes && entry.assignedEmployeeRecordIds.length
-        ? entry.estimatedDurationMinutes *
-          entry.assignedEmployeeRecordIds.length
+        ? entry.estimatedDurationMinutes * entry.assignedEmployeeRecordIds.length
         : null,
     location: entry.location,
     clientName: entry.clientName,

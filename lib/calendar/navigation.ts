@@ -1,4 +1,4 @@
-export type CalendarNavigationView = "day" | "week" | "month";
+export type CalendarNavigationView = 'day' | 'week' | 'month';
 
 /**
  * Inclusive local-time instants the calendar reads for one selected date and
@@ -16,12 +16,12 @@ export function shiftCalendarDate(
 ): Date {
   const shiftedDate = new Date(currentDate);
 
-  if (view === "day") {
+  if (view === 'day') {
     shiftedDate.setDate(shiftedDate.getDate() + direction);
     return shiftedDate;
   }
 
-  if (view === "week") {
+  if (view === 'week') {
     shiftedDate.setDate(shiftedDate.getDate() + direction * 7 * horizonWeeks);
     return shiftedDate;
   }
@@ -34,21 +34,13 @@ export function shiftCalendarDate(
 }
 
 function startOfLocalDay(date: Date, dayOffset: number): Date {
-  const result = new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate() + dayOffset,
-  );
+  const result = new Date(date.getFullYear(), date.getMonth(), date.getDate() + dayOffset);
   result.setHours(0, 0, 0, 0);
   return result;
 }
 
 function endOfLocalDay(date: Date, dayOffset: number): Date {
-  const result = new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate() + dayOffset,
-  );
+  const result = new Date(date.getFullYear(), date.getMonth(), date.getDate() + dayOffset);
   result.setHours(23, 59, 59, 999);
   return result;
 }
@@ -66,21 +58,20 @@ function mondayOfWeek(date: Date): Date {
  * window and one that began the day before still pairs.
  * Day and week offsets go through the Date constructor, never through
  * `setDate(start.getDate() + n)` on a second date object: that arithmetic
- * used the wrong month whenever the window started in the previous month
- * (PF-01).
+ * uses the wrong month whenever the window starts in the previous month.
  */
 export function getCalendarFetchRange(
   currentDate: Date,
   view: CalendarNavigationView,
   horizonWeeks = 1,
 ): CalendarFetchRange {
-  if (view === "day") {
+  if (view === 'day') {
     return {
       start: startOfLocalDay(currentDate, -1),
       end: endOfLocalDay(currentDate, 0),
     };
   }
-  if (view === "week") {
+  if (view === 'week') {
     const monday = mondayOfWeek(currentDate);
     return {
       start: startOfLocalDay(monday, -1),
@@ -91,11 +82,7 @@ export function getCalendarFetchRange(
 }
 
 export function getCalendarMonthFetchRange(currentDate: Date): CalendarFetchRange {
-  const firstOfMonth = new Date(
-    currentDate.getFullYear(),
-    currentDate.getMonth(),
-    1,
-  );
+  const firstOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
   const firstVisibleMonday = mondayOfWeek(firstOfMonth);
 
   // FullCalendar renders six complete weeks. Fetch one extra day on either
@@ -106,23 +93,32 @@ export function getCalendarMonthFetchRange(currentDate: Date): CalendarFetchRang
   };
 }
 
-/** True when `coverage` contains every instant of `needed`. */
-export function rangeCovers(
-  coverage: CalendarFetchRange,
-  needed: CalendarFetchRange,
+/** A `YYYY-MM-DD` calendar date as local noon, the anchor the views navigate from. */
+export function calendarAnchorDate(dateIso: string): Date {
+  return new Date(`${dateIso}T12:00:00`);
+}
+
+/**
+ * True when the view's period for `currentDate` (its day, its week from
+ * Monday, its month) is the one that contains `todayIso`. The caller passes
+ * the calendar's one "today"; this module never reads the clock.
+ */
+export function isCurrentCalendarPeriod(
+  currentDate: Date,
+  view: CalendarNavigationView,
+  todayIso: string,
 ): boolean {
-  return (
-    coverage.start.getTime() <= needed.start.getTime() &&
-    coverage.end.getTime() >= needed.end.getTime()
+  return rangesEqual(
+    getCalendarFetchRange(currentDate, view),
+    getCalendarFetchRange(calendarAnchorDate(todayIso), view),
   );
 }
 
-export function rangesEqual(
-  left: CalendarFetchRange,
-  right: CalendarFetchRange,
-): boolean {
-  return (
-    left.start.getTime() === right.start.getTime() &&
-    left.end.getTime() === right.end.getTime()
-  );
+/** True when `coverage` contains every instant of `needed`. */
+export function rangeCovers(coverage: CalendarFetchRange, needed: CalendarFetchRange): boolean {
+  return coverage.start.getTime() <= needed.start.getTime() && coverage.end.getTime() >= needed.end.getTime();
+}
+
+export function rangesEqual(left: CalendarFetchRange, right: CalendarFetchRange): boolean {
+  return left.start.getTime() === right.start.getTime() && left.end.getTime() === right.end.getTime();
 }

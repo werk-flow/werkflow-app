@@ -1,13 +1,10 @@
+import type { ActionFailure } from '@/lib/action-result';
 import type { Database } from '@/lib/supabase/database.types';
 
-type PlanningEntryKind =
-  Database['public']['Enums']['planning_entry_kind'];
-type PlanningInternalType =
-  Database['public']['Enums']['planning_internal_type'];
-type PlanningTimeKind =
-  Database['public']['Enums']['planning_time_kind'];
-export type PlanningOccurrenceStatus =
-  Database['public']['Enums']['planning_occurrence_status'];
+type PlanningEntryKind = Database['public']['Enums']['planning_entry_kind'];
+type PlanningInternalType = Database['public']['Enums']['planning_internal_type'];
+type PlanningTimeKind = Database['public']['Enums']['planning_time_kind'];
+export type PlanningOccurrenceStatus = Database['public']['Enums']['planning_occurrence_status'];
 
 type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly';
 export type DstResolution = 'exact' | 'shifted_forward' | 'first_ambiguous';
@@ -73,9 +70,7 @@ export type PlanningConflict = {
 
 // German labels for non-scheduled occurrence statuses. Skipped/cancelled
 // occurrences stay traceably visible in the calendar instead of disappearing.
-export const PLANNING_OCCURRENCE_STATUS_LABELS: Partial<
-  Record<PlanningOccurrenceStatus, string>
-> = {
+export const PLANNING_OCCURRENCE_STATUS_LABELS: Partial<Record<PlanningOccurrenceStatus, string>> = {
   skipped: 'Ausgelassen',
   cancelled: 'Abgesagt',
 };
@@ -127,6 +122,7 @@ export type PlanningCalendarEntry = {
   jobNumber: string | null;
   jobStatus: Database['public']['Enums']['job_status'] | null;
   jobExecutionVersion: number;
+  jobExecutionState: Database['public']['Enums']['work_execution_state'] | null;
   priority: Database['public']['Enums']['job_priority'] | null;
   clientName: string | null;
   clientAddress: string | null;
@@ -134,11 +130,10 @@ export type PlanningCalendarEntry = {
   projectNumber: string | null;
 };
 
-export type PlanningActionResult =
-  | { success: true; occurrenceIds: string[] }
-  | {
-      success: false;
-      error: string;
-      conflicts?: PlanningConflict[];
-      fingerprint?: string;
-    };
+/** A planning write failure, carrying the conflicts and fingerprint the caller must confirm. */
+export type PlanningActionFailure = ActionFailure & {
+  conflicts?: PlanningConflict[];
+  fingerprint?: string;
+};
+
+export type PlanningActionResult = { success: true; occurrenceIds: string[] } | PlanningActionFailure;

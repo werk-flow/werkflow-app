@@ -12,24 +12,24 @@
 // `bun run env:local` after a WSL restart (plus a rebuild before the next
 // browser run, because NEXT_PUBLIC_* values are baked into the build).
 // See docs/technical/environments.md.
-import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { withWorkspaceTestLock } from "../lib/testing/workspace-test-lock";
+import { execFileSync } from 'node:child_process';
+import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { withWorkspaceTestLock } from '../lib/testing/runner/workspace-test-lock';
 
 const BACKUP_FILES = {
-  local: ".env.local-stack-backup",
-  dev: ".env.dev-backup",
-  prod: ".env.live-backup",
+  local: '.env.local-stack-backup',
+  dev: '.env.dev-backup',
+  prod: '.env.live-backup',
 } as const;
 
 const target = process.argv[2] as keyof typeof BACKUP_FILES | undefined;
 if (!target || !(target in BACKUP_FILES)) {
-  console.error("Usage: bun scripts/switch-env.ts <local|dev|prod>");
+  console.error('Usage: bun scripts/switch-env.ts <local|dev|prod>');
   process.exit(1);
 }
 
-const repoRoot = join(import.meta.dir, "..");
+const repoRoot = join(import.meta.dir, '..');
 const source = join(repoRoot, BACKUP_FILES[target]);
 if (!existsSync(source)) {
   console.error(`Backup file missing: ${source}. Cannot switch.`);
@@ -39,7 +39,7 @@ if (!existsSync(source)) {
 function resolveWslIp(): string {
   let output: string;
   try {
-    output = execFileSync("wsl.exe", ["hostname", "-I"], { encoding: "utf8", timeout: 30_000 });
+    output = execFileSync('wsl.exe', ['hostname', '-I'], { encoding: 'utf8', timeout: 30_000 });
   } catch (error) {
     throw new Error(
       `Could not resolve the WSL address (${error instanceof Error ? error.message : String(error)}). Is WSL installed and the local stack set up? See docs/technical/environments.md.`,
@@ -52,46 +52,51 @@ function resolveWslIp(): string {
   return ip;
 }
 
-await withWorkspaceTestLock({ operation: `switch environment to ${target}`, repositoryRoot: repoRoot }, async () => {
-if (target === "local") {
-  const ip = resolveWslIp();
-  const backupContents = readFileSync(source, "utf8");
-  // A missing line would make the replace a silent no-op and leave .env.local
-  // half-stale; fail here instead of in a later preflight.
-  if (
-    !/^NEXT_PUBLIC_SUPABASE_URL=.*$/m.test(backupContents) ||
-    !/^R2_ENDPOINT=.*$/m.test(backupContents)
-  ) {
-    throw new Error(
-      `${BACKUP_FILES.local} must define NEXT_PUBLIC_SUPABASE_URL and R2_ENDPOINT; restore it per docs/technical/environments.md.`,
-    );
-  }
-  const refreshed = backupContents
-    .replace(/^NEXT_PUBLIC_SUPABASE_URL=.*$/m, `NEXT_PUBLIC_SUPABASE_URL=http://${ip}:54321`)
-    .replace(/^R2_ENDPOINT=.*$/m, `R2_ENDPOINT=http://${ip}:54321/storage/v1/s3`);
-  writeFileSync(source, refreshed);
-  writeFileSync(join(repoRoot, ".env.local"), refreshed);
-  console.log(
-    `.env.local now points at the LOCAL Supabase stack (http://${ip}:54321, werkflow-documents-local). Start it with \`wsl supabase start\` if it is not running.`,
-  );
-} else {
-  copyFileSync(source, join(repoRoot, ".env.local"));
-}
+await withWorkspaceTestLock(
+  { operation: `switch environment to ${target}`, repositoryRoot: repoRoot },
+  async () => {
+    if (target === 'local') {
+      const ip = resolveWslIp();
+      const backupContents = readFileSync(source, 'utf8');
+      // A missing line would make the replace a silent no-op and leave .env.local
+      // half-stale; fail here instead of in a later preflight.
+      if (
+        !/^NEXT_PUBLIC_SUPABASE_URL=.*$/m.test(backupContents) ||
+        !/^R2_ENDPOINT=.*$/m.test(backupContents)
+      ) {
+        throw new Error(
+          `${BACKUP_FILES.local} must define NEXT_PUBLIC_SUPABASE_URL and R2_ENDPOINT; restore it per docs/technical/environments.md.`,
+        );
+      }
+      const refreshed = backupContents
+        .replace(/^NEXT_PUBLIC_SUPABASE_URL=.*$/m, `NEXT_PUBLIC_SUPABASE_URL=http://${ip}:54321`)
+        .replace(/^R2_ENDPOINT=.*$/m, `R2_ENDPOINT=http://${ip}:54321/storage/v1/s3`);
+      writeFileSync(source, refreshed);
+      writeFileSync(join(repoRoot, '.env.local'), refreshed);
+      console.log(
+        `.env.local now points at the LOCAL Supabase stack (http://${ip}:54321, werkflow-documents-local). Start it with \`wsl supabase start\` if it is not running.`,
+      );
+    } else {
+      copyFileSync(source, join(repoRoot, '.env.local'));
+    }
 
-if (target === "prod") {
-  console.warn(
-    [
-      "",
-      "############################################################",
-      "##  WARNING: .env.local now points at the LIVE PRODUCTION ##",
-      "##  Supabase project and the PROD R2 bucket.              ##",
-      "##  Real customer data. Do NOT run tests or destructive   ##",
-      "##  scripts. Switch back with: bun run env:dev            ##",
-      "############################################################",
-      "",
-    ].join("\n"),
-  );
-} else if (target === "dev") {
-  console.log(".env.local now points at the cloud DEV backend (mbkkzuqjbdvzelqvuzcn, werkflow-documents-dev).");
-}
-});
+    if (target === 'prod') {
+      console.warn(
+        [
+          '',
+          '############################################################',
+          '##  WARNING: .env.local now points at the LIVE PRODUCTION ##',
+          '##  Supabase project and the PROD R2 bucket.              ##',
+          '##  Real customer data. Do NOT run tests or destructive   ##',
+          '##  scripts. Switch back with: bun run env:dev            ##',
+          '############################################################',
+          '',
+        ].join('\n'),
+      );
+    } else if (target === 'dev') {
+      console.log(
+        '.env.local now points at the cloud DEV backend (mbkkzuqjbdvzelqvuzcn, werkflow-documents-dev).',
+      );
+    }
+  },
+);

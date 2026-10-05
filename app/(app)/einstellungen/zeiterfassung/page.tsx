@@ -1,53 +1,49 @@
-import Link from 'next/link'
-import { cookies } from 'next/headers'
-import { redirect } from 'next/navigation'
+import Link from 'next/link';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 
-import { TimeTrackingSettingsForm } from '@/components/settings/time-tracking-settings-form'
-import { HolidayCalendarSettings } from '@/components/settings/holiday-calendar-settings'
-import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { TimeTrackingSettingsForm } from '@/components/settings/time-tracking-settings-form';
+import { HolidayCalendarSettings } from '@/components/settings/holiday-calendar-settings';
+import { LiveRouteRefresh } from '@/components/shared/live-route-refresh';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   getCachedMemberships,
   getCachedOrganizationCalendar,
   getCachedOrganizationSettings,
   getCachedUser,
-} from '@/lib/data/cached'
-import { resolveActiveOrgId } from '@/lib/org/cookies'
+} from '@/lib/data/cached';
+import { resolveActiveOrgId } from '@/lib/org/cookies';
 
 export default async function TimeTrackingSettingsPage() {
-  const [{ data: { user } }, cookieStore] = await Promise.all([
-    getCachedUser(),
-    cookies(),
-  ])
+  const [
+    {
+      data: { user },
+    },
+    cookieStore,
+  ] = await Promise.all([getCachedUser(), cookies()]);
 
   if (!user) {
-    redirect('/login')
+    redirect('/login');
   }
 
-  const memberships = await getCachedMemberships(user.id)
-  const activeOrgId = await resolveActiveOrgId(cookieStore, user.id)
+  const memberships = await getCachedMemberships(user.id);
+  const activeOrgId = await resolveActiveOrgId(cookieStore, user.id);
   const activeMembership =
-    memberships.find((membership) => membership.orgId === activeOrgId) ??
-    memberships[0] ??
-    null
+    memberships.find((membership) => membership.orgId === activeOrgId) ?? memberships[0] ?? null;
 
   if (!activeMembership) {
-    redirect('/dashboard')
+    redirect('/dashboard');
   }
 
   const [settings, calendar] = await Promise.all([
     getCachedOrganizationSettings(activeMembership.orgId),
     getCachedOrganizationCalendar(activeMembership.orgId),
-  ])
+  ]);
 
   return (
     <div className="space-y-6">
+      <LiveRouteRefresh tables={['organization_settings', 'organization_closure_days']} />
       <TimeTrackingSettingsForm
         initialSettings={{
           breakMode: settings.breakMode,
@@ -66,8 +62,8 @@ export default async function TimeTrackingSettingsPage() {
         <CardHeader>
           <CardTitle>Zeitkonten, Regeln & Lohnexport</CardTitle>
           <CardDescription>
-            Arbeitszeitregeln, Zeitkonten und die Lohnarten-Zuordnung werden im
-            Bereich Zeiterfassung gepflegt.
+            Arbeitszeitregeln, Zeitkonten und die Lohnarten-Zuordnung werden im Bereich Zeiterfassung
+            gepflegt.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -77,5 +73,5 @@ export default async function TimeTrackingSettingsPage() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

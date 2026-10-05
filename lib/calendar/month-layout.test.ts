@@ -3,15 +3,23 @@ import { monthGridRange, monthRowTemplate, monthWeeks } from './month-layout';
 
 describe('month layout', () => {
   test('the week row template never uses repeat(0)', () => {
-    expect(monthRowTemplate(0)).toBe('auto minmax(64px, auto)');
-    expect(monthRowTemplate(2)).toBe('auto minmax(22px, auto) minmax(22px, auto) minmax(64px, auto)');
+    expect(monthRowTemplate(0)).toBe('auto minmax(64px, 1fr)');
+    expect(monthRowTemplate(2)).toBe('auto minmax(22px, auto) minmax(22px, auto) minmax(64px, 1fr)');
     expect(monthRowTemplate(-1)).not.toContain('repeat');
   });
 
   test('September 2026 spans five Monday-to-Sunday weeks with today, past and out-of-month marks', () => {
     const weeks = monthWeeks('2026-09-18', '2026-09-18');
     expect(weeks).toHaveLength(5);
-    expect(weeks[0]?.map((cell) => cell.date)).toEqual(['2026-08-31', '2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04', '2026-09-05', '2026-09-06']);
+    expect(weeks[0]?.map((cell) => cell.date)).toEqual([
+      '2026-08-31',
+      '2026-09-01',
+      '2026-09-02',
+      '2026-09-03',
+      '2026-09-04',
+      '2026-09-05',
+      '2026-09-06',
+    ]);
     expect(weeks[0]?.[0]?.inMonth).toBe(false);
     expect(weeks[2]?.[4]).toMatchObject({ date: '2026-09-18', isToday: true, isPast: false, inMonth: true });
     expect(weeks[2]?.[3]?.isPast).toBe(true);

@@ -1,8 +1,10 @@
+import type { ActionFailure, ActionResult } from '@/lib/action-result';
 import 'server-only';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { memoizeRequestRead } from '@/lib/data/read-request-cache';
+import { logReadFailure, memoizeRequestRead, logReadErrors } from '@/lib/data/read-request-cache';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
+import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { getBusinessTodayIso } from '@/lib/personnel/types';
 import {
   canHolderApproveTarget,
@@ -14,11 +16,7 @@ import {
   type ResponsibilityDelegation,
   type ResponsibilityMember,
 } from './resolution';
-import type {
-  OrgRole,
-  OrganizationResponsibility,
-  ResponsibilityPerson,
-} from './types';
+import type { OrgRole, OrganizationResponsibility, ResponsibilityPerson } from './types';
 import { ORGANIZATION_RESPONSIBILITIES } from './types';
 
 export type ResponsibilityRuntimeState = {
@@ -33,21 +31,16 @@ export type ResponsibilityRuntimeState = {
  * stamped with the database clock (`clock_timestamp()` in
  * `apply_responsibility_configuration`); when the app server's clock trails
  * the database, a just-applied configuration would otherwise not be effective
- * yet — leaving a freshly revoked holder authorized for the skew window (a
- * real race surfaced by the P1-06 gate). Configurations are never
+ * yet — leaving a freshly revoked holder authorized for the skew window.
+ * Configurations are never
  * future-dated, so flooring the local time to the newest configuration
  * timestamp is safe and keeps all config-to-config ordering intact.
  */
-function getSkewGuardedActionTime(
-  configurations: ResponsibilityConfiguration[]
-): string {
+function getSkewGuardedActionTime(configurations: ResponsibilityConfiguration[]): string {
   const localNow = new Date().toISOString();
   let newest: string | null = null;
   for (const configuration of configurations) {
-    if (
-      newest === null ||
-      Date.parse(configuration.effectiveFrom) > Date.parse(newest)
-    ) {
+    if (newest === null || Date.parse(configuration.effectiveFrom) > Date.parse(newest)) {
       newest = configuration.effectiveFrom;
     }
   }
@@ -70,151 +63,172 @@ export type ResponsibilitySettingsData = {
   effective: Record<OrganizationResponsibility, EffectiveResponsibility>;
 };
 
-export const loadResponsibilityRuntimeState = memoizeRequestRead(async function loadResponsibilityRuntimeState(
-  organizationId: string
-): Promise<ResponsibilityRuntimeState | null> {
-  const admin = createSupabaseAdminClient();
-  const businessDate = getBusinessTodayIso();
-  const [
-    configurationsResult,
-    assignmentsResult,
-    delegationsResult,
-    employeeRecordsResult,
-    membershipsResult,
-  ] = await Promise.all([
-    admin
-      .from('organization_responsibility_configurations')
-      .select('*')
-      .eq('organization_id', organizationId),
-    admin
-      .from('organization_responsibility_assignments')
-      .select('*')
-      .eq('organization_id', organizationId),
-    admin
-      .from('organization_responsibility_delegations')
-      .select('*')
-      .eq('organization_id', organizationId),
-    admin
-      .from('employee_records')
-      .select('id, user_id, first_name, last_name, exit_date')
-      .eq('organization_id', organizationId),
-    admin
-      .from('organization_members')
-      .select('user_id, role')
-      .eq('organization_id', organizationId),
-  ]);
+export const loadResponsibilityRuntimeState = memoizeRequestRead(
+  async function loadResponsibilityRuntimeState(
+    organizationId: string,
+  ): Promise<ResponsibilityRuntimeState | null> {
+    const admin = createSupabaseAdminClient();
+    const businessDate = getBusinessTodayIso();
+    const [
+      configurationsResult,
+      assignmentsResult,
+      delegationsResult,
+      employeeRecordsResult,
+      membershipsResult,
+    ] = await Promise.all([
+      // Authorization state: a page truncated at 1,000 rows would silently drop holders.
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('organization_responsibility_configurations')
+            .select('*')
+            .eq('organization_id', organizationId)
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('organization_responsibility_assignments')
+            .select('*')
+            .eq('organization_id', organizationId)
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('organization_responsibility_delegations')
+            .select('*')
+            .eq('organization_id', organizationId)
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('employee_records')
+            .select('id, user_id, first_name, last_name, exit_date')
+            .eq('organization_id', organizationId)
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('organization_members')
+            .select('user_id, role')
+            .eq('organization_id', organizationId)
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+    ]);
 
-  const loadError =
-    configurationsResult.error ??
-    assignmentsResult.error ??
-    delegationsResult.error ??
-    employeeRecordsResult.error ??
-    membershipsResult.error;
-  if (loadError) {
-    console.error('Failed to load responsibility state:', loadError);
-    return null;
-  }
+    const loadError =
+      configurationsResult.error ??
+      assignmentsResult.error ??
+      delegationsResult.error ??
+      employeeRecordsResult.error ??
+      membershipsResult.error;
+    if (loadError) {
+      logReadFailure('Failed to load responsibility state:', loadError);
+      return null;
+    }
 
-  const membershipByUserId = new Map(
-    (membershipsResult.data ?? []).map((membership) => [
-      membership.user_id,
-      membership.role as OrgRole,
-    ])
-  );
-  const userIds = Array.from(membershipByUserId.keys());
-  const profilesResult =
-    userIds.length > 0
-      ? await admin
-          .from('profiles')
-          .select('id, first_name, last_name, email')
-          .in('id', userIds)
-      : { data: [], error: null };
+    const membershipByUserId = new Map(
+      (membershipsResult.data ?? []).map((membership) => [membership.user_id, membership.role as OrgRole]),
+    );
+    const userIds = Array.from(membershipByUserId.keys());
+    const profilesResult = await readInBatches(userIds, (batch) =>
+      admin
+        .from('profiles')
+        .select('id, first_name, last_name, email')
+        .in('id', [...batch]),
+    );
 
-  if (profilesResult.error) {
-    console.error('Failed to load responsibility holder profiles:', profilesResult.error);
-    return null;
-  }
+    if (profilesResult.error) {
+      logReadFailure('Failed to load responsibility holder profiles:', profilesResult.error);
+      return null;
+    }
 
-  const profileByUserId = new Map(
-    (profilesResult.data ?? []).map((profile) => [profile.id, profile])
-  );
-  const members: ResponsibilityMember[] = [];
-  const people: ResponsibilityPerson[] = [];
+    const profileByUserId = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile]));
+    const members: ResponsibilityMember[] = [];
+    const people: ResponsibilityPerson[] = [];
 
-  for (const record of employeeRecordsResult.data ?? []) {
-    if (!record.user_id) continue;
-    const role = membershipByUserId.get(record.user_id);
-    if (!role) continue;
-    const profile = profileByUserId.get(record.user_id);
-    const isActive =
-      record.exit_date === null || record.exit_date > businessDate;
+    for (const record of employeeRecordsResult.data ?? []) {
+      if (!record.user_id) continue;
+      const role = membershipByUserId.get(record.user_id);
+      if (!role) continue;
+      const profile = profileByUserId.get(record.user_id);
+      const isActive = record.exit_date === null || record.exit_date > businessDate;
 
-    members.push({
-      employeeRecordId: record.id,
-      userId: record.user_id,
-      role,
-      active: isActive,
-    });
-    if (isActive) {
-      people.push({
+      members.push({
         employeeRecordId: record.id,
         userId: record.user_id,
-        firstName: profile?.first_name ?? record.first_name,
-        lastName: profile?.last_name ?? record.last_name,
-        email: profile?.email ?? null,
         role,
+        active: isActive,
       });
+      if (isActive) {
+        people.push({
+          employeeRecordId: record.id,
+          userId: record.user_id,
+          firstName: profile?.first_name ?? record.first_name,
+          lastName: profile?.last_name ?? record.last_name,
+          email: profile?.email ?? null,
+          role,
+        });
+      }
     }
-  }
 
-  const assignmentsByConfigurationId = new Map<
-    string,
-    ResponsibilityConfiguration['assignments']
-  >();
-  for (const assignment of assignmentsResult.data ?? []) {
-    const assignments =
-      assignmentsByConfigurationId.get(assignment.configuration_id) ?? [];
-    assignments.push({
-      id: assignment.id,
-      configurationId: assignment.configuration_id,
-      employeeRecordId: assignment.employee_record_id,
-      source: assignment.source,
-      roleSnapshot: assignment.role_snapshot,
-    });
-    assignmentsByConfigurationId.set(assignment.configuration_id, assignments);
-  }
+    const assignmentsByConfigurationId = new Map<string, ResponsibilityConfiguration['assignments']>();
+    for (const assignment of assignmentsResult.data ?? []) {
+      const assignments = assignmentsByConfigurationId.get(assignment.configuration_id) ?? [];
+      assignments.push({
+        id: assignment.id,
+        configurationId: assignment.configuration_id,
+        employeeRecordId: assignment.employee_record_id,
+        source: assignment.source,
+        roleSnapshot: assignment.role_snapshot,
+      });
+      assignmentsByConfigurationId.set(assignment.configuration_id, assignments);
+    }
 
-  return {
-    members,
-    people: people.toSorted((left, right) => {
-      const leftName = `${left.lastName ?? ''} ${left.firstName ?? ''}`;
-      const rightName = `${right.lastName ?? ''} ${right.firstName ?? ''}`;
-      return leftName.localeCompare(rightName, 'de');
-    }),
-    configurations: (configurationsResult.data ?? []).map((configuration) => ({
-      id: configuration.id,
-      responsibility: configuration.responsibility,
-      mode: configuration.mode,
-      effectiveFrom: configuration.effective_from,
-      createdAt: configuration.created_at,
-      assignments:
-        assignmentsByConfigurationId.get(configuration.id) ?? [],
-    })),
-    delegations: (delegationsResult.data ?? []).map((delegation) => ({
-      id: delegation.id,
-      responsibility: delegation.responsibility,
-      delegatorEmployeeRecordId: delegation.delegator_employee_record_id,
-      substituteEmployeeRecordId: delegation.substitute_employee_record_id,
-      validFrom: delegation.valid_from,
-      validUntil: delegation.valid_until,
-      revokedFrom: delegation.revoked_from,
-    })),
-  };
-}, { outsideRequest: 'fresh' });
+    return {
+      members,
+      people: people.toSorted((left, right) => {
+        const leftName = `${left.lastName ?? ''} ${left.firstName ?? ''}`;
+        const rightName = `${right.lastName ?? ''} ${right.firstName ?? ''}`;
+        return leftName.localeCompare(rightName, 'de');
+      }),
+      configurations: (configurationsResult.data ?? []).map((configuration) => ({
+        id: configuration.id,
+        responsibility: configuration.responsibility,
+        mode: configuration.mode,
+        effectiveFrom: configuration.effective_from,
+        createdAt: configuration.created_at,
+        assignments: assignmentsByConfigurationId.get(configuration.id) ?? [],
+      })),
+      delegations: (delegationsResult.data ?? []).map((delegation) => ({
+        id: delegation.id,
+        responsibility: delegation.responsibility,
+        delegatorEmployeeRecordId: delegation.delegator_employee_record_id,
+        substituteEmployeeRecordId: delegation.substitute_employee_record_id,
+        validFrom: delegation.valid_from,
+        validUntil: delegation.valid_until,
+        revokedFrom: delegation.revoked_from,
+      })),
+    };
+  },
+  { outsideRequest: 'fresh' },
+);
 
 export async function getResponsibilitySettingsData(): Promise<
-  | { success: true; data: ResponsibilitySettingsData }
-  | { success: false; error: string }
+  ActionResult<{ data: ResponsibilitySettingsData }>
 > {
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
@@ -226,21 +240,21 @@ export async function getResponsibilitySettingsData(): Promise<
     admin.from('organizations').select('admin_id').eq('id', orgId).single(),
   ]);
   if (!state || organizationResult.error || !organizationResult.data) {
+    logReadErrors('getResponsibilitySettingsData: read failed', organizationResult.error);
     return { success: false, error: 'load_failed' };
   }
 
   const businessDate = getBusinessTodayIso();
   const actionTime = getSkewGuardedActionTime(state.configurations);
   const currentEmployeeRecordId =
-    state.members.find((member) => member.userId === userId)?.employeeRecordId ??
-    null;
+    state.members.find((member) => member.userId === userId)?.employeeRecordId ?? null;
   const isManager = role === 'admin' || role === 'buero';
   const visibleDelegations = isManager
     ? state.delegations
     : state.delegations.filter(
         (delegation) =>
           delegation.delegatorEmployeeRecordId === currentEmployeeRecordId ||
-          delegation.substituteEmployeeRecordId === currentEmployeeRecordId
+          delegation.substituteEmployeeRecordId === currentEmployeeRecordId,
       );
   const visiblePersonIds = new Set<string>([
     ...(currentEmployeeRecordId ? [currentEmployeeRecordId] : []),
@@ -253,18 +267,16 @@ export async function getResponsibilitySettingsData(): Promise<
     ORGANIZATION_RESPONSIBILITIES.map((responsibility) => [
       responsibility,
       resolveEffectiveResponsibility({ responsibility, actionTime, businessDate, ...state }),
-    ])
+    ]),
   ) as Record<OrganizationResponsibility, EffectiveResponsibility>;
 
-  const scopeEffective = (
-    effectiveResponsibility: EffectiveResponsibility
-  ): EffectiveResponsibility =>
+  const scopeEffective = (effectiveResponsibility: EffectiveResponsibility): EffectiveResponsibility =>
     isManager
       ? effectiveResponsibility
       : {
           ...effectiveResponsibility,
           holders: effectiveResponsibility.holders.filter(
-            (holder) => holder.employeeRecordId === currentEmployeeRecordId
+            (holder) => holder.employeeRecordId === currentEmployeeRecordId,
           ),
         };
 
@@ -279,16 +291,14 @@ export async function getResponsibilitySettingsData(): Promise<
       businessDate,
       people: isManager
         ? state.people
-        : state.people.filter((person) =>
-            visiblePersonIds.has(person.employeeRecordId)
-          ),
+        : state.people.filter((person) => visiblePersonIds.has(person.employeeRecordId)),
       configurations: isManager ? state.configurations : [],
       delegations: visibleDelegations,
       effective: Object.fromEntries(
         ORGANIZATION_RESPONSIBILITIES.map((responsibility) => [
           responsibility,
           scopeEffective(effectiveResponsibilities[responsibility]),
-        ])
+        ]),
       ) as Record<OrganizationResponsibility, EffectiveResponsibility>,
     },
   };
@@ -306,7 +316,7 @@ export async function authorizeResponsibilityForTarget(input: {
       holder: EffectiveResponsibilityHolder;
       effective: EffectiveResponsibility;
     }
-  | { success: false; error: string }
+  | ActionFailure
 > {
   const state = await loadResponsibilityRuntimeState(input.organizationId);
   if (!state) return { success: false, error: 'responsibility_load_failed' };
@@ -317,20 +327,12 @@ export async function authorizeResponsibilityForTarget(input: {
     businessDate: getBusinessTodayIso(),
     ...state,
   });
-  const holder = effective.holders.find(
-    (candidate) => candidate.userId === input.actorUserId
-  );
+  const holder = effective.holders.find((candidate) => candidate.userId === input.actorUserId);
 
-  if (
-    !holder ||
-    !canHolderApproveTarget(holder, input.targetUserId, input.targetRole)
-  ) {
+  if (!holder || !canHolderApproveTarget(holder, input.targetUserId, input.targetRole)) {
     return {
       success: false,
-      error:
-        input.actorUserId === input.targetUserId
-          ? 'self_approval_not_allowed'
-          : 'not_responsible',
+      error: input.actorUserId === input.targetUserId ? 'self_approval_not_allowed' : 'not_responsible',
     };
   }
 
@@ -351,22 +353,18 @@ export async function getEffectiveResponsibilityHolderForActor(input: {
     businessDate: getBusinessTodayIso(),
     ...state,
   });
-  return (
-    effective.holders.find((holder) => holder.userId === input.actorUserId) ??
-    null
-  );
+  return effective.holders.find((holder) => holder.userId === input.actorUserId) ?? null;
 }
 
+/** Null when the responsibility state cannot be read: a failed read must block the removal, never pass it. */
 export async function getResponsibilitiesStrandedByMemberRemoval(input: {
   organizationId: string;
   userId: string;
-}): Promise<OrganizationResponsibility[]> {
+}): Promise<OrganizationResponsibility[] | null> {
   const state = await loadResponsibilityRuntimeState(input.organizationId);
-  if (!state) return [];
+  if (!state) return null;
 
-  const employeeRecordId = state.members.find(
-    (member) => member.userId === input.userId
-  )?.employeeRecordId;
+  const employeeRecordId = state.members.find((member) => member.userId === input.userId)?.employeeRecordId;
   if (!employeeRecordId) return [];
 
   const actionTime = getSkewGuardedActionTime(state.configurations);
@@ -375,10 +373,7 @@ export async function getResponsibilitiesStrandedByMemberRemoval(input: {
     ORGANIZATION_RESPONSIBILITIES.map((responsibility) => [
       responsibility,
       resolveEffectiveResponsibility({ responsibility, actionTime, businessDate, ...state }),
-    ])
+    ]),
   ) as Record<OrganizationResponsibility, EffectiveResponsibility>;
-  return getResponsibilitiesStrandedByEmployeeRemoval(
-    effective,
-    employeeRecordId
-  );
+  return getResponsibilitiesStrandedByEmployeeRemoval(effective, employeeRecordId);
 }

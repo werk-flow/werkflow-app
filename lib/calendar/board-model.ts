@@ -31,18 +31,32 @@ export function groupBoardRows(input: {
 }): BoardTeamGroup[] {
   const groups = new Map<string, BoardTeamGroup>();
   if (input.includeUnassigned) {
-    groups.set(UNASSIGNED_ROW_KEY, { key: UNASSIGNED_ROW_KEY, name: 'Ohne Zuweisung', rows: [{ key: UNASSIGNED_ROW_KEY, kind: 'unassigned', row: null }] });
+    groups.set(UNASSIGNED_ROW_KEY, {
+      key: UNASSIGNED_ROW_KEY,
+      name: 'Ohne Zuweisung',
+      rows: [{ key: UNASSIGNED_ROW_KEY, kind: 'unassigned', row: null }],
+    });
   }
   const visibleRows = input.rows.filter((row) => {
-    if (input.memberUserIds && (!row.userId || !input.memberUserIds.includes(row.userId)) && row.userId !== null) return false;
+    if (
+      input.memberUserIds &&
+      (!row.userId || !input.memberUserIds.includes(row.userId)) &&
+      row.userId !== null
+    )
+      return false;
     if (input.teamIds.length > 0 && !(row.teamId && input.teamIds.includes(row.teamId))) return false;
     return true;
   });
-  const teamOrder = [...new Map(visibleRows.filter((row) => row.teamId).map((row) => [row.teamId ?? '', row.teamName ?? ''])).entries()]
-    .sort((left, right) => left[1].localeCompare(right[1], 'de'));
+  const teamOrder = [
+    ...new Map(
+      visibleRows.filter((row) => row.teamId).map((row) => [row.teamId ?? '', row.teamName ?? '']),
+    ).entries(),
+  ].sort((left, right) => left[1].localeCompare(right[1], 'de'));
   for (const [teamId, teamName] of teamOrder) groups.set(teamId, { key: teamId, name: teamName, rows: [] });
   groups.set(NO_TEAM_KEY, { key: NO_TEAM_KEY, name: 'Ohne Team', rows: [] });
-  for (const row of [...visibleRows].sort((left, right) => left.displayName.localeCompare(right.displayName, 'de'))) {
+  for (const row of [...visibleRows].sort((left, right) =>
+    left.displayName.localeCompare(right.displayName, 'de'),
+  )) {
     const group = groups.get(row.teamId ?? NO_TEAM_KEY);
     group?.rows.push({ key: row.employeeRecordId, kind: 'person', row });
   }
@@ -61,16 +75,25 @@ export function rowOwnsJob(model: BoardRowModel, job: CalendarJob): boolean {
 export function matchesBoardSearch(job: CalendarJob, query: string): boolean {
   const needle = query.trim().toLocaleLowerCase('de');
   if (!needle) return true;
-  return [job.title, job.clientName, job.jobNumber, job.location, job.projectName]
-    .some((value) => value?.toLocaleLowerCase('de').includes(needle));
+  return [job.title, job.clientName, job.jobNumber, job.location, job.projectName].some((value) =>
+    value?.toLocaleLowerCase('de').includes(needle),
+  );
 }
 
 export function occurrenceSpan(job: CalendarJob): BoardSpanItem | null {
   if (!job.plannedDate) return null;
   const startDate = job.startAt ? formatBerlinLocalDate(job.startAt) : job.plannedDate;
-  const endDateExclusive = job.endDateExclusive
-    ?? (job.endAt ? addLocalDays(formatBerlinLocalDate(new Date(new Date(job.endAt).getTime() - 1)), 1) : addLocalDays(startDate, 1));
-  return { key: job.id, startDate, endDateExclusive: endDateExclusive > startDate ? endDateExclusive : addLocalDays(startDate, 1), sortMinutes: job.plannedTime ? minutesOfDay(job.plannedTime) : -1 };
+  const endDateExclusive =
+    job.endDateExclusive ??
+    (job.endAt
+      ? addLocalDays(formatBerlinLocalDate(new Date(new Date(job.endAt).getTime() - 1)), 1)
+      : addLocalDays(startDate, 1));
+  return {
+    key: job.id,
+    startDate,
+    endDateExclusive: endDateExclusive > startDate ? endDateExclusive : addLocalDays(startDate, 1),
+    sortMinutes: job.plannedTime ? minutesOfDay(job.plannedTime) : -1,
+  };
 }
 
 export type BoardAbsenceItem = BoardSpanItem & {
@@ -89,18 +112,37 @@ export function absenceItems(input: {
   for (const entry of input.vacation) {
     if (input.employeeRecordId !== null && entry.employeeRecordId !== input.employeeRecordId) continue;
     const half = entry.dayPortion === 'half_day' ? ' (halber Tag)' : '';
-    items.push({ key: `vacation:${entry.id}`, startDate: entry.startDate, endDateExclusive: addLocalDays(entry.endDate, 1), sortMinutes: -2, kind: 'vacation', pending: entry.status === 'pending', label: `Urlaub – ${entry.personName}${half}${entry.status === 'pending' ? ' (angefragt)' : ''}` });
+    items.push({
+      key: `vacation:${entry.id}`,
+      startDate: entry.startDate,
+      endDateExclusive: addLocalDays(entry.endDate, 1),
+      sortMinutes: -2,
+      kind: 'vacation',
+      pending: entry.status === 'pending',
+      label: `Urlaub – ${entry.personName}${half}${entry.status === 'pending' ? ' (angefragt)' : ''}`,
+    });
   }
   for (const entry of input.sickness) {
     if (input.employeeRecordId !== null && entry.employeeRecordId !== input.employeeRecordId) continue;
     const half = entry.dayPortion === 'half_day' ? ' (halber Tag)' : '';
-    items.push({ key: `sickness:${entry.id}`, startDate: entry.startDate, endDateExclusive: addLocalDays(entry.endDate, 1), sortMinutes: -2, kind: 'sickness', pending: false, label: `Abwesend – ${entry.personName}${half}${entry.openEnded ? ' (bis auf Weiteres)' : ''}` });
+    items.push({
+      key: `sickness:${entry.id}`,
+      startDate: entry.startDate,
+      endDateExclusive: addLocalDays(entry.endDate, 1),
+      sortMinutes: -2,
+      kind: 'sickness',
+      pending: false,
+      label: `Abwesend – ${entry.personName}${half}${entry.openEnded ? ' (bis auf Weiteres)' : ''}`,
+    });
   }
   return items;
 }
 
 /** Recorded time per person and local date, with the provisional flag, for the actual-time strip. */
-export function actualMinutesByUserDate(entries: readonly TimeEntry[], now = new Date()): Map<string, { minutes: number; pending: boolean }> {
+export function actualMinutesByUserDate(
+  entries: readonly TimeEntry[],
+  now = new Date(),
+): Map<string, { minutes: number; pending: boolean }> {
   const byUser = new Map<string, TimeEntry[]>();
   for (const entry of entries) {
     const list = byUser.get(entry.userId) ?? [];
@@ -127,7 +169,11 @@ export function dispatchStateMatches(state: CalendarDispatchState, filters: read
   return filters.length === 0 || filters.includes(state);
 }
 
-export type BoardReassignmentTarget = { employeeRecordId: string | null; userId: string | null; date: string };
+export type BoardReassignmentTarget = {
+  employeeRecordId: string | null;
+  userId: string | null;
+  date: string;
+};
 
 /**
  * The one place that turns "this card, from that row, onto this cell" into
@@ -157,7 +203,9 @@ export function reassignmentChanges(input: {
     ...(rowChanged
       ? {
           assignedUserIds: swap(job.assignedUserIds, sourceUserId, target.userId),
-          ...(job.occurrenceId ? { assignedEmployeeRecordIds: swap(recordIds, sourceEmployeeRecordId, target.employeeRecordId) } : {}),
+          ...(job.occurrenceId
+            ? { assignedEmployeeRecordIds: swap(recordIds, sourceEmployeeRecordId, target.employeeRecordId) }
+            : {}),
         }
       : {}),
   };

@@ -1,23 +1,28 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import { Building2, Users } from 'lucide-react';
 
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle
-} from '@/components/ui/card';
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DeleteAccountButton } from '@/components/onboarding/delete-account-button';
 import { UrlFlashBanner } from '@/components/ui/banner';
+import { getAuthenticatedUser } from '@/lib/data/cached';
+import { readOwnLatestJoinRequest } from '@/lib/org/join-requests';
 
 export const metadata: Metadata = {
-  title: 'Onboarding - WerkFlow'
+  title: 'Onboarding - WerkFlow',
 };
 
-export default function OnboardingStartPage() {
+export default async function OnboardingStartPage() {
+  // A person whose join request waits goes straight to the waiting state.
+  const user = await getAuthenticatedUser();
+  if (!user) redirect('/login');
+  const latest = await readOwnLatestJoinRequest(user.id);
+  if (!latest.success) throw new Error('join_request_read_failed');
+  if (latest.request?.status === 'pending') redirect('/onboarding/join-organization');
+
   return (
     <div className="w-full max-w-2xl space-y-8">
       <Suspense fallback={null}>
@@ -27,9 +32,7 @@ export default function OnboardingStartPage() {
         />
       </Suspense>
       <div className="text-center space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">
-          Willkommen bei WerkFlow
-        </h1>
+        <h1 className="text-3xl font-bold tracking-tight">Willkommen bei WerkFlow</h1>
         <p className="text-muted-foreground">Wie möchtest du starten?</p>
       </div>
 
@@ -44,8 +47,8 @@ export default function OnboardingStartPage() {
             <div className="flex-1 space-y-2">
               <CardTitle className="text-xl">Organisation erstellen</CardTitle>
               <CardDescription>
-                Werde Admin und erstelle deine eigene Organisation. Lade
-                Mitarbeiter ein und verwalte dein Team.
+                Werde Admin und erstelle deine eigene Organisation. Lade Mitarbeiter ein und verwalte dein
+                Team.
               </CardDescription>
             </div>
             <Button className="w-full mt-auto" asChild>
@@ -56,10 +59,7 @@ export default function OnboardingStartPage() {
 
         {/* Join Organization Option */}
         <Card className="relative overflow-hidden transition-all hover:border-primary hover:shadow-md h-full">
-          <Link
-            href="/onboarding/join-organization"
-            className="absolute inset-0 z-10"
-          />
+          <Link href="/onboarding/join-organization" className="absolute inset-0 z-10" />
           <CardHeader className="flex flex-col h-full space-y-4">
             <div className="flex size-12 items-center justify-center rounded-lg bg-primary/10">
               <Users className="size-6 text-primary" />
@@ -67,8 +67,7 @@ export default function OnboardingStartPage() {
             <div className="flex-1 space-y-2">
               <CardTitle className="text-xl">Organisation beitreten</CardTitle>
               <CardDescription>
-                Du hast einen Organisationscode? Tritt einer bestehenden
-                Organisation bei.
+                Du hast einen Organisationscode? Tritt einer bestehenden Organisation bei.
               </CardDescription>
             </div>
             <Button variant="outline" className="w-full mt-auto" asChild>

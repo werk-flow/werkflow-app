@@ -1,13 +1,10 @@
-import {
-  Card,
-  CardContent,
-  CardHeader
-} from '@/components/ui/card';
+import { StandaloneScreen } from '@/components/shared/standalone-screen';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function UpgradeLoading() {
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center bg-background px-4">
+    <StandaloneScreen>
       <div className="w-full max-w-md space-y-8">
         <div className="text-center space-y-2">
           <Skeleton className="mx-auto h-9 w-48" />
@@ -27,6 +24,6 @@ export default function UpgradeLoading() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </StandaloneScreen>
   );
 }

@@ -20,7 +20,7 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogTitle
+  AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { EditClientDialog } from './edit-client-dialog';
 import type { Client } from '@/lib/jobs/types';
@@ -35,12 +35,7 @@ interface ClientActionsMenuProps {
   onDelete: (client: Client) => Promise<void>;
 }
 
-export function ClientActionsMenu({
-  client,
-  isBusy = false,
-  onSaved,
-  onDelete,
-}: ClientActionsMenuProps) {
+export function ClientActionsMenu({ client, isBusy = false, onSaved, onDelete }: ClientActionsMenuProps) {
   const router = useRouter();
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -49,24 +44,13 @@ export function ClientActionsMenu({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 w-8 p-0"
-            disabled={isBusy}
-          >
-            {isBusy ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <MoreHorizontal className="size-4" />
-            )}
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" disabled={isBusy}>
+            {isBusy ? <Loader2 className="size-4 animate-spin" /> : <MoreHorizontal className="size-4" />}
             <span className="sr-only">Aktionen öffnen</span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            onClick={() => router.push(`/kunden/${client.id}`)}
-          >
+          <DropdownMenuItem onClick={() => router.push(`/kunden/${client.id}`)}>
             <ExternalLink className="size-4" />
             Details anzeigen
           </DropdownMenuItem>
@@ -75,10 +59,7 @@ export function ClientActionsMenu({
             Bearbeiten
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem
-            variant="destructive"
-            onClick={() => setShowDeleteDialog(true)}
-          >
+          <DropdownMenuItem variant="destructive" onClick={() => setShowDeleteDialog(true)}>
             <Trash2 className="size-4" />
             Löschen
           </DropdownMenuItem>
@@ -97,20 +78,15 @@ export function ClientActionsMenu({
           <AlertDialogHeader>
             <AlertDialogTitle>Kunde löschen?</AlertDialogTitle>
             <AlertDialogDescription>
-              Bist du sicher, dass du{' '}
-              <span className="font-medium">{client.name}</span> löschen
-              möchtest? Bestehende Aufträge und Projekte verlieren die
-              Zuordnung zu diesem Kunden.
+              Bist du sicher, dass du <span className="font-medium">{client.name}</span> löschen möchtest?
+              Bestehende Aufträge und Projekte verlieren die Zuordnung zu diesem Kunden.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Abbrechen</AlertDialogCancel>
             {/* The row leaves the list at once; the list rolls it back and
                 reports a failure, so the confirm can close immediately. */}
-            <AlertDialogAction
-              onClick={() => void onDelete(client)}
-              variant="destructive"
-            >
+            <AlertDialogAction onClick={() => void onDelete(client)} variant="destructive">
               Löschen
             </AlertDialogAction>
           </AlertDialogFooter>

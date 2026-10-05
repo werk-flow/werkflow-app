@@ -20,7 +20,9 @@ async function HomeRedirect() {
     redirect('/login');
   }
 
-  const { data: { user } } = await getCachedUser();
+  const {
+    data: { user },
+  } = await getCachedUser();
   if (!user) {
     redirect('/login');
   }

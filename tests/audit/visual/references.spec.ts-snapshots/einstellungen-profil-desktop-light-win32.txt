@@ -1,0 +1,60 @@
+Haustechnik Krämer GmbH
+Organisation erstellen
+Dashboard
+Aufgaben
+3
+3 offene Aufgaben und Benachrichtigungen
+Kalender
+Zeiterfassung
+Qualifikationen
+Anfragen
+Aufträge
+Dokumente
+Inventar
+Service
+Arbeitsvorlagen
+Mitarbeiter
+Kunden
+MK
+Martin Krämer
+martin.kraemer@haustechnik-kraemer.de
+Einstellungen
+Persönlich
+Profil
+Name und Profilbild
+Konto & Sicherheit
+E-Mail und Passwort
+Abonnement & Abrechnung
+Plan und Abrechnung
+Organisation
+Dashboard
+Startansicht und Widgets
+Organisation
+Allgemeine Organisationsdaten
+Kalender
+Kalenderansichten und Regeln
+Zeiterfassung
+Arbeitszeiten und Freigaben
+Aufträge & Projekte
+Persönliche Tabellenansicht
+Mitarbeiter
+Freigaben und Vertretungen
+Kunden
+Kundenverwaltung und Defaults
+Profil
+Persönliche Angaben, die appweit als Anzeigename verwendet werden.
+Persönliche Einstellungen
+Profilbild
+Lade ein Bild hoch und passe den Ausschnitt vor dem Speichern genau so an, wie es später in der App erscheinen soll.
+MK
+Unterstützt werden gängige Bildformate bis 5 MB. Vor dem Speichern kannst du dein Bild zuschneiden und heranzoomen.
+Profilbild hochladen
+Anzeigename
+Diese Angaben erscheinen in der Sidebar und an weiteren Stellen der App als dein Name.
+Vorname
+*
+Pflichtfeld
+Nachname
+*
+Pflichtfeld
+Profil speichern

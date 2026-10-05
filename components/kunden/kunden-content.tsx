@@ -1,21 +1,22 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
-import { Search } from 'lucide-react';
 
 import { useBanner } from '@/components/ui/banner';
-import { Input } from '@/components/ui/input';
+import { SearchInput } from '@/components/ui/search-input';
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { ListPagination } from '@/components/shared/list-pagination';
 import { useListNavigation } from '@/hooks/use-list-navigation';
 import { ClientsTable } from './clients-table';
 import { clientCreations } from './create-client-dialog';
+import { CLIENT_DELETE_ERROR_MESSAGES } from './use-client-deletion';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useOptimisticChannel } from '@/hooks/use-optimistic-channel';
 import { useOptimisticList } from '@/hooks/use-optimistic-list';
 import { useLiveView } from '@/hooks/use-live-view';
 import { fetchCustomerPage } from '@/lib/clients/list-page';
 import { UsableContent } from '@/components/shared/usable-content';
+import { describeFailure } from '@/lib/action-messages';
 import { deleteClient } from '@/lib/clients/actions';
 import type { Client } from '@/lib/jobs/types';
 
@@ -24,7 +25,9 @@ interface KundenContentProps {
   /** Organization, caller and role identity of the rendered scope. */
   scopeKey: string;
   clients: Client[];
-  page: number; total: number; searchQuery: string;
+  page: number;
+  total: number;
+  searchQuery: string;
 }
 
 type SearchControl = {
@@ -32,11 +35,6 @@ type SearchControl = {
   onChange: (value: string) => void;
   /** Whether the search input owned focus before the list remounted. */
   focusedRef: RefObject<boolean>;
-};
-
-const DELETE_ERROR_MESSAGES: Record<string, string> = {
-  not_authorized: 'Du bist nicht berechtigt, Kunden zu löschen.',
-  client_not_found: 'Der Kunde wurde nicht gefunden.',
 };
 
 const getClientId = (client: Client) => client.id;
@@ -47,8 +45,7 @@ const compareClients = (a: Client, b: Client) => a.name.localeCompare(b.name, 'd
  * Search text, the pending URL navigation and the input's focus outlive the
  * keyed list below. Each committed page or search remounts the list so live
  * and optimistic state cannot cross scopes; a remount must not drop a
- * keystroke typed during the round trip or the 250 ms navigation timer
- * (review finding, 2026-09-13).
+ * keystroke typed during the round trip or the 250 ms navigation timer.
  */
 export function KundenContent(props: KundenContentProps) {
   const { scopeKey, page, searchQuery } = props;
@@ -72,8 +69,11 @@ export function KundenContent(props: KundenContentProps) {
 function KundenList({
   organizationId,
   clients: initialClients,
-  page, total: initialTotal, searchQuery,
-  navigation, search,
+  page,
+  total: initialTotal,
+  searchQuery,
+  navigation,
+  search,
 }: KundenContentProps & { navigation: ReturnType<typeof useListNavigation>; search: SearchControl }) {
   const { showBanner } = useBanner();
   const confirmedCreations = useRef(new Set<string>());
@@ -105,22 +105,38 @@ function KundenList({
   });
   const { insert, commit, rollback } = list;
   const { invalidate } = live;
-  const insertCreation = useCallback((tempId: string, draft: Client) => {
-    invalidate();
-    insert(tempId, draft);
-  }, [invalidate, insert]);
-  const commitCreation = useCallback((tempId: string, client: Client) => {
-    // A create started before an organization switch can finish afterward.
-    if (client.organizationId !== organizationId) { rollback(tempId); return; }
-    confirmedCreations.current.add(client.id);
-    commit(tempId, client);
-    void refresh();
-  }, [commit, refresh, organizationId, rollback]);
-  const rollbackCreation = useCallback((tempId: string) => {
-    rollback(tempId);
-    void refresh();
-  }, [rollback, refresh]);
-  useOptimisticChannel(clientCreations, { insert: insertCreation, commit: commitCreation, rollback: rollbackCreation });
+  const insertCreation = useCallback(
+    (tempId: string, draft: Client) => {
+      invalidate();
+      insert(tempId, draft);
+    },
+    [invalidate, insert],
+  );
+  const commitCreation = useCallback(
+    (tempId: string, client: Client) => {
+      // A create started before an organization switch can finish afterward.
+      if (client.organizationId !== organizationId) {
+        rollback(tempId);
+        return;
+      }
+      confirmedCreations.current.add(client.id);
+      commit(tempId, client);
+      void refresh();
+    },
+    [commit, refresh, organizationId, rollback],
+  );
+  const rollbackCreation = useCallback(
+    (tempId: string) => {
+      rollback(tempId);
+      void refresh();
+    },
+    [rollback, refresh],
+  );
+  useOptimisticChannel(clientCreations, {
+    insert: insertCreation,
+    commit: commitCreation,
+    rollback: rollbackCreation,
+  });
   // Only a successfully committed read started after the save can settle an
   // insertion outside this page/search. Failed or superseded reads cannot.
   useEffect(() => {
@@ -146,7 +162,7 @@ function KundenList({
     (clientId: string) => {
       void runBusy(clientId, refresh);
     },
-    [runBusy, refresh]
+    [runBusy, refresh],
   );
 
   // Delete: the row leaves at once and comes back with the error on failure.
@@ -158,60 +174,73 @@ function KundenList({
       const result = await deleteClient(client.id).catch(() => null);
       if (!result || !result.success) {
         rollback(client.id);
+        const retryHint = 'Bitte versuche es erneut.';
+        const reason = result
+          ? describeFailure(result.error, CLIENT_DELETE_ERROR_MESSAGES, retryHint)
+          : retryHint;
         showBanner({
           variant: 'error',
-          message: `Kunde „${client.name}" konnte nicht gelöscht werden: ${
-            (result && DELETE_ERROR_MESSAGES[result.error]) ??
-            'Bitte versuche es erneut.'
-          }`,
+          message: `Kunde „${client.name}“ konnte nicht gelöscht werden: ${reason}`,
         });
         await refresh();
         return;
       }
       showBanner({
         variant: 'success',
-        message: `Kunde „${client.name}" wurde gelöscht.`,
+        message: `Kunde „${client.name}“ wurde gelöscht.`,
       });
       await refresh();
     },
-    [remove, rollback, refresh, invalidate, showBanner]
+    [remove, rollback, refresh, invalidate, showBanner],
   );
 
   return (
     <UsableContent name="kunden" count={filteredRows.length}>
-      {live.isStale && <p role="status" className="mb-3 text-sm text-muted-foreground">Die Kundenliste konnte nicht aktualisiert werden. Bitte versuche es erneut.</p>}
+      {live.isStale && (
+        <p role="status" className="mb-3 text-sm text-muted-foreground">
+          Die Kundenliste konnte nicht aktualisiert werden. Bitte versuche es erneut.
+        </p>
+      )}
       <div className="mb-4 flex items-center justify-between gap-3">
         <p className="shrink-0 text-sm text-muted-foreground">
-          {total}{' '}
-          {total === 1 ? 'Kunde' : 'Kunden'}
+          {total} {total === 1 ? 'Kunde' : 'Kunden'}
         </p>
         <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
-          <div className="relative w-full max-w-xs">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              ref={searchInput}
-              value={search.value}
-              onChange={(event) => search.onChange(event.target.value)}
-              onFocus={() => { focusedRef.current = true; }}
-              onBlur={() => { focusedRef.current = false; }}
-              className="h-8 pl-9"
-              placeholder="Kunde, Ansprechpartner, Einsatzort..."
-              aria-label="Kunden durchsuchen"
-            />
-          </div>
+          <SearchInput
+            ref={searchInput}
+            wrapperClassName="w-full max-w-xs"
+            value={search.value}
+            onValueChange={search.onChange}
+            onFocus={() => {
+              focusedRef.current = true;
+            }}
+            onBlur={() => {
+              focusedRef.current = false;
+            }}
+            className="h-8"
+            placeholder="Kunde, Ansprechpartner, Einsatzort…"
+            aria-label="Kunden durchsuchen"
+          />
           <RefreshButton label="Tabelle aktualisieren" onRefresh={refresh} />
         </div>
       </div>
 
       <div inert={live.isStale || undefined}>
-      <ClientsTable
-        rows={filteredRows}
-        isBusy={isBusy}
-        onSaved={handleClientSaved}
-        onDelete={handleDeleteClient}
-      />
+        <ClientsTable
+          rows={filteredRows}
+          isBusy={isBusy}
+          onSaved={handleClientSaved}
+          onDelete={handleDeleteClient}
+          isFiltered={searchQuery.trim() !== ''}
+        />
       </div>
-      <ListPagination label="Kunden" page={page} total={total} busy={navigation.busy} onPageChange={(nextPage) => navigation.navigate({ page: nextPage })} />
+      <ListPagination
+        label="Kunden"
+        page={page}
+        total={total}
+        busy={navigation.busy}
+        onPageChange={(nextPage) => navigation.navigate({ page: nextPage })}
+      />
     </UsableContent>
   );
 }

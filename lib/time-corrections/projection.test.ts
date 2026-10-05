@@ -37,16 +37,18 @@ function application(input: {
     sources: [{ kind: input.sourceKind, id: input.sourceId, version: 'v1' }],
     snapshot: {
       schemaVersion: 1,
-      facts: [{
-        factId: 'start',
-        employeeRecordId: '10000000-0000-0000-0000-000000000005',
-        userId: baseEntry.userId,
-        entryType: 'clock_in',
-        timestamp: input.timestamp,
-        jobId: null,
-        activityKind: null,
-        isManual: true,
-      }],
+      facts: [
+        {
+          factId: 'start',
+          employeeRecordId: '10000000-0000-0000-0000-000000000005',
+          userId: baseEntry.userId,
+          entryType: 'clock_in',
+          timestamp: input.timestamp,
+          jobId: null,
+          activityKind: null,
+          isManual: true,
+        },
+      ],
     },
   };
 }
@@ -55,20 +57,20 @@ describe('applyApprovedTimeCorrections', () => {
   test('replaces a raw fact without mutating the source record', () => {
     const result = applyApprovedTimeCorrections(
       [baseEntry],
-      [application({
-        id: '20000000-0000-0000-0000-000000000001',
-        sourceKind: 'legacy_entry',
-        sourceId: baseEntry.id,
-        timestamp: '2026-09-01T06:15:00.000Z',
-      })],
-      baseEntry.organizationId
+      [
+        application({
+          id: '20000000-0000-0000-0000-000000000001',
+          sourceKind: 'legacy_entry',
+          sourceId: baseEntry.id,
+          timestamp: '2026-09-01T06:15:00.000Z',
+        }),
+      ],
+      baseEntry.organizationId,
     );
 
     expect(result).toHaveLength(1);
     expect(result[0]?.timestamp).toBe('2026-09-01T06:15:00.000Z');
-    expect(result[0]?.correctionApplicationId).toBe(
-      '20000000-0000-0000-0000-000000000001'
-    );
+    expect(result[0]?.correctionApplicationId).toBe('20000000-0000-0000-0000-000000000001');
     expect(baseEntry.timestamp).toBe('2026-09-01T06:00:00.000Z');
   });
 
@@ -85,11 +87,7 @@ describe('applyApprovedTimeCorrections', () => {
       sourceId: first.applicationId,
       timestamp: '2026-09-01T06:30:00.000Z',
     });
-    const result = applyApprovedTimeCorrections(
-      [baseEntry],
-      [first, second],
-      baseEntry.organizationId
-    );
+    const result = applyApprovedTimeCorrections([baseEntry], [first, second], baseEntry.organizationId);
 
     expect(result).toHaveLength(1);
     expect(result[0]?.timestamp).toBe('2026-09-01T06:30:00.000Z');

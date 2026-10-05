@@ -36,7 +36,12 @@ test('a submission with breaks becomes one session that owns every row', () => {
   expect(groups).toHaveLength(1);
   expect(groups[0]?.clockIn?.entry_type).toBe('clock_in');
   expect(groups[0]?.clockOut?.entry_type).toBe('clock_out');
-  expect(groups[0]?.entries.map((entry) => entry.entry_type)).toEqual(['clock_in', 'break_start', 'break_end', 'clock_out']);
+  expect(groups[0]?.entries.map((entry) => entry.entry_type)).toEqual([
+    'clock_in',
+    'break_start',
+    'break_end',
+    'clock_out',
+  ]);
   expect(groups[0]?.date).toBe('2026-09-15');
 });
 
@@ -62,7 +67,10 @@ test('two submissions on one day stay separate and the newest sorts first', () =
     row({ entry_type: 'clock_out', timestamp: '2026-09-15T15:00:00Z', created_at: '2026-09-16T07:00:00Z' }),
   ];
   const groups = groupPendingEntries(rows);
-  expect(groups.map((group) => group.clockIn?.timestamp)).toEqual(['2026-09-15T11:00:00Z', '2026-09-15T05:00:00Z']);
+  expect(groups.map((group) => group.clockIn?.timestamp)).toEqual([
+    '2026-09-15T11:00:00Z',
+    '2026-09-15T05:00:00Z',
+  ]);
 });
 
 test('one submission with two sessions pairs each clock-in with the clock-out that follows it', () => {

@@ -5,7 +5,7 @@ description: Diagnosis loop for hard bugs and performance regressions. Use when 
 
 # Diagnose a defect
 
-Adapted for WerkFlow from mattpocock/skills (MIT). For a test failure, first read `docs/technical/testing.md`. That guide owns group selection, the run's execution model, deadlines, retained diagnosis, recovery, the blocking rules and the campaign budget under decision 0007. Apply this skill to the suspected product, test, or environment defect. Read the owning feature contract before deciding what behavior is wrong.
+Adapted for WerkFlow from mattpocock/skills (MIT). For a test failure, first read `docs/technical/testing.md`. That guide owns group selection, repair mode, the run's execution model, deadlines, retained diagnosis and recovery under decision 0007. Apply this skill to the suspected product, test, or environment defect. Read the owning feature contract before deciding what behavior is wrong.
 
 Application tests use local Supabase. The canary and named provider checks use cloud DEV. Production is read-only during diagnosis. Use the repository wrappers and workspace ownership rules. Do not start a competing server, database reset, or test command.
 
@@ -63,11 +63,11 @@ Where practical, demonstrate that the check rejects the defect and passes the re
 
 Use the enforcement ladder from decision 0005: first remove the invalid state through a type or shared API, then add an automated check, then document a remaining judgment. State the prevention tier. If no suitable automated boundary exists, record why and the focused follow-up needed.
 
-A harness failure is a defect of the harness, not a detail of the run. The same class twice in one slice (a leaked state, a locator that matched a hidden copy, a fixture that did not fit the viewport) ends with a fixture, a convention test or a runner rule, never with a second local repair; the protocol's "Campaign Budget" binds the slice's closure to that.
+A harness failure is a defect of the harness, not a detail of the run. The same class twice in one slice (a leaked state, a locator that matched a hidden copy, a fixture that did not fit the viewport) ends with a fixture, a convention test or a runner rule, never with a second local repair; the protocol's "Campaign Line" binds the slice's closure to that.
 
 ## 6. Verify the affected scope and close the investigation
 
-Run the affected checks through the current test plan. Preserve valid unrelated group evidence. An unchanged failed group cannot be retried as acceptance except for the bounded environment-recovery path in `docs/technical/testing.md`: classify the environment cause, obtain the matching retained diagnostic pass, and only then clean its owned world; cleaning first forfeits the retry. Two failures on the same inputs remain blocked until the underlying cause is resolved.
+Run the affected checks through the current test plan. `docs/technical/testing.md` ("Repair mode" and "Failures") owns when a failed group may run again and in which order to classify, replay and clean. Follow it; a later pass alone is not a diagnosis.
 
 Before closing the finding, confirm:
 
@@ -76,8 +76,8 @@ Before closing the finding, confirm:
 - Temporary instrumentation and throwaway prototypes are removed or clearly archived.
 - The incident record names the cause, correction, affected proof, cleanup, and prevention tier.
 - No required selected group is falsely reported green while failed, blocked, or too slow.
-- The campaign line at the end of the verify run is inside its budget, or the harness change that answers it is in the same change.
+- A harness failure class that appeared twice in the slice is answered by a mechanism in the same change, not by a sentence (`docs/plans/phase-1/protocol.md`, "Campaign Line").
 
 Do not restart all passing groups, enlarge a timeout, or reset attempt history to obtain a clean-looking report. The result can be a confirmed repair, a disproved hypothesis, or an unresolved observation with a precise next step. Report which conclusion the evidence supports.
 
-Calendar save ownership is per operation: `beginMutation()` returns an idempotent release callback used in `finally`. A manual refresh or child success must never decrement another save. Check thrown transport failures as well as returned errors, and offer Undo only after confirmed persistence. Entries and correction metadata commit together through `completeCalendarEntryRead`; a missing badge read is a failed window, not ready data. The inner calendar scope includes organization, caller, and role, including auxiliary Parkplatz state.
+The calendar's save ownership rules live in the `werkflow-design` skill, "Loading states".

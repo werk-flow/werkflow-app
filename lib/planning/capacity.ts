@@ -1,8 +1,4 @@
-import type {
-  CapacityDayContext,
-  CapacityEvaluation,
-  PlanningConflict,
-} from './types';
+import type { CapacityDayContext, CapacityEvaluation, PlanningConflict } from './types';
 
 export type ProposedEmployeeMinutes = {
   employeeRecordId: string;
@@ -21,13 +17,10 @@ const CAPACITY_CONFLICT_MESSAGES = {
 
 export function evaluateCapacity(
   proposed: ProposedEmployeeMinutes[],
-  contexts: CapacityDayContext[]
+  contexts: CapacityDayContext[],
 ): CapacityEvaluation {
   const contextByKey = new Map(
-    contexts.map((context) => [
-      `${context.employeeRecordId}:${context.localDate}`,
-      context,
-    ])
+    contexts.map((context) => [`${context.employeeRecordId}:${context.localDate}`, context]),
   );
   const conflicts: PlanningConflict[] = [];
   const employeeDays: CapacityEvaluation['employeeDays'] = [];
@@ -59,9 +52,7 @@ export function evaluateCapacity(
         ? null
         : Math.max(
             0,
-            context.targetMinutes -
-              context.approvedAbsenceMinutes -
-              context.existingPlannedMinutes
+            context.targetMinutes - context.approvedAbsenceMinutes - context.existingPlannedMinutes,
           );
     employeeDays.push({ ...context, proposedMinutes: allocation.minutes, remainingMinutes });
 
@@ -130,7 +121,7 @@ export function calculateIntervalOverlapMinutes(
   firstStart: Date,
   firstEnd: Date,
   secondStart: Date,
-  secondEnd: Date
+  secondEnd: Date,
 ): number {
   const overlapStart = Math.max(firstStart.getTime(), secondStart.getTime());
   const overlapEnd = Math.min(firstEnd.getTime(), secondEnd.getTime());
@@ -139,13 +130,8 @@ export function calculateIntervalOverlapMinutes(
 
 export async function fingerprintSnapshot(value: unknown): Promise<string> {
   const serialized = JSON.stringify(sortObject(value));
-  const digest = await crypto.subtle.digest(
-    'SHA-256',
-    new TextEncoder().encode(serialized)
-  );
-  return Array.from(new Uint8Array(digest), (byte) =>
-    byte.toString(16).padStart(2, '0')
-  ).join('');
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(serialized));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 function compareByCodePoint(left: string, right: string): number {
@@ -162,15 +148,15 @@ function sortObject(value: unknown): unknown {
       .map(([key, nested]) => [key, sortObject(nested)]);
   }
   if (value instanceof Set) {
-    return [...value].map(sortObject).sort((left, right) =>
-      compareByCodePoint(JSON.stringify(left), JSON.stringify(right))
-    );
+    return [...value]
+      .map(sortObject)
+      .sort((left, right) => compareByCodePoint(JSON.stringify(left), JSON.stringify(right)));
   }
   if (value && typeof value === 'object') {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>)
         .sort(([left], [right]) => compareByCodePoint(left, right))
-        .map(([key, nested]) => [key, sortObject(nested)])
+        .map(([key, nested]) => [key, sortObject(nested)]),
     );
   }
   return value;

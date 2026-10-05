@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
-import { createAdminClient, withRoleClient } from './shared';
+import { createHash } from 'node:crypto';
+import { createAdminClient } from './shared';
 
 export type EmployeeRecordState = {
   id: string;
@@ -21,22 +21,20 @@ export async function getEmployeeRecordStateByUser(
 ): Promise<EmployeeRecordState> {
   const admin = createAdminClient();
   const { data, error } = await admin
-    .from("employee_records")
-    .select("id, user_id, employee_number, entry_date, exit_date")
-    .eq("organization_id", orgId)
-    .eq("user_id", userId);
+    .from('employee_records')
+    .select('id, user_id, employee_number, entry_date, exit_date')
+    .eq('organization_id', orgId)
+    .eq('user_id', userId);
 
   if (error || !data || data.length === 0) {
-    throw new Error(
-      `No employee record found for user ${userId}: ${error?.message}`,
-    );
+    throw new Error(`No employee record found for user ${userId}: ${error?.message}`);
   }
 
   const { data: membership } = await admin
-    .from("organization_members")
-    .select("joined_at")
-    .eq("organization_id", orgId)
-    .eq("user_id", userId)
+    .from('organization_members')
+    .select('joined_at')
+    .eq('organization_id', orgId)
+    .eq('user_id', userId)
     .maybeSingle();
 
   const [row] = data;
@@ -64,11 +62,11 @@ export async function getEmployeeRecordEventStates(
   employeeRecordId: string,
 ): Promise<EmployeeRecordEventState[]> {
   const { data, error } = await createAdminClient()
-    .from("employee_record_events")
-    .select("event_type, event_payload, created_by, created_at")
-    .eq("organization_id", orgId)
-    .eq("employee_record_id", employeeRecordId)
-    .order("created_at", { ascending: true });
+    .from('employee_record_events')
+    .select('event_type, event_payload, created_by, created_at')
+    .eq('organization_id', orgId)
+    .eq('employee_record_id', employeeRecordId)
+    .order('created_at', { ascending: true });
   if (error) {
     throw new Error(`Employee record events query failed: ${error.message}`);
   }
@@ -81,29 +79,6 @@ export async function getEmployeeRecordEventStates(
   }));
 }
 
-// P1-04: which work-schedule rows a real signed-in user can see under RLS.
-// The UI never shows foreign schedules, so the self-or-manager SELECT policy
-// (managers all org rows, a person exactly their own) is proved here.
-export async function getVisibleWorkScheduleRecordIdsAs(
-  user: { email: string; password: string },
-  orgId: string,
-): Promise<string[]> {
-  return withRoleClient(user, async (client) => {
-    const { data, error } = await client
-      .from("work_schedules")
-      .select("employee_record_id")
-      .eq("organization_id", orgId);
-    if (error) {
-      throw new Error(
-        `work_schedules query failed for ${user.email}: ${error.message}`,
-      );
-    }
-    return [
-      ...new Set((data ?? []).map((row) => row.employee_record_id as string)),
-    ];
-  });
-}
-
 export type ResponsibilityConfigurationState = {
   id: string;
   mode: string;
@@ -112,16 +87,16 @@ export type ResponsibilityConfigurationState = {
 
 export async function getLatestResponsibilityConfigurationState(
   orgId: string,
-  responsibility: "time_approval" | "leave_approval",
+  responsibility: 'time_approval' | 'leave_approval',
 ): Promise<ResponsibilityConfigurationState> {
   const admin = createAdminClient();
   const { data: configuration, error } = await admin
-    .from("organization_responsibility_configurations")
-    .select("id, mode")
-    .eq("organization_id", orgId)
-    .eq("responsibility", responsibility)
-    .order("effective_from", { ascending: false })
-    .order("created_at", { ascending: false })
+    .from('organization_responsibility_configurations')
+    .select('id, mode')
+    .eq('organization_id', orgId)
+    .eq('responsibility', responsibility)
+    .order('effective_from', { ascending: false })
+    .order('created_at', { ascending: false })
     .limit(1)
     .single();
   if (error || !configuration) {
@@ -129,13 +104,11 @@ export async function getLatestResponsibilityConfigurationState(
   }
 
   const { data: assignments, error: assignmentError } = await admin
-    .from("organization_responsibility_assignments")
-    .select("employee_record_id")
-    .eq("configuration_id", configuration.id);
+    .from('organization_responsibility_assignments')
+    .select('employee_record_id')
+    .eq('configuration_id', configuration.id);
   if (assignmentError) {
-    throw new Error(
-      `Responsibility assignments query failed: ${assignmentError.message}`,
-    );
+    throw new Error(`Responsibility assignments query failed: ${assignmentError.message}`);
   }
 
   return {
@@ -147,24 +120,67 @@ export async function getLatestResponsibilityConfigurationState(
   };
 }
 
-export async function getVisibleResponsibilityEmployeeRecordIdsAs(
-  user: { email: string; password: string },
-  orgId: string,
-): Promise<string[]> {
-  return withRoleClient(user, async (client) => {
-    const { data, error } = await client
-      .from("organization_responsibility_assignments")
-      .select("employee_record_id")
-      .eq("organization_id", orgId);
-    if (error) {
-      throw new Error(
-        `Responsibility RLS query failed for ${user.email}: ${error.message}`,
-      );
-    }
-    return [
-      ...new Set((data ?? []).map((row) => row.employee_record_id as string)),
-    ].sort();
+/** Stores one employment condition version, so a test owns the entitlement it builds on. */
+export async function seedEmploymentCondition(input: {
+  organizationId: string;
+  employeeRecordId: string;
+  actorUserId: string;
+  validFrom: string;
+  employmentType: 'vollzeit' | 'teilzeit' | 'ausbildung' | 'minijob' | 'sonstiges';
+  weeklyHours: number | null;
+  vacationDaysPerYear: number | null;
+  note: string;
+}): Promise<void> {
+  const { error } = await createAdminClient().from('employment_conditions').upsert(
+    {
+      organization_id: input.organizationId,
+      employee_record_id: input.employeeRecordId,
+      valid_from: input.validFrom,
+      employment_type: input.employmentType,
+      weekly_hours: input.weeklyHours,
+      vacation_days_per_year: input.vacationDaysPerYear,
+      note: input.note,
+      created_by: input.actorUserId,
+    },
+    { onConflict: 'employee_record_id,valid_from' },
+  );
+  if (error) throw new Error(`Employment condition setup failed: ${error.message}`);
+}
+
+/**
+ * Pins one responsibility to the role default or to named holders through the product's own
+ * configuration function, so a test owns its starting state instead of inheriting another test's.
+ */
+export async function setResponsibilityHolders(input: {
+  organizationId: string;
+  ownerUserId: string;
+  responsibility: 'time_approval' | 'leave_approval';
+  holderEmployeeRecordIds: readonly string[] | 'role_default';
+}): Promise<void> {
+  const admin = createAdminClient();
+  const { data: current, error: currentError } = await admin
+    .from('organization_responsibility_configurations')
+    .select('id')
+    .eq('organization_id', input.organizationId)
+    .eq('responsibility', input.responsibility)
+    .order('effective_from', { ascending: false })
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  // Membership triggers record a role-default configuration for every organization.
+  if (currentError || !current)
+    throw new Error(`Responsibility setup lookup failed: ${currentError?.message ?? 'no configuration'}`);
+  const roleDefault = input.holderEmployeeRecordIds === 'role_default';
+  const { error } = await admin.rpc('apply_responsibility_configuration', {
+    p_organization_id: input.organizationId,
+    p_responsibility: input.responsibility,
+    p_mode: roleDefault ? 'role_default' : 'selected',
+    p_employee_record_ids: roleDefault ? [] : [...input.holderEmployeeRecordIds],
+    p_actor_id: input.ownerUserId,
+    p_expected_configuration_id: current.id,
   });
+  if (error) throw new Error(`Responsibility setup failed: ${error.message}`);
 }
 
 /**
@@ -181,14 +197,12 @@ export async function giveEmployeesWorkSchedules(input: {
 }): Promise<void> {
   const admin = createAdminClient();
   const { data: employees, error: employeeError } = await admin
-    .from("employee_records")
-    .select("id")
-    .eq("organization_id", input.organizationId);
+    .from('employee_records')
+    .select('id')
+    .eq('organization_id', input.organizationId);
   if (employeeError || !employees?.length)
-    throw new Error(
-      `Work schedule setup failed: ${employeeError?.message ?? "no employees"}`,
-    );
-  const { error } = await admin.from("work_schedules").upsert(
+    throw new Error(`Work schedule setup failed: ${employeeError?.message ?? 'no employees'}`);
+  const { error } = await admin.from('work_schedules').upsert(
     employees.map((employee) => ({
       organization_id: input.organizationId,
       employee_record_id: employee.id,
@@ -203,9 +217,24 @@ export async function giveEmployeesWorkSchedules(input: {
       note: input.note,
       created_by: input.actorUserId,
     })),
-    { onConflict: "employee_record_id,valid_from" },
+    { onConflict: 'employee_record_id,valid_from' },
   );
   if (error) throw new Error(`Work schedule setup failed: ${error.message}`);
+}
+
+/** Moves the entry date back so time on `date` belongs to an active employment; never moves it forward. */
+export async function ensureEmployedSince(input: {
+  organizationId: string;
+  userIds: readonly string[];
+  date: string;
+}): Promise<void> {
+  const { error } = await createAdminClient()
+    .from('employee_records')
+    .update({ entry_date: input.date })
+    .eq('organization_id', input.organizationId)
+    .in('user_id', [...input.userIds])
+    .or(`entry_date.is.null,entry_date.gt.${input.date}`);
+  if (error) throw new Error(`Employment backdating failed: ${error.message}`);
 }
 
 export async function prepareP123PersonnelPrerequisites(input: {
@@ -215,35 +244,30 @@ export async function prepareP123PersonnelPrerequisites(input: {
 }): Promise<Array<{ id: string; userId: string | null }>> {
   const admin = createAdminClient();
   const { data: employees, error: employeeError } = await admin
-    .from("employee_records")
-    .select("id, user_id, employee_number")
-    .eq("organization_id", input.organizationId)
-    .order("id");
+    .from('employee_records')
+    .select('id, user_id, employee_number')
+    .eq('organization_id', input.organizationId)
+    .order('id');
   if (employeeError || !employees?.length)
-    throw new Error(
-      `P1-23 employee setup failed: ${employeeError?.message ?? "no employees"}`,
-    );
+    throw new Error(`P1-23 employee setup failed: ${employeeError?.message ?? 'no employees'}`);
   const { error: dateError } = await admin
-    .from("employee_records")
+    .from('employee_records')
     .update({ entry_date: input.validFrom })
-    .eq("organization_id", input.organizationId);
-  if (dateError)
-    throw new Error(`P1-23 entry-date setup failed: ${dateError.message}`);
+    .eq('organization_id', input.organizationId);
+  if (dateError) throw new Error(`P1-23 entry-date setup failed: ${dateError.message}`);
   for (const employee of employees) {
     if (employee.employee_number) continue;
     const { error: numberError } = await admin
-      .from("employee_records")
+      .from('employee_records')
       .update({ employee_number: `P123-${employee.id.slice(0, 8)}` })
-      .eq("id", employee.id)
-      .eq("organization_id", input.organizationId);
-    if (numberError)
-      throw new Error(`P1-23 employee-number setup failed: ${numberError.message}`);
+      .eq('id', employee.id)
+      .eq('organization_id', input.organizationId);
+    if (numberError) throw new Error(`P1-23 employee-number setup failed: ${numberError.message}`);
   }
   const weekdayMinutes = [480, 420, 360, 240];
-  const { error: scheduleError } = await admin.from("work_schedules").upsert(
+  const { error: scheduleError } = await admin.from('work_schedules').upsert(
     employees.map((employee, index) => {
-      const dailyMinutes =
-        weekdayMinutes[index % weekdayMinutes.length] ?? 480;
+      const dailyMinutes = weekdayMinutes[index % weekdayMinutes.length] ?? 480;
       return {
         organization_id: input.organizationId,
         employee_record_id: employee.id,
@@ -255,14 +279,13 @@ export async function prepareP123PersonnelPrerequisites(input: {
         friday_minutes: dailyMinutes,
         saturday_minutes: 0,
         sunday_minutes: 0,
-        note: "P1-23 acceptance prerequisite",
+        note: 'P1-23 acceptance prerequisite',
         created_by: input.actorUserId,
       };
     }),
-    { onConflict: "employee_record_id,valid_from" },
+    { onConflict: 'employee_record_id,valid_from' },
   );
-  if (scheduleError)
-    throw new Error(`P1-23 schedule setup failed: ${scheduleError.message}`);
+  if (scheduleError) throw new Error(`P1-23 schedule setup failed: ${scheduleError.message}`);
   return employees.map((employee) => ({
     id: employee.id,
     userId: employee.user_id,
@@ -277,8 +300,8 @@ export async function openRemainingP123Accounts(input: {
   const admin = createAdminClient();
   const [{ data: employees, error: employeeError }, { data: accounts, error: accountError }] =
     await Promise.all([
-      admin.from("employee_records").select("id").eq("organization_id", input.organizationId).order("id"),
-      admin.from("time_accounts").select("employee_record_id").eq("organization_id", input.organizationId),
+      admin.from('employee_records').select('id').eq('organization_id', input.organizationId).order('id'),
+      admin.from('time_accounts').select('employee_record_id').eq('organization_id', input.organizationId),
     ]);
   if (employeeError || accountError)
     throw new Error(
@@ -287,43 +310,114 @@ export async function openRemainingP123Accounts(input: {
   const existing = new Set((accounts ?? []).map((account) => account.employee_record_id));
   for (const employee of employees ?? []) {
     if (existing.has(employee.id)) continue;
-    const requestHash = createHash("sha256")
+    const requestHash = createHash('sha256')
       .update(`${input.organizationId}:${employee.id}:${input.openedOn}`)
-      .digest("hex");
+      .digest('hex');
     const operationId = `${requestHash.slice(0, 8)}-${requestHash.slice(8, 12)}-${requestHash.slice(12, 16)}-${requestHash.slice(16, 20)}-${requestHash.slice(20, 32)}`;
-    const { error } = await admin.rpc("open_time_account", {
+    const { error } = await admin.rpc('open_time_account', {
       p_organization_id: input.organizationId,
       p_employee_record_id: employee.id,
       p_opening_minutes: 0,
       p_opened_on: input.openedOn,
-      p_reason: "P1-23 acceptance opening",
+      p_reason: 'P1-23 acceptance opening',
       p_actor_id: input.actorUserId,
       p_operation_id: operationId,
       p_request_hash: requestHash,
     });
-    if (error)
-      throw new Error(`P1-23 account fixture RPC failed: ${error.message}`);
+    if (error) throw new Error(`P1-23 account fixture RPC failed: ${error.message}`);
   }
 }
 
 export async function getP124State(organizationId: string) {
   const admin = createAdminClient();
-  const [access, accessTransitions, employment, employmentTransitions, plans, requirements,
-    protectedDocuments, releases, acknowledgements, operations, events] = await Promise.all([
-      admin.from("personnel_access_lifecycles").select("*").eq("organization_id", organizationId).order("created_at"),
-      admin.from("personnel_access_transitions").select("*").eq("organization_id", organizationId).order("created_at").order("id"),
-      admin.from("personnel_employment_lifecycles").select("*").eq("organization_id", organizationId).order("created_at"),
-      admin.from("personnel_employment_transitions").select("*").eq("organization_id", organizationId).order("created_at").order("id"),
-      admin.from("personnel_onboarding_plans").select("*").eq("organization_id", organizationId).order("created_at"),
-      admin.from("personnel_onboarding_requirements").select("*").eq("organization_id", organizationId).order("created_at").order("id"),
-      admin.from("personnel_documents").select("*, documents!inner(display_name)").eq("organization_id", organizationId).order("classified_at").order("id"),
-      admin.from("personnel_document_releases").select("*").eq("organization_id", organizationId).order("released_at").order("id"),
-      admin.from("personnel_acknowledgements").select("*").eq("organization_id", organizationId).order("acknowledged_at"),
-      admin.from("personnel_lifecycle_operations").select("*").eq("organization_id", organizationId).order("created_at"),
-      admin.from("employee_record_events").select("*").eq("organization_id", organizationId).order("created_at").order("id"),
-    ]);
-  const results = [access, accessTransitions, employment, employmentTransitions, plans, requirements,
-    protectedDocuments, releases, acknowledgements, operations, events];
+  const [
+    access,
+    accessTransitions,
+    employment,
+    employmentTransitions,
+    plans,
+    requirements,
+    protectedDocuments,
+    releases,
+    acknowledgements,
+    operations,
+    events,
+  ] = await Promise.all([
+    admin
+      .from('personnel_access_lifecycles')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .order('created_at'),
+    admin
+      .from('personnel_access_transitions')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .order('created_at')
+      .order('id'),
+    admin
+      .from('personnel_employment_lifecycles')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .order('created_at'),
+    admin
+      .from('personnel_employment_transitions')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .order('created_at')
+      .order('id'),
+    admin
+      .from('personnel_onboarding_plans')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .order('created_at'),
+    admin
+      .from('personnel_onboarding_requirements')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .order('created_at')
+      .order('id'),
+    admin
+      .from('personnel_documents')
+      .select('*, documents!inner(display_name)')
+      .eq('organization_id', organizationId)
+      .order('classified_at')
+      .order('id'),
+    admin
+      .from('personnel_document_releases')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .order('released_at')
+      .order('id'),
+    admin
+      .from('personnel_acknowledgements')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .order('acknowledged_at'),
+    admin
+      .from('personnel_lifecycle_operations')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .order('created_at'),
+    admin
+      .from('employee_record_events')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .order('created_at')
+      .order('id'),
+  ]);
+  const results = [
+    access,
+    accessTransitions,
+    employment,
+    employmentTransitions,
+    plans,
+    requirements,
+    protectedDocuments,
+    releases,
+    acknowledgements,
+    operations,
+    events,
+  ];
   const failed = results.find((result) => result.error);
   if (failed?.error) throw new Error(`P1-24 state lookup failed: ${failed.error.message}`);
   return {
@@ -341,45 +435,41 @@ export async function getP124State(organizationId: string) {
   };
 }
 
-export async function getP124CountsAs(
-  user: { email: string; password: string },
-  organizationId: string,
-) {
-  const tables = [
-    "personnel_access_lifecycles",
-    "personnel_employment_lifecycles",
-    "personnel_onboarding_plans",
-    "personnel_onboarding_requirements",
-    "personnel_documents",
-    "personnel_document_releases",
-    "personnel_acknowledgements",
-  ] as const;
-  return withRoleClient(user, async (client) => {
-    const entries = await Promise.all(tables.map(async (table) => {
-      const { count, error } = await client.from(table)
-        .select("id", { count: "exact", head: true })
-        .eq("organization_id", organizationId);
-      if (error) throw new Error(`P1-24 ${table} RLS lookup failed: ${error.message}`);
-      if (count === null) throw new Error(`P1-24 ${table} RLS lookup returned no count`);
-      return [table, count] as const;
-    }));
-    return Object.fromEntries(entries) as Record<(typeof tables)[number], number>;
+/**
+ * A personnel record without app access, written like the "Personalakte anlegen" action
+ * (record plus its `created` event). Setup only; audit P1-24 creates one through the dialog.
+ */
+export async function seedNoLoginPersonnelRecord(input: {
+  organizationId: string;
+  actorUserId: string;
+  firstName: string;
+  lastName: string;
+  entryDate: string;
+}): Promise<string> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from('employee_records')
+    .insert({
+      organization_id: input.organizationId,
+      first_name: input.firstName,
+      last_name: input.lastName,
+      entry_date: input.entryDate,
+      created_by: input.actorUserId,
+    })
+    .select('id')
+    .single();
+  if (error) throw new Error(`No-login personnel record setup failed: ${error.message}`);
+  const { error: eventError } = await admin.from('employee_record_events').insert({
+    organization_id: input.organizationId,
+    employee_record_id: data.id,
+    event_type: 'created',
+    event_payload: {
+      first_name: input.firstName,
+      last_name: input.lastName,
+      entry_date: input.entryDate,
+    },
+    created_by: input.actorUserId,
   });
-}
-
-export async function getP124NoLoginRecordId(
-  organizationId: string,
-  lastName: string,
-): Promise<string | null> {
-  const { data, error } = await createAdminClient()
-    .from("employee_records")
-    .select("id")
-    .eq("organization_id", organizationId)
-    .eq("last_name", lastName)
-    .is("user_id", null)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw new Error(`P1-24 no-login personnel lookup failed: ${error.message}`);
-  return data?.id ?? null;
+  if (eventError) throw new Error(`No-login personnel event setup failed: ${eventError.message}`);
+  return data.id;
 }

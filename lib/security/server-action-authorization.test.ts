@@ -38,7 +38,8 @@ function isIdentityHelper(name: string): boolean {
 // Exports that intentionally run without a caller identity. Keep each reason
 // true; removing an entry requires the function to gain a check.
 const allowlist: Record<string, string> = {
-  'lib/dispatch/actions.ts#previewDispatchReadiness': 'delegates to authenticateAndAuthorize inside the first statement chain',
+  'lib/dispatch/actions.ts#previewDispatchReadiness':
+    'delegates to authenticateAndAuthorize inside the first statement chain',
 };
 
 function listApplicationSources(): string[] {
@@ -80,8 +81,10 @@ function hasServerDirective(statements: readonly ts.Statement[]): boolean {
 }
 
 function hasExportModifier(statement: ts.Statement): boolean {
-  return !!ts.canHaveModifiers(statement) &&
-    !!ts.getModifiers(statement)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword);
+  return (
+    !!ts.canHaveModifiers(statement) &&
+    !!ts.getModifiers(statement)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)
+  );
 }
 
 // Every export shape that can become a Server Action: function declarations,
@@ -89,37 +92,54 @@ function hasExportModifier(statement: ts.Statement): boolean {
 // rejected outright because their targets cannot be checked here.
 function exportedActions(file: string, source: ts.SourceFile): ExportedAction[] {
   const actions: ExportedAction[] = [];
-  if (hasServerDirective(source.statements)) for (const statement of source.statements) {
-    if (ts.isExportDeclaration(statement)) {
-      throw new Error(`${file} re-exports through 'use server'; move the export next to its authorization check`);
-    }
-    if (ts.isFunctionDeclaration(statement) && hasExportModifier(statement)) {
-      actions.push({ name: statement.name?.text ?? 'default', body: statement.body });
-      continue;
-    }
-    if (ts.isVariableStatement(statement) && hasExportModifier(statement)) {
-      for (const declaration of statement.declarationList.declarations) {
-        const initializer = declaration.initializer;
-        if (initializer && (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer))) {
-          actions.push({ name: declaration.name.getText(source), body: initializer.body });
-        } else {
-          throw new Error(`${file} exports an unresolved action alias ${declaration.name.getText(source)}; export the function beside its identity check`);
+  if (hasServerDirective(source.statements))
+    for (const statement of source.statements) {
+      if (ts.isExportDeclaration(statement)) {
+        throw new Error(
+          `${file} re-exports through 'use server'; move the export next to its authorization check`,
+        );
+      }
+      if (ts.isFunctionDeclaration(statement) && hasExportModifier(statement)) {
+        actions.push({ name: statement.name?.text ?? 'default', body: statement.body });
+        continue;
+      }
+      if (ts.isVariableStatement(statement) && hasExportModifier(statement)) {
+        for (const declaration of statement.declarationList.declarations) {
+          const initializer = declaration.initializer;
+          if (initializer && (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer))) {
+            actions.push({ name: declaration.name.getText(source), body: initializer.body });
+          } else {
+            throw new Error(
+              `${file} exports an unresolved action alias ${declaration.name.getText(source)}; export the function beside its identity check`,
+            );
+          }
         }
+        continue;
       }
-      continue;
-    }
-    if (ts.isExportAssignment(statement)) {
-      if (!ts.isArrowFunction(statement.expression) && !ts.isFunctionExpression(statement.expression)) {
-        throw new Error(`${file} exports an unresolved default action alias; export the function beside its identity check`);
+      if (ts.isExportAssignment(statement)) {
+        if (!ts.isArrowFunction(statement.expression) && !ts.isFunctionExpression(statement.expression)) {
+          throw new Error(
+            `${file} exports an unresolved default action alias; export the function beside its identity check`,
+          );
+        }
+        actions.push({ name: 'default', body: statement.expression.body });
       }
-      actions.push({ name: 'default', body: statement.expression.body });
     }
-  }
   function visitInline(node: ts.Node): void {
-    if ((ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node) || ts.isMethodDeclaration(node)) &&
-        node.body && ts.isBlock(node.body) && hasServerDirective(node.body.statements) &&
-        !actions.some((action) => action.body === node.body)) {
-      actions.push({ name: `inline:${source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1}`, body: node.body });
+    if (
+      (ts.isFunctionDeclaration(node) ||
+        ts.isFunctionExpression(node) ||
+        ts.isArrowFunction(node) ||
+        ts.isMethodDeclaration(node)) &&
+      node.body &&
+      ts.isBlock(node.body) &&
+      hasServerDirective(node.body.statements) &&
+      !actions.some((action) => action.body === node.body)
+    ) {
+      actions.push({
+        name: `inline:${source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1}`,
+        body: node.body,
+      });
     }
     ts.forEachChild(node, visitInline);
   }
@@ -127,7 +147,11 @@ function exportedActions(file: string, source: ts.SourceFile): ExportedAction[] 
   return actions;
 }
 
-function unguardedActions(file: string, source: ts.SourceFile, actions = exportedActions(file, source)): string[] {
+function unguardedActions(
+  file: string,
+  source: ts.SourceFile,
+  actions = exportedActions(file, source),
+): string[] {
   const unguarded: string[] = [];
   if (!actions.length) return unguarded;
 
@@ -143,8 +167,12 @@ function unguardedActions(file: string, source: ts.SourceFile, actions = exporte
     if (ts.isVariableStatement(statement)) {
       for (const declaration of statement.declarationList.declarations) {
         const initializer = declaration.initializer;
-        if (!ts.isIdentifier(declaration.name) || !initializer ||
-            !(ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer))) continue;
+        if (
+          !ts.isIdentifier(declaration.name) ||
+          !initializer ||
+          !(ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer))
+        )
+          continue;
         const calls = new Set<string>();
         calledIdentifiers(initializer.body, calls);
         callsByLocalFunction.set(declaration.name.text, calls);
@@ -190,7 +218,10 @@ test('module and inline Server Actions establish identity or have a reviewed exc
     unguarded.push(...unguardedActions(file, source, actions));
   }
   expect(unguarded).toEqual([]);
-  expect(Object.keys(allowlist).filter((key) => !existing.has(key)), 'stale action exceptions').toEqual([]);
+  expect(
+    Object.keys(allowlist).filter((key) => !existing.has(key)),
+    'stale action exceptions',
+  ).toEqual([]);
 });
 
 function couldContainServerDirective(text: string): boolean {
@@ -198,35 +229,76 @@ function couldContainServerDirective(text: string): boolean {
 }
 
 function fixture(source: string): string[] {
-  return unguardedActions('app/fixture.tsx', ts.createSourceFile('app/fixture.tsx', source, ts.ScriptTarget.Latest, true));
+  return unguardedActions(
+    'app/fixture.tsx',
+    ts.createSourceFile('app/fixture.tsx', source, ts.ScriptTarget.Latest, true),
+  );
 }
 
 test('inline use-server functions inside an ordinary page cannot bypass the identity inventory', () => {
-  expect(fixture(`export default function Page() { async function save() { 'use server'; return readPrivate(); } }`)).toHaveLength(1);
-  expect(fixture(`export default function Page() { return <form action={async () => { 'use server'; return readPrivate(); }} />; }`)).toHaveLength(1);
-  expect(fixture(`export default function Page() { async function save() { 'use server'; await getAuthenticatedUser(); return readPrivate(); } }`)).toEqual([]);
+  expect(
+    fixture(
+      `export default function Page() { async function save() { 'use server'; return readPrivate(); } }`,
+    ),
+  ).toHaveLength(1);
+  expect(
+    fixture(
+      `export default function Page() { return <form action={async () => { 'use server'; return readPrivate(); }} />; }`,
+    ),
+  ).toHaveLength(1);
+  expect(
+    fixture(
+      `export default function Page() { async function save() { 'use server'; await getAuthenticatedUser(); return readPrivate(); } }`,
+    ),
+  ).toEqual([]);
 });
 
 test('unresolved action aliases and re-exports fail instead of silently disappearing', () => {
-  expect(() => fixture(`'use server'; const inner = async () => readPrivate(); export const save = inner;`)).toThrow('unresolved action alias');
-  expect(() => fixture(`'use server'; const inner = async () => readPrivate(); export default inner;`)).toThrow('unresolved default action alias');
+  expect(() =>
+    fixture(`'use server'; const inner = async () => readPrivate(); export const save = inner;`),
+  ).toThrow('unresolved action alias');
+  expect(() =>
+    fixture(`'use server'; const inner = async () => readPrivate(); export default inner;`),
+  ).toThrow('unresolved default action alias');
   expect(() => fixture(`'use server'; export { save } from './other';`)).toThrow('re-exports');
 });
 
 test('direct functions and directive prologues are inventoried while literal text is not a directive', () => {
-  expect(fixture(`'use strict'; 'use server'; export async function save() { return readPrivate(); }`)).toHaveLength(1);
-  expect(fixture(`'use server'; export const save = async () => readPrivate(); export default async function() { return readPrivate(); }`)).toHaveLength(2);
+  expect(
+    fixture(`'use strict'; 'use server'; export async function save() { return readPrivate(); }`),
+  ).toHaveLength(1);
+  expect(
+    fixture(
+      `'use server'; export const save = async () => readPrivate(); export default async function() { return readPrivate(); }`,
+    ),
+  ).toHaveLength(2);
   expect(fixture(`const explanation = 'use server'; export const value = 1;`)).toEqual([]);
-  expect(fixture(`'use server'; export async function save() { const unused = async () => getAuthenticatedUser(); return readPrivate(); }`)).toHaveLength(1);
+  expect(
+    fixture(
+      `'use server'; export async function save() { const unused = async () => getAuthenticatedUser(); return readPrivate(); }`,
+    ),
+  ).toHaveLength(1);
   const escaped = String.raw`'use\x20server'; export async function save() { return readPrivate(); }`;
   expect(couldContainServerDirective(escaped)).toBe(true);
   expect(fixture(escaped)).toHaveLength(1);
 });
 
 test('called arrow and expression helpers establish identity, unused closures do not', () => {
-  expect(fixture(`'use server'; const guard = async () => getAuthenticatedUser(); export async function save() { await guard(); return readPrivate(); }`)).toEqual([]);
-  expect(fixture(`'use server'; const guard = async function() { await getAuthenticatedUser(); }; export async function save() { await guard(); return readPrivate(); }`)).toEqual([]);
-  expect(fixture(`'use server'; const guard = async () => { const unused = () => getAuthenticatedUser(); }; export async function save() { await guard(); return readPrivate(); }`)).toHaveLength(1);
+  expect(
+    fixture(
+      `'use server'; const guard = async () => getAuthenticatedUser(); export async function save() { await guard(); return readPrivate(); }`,
+    ),
+  ).toEqual([]);
+  expect(
+    fixture(
+      `'use server'; const guard = async function() { await getAuthenticatedUser(); }; export async function save() { await guard(); return readPrivate(); }`,
+    ),
+  ).toEqual([]);
+  expect(
+    fixture(
+      `'use server'; const guard = async () => { const unused = () => getAuthenticatedUser(); }; export async function save() { await guard(); return readPrivate(); }`,
+    ),
+  ).toHaveLength(1);
 });
 
 // Step 3 (2026-09-13) found 27 exported Server Actions with no caller in the
@@ -252,8 +324,9 @@ function normalizeModulePath(fromFile: string, specifier: string): string | null
 function importedNamesByModule(): Map<string, Set<string>> {
   const imported = new Map<string, Set<string>>();
   const record = (modulePath: string, name: string): void => {
-    if (!imported.has(modulePath)) imported.set(modulePath, new Set());
-    imported.get(modulePath)!.add(name);
+    const names = imported.get(modulePath) ?? new Set<string>();
+    names.add(name);
+    imported.set(modulePath, names);
   };
   // A text scan keeps this under the unit timeout: import and re-export statements in
   // this repository are plain `import ... from '...'` / `export { ... } from '...'` forms.
@@ -262,17 +335,28 @@ function importedNamesByModule(): Map<string, Set<string>> {
     const text = readFileSync(resolve(repositoryRoot, file), 'utf8');
     for (const match of text.matchAll(statement)) {
       const [, , typeOnly, clause, specifier] = match;
-      if (typeOnly) continue;
-      const modulePath = normalizeModulePath(file, specifier!);
+      if (typeOnly || clause === undefined || specifier === undefined) continue;
+      const modulePath = normalizeModulePath(file, specifier);
       if (!modulePath) continue;
-      const bindings = clause!.trim();
-      if (bindings.startsWith('*')) { record(modulePath, '*'); continue; }
+      const bindings = clause.trim();
+      if (bindings.startsWith('*')) {
+        record(modulePath, '*');
+        continue;
+      }
       const braces = /\{([^}]*)\}/.exec(bindings);
-      const defaultImport = bindings.replace(/\{[^}]*\}/, '').replace(/,/g, '').trim();
+      const defaultImport = bindings
+        .replace(/\{[^}]*\}/, '')
+        .replace(/,/g, '')
+        .trim();
       if (defaultImport && !defaultImport.startsWith('type')) record(modulePath, 'default');
       for (const entry of braces?.[1]?.split(',') ?? []) {
         // split() always yields a first element; the fallback only satisfies the index type.
-        const name = (entry.trim().replace(/^type\s+/, '').split(/\s+as\s+/)[0] ?? '').trim();
+        const name = (
+          entry
+            .trim()
+            .replace(/^type\s+/, '')
+            .split(/\s+as\s+/)[0] ?? ''
+        ).trim();
         if (name) record(modulePath, name);
       }
     }
@@ -296,5 +380,8 @@ test('every exported Server Action is imported by product code', () => {
       dead.push(`${file}#${action.name}`);
     }
   }
-  expect(dead, 'exported Server Actions with no product caller (delete them or wire them; see docs/plans/phase-1/hardening-2026-09/07-step-3-final-beta-acceptance.md)').toEqual([]);
+  expect(
+    dead,
+    'exported Server Actions with no product caller (delete them or wire them: an unused export is still a public POST endpoint)',
+  ).toEqual([]);
 });

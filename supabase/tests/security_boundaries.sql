@@ -1,9 +1,116 @@
--- Security boundary assertions (docs/plans/phase-1/hardening-2026-09/05-step-1-security-infrastructure.md).
+-- Security boundary assertions (docs/technical/security.md owns the rules).
 -- Runs inside one transaction against the local stack and rolls back.
 -- Each block raises on violation; ON_ERROR_STOP turns that into a failed group.
 begin;
 
--- SI-008 / SI-022: no SECURITY DEFINER function in the exposed schema may be
+-- Future tables cannot silently inherit Data API access. The service role still
+-- needs explicit SELECT on every operational table; RLS bypass is not a grant.
+do $$
+declare offender text;
+begin
+  select string_agg(c.relname, ', ' order by c.relname) into offender
+  from pg_class c join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public' and c.relkind in ('r', 'p')
+    and (not c.relrowsecurity or not has_table_privilege('service_role', c.oid, 'SELECT')
+      or has_table_privilege('anon', c.oid, 'TRUNCATE,REFERENCES,TRIGGER')
+      or has_table_privilege('authenticated', c.oid, 'TRUNCATE,REFERENCES,TRIGGER'));
+  if offender is not null then
+    raise exception 'Public table RLS/service grant/client structural privilege violation: %', offender;
+  end if;
+end;
+$$;
+
+-- Anonymous row privileges are a closed, reviewed inventory
+-- (docs/technical/security.md, "Trust boundaries", Database). The signed-out
+-- app reads and writes no public table with the anon role, so the inventory is
+-- empty (migration 20261002130000_revoke_anonymous_table_grants.sql). A table
+-- granted to anon, or a column-level grant, fails here until the owner
+-- approves it and this list gains the table with a comment naming its caller.
+do $$
+declare
+  reviewed constant text[] := array[]::text[];
+  unreviewed text; missing text;
+begin
+  select string_agg(c.relname, ', ' order by c.relname) into unreviewed
+  from pg_class c join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public' and c.relkind in ('r', 'p', 'v', 'm', 'f')
+    and (has_table_privilege('anon', c.oid, 'SELECT,INSERT,UPDATE,DELETE')
+      or has_any_column_privilege('anon', c.oid, 'SELECT,INSERT,UPDATE'))
+    and c.relname <> all (reviewed);
+  if unreviewed is not null then
+    raise exception 'Unreviewed anonymous row privilege on: %', unreviewed;
+  end if;
+  select string_agg(name, ', ' order by name) into missing
+  from unnest(reviewed) as name
+  where to_regclass('public.' || quote_ident(name)) is null
+    or not has_table_privilege('anon', to_regclass('public.' || quote_ident(name)), 'SELECT,INSERT,UPDATE,DELETE');
+  if missing is not null then
+    raise exception 'Anonymous privilege inventory lists tables without the grant: %', missing;
+  end if;
+  select string_agg(c.relname, ', ' order by c.relname) into unreviewed
+  from pg_class c join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public'
+    -- The planner may test the privilege before the kind; guard it explicitly.
+    and case when c.relkind = 'S' then has_sequence_privilege('anon', c.oid, 'USAGE,SELECT,UPDATE') else false end;
+  if unreviewed is not null then
+    raise exception 'Anonymous sequence privilege on: %', unreviewed;
+  end if;
+end;
+$$;
+
+-- RLS without a policy denies every client row, so such a table must be
+-- service-only by grant as well; a table a client role can address needs at
+-- least one policy that states who sees what.
+do $$
+declare offender text;
+begin
+  select string_agg(c.relname, ', ' order by c.relname) into offender
+  from pg_class c join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public' and c.relkind in ('r', 'p')
+    and not exists (select 1 from pg_policy p where p.polrelid = c.oid)
+    and (has_table_privilege('anon', c.oid, 'SELECT,INSERT,UPDATE,DELETE')
+      or has_table_privilege('authenticated', c.oid, 'SELECT,INSERT,UPDATE,DELETE')
+      or has_any_column_privilege('anon', c.oid, 'SELECT,INSERT,UPDATE')
+      or has_any_column_privilege('authenticated', c.oid, 'SELECT,INSERT,UPDATE'));
+  if offender is not null then
+    raise exception 'Public table without an RLS policy is reachable by a client role: %', offender;
+  end if;
+end;
+$$;
+
+-- Foundational reads and writes must survive a replay without legacy defaults.
+-- RLS still owns which records these roles can access.
+do $$
+declare relation_name text; api_role text; operation_name text;
+begin
+  foreach relation_name in array array['organizations', 'organization_members', 'profiles', 'clients', 'jobs'] loop
+    foreach api_role in array array['authenticated', 'service_role'] loop
+      foreach operation_name in array array['SELECT', 'INSERT', 'UPDATE', 'DELETE'] loop
+        if not has_table_privilege(api_role, 'public.' || relation_name, operation_name) then
+          raise exception 'Missing explicit foundation privilege: % % %', api_role, relation_name, operation_name;
+        end if;
+      end loop;
+    end loop;
+  end loop;
+end;
+$$;
+
+-- Transactional probe of the migration role's actual defaults, not their prose.
+create table public.werkflow_privilege_probe (id bigint generated by default as identity primary key);
+do $$
+declare api_role text;
+begin
+  foreach api_role in array array['anon', 'authenticated', 'service_role'] loop
+    if has_table_privilege(api_role, 'public.werkflow_privilege_probe', 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+      or has_sequence_privilege(api_role, 'public.werkflow_privilege_probe_id_seq', 'USAGE,SELECT,UPDATE') then
+      raise exception 'New public objects inherited implicit grants for %', api_role;
+    end if;
+  end loop;
+end;
+$$;
+drop table public.werkflow_privilege_probe;
+
+-- No SECURITY DEFINER function in the exposed schema may be
 -- executable by anon or authenticated, and the service-role lookups stay closed.
 do $$
 declare
@@ -45,7 +152,117 @@ begin
 end;
 $$;
 
--- SI-008: the committed body of fulfill_instruction_evidence carries the
+-- No SECURITY DEFINER function in public or app_private is executable by anon,
+-- also not through PUBLIC. authenticated executes exactly the reviewed RLS
+-- helpers below: each one appears in the policies of the named tables, which
+-- PostgreSQL evaluates as the querying role. app_private is not exposed
+-- through the Data API, so none of them is a client RPC. A new definer
+-- function executable by authenticated, or a listed one that lost the grant
+-- or no longer exists, fails until this list changes with a reason.
+do $$
+declare
+  reviewed constant text[] := array[
+    -- documents, document_links, document_versions, document_audit_events
+    'app_private.can_access_document(uuid, uuid)',
+    -- inventory_movements, job_material_lines
+    'app_private.can_access_job_inventory(uuid, uuid)',
+    -- work_artifacts and their revision, detail and source tables
+    'app_private.can_access_work_artifact(uuid, uuid)',
+    -- work_artifact_actions, job_instruction_item_evidence_fulfillments
+    'app_private.can_access_work_artifact_target(uuid, uuid, uuid, uuid)',
+    -- work_handover_packages
+    'app_private.can_read_work_handover_root(uuid, uuid)',
+    -- work_handover_draft_items, _events, _releases, _release_items
+    'app_private.can_review_work_handover_package(uuid, uuid)',
+    -- work_blocker_events
+    'app_private.can_view_p1_14_blocker(uuid, uuid)',
+    -- work_dependency_events
+    'app_private.can_view_p1_14_dependency(uuid, uuid)',
+    -- work_blockers, work_dependencies, work_execution_events, job_instruction_item_events
+    'app_private.can_view_p1_14_work_target(uuid, uuid, uuid, uuid, uuid)',
+    -- job_instruction_item_dependencies, job_instruction_item_evidence_requirements
+    'app_private.can_view_work_instruction_item(uuid, uuid)',
+    -- job_instruction_items
+    'app_private.can_view_work_instruction_target(uuid, uuid, uuid, uuid)',
+    -- personnel_documents, personnel_document_releases
+    'app_private.current_user_can_access_personnel_document(uuid)',
+    -- document_audit_events (personnel documents)
+    'app_private.current_user_can_access_personnel_document_history(uuid)',
+    -- document_versions (personnel documents)
+    'app_private.current_user_can_access_personnel_document_version(uuid, integer)',
+    -- manager visibility across clients, planning, time, teams and templates
+    'app_private.get_user_admin_or_manager_org_ids(uuid)',
+    -- organization_capabilities
+    'app_private.get_user_capability_ids(uuid)',
+    -- own rows in dispatches, absences, schedules, teams and responsibilities
+    'app_private.get_user_employee_record_ids(uuid)',
+    -- membership scope of organizations, jobs, projects, time and realtime_deletions
+    'app_private.get_user_org_ids(uuid)',
+    -- planning_occurrences
+    'app_private.get_user_planning_occurrence_ids()',
+    -- teams
+    'app_private.get_user_team_ids(uuid)',
+    -- organization_responsibility_configurations
+    'app_private.get_user_visible_responsibility_configuration_ids(uuid)',
+    -- installed_equipment and its event, identifier and link tables
+    'app_private.installed_equipment_actor_is_manager(uuid, uuid)',
+    -- documents, document_folders, document_links, document_versions, document_audit_events
+    'app_private.is_document_manager(uuid, uuid)',
+    -- inventory tables and job_material_lines
+    'app_private.is_inventory_manager(uuid, uuid)',
+    -- time_accounts, adjustments and period result tables
+    'app_private.is_p1_23_employee_record_actor(uuid, uuid, uuid)',
+    -- time_periods and period result tables
+    'app_private.is_p1_23_time_holder(uuid, uuid)',
+    -- time_correction_requests
+    'app_private.is_time_approval_holder(uuid, uuid, uuid)',
+    -- work_artifact_actions
+    'app_private.is_work_artifact_manager(uuid, uuid)',
+    -- maintenance plans, coverages and due work
+    'app_private.maintenance_actor_is_manager(uuid, uuid)',
+    -- personnel lifecycle, onboarding and acknowledgement tables
+    'app_private.p1_24_current_user_is_manager(uuid)',
+    -- personnel lifecycle, onboarding and acknowledgement tables (own rows)
+    'app_private.p1_24_current_user_is_self(uuid, uuid, boolean)',
+    -- document_versions, document_audit_events
+    'app_private.p1_24_is_protected_document(uuid)',
+    -- service_cases and their event, link and relation tables
+    'app_private.service_case_actor_is_manager(uuid, uuid)'
+  ];
+  offender text; unreviewed text; missing text;
+begin
+  select string_agg(p.oid::regprocedure::text, ', ' order by p.oid::regprocedure::text) into offender
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname in ('public', 'app_private') and p.prosecdef
+    and has_function_privilege('anon', p.oid, 'EXECUTE');
+  if offender is not null then
+    raise exception 'SECURITY DEFINER functions executable by anon: %', offender;
+  end if;
+
+  with granted as (
+    select n.nspname || '.' || p.proname || '(' || pg_catalog.oidvectortypes(p.proargtypes) || ')' as signature
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname in ('public', 'app_private') and p.prosecdef
+      and has_function_privilege('authenticated', p.oid, 'EXECUTE')
+  )
+  select string_agg(signature, ', ' order by signature) into unreviewed
+  from granted where signature <> all (reviewed);
+  if unreviewed is not null then
+    raise exception 'Unreviewed authenticated execution of SECURITY DEFINER functions: %', unreviewed;
+  end if;
+
+  select string_agg(signature, ', ' order by signature) into missing
+  from unnest(reviewed) as signature
+  where to_regprocedure(signature) is null
+    or not has_function_privilege('authenticated', to_regprocedure(signature), 'EXECUTE')
+    or not (select p.prosecdef from pg_proc p where p.oid = to_regprocedure(signature));
+  if missing is not null then
+    raise exception 'Definer inventory lists functions without an authenticated grant: %', missing;
+  end if;
+end;
+$$;
+
+-- The committed body of fulfill_instruction_evidence carries the
 -- requirement-not-found guard twice (requirement lookup and item lookup).
 do $$
 declare
@@ -59,7 +276,7 @@ begin
 end;
 $$;
 
--- SI-011: inventory ledgers are append-only for signed-in managers.
+-- Inventory ledgers are append-only for signed-in managers.
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
   raw_app_meta_data, raw_user_meta_data, created_at, updated_at
@@ -145,7 +362,7 @@ begin
 end;
 $$;
 
--- SI-006: a member with recorded time cannot be removed; the membership and the
+-- A member with recorded time cannot be removed; the membership and the
 -- history stay in place (containment until P1-33).
 insert into public.organization_members (organization_id, user_id, role) values
 ('51000000-0000-0000-0000-000000000010', '51000000-0000-0000-0000-000000000002', 'employee');

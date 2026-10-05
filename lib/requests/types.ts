@@ -1,20 +1,19 @@
+import type { ActionResult } from '@/lib/action-result';
+import type { QualificationWarningResult } from '@/lib/jobs/types';
 import type { Database } from '@/lib/supabase/database.types';
 
 // ============================================
 // Database Row Aliases
 // ============================================
 
-export type ClientRequestRow =
-  Database['public']['Tables']['client_requests']['Row'];
-export type ClientRequestEventRow =
-  Database['public']['Tables']['client_request_events']['Row'];
+export type ClientRequestRow = Database['public']['Tables']['client_requests']['Row'];
+export type ClientRequestEventRow = Database['public']['Tables']['client_request_events']['Row'];
 
 export type RequestStatus = Database['public']['Enums']['request_status'];
 export type RequestCategory = Database['public']['Enums']['request_category'];
 export type RequestUrgency = Database['public']['Enums']['request_urgency'];
 export type RequestSource = Database['public']['Enums']['request_source'];
-export type RequestCloseReason =
-  Database['public']['Enums']['request_close_reason'];
+export type RequestCloseReason = Database['public']['Enums']['request_close_reason'];
 
 // ============================================
 // Application-Level Types (camelCase)
@@ -63,7 +62,7 @@ export type ClientRequestEvent = {
 };
 
 // ============================================
-// German UI Vocabulary (owner-approved, P1-02)
+// German UI Vocabulary (owner-approved)
 // ============================================
 
 export const REQUEST_STATUS_LABELS: Record<RequestStatus, string> = {
@@ -117,19 +116,9 @@ export const REQUEST_CATEGORY_ORDER: RequestCategory[] = [
   'sonstiges',
 ];
 
-export const REQUEST_URGENCY_ORDER: RequestUrgency[] = [
-  'niedrig',
-  'normal',
-  'hoch',
-  'notfall',
-];
+export const REQUEST_URGENCY_ORDER: RequestUrgency[] = ['niedrig', 'normal', 'hoch', 'notfall'];
 
-export const REQUEST_SOURCE_ORDER: RequestSource[] = [
-  'telefon',
-  'email',
-  'vor_ort',
-  'sonstiges',
-];
+export const REQUEST_SOURCE_ORDER: RequestSource[] = ['telefon', 'email', 'vor_ort', 'sonstiges'];
 
 export const REQUEST_CLOSE_REASON_ORDER: RequestCloseReason[] = [
   'kein_bedarf',
@@ -142,7 +131,7 @@ export const REQUEST_CLOSE_REASON_ORDER: RequestCloseReason[] = [
 // Conversion maps the request urgency onto the existing job priority
 // vocabulary; "notfall" has no job equivalent and becomes "hoch".
 export function requestUrgencyToJobPriority(
-  urgency: RequestUrgency
+  urgency: RequestUrgency,
 ): Database['public']['Enums']['job_priority'] {
   switch (urgency) {
     case 'niedrig':
@@ -159,14 +148,13 @@ export function requestUrgencyToJobPriority(
 // Result Types
 // ============================================
 
-export type ClientRequestResult =
-  | { success: true; request: ClientRequest }
-  | { success: false; error: string };
+export type ClientRequestResult = ActionResult<{ request: ClientRequest }>;
 
+/** A job conversion forwards createJob's failures, including its qualification warning. */
 export type ConvertRequestResult =
   | { success: true; target: 'job'; jobId: string; jobNumber: string | null }
-  | { success: true; target: 'project'; projectId: string; projectNumber: string | null }
-  | { success: false; error: string };
+  | QualificationWarningResult
+  | ActionResult<{ target: 'project'; projectId: string; projectNumber: string | null }>;
 
 // ============================================
 // Converters
@@ -206,9 +194,7 @@ export function toClientRequest(row: ClientRequestRow): ClientRequest {
   };
 }
 
-export function toClientRequestEvent(
-  row: ClientRequestEventRow
-): ClientRequestEvent {
+export function toClientRequestEvent(row: ClientRequestEventRow): ClientRequestEvent {
   return {
     id: row.id,
     organizationId: row.organization_id,

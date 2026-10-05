@@ -2,16 +2,16 @@
 
 import { DocumentTableSkeleton } from '@/components/dokumente/document-library-table';
 import { WorkContextSkeleton } from '@/components/dokumente/document-work-context-view';
+import { PageHeaderActions } from '@/components/shared/page-action';
+import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { Skeleton } from '@/components/ui/skeleton';
 
+export const DOKUMENTE_SUBTITLE = 'Organisiere Dateien, Bilder, Verträge und Auftragsdokumente an einem Ort.';
+
 type DokumenteSkeletonView = 'folders' | 'work' | 'all' | 'trash';
 
-function DokumenteTableRowsSkeleton({
-  rowCount = 10,
-}: {
-  rowCount?: number;
-}) {
+function DokumenteTableRowsSkeleton({ rowCount = 10 }: { rowCount?: number }) {
   return <DocumentTableSkeleton rowCount={rowCount} />;
 }
 
@@ -19,11 +19,7 @@ function DokumenteWorkContextSkeleton() {
   return <WorkContextSkeleton />;
 }
 
-export function DokumenteTabContentSkeleton({
-  view,
-}: {
-  view: DokumenteSkeletonView;
-}) {
+export function DokumenteTabContentSkeleton({ view }: { view: DokumenteSkeletonView }) {
   if (view === 'work') {
     return <DokumenteWorkContextSkeleton />;
   }
@@ -31,21 +27,14 @@ export function DokumenteTabContentSkeleton({
   return <DokumenteTableRowsSkeleton rowCount={10} />;
 }
 
-// Same geometry as the library body in document-library-content.tsx, which
-// owns the title block; the page shell supplies padding and scroll.
+// Same geometry as the library body in document-library-content.tsx. The
+// page owns the header; like the library, this fills its action slot.
 export function DokumenteContentSkeleton() {
   return (
     <div className="flex flex-col gap-4">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-xl font-bold sm:text-2xl">Dokumente</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Organisiere Dateien, Bilder, Verträge und Auftragsdokumente an einem
-            Ort.
-          </p>
-        </div>
-        <Skeleton className="h-10 w-52 sm:mt-1" />
-      </header>
+      <PageHeaderActions>
+        <Skeleton className="h-9 w-52" />
+      </PageHeaderActions>
 
       <div className="space-y-3 rounded-lg border bg-card p-3">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -82,6 +71,11 @@ export function DokumenteContentSkeleton() {
 export function DokumentePageSkeleton() {
   return (
     <PageShell>
+      <PageHeader
+        title="Dokumente"
+        subtitle={DOKUMENTE_SUBTITLE}
+        actions={<Skeleton className="h-9 w-52" />}
+      />
       <PageBody>
         <DokumenteContentSkeleton />
       </PageBody>

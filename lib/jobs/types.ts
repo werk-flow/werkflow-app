@@ -1,3 +1,5 @@
+import type { ActionFailure, ActionResult } from '@/lib/action-result';
+import type { ProfileReference } from '@/lib/profile-reference';
 import type { Database } from '@/lib/supabase/database.types';
 import type { AssignmentEvaluation } from '@/lib/qualifications/types';
 import type { ClientContact, ClientSite } from '@/lib/clients/types';
@@ -13,11 +15,9 @@ export type ProjectRow = Database['public']['Tables']['projects']['Row'];
 
 export type JobRow = Database['public']['Tables']['jobs']['Row'];
 
-export type JobAssignmentRow =
-  Database['public']['Tables']['job_assignments']['Row'];
+export type JobAssignmentRow = Database['public']['Tables']['job_assignments']['Row'];
 
-export type JobInstructionItemRow =
-  Database['public']['Tables']['job_instruction_items']['Row'];
+export type JobInstructionItemRow = Database['public']['Tables']['job_instruction_items']['Row'];
 
 // ============================================
 // Enum Types
@@ -101,13 +101,12 @@ export type JobAssignment = {
   assignedAt: string;
 };
 
-export type JobInstructionActor = {
-  userId: string;
-  firstName: string | null;
-  lastName: string | null;
-  email: string | null;
-  avatarPath: string | null;
-};
+/** The owner of an instruction list: a job or a project, never both. */
+export type InstructionListOwner =
+  | { jobId: string; projectId?: undefined }
+  | { jobId?: undefined; projectId: string };
+
+export type JobInstructionActor = ProfileReference;
 
 export type JobInstructionItem = {
   id: string;
@@ -212,6 +211,8 @@ export type CalendarJob = {
   jobNumber: string | null;
   title: string;
   status: JobStatus;
+  /** The job's work state; null on internal entries and legacy jobs. */
+  executionState: WorkExecutionState | null;
   priority: JobPriority;
   plannedDate: string | null;
   plannedTime: string | null;
@@ -245,78 +246,45 @@ export type CalendarEntryDialogJobOption = {
 // Result Types
 // ============================================
 
-export type CreateClientResult =
-  | { success: true; client: Client }
-  | { success: false; error: string };
+export type CreateClientResult = ActionResult<{ client: Client }>;
 
-export type UpdateClientResult =
-  | { success: true; client: Client }
-  | { success: false; error: string };
+export type UpdateClientResult = ActionResult<{ client: Client }>;
 
-export type DeleteClientResult =
-  | { success: true }
-  | { success: false; error: string };
+export type DeleteClientResult = ActionResult;
 
-type QualificationWarningResult = {
-  success: false;
-  error: 'qualification_warning' | 'stale_evaluation';
+/** An assignment that needs a confirmed override carries the evaluation the dialog shows. */
+export type QualificationWarningResult = ActionFailure<'qualification_warning' | 'stale_evaluation'> & {
   evaluation: AssignmentEvaluation;
 };
 
-export type CreateJobResult =
-  | { success: true; job: Job }
-  | QualificationWarningResult
-  | { success: false; error: string };
+export type CreateJobResult = { success: true; job: Job } | QualificationWarningResult | ActionFailure;
 
-export type UpdateJobResult =
-  | { success: true; job: Job }
-  | QualificationWarningResult
-  | { success: false; error: string };
+export type UpdateJobResult = { success: true; job: Job } | QualificationWarningResult | ActionFailure;
 
-export type DeleteJobResult =
-  | { success: true }
-  | { success: false; error: string };
+export type DeleteJobResult = ActionResult;
 
-export type CreateProjectResult =
-  | { success: true; project: Project }
-  | { success: false; error: string };
+export type CreateProjectResult = ActionResult<{ project: Project }>;
 
-export type UpdateProjectResult =
-  | { success: true; project: Project }
-  | { success: false; error: string };
+export type UpdateProjectResult = ActionResult<{ project: Project }>;
 
-export type DeleteProjectResult =
-  | { success: true }
-  | { success: false; error: string };
+export type DeleteProjectResult = ActionResult;
 
 export type UpdateJobAssignmentsResult =
   | { success: true; assignments: JobAssignment[] }
   | QualificationWarningResult
-  | { success: false; error: string };
+  | ActionFailure;
 
-export type GetJobInstructionItemsResult =
-  | { success: true; items: JobInstructionItemWithDetails[] }
-  | { success: false; error: string };
+export type GetJobInstructionItemsResult = ActionResult<{ items: JobInstructionItemWithDetails[] }>;
 
-export type CreateJobInstructionItemResult =
-  | { success: true; item: JobInstructionItemWithDetails }
-  | { success: false; error: string };
+export type CreateJobInstructionItemResult = ActionResult<{ item: JobInstructionItemWithDetails }>;
 
-export type UpdateJobInstructionItemResult =
-  | { success: true; item: JobInstructionItemWithDetails }
-  | { success: false; error: string };
+export type UpdateJobInstructionItemResult = ActionResult<{ item: JobInstructionItemWithDetails }>;
 
-export type DeleteJobInstructionItemResult =
-  | { success: true }
-  | { success: false; error: string };
+export type DeleteJobInstructionItemResult = ActionResult;
 
-export type ToggleJobInstructionItemCompletionResult =
-  | { success: true; item: JobInstructionItemWithDetails }
-  | { success: false; error: string };
+export type ToggleJobInstructionItemCompletionResult = ActionResult<{ item: JobInstructionItemWithDetails }>;
 
-export type ReorderJobInstructionItemsResult =
-  | { success: true }
-  | { success: false; error: string };
+export type ReorderJobInstructionItemsResult = ActionResult;
 
 // ============================================
 // Converter Functions
@@ -360,9 +328,7 @@ export function toProject(row: ProjectRow): Project {
   };
 }
 
-export function normalizeJobPlannedTime(
-  plannedTime: string | null | undefined
-): string | null {
+export function normalizeJobPlannedTime(plannedTime: string | null | undefined): string | null {
   if (!plannedTime) return null;
 
   const trimmed = plannedTime.trim();
@@ -403,9 +369,7 @@ export function toJob(row: JobRow): Job {
   };
 }
 
-export function getJobDisplayTitle(
-  job: Pick<Job, 'title' | 'description'>
-): string {
+export function getJobDisplayTitle(job: Pick<Job, 'title' | 'description'>): string {
   const title = job.title.trim();
   if (title) return title;
 
@@ -413,9 +377,7 @@ export function getJobDisplayTitle(
   return description || '—';
 }
 
-export function getProjectDisplayTitle(
-  project: Pick<Project, 'name' | 'description'>
-): string {
+export function getProjectDisplayTitle(project: Pick<Project, 'name' | 'description'>): string {
   const title = project.name.trim();
   if (title) return title;
 
@@ -433,9 +395,7 @@ export function toJobAssignment(row: JobAssignmentRow): JobAssignment {
   };
 }
 
-export function toJobInstructionItem(
-  row: JobInstructionItemRow
-): JobInstructionItem {
+export function toJobInstructionItem(row: JobInstructionItemRow): JobInstructionItem {
   return {
     id: row.id,
     organizationId: row.organization_id,
@@ -527,9 +487,7 @@ function deriveProjectStatus(jobs: Pick<Job, 'status'>[]): ProjectStatus {
   const allDone = jobs.every((j) => j.status === 'fertig');
   if (allDone) return 'abgeschlossen';
 
-  const anyStarted = jobs.some(
-    (j) => j.status === 'in_bearbeitung' || j.status === 'fertig'
-  );
+  const anyStarted = jobs.some((j) => j.status === 'in_bearbeitung' || j.status === 'fertig');
   if (anyStarted) return 'in_bearbeitung';
 
   return 'nicht_begonnen';
@@ -540,7 +498,7 @@ function deriveProjectStatus(jobs: Pick<Job, 'status'>[]): ProjectStatus {
  */
 export function getEffectiveProjectStatus(
   project: Pick<Project, 'statusOverride'>,
-  jobs: Pick<Job, 'status'>[]
+  jobs: Pick<Job, 'status'>[],
 ): ProjectStatus {
   return project.statusOverride ?? deriveProjectStatus(jobs);
 }
@@ -548,9 +506,7 @@ export function getEffectiveProjectStatus(
 /**
  * Calculate project progress as a percentage (0-100).
  */
-export function calculateProjectProgress(
-  jobs: Pick<Job, 'status'>[]
-): number {
+export function calculateProjectProgress(jobs: Pick<Job, 'status'>[]): number {
   if (jobs.length === 0) return 0;
   const completed = jobs.filter((j) => j.status === 'fertig').length;
   return Math.round((completed / jobs.length) * 100);
@@ -564,7 +520,7 @@ export function calculateProjectProgress(
  */
 export function calculateTrafficLight(
   project: Pick<Project, 'plannedStartDate' | 'plannedEndDate'>,
-  jobs: Pick<Job, 'status'>[]
+  jobs: Pick<Job, 'status'>[],
 ): 'green' | 'yellow' | 'red' {
   if (jobs.length === 0) return 'green';
 
@@ -596,7 +552,7 @@ export function calculateTrafficLight(
 export function calculateTrafficLightFromCounts(
   project: Pick<Project, 'plannedStartDate' | 'plannedEndDate'>,
   jobCount: number,
-  completedJobCount: number
+  completedJobCount: number,
 ): 'green' | 'yellow' | 'red' {
   if (jobCount === 0) return 'green';
 
@@ -625,10 +581,14 @@ function getJobUnifiedStatus(job: Pick<Job, 'status' | 'executionState'>): Unifi
   if (job.status === 'geparkt') return 'parked';
   if (job.executionState) return job.executionState;
   switch (job.status) {
-    case 'nicht_bearbeitet': return 'not_started';
-    case 'in_bearbeitung': return 'in_progress';
-    case 'fertig': return 'execution_complete';
-    default: throw new Error(`Unexpected job status: ${String(job.status)}`);
+    case 'nicht_bearbeitet':
+      return 'not_started';
+    case 'in_bearbeitung':
+      return 'in_progress';
+    case 'fertig':
+      return 'execution_complete';
+    default:
+      throw new Error(`Unexpected job status: ${String(job.status)}`);
   }
 }
 
@@ -640,11 +600,16 @@ function getProjectUnifiedStatus(project: ProjectWithDetails): UnifiedStatus {
   if (project.executionStateOverride) return project.executionStateOverride;
   const effective = project.statusOverride ?? getEffectiveProjectStatusFromCounts(project);
   switch (effective) {
-    case 'nicht_begonnen': return 'not_started';
-    case 'in_bearbeitung': return 'in_progress';
-    case 'abgeschlossen': return 'execution_complete';
-    case 'geparkt': return 'parked';
-    default: throw new Error(`Unexpected project status: ${String(effective)}`);
+    case 'nicht_begonnen':
+      return 'not_started';
+    case 'in_bearbeitung':
+      return 'in_progress';
+    case 'abgeschlossen':
+      return 'execution_complete';
+    case 'geparkt':
+      return 'parked';
+    default:
+      throw new Error(`Unexpected project status: ${String(effective)}`);
   }
 }
 
@@ -652,7 +617,10 @@ function getProjectUnifiedStatus(project: ProjectWithDetails): UnifiedStatus {
  * Derive effective project status from aggregate counts (avoids needing the jobs array).
  */
 export function getEffectiveProjectStatusFromCounts(
-  project: Pick<ProjectWithDetails, 'jobCount' | 'completedJobCount' | 'inProgressJobCount' | 'parkedJobCount'>
+  project: Pick<
+    ProjectWithDetails,
+    'jobCount' | 'completedJobCount' | 'inProgressJobCount' | 'parkedJobCount'
+  >,
 ): ProjectStatus {
   if (project.jobCount === 0) return 'nicht_begonnen';
   if (project.parkedJobCount === project.jobCount) return 'geparkt';
@@ -675,10 +643,7 @@ export function getEntryUnifiedStatus(entry: UnifiedListEntry): UnifiedStatus {
  * Standalone jobs (no projectId) and projects become top-level entries.
  * Jobs with a projectId are nested under their project.
  */
-export function buildUnifiedList(
-  jobs: Job[],
-  projects: ProjectWithDetails[]
-): UnifiedListEntry[] {
+export function buildUnifiedList(jobs: Job[], projects: ProjectWithDetails[]): UnifiedListEntry[] {
   const jobsByProject = new Map<string, Job[]>();
   const standaloneJobs: Job[] = [];
 
@@ -731,18 +696,18 @@ export function buildUnifiedList(
 // ============================================
 
 function isArchivedEntry(entry: UnifiedListEntry): boolean {
-  return ['execution_complete', 'handed_over', 'cancelled'].includes(
-    getEntryUnifiedStatus(entry)
-  );
+  return ['execution_complete', 'handed_over', 'cancelled'].includes(getEntryUnifiedStatus(entry));
 }
 
 function isParkedEntry(entry: UnifiedListEntry): boolean {
   return getEntryUnifiedStatus(entry) === 'parked';
 }
 
-export function splitEntries(
-  entries: UnifiedListEntry[]
-): { active: UnifiedListEntry[]; parked: UnifiedListEntry[]; archived: UnifiedListEntry[] } {
+export function splitEntries(entries: UnifiedListEntry[]): {
+  active: UnifiedListEntry[];
+  parked: UnifiedListEntry[];
+  archived: UnifiedListEntry[];
+} {
   const active: UnifiedListEntry[] = [];
   const parked: UnifiedListEntry[] = [];
   const archived: UnifiedListEntry[] = [];
@@ -765,7 +730,7 @@ export function splitEntries(
 export function matchesSearch(
   entry: UnifiedListEntry,
   query: string,
-  clientMap: Record<string, string>
+  clientMap: Record<string, string>,
 ): boolean {
   if (!query) return true;
   const q = query.toLowerCase();
@@ -795,7 +760,7 @@ export function matchesSearch(
       j.title.toLowerCase().includes(q) ||
       (j.jobNumber?.toLowerCase().includes(q) ?? false) ||
       (j.description?.toLowerCase().includes(q) ?? false) ||
-      (j.location?.toLowerCase().includes(q) ?? false)
+      (j.location?.toLowerCase().includes(q) ?? false),
   );
 }
 
@@ -809,7 +774,7 @@ export function sortUnifiedEntries(
   entries: UnifiedListEntry[],
   column: SortColumn,
   direction: 'asc' | 'desc',
-  clientMap: Record<string, string>
+  clientMap: Record<string, string>,
 ): UnifiedListEntry[] {
   const sorted = [...entries];
   const dir = direction === 'asc' ? 1 : -1;
@@ -835,9 +800,11 @@ export function sortUnifiedEntries(
 }
 
 const STATUS_SORT_ORDER: Record<string, number> = {
-  nicht_bearbeitet: 0, nicht_begonnen: 0,
+  nicht_bearbeitet: 0,
+  nicht_begonnen: 0,
   in_bearbeitung: 1,
-  fertig: 2, abgeschlossen: 2,
+  fertig: 2,
+  abgeschlossen: 2,
   geparkt: 3,
 };
 
@@ -850,30 +817,41 @@ const PRIORITY_SORT_ORDER: Record<string, number> = {
 function getSortValue(
   entry: UnifiedListEntry,
   column: SortColumn,
-  clientMap: Record<string, string>
+  clientMap: Record<string, string>,
 ): string | number | null {
   if (entry.type === 'standalone-job') {
     const j = entry.job;
     switch (column) {
-      case 'nr': return j.jobNumber ?? '';
-      case 'bezeichnung': return getJobDisplayTitle(j);
-      case 'kunde': return j.clientId ? (clientMap[j.clientId] ?? '') : '';
-      case 'status': return STATUS_SORT_ORDER[j.status] ?? 0;
-      case 'prioritaet': return PRIORITY_SORT_ORDER[j.priority] ?? 0;
-      case 'datum': return j.plannedDate ?? null;
+      case 'nr':
+        return j.jobNumber ?? '';
+      case 'bezeichnung':
+        return getJobDisplayTitle(j);
+      case 'kunde':
+        return j.clientId ? (clientMap[j.clientId] ?? '') : '';
+      case 'status':
+        return STATUS_SORT_ORDER[j.status] ?? 0;
+      case 'prioritaet':
+        return PRIORITY_SORT_ORDER[j.priority] ?? 0;
+      case 'datum':
+        return j.plannedDate ?? null;
     }
   }
   const p = entry.project;
   switch (column) {
-    case 'nr': return p.projectNumber ?? '';
-    case 'bezeichnung': return getProjectDisplayTitle(p);
-    case 'kunde': return p.clientId ? (clientMap[p.clientId] ?? '') : '';
+    case 'nr':
+      return p.projectNumber ?? '';
+    case 'bezeichnung':
+      return getProjectDisplayTitle(p);
+    case 'kunde':
+      return p.clientId ? (clientMap[p.clientId] ?? '') : '';
     case 'status': {
       const eff = p.statusOverride ?? getEffectiveProjectStatusFromCounts(p);
       return STATUS_SORT_ORDER[eff] ?? 0;
     }
-    case 'prioritaet': return -1;
-    case 'datum': return p.plannedStartDate ?? null;
+    case 'prioritaet':
+      return -1;
+    case 'datum':
+      return p.plannedStartDate ?? null;
   }
 }
 
@@ -917,6 +895,6 @@ function getEntryDate(entry: UnifiedListEntry): Date | null {
   }
   const earliest = entry.childJobs
     .filter((j) => j.plannedDate)
-    .sort((a, b) => a.plannedDate!.localeCompare(b.plannedDate!))[0];
+    .sort((a, b) => (a.plannedDate ?? '').localeCompare(b.plannedDate ?? ''))[0];
   return earliest?.plannedDate ? new Date(earliest.plannedDate) : null;
 }

@@ -13,10 +13,12 @@ import { PageBody, PageShell } from '@/components/shared/page-shell';
 // derived live from the owning domains and deep-link there; nothing is
 // decided on this page.
 export default async function AufgabenPage() {
-  const [{ data: { user } }, cookieStore] = await Promise.all([
-    getCachedUser(),
-    cookies(),
-  ]);
+  const [
+    {
+      data: { user },
+    },
+    cookieStore,
+  ] = await Promise.all([getCachedUser(), cookies()]);
 
   if (!user) {
     redirect('/login');
@@ -29,9 +31,7 @@ export default async function AufgabenPage() {
       <PageShell>
         <PageHeader title="Aufgaben" />
         <PageBody>
-          <p className="text-muted-foreground">
-            Bitte wähle zuerst eine Organisation aus.
-          </p>
+          <p className="text-muted-foreground">Bitte wähle zuerst eine Organisation aus.</p>
         </PageBody>
       </PageShell>
     );

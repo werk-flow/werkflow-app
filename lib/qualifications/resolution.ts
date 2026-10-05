@@ -21,26 +21,21 @@ const COVERAGE_RANK: Record<CoverageStatus, number> = {
 function compareRecordAttribution(
   left: EmployeeCapabilityRecord,
   right: EmployeeCapabilityRecord,
-  status: CoverageStatus
+  status: CoverageStatus,
 ): number {
   if (status === 'not_yet_valid') {
     return left.validFrom.localeCompare(right.validFrom) || left.id.localeCompare(right.id);
   }
   if (status === 'expired') {
-    return (
-      (right.validUntil ?? '').localeCompare(left.validUntil ?? '') ||
-      left.id.localeCompare(right.id)
-    );
+    return (right.validUntil ?? '').localeCompare(left.validUntil ?? '') || left.id.localeCompare(right.id);
   }
-  return (
-    right.validFrom.localeCompare(left.validFrom) || left.id.localeCompare(right.id)
-  );
+  return right.validFrom.localeCompare(left.validFrom) || left.id.localeCompare(right.id);
 }
 
 function statusForRecord(
   record: EmployeeCapabilityRecord,
   requirement: JobCapabilityRequirement,
-  assessedForDate: string
+  assessedForDate: string,
 ): CoverageStatus {
   if (record.validFrom > assessedForDate) return 'not_yet_valid';
   if (record.validUntil && record.validUntil < assessedForDate) return 'expired';
@@ -57,24 +52,19 @@ function statusForRecord(
 function strongestCandidateRecord(
   candidate: AssignmentCandidate,
   requirement: JobCapabilityRequirement,
-  assessedForDate: string
+  assessedForDate: string,
 ): { status: CoverageStatus; record: EmployeeCapabilityRecord | null } {
-  let strongest: { status: CoverageStatus; record: EmployeeCapabilityRecord } | null =
-    null;
+  let strongest: { status: CoverageStatus; record: EmployeeCapabilityRecord } | null = null;
 
   for (const record of candidate.capabilityRecords) {
-    if (
-      record.capabilityId !== requirement.capabilityId ||
-      record.supersededAt !== null
-    ) {
+    if (record.capabilityId !== requirement.capabilityId || record.supersededAt !== null) {
       continue;
     }
     const status = statusForRecord(record, requirement, assessedForDate);
     if (
       !strongest ||
       COVERAGE_RANK[status] < COVERAGE_RANK[strongest.status] ||
-      (status === strongest.status &&
-        compareRecordAttribution(record, strongest.record, status) < 0)
+      (status === strongest.status && compareRecordAttribution(record, strongest.record, status) < 0)
     ) {
       strongest = { status, record };
     }
@@ -86,26 +76,18 @@ function strongestCandidateRecord(
 export function resolveRequirementCoverage(
   requirement: JobCapabilityRequirement,
   candidates: AssignmentCandidate[],
-  assessedForDate: string
+  assessedForDate: string,
 ): RequirementCoverage {
-  let strongest:
-    | {
-        status: CoverageStatus;
-        candidate: AssignmentCandidate;
-        record: EmployeeCapabilityRecord;
-      }
-    | null = null;
+  let strongest: {
+    status: CoverageStatus;
+    candidate: AssignmentCandidate;
+    record: EmployeeCapabilityRecord;
+  } | null = null;
 
   for (const candidate of [...candidates].sort((left, right) =>
-    (left.userId ?? left.employeeRecordId).localeCompare(
-      right.userId ?? right.employeeRecordId
-    )
+    (left.userId ?? left.employeeRecordId).localeCompare(right.userId ?? right.employeeRecordId),
   )) {
-    const result = strongestCandidateRecord(
-      candidate,
-      requirement,
-      assessedForDate
-    );
+    const result = strongestCandidateRecord(candidate, requirement, assessedForDate);
     if (!result.record) continue;
     if (
       !strongest ||
@@ -139,16 +121,14 @@ export function resolveRequirementCoverage(
 
 export function resolveApprenticeWarning(
   enabled: boolean,
-  candidates: AssignmentCandidate[]
+  candidates: AssignmentCandidate[],
 ): ApprenticeWarning {
   if (!enabled || candidates.length === 0) {
     return { status: 'not_configured' };
   }
 
   const knownNonApprentice = candidates.some(
-    (candidate) =>
-      candidate.employmentType !== null &&
-      candidate.employmentType !== 'ausbildung'
+    (candidate) => candidate.employmentType !== null && candidate.employmentType !== 'ausbildung',
   );
   if (knownNonApprentice) return { status: 'covered' };
 
@@ -180,9 +160,7 @@ function buildAssignmentFingerprint(input: {
     apprenticeWarningEnabled: input.apprenticeWarningEnabled,
     candidates: [...input.candidates]
       .sort((left, right) =>
-        (left.userId ?? left.employeeRecordId).localeCompare(
-          right.userId ?? right.employeeRecordId
-        )
+        (left.userId ?? left.employeeRecordId).localeCompare(right.userId ?? right.employeeRecordId),
       )
       .map((candidate) => ({
         userId: candidate.userId,
@@ -220,26 +198,15 @@ export function resolveAssignmentEvaluation(input: {
   apprenticeWarningEnabled: boolean;
 }): AssignmentEvaluation {
   const requirementCoverage = input.requirements.map((requirement) =>
-    resolveRequirementCoverage(
-      requirement,
-      input.candidates,
-      input.assessedForDate
-    )
+    resolveRequirementCoverage(requirement, input.candidates, input.assessedForDate),
   );
-  const apprenticeWarning = resolveApprenticeWarning(
-    input.apprenticeWarningEnabled,
-    input.candidates
-  );
+  const apprenticeWarning = resolveApprenticeWarning(input.apprenticeWarningEnabled, input.candidates);
 
   return {
     jobId: input.jobId,
     assessedForDate: input.assessedForDate,
-    selectedUserIds: input.candidates.flatMap((candidate) =>
-      candidate.userId ? [candidate.userId] : []
-    ),
-    selectedEmployeeRecordIds: input.candidates.map(
-      (candidate) => candidate.employeeRecordId
-    ),
+    selectedUserIds: input.candidates.flatMap((candidate) => (candidate.userId ? [candidate.userId] : [])),
+    selectedEmployeeRecordIds: input.candidates.map((candidate) => candidate.employeeRecordId),
     requirementCoverage,
     apprenticeWarning,
     requiresOverride:
@@ -256,7 +223,7 @@ export type CertificationExpiryPhase = 'none' | 'approaching' | 'expired';
 export function resolveCertificationExpiryPhase(
   validUntil: string | null,
   today: string,
-  warningDays: number
+  warningDays: number,
 ): CertificationExpiryPhase {
   if (!validUntil) return 'none';
   if (validUntil < today) return 'expired';

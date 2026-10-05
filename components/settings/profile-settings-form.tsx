@@ -6,22 +6,12 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 
 import { updateProfileSettings } from '@/lib/settings/actions';
-import {
-  type ProfileSettingsValues,
-  profileSettingsSchema,
-} from '@/lib/settings/schemas';
+import { type ProfileSettingsValues, profileSettingsSchema } from '@/lib/settings/schemas';
 import { ProfileAvatarSection } from '@/components/settings/profile-avatar-section';
 import { useBanner } from '@/components/ui/banner';
 import { useUserProfile } from '@/components/user/user-profile-context';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
@@ -68,8 +58,7 @@ export function ProfileSettingsForm() {
         message: 'Dein Profil wurde gespeichert.',
         variant: 'success',
       });
-    } catch (error) {
-      console.error('Unexpected error saving profile settings:', error);
+    } catch {
       showBanner({
         message: 'Dein Profil konnte nicht gespeichert werden.',
         variant: 'error',
@@ -117,11 +106,8 @@ export function ProfileSettingsForm() {
               />
             </CardContent>
             <CardFooter className="justify-end border-t">
-              <Button
-                type="submit"
-                disabled={isSaving || !form.formState.isDirty}
-              >
-                {isSaving ? 'Speichert...' : 'Profil speichern'}
+              <Button type="submit" disabled={isSaving || !form.formState.isDirty}>
+                {isSaving ? 'Speichert…' : 'Profil speichern'}
               </Button>
             </CardFooter>
           </form>

@@ -13,11 +13,13 @@ const TIMELINE_VISIBLE_HOURS = 13;
 export const TIMELINE_START_HOUR = 5;
 export const TIMELINE_MIN_ZOOM = 0.5;
 export const TIMELINE_MAX_ZOOM = 4;
-export const DAY_LANE_HEIGHT = 56;
+export const DAY_LANE_HEIGHT = 96;
 export const DAY_TRAY_HEIGHT = 32;
 export const DAY_NAME_COLUMN_PX = 160;
 export const DEFAULT_VISIT_MINUTES = 240;
 export const MIN_ITEM_MINUTES = 15;
+/** Visual size only. Recorded duration and drag arithmetic keep their real timestamps. */
+export const DAY_MIN_ITEM_WIDTH = 72;
 
 /** The hour width that shows the visible working hours across the given viewport width. */
 export function fittedHourWidth(viewportWidth: number, zoom: number): number {
@@ -34,13 +36,22 @@ export type TimedLaneItem<Item extends TimedItem> = { item: Item; lane: number }
  * first lane whose last item ended at or before their start. Overlapping
  * items land side by side, the row grows by the lane count.
  */
-export function packTimeLanes<Item extends TimedItem>(items: readonly Item[]): { lanes: TimedLaneItem<Item>[]; laneCount: number } {
+export function packTimeLanes<Item extends TimedItem>(
+  items: readonly Item[],
+  minimumDisplayMinutes = 0,
+): { lanes: TimedLaneItem<Item>[]; laneCount: number } {
   const sorted = [...items].sort((a, b) => a.startMinutes - b.startMinutes || b.endMinutes - a.endMinutes);
   const laneEnds: number[] = [];
   const lanes: TimedLaneItem<Item>[] = [];
   for (const item of sorted) {
+    const displayEnd = Math.max(item.endMinutes, item.startMinutes + minimumDisplayMinutes);
     let lane = laneEnds.findIndex((end) => end <= item.startMinutes);
-    if (lane < 0) { lane = laneEnds.length; laneEnds.push(item.endMinutes); } else { laneEnds[lane] = item.endMinutes; }
+    if (lane < 0) {
+      lane = laneEnds.length;
+      laneEnds.push(displayEnd);
+    } else {
+      laneEnds[lane] = displayEnd;
+    }
     lanes.push({ item, lane });
   }
   return { lanes, laneCount: laneEnds.length };
@@ -52,7 +63,10 @@ export function minutesIntoDay(instant: Date, dayStart: Date): number {
 }
 
 /** Gaps between consecutive visits of one person, in minutes, when short enough to matter for travel. */
-export function travelGaps(items: readonly TimedItem[], maxMinutes = 120): Array<{ startMinutes: number; endMinutes: number }> {
+export function travelGaps(
+  items: readonly TimedItem[],
+  maxMinutes = 120,
+): Array<{ startMinutes: number; endMinutes: number }> {
   const sorted = [...items].sort((a, b) => a.startMinutes - b.startMinutes);
   const gaps: Array<{ startMinutes: number; endMinutes: number }> = [];
   for (let index = 1; index < sorted.length; index += 1) {
@@ -60,7 +74,8 @@ export function travelGaps(items: readonly TimedItem[], maxMinutes = 120): Array
     const current = sorted[index];
     if (!previous || !current) continue;
     const gap = current.startMinutes - previous.endMinutes;
-    if (gap > 0 && gap <= maxMinutes) gaps.push({ startMinutes: previous.endMinutes, endMinutes: current.startMinutes });
+    if (gap > 0 && gap <= maxMinutes)
+      gaps.push({ startMinutes: previous.endMinutes, endMinutes: current.startMinutes });
   }
   return gaps;
 }
@@ -68,8 +83,16 @@ export function travelGaps(items: readonly TimedItem[], maxMinutes = 120): Array
 export type EntryTimestampUpdate = { entryId: string; newUserId: string; newTimestamp: string };
 
 /** Every source entry of a block shifted by the same delta, optionally onto another person. */
-export function shiftedBlockUpdates(sourceEntries: readonly TimeEntry[], deltaMs: number, newUserId: string): EntryTimestampUpdate[] {
-  return sourceEntries.map((entry) => ({ entryId: entry.id, newUserId, newTimestamp: new Date(new Date(entry.timestamp).getTime() + deltaMs).toISOString() }));
+export function shiftedBlockUpdates(
+  sourceEntries: readonly TimeEntry[],
+  deltaMs: number,
+  newUserId: string,
+): EntryTimestampUpdate[] {
+  return sourceEntries.map((entry) => ({
+    entryId: entry.id,
+    newUserId,
+    newTimestamp: new Date(new Date(entry.timestamp).getTime() + deltaMs).toISOString(),
+  }));
 }
 
 /**
@@ -91,9 +114,17 @@ export function resizedBlockUpdates(input: {
   const clockOut = sourceEntries.find((entry) => entry.id === clockOutId);
   const updates: EntryTimestampUpdate[] = [{ entryId: clockOutId, newUserId: userId, newTimestamp }];
   const trailingBreak = [...sourceEntries].reverse().find((entry) => entry.entryType === 'break_start');
-  if (clockOut && trailingBreak && new Date(trailingBreak.timestamp).getTime() >= new Date(clockOut.timestamp).getTime() - 60_000) {
+  if (
+    clockOut &&
+    trailingBreak &&
+    new Date(trailingBreak.timestamp).getTime() >= new Date(clockOut.timestamp).getTime() - 60_000
+  ) {
     const deltaMs = new Date(newTimestamp).getTime() - new Date(clockOut.timestamp).getTime();
-    updates.push({ entryId: trailingBreak.id, newUserId: userId, newTimestamp: new Date(new Date(trailingBreak.timestamp).getTime() + deltaMs).toISOString() });
+    updates.push({
+      entryId: trailingBreak.id,
+      newUserId: userId,
+      newTimestamp: new Date(new Date(trailingBreak.timestamp).getTime() + deltaMs).toISOString(),
+    });
   }
   return updates;
 }

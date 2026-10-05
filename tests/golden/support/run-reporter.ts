@@ -18,7 +18,7 @@ import {
   type RunFailure,
 } from './run-state';
 import { testIdentity } from './test-identity';
-import { validateExecutedSelection } from '../../../lib/testing/test-evidence';
+import { validateExecutedSelection } from '../../../lib/testing/evidence/test-evidence';
 
 function failureFromError(title: string, file: string | null, error?: TestError): RunFailure {
   return {
@@ -38,14 +38,22 @@ export default class RunReporter implements Reporter {
     const manifest = ensureRunManifest();
     this.total = suite.allTests().length;
     const discovered = suite.allTests().map(testIdentity);
-    if (!manifest.selectedTestIds || JSON.stringify([...manifest.selectedTestIds].sort()) !== JSON.stringify([...discovered].sort())) {
-      throw new Error('Execution discovery differs from the repository runner selection. Direct or reconfigured Playwright execution cannot certify.');
+    if (
+      !manifest.selectedTestIds ||
+      JSON.stringify([...manifest.selectedTestIds].sort()) !== JSON.stringify([...discovered].sort())
+    ) {
+      throw new Error(
+        'Execution discovery differs from the repository runner selection. Direct or reconfigured Playwright execution cannot certify.',
+      );
     }
     updateRunManifest(currentRunKey(), { status: 'running', total: this.total });
   }
 
   onTestBegin(test: TestCase): void {
-    updateRunManifest(currentRunKey(), { currentTestId: testIdentity(test), currentTestStartedAt: new Date().toISOString() });
+    updateRunManifest(currentRunKey(), {
+      currentTestId: testIdentity(test),
+      currentTestStartedAt: new Date().toISOString(),
+    });
   }
 
   onTestEnd(test: TestCase, result: TestResult): void {
@@ -65,7 +73,10 @@ export default class RunReporter implements Reporter {
       failed: this.failed,
       skipped: this.skipped,
       failures: failure ? [...current.failures, failure] : current.failures,
-      outcomes: [...(current.outcomes ?? []), { id: testIdentity(test), status: result.status, durationMilliseconds: result.duration }],
+      outcomes: [
+        ...(current.outcomes ?? []),
+        { id: testIdentity(test), status: result.status, durationMilliseconds: result.duration },
+      ],
       currentTestId: null,
       currentTestStartedAt: null,
     }));
@@ -83,11 +94,18 @@ export default class RunReporter implements Reporter {
   onEnd(result: FullResult): void {
     const manifest = readRunManifest(currentRunKey());
     if (result.status === 'passed') {
-      const errors = validateExecutedSelection({ selectedTestIds: manifest.selectedTestIds ?? [], outcomes: manifest.outcomes ?? [] });
+      const errors = validateExecutedSelection({
+        selectedTestIds: manifest.selectedTestIds ?? [],
+        outcomes: manifest.outcomes ?? [],
+      });
       if (errors.length) {
         const failure = failureFromError('Execution evidence', null, { message: errors.join('\n') });
         markRunFailed(failure);
-        updateRunManifest(currentRunKey(), (current) => ({ status: 'failed', completedAt: new Date().toISOString(), failures: [...current.failures, failure] }));
+        updateRunManifest(currentRunKey(), (current) => ({
+          status: 'failed',
+          completedAt: new Date().toISOString(),
+          failures: [...current.failures, failure],
+        }));
         return;
       }
     }

@@ -14,19 +14,16 @@ export function usePendingTask(): {
   run: (task: () => Promise<void>) => Promise<void>;
   isPending: boolean;
 } {
-  const { run, isPending } = useServerAction(
-    async (task: () => Promise<void>) => task()
-  );
+  const { run, isPending } = useServerAction(async (task: () => Promise<void>) => task());
   return { run, isPending };
 }
 
 /**
  * Pending-state helper for server actions (client freshness contract rule 6).
  * `isPending` binds to the awaited server call and nothing else — never to a
- * router transition: a router-entangled `useTransition` kept controls
- * disabled after unrelated Realtime refreshes (the P1-16 MetadataSection
- * defect). ESLint bans async `startTransition` callbacks in product code so
- * this is the one submit path.
+ * router transition: a router-entangled `useTransition` keeps controls
+ * disabled after unrelated Realtime refreshes. ESLint bans async
+ * `startTransition` callbacks in product code so this is the one submit path.
  *
  * Concurrent calls all run and each settles independently (`isPending` while
  * any is in flight): programmatic invocations — an effect-driven fetch, a
@@ -34,8 +31,8 @@ export function usePendingTask(): {
  * protection is the disabled state the flag drives, matching the
  * `useTransition` semantics this replaces. Errors propagate to the caller
  * after the pending count settles.
- * Hook-level suppression of overlapping calls was tried and removed on
- * 2026-08-28 after it silently dropped flows; do not reintroduce it here.
+ * The hook never suppresses overlapping calls: suppression silently drops
+ * programmatic flows.
  */
 export type ServerActionPhase = 'idle' | 'pending' | 'settling';
 
@@ -45,12 +42,12 @@ export type ServerActionPhase = 'idle' | 'pending' | 'settling';
  * resolves when refreshed server props arrive. `run` still returns as soon
  * as the action does, so a dialog closes immediately; `isSettling` stays true
  * until the settle read finishes, and the landing surface shows that window
- * with an inline indicator instead of a skeleton (feedback canon, 2026-09-03).
+ * with an inline indicator instead of a skeleton.
  * A settle failure never rejects `run`; the live view owns that error.
  */
 export function useServerAction<Args extends readonly unknown[], Result>(
   action: (...args: Args) => Promise<Result>,
-  options: { settle?: (result: Result) => Promise<unknown> } = {}
+  options: { settle?: (result: Result) => Promise<unknown> } = {},
 ): {
   run: (...args: Args) => Promise<Result>;
   isPending: boolean;
@@ -89,6 +86,7 @@ export function useServerAction<Args extends readonly unknown[], Result>(
     if (settle && mountedRef.current) {
       setSettlingCount((count) => count + 1);
       void settle(result)
+        // eslint-disable-next-line no-restricted-syntax -- the settle read reports its own failure; here only the indicator has to end
         .catch(() => undefined)
         .finally(() => {
           if (mountedRef.current) setSettlingCount((count) => count - 1);

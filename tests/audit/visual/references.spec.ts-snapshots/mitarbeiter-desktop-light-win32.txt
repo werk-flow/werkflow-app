@@ -1,0 +1,73 @@
+Haustechnik Krämer GmbH
+Organisation erstellen
+Dashboard
+Aufgaben
+3
+3 offene Aufgaben und Benachrichtigungen
+Kalender
+Zeiterfassung
+Qualifikationen
+Anfragen
+Aufträge
+Dokumente
+Inventar
+Service
+Arbeitsvorlagen
+Mitarbeiter
+Kunden
+MK
+Martin Krämer
+martin.kraemer@haustechnik-kraemer.de
+Mitarbeiter
+Personalakte anlegen
+Mitarbeiter hinzufügen
+4
+Mitglieder
+0
+arbeiten gerade
+Mitglieder
+4
+Einladungen
+Teams
+Qualifikationen
+Name
+E-Mail
+Rolle
+Status
+Tagesfortschritt
+Beigetreten
+Martin Krämer
+Aktiv
+Mit Zugang
+martin.kraemer@haustechnik-kraemer.de
+Admin
+Nicht eingestempelt
+0%
+01.01.2026
+Sabine Vogel
+Aktiv
+Mit Zugang
+sabine.vogel@haustechnik-kraemer.de
+Büro
+Nicht eingestempelt
+0%
+01.01.2026
+Aktionen öffnen
+Jonas Becker
+Aktiv
+Mit Zugang
+jonas.becker@haustechnik-kraemer.de
+Handwerker/in
+Nicht eingestempelt
+0%
+01.01.2026
+Aktionen öffnen
+Kevin Schmid
+Aktiv
+Mit Zugang
+kevin.schmid@haustechnik-kraemer.de
+Handwerker/in
+Nicht eingestempelt
+0%
+01.01.2026
+Aktionen öffnen

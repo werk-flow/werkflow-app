@@ -6,7 +6,12 @@ import { unstable_rethrow } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { describeFailure } from '@/lib/action-messages';
 import { simulatePayment } from '@/lib/subscription/actions';
+
+const PAYMENT_ERROR_MESSAGES: Readonly<Record<string, string>> = {
+  too_many_attempts: 'Zu viele Versuche. Bitte warte etwas und versuche es dann erneut.',
+};
 
 export function SimulatePaymentButton() {
   const [isLoading, setIsLoading] = useState(false);
@@ -22,9 +27,11 @@ export function SimulatePaymentButton() {
       // If we get here without redirect, there was an error
       if (!result.success) {
         setError(
-          result.error === 'not_authenticated'
-            ? 'Du musst angemeldet sein.'
-            : 'Ein Fehler ist aufgetreten. Bitte versuche es erneut.'
+          describeFailure(
+            result.error ?? 'unexpected_error',
+            PAYMENT_ERROR_MESSAGES,
+            'Ein Fehler ist aufgetreten. Bitte versuche es erneut.',
+          ),
         );
       }
     } catch (error) {
@@ -37,16 +44,11 @@ export function SimulatePaymentButton() {
 
   return (
     <div className="space-y-2">
-      <Button
-        onClick={handleClick}
-        disabled={isLoading}
-        className="w-full"
-        size="lg"
-      >
+      <Button onClick={handleClick} disabled={isLoading} className="w-full" size="lg">
         {isLoading ? (
           <>
             <Loader2 className="mr-2 size-4 animate-spin" />
-            Wird verarbeitet...
+            Wird verarbeitet…
           </>
         ) : (
           'Zahlung simulieren / Fortfahren'
@@ -56,5 +58,3 @@ export function SimulatePaymentButton() {
     </div>
   );
 }
-
-

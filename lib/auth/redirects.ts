@@ -1,7 +1,4 @@
-import {
-  getCachedMemberships,
-  getCachedPrestartMemberships,
-} from '@/lib/data/cached';
+import { getCachedMemberships, getCachedPrestartMemberships } from '@/lib/data/cached';
 
 const DEFAULT_AUTHENTICATED_PATH = '/dashboard';
 const ONBOARDING_START_PATH = '/onboarding/start';
@@ -13,7 +10,5 @@ export async function getAuthenticatedRedirectPath(userId: string): Promise<stri
 
   const prestartMemberships = await getCachedPrestartMemberships(userId);
 
-  return prestartMemberships.length > 0
-    ? PERSONNEL_PRESTART_PATH
-    : ONBOARDING_START_PATH;
+  return prestartMemberships.length > 0 ? PERSONNEL_PRESTART_PATH : ONBOARDING_START_PATH;
 }

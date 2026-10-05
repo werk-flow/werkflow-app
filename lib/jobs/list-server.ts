@@ -18,7 +18,10 @@ export async function loadJobListPage(queries: JobListQueries): Promise<{
   const { orgId, userId, isManagerOrAbove } = auth.context;
   const admin = createSupabaseAdminClient();
   const result = await admin.rpc('list_job_entries_page', {
-    p_organization_id: orgId, p_user_id: userId, p_is_manager: isManagerOrAbove, p_queries: queries,
+    p_organization_id: orgId,
+    p_user_id: userId,
+    p_is_manager: isManagerOrAbove,
+    p_queries: queries,
   });
   if (result.error) throw new Error('Aufträge konnten nicht geladen werden.');
   const pages = jobListPagesSchema.parse(result.data);
@@ -26,13 +29,48 @@ export async function loadJobListPage(queries: JobListQueries): Promise<{
   const jobIds = entries.filter((entry) => entry.type === 'standalone-job').map((entry) => entry.id);
   const projectIds = entries.filter((entry) => entry.type === 'project').map((entry) => entry.id);
   const [jobResult, projectResult, assignments] = await Promise.all([
-    readInBatches(jobIds, (ids) => admin.from('jobs').select('*').eq('organization_id', orgId).in('id', [...ids])),
-    readInBatches(projectIds, (ids) => admin.from('projects').select('*').eq('organization_id', orgId).in('id', [...ids])),
-    readInBatches(jobIds, (ids) => readCompleteRows((from, to) => admin.from('job_assignments').select('job_id,user_id').eq('organization_id', orgId).in('job_id', [...ids]).order('id').range(from, to), LIST_ROW_CAP)),
+    readInBatches(jobIds, (ids) =>
+      admin
+        .from('jobs')
+        .select('*')
+        .eq('organization_id', orgId)
+        .in('id', [...ids]),
+    ),
+    readInBatches(projectIds, (ids) =>
+      admin
+        .from('projects')
+        .select('*')
+        .eq('organization_id', orgId)
+        .in('id', [...ids]),
+    ),
+    readInBatches(jobIds, (ids) =>
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('job_assignments')
+            .select('job_id,user_id')
+            .eq('organization_id', orgId)
+            .in('job_id', [...ids])
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+    ),
   ]);
-  if (jobResult.error || projectResult.error || assignments.error) throw new Error('Aufträge konnten nicht geladen werden.');
-  const clientIds = [...new Set([...jobResult.data, ...projectResult.data].flatMap((row) => row.client_id ? [row.client_id] : []))];
-  const clientResult = await readInBatches(clientIds, (ids) => admin.from('clients').select('*').eq('organization_id', orgId).in('id', [...ids]));
+  if (jobResult.error || projectResult.error || assignments.error)
+    throw new Error('Aufträge konnten nicht geladen werden.');
+  const clientIds = [
+    ...new Set(
+      [...jobResult.data, ...projectResult.data].flatMap((row) => (row.client_id ? [row.client_id] : [])),
+    ),
+  ];
+  const clientResult = await readInBatches(clientIds, (ids) =>
+    admin
+      .from('clients')
+      .select('*')
+      .eq('organization_id', orgId)
+      .in('id', [...ids]),
+  );
   if (clientResult.error) throw new Error('Kunden konnten nicht geladen werden.');
   const clients: Client[] = clientResult.data.map(toClient);
   const clientById = new Map(clients.map((client) => [client.id, client]));
@@ -40,11 +78,24 @@ export async function loadJobListPage(queries: JobListQueries): Promise<{
   const projects: ProjectWithDetails[] = projectResult.data.map((row) => {
     const entry = entries.find((entry) => entry.id === row.id && entry.type === 'project');
     if (!entry) throw new Error('Projekt konnte nicht geladen werden.');
-    return { ...toProject(row), client: row.client_id ? clientById.get(row.client_id) ?? null : null,
-      jobCount: entry.jobCount, completedJobCount: entry.completedJobCount,
-      inProgressJobCount: entry.inProgressJobCount, parkedJobCount: entry.parkedJobCount };
+    return {
+      ...toProject(row),
+      client: row.client_id ? (clientById.get(row.client_id) ?? null) : null,
+      jobCount: entry.jobCount,
+      completedJobCount: entry.completedJobCount,
+      inProgressJobCount: entry.inProgressJobCount,
+      parkedJobCount: entry.parkedJobCount,
+    };
   });
   const jobAssignmentMap: Record<string, string[]> = {};
-  for (const assignment of assignments.data) (jobAssignmentMap[assignment.job_id] ??= []).push(assignment.user_id);
-  return { jobs, projects, clients, jobAssignmentMap, clientMap: Object.fromEntries(clients.map((client) => [client.id, client.name])), pagination: { queries, pages } };
+  for (const assignment of assignments.data)
+    (jobAssignmentMap[assignment.job_id] ??= []).push(assignment.user_id);
+  return {
+    jobs,
+    projects,
+    clients,
+    jobAssignmentMap,
+    clientMap: Object.fromEntries(clients.map((client) => [client.id, client.name])),
+    pagination: { queries, pages },
+  };
 }

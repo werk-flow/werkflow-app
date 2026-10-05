@@ -2,7 +2,7 @@ import type { WorkArtifactActionRow } from './types';
 
 export function redactWorkArtifactActionForField(
   action: WorkArtifactActionRow,
-  viewerId: string
+  viewerId: string,
 ): WorkArtifactActionRow {
   const ownsAction = action.created_by === viewerId;
 

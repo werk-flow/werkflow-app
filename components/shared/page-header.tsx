@@ -25,15 +25,7 @@ interface PageHeaderProps {
  * padding. Area headers put `AreaNav` in `nav`; detail pages pass
  * `breadcrumbs`; in-page state tabs never live here (design canon).
  */
-export function PageHeader({
-  title,
-  eyebrow,
-  subtitle,
-  badges,
-  actions,
-  nav,
-  breadcrumbs,
-}: PageHeaderProps) {
+export function PageHeader({ title, eyebrow, subtitle, badges, actions, nav, breadcrumbs }: PageHeaderProps) {
   const backHref = breadcrumbs?.[0]?.href;
 
   return (
@@ -52,19 +44,21 @@ export function PageHeader({
               className="flex shrink-0 items-center gap-1 transition-colors hover:text-foreground"
             >
               <ArrowLeft className="size-4" />
-              <span className="hidden sm:inline">{breadcrumbs[0]?.label}</span>
+              <span className="sr-only sm:not-sr-only">{breadcrumbs[0]?.label}</span>
             </Link>
           ) : (
             <span className="shrink-0">{breadcrumbs[0]?.label}</span>
           )}
           {breadcrumbs.slice(1).map((crumb, index) => (
             <span key={index} className="flex min-w-0 items-center gap-1.5">
-              <ChevronRight className="size-3.5 shrink-0" />
+              {/* Phones show only the back arrow for the first crumb; a separator after it would stand alone. */}
+              <ChevronRight
+                className={
+                  index === 0 && backHref ? 'hidden size-3.5 shrink-0 sm:block' : 'size-3.5 shrink-0'
+                }
+              />
               {crumb.href ? (
-                <Link
-                  href={crumb.href}
-                  className="truncate transition-colors hover:text-foreground"
-                >
+                <Link href={crumb.href} className="truncate transition-colors hover:text-foreground">
                   {crumb.label}
                 </Link>
               ) : (
@@ -77,22 +71,24 @@ export function PageHeader({
 
       <div className={nav ? 'pb-2' : 'pb-3 sm:pb-4'}>
         <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 basis-40">
             {eyebrow && (
-              <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                {eyebrow}
-              </p>
+              <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{eyebrow}</p>
             )}
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <h1 className="min-w-0 break-words text-xl font-bold sm:text-2xl">{title}</h1>
+              <h1 className="min-w-0 break-words text-lg font-semibold tracking-tight sm:text-xl">{title}</h1>
               {badges}
             </div>
-            {subtitle && (
-              <p className="mt-0.5 break-words text-sm text-muted-foreground">{subtitle}</p>
-            )}
+            {subtitle && <p className="mt-0.5 break-words text-sm text-muted-foreground">{subtitle}</p>}
           </div>
+          {/* Phones: every header action is at least 44 px in both directions
+              (design canon, touch targets); desktop keeps the compact sizes.
+              `button` also covers a Button inside a menu trigger, whose
+              `data-slot` the trigger replaces. */}
           {actions && (
-            <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
+            <div className="flex max-w-full shrink-0 flex-wrap items-center gap-2 [&_:is(button,[data-slot=button])]:min-h-11 [&_:is(button,[data-slot=button])]:min-w-11 sm:[&_:is(button,[data-slot=button])]:min-h-0 sm:[&_:is(button,[data-slot=button])]:min-w-0">
+              {actions}
+            </div>
           )}
         </div>
       </div>

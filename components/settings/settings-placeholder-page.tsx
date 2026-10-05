@@ -12,10 +12,5 @@ export function SettingsPlaceholderPage({ slug }: SettingsPlaceholderPageProps) 
     return null;
   }
 
-  return (
-    <SettingsPlaceholder
-      title={section.label}
-      description={section.description}
-    />
-  );
+  return <SettingsPlaceholder />;
 }

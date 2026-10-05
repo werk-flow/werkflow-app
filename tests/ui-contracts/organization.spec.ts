@@ -1,13 +1,20 @@
 import { expect, test } from '@playwright/test';
-import { assertWorkspaceTestLock } from '@/lib/testing/workspace-test-lock';
+import { assertWorkspaceTestLock } from '@/lib/testing/runner/workspace-test-lock';
 
 test.beforeEach(async ({ page }) => {
   assertWorkspaceTestLock();
   const bundle = process.env.WERKFLOW_UI_CONTRACT_BUNDLE;
   if (!bundle) throw new Error('Run through bun tests/ui-contracts/run.ts.');
-  await page.route('http://localhost/ui-contracts**', (route) => route.fulfill({ contentType: 'text/html', body: '<html lang="de"><body><div id="root"></div></body></html>' }));
+  await page.route('http://localhost/ui-contracts**', (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      body: '<html lang="de"><body><div id="root"></div></body></html>',
+    }),
+  );
   await page.goto('http://localhost/ui-contracts');
-  await page.evaluate(() => { window.uiContractFixture = 'organization'; });
+  await page.evaluate(() => {
+    window.uiContractFixture = 'organization';
+  });
   await page.addScriptTag({ path: bundle });
 });
 

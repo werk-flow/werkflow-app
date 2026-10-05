@@ -10,10 +10,8 @@ import {
 // carry meaning at a glance (converted = done-green, emergency = red).
 const STATUS_CLASSES: Record<RequestStatus, string> = {
   offen: 'bg-accent text-accent-foreground',
-  in_klaerung:
-    'bg-warning-soft text-warning-soft-foreground',
-  umgewandelt:
-    'bg-success-soft text-success-soft-foreground',
+  in_klaerung: 'bg-warning-soft text-warning-soft-foreground',
+  umgewandelt: 'bg-success-soft text-success-soft-foreground',
   geschlossen: 'bg-muted text-muted-foreground',
 };
 
@@ -29,7 +27,7 @@ export function RequestStatusBadge({ status }: { status: RequestStatus }) {
     <span
       className={cn(
         'inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium',
-        STATUS_CLASSES[status]
+        STATUS_CLASSES[status],
       )}
     >
       {REQUEST_STATUS_LABELS[status]}
@@ -42,7 +40,7 @@ export function RequestUrgencyBadge({ urgency }: { urgency: RequestUrgency }) {
     <span
       className={cn(
         'inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium',
-        URGENCY_CLASSES[urgency]
+        URGENCY_CLASSES[urgency],
       )}
     >
       {REQUEST_URGENCY_LABELS[urgency]}

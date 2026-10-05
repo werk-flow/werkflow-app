@@ -1,14 +1,13 @@
 import { existsSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
-import { withWorkspaceTestLock } from '../lib/testing/workspace-test-lock';
-import { executeSqlAssertionFiles } from '../lib/testing/sql-assertion-files';
+import { withWorkspaceTestLock } from '../lib/testing/runner/workspace-test-lock';
+import { executeSqlAssertionFiles } from '../lib/testing/selection/sql-assertion-files';
 
 // Every file argument runs, in order, each in its own psql session. The group
 // registry may therefore declare several files for one SQL group; a file that
 // is declared but never executed cannot masquerade as proof.
-const assertionFiles = (process.argv.length > 2
-  ? process.argv.slice(2)
-  : ['supabase/tests/p1_21_time_segments.sql']
+const assertionFiles = (
+  process.argv.length > 2 ? process.argv.slice(2) : ['supabase/tests/p1_21_time_segments.sql']
 ).map((file) => resolve(process.cwd(), file));
 
 for (const assertionFile of assertionFiles) {
@@ -30,8 +29,7 @@ const dockerCommand = [
   '-v',
   'ON_ERROR_STOP=1',
 ];
-const command =
-  process.platform === 'win32' ? ['wsl', ...dockerCommand] : dockerCommand;
+const command = process.platform === 'win32' ? ['wsl', ...dockerCommand] : dockerCommand;
 
 export async function runSqlAssertionFile(assertionFile: string): Promise<void> {
   const child = Bun.spawn(command, {
@@ -50,5 +48,5 @@ await withWorkspaceTestLock(
   { operation: `SQL assertions ${assertionFiles.map((file) => basename(file)).join(', ')}` },
   async () => {
     await executeSqlAssertionFiles(assertionFiles, runSqlAssertionFile);
-  }
+  },
 );

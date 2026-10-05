@@ -1,7 +1,7 @@
-import { MitarbeiterContentSkeleton } from '@/components/loading-states/mitarbeiter-content-skeleton'
-import { PageHeader } from '@/components/shared/page-header'
-import { PageBody, PageShell } from '@/components/shared/page-shell'
-import { Skeleton } from '@/components/ui/skeleton'
+import { MitarbeiterContentSkeleton } from '@/components/loading-states/mitarbeiter-content-skeleton';
+import { PageHeader } from '@/components/shared/page-header';
+import { PageBody, PageShell } from '@/components/shared/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export function MitarbeiterPageSkeleton() {
   return (
@@ -19,5 +19,5 @@ export function MitarbeiterPageSkeleton() {
         <MitarbeiterContentSkeleton />
       </PageBody>
     </PageShell>
-  )
+  );
 }

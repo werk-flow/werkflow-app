@@ -1,4 +1,4 @@
-const TIME_TRACKING_TIME_ZONE = 'Europe/Berlin';
+export const TIME_TRACKING_TIME_ZONE = 'Europe/Berlin';
 
 type ZonedDateParts = {
   year: number;
@@ -32,8 +32,7 @@ function getZonedDateParts(date: Date): ZonedDateParts {
 
 function getTimeZoneOffsetMinutes(utcGuess: Date): number {
   const parts = offsetFormatter.formatToParts(utcGuess);
-  const offsetValue =
-    parts.find((part) => part.type === 'timeZoneName')?.value ?? 'GMT+0';
+  const offsetValue = parts.find((part) => part.type === 'timeZoneName')?.value ?? 'GMT+0';
   const match = offsetValue.match(/^GMT([+-])(\d{1,2})(?::?(\d{2}))?$/);
 
   if (!match) {
@@ -54,11 +53,9 @@ function getZonedDateTime(
   hour: number,
   minute: number,
   second: number,
-  millisecond: number
+  millisecond: number,
 ): Date {
-  const utcGuess = new Date(
-    Date.UTC(year, month - 1, day, hour, minute, second, millisecond)
-  );
+  const utcGuess = new Date(Date.UTC(year, month - 1, day, hour, minute, second, millisecond));
   const offsetMinutes = getTimeZoneOffsetMinutes(utcGuess);
 
   return new Date(utcGuess.getTime() - offsetMinutes * 60 * 1000);
@@ -78,11 +75,7 @@ export function isSameLocalDay(a: Date, b: Date): boolean {
   const aParts = getZonedDateParts(a);
   const bParts = getZonedDateParts(b);
 
-  return (
-    aParts.year === bParts.year &&
-    aParts.month === bParts.month &&
-    aParts.day === bParts.day
-  );
+  return aParts.year === bParts.year && aParts.month === bParts.month && aParts.day === bParts.day;
 }
 
 export function getLocalDayKey(date: Date): string {

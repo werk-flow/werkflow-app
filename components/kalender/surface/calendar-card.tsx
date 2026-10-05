@@ -1,9 +1,14 @@
 'use client';
 
+import { PlainButton } from '@/components/ui/plain-button';
 import { forwardRef, type ReactNode } from 'react';
 import { Briefcase, CalendarDays, Lock, Repeat2, StickyNote } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { CALENDAR_DISPATCH_STATE_LABELS, isNoteEntry, type CalendarDispatchState } from '@/lib/calendar/board';
+import {
+  CALENDAR_DISPATCH_STATE_LABELS,
+  isNoteEntry,
+  type CalendarDispatchState,
+} from '@/lib/calendar/board';
 import { PLANNING_OCCURRENCE_STATUS_LABELS } from '@/lib/planning/types';
 import type { CalendarJob } from '@/lib/jobs/types';
 import { MATERIAL_UNRESERVED_LABEL } from '@/lib/dispatch/readiness';
@@ -18,7 +23,10 @@ import { MATERIAL_UNRESERVED_LABEL } from '@/lib/dispatch/readiness';
  */
 type CalendarCardSize = 'board' | 'day' | 'month';
 
-export type CalendarCardChip = { label: string; tone: 'neutral' | 'success' | 'warning' | 'info' | 'destructive' };
+export type CalendarCardChip = {
+  label: string;
+  tone: 'neutral' | 'success' | 'warning' | 'info' | 'destructive';
+};
 
 const DISPATCH_CHIP_TONE: Record<CalendarDispatchState, CalendarCardChip['tone']> = {
   nicht_gesendet: 'neutral',
@@ -51,15 +59,24 @@ function isInactiveOccurrence(job: Pick<CalendarJob, 'occurrenceStatus'>): boole
 }
 
 /** Customer and place in one line, the way the office reads a card. */
-function cardSubtitle(job: Pick<CalendarJob, 'clientName' | 'location' | 'clientAddress' | 'projectName'>): string {
-  return [job.clientName, job.location ?? job.clientAddress].filter(Boolean).join(' · ') || job.projectName || '';
+function cardSubtitle(
+  job: Pick<CalendarJob, 'clientName' | 'location' | 'clientAddress' | 'projectName'>,
+): string {
+  return (
+    [job.clientName, job.location ?? job.clientAddress].filter(Boolean).join(' · ') || job.projectName || ''
+  );
 }
 
 function cardTime(job: Pick<CalendarJob, 'plannedTime' | 'estimatedDurationMinutes'>): string {
   if (!job.plannedTime) return 'ganztägig';
   const minutes = job.estimatedDurationMinutes ?? 0;
   const hours = minutes / 60;
-  const duration = minutes > 0 ? ` · ${hours.toLocaleString('de-DE', { maximumFractionDigits: 1 })} h` : '';
+  const duration =
+    minutes <= 0
+      ? ''
+      : minutes < 60
+        ? ` · ${minutes} min`
+        : ` · ${hours.toLocaleString('de-DE', { maximumFractionDigits: 1 })} h`;
   return `${job.plannedTime}${duration}`;
 }
 
@@ -88,18 +105,36 @@ export type CalendarCardProps = {
 };
 
 export const CalendarCard = forwardRef<HTMLButtonElement, CalendarCardProps>(function CalendarCard(
-  { job, size, chips = [], compact = false, selected = false, linked = false, draggable = false, locked = false, onPointerDown, onOpen, onHoverLink, className, style, children, ...rest },
+  {
+    job,
+    size,
+    chips = [],
+    compact = false,
+    selected = false,
+    linked = false,
+    draggable = false,
+    locked = false,
+    onPointerDown,
+    onOpen,
+    onHoverLink,
+    className,
+    style,
+    children,
+    ...rest
+  },
   ref,
 ) {
   const inactive = isInactiveOccurrence(job);
   const inert = inactive || locked;
   const note = isNoteEntry(job);
-  const statusLabel = job.occurrenceStatus ? PLANNING_OCCURRENCE_STATUS_LABELS[job.occurrenceStatus] : undefined;
+  const statusLabel = job.occurrenceStatus
+    ? PLANNING_OCCURRENCE_STATUS_LABELS[job.occurrenceStatus]
+    : undefined;
   const subtitle = cardSubtitle(job);
   const Icon = note ? StickyNote : job.entryKind === 'internal' ? CalendarDays : Briefcase;
   const oneLine = size === 'month' || compact;
   return (
-    <button
+    <PlainButton
       ref={ref}
       type="button"
       data-calendar-card={size}
@@ -108,12 +143,12 @@ export const CalendarCard = forwardRef<HTMLButtonElement, CalendarCardProps>(fun
       data-locked={locked ? '' : undefined}
       aria-label={`${rest['aria-label'] ?? `${job.title}, ${cardTime(job)}${subtitle ? `, ${subtitle}` : ''}`}${locked ? ', begonnen oder vergangen' : ''}`}
       className={cn(
-        'group/card relative flex min-w-0 flex-col gap-0.5 overflow-hidden rounded-md border text-left text-xs leading-tight transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        'group/card relative flex min-w-0 flex-col gap-1 overflow-hidden rounded-md border border-l-2 text-left text-xs leading-snug transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         note
           ? 'border-dashed border-calendar-note-border bg-calendar-note text-calendar-note-foreground'
-          : 'border-calendar-planning-border bg-calendar-planning text-calendar-planning-foreground',
-        oneLine ? 'h-6 justify-center px-1.5' : 'px-2 py-1',
-        !inert && draggable && 'cursor-grab active:cursor-grabbing hover:shadow-sm',
+          : 'border-calendar-planning-border border-l-calendar-planning-strong bg-calendar-planning text-calendar-planning-foreground',
+        oneLine ? 'h-6 justify-center px-1.5' : 'px-2 py-1.5',
+        !inert && draggable && 'cursor-grab active:cursor-grabbing hover:bg-calendar-planning-border/40',
         inactive && 'opacity-60',
         selected && 'ring-2 ring-primary',
         linked && 'shadow-[0_0_0_2px_var(--calendar-planning-strong)]',
@@ -122,35 +157,83 @@ export const CalendarCard = forwardRef<HTMLButtonElement, CalendarCardProps>(fun
       style={style}
       onPointerDown={!inert && draggable ? onPointerDown : undefined}
       onClick={(event) => onOpen?.(event.currentTarget)}
-      onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpen?.(event.currentTarget); } }}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onOpen?.(event.currentTarget);
+        }
+      }}
       onMouseEnter={() => onHoverLink?.(job.occurrenceId ?? null)}
       onMouseLeave={() => onHoverLink?.(null)}
       onFocus={() => onHoverLink?.(job.occurrenceId ?? null)}
       onBlur={() => onHoverLink?.(null)}
     >
       <span className="flex min-w-0 items-center gap-1">
-        <Icon className={cn('size-3 shrink-0', note ? 'text-calendar-note-foreground' : 'text-calendar-planning-strong')} aria-hidden="true" />
-        {!oneLine && job.plannedTime && <span className="shrink-0 tabular-nums">{job.plannedTime}</span>}
-        <span className={cn('min-w-0 truncate font-medium', inactive && 'line-through')}>{job.title}</span>
+        <Icon
+          className={cn(
+            'size-3 shrink-0',
+            note ? 'text-calendar-note-foreground' : 'text-calendar-planning-strong',
+          )}
+          aria-hidden="true"
+        />
+        <span
+          className={cn(
+            'min-w-0 font-medium',
+            !oneLine ? 'line-clamp-2 break-words' : 'truncate',
+            inactive && 'line-through',
+          )}
+        >
+          {job.title}
+        </span>
         {locked && <Lock className="ml-auto size-3 shrink-0 opacity-70" aria-hidden="true" />}
-        {job.seriesId && <Repeat2 className="size-3 shrink-0 opacity-70" role="img" aria-label="Serientermin" />}
-        {statusLabel && <span className="shrink-0 rounded-sm bg-muted px-1 text-[11px] text-muted-foreground">{statusLabel}</span>}
-        {size === 'month' && job.jobNumber && <span className="ml-auto hidden shrink-0 font-mono text-[11px] opacity-70 sm:inline">{job.jobNumber}</span>}
+        {job.seriesId && (
+          <Repeat2 className="size-3 shrink-0 opacity-70" role="img" aria-label="Serientermin" />
+        )}
+        {inactive && statusLabel && (
+          <span className="shrink-0 rounded-sm bg-muted px-1 text-[11px] text-muted-foreground">
+            {statusLabel}
+          </span>
+        )}
+        {size === 'month' && job.jobNumber && (
+          <span className="ml-auto hidden shrink-0 font-mono text-[11px] opacity-70 sm:inline">
+            {job.jobNumber}
+          </span>
+        )}
       </span>
+      {!oneLine && job.plannedTime && (
+        <span className="text-[11px] tabular-nums opacity-80">{cardTime(job)}</span>
+      )}
       {!oneLine && (subtitle || job.jobNumber) && (
-        <span className="flex min-w-0 items-center gap-1 text-[11px] opacity-80">
-          {job.jobNumber && <span className="shrink-0 font-mono">{job.jobNumber}</span>}
-          {subtitle && <span className="min-w-0 truncate">{subtitle}</span>}
+        <span
+          className={cn(
+            'flex min-w-0 gap-1 text-[11px] opacity-80',
+            size === 'day' ? 'flex-col items-start' : 'items-center',
+          )}
+        >
+          {job.jobNumber && size !== 'day' && <span className="shrink-0 font-mono">{job.jobNumber}</span>}
+          {subtitle && (
+            <span className={cn('min-w-0', size === 'day' ? 'line-clamp-2 break-words' : 'truncate')}>
+              {subtitle}
+            </span>
+          )}
         </span>
       )}
       {!oneLine && chips.length > 0 && (
         <span className="flex min-w-0 flex-wrap gap-1 pt-0.5">
           {chips.map((chip) => (
-            <span key={chip.label} className={cn('max-w-full truncate whitespace-nowrap rounded-sm px-1 text-[11px] leading-4', CHIP_CLASS[chip.tone])}>{chip.label}</span>
+            <span
+              key={chip.label}
+              className={cn(
+                'max-w-full truncate whitespace-nowrap rounded-sm px-1 text-[11px] leading-4',
+                CHIP_CLASS[chip.tone],
+              )}
+            >
+              {chip.label}
+            </span>
           ))}
         </span>
       )}
       {children}
-    </button>
+    </PlainButton>
   );
 });

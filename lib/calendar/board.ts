@@ -1,7 +1,12 @@
 import type { DispatchRecipientDerivedState } from '@/lib/dispatch/types';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { OrgRole } from '@/lib/jobs/types';
-import { addLocalDays, formatBerlinLocalDate, resolveBerlinWallTime, splitTimedIntervalByBerlinDate } from '@/lib/planning/date-time';
+import {
+  addLocalDays,
+  formatBerlinLocalDate,
+  resolveBerlinWallTime,
+  splitTimedIntervalByBerlinDate,
+} from '@/lib/planning/date-time';
 
 /**
  * The board context (P1-24a): what the calendar needs beyond the window's
@@ -117,10 +122,14 @@ export function dispatchStateFor(
  * edit, so the refusal is never a banner after the fact. A job without an occurrence (legacy bridge) is
  * not covered by that rule.
  */
-export function isStartedOccurrence(job: Pick<CalendarJob, 'occurrenceId' | 'timeKind' | 'startAt' | 'plannedDate' | 'plannedTime'>, nowMs: number): boolean {
+export function isStartedOccurrence(
+  job: Pick<CalendarJob, 'occurrenceId' | 'timeKind' | 'startAt' | 'plannedDate' | 'plannedTime'>,
+  nowMs: number,
+): boolean {
   if (!job.occurrenceId || !job.plannedDate) return false;
   if (job.startAt) return new Date(job.startAt).getTime() <= nowMs;
-  if (job.timeKind === 'all_day' || !job.plannedTime) return job.plannedDate <= formatBerlinLocalDate(new Date(nowMs));
+  if (job.timeKind === 'all_day' || !job.plannedTime)
+    return job.plannedDate <= formatBerlinLocalDate(new Date(nowMs));
   const start = resolveBerlinWallTime(`${job.plannedDate}T${job.plannedTime.slice(0, 5)}`);
   return start ? start.instant.getTime() <= nowMs : false;
 }
@@ -141,8 +150,11 @@ export function plannedMinutesByEmployeeDate(
     minutes.set(key, (minutes.get(key) ?? 0) + value);
   };
   for (const job of jobs) {
-    if (job.occurrenceStatus === 'skipped' || job.occurrenceStatus === 'cancelled' || isNoteEntry(job)) continue;
-    const records = job.assignedEmployeeRecordIds ?? job.assignedUserIds.flatMap((userId) => recordIdByUserId.get(userId) ?? []);
+    if (job.occurrenceStatus === 'skipped' || job.occurrenceStatus === 'cancelled' || isNoteEntry(job))
+      continue;
+    const records =
+      job.assignedEmployeeRecordIds ??
+      job.assignedUserIds.flatMap((userId) => recordIdByUserId.get(userId) ?? []);
     if (records.length === 0) continue;
     if (job.startAt && job.endAt) {
       for (const allocation of splitTimedIntervalByBerlinDate(new Date(job.startAt), new Date(job.endAt))) {

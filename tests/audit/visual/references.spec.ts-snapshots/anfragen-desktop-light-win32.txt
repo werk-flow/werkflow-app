@@ -1,0 +1,63 @@
+Haustechnik Krämer GmbH
+Organisation erstellen
+Dashboard
+Aufgaben
+3
+3 offene Aufgaben und Benachrichtigungen
+Kalender
+Zeiterfassung
+Qualifikationen
+Anfragen
+Aufträge
+Dokumente
+Inventar
+Service
+Arbeitsvorlagen
+Mitarbeiter
+Kunden
+MK
+Martin Krämer
+martin.kraemer@haustechnik-kraemer.de
+Anfragen
+Anfrage erfassen
+Aktiv
+Umgewandelt
+Geschlossen
+Alle
+3
+Anfragen
+Nr.
+Anliegen
+Kunde / Anrufer
+Kategorie
+Dringlichkeit
+Status
+Eingegangen
+Zuständig
+ANF-2026-0303
+Wasserfleck an der Decke im Flur
+Praxis Dr. Wolf
+Sonstiges
+Normal
+In Klärung
+01.01.2026, 08:00
+—
+ANF-2026-0302
+Angebot für ein barrierefreies Bad
+Helga Schneider (neu)
+Sonstiges
+Normal
+Offen
+01.01.2026, 08:00
+—
+ANF-2026-0301
+Heizung im Dachgeschoss bleibt kalt
+Familie Hoffmann
+Sonstiges
+Hoch
+Offen
+01.01.2026, 08:00
+—
+1–3
+von
+3

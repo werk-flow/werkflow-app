@@ -6,11 +6,7 @@ import {
   resolveCertificationExpiryPhase,
   resolveRequirementCoverage,
 } from './resolution';
-import type {
-  AssignmentCandidate,
-  EmployeeCapabilityRecord,
-  JobCapabilityRequirement,
-} from './types';
+import type { AssignmentCandidate, EmployeeCapabilityRecord, JobCapabilityRequirement } from './types';
 
 const requirement: JobCapabilityRequirement = {
   id: 'requirement-1',
@@ -20,9 +16,7 @@ const requirement: JobCapabilityRequirement = {
   requireConfirmation: true,
 };
 
-function record(
-  patch: Partial<EmployeeCapabilityRecord> = {}
-): EmployeeCapabilityRecord {
+function record(patch: Partial<EmployeeCapabilityRecord> = {}): EmployeeCapabilityRecord {
   return {
     id: 'record-1',
     employeeRecordId: 'employee-record-1',
@@ -41,9 +35,7 @@ function record(
   };
 }
 
-function candidate(
-  patch: Partial<AssignmentCandidate> = {}
-): AssignmentCandidate {
+function candidate(patch: Partial<AssignmentCandidate> = {}): AssignmentCandidate {
   return {
     userId: 'user-1',
     employeeRecordId: 'employee-record-1',
@@ -56,12 +48,8 @@ function candidate(
 
 describe('qualification coverage resolution', () => {
   test('treats validity boundaries as inclusive', () => {
-    expect(
-      resolveRequirementCoverage(requirement, [candidate()], '2026-01-01').status
-    ).toBe('covered');
-    expect(
-      resolveRequirementCoverage(requirement, [candidate()], '2026-12-31').status
-    ).toBe('covered');
+    expect(resolveRequirementCoverage(requirement, [candidate()], '2026-01-01').status).toBe('covered');
+    expect(resolveRequirementCoverage(requirement, [candidate()], '2026-12-31').status).toBe('covered');
   });
 
   test('uses the strongest overlapping certification without losing attribution', () => {
@@ -79,15 +67,9 @@ describe('qualification coverage resolution', () => {
       ],
     });
 
-    const result = resolveRequirementCoverage(
-      requirement,
-      [person],
-      '2026-06-01'
-    );
+    const result = resolveRequirementCoverage(requirement, [person], '2026-06-01');
     expect(result.status).toBe('unconfirmed');
-    expect(result.contributor?.employeeCapabilityId).toBe(
-      'current-unconfirmed'
-    );
+    expect(result.contributor?.employeeCapabilityId).toBe('current-unconfirmed');
   });
 
   test('separates team coverage from the named contributor', () => {
@@ -103,11 +85,7 @@ describe('qualification coverage resolution', () => {
       capabilityRecords: [record({ id: 'covered' })],
     });
 
-    const result = resolveRequirementCoverage(
-      requirement,
-      [expired, covered],
-      '2026-06-01'
-    );
+    const result = resolveRequirementCoverage(requirement, [expired, covered], '2026-06-01');
     expect(result.status).toBe('covered');
     expect(result.contributor?.displayName).toBe('Clara Neu');
   });
@@ -117,12 +95,10 @@ describe('qualification coverage resolution', () => {
       requirement,
       [
         candidate({
-          capabilityRecords: [
-            record({ confirmationStatus: 'unconfirmed' }),
-          ],
+          capabilityRecords: [record({ confirmationStatus: 'unconfirmed' })],
         }),
       ],
-      '2026-06-01'
+      '2026-06-01',
     );
     expect(result.status).toBe('unconfirmed');
   });
@@ -131,7 +107,7 @@ describe('qualification coverage resolution', () => {
     const result = resolveRequirementCoverage(
       requirement,
       [candidate({ capabilityRecords: [record({ validFrom: '2027-01-01' })] })],
-      '2026-06-01'
+      '2026-06-01',
     );
 
     expect(result.status).toBe('not_yet_valid');
@@ -145,7 +121,7 @@ describe('qualification coverage resolution', () => {
           capabilityRecords: [record({ supersededAt: '2026-05-01T10:00:00Z' })],
         }),
       ],
-      '2026-06-01'
+      '2026-06-01',
     );
 
     expect(result.status).toBe('missing');
@@ -181,28 +157,20 @@ describe('qualification coverage resolution', () => {
 describe('apprentice assignment signal', () => {
   test('is default-off and clears when a known non-apprentice is selected', () => {
     const apprentice = candidate({ employmentType: 'ausbildung' });
-    expect(resolveApprenticeWarning(false, [apprentice]).status).toBe(
-      'not_configured'
-    );
+    expect(resolveApprenticeWarning(false, [apprentice]).status).toBe('not_configured');
     expect(
       resolveApprenticeWarning(true, [
         apprentice,
         candidate({ userId: 'user-2', employmentType: 'vollzeit' }),
-      ]).status
+      ]).status,
     ).toBe('covered');
   });
 
   test('distinguishes apprentice-only from unknown employment conditions', () => {
-    expect(
-      resolveApprenticeWarning(true, [
-        candidate({ employmentType: 'ausbildung' }),
-      ]).status
-    ).toBe('apprentices_only');
-    expect(
-      resolveApprenticeWarning(true, [
-        candidate({ employmentType: null }),
-      ]).status
-    ).toBe('incomplete');
+    expect(resolveApprenticeWarning(true, [candidate({ employmentType: 'ausbildung' })]).status).toBe(
+      'apprentices_only',
+    );
+    expect(resolveApprenticeWarning(true, [candidate({ employmentType: null })]).status).toBe('incomplete');
   });
 });
 
@@ -220,9 +188,7 @@ describe('evaluation fingerprints and expiry attention', () => {
       assessedForDate: '2026-06-01',
       candidates: [
         candidate({
-          capabilityRecords: [
-            record({ confirmationStatus: 'unconfirmed' }),
-          ],
+          capabilityRecords: [record({ confirmationStatus: 'unconfirmed' })],
         }),
       ],
       requirements: [requirement],
@@ -258,23 +224,15 @@ describe('evaluation fingerprints and expiry attention', () => {
   });
 
   test('re-surfaces on validity phase changes but evidence is absent from the version', () => {
-    expect(
-      resolveCertificationExpiryPhase('2026-08-31', '2026-08-08', 30)
-    ).toBe('approaching');
-    expect(
-      resolveCertificationExpiryPhase('2026-08-07', '2026-08-08', 30)
-    ).toBe('expired');
-    expect(
-      resolveCertificationExpiryPhase('2026-08-07', '2026-08-08', 0)
-    ).toBe('expired');
-    expect(
-      resolveCertificationExpiryPhase('2026-08-31', '2026-08-08', Number.NaN)
-    ).toBe('none');
+    expect(resolveCertificationExpiryPhase('2026-08-31', '2026-08-08', 30)).toBe('approaching');
+    expect(resolveCertificationExpiryPhase('2026-08-07', '2026-08-08', 30)).toBe('expired');
+    expect(resolveCertificationExpiryPhase('2026-08-07', '2026-08-08', 0)).toBe('expired');
+    expect(resolveCertificationExpiryPhase('2026-08-31', '2026-08-08', Number.NaN)).toBe('none');
     expect(
       getCertificationAttentionVersion({
         validUntil: '2026-08-31',
         phase: 'approaching',
-      })
+      }),
     ).toBe('2026-08-31:approaching');
   });
 });

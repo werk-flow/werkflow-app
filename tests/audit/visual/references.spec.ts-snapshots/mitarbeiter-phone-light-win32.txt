@@ -1,0 +1,54 @@
+Menü öffnen
+Mitarbeiter
+Personalakte anlegen
+Personalakte
+Mitarbeiter hinzufügen
+Hinzufügen
+4
+Mitglieder
+0
+arbeiten gerade
+Mitglieder
+4
+Einladungen
+Teams
+Qualifikationen
+Martin Krämer
+Admin
+Aktiv
+Mit Zugang
+Nicht eingestempelt
+0%
+martin.kraemer@haustechnik-kraemer.de
+Beigetreten:
+01.01.26
+Sabine Vogel
+Büro
+Aktiv
+Mit Zugang
+Nicht eingestempelt
+0%
+sabine.vogel@haustechnik-kraemer.de
+Beigetreten:
+01.01.26
+Aktionen öffnen
+Jonas Becker
+Handwerker/in
+Aktiv
+Mit Zugang
+Nicht eingestempelt
+0%
+jonas.becker@haustechnik-kraemer.de
+Beigetreten:
+01.01.26
+Aktionen öffnen
+Kevin Schmid
+Handwerker/in
+Aktiv
+Mit Zugang
+Nicht eingestempelt
+0%
+kevin.schmid@haustechnik-kraemer.de
+Beigetreten:
+01.01.26
+Aktionen öffnen

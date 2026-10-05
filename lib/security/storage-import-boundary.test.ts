@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import ts from 'typescript';
-import { sourceImportGraph, UNKNOWN_IMPORT_DEPENDENCY } from '../testing/group-evidence';
+import { sourceImportGraph, UNKNOWN_IMPORT_DEPENDENCY } from '../testing/evidence/group-evidence';
 
 // Tier 2 import inventory, not a substitute for checking serialized responses.
 // Follow browser dependencies through lib/; Next's server-only and use-server
@@ -18,7 +18,8 @@ function listSources(root: string, directories: readonly string[]): string[] {
     for (const entry of readdirSync(resolve(root, relativePath), { withFileTypes: true })) {
       const path = `${relativePath}/${entry.name}`;
       if (entry.isDirectory()) visit(path);
-      else if (/\.[cm]?[jt]sx?$/.test(entry.name) && !/\.(test|spec)\.[cm]?[jt]sx?$/.test(entry.name)) found.push(path);
+      else if (/\.[cm]?[jt]sx?$/.test(entry.name) && !/\.(test|spec)\.[cm]?[jt]sx?$/.test(entry.name))
+        found.push(path);
     }
   }
   for (const directory of directories) visit(directory);
@@ -32,8 +33,13 @@ function moduleBoundary(source: string): { directives: Set<string>; serverOnly: 
     if (!ts.isExpressionStatement(statement) || !ts.isStringLiteral(statement.expression)) break;
     values.add(statement.expression.text);
   }
-  const serverOnly = syntax.statements.some((statement) => ts.isImportDeclaration(statement) &&
-    !statement.importClause && ts.isStringLiteral(statement.moduleSpecifier) && statement.moduleSpecifier.text === 'server-only');
+  const serverOnly = syntax.statements.some(
+    (statement) =>
+      ts.isImportDeclaration(statement) &&
+      !statement.importClause &&
+      ts.isStringLiteral(statement.moduleSpecifier) &&
+      statement.moduleSpecifier.text === 'server-only',
+  );
   return { directives: values, serverOnly };
 }
 
@@ -54,7 +60,10 @@ function storageBoundaryViolations(root: string, files: readonly string[]): stri
   // Retain the direct app-root restriction, including relative/dynamic imports.
   for (const file of graph.keys()) {
     if (!/^(app|components|hooks)\//.test(file)) continue;
-    if (graph.get(file)?.includes(storageAdapter) || imports.get(file)?.some((name) => storagePackages.has(name))) {
+    if (
+      graph.get(file)?.includes(storageAdapter) ||
+      imports.get(file)?.some((name) => storagePackages.has(name))
+    ) {
       violations.add(`${file}: direct storage implementation import`);
     }
   }
@@ -82,7 +91,12 @@ function storageBoundaryViolations(root: string, files: readonly string[]): stri
 }
 
 test('browser imports cannot reach raw storage through relative, dynamic, or transitive imports', () => {
-  expect(storageBoundaryViolations(repositoryRoot, listSources(repositoryRoot, ['app', 'components', 'hooks', 'lib']))).toEqual([]);
+  expect(
+    storageBoundaryViolations(
+      repositoryRoot,
+      listSources(repositoryRoot, ['app', 'components', 'hooks', 'lib']),
+    ),
+  ).toEqual([]);
 }, 30_000); // The browser import graph is parsed with the TypeScript AST; 5 s is not enough under host load (incident 2026-09-13).
 
 test('the admin client keeps its build-time server-only guard', () => {
@@ -114,7 +128,12 @@ for (const expression of [
   `const adapter = require('../lib/storage/r2');`,
 ]) {
   test(`direct storage import is rejected: ${expression}`, () => {
-    expect(fixture({ 'components/client.ts': `'use client'; ${expression}`, [storageAdapter]: 'export const read = 1;' })).not.toEqual([]);
+    expect(
+      fixture({
+        'components/client.ts': `'use client'; ${expression}`,
+        [storageAdapter]: 'export const read = 1;',
+      }),
+    ).not.toEqual([]);
   });
 }
 
@@ -125,29 +144,38 @@ test('transitive barrels, dynamic imports and raw SDK imports are rejected acros
     `import { S3Client } from '@aws-sdk/client-s3'; export { S3Client };`,
     `export * from '@aws-sdk/s3-request-presigner';`,
   ]) {
-    expect(fixture({
-      'components/client.ts': `'use client'; import { read } from '../lib/barrel';`,
-      'lib/barrel.ts': `export * from './helper';`, 'lib/helper.ts': implementation,
-      [storageAdapter]: 'export const read = 1;',
-    })).not.toEqual([]);
+    expect(
+      fixture({
+        'components/client.ts': `'use client'; import { read } from '../lib/barrel';`,
+        'lib/barrel.ts': `export * from './helper';`,
+        'lib/helper.ts': implementation,
+        [storageAdapter]: 'export const read = 1;',
+      }),
+    ).not.toEqual([]);
   }
 });
 
 test('unknown dynamic imports fail closed and supported server boundaries remain usable', () => {
-  expect(fixture({ 'lib/client.ts': `'use client'; export const load = (name: string) => import(name);` })).not.toEqual([]);
+  expect(
+    fixture({ 'lib/client.ts': `'use client'; export const load = (name: string) => import(name);` }),
+  ).not.toEqual([]);
   for (const boundary of ["'use server';", "import 'server-only';"]) {
-    expect(fixture({
-      'components/client.ts': `'use client'; import { read } from '../lib/server';`,
-      'lib/server.ts': `${boundary} import { read } from './storage/r2'; export { read };`,
-      [storageAdapter]: 'export const read = 1;',
-    })).toEqual([]);
+    expect(
+      fixture({
+        'components/client.ts': `'use client'; import { read } from '../lib/server';`,
+        'lib/server.ts': `${boundary} import { read } from './storage/r2'; export { read };`,
+        [storageAdapter]: 'export const read = 1;',
+      }),
+    ).toEqual([]);
   }
 });
 
 test('an erased type import is not a server-only runtime boundary', () => {
-  expect(fixture({
-    'components/client.ts': `'use client'; import { read } from '../lib/server';`,
-    'lib/server.ts': `import type {} from 'server-only'; export { read } from './storage/r2';`,
-    [storageAdapter]: 'export const read = 1;',
-  })).not.toEqual([]);
+  expect(
+    fixture({
+      'components/client.ts': `'use client'; import { read } from '../lib/server';`,
+      'lib/server.ts': `import type {} from 'server-only'; export { read } from './storage/r2';`,
+      [storageAdapter]: 'export const read = 1;',
+    }),
+  ).not.toEqual([]);
 });

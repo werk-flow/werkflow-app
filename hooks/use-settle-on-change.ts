@@ -31,13 +31,14 @@ export function useSettleOnChange(value: unknown, timeoutMs = 15_000): () => Pro
     return () => settlement.cancel();
   }, []);
 
-  return useCallback(
-    async () => {
-      const outcome = await settlementRef.current.wait(timeoutMs);
-      if (outcome === 'timed-out') {
-        showBanner({ variant: 'error', message: 'Die Änderung wurde gespeichert, die Ansicht aber noch nicht aktualisiert. Bitte aktualisiere die Seite.' });
-      }
-    },
-    [timeoutMs, showBanner]
-  );
+  return useCallback(async () => {
+    const outcome = await settlementRef.current.wait(timeoutMs);
+    if (outcome === 'timed-out') {
+      showBanner({
+        variant: 'error',
+        message:
+          'Die Änderung wurde gespeichert, die Ansicht aber noch nicht aktualisiert. Bitte aktualisiere die Seite.',
+      });
+    }
+  }, [timeoutMs, showBanner]);
 }

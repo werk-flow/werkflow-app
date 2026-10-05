@@ -2,9 +2,7 @@
  * Bounds a route-interception gate without waiting on Playwright's request
  * event, which may remain pending until the intercepted route is continued.
  */
-export async function waitForRouteIntercept(
-  intercepted: Promise<void>
-): Promise<void> {
+export async function waitForRouteIntercept(intercepted: Promise<void>): Promise<void> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([

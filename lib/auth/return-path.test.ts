@@ -5,9 +5,7 @@ const origin = 'https://app.werk-flow.app';
 
 describe('resolveSafeReturnPath', () => {
   test('keeps an ordinary relative path with query and hash', () => {
-    expect(resolveSafeReturnPath('/auftraege?tab=offen#top', origin)).toBe(
-      '/auftraege?tab=offen#top'
-    );
+    expect(resolveSafeReturnPath('/auftraege?tab=offen#top', origin)).toBe('/auftraege?tab=offen#top');
   });
 
   test.each([

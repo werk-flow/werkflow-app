@@ -84,7 +84,11 @@ export function Field({
             )}
           </span>
         </Label>
-        {requiredDescriptionId && <span id={requiredDescriptionId} className="sr-only">Pflichtfeld</span>}
+        {requiredDescriptionId && (
+          <span id={requiredDescriptionId} className="sr-only">
+            Pflichtfeld
+          </span>
+        )}
         {children}
         {description && (
           <p id={descriptionId} className="text-xs text-muted-foreground">

@@ -10,19 +10,27 @@ const messageId = '49a3999c-0ce1-4ea6-ab68-afcd6dc2e794';
 const localMessageId = 'aBcDeFgHiJkLmNoPqRsTuV';
 const cases = [
   {
-    name: 'send-invite-email', factory: createInviteEmailHandler,
-    body: { to: 'private@example.test', inviterName: '<script>private</script>', organizationName: 'SHK & Co',
-      inviteUrl: 'https://example.test/invite?code=secret', isExistingUser: false },
+    name: 'send-invite-email',
+    factory: createInviteEmailHandler,
+    body: {
+      to: 'private@example.test',
+      inviterName: '<script>private</script>',
+      organizationName: 'SHK & Co',
+      inviteUrl: 'https://example.test/invite?code=secret',
+      isExistingUser: false,
+    },
   },
   {
-    name: 'send-email-change-current-otp', factory: createEmailChangeOtpHandler,
+    name: 'send-email-change-current-otp',
+    factory: createEmailChangeOtpHandler,
     body: { to: 'private@example.test', code: '924617', firstName: '<script>private</script>' },
   },
 ];
 
 function request(body: unknown, authorized = true): Request {
   return new Request('https://example.test/mail', {
-    method: 'POST', headers: { apikey: authorized ? apiKey : 'wrong', 'Content-Type': 'application/json' },
+    method: 'POST',
+    headers: { apikey: authorized ? apiKey : 'wrong', 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
 }
@@ -32,9 +40,14 @@ for (const example of cases) {
     const deliveries: { url: string; init: RequestInit }[] = [];
     const logs: unknown[] = [];
     const handler = example.factory({
-      secretKeys: JSON.stringify([apiKey]), localMailCapture: 'mailpit', supabaseUrl: 'http://kong:8000',
+      secretKeys: JSON.stringify([apiKey]),
+      localMailCapture: 'mailpit',
+      supabaseUrl: 'http://kong:8000',
       logError: (...values) => logs.push(values),
-      sendRequest: async (url, init) => { deliveries.push({ url, init }); return Response.json({ ID: localMessageId }); },
+      sendRequest: async (url, init) => {
+        deliveries.push({ url, init });
+        return Response.json({ ID: localMessageId });
+      },
     });
     const response = await handler(request(example.body));
     expect(response.status).toBe(200);
@@ -50,9 +63,17 @@ for (const example of cases) {
   test(`${example.name}: cloud cannot enable the local capture fallback`, async () => {
     let sends = 0;
     for (const supabaseUrl of ['https://project.supabase.co', 'http://kong:8000.evil.test', undefined]) {
-      const handler = example.factory({ secretKeys: JSON.stringify([apiKey]), localMailCapture: 'mailpit',
-        ...(supabaseUrl !== undefined ? { supabaseUrl } : {}), resendApiKey: 're_synthetic', logError: () => {},
-        sendRequest: async () => { sends++; return Response.json({ ID: messageId }); } });
+      const handler = example.factory({
+        secretKeys: JSON.stringify([apiKey]),
+        localMailCapture: 'mailpit',
+        ...(supabaseUrl !== undefined ? { supabaseUrl } : {}),
+        resendApiKey: 're_synthetic',
+        logError: () => {},
+        sendRequest: async () => {
+          sends++;
+          return Response.json({ ID: messageId });
+        },
+      });
       expect((await handler(request(example.body))).status).toBe(503);
     }
     expect(sends).toBe(0);
@@ -61,12 +82,18 @@ for (const example of cases) {
   test(`${example.name}: rejected, missing and malformed local capture never reports successful delivery`, async () => {
     for (const failure of ['rejected', 'network', 'malformed'] as const) {
       const logs: unknown[] = [];
-      const handler = example.factory({ secretKeys: JSON.stringify([apiKey]), localMailCapture: 'mailpit',
-        supabaseUrl: 'http://kong:8000', logError: (...values) => logs.push(values),
+      const handler = example.factory({
+        secretKeys: JSON.stringify([apiKey]),
+        localMailCapture: 'mailpit',
+        supabaseUrl: 'http://kong:8000',
+        logError: (...values) => logs.push(values),
         sendRequest: async () => {
           if (failure === 'network') throw new Error(privateMarker);
-          return failure === 'rejected' ? new Response(privateMarker, { status: 503 }) : Response.json({ ID: privateMarker });
-        } });
+          return failure === 'rejected'
+            ? new Response(privateMarker, { status: 503 })
+            : Response.json({ ID: privateMarker });
+        },
+      });
       const response = await handler(request(example.body));
       expect(response.status).toBe(502);
       expect(JSON.stringify(logs)).not.toContain('private');
@@ -78,8 +105,12 @@ for (const example of cases) {
     const logs: unknown[] = [];
     let sends = 0;
     const handler = example.factory({
-      secretKeys: JSON.stringify([apiKey]), logError: (...values) => logs.push(values),
-      sendRequest: async () => { sends++; return Response.json({ id: messageId }); },
+      secretKeys: JSON.stringify([apiKey]),
+      logError: (...values) => logs.push(values),
+      sendRequest: async () => {
+        sends++;
+        return Response.json({ id: messageId });
+      },
     });
     const response = await handler(request(example.body));
     expect(response.status).toBe(503);
@@ -92,7 +123,8 @@ for (const example of cases) {
     test(`${example.name}: ${failure} does not expose provider text or report delivery`, async () => {
       const logs: unknown[] = [];
       const handler = example.factory({
-        secretKeys: JSON.stringify([apiKey]), resendApiKey: 're_synthetic',
+        secretKeys: JSON.stringify([apiKey]),
+        resendApiKey: 're_synthetic',
         logError: (...values) => logs.push(values),
         sendRequest: async () => {
           if (failure === 'network') throw new Error(privateMarker);
@@ -115,9 +147,13 @@ for (const example of cases) {
     let sends = 0;
     const logs: unknown[] = [];
     const handler = example.factory({
-      secretKeys: JSON.stringify([apiKey]), resendApiKey: 're_synthetic',
+      secretKeys: JSON.stringify([apiKey]),
+      resendApiKey: 're_synthetic',
       logError: (...values) => logs.push(values),
-      sendRequest: async () => { sends++; return Response.json({ id: messageId }); },
+      sendRequest: async () => {
+        sends++;
+        return Response.json({ id: messageId });
+      },
     });
     expect((await handler(request(example.body, false))).status).toBe(401);
     expect((await handler(request({ ...example.body, to: { privateMarker } }))).status).toBe(400);
@@ -130,15 +166,21 @@ for (const example of cases) {
     const logs: unknown[] = [];
     let sends = 0;
     const dependencies = {
-      resendApiKey: 're_synthetic', logError: (...values: unknown[]) => logs.push(values),
-      sendRequest: async () => { sends++; return Response.json({ id: messageId }); },
+      resendApiKey: 're_synthetic',
+      logError: (...values: unknown[]) => logs.push(values),
+      sendRequest: async () => {
+        sends++;
+        return Response.json({ id: messageId });
+      },
     };
     const invalid = example.factory({ ...dependencies, secretKeys: privateMarker });
     expect((await invalid(request(example.body))).status).toBe(500);
     expect(sends).toBe(0);
     expect(JSON.stringify(logs)).not.toContain('private');
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(apiKey));
-    const hashedKey = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+    const hashedKey = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join(
+      '',
+    );
     const valid = example.factory({ ...dependencies, secretKeys: JSON.stringify([hashedKey]) });
     expect((await valid(request(example.body))).status).toBe(200);
     expect(sends).toBe(1);
@@ -148,7 +190,8 @@ for (const example of cases) {
     const sent: RequestInit[] = [];
     const logs: unknown[] = [];
     const handler = example.factory({
-      secretKeys: JSON.stringify([apiKey]), resendApiKey: 're_synthetic',
+      secretKeys: JSON.stringify([apiKey]),
+      resendApiKey: 're_synthetic',
       logError: (...values) => logs.push(values),
       sendRequest: async (url, init) => {
         expect(url).toBe('https://api.resend.com/emails');
@@ -170,11 +213,19 @@ for (const example of cases) {
   test(`${example.name}: deployment entry uses the tested handler and permits no payload logging`, () => {
     const directory = resolve(import.meta.dir, '../../supabase/functions', example.name);
     const entry = readFileSync(resolve(directory, 'index.ts'), 'utf8');
-    expect(entry).toContain(`Deno.serve(${example.factory.name}({`);
+    expect(entry).toMatch(new RegExp(`Deno\\.serve\\(\\s*${example.factory.name}\\(\\{`));
     expect(entry).toContain("from './handler.ts'");
     // Future logging must use the deliberately payload-free dependency contract.
-    for (const file of ['index.ts', 'handler.ts', '../_shared/mail-delivery.ts', '../_shared/mail-auth.ts', '../_shared/html.ts']) {
-      expect(readFileSync(resolve(directory, file), 'utf8')).not.toMatch(/console\.(error|log|warn|info|debug)\s*\(/);
+    for (const file of [
+      'index.ts',
+      'handler.ts',
+      '../_shared/mail-delivery.ts',
+      '../_shared/mail-auth.ts',
+      '../_shared/html.ts',
+    ]) {
+      expect(readFileSync(resolve(directory, file), 'utf8')).not.toMatch(
+        /console\.(error|log|warn|info|debug)\s*\(/,
+      );
     }
   });
 }

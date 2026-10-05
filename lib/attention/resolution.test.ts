@@ -45,70 +45,45 @@ describe('selectFollowUpAttentionRows (P1-10)', () => {
   ];
 
   test('keeps the manager role gate explicit', () => {
+    expect(selectFollowUpAttentionRows('employee', 'admin-1', candidates, activeManagers).rows).toEqual([]);
     expect(
-      selectFollowUpAttentionRows(
-        'employee',
-        'admin-1',
-        candidates,
-        activeManagers
-      ).rows
-    ).toEqual([]);
-    expect(
-      selectFollowUpAttentionRows(
-        'buero',
-        'buero-1',
-        candidates,
-        activeManagers
-      ).rows.map((row) => row.id)
+      selectFollowUpAttentionRows('buero', 'buero-1', candidates, activeManagers).rows.map((row) => row.id),
     ).toEqual(['other-active', 'unavailable']);
   });
 
   test('shows own and unavailable-owner work but excludes other active owners', () => {
-    const result = selectFollowUpAttentionRows(
-      'admin',
-      'admin-1',
-      candidates,
-      activeManagers
-    );
+    const result = selectFollowUpAttentionRows('admin', 'admin-1', candidates, activeManagers);
     expect(result.capacityExceeded).toBe(false);
     expect(result.rows.map((row) => row.id)).toEqual(['own', 'unavailable']);
-    expect(result.rows.map((row) => row.ownerUnavailable)).toEqual([
-      false,
-      true,
-    ]);
+    expect(result.rows.map((row) => row.ownerUnavailable)).toEqual([false, true]);
   });
 
   test('accepts exactly 100 rows and rejects 101 without partial results', () => {
     const oneHundred = Array.from({ length: 100 }, (_, index) =>
-      followUpCandidate(`follow-up-${index}`, 'admin-1')
+      followUpCandidate(`follow-up-${index}`, 'admin-1'),
     );
-    expect(
-      selectFollowUpAttentionRows(
-        'admin',
-        'admin-1',
-        oneHundred,
-        activeManagers
-      )
-    ).toMatchObject({ capacityExceeded: false });
+    expect(selectFollowUpAttentionRows('admin', 'admin-1', oneHundred, activeManagers)).toMatchObject({
+      capacityExceeded: false,
+    });
     expect(
       selectFollowUpAttentionRows(
         'admin',
         'admin-1',
         [...oneHundred, followUpCandidate('overflow', 'admin-1')],
-        activeManagers
-      )
+        activeManagers,
+      ),
     ).toEqual({ rows: [], capacityExceeded: true });
   });
 
   test('applies capacity only after excluding other active owners', () => {
     const otherOwnerRows = Array.from({ length: 101 }, (_, index) =>
-      followUpCandidate(`other-${index}`, 'buero-1')
+      followUpCandidate(`other-${index}`, 'buero-1'),
     );
     const result = selectFollowUpAttentionRows(
       'admin',
       'admin-1',
       [...otherOwnerRows, followUpCandidate('own', 'admin-1')],
-      activeManagers
+      activeManagers,
     );
     expect(result.capacityExceeded).toBe(false);
     expect(result.rows.map((row) => row.id)).toEqual(['own']);
@@ -117,22 +92,18 @@ describe('selectFollowUpAttentionRows (P1-10)', () => {
 
 describe('attentionItemKey', () => {
   test('is stable and unique per source_type + source_id', () => {
-    expect(
-      attentionItemKey({ sourceType: 'vacation_decision', sourceId: 'r1' })
-    ).toBe('vacation_decision:r1');
-    expect(
-      attentionItemKey({ sourceType: 'vacation_decision', sourceId: 'r1' })
-    ).toBe(
-      attentionItemKey({ sourceType: 'vacation_decision', sourceId: 'r1' })
+    expect(attentionItemKey({ sourceType: 'vacation_decision', sourceId: 'r1' })).toBe(
+      'vacation_decision:r1',
+    );
+    expect(attentionItemKey({ sourceType: 'vacation_decision', sourceId: 'r1' })).toBe(
+      attentionItemKey({ sourceType: 'vacation_decision', sourceId: 'r1' }),
     );
     expect(
       attentionItemKey({
         sourceType: 'vacation_request_approval',
         sourceId: 'r1',
-      })
-    ).not.toBe(
-      attentionItemKey({ sourceType: 'vacation_decision', sourceId: 'r1' })
-    );
+      }),
+    ).not.toBe(attentionItemKey({ sourceType: 'vacation_decision', sourceId: 'r1' }));
   });
 });
 
@@ -163,21 +134,14 @@ describe('dedupeAttentionItems', () => {
       { sourceType: 'client_request_open' as const, sourceId: 'a' },
       { sourceType: 'client_request_open' as const, sourceId: 'b' },
     ];
-    expect(dedupeAttentionItems(items).map((item) => item.sourceId)).toEqual([
-      'b',
-      'a',
-    ]);
+    expect(dedupeAttentionItems(items).map((item) => item.sourceId)).toEqual(['b', 'a']);
   });
 });
 
 describe('resolveVacationDecisionFacts', () => {
   test('pending and withdrawn requests produce no notification', () => {
-    expect(
-      resolveVacationDecisionFacts(makeDecisionRequest({ status: 'pending' }))
-    ).toBeNull();
-    expect(
-      resolveVacationDecisionFacts(makeDecisionRequest({ status: 'withdrawn' }))
-    ).toBeNull();
+    expect(resolveVacationDecisionFacts(makeDecisionRequest({ status: 'pending' }))).toBeNull();
+    expect(resolveVacationDecisionFacts(makeDecisionRequest({ status: 'withdrawn' }))).toBeNull();
   });
 
   test('approval and rejection version on the decision timestamp', () => {
@@ -185,7 +149,7 @@ describe('resolveVacationDecisionFacts', () => {
       makeDecisionRequest({
         status: 'approved',
         decidedAt: '2026-08-07T10:00:00Z',
-      })
+      }),
     );
     expect(approved).toEqual({
       status: 'approved',
@@ -197,7 +161,7 @@ describe('resolveVacationDecisionFacts', () => {
       makeDecisionRequest({
         status: 'rejected',
         decidedAt: '2026-08-07T11:00:00Z',
-      })
+      }),
     );
     expect(rejected?.status).toBe('rejected');
     expect(rejected?.stateVersion).toBe('rejected:2026-08-07T11:00:00Z');
@@ -210,14 +174,14 @@ describe('resolveVacationDecisionFacts', () => {
       makeDecisionRequest({
         status: 'approved',
         decidedAt: '2026-08-07T10:00:00Z',
-      })
+      }),
     );
     const cancelled = resolveVacationDecisionFacts(
       makeDecisionRequest({
         status: 'cancelled',
         decidedAt: '2026-08-07T10:00:00Z',
         cancelledAt: '2026-08-08T09:00:00Z',
-      })
+      }),
     );
     expect(cancelled?.status).toBe('cancelled');
     expect(cancelled?.occurredAt).toBe('2026-08-08T09:00:00Z');
@@ -226,14 +190,10 @@ describe('resolveVacationDecisionFacts', () => {
 
   test('decision states without their timestamp produce no notification', () => {
     expect(
-      resolveVacationDecisionFacts(
-        makeDecisionRequest({ status: 'approved', decidedAt: null })
-      )
+      resolveVacationDecisionFacts(makeDecisionRequest({ status: 'approved', decidedAt: null })),
     ).toBeNull();
     expect(
-      resolveVacationDecisionFacts(
-        makeDecisionRequest({ status: 'cancelled', cancelledAt: null })
-      )
+      resolveVacationDecisionFacts(makeDecisionRequest({ status: 'cancelled', cancelledAt: null })),
     ).toBeNull();
   });
 });
@@ -252,12 +212,8 @@ describe('isNotificationUnread', () => {
 
 describe('isWithinNotificationWindow', () => {
   test('recent decisions are inside, old ones outside', () => {
-    expect(
-      isWithinNotificationWindow('2026-08-01T10:00:00Z', '2026-08-07')
-    ).toBe(true);
-    expect(
-      isWithinNotificationWindow('2026-01-01T10:00:00Z', '2026-08-07')
-    ).toBe(false);
+    expect(isWithinNotificationWindow('2026-08-01T10:00:00Z', '2026-08-07')).toBe(true);
+    expect(isWithinNotificationWindow('2026-01-01T10:00:00Z', '2026-08-07')).toBe(false);
   });
 
   test('the boundary day is inclusive and DST-independent', () => {
@@ -265,12 +221,9 @@ describe('isWithinNotificationWindow', () => {
     const businessToday = '2026-08-07';
     const boundary = notificationWindowStartIso(businessToday);
     expect(isWithinNotificationWindow(boundary, businessToday)).toBe(true);
-    expect(
-      isWithinNotificationWindow(
-        new Date(Date.parse(boundary) - 1).toISOString(),
-        businessToday
-      )
-    ).toBe(false);
+    expect(isWithinNotificationWindow(new Date(Date.parse(boundary) - 1).toISOString(), businessToday)).toBe(
+      false,
+    );
   });
 
   test('unparseable timestamps are excluded, not crashing', () => {
@@ -315,14 +268,8 @@ describe('sortNotificationsNewestFirst', () => {
     };
     const input = [older, newer];
     const sorted = sortNotificationsNewestFirst(input);
-    expect(sorted.map((notification) => notification.sourceId)).toEqual([
-      'r2',
-      'r1',
-    ]);
-    expect(input.map((notification) => notification.sourceId)).toEqual([
-      'r1',
-      'r2',
-    ]);
+    expect(sorted.map((notification) => notification.sourceId)).toEqual(['r2', 'r1']);
+    expect(input.map((notification) => notification.sourceId)).toEqual(['r1', 'r2']);
   });
 });
 

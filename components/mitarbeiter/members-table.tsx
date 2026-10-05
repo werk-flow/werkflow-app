@@ -1,32 +1,20 @@
 'use client';
 
+import { EmptyState } from '@/components/ui/empty-state';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Users } from 'lucide-react';
 
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { ListRow } from '@/components/ui/list-row';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  SkeletonList,
-  SkeletonRows,
-  type SkeletonColumn,
-} from '@/components/ui/skeleton-table';
+import { SkeletonList, SkeletonRows, type SkeletonColumn } from '@/components/ui/skeleton-table';
 import { MemberActionsMenu } from './member-actions-menu';
+import { STATUS_SKELETON, PROGRESS_SKELETON, memberColumns } from './members-table-columns';
 import { StatusBadge } from './status-badge';
 import { HoursDisplay } from './hours-display';
-import {
-  AccessStateBadge,
-  EmploymentStateBadge,
-} from './personnel-state-badges';
+import { AccessStateBadge, EmploymentStateBadge } from './personnel-state-badges';
 import type { OrgRole } from '@/lib/members/actions';
 import { ROLE_LABELS } from '@/lib/roles';
 import type { MemberStatus } from '@/hooks/use-member-status';
@@ -44,7 +32,7 @@ function canViewMemberStatus(
   currentUserRole: OrgRole,
   currentUserId: string,
   memberId: string,
-  memberRole: OrgRole
+  memberRole: OrgRole,
 ): boolean {
   // Admins can view everyone
   if (currentUserRole === 'admin') return true;
@@ -74,7 +62,7 @@ type RoleChangeHandler = (
   memberId: string,
   newRole: OrgRole,
   firstName: string,
-  lastName: string
+  lastName: string,
 ) => Promise<void>;
 
 interface MembersTableProps {
@@ -89,6 +77,11 @@ interface MembersTableProps {
    * member without a status yet show a skeleton; the rows stay on screen.
    */
   isStatusLoading?: boolean;
+  /**
+   * The status read failed. A member without a last-known status shows
+   * „Nicht verfügbar“ instead of a status the read never delivered.
+   */
+  isStatusUnavailable?: boolean;
   /** Rows with a change in flight (role change until refreshed props land). */
   busyMemberIds?: ReadonlySet<string>;
   /** Resolved daily targets per member (P1-04) */
@@ -97,62 +90,21 @@ interface MembersTableProps {
   removalBlockedByUserId?: Record<string, string> | undefined;
 }
 
-// The status cells' skeletons double as their loading state in the live table.
-const STATUS_SKELETON = <Skeleton className="h-[22px] w-24 rounded-full" />;
-const PROGRESS_SKELETON = (
-  <div className="flex items-center gap-2 min-w-[100px]">
-    <Skeleton className="h-2 flex-1" />
-    <Skeleton className="h-4 w-8" />
-  </div>
-);
-
-// One column definition for the loaded table and its skeleton (design canon):
-// header count, widths and hover cannot drift apart. The actions column is
-// appended only for managers, see `memberColumns`.
-const MEMBER_COLUMNS: readonly SkeletonColumn[] = [
-  {
-    id: 'name',
-    header: 'Name',
-    className: 'w-[18%]',
-    skeleton: <Skeleton className="h-5 w-28" />,
-  },
-  { id: 'email', header: 'E-Mail', skeleton: <Skeleton className="h-5 w-48" /> },
-  {
-    id: 'role',
-    header: 'Rolle',
-    className: 'w-[120px] px-4',
-    skeleton: <Skeleton className="h-[22px] w-20 rounded-full" />,
-  },
-  {
-    id: 'status',
-    header: 'Status',
-    className: 'w-[150px] px-4',
-    skeleton: STATUS_SKELETON,
-  },
-  {
-    id: 'progress',
-    header: 'Tagesfortschritt',
-    className: 'w-[150px] px-4',
-    skeleton: PROGRESS_SKELETON,
-  },
-  {
-    id: 'joined',
-    header: 'Beigetreten',
-    className: 'w-[120px]',
-    skeleton: <Skeleton className="h-5 w-20" />,
-  },
-];
-
-const MEMBER_ACTIONS_COLUMN: SkeletonColumn = {
-  id: 'actions',
-  header: '',
-  className: 'w-[50px]',
-  skeleton: <Skeleton className="size-8 rounded" />,
+type MemberRowProps = {
+  member: OrgMember;
+  memberName: string;
+  canManageMembers: boolean;
+  canViewStatus: boolean;
+  currentUserId: string;
+  currentUserRole: OrgRole;
+  onRoleChange: RoleChangeHandler;
+  status?: MemberStatus | undefined;
+  isStatusLoading: boolean;
+  isBusy: boolean;
+  target?: DailyTarget | undefined;
+  personnel?: PersonnelListEntry | undefined;
+  removalBlockedMessage?: string | undefined;
 };
-
-function memberColumns(showActions: boolean): readonly SkeletonColumn[] {
-  return showActions ? [...MEMBER_COLUMNS, MEMBER_ACTIONS_COLUMN] : MEMBER_COLUMNS;
-}
 
 function MembersTableHeader({ columns }: { columns: readonly SkeletonColumn[] }) {
   return (
@@ -169,13 +121,7 @@ function MembersTableHeader({ columns }: { columns: readonly SkeletonColumn[] })
 }
 
 /** Same frame as the loaded list; rows hover because loaded rows navigate. */
-export function MembersTableSkeleton({
-  count,
-  showActions,
-}: {
-  count: number;
-  showActions: boolean;
-}) {
+export function MembersTableSkeleton({ count, showActions }: { count: number; showActions: boolean }) {
   const columns = memberColumns(showActions);
   return (
     <>
@@ -219,28 +165,11 @@ function MemberCard({
   target,
   personnel,
   removalBlockedMessage,
-}: {
-  member: OrgMember;
-  memberName: string;
-  canManageMembers: boolean;
-  canViewStatus: boolean;
-  currentUserId: string;
-  currentUserRole: OrgRole;
-  onRoleChange: RoleChangeHandler;
-  status?: MemberStatus | undefined;
-  isStatusLoading: boolean;
-  isBusy: boolean;
-  target?: DailyTarget | undefined;
-  personnel?: PersonnelListEntry | undefined;
-  removalBlockedMessage?: string | undefined;
-}) {
+}: MemberRowProps) {
   const router = useRouter();
 
   return (
-    <ListRow
-      interactive
-      onClick={() => router.push(`/mitarbeiter/${member.user_id}`)}
-    >
+    <ListRow interactive onClick={() => router.push(`/mitarbeiter/${member.user_id}`)}>
       <div className="flex-1 min-w-0 space-y-1">
         <div className="flex items-center gap-2">
           <Link
@@ -257,13 +186,8 @@ function MemberCard({
         </div>
         {personnel ? (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-              <EmploymentStateBadge state={getEmploymentState(personnel.record)} />
-              <AccessStateBadge
-                state={getAccessState(
-                  personnel.record,
-                  personnel.hasPendingInvite
-                )}
-              />
+            <EmploymentStateBadge state={getEmploymentState(personnel.record)} />
+            <AccessStateBadge state={getAccessState(personnel.record, personnel.hasPendingInvite)} />
           </div>
         ) : null}
         {isStatusLoading && !status ? (
@@ -276,7 +200,6 @@ function MemberCard({
               isPending={status?.isPending ?? false}
               canViewStatus={canViewStatus}
             />
-            <span className="text-muted-foreground/60">·</span>
             <HoursDisplay
               status={status?.status}
               isClockedIn={status?.isClockedIn ?? false}
@@ -287,15 +210,14 @@ function MemberCard({
             />
           </div>
         )}
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-          <span className="min-w-0 max-w-full truncate">{member.email}</span>
-          <span className="text-muted-foreground/60">·</span>
+        <div className="text-xs text-muted-foreground">
+          <span className="block truncate">{member.email}</span>
           <span>
             Beigetreten:{' '}
             {new Date(member.joined_at).toLocaleDateString('de-DE', {
               day: '2-digit',
               month: '2-digit',
-              year: '2-digit'
+              year: '2-digit',
             })}
           </span>
         </div>
@@ -320,6 +242,102 @@ function MemberCard({
   );
 }
 
+// Desktop table row for a single member
+function MemberTableRow({
+  member,
+  memberName,
+  canManageMembers,
+  canViewStatus,
+  currentUserId,
+  currentUserRole,
+  onRoleChange,
+  status,
+  isStatusLoading,
+  isBusy,
+  target,
+  personnel,
+  removalBlockedMessage,
+}: MemberRowProps) {
+  const router = useRouter();
+  const showStatusSkeleton = isStatusLoading && !status;
+
+  return (
+    <TableRow interactive onClick={() => router.push(`/mitarbeiter/${member.user_id}`)}>
+      <TableCell className="font-medium">
+        <div className="space-y-1">
+          <span className="flex items-center gap-2">
+            <Link href={`/mitarbeiter/${member.user_id}`} onClick={(event) => event.stopPropagation()}>
+              {memberName}
+            </Link>
+            <InlinePending active={isBusy} />
+          </span>
+          {personnel ? (
+            <span className="flex flex-wrap items-center gap-1.5">
+              <EmploymentStateBadge state={getEmploymentState(personnel.record)} />
+              <AccessStateBadge state={getAccessState(personnel.record, personnel.hasPendingInvite)} />
+            </span>
+          ) : null}
+        </div>
+      </TableCell>
+      <TableCell>{member.email}</TableCell>
+      <TableCell className="px-4">
+        <span className="inline-flex items-center rounded-full bg-accent px-2.5 py-0.5 text-xs font-medium text-accent-foreground">
+          {ROLE_LABELS[member.role] || member.role}
+        </span>
+      </TableCell>
+      <TableCell className="px-4">
+        {showStatusSkeleton ? (
+          STATUS_SKELETON
+        ) : (
+          <StatusBadge
+            status={status?.status}
+            isClockedIn={status?.isClockedIn ?? false}
+            isPending={status?.isPending ?? false}
+            canViewStatus={canViewStatus}
+          />
+        )}
+      </TableCell>
+      <TableCell className="px-4">
+        {showStatusSkeleton ? (
+          PROGRESS_SKELETON
+        ) : (
+          <HoursDisplay
+            status={status?.status}
+            isClockedIn={status?.isClockedIn ?? false}
+            statusStartedAt={status?.statusStartedAt ?? null}
+            workMinutes={status?.workMinutes ?? 0}
+            canViewStatus={canViewStatus}
+            target={target}
+          />
+        )}
+      </TableCell>
+      <TableCell className="text-muted-foreground">
+        {new Date(member.joined_at).toLocaleDateString('de-DE', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+        })}
+      </TableCell>
+      {canManageMembers && (
+        <TableCell onClick={(e) => e.stopPropagation()}>
+          <MemberActionsMenu
+            memberId={member.user_id}
+            memberName={memberName}
+            memberFirstName={member.first_name}
+            memberLastName={member.last_name}
+            memberRole={member.role}
+            currentUserId={currentUserId}
+            currentUserRole={currentUserRole}
+            removalBlockedMessage={removalBlockedMessage}
+            isBusy={isBusy}
+            onRoleChange={onRoleChange}
+          />
+        </TableCell>
+      )}
+    </TableRow>
+  );
+}
+
 export function MembersTable({
   members,
   currentUserId,
@@ -327,30 +345,24 @@ export function MembersTable({
   onRoleChange,
   statusMap = {},
   isStatusLoading = false,
+  isStatusUnavailable = false,
   busyMemberIds,
   targetsByUserId,
   personnelByUserId,
   removalBlockedByUserId = {},
 }: MembersTableProps) {
-  const router = useRouter();
-  const canManageMembers =
-    currentUserRole === 'admin' || currentUserRole === 'buero';
+  const canManageMembers = currentUserRole === 'admin' || currentUserRole === 'buero';
 
   // No loading prop on purpose: the list never turns into a skeleton over data
   // it already has (feedback canon); `MembersTableSkeleton` serves loading.tsx.
 
   if (members.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
-        <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-muted">
-          <Users className="size-6 text-muted-foreground" />
-        </div>
-        <h2 className="text-lg font-semibold">Keine Mitarbeiter</h2>
-        <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-          Du hast noch keine Mitarbeiter zu deiner Organisation hinzugefügt.
-          Klicke auf &quot;Mitarbeiter hinzufügen&quot; um jemanden einzuladen.
-        </p>
-      </div>
+      <EmptyState
+        icon={Users}
+        title="Noch keine Mitarbeiter"
+        description="Lade dein Team über „Mitarbeiter hinzufügen“ in die Organisation ein."
+      />
     );
   }
 
@@ -363,12 +375,9 @@ export function MembersTable({
             member.first_name || member.last_name
               ? `${member.first_name} ${member.last_name}`.trim()
               : member.email;
-          const canViewStatus = canViewMemberStatus(
-            currentUserRole,
-            currentUserId,
-            member.user_id,
-            member.role
-          );
+          const canViewStatus =
+            canViewMemberStatus(currentUserRole, currentUserId, member.user_id, member.role) &&
+            !(isStatusUnavailable && !statusMap[member.user_id]);
 
           return (
             <MemberCard
@@ -401,107 +410,27 @@ export function MembersTable({
                 member.first_name || member.last_name
                   ? `${member.first_name} ${member.last_name}`.trim()
                   : member.email;
-              const status = statusMap[member.user_id];
-              const showStatusSkeleton = isStatusLoading && !status;
-              const isBusy = busyMemberIds?.has(member.user_id) ?? false;
-              const personnel = personnelByUserId?.[member.user_id];
-              const canViewStatus = canViewMemberStatus(
-                currentUserRole,
-                currentUserId,
-                member.user_id,
-                member.role
-              );
+              const canViewStatus =
+                canViewMemberStatus(currentUserRole, currentUserId, member.user_id, member.role) &&
+                !(isStatusUnavailable && !statusMap[member.user_id]);
 
               return (
-                <TableRow
+                <MemberTableRow
                   key={member.user_id}
-                  interactive
-                  onClick={() => router.push(`/mitarbeiter/${member.user_id}`)}
-                >
-                  <TableCell className="font-medium">
-                    <div className="space-y-1">
-                      <span className="flex items-center gap-2">
-                        <Link
-                          href={`/mitarbeiter/${member.user_id}`}
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          {memberName}
-                        </Link>
-                        <InlinePending active={isBusy} />
-                      </span>
-                      {personnel ? (
-                        <span className="flex flex-wrap items-center gap-1.5">
-                          <EmploymentStateBadge
-                            state={getEmploymentState(personnel.record)}
-                          />
-                          <AccessStateBadge
-                            state={getAccessState(
-                              personnel.record,
-                              personnel.hasPendingInvite
-                            )}
-                          />
-                        </span>
-                      ) : null}
-                    </div>
-                  </TableCell>
-                  <TableCell>{member.email}</TableCell>
-                  <TableCell className="px-4">
-                    <span className="inline-flex items-center rounded-full bg-accent px-2.5 py-0.5 text-xs font-medium text-accent-foreground">
-                      {ROLE_LABELS[member.role] || member.role}
-                    </span>
-                  </TableCell>
-                  <TableCell className="px-4">
-                    {showStatusSkeleton ? (
-                      STATUS_SKELETON
-                    ) : (
-                      <StatusBadge
-                        status={status?.status}
-                        isClockedIn={status?.isClockedIn ?? false}
-                        isPending={status?.isPending ?? false}
-                        canViewStatus={canViewStatus}
-                      />
-                    )}
-                  </TableCell>
-                  <TableCell className="px-4">
-                    {showStatusSkeleton ? (
-                      PROGRESS_SKELETON
-                    ) : (
-                      <HoursDisplay
-                        status={status?.status}
-                        isClockedIn={status?.isClockedIn ?? false}
-                        statusStartedAt={status?.statusStartedAt ?? null}
-                        workMinutes={status?.workMinutes ?? 0}
-                        canViewStatus={canViewStatus}
-                        target={targetsByUserId?.[member.user_id]}
-                      />
-                    )}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {new Date(member.joined_at).toLocaleDateString('de-DE', {
-                      day: '2-digit',
-                      month: '2-digit',
-                      year: 'numeric'
-                    })}
-                  </TableCell>
-                  {canManageMembers && (
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <MemberActionsMenu
-                        memberId={member.user_id}
-                        memberName={memberName}
-                        memberFirstName={member.first_name}
-                        memberLastName={member.last_name}
-                        memberRole={member.role}
-                        currentUserId={currentUserId}
-                        currentUserRole={currentUserRole}
-                        removalBlockedMessage={
-                          removalBlockedByUserId[member.user_id]
-                        }
-                        isBusy={isBusy}
-                        onRoleChange={onRoleChange}
-                      />
-                    </TableCell>
-                  )}
-                </TableRow>
+                  member={member}
+                  memberName={memberName}
+                  canManageMembers={canManageMembers}
+                  canViewStatus={canViewStatus}
+                  currentUserId={currentUserId}
+                  currentUserRole={currentUserRole}
+                  onRoleChange={onRoleChange}
+                  status={statusMap[member.user_id]}
+                  isStatusLoading={isStatusLoading}
+                  isBusy={busyMemberIds?.has(member.user_id) ?? false}
+                  target={targetsByUserId?.[member.user_id]}
+                  personnel={personnelByUserId?.[member.user_id]}
+                  removalBlockedMessage={removalBlockedByUserId[member.user_id]}
+                />
               );
             })}
           </TableBody>

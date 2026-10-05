@@ -1,9 +1,9 @@
-"use client";
-import { SectionError } from "@/components/ui/section-error";
+'use client';
+import { SectionError } from '@/components/ui/section-error';
 
-import { useEffect, useState, type ReactElement } from "react";
+import { useEffect, useState, type ReactElement } from 'react';
 
-import { ContextualDocumentsSection } from "@/components/dokumente/contextual-documents-section";
+import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
 import {
   Dialog,
   DialogContent,
@@ -11,16 +11,16 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { ContextualDocumentsSkeleton } from "@/components/dokumente/contextual-documents-layout";
-import { getMaintenanceCoverageDocuments } from "@/lib/documents/actions";
-import type { OrganizationDocument } from "@/lib/documents/types";
-import type { MaintenanceCoverageItem } from "@/lib/maintenance/types";
+} from '@/components/ui/dialog';
+import { ContextualDocumentsSkeleton } from '@/components/dokumente/contextual-documents-layout';
+import { getMaintenanceCoverageDocuments } from '@/lib/documents/actions';
+import type { OrganizationDocument } from '@/lib/documents/types';
+import type { MaintenanceCoverageItem } from '@/lib/maintenance/types';
 
 type DocumentsState =
-  | { status: "loading" }
-  | { status: "ready"; documents: OrganizationDocument[] }
-  | { status: "failed" };
+  | { status: 'loading' }
+  | { status: 'ready'; documents: OrganizationDocument[] }
+  | { status: 'failed' };
 
 export function MaintenanceCoverageDocumentsDialog({
   open,
@@ -31,7 +31,7 @@ export function MaintenanceCoverageDocumentsDialog({
   onOpenChange: (open: boolean) => void;
   coverage: MaintenanceCoverageItem;
 }): ReactElement {
-  const [state, setState] = useState<DocumentsState>({ status: "loading" });
+  const [state, setState] = useState<DocumentsState>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (!open) return;
@@ -39,14 +39,10 @@ export function MaintenanceCoverageDocumentsDialog({
     getMaintenanceCoverageDocuments(coverage.id).then(
       (result) => {
         if (!current) return;
-        setState(
-          result.success
-            ? { status: "ready", documents: result.documents }
-            : { status: "failed" },
-        );
+        setState(result.success ? { status: 'ready', documents: result.documents } : { status: 'failed' });
       },
       () => {
-        if (current) setState({ status: "failed" });
+        if (current) setState({ status: 'failed' });
       },
     );
     return () => {
@@ -55,25 +51,24 @@ export function MaintenanceCoverageDocumentsDialog({
   }, [coverage.id, open, attempt]);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl">
+      <DialogContent size="3xl">
         <DialogHeader>
           <DialogTitle>Dokumente zu {coverage.coverageNumber}</DialogTitle>
           <DialogDescription>
-            Vertragsunterlagen werden aus der zentralen Ablage verknüpft. Es
-            entsteht keine Dateikopie.
+            Vertragsunterlagen werden aus der zentralen Ablage verknüpft. Es entsteht keine Dateikopie.
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
-          {state.status === "loading" ? (
+          {state.status === 'loading' ? (
             <ContextualDocumentsSkeleton
               description="Bestätigte Vertrags- und Fristunterlagen dieser operativen Abdeckung."
               canUpload
               canAttach
             />
-          ) : state.status === "failed" ? (
+          ) : state.status === 'failed' ? (
             <SectionError
               onRetry={() => {
-                setState({ status: "loading" });
+                setState({ status: 'loading' });
                 setAttempt((count) => count + 1);
               }}
             >
@@ -85,7 +80,7 @@ export function MaintenanceCoverageDocumentsDialog({
               description="Bestätigte Vertrags- und Fristunterlagen dieser operativen Abdeckung."
               documents={state.documents}
               documentTarget={{
-                kind: "maintenance_coverage",
+                kind: 'maintenance_coverage',
                 maintenanceCoverageId: coverage.id,
               }}
               contextLabel={coverage.coverageNumber}

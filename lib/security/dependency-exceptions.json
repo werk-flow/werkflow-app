@@ -1,5 +1,22 @@
 {
   "version": 1,
-  "dependencyDigest": "6ba46aea23489ccd36361e34d12aaebd83b9b0b7e54b93f517d3645961d6dc92",
-  "exceptions": []
+  "dependencyDigest": "ec4f923bada6a42873ff39cf69694a7ab8ee3db0b194ed6d8b96d5cd4244f109",
+  "exceptions": [
+    {
+      "package": "braces",
+      "version": "3.0.3",
+      "advisory": "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
+      "severity": "high",
+      "paths": ["braces"],
+      "reviewedOn": "2026-10-03",
+      "expiresOn": "2026-11-02",
+      "rationale": "Stack exhaustion through deeply nested brace patterns. braces is installed only through the lint toolchain (eslint-config-next and typescript-eslint, via fast-glob and micromatch) and never runs in the deployed application; the only patterns it receives come from the repository configuration. No fixed version is published. Accepted by the owner on 2026-10-03 for 30 days; update as soon as a fix exists.",
+      "evidence": [
+        "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
+        "bun audit: eslint-config-next > @next/eslint-plugin-next > fast-glob > micromatch > braces",
+        "bun audit: @typescript-eslint/parser > @typescript-eslint/typescript-estree > fast-glob > micromatch > braces",
+        "npm registry: 3.0.3 is the latest published version of braces"
+      ]
+    }
+  ]
 }

@@ -1,7 +1,7 @@
-import type { PersonnelLifecycleView } from "@/lib/personnel/lifecycle-actions";
+import type { PersonnelLifecycleView } from '@/lib/personnel/lifecycle-actions';
 
-type PersonnelActions = typeof import("@/lib/personnel/lifecycle-actions");
-type UploadClient = typeof import("@/lib/documents/upload-client");
+type PersonnelActions = typeof import('@/lib/personnel/lifecycle-actions');
+type UploadClient = typeof import('@/lib/documents/upload-client');
 
 declare global {
   interface Window {
@@ -21,11 +21,11 @@ declare global {
 
 export function initializePersonnelBoundary(): PersonnelLifecycleView {
   const snapshot: PersonnelLifecycleView = {
-    employeeRecordId: "contract-employee",
-    userId: "contract-user",
+    employeeRecordId: 'contract-employee',
+    userId: 'contract-user',
     access: {
       id: null,
-      state: "not_configured",
+      state: 'not_configured',
       storedState: null,
       effectiveAt: null,
       scheduledState: null,
@@ -61,11 +61,11 @@ export function initializePersonnelBoundary(): PersonnelLifecycleView {
 }
 
 export async function getPersonnelLifecycle(
-  employeeRecordId: Parameters<PersonnelActions["getPersonnelLifecycle"]>[0],
-): ReturnType<PersonnelActions["getPersonnelLifecycle"]> {
+  employeeRecordId: Parameters<PersonnelActions['getPersonnelLifecycle']>[0],
+): ReturnType<PersonnelActions['getPersonnelLifecycle']> {
   const state = window.uiContractPersonnel;
   if (employeeRecordId !== state.snapshot.employeeRecordId)
-    throw new Error("Unexpected personnel read scope.");
+    throw new Error('Unexpected personnel read scope.');
   state.reads += 1;
   if (state.holdRead) {
     await new Promise<void>((resolveRead) => {
@@ -76,17 +76,17 @@ export async function getPersonnelLifecycle(
       };
     });
   }
-  if (state.rejectRead) return { success: false, error: "load_failed" };
+  if (state.rejectRead) return { success: false, error: 'load_failed' };
   return { success: true, data: structuredClone(state.snapshot) };
 }
 
 export async function uploadPersonnelDocumentDirect(
-  input: Parameters<UploadClient["uploadPersonnelDocumentDirect"]>[0],
-): ReturnType<UploadClient["uploadPersonnelDocumentDirect"]> {
+  input: Parameters<UploadClient['uploadPersonnelDocumentDirect']>[0],
+): ReturnType<UploadClient['uploadPersonnelDocumentDirect']> {
   const state = window.uiContractPersonnel;
-  if (state.rejectUpload) return { success: false, error: "not_authorized" };
+  if (state.rejectUpload) return { success: false, error: 'not_authorized' };
   if (input.employeeRecordId !== state.snapshot.employeeRecordId)
-    throw new Error("Unexpected personnel upload scope.");
+    throw new Error('Unexpected personnel upload scope.');
   state.uploads += 1;
   const documentId = `contract-document-${state.uploads}`;
   state.snapshot = {
@@ -113,28 +113,47 @@ export async function uploadPersonnelDocumentDirect(
 }
 
 async function unexpectedPersonnelAction(): Promise<never> {
-  throw new Error("Unexpected personnel operation in isolated UI contracts.");
+  throw new Error('Unexpected personnel operation in isolated UI contracts.');
 }
-export async function getOwnPersonnelActions(): ReturnType<PersonnelActions["getOwnPersonnelActions"]> {
-  return { success: true, data: {
-    organizationId: "contract-organization",
-    employeeRecordId: window.uiContractPersonnel.snapshot.employeeRecordId,
-    prestart: false,
-    requirements: [],
-    documents: [{
-      id: "contract-released-document", documentId: "contract-file", displayName: "Willkommen.txt",
-      documentType: "Willkommensunterlage", accessClass: "personnel_standard", evidenceState: "valid",
-      validUntil: null, currentVersionNumber: 1, releasedToEmployee: true, deletedAt: null, version: 1,
-    }],
-  } };
+export async function getOwnPersonnelActions(): ReturnType<PersonnelActions['getOwnPersonnelActions']> {
+  return {
+    success: true,
+    data: {
+      organizationId: 'contract-organization',
+      employeeRecordId: window.uiContractPersonnel.snapshot.employeeRecordId,
+      prestart: false,
+      requirements: [],
+      documents: [
+        {
+          id: 'contract-released-document',
+          documentId: 'contract-file',
+          displayName: 'Willkommen.txt',
+          documentType: 'Willkommensunterlage',
+          accessClass: 'personnel_standard',
+          evidenceState: 'valid',
+          validUntil: null,
+          currentVersionNumber: 1,
+          releasedToEmployee: true,
+          deletedAt: null,
+          version: 1,
+        },
+      ],
+    },
+  };
 }
 export async function acknowledgePersonnelDocument(
-  input: Parameters<PersonnelActions["acknowledgePersonnelDocument"]>[0],
-): ReturnType<PersonnelActions["acknowledgePersonnelDocument"]> {
-  if (!input || typeof input !== "object" || !("documentVersionNumber" in input) || input.documentVersionNumber !== 1) throw new Error("Unexpected receipt version");
-  if (window.uiContractPersonnel.rejectAcknowledgement) return { success: false, error: "not_authorized" };
+  input: Parameters<PersonnelActions['acknowledgePersonnelDocument']>[0],
+): ReturnType<PersonnelActions['acknowledgePersonnelDocument']> {
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    !('documentVersionNumber' in input) ||
+    input.documentVersionNumber !== 1
+  )
+    throw new Error('Unexpected receipt version');
+  if (window.uiContractPersonnel.rejectAcknowledgement) return { success: false, error: 'not_authorized' };
   window.uiContractPersonnel.acknowledgements += 1;
-  return { success: true, data: { acknowledgementId: "contract-receipt" } };
+  return { success: true, data: { acknowledgementId: 'contract-receipt' } };
 }
 export const acknowledgePersonnelRequirement = unexpectedPersonnelAction;
 export const createPersonnelOnboardingPlan = unexpectedPersonnelAction;

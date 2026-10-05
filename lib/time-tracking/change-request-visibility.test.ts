@@ -11,8 +11,8 @@ describe('canViewChangeRequest', () => {
     expect(
       canViewChangeRequest(
         { organizationId: orgB, requestedBy: me, entryUserId: me },
-        { userId: me, roleByOrganization: new Map([[orgA, 'admin']]) }
-      )
+        { userId: me, roleByOrganization: new Map([[orgA, 'admin']]) },
+      ),
     ).toBe(false);
   });
 
@@ -21,8 +21,8 @@ describe('canViewChangeRequest', () => {
       expect(
         canViewChangeRequest(
           { organizationId: orgA, requestedBy: other, entryUserId: other },
-          { userId: me, roleByOrganization: new Map([[orgA, role]]) }
-        )
+          { userId: me, roleByOrganization: new Map([[orgA, role]]) },
+        ),
       ).toBe(true);
     }
   });
@@ -32,17 +32,17 @@ describe('canViewChangeRequest', () => {
       userId: me,
       roleByOrganization: new Map([[orgA, 'employee' as const]]),
     };
+    expect(canViewChangeRequest({ organizationId: orgA, requestedBy: me, entryUserId: other }, caller)).toBe(
+      true,
+    );
+    expect(canViewChangeRequest({ organizationId: orgA, requestedBy: other, entryUserId: me }, caller)).toBe(
+      true,
+    );
     expect(
-      canViewChangeRequest({ organizationId: orgA, requestedBy: me, entryUserId: other }, caller)
-    ).toBe(true);
-    expect(
-      canViewChangeRequest({ organizationId: orgA, requestedBy: other, entryUserId: me }, caller)
-    ).toBe(true);
-    expect(
-      canViewChangeRequest({ organizationId: orgA, requestedBy: other, entryUserId: other }, caller)
+      canViewChangeRequest({ organizationId: orgA, requestedBy: other, entryUserId: other }, caller),
     ).toBe(false);
     expect(
-      canViewChangeRequest({ organizationId: orgA, requestedBy: other, entryUserId: null }, caller)
+      canViewChangeRequest({ organizationId: orgA, requestedBy: other, entryUserId: null }, caller),
     ).toBe(false);
   });
 });

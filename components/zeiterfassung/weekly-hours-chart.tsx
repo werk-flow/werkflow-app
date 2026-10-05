@@ -27,6 +27,119 @@ const GRID_HOURS = [2, 4, 6, 8, 10, 12];
 const BAR_HEIGHT = 180;
 const LABEL_AREA = 24;
 
+type WeeklyHoursChartBarsProps = {
+  data: DayData[];
+  todayIndex: number;
+  narrowBars: boolean;
+  minutesToPx: (mins: number) => number;
+};
+
+/* Bar columns */
+function WeeklyHoursChartBars({ data, todayIndex, narrowBars, minutesToPx }: WeeklyHoursChartBarsProps) {
+  return (
+    <div
+      className="absolute flex items-end gap-1 sm:gap-1.5"
+      style={{ top: 0, bottom: LABEL_AREA, left: 28, right: 0 }}
+    >
+      {data.map((day, i) => {
+        const isToday = i === todayIndex;
+        const workPx = minutesToPx(day.workMinutes);
+        const breakPx = minutesToPx(day.breakMinutes);
+        const overtimePx = minutesToPx(day.overtimeMinutes);
+        const detailsLabel =
+          `${day.label}: Anwesenheit ${formatDuration(day.totalMinutes)}, ` +
+          `Arbeitszeit ${formatDuration(day.workMinutes)}, ` +
+          `Pause ${formatDuration(day.breakMinutes)}, ` +
+          `Überstunden ${formatDuration(day.overtimeMinutes)}`;
+
+        return (
+          <div
+            key={day.date}
+            className="flex h-full flex-1 flex-col items-center justify-end"
+            role="img"
+            aria-label={detailsLabel}
+            title={detailsLabel}
+          >
+            <div
+              className={cn(
+                'flex flex-col-reverse overflow-hidden rounded-t-[3px]',
+                narrowBars ? 'w-full max-w-[66px]' : 'w-[85%]',
+                isToday && 'ring-1 ring-foreground/15',
+              )}
+              style={{ height: workPx + breakPx + overtimePx }}
+            >
+              {workPx > 0 && (
+                <div
+                  className="w-full shrink-0 bg-success transition-all duration-500"
+                  style={{ height: workPx }}
+                />
+              )}
+              {breakPx > 0 && (
+                <div
+                  className="w-full shrink-0 bg-warning transition-all duration-500"
+                  style={{ height: breakPx }}
+                />
+              )}
+              {overtimePx > 0 && (
+                <div
+                  className="w-full shrink-0 bg-info transition-all duration-500"
+                  style={{ height: overtimePx }}
+                />
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* Day labels */
+function WeeklyHoursChartDayLabels({ data, todayIndex }: { data: DayData[]; todayIndex: number }) {
+  return (
+    <div
+      className="absolute flex gap-1 sm:gap-1.5"
+      style={{ bottom: 0, height: LABEL_AREA, left: 28, right: 0 }}
+    >
+      {data.map((day, i) => {
+        const isToday = i === todayIndex;
+        return (
+          <div key={`lbl-${day.date}`} className="flex flex-1 items-start justify-center pt-1.5">
+            <span
+              className={cn(
+                'text-[10px] tabular-nums leading-none',
+                isToday ? 'font-semibold text-foreground' : 'text-muted-foreground',
+              )}
+            >
+              {day.label}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* Legend */
+function WeeklyHoursChartLegend() {
+  return (
+    <div className="mt-2 flex items-center justify-center gap-4 text-[10px] text-muted-foreground">
+      <span className="flex items-center gap-1">
+        <span className="inline-block h-2 w-2 rounded-full bg-success" />
+        Arbeitszeit
+      </span>
+      <span className="flex items-center gap-1">
+        <span className="inline-block h-2 w-2 rounded-full bg-warning" />
+        Pause
+      </span>
+      <span className="flex items-center gap-1">
+        <span className="inline-block h-2 w-2 rounded-full bg-info" />
+        Überstunden
+      </span>
+    </div>
+  );
+}
+
 export function WeeklyHoursChart({
   weekData,
   todayIndex,
@@ -38,7 +151,7 @@ export function WeeklyHoursChart({
   narrowBars = false,
   weekLabel,
   weekTargets,
-  className
+  className,
 }: WeeklyHoursChartProps) {
   const data = useMemo(() => {
     if (!weekData.length) return [];
@@ -52,7 +165,7 @@ export function WeeklyHoursChart({
             autoBreakThresholdMinutes: liveAutoBreakThresholdMinutes ?? 360,
             autoBreakDurationMinutes: liveAutoBreakDurationMinutes ?? 30,
           },
-          weekTargets?.[i]?.targetMinutes
+          weekTargets?.[i]?.targetMinutes,
         );
         return { ...day, ...bd, totalMinutes: liveTodayMinutes };
       }
@@ -71,7 +184,7 @@ export function WeeklyHoursChart({
 
   const weeklyTargetMinutes = useMemo(
     () => (weekTargets ? sumTargetMinutes(weekTargets) : null),
-    [weekTargets]
+    [weekTargets],
   );
 
   const maxMinutes = useMemo(() => {
@@ -80,10 +193,7 @@ export function WeeklyHoursChart({
     return Math.min(ceil, 12 * 60);
   }, [data]);
 
-  const gridLines = useMemo(
-    () => GRID_HOURS.filter((h) => h * 60 <= maxMinutes),
-    [maxMinutes]
-  );
+  const gridLines = useMemo(() => GRID_HOURS.filter((h) => h * 60 <= maxMinutes), [maxMinutes]);
 
   if (!data.length) return null;
 
@@ -96,9 +206,7 @@ export function WeeklyHoursChart({
         <div className="mb-6 flex items-baseline justify-between gap-2 text-[11px] font-medium tabular-nums text-muted-foreground">
           <span>{weekLabel.dateRange}</span>
           <span className="flex items-baseline gap-3">
-            {weeklyTargetMinutes !== null && (
-              <span>Soll: {formatDuration(weeklyTargetMinutes)}</span>
-            )}
+            {weeklyTargetMinutes !== null && <span>Soll: {formatDuration(weeklyTargetMinutes)}</span>}
             <span>{weekLabel.kw}</span>
           </span>
         </div>
@@ -128,107 +236,22 @@ export function WeeklyHoursChart({
             style={{
               bottom: LABEL_AREA + minutesToPx(h * 60),
               left: 28,
-              right: 0
+              right: 0,
             }}
           />
         ))}
 
-        {/* Bar columns */}
-        <div
-          className="absolute flex items-end gap-1 sm:gap-1.5"
-          style={{ top: 0, bottom: LABEL_AREA, left: 28, right: 0 }}
-        >
-          {data.map((day, i) => {
-            const isToday = i === todayIndex;
-            const workPx = minutesToPx(day.workMinutes);
-            const breakPx = minutesToPx(day.breakMinutes);
-            const overtimePx = minutesToPx(day.overtimeMinutes);
-            const detailsLabel = `${day.label}: Anwesenheit ${formatDuration(day.totalMinutes)}, Arbeitszeit ${formatDuration(day.workMinutes)}, Pause ${formatDuration(day.breakMinutes)}, Überstunden ${formatDuration(day.overtimeMinutes)}`;
+        <WeeklyHoursChartBars
+          data={data}
+          todayIndex={todayIndex}
+          narrowBars={narrowBars}
+          minutesToPx={minutesToPx}
+        />
 
-            return (
-              <div
-                key={day.date}
-                className="flex h-full flex-1 flex-col items-center justify-end"
-                role="img"
-                aria-label={detailsLabel}
-                title={detailsLabel}
-              >
-                <div
-                  className={cn(
-                    'flex flex-col-reverse overflow-hidden rounded-t-[3px]',
-                    narrowBars ? 'w-full max-w-[66px]' : 'w-[85%]',
-                    isToday &&
-                      'ring-1 ring-foreground/15'
-                  )}
-                  style={{ height: workPx + breakPx + overtimePx }}
-                >
-                  {workPx > 0 && (
-                    <div
-                      className="w-full shrink-0 bg-success transition-all duration-500"
-                      style={{ height: workPx }}
-                    />
-                  )}
-                  {breakPx > 0 && (
-                    <div
-                      className="w-full shrink-0 bg-warning transition-all duration-500"
-                      style={{ height: breakPx }}
-                    />
-                  )}
-                  {overtimePx > 0 && (
-                    <div
-                      className="w-full shrink-0 bg-info transition-all duration-500"
-                      style={{ height: overtimePx }}
-                    />
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Day labels */}
-        <div
-          className="absolute flex gap-1 sm:gap-1.5"
-          style={{ bottom: 0, height: LABEL_AREA, left: 28, right: 0 }}
-        >
-          {data.map((day, i) => {
-            const isToday = i === todayIndex;
-            return (
-              <div
-                key={`lbl-${day.date}`}
-                className="flex flex-1 items-start justify-center pt-1.5"
-              >
-                <span
-                  className={cn(
-                    'text-[10px] tabular-nums leading-none',
-                    isToday
-                      ? 'font-semibold text-foreground'
-                      : 'text-muted-foreground'
-                  )}
-                >
-                  {day.label}
-                </span>
-              </div>
-            );
-          })}
-        </div>
+        <WeeklyHoursChartDayLabels data={data} todayIndex={todayIndex} />
       </div>
 
-      {/* Legend */}
-      <div className="mt-2 flex items-center justify-center gap-4 text-[10px] text-muted-foreground">
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-2 w-2 rounded-full bg-success" />
-          Arbeitszeit
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-2 w-2 rounded-full bg-warning" />
-          Pause
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-2 w-2 rounded-full bg-info" />
-          Überstunden
-        </span>
-      </div>
+      <WeeklyHoursChartLegend />
     </div>
   );
 }

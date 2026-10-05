@@ -1,86 +1,98 @@
-import { expect, test, type Page } from "@playwright/test";
-import { assertWorkspaceTestLock } from "@/lib/testing/workspace-test-lock";
+import { expect, test, type Page } from '@playwright/test';
+import { assertWorkspaceTestLock } from '@/lib/testing/runner/workspace-test-lock';
 
 async function readCount(page: Page, count: number): Promise<void> {
   await expect.poll(() => page.evaluate(() => window.calendarContract.reads.length)).toBe(count);
 }
 async function resolveRead(page: Page, index: number, label: string, success = true): Promise<void> {
-  await page.evaluate(({ index, label, success }) => window.calendarContract.resolveRead(index, label, success), { index, label, success });
+  await page.evaluate(
+    ({ index, label, success }) => window.calendarContract.resolveRead(index, label, success),
+    { index, label, success },
+  );
 }
 test.beforeEach(async ({ page }) => {
   assertWorkspaceTestLock();
   const bundle = process.env.WERKFLOW_UI_CONTRACT_BUNDLE;
-  if (!bundle) throw new Error("Run through bun tests/ui-contracts/run.ts.");
-  await page.clock.install({ time: new Date("2026-09-08T10:00:00Z") });
-  await page.clock.pauseAt(new Date("2026-09-08T10:00:01Z"));
-  const url = "http://localhost/ui-contracts";
-  await page.route(url, (route) => route.fulfill({ contentType: "text/html", body: '<html lang="de"><body><div id="root"></div></body></html>' }));
+  if (!bundle) throw new Error('Run through bun tests/ui-contracts/run.ts.');
+  await page.clock.install({ time: new Date('2026-09-08T10:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-09-08T10:00:01Z'));
+  const url = 'http://localhost/ui-contracts';
+  await page.route(url, (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      body: '<html lang="de"><body><div id="root"></div></body></html>',
+    }),
+  );
   await page.goto(url);
-  await page.evaluate(() => { window.uiContractFixture = "calendar"; });
+  await page.evaluate(() => {
+    window.uiContractFixture = 'calendar';
+  });
   await page.addScriptTag({ path: bundle });
   await readCount(page, 1);
 });
 
-test("ordinary events share one feature debounce across tables", async ({ page }) => {
-  await resolveRead(page, 0, "vorher");
-  await expect(page.getByLabel("Daten")).toHaveText("vorher");
+test('ordinary events share one feature debounce across tables', async ({ page }) => {
+  await resolveRead(page, 0, 'vorher');
+  await expect(page.getByLabel('Daten')).toHaveText('vorher');
   await page.evaluate(() => {
-    window.calendarContract.emit("jobs");
-    window.calendarContract.emit("jobs");
-    window.calendarContract.emit("planning_occurrences");
+    window.calendarContract.emit('jobs');
+    window.calendarContract.emit('jobs');
+    window.calendarContract.emit('planning_occurrences');
   });
   await page.clock.runFor(149);
   await readCount(page, 1);
   await page.clock.runFor(2);
   await readCount(page, 2);
-  await resolveRead(page, 1, "aktuell");
-  await expect(page.getByLabel("Daten")).toHaveText("aktuell");
+  await resolveRead(page, 1, 'aktuell');
+  await expect(page.getByLabel('Daten')).toHaveText('aktuell');
   await page.clock.runFor(1_000);
   await readCount(page, 2);
 });
 
-test("reconnect recovers a write made after an earlier read inside the disconnected gap", async ({ page }) => {
-  await resolveRead(page, 0, "vorher");
-  await expect(page.getByLabel("Daten")).toHaveText("vorher");
-  await page.evaluate(() => window.calendarContract.status("CHANNEL_ERROR"));
-  await page.getByRole("button", { name: "Aktualisieren" }).click();
+test('reconnect recovers a write made after an earlier read inside the disconnected gap', async ({
+  page,
+}) => {
+  await resolveRead(page, 0, 'vorher');
+  await expect(page.getByLabel('Daten')).toHaveText('vorher');
+  await page.evaluate(() => window.calendarContract.status('CHANNEL_ERROR'));
+  await page.getByRole('button', { name: 'Aktualisieren' }).click();
   await readCount(page, 2);
-  await resolveRead(page, 1, "während der Lücke");
-  await expect(page.getByLabel("Daten")).toHaveText("während der Lücke");
+  await resolveRead(page, 1, 'während der Lücke');
+  await expect(page.getByLabel('Daten')).toHaveText('während der Lücke');
   // The server changes after that snapshot; no event is delivered in the gap.
-  await page.evaluate(() => window.calendarContract.status("SUBSCRIBED"));
+  await page.evaluate(() => window.calendarContract.status('SUBSCRIBED'));
   await page.evaluate(() => window.calendarContract.system({ extension: 'postgres_changes', status: 'ok' }));
   await page.clock.runFor(151);
   await readCount(page, 3);
-  await resolveRead(page, 2, "nach der Lücke");
-  await expect(page.getByLabel("Daten")).toHaveText("nach der Lücke");
+  await resolveRead(page, 2, 'nach der Lücke');
+  await expect(page.getByLabel('Daten')).toHaveText('nach der Lücke');
 });
 
-test("reconnect does not treat a failed read as coverage of missed updates", async ({ page }) => {
-  await resolveRead(page, 0, "", false);
-  await expect(page.getByLabel("Fehler", { exact: true })).toHaveText("1");
-  await page.evaluate(() => window.calendarContract.status("CHANNEL_ERROR"));
-  await page.getByRole("button", { name: "Aktualisieren" }).click();
+test('reconnect does not treat a failed read as coverage of missed updates', async ({ page }) => {
+  await resolveRead(page, 0, '', false);
+  await expect(page.getByLabel('Fehler', { exact: true })).toHaveText('1');
+  await page.evaluate(() => window.calendarContract.status('CHANNEL_ERROR'));
+  await page.getByRole('button', { name: 'Aktualisieren' }).click();
   await readCount(page, 2);
-  await resolveRead(page, 1, "", false);
-  await expect(page.getByLabel("Fehler", { exact: true })).toHaveText("2");
-  await page.evaluate(() => window.calendarContract.status("SUBSCRIBED"));
+  await resolveRead(page, 1, '', false);
+  await expect(page.getByLabel('Fehler', { exact: true })).toHaveText('2');
+  await page.evaluate(() => window.calendarContract.status('SUBSCRIBED'));
   await page.evaluate(() => window.calendarContract.system({ extension: 'postgres_changes', status: 'ok' }));
   await page.clock.runFor(151);
   await readCount(page, 3);
-  await resolveRead(page, 2, "wiederhergestellt");
-  await expect(page.getByLabel("Daten")).toHaveText("wiederhergestellt");
+  await resolveRead(page, 2, 'wiederhergestellt');
+  await expect(page.getByLabel('Daten')).toHaveText('wiederhergestellt');
 });
 
-test("a reconnect supersedes a held read that started before the channel recovered", async ({ page }) => {
-  await page.evaluate(() => window.calendarContract.status("CHANNEL_ERROR"));
-  await page.evaluate(() => window.calendarContract.status("SUBSCRIBED"));
+test('a reconnect supersedes a held read that started before the channel recovered', async ({ page }) => {
+  await page.evaluate(() => window.calendarContract.status('CHANNEL_ERROR'));
+  await page.evaluate(() => window.calendarContract.status('SUBSCRIBED'));
   await page.evaluate(() => window.calendarContract.system({ extension: 'postgres_changes', status: 'ok' }));
   await page.clock.runFor(151);
   await readCount(page, 2);
-  await resolveRead(page, 1, "nach Wiederverbindung");
-  await resolveRead(page, 0, "vor Wiederverbindung");
-  await expect(page.getByLabel("Daten")).toHaveText("nach Wiederverbindung");
+  await resolveRead(page, 1, 'nach Wiederverbindung');
+  await resolveRead(page, 0, 'vor Wiederverbindung');
+  await expect(page.getByLabel('Daten')).toHaveText('nach Wiederverbindung');
 });
 
 // Decision D5: a focus or visibility return re-reads only after a real absence.
@@ -99,7 +111,9 @@ async function comeBack(page: Page): Promise<void> {
   });
 }
 
-test('a short absence triggers no catch-up, a long one exactly one, and a reconnect still catches up at once', async ({ page }) => {
+test('a short absence triggers no catch-up, a long one exactly one, and a reconnect still catches up at once', async ({
+  page,
+}) => {
   await resolveRead(page, 0, 'vorher');
   await page.evaluate(() => window.calendarContract.status('SUBSCRIBED'));
   await page.evaluate(() => window.calendarContract.system({ extension: 'postgres_changes', status: 'ok' }));
@@ -134,7 +148,9 @@ test('a short absence triggers no catch-up, a long one exactly one, and a reconn
   await readCount(page, 4);
 });
 
-test('database readiness recovers changes after channel join for route and calendar readers', async ({ page }) => {
+test('database readiness recovers changes after channel join for route and calendar readers', async ({
+  page,
+}) => {
   await resolveRead(page, 0, 'vorher');
   await page.evaluate(() => window.calendarContract.status('SUBSCRIBED'));
   await page.clock.runFor(151);
@@ -160,13 +176,15 @@ test('database readiness recovers changes after channel join for route and calen
   await expect(page.getByLabel('Daten')).toHaveText('nach Datenbankbereitschaft');
 });
 
-test('removed organization channel cannot deliver queued row, deletion or readiness callbacks', async ({ page }) => {
+test('removed organization channel cannot deliver queued row, deletion or readiness callbacks', async ({
+  page,
+}) => {
   await resolveRead(page, 0, 'vorher');
   const lateDelivery = await page.evaluateHandle(() => window.calendarContract.captureLateDelivery());
   await page.getByRole('button', { name: 'Organisation wechseln' }).click();
   await readCount(page, 2);
   await resolveRead(page, 1, 'andere Organisation');
-  await lateDelivery.evaluate(deliver => deliver());
+  await lateDelivery.evaluate((deliver) => deliver());
   await page.clock.runFor(151);
   await readCount(page, 2);
   expect(await page.evaluate(() => window.uiContractServices.navigation)).toEqual([]);
@@ -174,112 +192,260 @@ test('removed organization channel cannot deliver queued row, deletion or readin
   await lateDelivery.dispose();
 });
 
-test("held mutation queues range navigation and manual refresh until settlement", async ({ page }) => {
-  await resolveRead(page, 0, "vorher");
-  await expect(page.getByLabel("Daten")).toHaveText("vorher");
-  await page.getByRole("button", { name: "Speichern starten", exact: true }).click();
-  await page.getByRole("button", { name: "Woche", exact: true }).click();
-  await page.getByRole("button", { name: "Aktualisieren" }).click();
+test('held mutation queues range navigation and manual refresh until settlement', async ({ page }) => {
+  await resolveRead(page, 0, 'vorher');
+  await expect(page.getByLabel('Daten')).toHaveText('vorher');
+  await page.getByRole('button', { name: 'Speichern starten', exact: true }).click();
+  await page.getByRole('button', { name: 'Woche', exact: true }).click();
+  await page.getByRole('button', { name: 'Aktualisieren' }).click();
   await page.evaluate(() => window.calendarContract.emit());
   await page.clock.runFor(400);
   await readCount(page, 1);
-  await expect(page.getByLabel("Daten")).toHaveText("optimistisch");
-  await page.getByRole("button", { name: "Speichern beenden", exact: true }).click();
+  await expect(page.getByLabel('Daten')).toHaveText('optimistisch');
+  await page.getByRole('button', { name: 'Speichern beenden', exact: true }).click();
   await page.clock.runFor(151);
   // One read starts after both the save and queued invalidation; it covers both.
   await readCount(page, 2);
-  await resolveRead(page, 1, "bestätigt");
-  await expect(page.getByLabel("Daten")).toHaveText("bestätigt");
-  await expect(page.getByRole("button", { name: "Aktualisieren" })).toBeEnabled();
+  await resolveRead(page, 1, 'bestätigt');
+  await expect(page.getByLabel('Daten')).toHaveText('bestätigt');
+  await expect(page.getByRole('button', { name: 'Aktualisieren' })).toBeEnabled();
 });
 
-test("scope switch cancels old mutation timer and rejects the old response", async ({ page }) => {
-  await resolveRead(page, 0, "Organisation A");
-  await expect(page.getByLabel("Daten")).toHaveText("Organisation A");
-  await page.getByRole("button", { name: "Speichern starten", exact: true }).click();
-  await page.getByRole("button", { name: "Speichern beenden", exact: true }).click();
-  await page.getByRole("button", { name: "Organisation wechseln" }).click();
+test('a day mutation refreshes the retained week and returning to it needs no read', async ({ page }) => {
+  await resolveRead(page, 0, 'vorher');
+  await page.getByRole('button', { name: 'Woche', exact: true }).click();
   await readCount(page, 2);
-  await expect(page.getByLabel("Daten")).toHaveText("");
-  await resolveRead(page, 1, "Organisation B");
+  const weekInput = await page.evaluate(() => window.calendarContract.reads[1]);
+  await resolveRead(page, 1, 'Woche geladen');
+  await expect(page.getByLabel('Daten')).toHaveText('Woche geladen');
+  await page.getByRole('button', { name: 'Tag', exact: true }).click();
+  await page.getByRole('button', { name: 'Speichern starten', exact: true }).click();
+  await expect(page.getByLabel('Daten')).toHaveText('optimistisch');
+  await page.getByRole('button', { name: 'Speichern beenden', exact: true }).click();
+  await page.clock.runFor(151);
+  await readCount(page, 3);
+  expect(await page.evaluate(() => window.calendarContract.reads[2])).toEqual(weekInput);
+  await resolveRead(page, 2, 'Woche aktualisiert');
+  await expect(page.getByLabel('Daten')).toHaveText('Woche aktualisiert');
+  await page.getByRole('button', { name: 'Woche', exact: true }).click();
+  await expect(page.getByLabel('Zustand')).toHaveText('ready');
+  await page.clock.runFor(1_000);
+  await readCount(page, 3);
+  // A date outside the retained window requests only its own range.
+  await page.getByRole('button', { name: 'Anderer Tag', exact: true }).click();
+  await readCount(page, 4);
+  const outsideInput = await page.evaluate(() => window.calendarContract.reads[3]);
+  expect(outsideInput?.fromDate).toBe('2026-09-21');
+  expect(outsideInput?.toDate).toBe('2026-09-22');
+  await resolveRead(page, 3, 'Anderer Tag geladen');
+  await expect(page.getByLabel('Daten')).toHaveText('Anderer Tag geladen');
+});
+
+test('partial initial week coverage cannot widen the authoritative day read', async ({ page }) => {
+  const dayInput = await page.evaluate(() => window.calendarContract.reads[0]);
+  await page.getByRole('button', { name: 'Teilweise geladene Woche' }).click();
+  await readCount(page, 2);
+  expect(await page.evaluate(() => window.calendarContract.reads[1])).toEqual(dayInput);
+  await resolveRead(page, 1, 'vollständig geladener Tag');
+  await expect(page.getByLabel('Daten')).toHaveText('vollständig geladener Tag');
+  await resolveRead(page, 0, 'verworfener Leser');
+  await expect(page.getByLabel('Daten')).toHaveText('vollständig geladener Tag');
+});
+
+test('scope switch cancels old mutation timer and rejects the old response', async ({ page }) => {
+  await resolveRead(page, 0, 'Organisation A');
+  await expect(page.getByLabel('Daten')).toHaveText('Organisation A');
+  await page.getByRole('button', { name: 'Speichern starten', exact: true }).click();
+  await page.getByRole('button', { name: 'Speichern beenden', exact: true }).click();
+  await page.getByRole('button', { name: 'Organisation wechseln' }).click();
+  await readCount(page, 2);
+  await expect(page.getByLabel('Daten')).toHaveText('');
+  await resolveRead(page, 1, 'Organisation B');
   await page.clock.runFor(400);
   await readCount(page, 2);
-  await expect(page.getByLabel("Daten")).toHaveText("Organisation B");
-  expect(await page.evaluate(() => window.calendarContract.reads.map((read) => read.organizationId))).toEqual(["org-a", "org-b"]);
+  await expect(page.getByLabel('Daten')).toHaveText('Organisation B');
+  expect(await page.evaluate(() => window.calendarContract.reads.map((read) => read.organizationId))).toEqual(
+    ['org-a', 'org-b'],
+  );
 });
 
-test("rapid range changes reject a held obsolete response instead of replacing the latest window", async ({ page }) => {
-  await page.getByRole("button", { name: "Woche", exact: true }).click();
+test('rapid range changes reject a held obsolete response instead of replacing the latest window', async ({
+  page,
+}) => {
+  await page.getByRole('button', { name: 'Woche', exact: true }).click();
   await readCount(page, 2);
-  await page.getByRole("button", { name: "Tag", exact: true }).click();
+  await page.getByRole('button', { name: 'Tag', exact: true }).click();
   // A pending week covers this day; it may complete once without an extra read.
-  await resolveRead(page, 1, "aktuelles Fenster");
-  await expect(page.getByLabel("Daten")).toHaveText("aktuelles Fenster");
-  await resolveRead(page, 0, "veraltetes Fenster");
-  await expect(page.getByLabel("Daten")).toHaveText("aktuelles Fenster");
+  expect(
+    await page.evaluate(() => ({
+      window: window.calendarContract.windowSignals.map((signal) => signal?.aborted),
+      board: window.calendarContract.boardSignals.map((signal) => signal?.aborted),
+      paired: window.calendarContract.windowSignals.every(
+        (signal, index) => signal === window.calendarContract.boardSignals[index],
+      ),
+    })),
+  ).toEqual({ window: [true, false], board: [true, false], paired: true });
+  await resolveRead(page, 1, 'aktuelles Fenster');
+  await expect(page.getByLabel('Daten')).toHaveText('aktuelles Fenster');
+  await resolveRead(page, 0, 'veraltetes Fenster');
+  await expect(page.getByLabel('Daten')).toHaveText('aktuelles Fenster');
+});
+
+test('returning to a covered window before another window lands cancels that read and reads nothing again', async ({
+  page,
+}) => {
+  await resolveRead(page, 0, 'Tag geladen');
+  await expect(page.getByLabel('Zustand')).toHaveText('ready');
+  await page.getByRole('button', { name: 'Anderer Tag', exact: true }).click();
+  await readCount(page, 2);
+  await page.getByRole('button', { name: 'Tag', exact: true }).click();
+  await expect(page.getByLabel('Zustand')).toHaveText('ready');
+  expect(await page.evaluate(() => window.calendarContract.windowSignals[1]?.aborted)).toBe(true);
+  expect(await page.evaluate(() => window.calendarContract.boardSignals[1]?.aborted)).toBe(true);
+  // The cancelled response can neither replace the covered day nor force a second read of it.
+  await resolveRead(page, 1, 'anderer Tag');
+  await page.clock.runFor(1_000);
+  await readCount(page, 2);
+  await expect(page.getByLabel('Daten')).toHaveText('Tag geladen');
+  await expect(page.getByLabel('Zustand')).toHaveText('ready');
+  await expect(page.getByLabel('Fehler', { exact: true })).toHaveText('0');
+});
+
+test('a Realtime catch-up cancelled by returning to a covered window still reads that window once', async ({
+  page,
+}) => {
+  await resolveRead(page, 0, 'Tag geladen');
+  await page.getByRole('button', { name: 'Anderer Tag', exact: true }).click();
+  await readCount(page, 2);
+  // The catch-up for this event starts after it and supersedes the held navigation read.
+  await page.evaluate(() => window.calendarContract.emit());
+  await page.clock.runFor(151);
+  await readCount(page, 3);
+  await page.getByRole('button', { name: 'Tag', exact: true }).click();
+  // The covered day predates the event, so exactly one read of that day replaces the catch-up.
+  await readCount(page, 4);
+  expect(await page.evaluate(() => window.calendarContract.windowSignals[2]?.aborted)).toBe(true);
+  expect(await page.evaluate(() => window.calendarContract.reads[3])).toEqual(
+    await page.evaluate(() => window.calendarContract.reads[0]),
+  );
+  await expect(page.getByLabel('Daten')).toHaveText('Tag geladen');
+  await resolveRead(page, 2, 'anderer Tag');
+  await resolveRead(page, 3, 'Tag nach Ereignis');
+  await expect(page.getByLabel('Daten')).toHaveText('Tag nach Ereignis');
+  await page.clock.runFor(1_000);
+  await readCount(page, 4);
+  await expect(page.getByLabel('Zustand')).toHaveText('ready');
+  await expect(page.getByLabel('Fehler', { exact: true })).toHaveText('0');
 });
 
 test("old-organization held read cannot replace the new organization's completed read", async ({ page }) => {
-  await page.getByRole("button", { name: "Organisation wechseln" }).click();
+  await page.getByRole('button', { name: 'Organisation wechseln' }).click();
   await readCount(page, 2);
-  await resolveRead(page, 1, "Organisation B");
-  await expect(page.getByLabel("Daten")).toHaveText("Organisation B");
-  await resolveRead(page, 0, "Organisation A verspätet");
-  await expect(page.getByLabel("Daten")).toHaveText("Organisation B");
+  expect(
+    await page.evaluate(() => window.calendarContract.windowSignals.map((signal) => signal?.aborted)),
+  ).toEqual([true, false]);
+  expect(
+    await page.evaluate(() => window.calendarContract.boardSignals.map((signal) => signal?.aborted)),
+  ).toEqual([true, false]);
+  await resolveRead(page, 1, 'Organisation B');
+  await expect(page.getByLabel('Daten')).toHaveText('Organisation B');
+  await resolveRead(page, 0, 'Organisation A verspätet');
+  await expect(page.getByLabel('Daten')).toHaveText('Organisation B');
 });
 
-test("an operation releases only its own lease, including transport failure and duplicate completion", async ({ page }) => {
-  await resolveRead(page, 0, "vorher");
-  await page.getByRole("button", { name: "Speichern starten", exact: true }).click();
-  await page.getByRole("button", { name: "Zweites Speichern starten", exact: true }).click();
-  await page.getByRole("button", { name: "Transportfehler auslösen" }).click();
-  await expect(page.getByLabel("Transportfehler")).toHaveText("fehlgeschlagen");
-  await page.getByRole("button", { name: "Speichern beenden", exact: true }).click();
-  await page.getByRole("button", { name: "Speichern beenden", exact: true }).click();
-  await page.getByRole("button", { name: "Aktualisieren", exact: true }).click();
-  await page.getByRole("button", { name: "Woche", exact: true }).click();
-  await page.clock.runFor(400);
-  await readCount(page, 1);
-  await expect(page.getByLabel("Mutationen")).toHaveText("aktiv");
-  await page.getByRole("button", { name: "Zweites Speichern beenden", exact: true }).click();
+test('an obsolete abort stays quiet while a current read failure remains visible', async ({ page }) => {
+  await page.getByRole('button', { name: 'Woche', exact: true }).click();
+  await readCount(page, 2);
+  await resolveRead(page, 0, '', false);
+  await expect(page.getByLabel('Fehler', { exact: true })).toHaveText('0');
+  await resolveRead(page, 1, 'Woche geladen');
+  await expect(page.getByLabel('Daten')).toHaveText('Woche geladen');
+  await page.getByRole('button', { name: 'Aktualisieren', exact: true }).click();
+  await readCount(page, 3);
+  await resolveRead(page, 2, '', false);
+  await expect(page.getByLabel('Fehler', { exact: true })).toHaveText('1');
+  await expect(page.getByLabel('Daten')).toHaveText('Woche geladen');
+});
+
+test('starting a mutation cancels its obsolete read without losing the optimistic or confirmed result', async ({
+  page,
+}) => {
+  await page.getByRole('button', { name: 'Speichern starten', exact: true }).click();
+  expect(await page.evaluate(() => window.calendarContract.windowSignals[0]?.aborted)).toBe(true);
+  expect(await page.evaluate(() => window.calendarContract.boardSignals[0]?.aborted)).toBe(true);
+  await resolveRead(page, 0, '', false);
+  await expect(page.getByLabel('Fehler', { exact: true })).toHaveText('0');
+  await expect(page.getByLabel('Daten')).toHaveText('optimistisch');
+  await page.getByRole('button', { name: 'Speichern beenden', exact: true }).click();
   await page.clock.runFor(151);
   await readCount(page, 2);
-  await resolveRead(page, 1, "wiederhergestellt");
-  await expect(page.getByLabel("Mutationen")).toHaveText("frei");
-  await expect(page.getByLabel("Daten")).toHaveText("wiederhergestellt");
+  await resolveRead(page, 1, 'bestätigt');
+  await expect(page.getByLabel('Daten')).toHaveText('bestätigt');
 });
 
-test("calendar visibility filters support keyboard and label activation without double toggles", async ({ page }) => {
-  const workingHours = page.getByRole("checkbox", { name: "Arbeitszeiten", exact: true });
-  const jobs = page.getByRole("checkbox", { name: "Termine", exact: true });
+test('an operation releases only its own lease, including transport failure and duplicate completion', async ({
+  page,
+}) => {
+  await resolveRead(page, 0, 'vorher');
+  await page.getByRole('button', { name: 'Speichern starten', exact: true }).click();
+  await page.getByRole('button', { name: 'Zweites Speichern starten', exact: true }).click();
+  await page.getByRole('button', { name: 'Transportfehler auslösen' }).click();
+  await expect(page.getByLabel('Transportfehler')).toHaveText('fehlgeschlagen');
+  await page.getByRole('button', { name: 'Speichern beenden', exact: true }).click();
+  await page.getByRole('button', { name: 'Speichern beenden', exact: true }).click();
+  await page.getByRole('button', { name: 'Aktualisieren', exact: true }).click();
+  await page.getByRole('button', { name: 'Woche', exact: true }).click();
+  await page.clock.runFor(400);
+  await readCount(page, 1);
+  await expect(page.getByLabel('Mutationen')).toHaveText('aktiv');
+  await page.getByRole('button', { name: 'Zweites Speichern beenden', exact: true }).click();
+  await page.clock.runFor(151);
+  await readCount(page, 2);
+  await resolveRead(page, 1, 'wiederhergestellt');
+  await expect(page.getByLabel('Mutationen')).toHaveText('frei');
+  await expect(page.getByLabel('Daten')).toHaveText('wiederhergestellt');
+});
+
+test('calendar visibility filters support keyboard and label activation without double toggles', async ({
+  page,
+}) => {
+  const workingHours = page.getByRole('checkbox', { name: 'Arbeitszeiten', exact: true });
+  const jobs = page.getByRole('checkbox', { name: 'Termine', exact: true });
   await expect(workingHours).not.toBeChecked();
   await expect(jobs).toBeChecked();
   await workingHours.focus();
-  await page.keyboard.press("Space");
+  await page.keyboard.press('Space');
   await expect(workingHours).toBeChecked();
   await expect(jobs).toBeChecked();
-  await page.getByRole("group", { name: "Angezeigte Einträge" }).getByText("Arbeitszeiten", { exact: true }).click();
+  await page
+    .getByRole('group', { name: 'Angezeigte Einträge' })
+    .getByText('Arbeitszeiten', { exact: true })
+    .click();
   await expect(workingHours).not.toBeChecked();
   await jobs.focus();
-  await page.keyboard.press("Space");
+  await page.keyboard.press('Space');
   await expect(jobs).not.toBeChecked();
-  await page.getByRole("group", { name: "Angezeigte Einträge" }).getByText("Termine", { exact: true }).click();
+  await page
+    .getByRole('group', { name: 'Angezeigte Einträge' })
+    .getByText('Termine', { exact: true })
+    .click();
   await expect(jobs).toBeChecked();
 });
 
-
-test("closure invalidation uses the range owner, keeps failed coverage stale and commits a recovered removal", async ({ page }) => {
-  await page.evaluate(() => window.calendarContract.resolveRead(0, "Auftrag", true, "Betriebsruhe"));
-  await expect(page.getByLabel("Betriebsruhe", { exact: true })).toHaveText("Betriebsruhe");
-  await page.evaluate(() => window.calendarContract.emit("organization_closure_days"));
+test('closure invalidation uses the range owner, keeps failed coverage stale and commits a recovered removal', async ({
+  page,
+}) => {
+  await page.evaluate(() => window.calendarContract.resolveRead(0, 'Auftrag', true, 'Betriebsruhe'));
+  await expect(page.getByLabel('Betriebsruhe', { exact: true })).toHaveText('Betriebsruhe');
+  await page.evaluate(() => window.calendarContract.emit('organization_closure_days'));
   await page.clock.runFor(151);
   await readCount(page, 2);
-  await resolveRead(page, 1, "", false);
-  await expect(page.getByLabel("Fehler", { exact: true })).toHaveText("1");
-  await expect(page.getByLabel("Betriebsruhe", { exact: true })).toHaveText("Betriebsruhe");
-  await page.getByRole("button", { name: "Aktualisieren", exact: true }).click();
+  await resolveRead(page, 1, '', false);
+  await expect(page.getByLabel('Fehler', { exact: true })).toHaveText('1');
+  await expect(page.getByLabel('Betriebsruhe', { exact: true })).toHaveText('Betriebsruhe');
+  await page.getByRole('button', { name: 'Aktualisieren', exact: true }).click();
   await readCount(page, 3);
-  await resolveRead(page, 2, "Auftrag");
-  await expect(page.getByLabel("Betriebsruhe", { exact: true })).toBeEmpty();
-  await expect(page.getByLabel("Zustand", { exact: true })).toHaveText("ready");
+  await resolveRead(page, 2, 'Auftrag');
+  await expect(page.getByLabel('Betriebsruhe', { exact: true })).toBeEmpty();
+  await expect(page.getByLabel('Zustand', { exact: true })).toHaveText('ready');
 });

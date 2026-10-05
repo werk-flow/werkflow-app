@@ -2,12 +2,7 @@ export const CURRENT_EMAIL_OTP_LENGTH = 6;
 export const CURRENT_EMAIL_OTP_EXPIRY_MINUTES = 10;
 export const CURRENT_EMAIL_OTP_RESEND_COOLDOWN_SECONDS = 60;
 
-type EmailChangeWizardStep =
-  | 'idle'
-  | 'verify_current'
-  | 'enter_new'
-  | 'verify_new'
-  | 'completion_pending';
+type EmailChangeWizardStep = 'idle' | 'verify_current' | 'enter_new' | 'verify_new' | 'completion_pending';
 
 export type EmailChangeWizardState = {
   step: EmailChangeWizardStep;

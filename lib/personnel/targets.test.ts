@@ -13,11 +13,7 @@ import {
   type OrganizationHolidayCalendar,
 } from './targets';
 
-function makeSchedule(
-  validFrom: string,
-  dayMinutes: number[],
-  id = `schedule-${validFrom}`
-): WorkSchedule {
+function makeSchedule(validFrom: string, dayMinutes: number[], id = `schedule-${validFrom}`): WorkSchedule {
   return {
     id,
     organizationId: 'org-1',
@@ -31,10 +27,7 @@ function makeSchedule(
   };
 }
 
-function makeCondition(
-  validFrom: string,
-  weeklyHours: number | null
-): EmploymentCondition {
+function makeCondition(validFrom: string, weeklyHours: number | null): EmploymentCondition {
   return {
     id: `condition-${validFrom}`,
     organizationId: 'org-1',
@@ -88,10 +81,7 @@ describe('resolveDailyTarget — schedule source', () => {
   });
 
   test('a date-effective change never alters historical days', () => {
-    const schedules = [
-      makeSchedule('2026-01-01', FULL_TIME),
-      makeSchedule('2026-08-05', PART_TIME),
-    ];
+    const schedules = [makeSchedule('2026-01-01', FULL_TIME), makeSchedule('2026-08-05', PART_TIME)];
     const before = resolveDailyTarget({
       dateIso: '2026-08-04',
       schedules,
@@ -140,10 +130,7 @@ describe('resolveDailyTarget — fallback cascade', () => {
   });
 
   test('derived source uses the condition effective on the date', () => {
-    const conditions = [
-      makeCondition('2026-01-01', 40),
-      makeCondition('2026-08-05', 20),
-    ];
+    const conditions = [makeCondition('2026-01-01', 40), makeCondition('2026-08-05', 20)];
     const before = resolveDailyTarget({
       dateIso: '2026-08-04',
       schedules: [],
@@ -183,9 +170,7 @@ describe('resolveDailyTarget — fallback cascade', () => {
 describe('resolveDailyTarget — holidays and closure days', () => {
   const bavarianCalendar: OrganizationHolidayCalendar = {
     holidayRegion: 'BY',
-    holidayRegionHistory: [
-      { region: 'BY', effectiveFrom: '2026-01-01T08:00:00Z' },
-    ],
+    holidayRegionHistory: [{ region: 'BY', effectiveFrom: '2026-01-01T08:00:00Z' }],
     closureDays: [],
   };
 
@@ -217,9 +202,7 @@ describe('resolveDailyTarget — holidays and closure days', () => {
   test('holidays only apply from the region selection onward', () => {
     const calendar: OrganizationHolidayCalendar = {
       holidayRegion: 'BY',
-      holidayRegionHistory: [
-        { region: 'BY', effectiveFrom: '2026-08-01T08:00:00Z' },
-      ],
+      holidayRegionHistory: [{ region: 'BY', effectiveFrom: '2026-08-01T08:00:00Z' }],
       closureDays: [],
     };
     // Fronleichnam was before the selection: the day keeps its target.
@@ -254,12 +237,9 @@ describe('resolveDailyTarget — holidays and closure days', () => {
 
 describe('resolveHolidayRegionOnDate', () => {
   test('without history the current selection applies', () => {
-    expect(
-      resolveHolidayRegionOnDate(
-        { holidayRegion: 'NW', holidayRegionHistory: [] },
-        '2026-08-04'
-      )
-    ).toBe('NW');
+    expect(resolveHolidayRegionOnDate({ holidayRegion: 'NW', holidayRegionHistory: [] }, '2026-08-04')).toBe(
+      'NW',
+    );
   });
 
   test('a region change resolves per date', () => {
@@ -295,17 +275,11 @@ describe('week helpers', () => {
   });
 
   test('sumTargetMinutes sums a week of mixed sources', () => {
-    const targets = resolveDailyTargets(
-      getBusinessWeekDates(new Date('2026-08-05T12:00:00Z')),
-      {
-        schedules: [
-          makeSchedule('2026-01-01', FULL_TIME),
-          makeSchedule('2026-08-06', PART_TIME),
-        ],
-        conditions: [],
-        calendar: EMPTY_HOLIDAY_CALENDAR,
-      }
-    );
+    const targets = resolveDailyTargets(getBusinessWeekDates(new Date('2026-08-05T12:00:00Z')), {
+      schedules: [makeSchedule('2026-01-01', FULL_TIME), makeSchedule('2026-08-06', PART_TIME)],
+      conditions: [],
+      calendar: EMPTY_HOLIDAY_CALENDAR,
+    });
     // Mo–Mi full time (3 × 480), Do–Fr part time (2 × 240), weekend 0.
     expect(sumTargetMinutes(targets)).toBe(3 * 480 + 2 * 240);
   });
@@ -357,9 +331,7 @@ describe('resolveDailyTarget — sickness absence (P1-08)', () => {
   test('holiday zeroing stays first: sickness on a holiday changes nothing', () => {
     const calendar: OrganizationHolidayCalendar = {
       holidayRegion: 'BY',
-      holidayRegionHistory: [
-        { region: 'BY', effectiveFrom: '2025-01-01T00:00:00Z' },
-      ],
+      holidayRegionHistory: [{ region: 'BY', effectiveFrom: '2025-01-01T00:00:00Z' }],
       closureDays: [],
     };
     // 2026-01-06 Heilige Drei Könige (BY), a Tuesday.
@@ -438,13 +410,7 @@ describe('resolveDailyTarget — sickness absence (P1-08)', () => {
       endDate: '2026-08-05',
       dayPortion: 'full' as const,
     };
-    expect(
-      resolveDailyTarget({ dateIso: '2026-08-03', ...base, absences: [span] })
-        .targetMinutes
-    ).toBe(480);
-    expect(
-      resolveDailyTarget({ dateIso: '2026-08-06', ...base, absences: [span] })
-        .targetMinutes
-    ).toBe(480);
+    expect(resolveDailyTarget({ dateIso: '2026-08-03', ...base, absences: [span] }).targetMinutes).toBe(480);
+    expect(resolveDailyTarget({ dateIso: '2026-08-06', ...base, absences: [span] }).targetMinutes).toBe(480);
   });
 });

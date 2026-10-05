@@ -1,22 +1,20 @@
-export function isIsoCalendarDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const [year, month, day] = value.split("-").map(Number);
-  if (year === undefined || month === undefined || day === undefined) return false;
-  const parsed = new Date(Date.UTC(year, month - 1, day));
-  return (
-    parsed.getUTCFullYear() === year &&
-    parsed.getUTCMonth() === month - 1 &&
-    parsed.getUTCDate() === day
-  );
+import { isValidIsoDate } from '@/lib/calendar/date-range';
+import { isJsonRecord } from '@/lib/supabase/json';
+
+/** Narrows a value the period sources guarantee; a missing one stops the action with its named error. */
+export function requirePresent<Value>(value: Value | null | undefined, errorCode: string): Value {
+  if (value === null || value === undefined) throw new Error(errorCode);
+  return value;
 }
 
-export function isValidOptionalIsoDateRange(
-  validFrom: string,
-  validUntil: string,
-): boolean {
+/** A stored snapshot object; any other value stops the action with its named error. */
+export function requireJsonRecord(value: unknown, errorCode: string): Record<string, unknown> {
+  if (!isJsonRecord(value)) throw new Error(errorCode);
+  return value;
+}
+
+export function isValidOptionalIsoDateRange(validFrom: string, validUntil: string): boolean {
   return (
-    isIsoCalendarDate(validFrom) &&
-    (!validUntil ||
-      (isIsoCalendarDate(validUntil) && validUntil >= validFrom))
+    isValidIsoDate(validFrom) && (!validUntil || (isValidIsoDate(validUntil) && validUntil >= validFrom))
   );
 }

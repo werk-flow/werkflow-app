@@ -9,22 +9,14 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger
+  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle
-} from '@/components/ui/alert-dialog';
 import { useBanner } from '@/components/ui/banner';
-import { ErrorText } from '@/components/ui/error-text';
+import { describeFailure } from '@/lib/action-messages';
 import { cancelInvite } from '@/lib/invites/cancel-action';
 import { deleteInvite } from '@/lib/invites/delete-action';
+import { InviteCancelConfirmDialog, InviteDeleteConfirmDialog } from './invite-actions-menu-dialogs';
+import { MANAGE_INVITE_MESSAGES } from './invite-messages';
 
 interface InviteActionsMenuProps {
   inviteId: string;
@@ -59,8 +51,7 @@ export function InviteActionsMenu({
   const isLoading = busy.isBusy;
 
   // Determine effective status (pending but expired = expired)
-  const effectiveStatus =
-    status === 'pending' && isExpired ? 'expired' : status;
+  const effectiveStatus = status === 'pending' && isExpired ? 'expired' : status;
 
   // Can only cancel if status is pending and not expired
   const canCancel = status === 'pending' && !isExpired;
@@ -81,7 +72,9 @@ export function InviteActionsMenu({
       router.refresh();
       void busy.run(waitForChange);
     } else {
-      setError(result.error || 'Fehler beim Stornieren der Einladung.');
+      setError(
+        describeFailure(result.error, MANAGE_INVITE_MESSAGES, 'Die Einladung konnte nicht storniert werden.'),
+      );
     }
   };
 
@@ -98,7 +91,9 @@ export function InviteActionsMenu({
       router.refresh();
       void busy.run(waitForChange);
     } else {
-      setError(result.error || 'Fehler beim Löschen der Einladung.');
+      setError(
+        describeFailure(result.error, MANAGE_INVITE_MESSAGES, 'Die Einladung konnte nicht gelöscht werden.'),
+      );
     }
   };
 
@@ -111,17 +106,8 @@ export function InviteActionsMenu({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 w-8 p-0"
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <MoreHorizontal className="size-4" />
-            )}
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" disabled={isLoading}>
+            {isLoading ? <Loader2 className="size-4 animate-spin" /> : <MoreHorizontal className="size-4" />}
             <span className="sr-only">Aktionen öffnen</span>
           </Button>
         </DropdownMenuTrigger>
@@ -136,10 +122,7 @@ export function InviteActionsMenu({
             </DropdownMenuItem>
           )}
           {canDelete && (
-            <DropdownMenuItem
-              variant="destructive"
-              onClick={() => setShowDeleteDialog(true)}
-            >
+            <DropdownMenuItem variant="destructive" onClick={() => setShowDeleteDialog(true)}>
               <Trash2 className="size-4" />
               Löschen
             </DropdownMenuItem>
@@ -148,94 +131,30 @@ export function InviteActionsMenu({
       </DropdownMenu>
 
       {/* Cancel Confirmation Dialog */}
-      <AlertDialog
+      <InviteCancelConfirmDialog
         open={showCancelDialog}
         onOpenChange={(open) => {
           setShowCancelDialog(open);
           if (!open) setError(null);
         }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Einladung stornieren?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Bist du sicher, dass du die Einladung für{' '}
-              <span className="font-medium">{inviteEmail}</span> stornieren
-              möchtest? Der Einladungslink wird ungültig und kann nicht mehr
-              verwendet werden.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <ErrorText>{error}</ErrorText>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isLoading}>
-              Abbrechen
-            </AlertDialogCancel>
-            <AlertDialogAction
-              // Keep the dialog open until the server confirms; a failure
-              // must stay visible at the point of action.
-              onClick={(event) => {
-                event.preventDefault();
-                void handleCancel();
-              }}
-              disabled={isLoading}
-              variant="destructive"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 size-4 animate-spin" />
-                  Wird storniert...
-                </>
-              ) : (
-                'Stornieren'
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        inviteEmail={inviteEmail}
+        error={error}
+        isLoading={isLoading}
+        onConfirm={handleCancel}
+      />
 
       {/* Delete Confirmation Dialog */}
-      <AlertDialog
+      <InviteDeleteConfirmDialog
         open={showDeleteDialog}
         onOpenChange={(open) => {
           setShowDeleteDialog(open);
           if (!open) setError(null);
         }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Einladung löschen?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Bist du sicher, dass du die Einladung für{' '}
-              <span className="font-medium">{inviteEmail}</span> endgültig
-              löschen möchtest? Diese Aktion kann nicht rückgängig gemacht
-              werden.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <ErrorText>{error}</ErrorText>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isLoading}>
-              Abbrechen
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(event) => {
-                event.preventDefault();
-                void handleDelete();
-              }}
-              disabled={isLoading}
-              variant="destructive"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 size-4 animate-spin" />
-                  Wird gelöscht...
-                </>
-              ) : (
-                'Löschen'
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        inviteEmail={inviteEmail}
+        error={error}
+        isLoading={isLoading}
+        onConfirm={handleDelete}
+      />
     </>
   );
 }

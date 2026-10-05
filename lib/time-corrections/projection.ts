@@ -1,31 +1,25 @@
+import { compareTimeEntries } from '@/lib/time-tracking/entry-order';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 
-import {
-  correctionFactToEntry,
-  type TimeCorrectionApplicationProjection,
-} from './types';
+import { correctionFactToEntry, type TimeCorrectionApplicationProjection } from './types';
 
 function isSuppressed(
   entry: TimeEntry,
   suppressedLegacyIds: ReadonlySet<string>,
   suppressedSegmentIds: ReadonlySet<string>,
-  suppressedApplicationIds: ReadonlySet<string>
+  suppressedApplicationIds: ReadonlySet<string>,
 ): boolean {
   return (
     suppressedLegacyIds.has(entry.id) ||
-    (entry.canonicalSegmentId
-      ? suppressedSegmentIds.has(entry.canonicalSegmentId)
-      : false) ||
-    (entry.correctionApplicationId
-      ? suppressedApplicationIds.has(entry.correctionApplicationId)
-      : false)
+    (entry.canonicalSegmentId ? suppressedSegmentIds.has(entry.canonicalSegmentId) : false) ||
+    (entry.correctionApplicationId ? suppressedApplicationIds.has(entry.correctionApplicationId) : false)
   );
 }
 
 export function applyApprovedTimeCorrections(
   entries: readonly TimeEntry[],
   applications: readonly TimeCorrectionApplicationProjection[],
-  organizationId: string
+  organizationId: string,
 ): TimeEntry[] {
   const suppressedLegacyIds = new Set<string>();
   const suppressedSegmentIds = new Set<string>();
@@ -47,15 +41,13 @@ export function applyApprovedTimeCorrections(
       : application.snapshot.facts.map((fact) => ({
           ...correctionFactToEntry(fact, application),
           organizationId,
-        }))
+        })),
   );
 
-  return [...entries.filter((entry) => !isSuppressed(
-    entry,
-    suppressedLegacyIds,
-    suppressedSegmentIds,
-    suppressedApplicationIds
-  )), ...correctedEntries].sort((left, right) =>
-    left.timestamp.localeCompare(right.timestamp) || left.id.localeCompare(right.id)
-  );
+  return [
+    ...entries.filter(
+      (entry) => !isSuppressed(entry, suppressedLegacyIds, suppressedSegmentIds, suppressedApplicationIds),
+    ),
+    ...correctedEntries,
+  ].sort(compareTimeEntries);
 }

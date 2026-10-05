@@ -1,5 +1,7 @@
 import type { updatePlanningCalendarEntry as ServerUpdatePlanning } from '@/lib/planning/actions';
 import type { updateJob as ServerUpdateJob } from '@/lib/jobs/actions';
+import { unexpectedWrite } from './held-write-boundary';
+import { reviewTimeCorrectionContract } from './time-approval-boundaries';
 
 /**
  * The write boundary of the calendar views' contracts (P1-24a): every
@@ -32,7 +34,10 @@ function hold(call: HeldCall): Promise<Result> {
   return new Promise((resolve, reject) => held.push({ resolve, reject }));
 }
 
-export function updatePlanningCalendarEntry(occurrenceId: string, input: Parameters<typeof ServerUpdatePlanning>[1]): Promise<Result> {
+export function updatePlanningCalendarEntry(
+  occurrenceId: string,
+  input: Parameters<typeof ServerUpdatePlanning>[1],
+): Promise<Result> {
   return hold({ kind: 'planning', id: occurrenceId, input });
 }
 export function updateJob(jobId: string, input: Parameters<typeof ServerUpdateJob>[1]): Promise<Result> {
@@ -41,12 +46,30 @@ export function updateJob(jobId: string, input: Parameters<typeof ServerUpdateJo
 export function createPlanningEntry(input: unknown): Promise<Result> {
   return hold({ kind: 'planning', id: 'create', input });
 }
-export function reassignEntryBatch(updates: unknown): Promise<Result> {
-  return hold({ kind: 'entries', id: 'batch', input: updates });
+export async function getTimeCorrectionFormOptions(): Promise<unknown> {
+  return {
+    success: true,
+    options: {
+      currentEmployeeRecordId: 'manager-record',
+      people: [
+        { userId: 'worker', employeeRecordId: 'r1', name: 'Alex Test' },
+        { userId: 'worker-2', employeeRecordId: 'r2', name: 'Bea Zwei' },
+      ],
+      jobs: [],
+    },
+  };
 }
-export function updateEntry(entryId: string, fields: unknown): Promise<Result> {
-  return hold({ kind: 'entries', id: entryId, input: fields });
+export async function submitTimeCorrection(input: unknown): Promise<unknown> {
+  const result = await hold({ kind: 'entries', id: 'correction', input });
+  return result.success
+    ? { success: true, status: 'submitted', requestId: 'request', replayed: false }
+    : result;
 }
+// `@/lib/time-corrections/actions` for the correction approval card.
+export const reviewTimeCorrection = reviewTimeCorrectionContract;
+export const reviewTimeCorrectionsBatch = unexpectedWrite;
+export const withdrawTimeCorrection = unexpectedWrite;
+export const resubmitTimeCorrection = unexpectedWrite;
 export function parkWorkTarget(input: unknown): Promise<Result> {
   return hold({ kind: 'park', id: 'park', input });
 }

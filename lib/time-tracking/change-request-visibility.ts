@@ -14,7 +14,7 @@ export type ChangeRequestVisibilityFacts = {
  */
 export function canViewChangeRequest(
   facts: ChangeRequestVisibilityFacts,
-  caller: { userId: string; roleByOrganization: ReadonlyMap<string, OrgRole> }
+  caller: { userId: string; roleByOrganization: ReadonlyMap<string, OrgRole> },
 ): boolean {
   const role = caller.roleByOrganization.get(facts.organizationId);
   if (!role) return false;

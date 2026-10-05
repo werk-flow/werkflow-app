@@ -15,14 +15,14 @@ export function StatusBadge({
   isClockedIn,
   status,
   isPending = false,
-  canViewStatus = true
+  canViewStatus = true,
 }: StatusBadgeProps) {
   const effectiveStatus = status ?? (isClockedIn ? 'working' : 'clocked_out');
 
   // Show "Nicht verfügbar" for members the current user can't view
   if (!canViewStatus) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-muted/50 px-2 py-0.5 text-xs font-medium text-muted-foreground/70">
+      <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-muted/50 px-2 py-0.5 text-xs font-medium text-muted-foreground/70">
         <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
         Nicht verfügbar
       </span>
@@ -32,7 +32,7 @@ export function StatusBadge({
   // Pending state (working but awaiting approval)
   if (effectiveStatus === 'working' && isPending) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning-soft-foreground">
+      <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning-soft-foreground">
         <span className="h-1.5 w-1.5 rounded-full bg-warning animate-pulse" />
         Arbeitet (ausstehend)
       </span>
@@ -41,7 +41,7 @@ export function StatusBadge({
 
   if (effectiveStatus === 'on_break') {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning-soft-foreground">
+      <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning-soft-foreground">
         <span className="h-1.5 w-1.5 rounded-full bg-warning animate-pulse" />
         Macht Pause
       </span>
@@ -51,18 +51,16 @@ export function StatusBadge({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium',
+        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium',
         effectiveStatus === 'working'
           ? 'bg-success-soft text-success-soft-foreground'
-          : 'bg-muted text-muted-foreground'
+          : 'bg-muted text-muted-foreground',
       )}
     >
       <span
         className={cn(
           'h-1.5 w-1.5 rounded-full',
-          effectiveStatus === 'working'
-            ? 'bg-success animate-pulse'
-            : 'bg-muted-foreground'
+          effectiveStatus === 'working' ? 'bg-success animate-pulse' : 'bg-muted-foreground',
         )}
       />
       {effectiveStatus === 'working' ? 'Arbeitet' : 'Nicht eingestempelt'}

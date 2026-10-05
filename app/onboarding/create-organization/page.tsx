@@ -2,28 +2,19 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import {
-  isUserSubscribed,
-  userHasOrganizations
-} from '@/lib/subscription/helpers';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle
-} from '@/components/ui/card';
+import { isUserSubscribed, userHasOrganizations } from '@/lib/subscription/helpers';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 import { CreateOrganizationForm } from './create-organization-form';
 
 export const metadata: Metadata = {
-  title: 'Organisation erstellen - WerkFlow'
+  title: 'Organisation erstellen - WerkFlow',
 };
 
 export default async function CreateOrganizationPage() {
   const supabase = await createSupabaseServerClient();
   const {
-    data: { user }
+    data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) {
@@ -45,12 +36,9 @@ export default async function CreateOrganizationPage() {
   return (
     <Card className="w-full max-w-md">
       <CardHeader className="text-center">
-        <CardTitle className="text-2xl">
-          Lass uns deine Organisation erstellen
-        </CardTitle>
+        <CardTitle className="text-2xl">Lass uns deine Organisation erstellen</CardTitle>
         <CardDescription>
-          Gib deiner Organisation einen Namen. Du kannst ihn später jederzeit
-          ändern.
+          Gib deiner Organisation einen Namen. Du kannst ihn später jederzeit ändern.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -59,6 +47,3 @@ export default async function CreateOrganizationPage() {
     </Card>
   );
 }
-
-
-

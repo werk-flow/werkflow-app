@@ -1,7 +1,7 @@
-import { KundenContentSkeleton } from '@/components/loading-states/kunden-content-skeleton'
-import { PageHeader } from '@/components/shared/page-header'
-import { PageBody, PageShell } from '@/components/shared/page-shell'
-import { Skeleton } from '@/components/ui/skeleton'
+import { KundenContentSkeleton } from '@/components/loading-states/kunden-content-skeleton';
+import { PageHeader } from '@/components/shared/page-header';
+import { PageBody, PageShell } from '@/components/shared/page-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export function KundenPageSkeleton() {
   return (
@@ -11,5 +11,5 @@ export function KundenPageSkeleton() {
         <KundenContentSkeleton />
       </PageBody>
     </PageShell>
-  )
+  );
 }

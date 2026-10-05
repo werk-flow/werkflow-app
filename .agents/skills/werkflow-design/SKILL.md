@@ -5,13 +5,13 @@ description: WerkFlow's design language and frontend conventions. Use for any UI
 
 # WerkFlow Design Language
 
-WerkFlow looks calm, professional, and a little "boring" on purpose. It replaces flashy legacy software and paper chaos for non-technical German SHK businesses, so clarity and trust beat visual excitement. The Aufträge and Dokumente tables are the north star: simple, elegant, quiet surfaces where content does the talking.
+WerkFlow looks calm, professional, and a little "boring" on purpose. It replaces flashy legacy software and paper chaos for non-technical German SHK businesses, so clarity and trust beat visual excitement. The Aufträge and Dokumente tables are existing patterns, not a substitute for an accepted visual target when the owner requests a redesign.
 
 This file carries the complete UI/UX canon: visual language, the component registry, the interaction canon, the feedback vocabulary, and the loading canon. Behavior that can live in code lives in the registered components; this file tells you which component owns which behavior and what the rules are when you compose them.
 
 ## Source of truth
 
-All theme values live in `app/globals.css` (`:root` tokens + `@theme inline` mapping). **To change how the app looks, edit the tokens there — never scatter raw hex values or one-off styles in components.** Interaction behavior lives in the registered components below — to change a behavior, change the component, not the call sites. If tokens/components and this file ever disagree, the code wins — then update this file.
+All theme values live in `app/globals.css` (`:root` tokens + `@theme inline` mapping). **To change how the app looks, edit the tokens there — never scatter raw hex values or one-off styles in components.** Interaction behavior lives in the registered components below — to change a behavior, change the component, not the call sites. Code establishes the current rendering, not the intended design. When it conflicts with an accepted rule or owner decision, identify the discrepancy and repair the wrong side. Change the canon only for a deliberate design decision; do not turn implementation drift into a new rule.
 
 ## Color
 
@@ -21,8 +21,9 @@ All theme values live in `app/globals.css` (`:root` tokens + `@theme inline` map
 - `lib/ui/contrast-contracts.test.ts` checks normal-text contrast from the actual theme tokens, shared control states, and current documented tint combinations (Tier 2). The browser layout audit checks rendered primary button states in both themes. Neither check certifies arbitrary opacity, caller-specific backgrounds, imagery, disabled controls, or non-text contrast; review those in their rendered context.
 - **Purple is a soft, desaturated undertone, never a loud accent.** The `--brand-purple*` scale is deliberately muted (grayish purple) and the neutral tokens (`muted`, `accent`, `secondary`, `border`, `input`) carry only a faint purple cast. Do not reintroduce vivid violet (the old `#7b2cbf` family) in UI — only the logo SVGs keep their vivid purple.
 - Purple is also the semantic hue for parked/planning entities (`geparkt` badges, calendar job blocks, Parkplatz). Keep that coding, always via `brand-purple` tokens.
-- Status colors stay semantic (green success, red destructive, yellow warning, blue info) — never rebrand them orange or purple. They are tokens in `app/globals.css`: per family a fill with its text (`bg-success` + `text-success-foreground`), readable text on neutral surfaces (`text-success-text`; red uses `text-destructive`), and a tinted surface with its text (`bg-success-soft` + `text-success-soft-foreground`); opacity modifiers work on the fill (`bg-success/10`, `border-warning/40`). Numbered palette classes (`bg-green-100`, `text-slate-700`, `dark:text-yellow-300`) are a lint error in product JSX; the tokens flip for dark mode by themselves, so no `dark:` counterpart is needed. `lib/ui/contrast-contracts.test.ts` checks every family's pairs.
+- Status colors stay semantic (green success, red destructive, yellow warning, blue info, teal ongoing work) — never rebrand them orange or purple. They are tokens in `app/globals.css`: per family a fill with its text (`bg-success` + `text-success-foreground`), readable text on neutral surfaces (`text-success-text`; red uses `text-destructive`), and a tinted surface with its text (`bg-success-soft` + `text-success-soft-foreground`); opacity modifiers work on the fill (`bg-success/10`, `border-warning/40`). Numbered palette classes (`bg-green-100`, `text-slate-700`, `dark:text-yellow-300`) are a lint error in product JSX; the tokens flip for dark mode by themselves, so no `dark:` counterpart is needed. `lib/ui/contrast-contracts.test.ts` checks every family's pairs.
 - Yellow `warning` is the one color for every "waiting for approval" state (owner ruling 2026-09-17): a pending correction, a pending request, a pending session review. Orange stays with actions and purple with the calendar's planning meaning; neither marks a waiting state.
+- Work that is being done („In Bearbeitung“, „In Ausführung“) has its own teal family, `bg-ongoing-soft` + `text-ongoing-soft-foreground` (owner decision 2026-10-03), so it never reads as waiting. `components/auftraege/status-classes.ts` owns the colors of every job, project and work state; a badge that shows such a state reads its classes there.
 - Pairing rules: orange background → white/neutral text; purple background → white/neutral/purple text; neutral background → orange **or** purple text. Never orange text on purple or purple text on orange. Same rules in dark mode.
 - Logos: light mode `/logo-*-light.svg`, dark mode `/logo-*-dark.svg`, swapped with `dark:hidden` / `hidden dark:block`.
 
@@ -30,16 +31,18 @@ All theme values live in `app/globals.css` (`:root` tokens + `@theme inline` map
 
 - Radius scale is deliberately modest (`--radius: 8px`): containers and cards use `rounded-lg` (8px), controls `rounded-md` (6px). Never `rounded-2xl`/`rounded-3xl`; `rounded-full` only for avatars, dots, and count badges.
 - Cards and panels: `border` + `shadow-xs`, flat and quiet. Elevation shadows (`shadow-lg`+) are reserved for genuinely floating elements: dialogs, popovers, dropdowns, banners, drag previews, the clock FAB.
-- Focus: 2px ring (`focus-visible:ring-2` with `ring-ring/50`), no ring offsets (a `ring-offset-*` class in product JSX is a lint error). Never 3px+ rings — they read as chunky. The orange ring is on-brand and required for keyboard a11y; don't remove it.
+- Focus: one 2px ring (`focus-visible:ring-2` with `ring-ring/50`), with a neutral field border. Do not add an orange border around the ring or a ring offset. Visible focus is required; orange is the brand choice, not an accessibility requirement. Registered inputs, selects and time fields own this treatment. The styled presentation contract checks visibility without changing field geometry.
 - Icons: Lucide only. A global rule in `globals.css` sets all Lucide icons to a sleek 1.75 stroke — don't pass `strokeWidth` props (lint: `ui/no-lucide-stroke-width`); for a rare intentional exception use a utility class like `[stroke-width:3]`.
 - Typography: Geist Sans + Geist Mono. Hierarchy via `font-medium`/`font-semibold` and `text-muted-foreground`, not size jumps. Tabular numbers for time/amount columns.
 
 ## Density and layout
 
-- **One page container.** Every authenticated page is `PageShell` → `PageHeader` → `PageBody` (`components/shared/page-shell.tsx`, `page-header.tsx`). The shell's `<main>` has no padding and no scroll region; `PageBody` owns both plus the bottom clearance for the clock button. Hand-rolled columns are lint-banned. One title style (`text-xl font-bold sm:text-2xl`), one header padding.
-- **Areas with subpages get a `layout.tsx`** that renders the shell and a persistent `PageHeader` with the area name as its `h1` title and `AreaNav` (`components/shared/area-nav.tsx`, underlined route tabs driven by the pathname) in its `nav` slot. Subpages render content only, under an `h2` with the subpage name and a toolbar row for the primary action, so the header and nav survive navigation and loading states. An area tab never leaves its area. In-page state tabs are shadcn `Tabs` (filled pills) and never sit in a header, so the two can't be confused.
-- **No page-level horizontal scroll on any viewport.** Below the tablet breakpoint tables render as `ListRow` cards; nothing is cropped to fake compliance — a component that does not fit gets a mobile layout. Named exceptions, each inside its own scroll region with a visible edge: the calendar day and week grids and the signature pad. Tab strips and area navs scroll within themselves. The 375 px viewport audit measures loaded content on registered routes. Add new authenticated pages to `lib/testing/mobile-route-inventory.ts`; its unit check rejects missing pages. Cover detail fixtures and redirects explicitly. Route coverage does not prove every tab, dialog, data state, or role variant.
+- **One page container.** Every authenticated page is `PageShell` → `PageHeader` → `PageBody` (`components/shared/page-shell.tsx`, `page-header.tsx`). The shell's `<main>` has no padding and no scroll region; `PageBody` owns both plus the bottom clearance for the clock button. Hand-rolled columns are lint-banned. Titles use `text-lg font-semibold tracking-tight sm:text-xl`; the shared header owns padding.
+- **Areas with subpages get a `layout.tsx`** that renders the shell and a persistent `PageHeader` with the area name as its `h1` title and `AreaNav` (`components/shared/area-nav.tsx`, underlined route tabs driven by the pathname) in its `nav` slot. Subpages render content only, under `SubpageHeader` (the `h2` with the subpage name, its description and the primary action on the right), so the header and nav survive navigation and loading states. Sections inside a subpage use `h3`. An area tab never leaves its area. In-page state tabs are shadcn `Tabs` (filled pills) and never sit in a header, so the two can't be confused.
+- **No page-level horizontal scroll on any viewport.** Below the tablet breakpoint tables render as `ListRow` cards; nothing is cropped to fake compliance — a component that does not fit gets a mobile layout. Named exceptions, each inside its own scroll region with a visible edge: the desktop calendar timelines, the month grid and the signature pad. Tab strips and area navs scroll within themselves. The 375 px viewport audit measures loaded content on registered routes. Add new authenticated pages to `lib/testing/selection/mobile-route-inventory.ts`; its unit check rejects missing pages. Cover detail fixtures and redirects explicitly. Route coverage does not prove every tab, dialog, data state, or role variant.
 - Full-height layouts use dynamic viewport units (`h-dvh` / `min-h-dvh`), never `h-screen` / `min-h-screen`, so mobile browser chrome cannot crop or extend the page. ESLint owns this rule.
+- A screen outside the app shell (sign-in, onboarding, upgrade, invitation error, root not-found, root error) is `StandaloneScreen`: one background, the logo in both themes, a centered column and vertical padding.
+- The bottom right corner belongs to the clock button. Page actions live in `PageHeader` or `SubpageHeader`, never in a fixed button; fixed positioning is reserved for the named floating layers (clock button, navigation drawer, calendar panels, drag previews). A side panel the clock button floats over keeps bottom clearance like `PageBody`.
 - Slim, not chunky: tabs are `h-9`, sidebar nav items `py-1.5`, active nav is a quiet neutral fill (`bg-accent` + `font-medium`), never a loud colored pill.
 - Managers (admin/buero) get efficient, scannable density — tables, filters, inline actions. Field workers (employee) get simpler screens with one big, unmissable primary action; touch targets ≥ 44px on their primary flows.
 - Don't wrap every block in a card. Prefer sections with headings, spacing, and dividers when hierarchy alone is enough; use cards for genuinely separate objects.
@@ -50,6 +53,7 @@ All theme values live in `app/globals.css` (`:root` tokens + `@theme inline` map
 - Tailwind CSS v4 only. `app/globals.css` imports Tailwind with `source(none)` and explicitly registers only the class-bearing application directories. Do not restore repository-wide automatic detection: retained browser artifacts can contain hundreds of thousands of files and have already exhausted Turbopack's PostCSS worker timeout. No `@tailwind` directives, no `content` array, no v3 plugins. Use `bg-linear-*` (not `bg-gradient-*`), built-in container queries, v4 variants.
 - **Build UI from the component registry below.** The shadcn primitives in `components/ui/` are the base layer, but for every interaction type the registry names the component that owns it — reach for that one, not for a raw primitive or a one-off styled div.
 - Buttons/inputs/controls inherit their look from `components/ui/` — if a control looks wrong everywhere, fix the primitive, not the call sites.
+- Controls and state tabs are flat. Use the shared neutral border or selected fill, without a raised shadow on each field, button or active tab. Keep floating menus and dialogs visually distinct from the page with their existing elevation.
 - UI copy: natural German with umlauts/ß, sentence case, outcome-named buttons ("Speichern", "Auftrag anlegen"). Code, identifiers, comments: English.
 - Accessibility: visible focus, German `aria-label`s on icon buttons, sufficient contrast for `muted-foreground`, keyboard-reachable interactions.
 
@@ -62,25 +66,37 @@ The first question for any control is: **does this list contain entities or a fi
 | Page column, header, scroll body | `PageShell`, `PageHeader`, `PageBody` | `components/shared/page-shell`, `components/shared/page-header` |
 | Route tabs of an area with subpages | `AreaNav` (in the area `layout.tsx`) | `components/shared/area-nav` |
 | Header primary action whose dialog lives in suspended content | `PageActionProvider` + `PageActionButton` + `usePageAction` (share the open flag across the Suspense boundary so the header paints first) | `components/shared/page-action` |
+| Header actions whose handlers exist only in suspended content, or the primary action of one subpage in an area header | `PageHeaderSlotProvider` + `PageHeaderSlot` + `PageHeaderActions` (the content portals its actions into the static header, so the title paints first; Zeiterfassung's „Manuelle Eintragung“ sits beside the area title on its overview only) | `components/shared/page-action` |
 | Label + control stack (every form field) | `Field` (owns gap, required marker, label/error/description IDs; registered controls consume its context) | `components/ui/field` |
+| Submit with missing input | `focusFirstInvalidField` (the submit stays enabled; the handler marks the fields through `Field`'s `error` and focuses the first) | `lib/ui/field-validation` |
+| Ordinary action or submit | `Button` (`default` for the one primary action, `outline` for a row action repeated per row, `destructive` only for an irreversible step; disabled only while its request runs) | `components/ui/button` |
+| Clickable region that owns its shape (row, disclosure header, filter pill, chip remove) | `PlainButton` (sets `type="button"` and the focus ring; an ordinary action uses `Button`) | `components/ui/plain-button` |
+| Search field of a list, picker or toolbar | `SearchInput` (magnifier, clear button that refocuses, pending spinner; name it with `aria-label`) | `components/ui/search-input` |
+| Subpage title row inside an area | `SubpageHeader` (`h2`, description, actions; actions wrap below on phones) | `components/shared/subpage-header` |
+| Title of a detail card or section („PROFIL“, „DOKUMENTE & BILDER“) | `SectionTitle` (small uppercase muted heading with optional icon; `as` sets the level) | `components/shared/section-title` |
+| Screen outside the app shell | `StandaloneScreen` | `components/shared/standalone-screen` |
+| State label | `Badge` (`secondary` default, `success`, `destructive`, `outline`; there is no orange badge). A state is a label and never a button: a badge is a small pill without hover or pressed state, an action is a `Button` that names the step („Stornieren“, not „Storniert“). Job, project and work states take their classes from `status-classes` | `components/ui/badge`, `components/auftraege/status-classes` |
+| Dialog width | `DialogContent size` (`sm`, `md`, `lg`, `xl`, `2xl`, `3xl`, `4xl`; default `lg`) | `components/ui/dialog` |
+| Dialog or confirmation that waits for its server answer | `Dialog pending` / `AlertDialog pending` (refuses Escape, an outside click, the close button and `AlertDialogCancel` until the answer lands; the submit's own `disabled` stays the double-submit guard) | `components/ui/dialog`, `components/ui/alert-dialog` |
+| Sortable column head of a table | `SortableTableHead` (direction icon and `aria-sort`) | `components/ui/sortable-table-head` |
 | Table row that reacts to a click | `TableRow interactive` (`"select"` for click-selects, double-click-opens) | `components/ui/table` |
+| Form per person in a list (one row per person, the same fields in each) | `Table` with one header row from the tablet breakpoint, a `ListRow` card with `Field` labels on phones; a table row cannot hold a form, so the row's controls join the form in its first cell through the `form` attribute (`components/zeiterfassung/time-account-person-table.tsx`) | `components/ui/table`, `components/ui/list-row` |
 | Mobile card row of a list, or a row inside a divided card | `ListRow` (`interactive`, `asChild` for links, `skeleton`; `variant="plain"` drops the box for rows inside a `divide-y` container) | `components/ui/list-row` |
 | Action menu on a row that can replace an optimistic draft or remount under Realtime | `RowActionsMenu` (native trigger/items, body portal, keyboard navigation and focus restoration without a composed Radix `asChild` ref) | `components/ui/row-actions-menu` |
 | Loading placeholder for a table or card list | `SkeletonTable` / `SkeletonRows` / `SkeletonList` fed by the list's own column definition | `components/ui/skeleton-table` |
 | Row for a record the user just created | `PendingRow` | `components/ui/pending-row` |
 | Spinner at the point of change | `InlinePending` + `useBusyIds` for per-row pending | `components/ui/inline-pending`, `hooks/use-busy-id` |
-| Submit control inside a `<form action={serverAction}>` | `PendingSubmitButton` (uses `useFormStatus`; clicked control spins, siblings disable until settlement) | `components/ui/pending-submit-button` |
 | Instant local echo of a list mutation | `useOptimisticList` (insert/update/remove with rollback and self-expiry) | `hooks/use-optimistic-list` |
 | Progress over N items | `useBatchProgress` | `hooks/use-batch-progress` |
 | Manual refresh of a list or a section retry | `RefreshButton` / `useRouterRefresh` (the one home of a router transition; rows stay on screen) | `components/ui/refresh-button` |
 | Settle read for a props-driven list (refreshed server props, no live view) | `useSettleOnChange(value)` → pass as `useServerAction`'s `settle` | `hooks/use-settle-on-change` |
-| Single choice from an entity list | `SearchableSelect` | `components/ui/searchable-select` |
-| Multi choice from an entity list | `SearchableMultiSelect` | `components/ui/searchable-select` |
+| Single choice from an entity list | `SearchableSelect` (a failed option read passes `loadError` with `onRetryLoad`, which shows „Erneut laden“) | `components/ui/searchable-select` |
+| Multi choice from an entity list | `SearchableMultiSelect` (the same retry slot) | `components/ui/searchable-select` |
 | Entity choice with inline create | `SelectWithCreate` | `components/ui/select-with-create` |
-| Customer choice (with create) | `ClientSelectWithCreate` | `components/auftraege/client-select-with-create` |
+| Customer choice (with create) | `ClientSelectWithCreate` | `components/auftraege/shared/client-select-with-create` |
 | Lager choice (with create) | `LocationSelectWithCreate` | `components/inventar/location-select-with-create` |
-| Employee assignment | `EmployeeMultiSelect` | `components/auftraege/employee-multi-select` |
-| Job multi-assignment | `JobMultiSelect` | `components/auftraege/job-multi-select` |
+| Employee assignment | `EmployeeMultiSelect` | `components/auftraege/shared/employee-multi-select` |
+| Job multi-assignment | `JobMultiSelect` | `components/auftraege/shared/job-multi-select` |
 | Fixed enum, under ~10 options | shadcn `Select` | `components/ui/select` |
 | Date entry | `DatePicker` | `components/ui/date-picker` |
 | Month entry (`YYYY-MM`, typed or picked; hidden input for forms) | `MonthPicker` | `components/ui/month-picker` |
@@ -98,16 +114,30 @@ The first question for any control is: **does this list contain entities or a fi
 | Success/error/info/progress feedback | `Banner` via `useBanner()` (its dismiss button is named „Hinweis schließen") | `components/ui/banner` |
 | Inline field/action errors | `ErrorText` | `components/ui/error-text` |
 | Failure of one page region or section, with retry | `SectionError` | `components/ui/section-error` |
+| Failure of a region that a server component loads | `RegionLoadError` (`SectionError` whose retry reads the route again while the rest of the page stays) | `components/shared/region-load-error` |
+| Failure of a whole authenticated page | `app/(app)/error.tsx` (sidebar and clock button stay usable); `app/error.tsx` covers a failure of the layout itself | route files |
+| Empty list or region, and a search or filter without a match | `EmptyState` (empty source: „Noch keine …" plus the next step in `action`; no match: „Keine … gefunden" plus how to widen the search) | `components/ui/empty-state` |
 | Loading placeholders | `Skeleton` + the page skeletons | `components/ui/skeleton`, `components/loading-states/*` |
 | Collapsible form section („Weitere Angaben") | `FormDisclosure` (rotating-chevron pattern) | `components/ui/form-disclosure` |
+| Yes/no choice, multi-line text, password with show toggle, one-time code | `Checkbox` with its own label; `Textarea`, `PasswordInput` and `InputOTP` inside a `Field` | `components/ui/checkbox`, `components/ui/textarea`, `components/ui/password-input`, `components/ui/input-otp` |
+| Separate object on a page, person image | `Card`, `Avatar` | `components/ui/card`, `components/ui/avatar` |
+| In-page state tabs | `Tabs` (filled pills, never in a header) | `components/ui/tabs` |
+| Side or bottom sheet, destructive confirmation | `Sheet`, `AlertDialog` | `components/ui/sheet`, `components/ui/alert-dialog` |
+| Menu on a trigger or a right click, anchored floating panel | `DropdownMenu`, `ContextMenu`, `Popover` | `components/ui/dropdown-menu`, `components/ui/context-menu`, `components/ui/popover` |
+| Determinate progress, divider | `Progress`, `Separator` | `components/ui/progress`, `components/ui/separator` |
+| Auth and settings forms built on react-hook-form | `Form`, `FormField` and their parts; new forms use plain `<form onSubmit>` | `components/ui/form` |
+
+Building blocks of the rows above, not for direct use: `Label` (rendered by `Field`), `Calendar` (inside `DatePicker`), `OpenDialogProvider` and `RegisterOpenDialog` (the dialog primitives register themselves), `SearchableSelectPopup`, `components/ui/searchable-single-select` and `components/ui/searchable-multi-select` (re-exported by `components/ui/searchable-select`), `useSearchableSelectPopup` and `useDatePickerSegments`.
 
 ESLint rejects native date/time/month/week/number/range/checkbox/radio inputs, native `<select>`, raw `role="alert"`, and sonner imports outside `components/ui/`. Registered controls and feedback components own those interactions. Static attribute checks cover quoted values and JSX expression literals. The config also rejects static viewport and page-column literals, `Label` + nested or conditional control stacks outside `Field`, and call-site hover/cursor classes on `TableRow`/`ListRow`. Standalone section labels and checkbox labels remain supported. `lib/ui/eslint-contracts.test.mjs` probes the effective flat config, including named exceptions, so an exception cannot silently drop unrelated restrictions.
+
+These rules are lint errors in product JSX, too, outside `components/ui/`: a raw `<button>` or raw text `<input>` (`ui/no-raw-controls`), a block element inside a `<p>` (`ui/no-block-in-paragraph`), a submit button disabled by anything but a pending or availability flag (`ui/submit-disabled-only-while-pending`), an icon-only `Button` without a German `aria-label` (`ui/icon-button-needs-name`), a raw `<h1>` outside `PageHeader`, a `max-w-*` class on `DialogContent`, and a waiting dialog without `pending` (`ui/dialog-pending-while-waiting`). In `app/`, `components/` (registry included) and `hooks/`, lint also rejects a pending flag reset only on success (`ui/pending-reset-on-failure`), a page-wide keydown listener that ignores `event.defaultPrevented` (`ui/global-key-handler-respects-consumed`), and an effect that only copies props or state into state (`ui/no-derived-state-effect`). Two unit checks cover what lint cannot see: `lib/conventions/german-copy.test.ts` rejects transliterated umlauts, three dots in place of „…" and the formal address, and `lib/conventions/route-loading.test.ts` requires a `loading.tsx` in the folder of every authenticated page.
 
 A raw `Select` throws above nine options in development. `lib/ui/select-registry.test.ts` checks resolvable enum bounds independently of the build mode and names runtime choices that need separate bounds. These are Tier 2 checks. Whether a new choice represents entities remains a Tier 3 review decision; a short entity list still needs search.
 
 Native controls stay out of the web app on every viewport, phones included: the mobile browser is not the native app. A future React Native app uses native pickers because that is its platform; the web app keeps its own components and makes them touch-friendly (44 px targets, `inputMode` for the right keyboard).
 
-Rules the registry components already encode — don't re-implement them per call site: search with a clear button, de-DE case-insensitive filtering (`filterByQuery` in `lib/ui/search`), empty states, `allowNone`, an `action` slot for inline create, `readOnly` rendering, and dialog-aware portaling. Empty-state copy: "Kein/e X gefunden" when a search filters to nothing; when the source list itself is empty, say what the list is for and offer the next action (the `action` slot or an adjacent button).
+Rules the registry components already encode — don't re-implement them per call site: search with a clear button, de-DE case-insensitive filtering (`filterByQuery` in `lib/ui/search`), empty states, a retry for a failed option read, `allowNone`, an `action` slot for inline create, `readOnly` rendering, and dialog-aware portaling. Empty-state copy: "Kein/e X gefunden" when a search filters to nothing; when the source list itself is empty, say what the list is for and offer the next action (the `action` slot or an adjacent button).
 
 **Extending the registry:** composites built from these primitives are welcome (`DocumentLinkDialog` is the model). A genuinely new interaction pattern is allowed, but design it deliberately and add its registry row here in the same change. Silent one-offs are the defect this canon exists to prevent.
 
@@ -139,23 +169,27 @@ Use `AlertDialog` with `AlertDialogCancel` and `AlertDialogAction`, without a pl
 
 ### Dialog close and success
 
-One convention: on success the dialog closes and the success banner confirms; on failure the dialog stays open with its filled values and `ErrorText` at the point of action. A create dialog may close optimistically only after client validation has ruled out every correctable input problem. If the server can still return a correctable domain error, such as a required overlap reason, keep the dialog mounted and pending until the server accepts it; an optimistic list row may render at the same time from the same promise. No inline success flashes before closing, no delayed auto-close timers. Delete flows that redirect confirm via the URL-flash banner on the landing page.
+One convention: on success the dialog closes and the success banner confirms; on failure the dialog stays open with its filled values and `ErrorText` at the point of action. While a dialog waits for its server answer, its root gets `pending` (`<Dialog pending={isSaving}>`, `<AlertDialog pending={isDeleting}>`): Escape, an outside click and the close controls cannot close it, so the failure cannot land in a dialog that is gone. The guard refuses only the user's dismissal: the owner closes through its own `open` state once the request answers, and a failure releases `pending` so the dialog is dismissible again (`ui:contracts` dialog pending contract). A form inside a dialog reports its request to the host with `useReportPending` (`hooks/use-report-pending.ts`). A Cancel `Button` that closes through the caller's own state also takes `disabled={isSaving}`, and an `AlertDialogAction` that awaits keeps the dialog open with `event.preventDefault()`. A create dialog may close optimistically only after client validation has ruled out every correctable input problem. If the server can still return a correctable domain error, such as a required overlap reason, keep the dialog mounted and pending until the server accepts it; an optimistic list row may render at the same time from the same promise. No inline success flashes before closing, no delayed auto-close timers. Delete flows that redirect confirm via the URL-flash banner on the landing page.
 
 ### Long forms in dialogs
+
+Dialog and sheet action groups keep at least 8 px between buttons in both stacked and horizontal layouts. The shared footers own `gap-2`; use them without reducing that gap. A nested action group owns its own gap. Horizontal margin utilities alone leave stacked buttons touching. The styled presentation contract checks actual button separation on phone and desktop.
+
+Tabbed creation and conversion forms use `DialogContent workspace` to keep a stable frame across loading and tab changes. Use a scrolling body within that frame; retain natural sizing for brief confirmations. `DialogFooter` gives its registered buttons at least 44 px height on phones, and `DialogContent` owns the 44 px phone close target. Desktop controls keep their compact sizes. The styled presentation contract checks frame, footer position, touch targets and keyboard access to the last field. Also inspect the real form, since a generic contract cannot prove each form's nesting.
 
 - `DialogContent` caps its height; long content goes in `DialogBody`, which makes the dialog a fixed-header/scroll-body/fixed-footer column. The title and the submit row never scroll out of view. `DialogBody` keeps a 4 px vertical inset so a first or last row's ring is not clipped, but draw a selection state inside the box (`border-primary` plus a tint) rather than as an outer ring: the scroll container clips whatever hangs outside a row (the clock dialog's cropped tile, 2026-09-15).
 - Border colors are utilities like any other: the global default border color lives in `@layer base` in `app/globals.css`. Never add an unlayered `*` rule there; it beats every layered utility and silently disabled `border-primary` and `border-destructive` app-wide until 2026-09-15. The styled clock contract pins the selected tile's border color.
 - Forms with more than ~8 fields group into titled sections with dividers. Genuinely optional blocks collapse behind `FormDisclosure` — the registry component with the app's rotating-chevron affordance. Never native `<details>`/`<summary>` (the browser marker triangle is off-brand).
-- No multi-step wizards for operational forms — office users fill these daily; steps add clicks to routine work. Very large editors use a two-column grid (`sm:grid-cols-2`) plus section grouping instead. Three more consumer-app patterns were rejected with the wizards on 2026-08-21 and stay rejected: celebration or confetti empty and success states; optimistic UI as the default posture (it conflicts with the persisted-state assertions of the test canon and with a correction-heavy domain; the pending-feedback matrix names the interactions that are optimistic); and mobile bottom navigation (the manager surface is desktop-first, and the 44 px and one-primary-action rules already cover field-worker phones).
+- No multi-step wizards for operational forms — office users fill these daily; steps add clicks to routine work. Very large editors use a two-column grid (`sm:grid-cols-2`) plus section grouping instead. Three more consumer-app patterns were rejected with the wizards on 2026-08-21 and stay rejected: celebration or confetti empty and success states; optimistic UI as the default posture (domain risk determines where optimism is safe; the pending-feedback matrix names those interactions, and tests distinguish the immediate visual result from confirmed persistence); and mobile bottom navigation (the manager surface is desktop-first, and the 44 px and one-primary-action rules already cover field-worker phones).
 
 ### Loading states
 
 Contextual documents share `ContextualDocumentsFrame` and `ContextualDocumentRowFrame` with `ContextualDocumentsSkeleton` in `components/dokumente/contextual-documents-layout.tsx`. Preserve the known title/description, responsive toolbar, and icon/name/metadata/menu geometry while data loads. The row container stays inert because opening a file and its menu are separate controls. Service detail loading states compose this skeleton at the document section's position. `lib/ui/contextual-documents-layout.test.ts` checks shared ownership and current consumers; unknown row counts and variable text still need rendered judgment.
 
-- Every route segment ships a `loading.tsx` skeleton from `components/loading-states/` that mirrors the real layout — structure first, data fills in. New top-level routes also get an entry in the app-shell org-switch skeleton map (`components/sidebar/app-shell.tsx`). In an area with a `layout.tsx`, the subpage `loading.tsx` renders content only; the header and `AreaNav` stay on screen.
+- Every route segment ships a `loading.tsx` skeleton from `components/loading-states/` that mirrors the real layout — structure first, data fills in. New top-level routes also get an entry in the org-switch skeleton map (`components/sidebar/org-switch-overlay.tsx`). In an area with a `layout.tsx`, the subpage `loading.tsx` renders content only; the header and `AreaNav` stay on screen.
 - **A skeleton mirrors the layout and interaction of what it loads.** Table headers and skeleton cells share the list's `X_COLUMNS: readonly SkeletonColumn[]`. A grid list shares its header and row layout with its exported skeleton, as the maintenance due list does. Route loading files render these exports. `TableRow`/`ListRow` own the hover token through `interactive`; live rows and skeleton rows must agree. Option rows inside pickers (the document link and attach dialogs, the job materials search) keep their own muted hover tokens: they are buttons, not list rows (accepted at the 2026-09-04 closure). `lib/ui/skeleton-pairing.test.ts` checks column reuse and loading-file composition. `lib/ui/row-contracts.test.ts` compares interaction flags, inventories every product table, and checks desktop-only containment. Tables need mobile cards that retain their information. Rendered layout, conditional states, and named scroll exceptions still require browser review.
 - A skeleton never stands in for data that exists. After the user's own action the list keeps its rows and shows a `PendingRow` or an inline indicator; a full-list skeleton after a mutation is a defect.
-- A windowed surface uses the range owner in `components/kalender/use-calendar-range-data.ts`. Show a skeleton only when a required dataset has never loaded. While a new window loads, retain the grid with `aria-busy` and `inert`; a failed uncovered read shows `SectionError` with retry. Disable retained stale grid actions too. Keep header navigation available. Readiness follows both data coverage and the actual renderer: `FullCalendarView` must report its requested date after rendering before the month marker becomes ready. The scope, mutation queue, causal reconnect rules, and regression checks live in `docs/technical/realtime-and-caching.md`. The calendar header deliberately stays inside its data boundary because it is bound to container state (view, date, filters); every other list renders its header outside the boundary so it paints before the data (2026-09-03).
+- A windowed surface uses the range owner in `components/kalender/use-calendar-range-data.ts`. Show a skeleton only when a required dataset has never loaded. While a new window loads, retain the grid with `aria-busy` and `inert`; a failed uncovered read shows `SectionError` with retry. Disable retained stale grid actions too. Keep header navigation available. Readiness follows both data coverage and the actual renderer: the mounted board, day or month renderer must expose usable content for the requested window before its readiness marker is true. The scope, mutation queue, causal reconnect rules, and regression checks live in `docs/technical/realtime-and-caching.md`. The calendar header deliberately stays inside its data boundary because it is bound to container state (view, date, filters); every other list renders its header outside the boundary so it paints before the data (2026-09-03).
 
 Calendar save ownership is per operation: `beginMutation()` returns an idempotent release callback used in `finally`. A manual refresh or child success must never decrement another save. Check thrown transport failures as well as returned errors, and offer Undo only after confirmed persistence. Entries and correction metadata commit together through `completeCalendarEntryRead`; a missing badge read is a failed window, not ready data. The inner calendar scope includes organization, caller, and role, including auxiliary Parkplatz state.
 - Section-level async loads inside a page use a section skeleton, not a centered spinner with text.
@@ -220,40 +254,163 @@ When testing loading or freshness, measure from the initiating action through th
 
 The calendar (`components/kalender`, `lib/calendar`) is the office's main hub and has its own rules on top of everything above. Change a rule by changing its home, then this list.
 
+- **Readable time geometry.** Short day items have a minimum visual width owned by `DAY_MIN_ITEM_WIDTH`. Lane packing reserves that width, while timestamps and drag payloads retain real duration. A short recorded block shows its activity and a bottom rule for the true time extent. Resize origins track the actual endpoint, including when the hit area is larger. `day-layout.test.ts` and the styled calendar-day contracts protect packing and resize writes.
+- **Card hierarchy.** Board cards put the title first, followed by time, customer/site and operational status. Day cards fit their fixed-height lane with time inline; do not copy the taller board anatomy into them. Month cards remain compact. Selection, warning and dispatch meaning must remain visible.
+- **Feedback geometry.** Drag refusal text grows within the ghost and stays inside the viewport. Both mouse movement and touch long-press initialize its current label. The styled day and board contracts cover these paths. Calendar skeletons follow the selected view, and a saved month view receives its full initial window instead of repeating the fetch in the browser.
+
 - **Tokens.** Every calendar colour is a `--calendar-*` token in `app/globals.css`; the literal-colour lint rule rejects `rgb()`, `hsl()` and hex in calendar JSX and style strings. Purple marks planning (cards, bars, the Parkplatz); orange stays with actions and the now indicator keeps its one hue exception.
 - **Layers.** Three views (Plantafel, Tag, Monat) render on one surface model: rows and columns of Berlin dates, cards for timed visits, bars for all-day and multi-day visits, absence and closure context in the row, hatched days outside employment. The Parkplatz and the Einsätze panels are inset side panels beside the view, never overlays; the Parkplatz closes with Escape when no dialog is open and folds to a fixed sheet on a phone.
 - **Cards.** A card carries the time, the title, the customer, the dispatch chip and the material chip; chips truncate and never overflow the card. A tools chip does not exist until a tool assessment fact exists. Capacity shows as „geplant / Soll“ in the cell, with the sentence as title and read-aloud text.
 - **The engine.** One drag engine (`drag-engine/drag-engine.tsx`, math in `lib/calendar/drag-math.ts`): a drag starts after a 250 ms press or a small movement, one ghost moves by `transform` without a React commit per pointer move, the container scrolls only after 150 ms in its 40 px edge zone and never while the pointer is outside it, Escape cancels, Shift fines the snap and bypasses the absence and off-day refusals. A parked card cannot target the Parkplatz.
-- **The optimistic owner.** `mutations/use-calendar-mutations.ts`: the card is at its target before the first server call, a refusal rolls back with the rule's sentence, success offers Undo through the inverse write.
+- **The optimistic owner.** `mutations/use-calendar-mutations.ts` composes the visit, park, feedback and optimistic-run hooks beside it into one owner: the card is at its target before the first server call, a refusal rolls back with the rule's sentence, success offers Undo through the inverse write.
 - **Messages.** Every refusal, client pre-check and undo failure reads its sentence from `lib/calendar/messages.ts` (`calendarRefusalMessage`); a code without a sentence fails `tsc`, and no component renders a code or an inline sentence. Sentences name the rule and the next step in German with typographic quotes.
 - **Shortcuts.** The `?` list is the contract: every line holds in every view or names the one it holds in (`t`, `j`/`k`, `d`/`w`/`m`, `c`, `z`, `?`, Tab and Enter, Esc; `+`/`-` in the day, arrows and Alt-drag on the board). A shortcut that works in one view only is labelled, never implied.
 - **Keyboard paths.** Every drag has a command path (the entry popover's „Verschieben …“ and „Parken“, the Parkplatz card's „Einplanen am …“ form) and focus returns to the card after a drop and after every dialog a drop opened; the live region announces the result.
 - **History.** A started or past occurrence is locked before anyone tries: no drag source, a lock icon on the card, no edit or move in the popover, the rule named there (`isStartedOccurrence`, the same rule the database enforces). Never let a user start a change the server will refuse; there is no read-only mode.
 - **Preferences.** View, horizon, density, weekend, filters, search and „Termine“ persist per user and organization under the `calendar` key; every change saves at once except the search text (600 ms after the last keystroke); „Arbeitszeiten“ is session state.
-- **Phones.** The week is a day list for every role (name per card when more than one row is visible), without toolbar and drag; the day and month keep their grids inside their own scroll regions.
+- **Phones.** The week is a day list for every role, with names when more than one row is visible. The day uses a chronological list per person, with full-width visits and recorded activities; employees do not get a redundant name column. Both lists open the existing detail and editing flows, without drag. Short activities keep their actual times and at least a 44 px target. The month keeps its grid inside its own scroll region. Phone navigation uses a compact date range and 44 px controls.
 
-## Checklist before shipping UI
+## Visual target and review
 
-Tier 1 components own shared behavior. Tier 2 checks detect the covered structural and interaction regressions. Tier 3 review still owns natural German, visual balance, domain meaning, and policy exceptions. The isolated component suite proves semantics and focus; the application browser suites prove rendered layouts and business flows. Use the verification procedure in `docs/technical/testing.md`; a static pass alone does not close this checklist.
+Existing pages establish current behavior and reusable patterns; they are not automatic visual approval. When the owner asks for a redesign, compare a representative populated screen with the chosen references before extending the composition. If the shared controls cause the problem, propose a coherent primitive/token change rather than forcing the old appearance onto the new surface. Preserve permissions, data behavior and accessibility through that change.
 
-- [ ] Values come from tokens/primitives, no ad-hoc hex or radius
-- [ ] Page is `PageShell` → `PageHeader` → `PageBody`; an area with subpages has a `layout.tsx` with `AreaNav`
-- [ ] Nothing scrolls the page horizontally at 375 px; tables have a `ListRow` card layout below the tablet breakpoint
-- [ ] Every field is a `Field`; required fields carry the marker; the submit button is not pre-disabled
-- [ ] Every mutation shows pending feedback in the first frame per the matrix; no skeleton over existing data
-- [ ] Skeleton rows share the list's column definition and its `interactive` flag
-- [ ] Controls come from the component registry; no raw entity `Select`, native date/time/number inputs, or native `<select>`
-- [ ] Non-destructive dialogs are real forms (Enter submits); destructive confirms are `AlertDialog`
-- [ ] Feedback follows the policy matrix; every failure is visible at the point of action
-- [ ] Long dialogs use `DialogBody`; the submit row can't scroll away
-- [ ] Route has a `loading.tsx` skeleton; section loads have skeletons, not text spinners
-- [ ] Orange only on the things that deserve attention; purple stays quiet
-- [ ] Hover/focus/disabled/loading/empty/error states covered
-- [ ] Dark mode and mobile checked; German copy natural
-- [ ] No new dependencies, fonts, or icon libraries; flows and role behavior unchanged
+Follow `docs/technical/standards-audit.md` under "Rendered design acceptance". The reviewed reference images and what each one shows are in `references/README.md` beside this file. Record the actual rendered evidence, visual findings and dispositions. Checks for radius, colors, overflow or successful clicks do not establish visual quality. Failed captures remain missing evidence. Tests adapt to the intended interaction and prove its persistence separately; test convenience is not a reason to choose a worse user experience.
+
+## How to work
+
+Start each UI task from the procedure below. It names the file to copy and the check to run before you move on, so lint and the contracts confirm the first draft instead of rejecting it.
+
+### Add a page
+
+1. Copy `app/(app)/qualifikationen/page.tsx`: `PageShell`, `PageHeader` with the German title, `PageBody`, and the data behind `Suspense`.
+2. In an area with subpages, render content under `SubpageHeader`. The area's `layout.tsx` owns `PageHeader` and `AreaNav`.
+3. Write the skeleton in `components/loading-states/` from the page's own column definitions, and render it from the route's `loading.tsx`. A new top-level route also gets its entry in `components/sidebar/org-switch-overlay.tsx`.
+4. Return `RegionLoadError` with natural German when a server read fails. A client section uses `SectionError`.
+5. Add the route to `lib/testing/selection/mobile-route-inventory.ts`.
+6. Run `bun run test:unit lib/conventions/route-loading.test.ts lib/ui/skeleton-pairing.test.ts lib/testing/selection/mobile-route-inventory.test.ts` and `bun run lint <files>`.
+
+Wrong turn: a spinner or a generic skeleton as the loading state. It does not mirror the page, so the layout jumps when the data lands.
+
+### Add a form or a dialog
+
+1. Copy `components/auftraege/lifecycle/work-lifecycle-reason-dialog.tsx`: `DialogContent` with its `size`, a real `<form onSubmit>`, and a `type="submit"` primary button.
+2. Wrap every control in `Field`, and take the control from the registry: an entity list is searchable, a date is a `DatePicker`, a fixed enum under ten options is a `Select`.
+3. On submit, pass the field errors to `Field` and call `focusFirstInvalidField`. The submit stays enabled.
+4. Bind pending state to the server call through `useServerAction` or `usePendingTask`, and disable the submit only while it is pending.
+5. On failure, keep the dialog open with its values and show the sentence from `describeFailure` in `ErrorText`. On success, close the dialog and confirm through `Banner`.
+6. Run `bun run lint <files>` and `bun run test:unit lib/ui/dialog-contracts.test.ts lib/ui/field-contracts.test.tsx lib/conventions/german-copy.test.ts`.
+
+Wrong turn: a submit disabled until the form is complete. The user hunts for the missing field, and a keyboard user cannot reach the button.
+
+### Add a list or a table
+
+1. Copy `components/kunden/kunden-content.tsx` and `components/kunden/clients-table.tsx`. The reader follows "Add a list" in `docs/technical/realtime-and-caching.md`.
+2. Define the columns once and feed both the table header and the skeleton from them.
+3. Render the desktop table with `SortableTableHead` and `TableRow interactive`, and the same rows as `ListRow` cards below the tablet breakpoint.
+4. Render `EmptyState`: „Noch keine …“ with the next step for an empty source, „Keine … gefunden“ for a search without a match.
+5. Page with `ListPagination` and `parseListPage`.
+6. Run `bun run test:unit lib/ui/row-contracts.test.ts lib/ui/skeleton-pairing.test.ts lib/ui/empty-state-copy.test.ts lib/ui/list-pagination-render.test.tsx`, then look at the list at 375 px.
+
+Wrong turn: a table that scrolls sideways on the phone, or columns hidden there. `audit:layout` fails on the overflow, and a hidden column loses information.
+
+### Add a status or a color
+
+1. Pick the semantic family: green success, red destructive, yellow for every waiting-for-approval state, blue info, purple for planning and parked work.
+2. Render a state as `Badge` with its variant. A custom surface uses the family's token pair, such as `bg-success-soft` with `text-success-soft-foreground`.
+3. A new color is a token in `app/globals.css` for both themes, with its pairs checked in `lib/ui/contrast-contracts.test.ts`.
+4. Run `bun run lint <files>` and `bun run test:unit lib/ui/contrast-contracts.test.ts`.
+
+Wrong turn: orange for a status. Orange marks actions, and it stops drawing attention once it is common.
+
+### Change an accepted design
+
+1. Before you build, show the owner the rendered current screen and the proposal, as rendered design acceptance in `docs/technical/standards-audit.md` describes.
+2. When the problem is shared, change the token or the primitive in `components/ui/`. Change a call site only for a local problem.
+3. Run `bun run test:ui`, and look at both themes at 375 px and on the desktop.
+4. After the owner accepts the rendered result, update the references as "Keep accepted screens as visual references" in that doc describes, and run `bun run test:verify --group audit:visual`.
+
+Wrong turn: a reference rewritten because the comparison failed. A reference records what the owner accepted, not what the build produced.
+
+## Checklist
+
+This skill owns virtue 1 in `AGENTS.md`. Tier 1 components own shared behavior, Tier 2 checks catch the covered regressions, and review owns natural German, visual balance, domain meaning and fit for the role. Every item names its mechanism. A `[judgment]` item is a Tier 3 default: diverge only with the note that `AGENTS.md` describes under "How to read the virtues".
+
+- Values come from the tokens in `app/globals.css`: no hex, `rgb()` or `hsl()` literal, no arbitrary hex class, no numbered palette class. [code `app/globals.css`, lint `colorLiteralSelectors`, lint `stylingSelectors`, lint `paletteSelectors`]
+- Text and controls keep readable contrast in both themes. [test `lib/ui/contrast-contracts.test.ts`]
+- Radius stops at `rounded-lg`, focus is one 2px ring without an offset, and Lucide icons keep the global stroke. [lint `stylingSelectors`, lint `focusRingSelectors`, lint `ui/no-lucide-stroke-width`]
+- A page renders `PageShell`, `PageHeader` and `PageBody`, and its title comes from `PageHeader`. An area with subpages has a `layout.tsx` with `AreaNav`. [code `components/shared/page-shell.tsx`, lint `shellSelectors`, lint `headingSelectors`]
+- A subpage title is `SubpageHeader`, a detail card title is `SectionTitle`, a screen outside the shell is `StandaloneScreen`. No `h2` copies the page title style. [lint `shellSelectors`, test `lib/ui/eslint-contracts.test.mjs`]
+- No control stays under the clock button: page actions are never fixed, and the page body scrolled to its end leaves every control clear. [lint `floatingSelectors`, group `audit:layout`]
+- A search field is `SearchInput`. [lint `registrySelectors`]
+- A Card does not stack its padding on a self-padded child. [test `lib/ui/card-padding.test.ts`]
+- A primitive styles its states once for both themes, so a caller's override works in dark mode too. [test `lib/ui/primitive-state-themes.test.ts`]
+- An empty list shows only its `EmptyState`, and one page shows no page buttons. [test `lib/ui/list-pagination-render.test.tsx`]
+- Full-height layouts use `h-dvh` or `min-h-dvh`. [lint `stylingSelectors`]
+- Nothing scrolls the page horizontally at 375 px, and a table has a `ListRow` card layout below the tablet breakpoint. A new authenticated page is listed in the mobile route inventory. [group `audit:layout`, test `lib/testing/selection/mobile-route-inventory.test.ts`, test `lib/ui/row-contracts.test.ts`]
+- Every control comes from the component registry: `Button` or `PlainButton`, `Input` in a `Field`, `DatePicker`, `TimeInput`, `SearchableSelect`, `FormDisclosure`. [lint `ui/no-raw-controls`, lint `registrySelectors`, test `lib/ui/field-contracts.test.tsx`]
+- A raw `Select` holds a fixed enum with fewer than ten options. An entity list is searchable. [test `lib/ui/select-registry.test.ts`]
+- Every field is a `Field`, so its label, required marker and error are wired. [lint `ui/label-in-spaced-container`, test `lib/ui/field-contracts.test.tsx`]
+- A submit stays enabled. An invalid submit marks the fields and focuses the first through `focusFirstInvalidField`. An action button that needs a choice or typed text works the same way. [lint `ui/submit-disabled-only-while-pending`, lint `ui/action-disabled-only-while-pending`, code `lib/ui/field-validation.ts`]
+- An icon-only button has a German `aria-label`. [lint `ui/icon-button-needs-name`]
+- A dialog that waits for its server answer passes `pending` to its root, so Escape, an outside click and the close controls cannot close it before the result lands. [lint `ui/dialog-pending-while-waiting`, code `components/ui/dialog.tsx`, code `components/ui/alert-dialog.tsx`, group `ui:contracts`, judgment]
+- A page-wide keydown listener skips a key that a dialog, menu or drag already consumed (`event.defaultPrevented`). [lint `ui/global-key-handler-respects-consumed`]
+- Every authenticated route highlights exactly one sidebar entry. [test `lib/ui/sidebar-nav-coverage.test.ts`]
+- A number keeps its stored precision from prefill to save: a quantity keeps three fractional digits, and with a decimal comma a dot is a thousands separator. [test `lib/ui/decimal.test.ts`, code `components/ui/quantity-stepper.tsx`, judgment]
+- No database id or code reaches the screen or an export: a missing label falls back to neutral German such as „Änderung dokumentiert“, never to `?? id` or `LABELS[code] ?? code`. [judgment]
+- A non-destructive dialog is a form that submits on Enter. A destructive confirmation is an `AlertDialog`. A long dialog uses `DialogBody`, and its width comes from the `size` prop. [test `lib/ui/dialog-contracts.test.ts`, lint `dialogSizeSelectors`]
+- Every route has its own `loading.tsx` that mirrors its page. [test `lib/conventions/route-loading.test.ts`]
+- A skeleton row shares the list's columns and its `interactive` flag, and a row hovers only through that flag. [test `lib/ui/skeleton-pairing.test.ts`, lint `hoverSelectors`, test `lib/ui/contextual-documents-layout.test.ts`]
+- An empty list renders `EmptyState` with a „Noch keine …“ or „Keine … gefunden“ title. A region that fails shows `RegionLoadError` or `SectionError` with retry. [code `components/ui/empty-state.tsx`, test `lib/ui/empty-state-copy.test.ts`, code `components/shared/region-load-error.tsx`, judgment]
+- A failure is visible at the point of action. Inline errors render through `ErrorText`, global feedback through `Banner`. A rejection never ends in an empty `.catch`, and a pending flag set before an await is reset when the call rejects. The reviewer checks that a failed write keeps the dialog open with its values. [lint `registrySelectors`, lint `swallowedRejectionSelectors`, lint `ui/pending-reset-on-failure`, judgment]
+- A failed read is a failure the screen shows, never an empty list or a missing row. [test `lib/conventions/read-error-visibility.test.ts`]
+- Every Server Action write in client code shows feedback in its first frame: a pending flag, a progress banner or an optimistic row. [test `lib/conventions/server-action-feedback.test.ts`]
+- A control rendered on the server accepts no click before it hydrates. [test `lib/ui/hydration.test.tsx`, test `lib/ui/tabs-hydration.test.tsx`]
+- A value derived from props or state is computed during render, never copied into state by an effect: such an effect can starve under hydration scheduling and commit forever. A hydrated list settles after a refresh during a pending route transition. [lint `ui/no-derived-state-effect`, test `tests/ui-contracts/hydration-settle.spec.ts`]
+- A post-redirect confirmation (`UrlFlashBanner`) is in the first render, never set from an effect: an effect in a hydration commit can run at idle priority and lose to the param strip. [test `lib/ui/url-flash-banner.test.tsx`]
+- A `<p>` holds inline content only. A block element or a block-rendering registry component (`Skeleton`, `Card`, `ErrorText`, `SectionError`, `EmptyState`, `Field`) inside it breaks hydration, because the HTML parser closes the paragraph. [lint `ui/no-block-in-paragraph`]
+- The registered date and time controls keep their own picker and segment logic. [test `lib/ui/custom-time-input.test.ts`, test `lib/ui/date-segments.test.ts`]
+- Tailwind scans only the class-bearing source folders, and the popover dependency stays on its repaired version. [test `lib/ui/tailwind-source.test.ts`, test `lib/ui/popper-dependency.test.ts`]
+- The lint configuration itself rejects every banned spelling. [test `lib/ui/eslint-contracts.test.mjs`]
+- German copy uses real umlauts and `ß`, says "du", uses the typographic ellipsis, closes „ with “, and names no slice or ticket code such as P1-14. A stored date reads 01.09.2026, never 2026-09-01. [test `lib/conventions/german-copy.test.ts`, test `lib/conventions/text-encoding.test.ts`, lint `dateTextSelectors`]
+- Shared controls hold their semantics, focus and pending states in the component suite. [group `ui:contracts`]
+- Orange marks only what deserves attention: no orange status badge, and a row action repeated per row is `outline`. Purple stays a quiet undertone for planning and parked work. [code `components/ui/badge.tsx`, judgment]
+- A state is a label, an action is a button: a state renders as `Badge`, a lifecycle button names its step, never the state it ends in, and a reversible step is not a filled red button. [code `components/ui/badge.tsx`, test `lib/work-lifecycle/types.test.ts`, judgment]
+- A job, project or work state reads its color from `components/auftraege/status-classes.ts`; no other file maps such a state to a color. [test `lib/conventions/status-colors.test.ts`]
+- Hierarchy, density, shadows, natural German and fit for the role pass [rendered design acceptance](../../../docs/technical/standards-audit.md#rendered-design-acceptance) for a major UI change. [judgment]
+- An accepted screen keeps its look: every page family has a visual reference, an intended change updates the reference, and the owner accepts each changed image. [group `audit:visual`, judgment]
+
+## Never
+
+- Hardcode a hex value, a radius above `rounded-lg` or a numbered palette class. [lint `colorLiteralSelectors`, lint `stylingSelectors`, lint `paletteSelectors`]
+- Write a raw `<button>`, a raw text `<input>`, a native date, time, number or select control, or `<details>`. [lint `ui/no-raw-controls`, lint `registrySelectors`]
+- Write a raw `<h1>`, or a `max-w-*` class on `DialogContent`. [lint `headingSelectors`, lint `dialogSizeSelectors`]
+- Float a page action in a fixed button. [lint `floatingSelectors`]
+- Render a stored `YYYY-MM-DD` date as text. [lint `dateTextSelectors`]
+- Hand-roll a page column or a row hover. [lint `shellSelectors`, lint `hoverSelectors`]
+- Disable a submit or an action button to express validation. [lint `ui/submit-disabled-only-while-pending`, lint `ui/action-disabled-only-while-pending`]
+- Write a raw `role="alert"` outside `components/ui`. [lint `registrySelectors`]
+- Use orange as decoration, or purple as a loud accent. [judgment]
+- Assert a palette class in a test instead of a semantic token. [test `lib/conventions/palette-classes-in-tests.test.ts`]
+- Keep a design the owner rejected as a test baseline or a reference image. [judgment]
+- Update a visual reference to pass a failing run. Only a focused update run can rewrite one; whether the owner accepted the new image is review. [test `lib/testing/runner/visual-reference-updates.test.ts`, judgment]
+
+## Verify your work
+
+1. Run `bun run lint`. A pass prints no problem.
+2. Run `bun run test:unit`. The tests under `lib/ui/` and `lib/conventions/` pass.
+3. Run `bun run test:ui`. The component suite passes.
+4. Run `bun run test:verify`. The change plan selects `audit:layout` when a shared control or a token changed. For a release, or after an accepted redesign, run `bun run test:verify --group audit:visual`. It compares each page family's image and its exact visible text, so a changed label fails. To accept a design change, follow the reference rules in `docs/technical/standards-audit.md`.
+5. Look at the screen yourself: both themes, 375 px and desktop, the keyboard path, and the empty, loading and error states. A screenshot does not prove an interaction.
+6. For a major UI change, follow rendered design acceptance in `docs/technical/standards-audit.md` and record each visual finding with its disposition in the slice record.
+
+## Examples
+
+- `app/(app)/qualifikationen/page.tsx`: `PageShell`, `PageHeader` and `PageBody`, the data behind `Suspense` with the page's own skeleton, and `RegionLoadError` with natural German when the read fails.
+- `components/auftraege/lifecycle/work-lifecycle-reason-dialog.tsx`: a dialog that is a form, an enabled submit with `focusFirstInvalidField`, pending state from `usePendingTask`, and the error in `ErrorText`.
+- `components/ui/empty-state.tsx`: the one empty state, with the two title patterns written down where every caller reads them.
 
 ## Tweaking the design later
 
 1. Adjust tokens in `app/globals.css` (colors, radius, dark mode) — this restyles ~80% of the app coherently.
 2. For control sizing/feel or interaction behavior, adjust the primitives in `components/ui/`.
-3. Update this file only when the *intent* changes — a new registry row, a changed canon rule — and mirror any skill change between `.claude/skills/` and `.agents/skills/` (they must stay identical). `AGENTS.md` carries only the short brand rules and points here for the canon, so a canon change lands in this file, not there.
+3. Update this file only when the *intent* changes — a new registry row, a changed canon rule — and mirror any skill change between `.claude/skills/` and `.agents/skills/` (they must stay identical). `AGENTS.md` summarizes virtue 1 and points here for the canon, so a canon change lands in this file, not there.

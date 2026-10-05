@@ -1,0 +1,66 @@
+Haustechnik Krämer GmbH
+Organisation erstellen
+Dashboard
+Aufgaben
+3
+3 offene Aufgaben und Benachrichtigungen
+Kalender
+Zeiterfassung
+Qualifikationen
+Anfragen
+Aufträge
+Dokumente
+Inventar
+Service
+Arbeitsvorlagen
+Mitarbeiter
+Kunden
+MK
+Martin Krämer
+martin.kraemer@haustechnik-kraemer.de
+Service
+Servicefälle
+Anlagen & Geräte
+Wartung
+Servicefälle
+SRV-2026-001
+Neu
+Normal
+Therme zeigt Störung F.28
+Direkt erfasst
+· Aktualisiert
+01.01.2026, 08:00
+Bearbeiten
+Ursprüngliche Kundenaussage
+Die Therme geht nach dem Zünden wieder aus und zeigt F.28 an.
+Einschätzung
+Vorläufiger Kostenkontext
+Noch ungeklärt
+Zugang und Hinweise vor Ort
+Bitte vorher anrufen, tagsüber ist niemand zu Hause.
+Interne Einschätzung
+Nicht erfasst
+Diese Einordnung dient nur der Einsatzplanung. Sie ist keine rechtliche Gewährleistungs- oder endgültige Kostenentscheidung.
+Dokumente & Bilder
+Dokumente werden aus der zentralen Ablage verknüpft. Es entsteht keine Dateikopie.
+Verknüpfen
+Hochladen
+Noch keine Dokumente vorhanden.
+Lade Dateien hoch oder verknüpfe vorhandene Dokumente aus der Dokumentenablage.
+Arbeitsnachweise
+Exakte Versionen aus dem zugeordneten Auftrag.
+Verknüpfen
+Ordne zuerst einen Auftrag zu.
+Kunde & Einsatzort
+Familie Hoffmann
+Einfamilienhaus
+Lindenstraße 4, 71032 Böblingen
+Betroffene Anlagen
+Gas-Brennwerttherme
+ANL-2026-001
+Operativer Auftrag
+Lege den Auftrag im bestehenden Auftragsbereich an und ordne ihn anschließend hier zu.
+Auftrag anlegen
+Nächster Schritt
+Plane eine Büro-, Gewährleistungs- oder Kundenrückfrage als bestehende Nachfassaktion.
+Nachfassaktion anlegen

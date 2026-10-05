@@ -1,26 +1,9 @@
-# Customer Avatar
+# Customer avatar
 
-Status: living — last reviewed 2026-09-02; placeholder, do not invent details it lacks
+Status: living — last reviewed 2026-09-25; stable route to the canonical business document
 
-This document is a placeholder for a deeper customer avatar/persona description.
+Read the [canonical customer avatar](../../../werkflow-business/docs/avatar.md) in werkflow-business. Edit commercial facts there and follow its [workspace workflow](../../../werkflow-business/docs/workflow.md). This page preserves existing app links without maintaining a second version.
 
-For now, use `AGENTS.md` as the source of truth for broad target-user context.
+Customer personas do not define permission roles. The app specifications own admin, buero and employee access and the actual role-specific workflows.
 
-## Current High-Level Avatar
-
-WerkFlow is SHK-first. The direct customer is usually the owner of a German SHK business, while the whole team becomes the user base: office staff, managers, field workers (`Handwerker/in`), apprentices, and other employees.
-
-## Not Yet Defined
-
-Do not invent exact company size, revenue, buying triggers, objections, region, or vertical expansion strategy from this placeholder. Ask the product owner before using those assumptions.
-
-## Future Topics
-
-- Ideal customer profile.
-- Buyer persona.
-- Office staff persona.
-- Field-worker persona.
-- Apprentice persona.
-- Buying triggers.
-- Current software/paper workflow.
-- Expansion beyond SHK into adjacent trades.
+The [app roadmap](../plans/phase-1/roadmap.md) and owning feature baselines establish implementation status. A local commit or business draft is not production evidence. Read the [app release workflow](../decisions/0008-development-workflow.md) for publication. If the sibling checkout is missing, use [the business repository](https://github.com/werk-flow/werkflow-business) at an identified published revision or report the missing source.
