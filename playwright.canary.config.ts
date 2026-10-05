@@ -1,5 +1,5 @@
 import { defineConfig } from '@playwright/test';
-import { browserRunPaths } from './lib/testing/run-paths';
+import { browserRunPaths } from './lib/testing/runs/run-paths';
 
 import { loadEnvLocal } from './tests/golden/support/env';
 import { configureRunEnvironment, currentRunKey } from './tests/golden/support/run-state';
@@ -12,8 +12,7 @@ const runPaths = browserRunPaths(__dirname, currentRunKey());
 const quietReporter = process.env.WERKFLOW_QUIET_REPORTER === '1';
 const listingTests = process.argv.includes('--list');
 
-// Cloud canary suite (decision D10, docs/plans/phase-1/consolidation-2026-08/platform-hardening.md; ADR
-// docs/decisions/0006-testing-architecture.md). A deliberately small battery; current execution and acceptance rules: decision 0007 (docs/decisions/0007-independent-test-groups.md)
+// Cloud canary suite (ADR docs/decisions/0006-testing-architecture.md). A deliberately small battery; current execution and acceptance rules: decision 0007 (docs/decisions/0007-independent-test-groups.md)
 // against cloud DEV Supabase and real R2 that proves the behavior only the
 // cloud can prove: real provider auth, R2 round trips, cloud Realtime
 // delivery, real Resend mail, HIBP password rejection, migration parity.

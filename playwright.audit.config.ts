@@ -1,5 +1,6 @@
 import { defineConfig } from '@playwright/test';
-import { browserRunPaths } from './lib/testing/run-paths';
+import { browserRunPaths } from './lib/testing/runs/run-paths';
+import { visualReferenceUpdateMode } from './lib/testing/runner/visual-reference-updates';
 
 import { loadEnvLocal } from './tests/golden/support/env';
 import { configureRunEnvironment, currentRunKey } from './tests/golden/support/run-state';
@@ -12,7 +13,7 @@ const runPaths = browserRunPaths(__dirname, currentRunKey());
 const quietReporter = process.env.WERKFLOW_QUIET_REPORTER === '1';
 const listingTests = process.argv.includes('--list');
 
-// Wave-audit battery (docs/plans/phase-1/audits/wave-1-audit.md, wave-2-audit.md, …). Runs
+// Wave-audit battery (docs/technical/testing.md owns the rules). Runs
 // the exhaustive user-flow audit specs against a locally running app and the
 // selected Supabase target, local by default, reusing the golden harness (world seeder, steps, db
 // helpers). testDir covers every wave; scope runs with --grep @AUDIT-W<N>
@@ -45,6 +46,9 @@ export default defineConfig({
         ['html', { open: 'never', outputFolder: runPaths.report }],
       ],
   outputDir: runPaths.results,
+  // Visual references (tests/audit/visual/) are written only by an explicit
+  // focused update (standards-audit.md, "Rendered design acceptance").
+  updateSnapshots: visualReferenceUpdateMode(process.env),
   use: {
     baseURL: process.env.GOLDEN_BASE_URL ?? 'http://localhost:3000',
     // Missing controls must fail at the action, not consume a whole scenario.

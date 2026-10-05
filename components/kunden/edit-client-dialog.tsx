@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 
@@ -11,37 +11,29 @@ import {
   DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogTitle
+  DialogTitle,
 } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ErrorText } from '@/components/ui/error-text';
 import { useBanner } from '@/components/ui/banner';
+import { describeFailure } from '@/lib/action-messages';
 import { updateClient, type UpdateClientInput } from '@/lib/clients/actions';
 import { CLIENT_TYPE_LABELS, type Client, type ClientType } from '@/lib/jobs/types';
 
 const CLIENT_TYPE_OPTIONS: { value: ClientType; label: string }[] = [
   { value: 'privat', label: CLIENT_TYPE_LABELS.privat },
-  { value: 'gewerblich', label: CLIENT_TYPE_LABELS.gewerblich }
+  { value: 'gewerblich', label: CLIENT_TYPE_LABELS.gewerblich },
 ];
 
 const ERROR_MESSAGES: Record<string, string> = {
-  not_authenticated: 'Du bist nicht angemeldet.',
-  no_active_org: 'Keine Organisation ausgewählt.',
   not_authorized: 'Du bist nicht berechtigt, Kunden zu verwalten.',
   name_required: 'Bitte gib einen Namen ein.',
   client_not_found: 'Kunde nicht gefunden.',
   no_changes: 'Keine Änderungen vorgenommen.',
   update_failed: 'Fehler beim Aktualisieren des Kunden.',
-  unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.'
 };
 
 interface EditClientDialogProps {
@@ -52,12 +44,7 @@ interface EditClientDialogProps {
   onSaved?: () => void;
 }
 
-export function EditClientDialog({
-  client,
-  open,
-  onOpenChange,
-  onSaved
-}: EditClientDialogProps) {
+export function EditClientDialog({ client, open, onOpenChange, onSaved }: EditClientDialogProps) {
   const [name, setName] = useState(client.name);
   const [clientType, setClientType] = useState<ClientType>(client.clientType);
   const [email, setEmail] = useState(client.email ?? '');
@@ -72,7 +59,11 @@ export function EditClientDialog({
   const router = useRouter();
   const { showBanner } = useBanner();
 
-  useEffect(() => {
+  // Every opening, and another client while open, refills the form during render, never in an
+  // effect. A refreshed object of the same client keeps what the user typed.
+  const [resetFor, setResetFor] = useState({ open: false, clientId: client.id });
+  if (open !== resetFor.open || client.id !== resetFor.clientId) {
+    setResetFor({ open, clientId: client.id });
     if (open) {
       setName(client.name);
       setClientType(client.clientType);
@@ -84,7 +75,7 @@ export function EditClientDialog({
       setNameError(null);
       setHasAttemptedSubmit(false);
     }
-  }, [open, client]);
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,7 +98,7 @@ export function EditClientDialog({
         ...(email.trim() ? { email: email.trim() } : {}),
         ...(phone.trim() ? { phone: phone.trim() } : {}),
         ...(address.trim() ? { address: address.trim() } : {}),
-        ...(notes.trim() ? { notes: notes.trim() } : {})
+        ...(notes.trim() ? { notes: notes.trim() } : {}),
       };
 
       const result = await updateClient(client.id, input);
@@ -118,9 +109,7 @@ export function EditClientDialog({
         showBanner({ variant: 'success', message: 'Kunde gespeichert.' });
         router.refresh();
       } else {
-        setError(
-          ERROR_MESSAGES[result.error] || result.error || 'Unbekannter Fehler'
-        );
+        setError(describeFailure(result.error, ERROR_MESSAGES, 'Unbekannter Fehler'));
       }
     } catch {
       setError('Ein unerwarteter Fehler ist aufgetreten.');
@@ -132,16 +121,11 @@ export function EditClientDialog({
   const showNameError = hasAttemptedSubmit && nameError;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="sm:max-w-[425px]"
-        onOpenAutoFocus={(e) => e.preventDefault()}
-      >
+    <Dialog open={open} onOpenChange={onOpenChange} pending={isLoading}>
+      <DialogContent size="md" onOpenAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>Kunde bearbeiten</DialogTitle>
-          <DialogDescription>
-            Ändere die Daten des Kunden.
-          </DialogDescription>
+          <DialogDescription>Ändere die Daten des Kunden.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} noValidate>
           <div className="grid gap-4 py-4">
@@ -204,7 +188,7 @@ export function EditClientDialog({
             </Field>
             <Field label="Notizen" htmlFor="edit-client-notes">
               <Textarea
-                placeholder="Optionale Notizen zum Kunden..."
+                placeholder="Optionale Notizen zum Kunden…"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 disabled={isLoading}
@@ -215,7 +199,7 @@ export function EditClientDialog({
           <DialogFooter>
             <Button type="submit" disabled={isLoading}>
               {isLoading && <Loader2 className="size-4 animate-spin" />}
-              {isLoading ? 'Wird gespeichert...' : 'Speichern'}
+              {isLoading ? 'Wird gespeichert…' : 'Speichern'}
             </Button>
           </DialogFooter>
         </form>

@@ -19,8 +19,14 @@ export interface AreaNavItem {
  * pathname, so they never look like the in-page state tabs (shadcn `Tabs`,
  * filled pills). Lives in the area's `layout.tsx` inside `PageHeader`'s
  * `nav` slot, so it stays on screen across subpages and loading states.
- * Scrolls within itself on narrow screens instead of widening the page.
+ * Scrolls within itself on narrow screens instead of widening the page, and
+ * brings the current item into view, so the strip always shows where the
+ * user is.
  */
+function showInStrip(link: HTMLAnchorElement | null): void {
+  link?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+
 export function AreaNav({
   items,
   ariaLabel,
@@ -45,6 +51,7 @@ export function AreaNav({
               key={item.href}
               href={item.href}
               aria-current={active ? 'page' : undefined}
+              ref={active ? showInStrip : undefined}
               className={cn(
                 'flex shrink-0 items-center border-b-2 px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
                 active

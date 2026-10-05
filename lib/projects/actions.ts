@@ -1,13 +1,15 @@
 'use server';
 
+import type { ActionResult } from '@/lib/action-result';
 import { updateTag } from 'next/cache';
-import { readCompleteRows, readInBatches, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { readCompleteRows, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
+import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { CACHE_TAGS } from '@/lib/data/cached';
+import { logReadFailure, loggedRead, logReadErrors } from '@/lib/data/read-request-cache';
 import {
   type Project,
-  type ProjectWithDetails,
+  type ProjectRow,
   type DerivedProjectStatus,
   type CreateProjectResult,
   type UpdateProjectResult,
@@ -20,7 +22,21 @@ import {
   getEffectiveProjectStatus,
 } from '@/lib/jobs/types';
 import { validateSiteAndContactForClient } from '@/lib/clients/site-contact-validation';
-import { applyWorkTemplateWithAdmin } from '@/lib/work-templates/server';
+import { logError } from '@/lib/logging';
+import { uuidSchema } from '@/lib/validation/uuid';
+import { z } from '@/lib/zod';
+import { createProjectInputSchema, updateProjectArgumentsSchema } from './action-schemas';
+import { PROJECT_CREATION_REFUSALS, projectCreationColumns } from './creation';
+import { rpcArgs } from '@/lib/supabase/rpc-args';
+import { toJson } from '@/lib/supabase/json';
+import { CUSTOMER_REFERENCE_REFUSALS, workWriteFailure } from '@/lib/jobs/write-refusals';
+
+const PROJECT_UPDATE_REFUSALS = [
+  'project_not_found',
+  'name_or_description_required',
+  'project_number_taken',
+  ...CUSTOMER_REFERENCE_REFUSALS,
+];
 
 // ============================================
 // Input Types
@@ -39,9 +55,7 @@ export type CreateProjectInput = {
   templateVersionId?: string;
 };
 
-export type UpdateProjectInput = Partial<
-  Omit<CreateProjectInput, 'templateVersionId'>
->;
+export type UpdateProjectInput = Partial<Omit<CreateProjectInput, 'templateVersionId'>>;
 
 // ============================================
 // Result Types
@@ -58,9 +72,10 @@ export type ProjectDetailsResult = {
 // Actions
 // ============================================
 
-export async function createProject(
-  input: CreateProjectInput,
-): Promise<CreateProjectResult> {
+export async function createProject(rawInput: CreateProjectInput): Promise<CreateProjectResult> {
+  const parsedInput = createProjectInputSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
@@ -70,126 +85,38 @@ export async function createProject(
       return { success: false, error: 'not_authorized' };
     }
 
-    const name = input.name.trim();
-    const description = input.description?.trim() ?? '';
-    if (!name && !description) {
-      return { success: false, error: 'name_or_description_required' };
-    }
-
-    const projectNumber = input.projectNumber?.trim();
-    if (!projectNumber) {
-      return { success: false, error: 'project_number_required' };
-    }
-
-    const admin = createSupabaseAdminClient();
-
-    const { data: existingNumber } = await admin
-      .from('projects')
-      .select('id')
-      .eq('organization_id', orgId)
-      .eq('project_number', projectNumber)
-      .maybeSingle();
-
-    if (existingNumber) {
-      return { success: false, error: 'project_number_taken' };
-    }
-
-    if (input.clientId) {
-      const { data: client, error: clientError } = await admin
-        .from('clients')
-        .select('id')
-        .eq('id', input.clientId)
-        .eq('organization_id', orgId)
-        .single();
-
-      if (clientError || !client) {
-        return { success: false, error: 'client_not_found' };
-      }
-    }
-
-    const siteContactCheck = await validateSiteAndContactForClient(
-      admin,
-      orgId,
-      input.clientId || null,
-      input.siteId || null,
-      input.contactId || null,
+    // One transaction: the project and its work template, or nothing.
+    const { data, error } = await createSupabaseAdminClient().rpc(
+      'create_project_with_template',
+      rpcArgs('create_project_with_template', {
+        p_organization_id: orgId,
+        p_actor_id: userId,
+        p_project: projectCreationColumns(input),
+        p_template_version_id: input.templateVersionId || null,
+      }),
     );
-    if (!siteContactCheck.success) {
-      return siteContactCheck;
+    if (error) {
+      return workWriteFailure('Error creating project:', error, PROJECT_CREATION_REFUSALS, 'create_failed');
     }
 
-    const { data, error } = await admin
-      .from('projects')
-      .insert({
-        organization_id: orgId,
-        client_id: input.clientId || null,
-        site_id: input.siteId || null,
-        contact_id: input.contactId || null,
-        name,
-        description: description || null,
-        project_number: input.projectNumber?.trim() || null,
-        planned_start_date: input.plannedStartDate || null,
-        planned_end_date: input.plannedEndDate || null,
-        created_by: userId,
-      })
-      .select()
-      .single();
-
-    if (error || !data) {
-      console.error('Error creating project:', error);
-      return { success: false, error: 'create_failed' };
-    }
-
-    if (input.templateVersionId) {
-      const { error: templateError } = await applyWorkTemplateWithAdmin(
-        admin,
-        orgId,
-        userId,
-        {
-          templateVersionId: input.templateVersionId,
-          projectId: data.id,
-          idempotencyKey: `create-project-${data.id}-${input.templateVersionId}`,
-        },
-      );
-      if (templateError) {
-        console.error(
-          'Failed to apply work template while creating project:',
-          templateError,
-        );
-        const { error: rollbackError } = await admin
-          .from('projects')
-          .delete()
-          .eq('id', data.id)
-          .eq('organization_id', orgId);
-        if (rollbackError) return { success: false, error: 'rollback_failed' };
-        const knownCode =
-          [
-            'work_template_version_unavailable',
-            'work_template_reference_unavailable',
-          ].find((code) => templateError.message.includes(code)) ??
-          ([
-            'work_template_material_reference_unavailable',
-            'work_template_capability_reference_unavailable',
-          ].some((code) => templateError.message.includes(code))
-            ? 'work_template_reference_unavailable'
-            : undefined);
-        return { success: false, error: knownCode ?? 'template_apply_failed' };
-      }
-    }
-
-    updateTag(CACHE_TAGS.projects(orgId));
     updateTag(CACHE_TAGS.workTemplates(orgId));
 
     return { success: true, project: toProject(data) };
   } catch (error) {
-    console.error('Unexpected error in createProject:', error);
+    logError('Unexpected error in createProject:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 export async function updateProject(
-  projectId: string,
-  input: UpdateProjectInput,
+  rawProjectId: string,
+  rawInput: UpdateProjectInput,
 ): Promise<UpdateProjectResult> {
+  const parsedArguments = updateProjectArgumentsSchema.safeParse({
+    projectId: rawProjectId,
+    input: rawInput,
+  });
+  if (!parsedArguments.success) return { success: false, error: 'invalid_input' };
+  const { projectId, input } = parsedArguments.data;
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
@@ -212,8 +139,7 @@ export async function updateProject(
       return { success: false, error: 'project_not_found' };
     }
 
-    const resultingName =
-      input.name !== undefined ? input.name.trim() : existing.name.trim();
+    const resultingName = input.name !== undefined ? input.name.trim() : existing.name.trim();
     const resultingDescription =
       input.description !== undefined
         ? (input.description?.trim() ?? '')
@@ -237,44 +163,32 @@ export async function updateProject(
     }
 
     if (input.projectNumber !== undefined && input.projectNumber?.trim()) {
-      const { data: numberConflict } = await admin
-        .from('projects')
-        .select('id')
-        .eq('organization_id', orgId)
-        .eq('project_number', input.projectNumber.trim())
-        .neq('id', projectId)
-        .maybeSingle();
+      const { data: numberConflict } = await loggedRead(
+        'updateProject: projects read failed',
+        admin
+          .from('projects')
+          .select('id')
+          .eq('organization_id', orgId)
+          .eq('project_number', input.projectNumber.trim())
+          .neq('id', projectId)
+          .maybeSingle(),
+      );
 
       if (numberConflict) {
         return { success: false, error: 'project_number_taken' };
       }
     }
 
-    const resultingClientId =
-      input.clientId !== undefined
-        ? input.clientId || null
-        : existing.client_id;
+    const resultingClientId = input.clientId !== undefined ? input.clientId || null : existing.client_id;
     const clientChanged = resultingClientId !== existing.client_id;
 
     // A customer change invalidates the previous customer's site/contact.
     const resultingSiteId =
-      input.siteId !== undefined
-        ? input.siteId || null
-        : clientChanged
-          ? null
-          : existing.site_id;
+      input.siteId !== undefined ? input.siteId || null : clientChanged ? null : existing.site_id;
     const resultingContactId =
-      input.contactId !== undefined
-        ? input.contactId || null
-        : clientChanged
-          ? null
-          : existing.contact_id;
+      input.contactId !== undefined ? input.contactId || null : clientChanged ? null : existing.contact_id;
 
-    if (
-      input.siteId !== undefined ||
-      input.contactId !== undefined ||
-      clientChanged
-    ) {
+    if (input.siteId !== undefined || input.contactId !== undefined || clientChanged) {
       const siteContactCheck = await validateSiteAndContactForClient(
         admin,
         orgId,
@@ -289,72 +203,43 @@ export async function updateProject(
 
     const updateData: Record<string, unknown> = {};
     if (input.name !== undefined) updateData.name = input.name.trim();
-    if (input.description !== undefined)
-      updateData.description = input.description?.trim() || null;
-    if (input.clientId !== undefined)
-      updateData.client_id = input.clientId || null;
-    if (input.siteId !== undefined || clientChanged)
-      updateData.site_id = resultingSiteId;
-    if (input.contactId !== undefined || clientChanged)
-      updateData.contact_id = resultingContactId;
-    if (input.projectNumber !== undefined)
-      updateData.project_number = input.projectNumber?.trim() || null;
-    if (input.plannedStartDate !== undefined)
-      updateData.planned_start_date = input.plannedStartDate || null;
-    if (input.plannedEndDate !== undefined)
-      updateData.planned_end_date = input.plannedEndDate || null;
+    if (input.description !== undefined) updateData.description = input.description?.trim() || null;
+    if (input.clientId !== undefined) updateData.client_id = input.clientId || null;
+    if (input.siteId !== undefined || clientChanged) updateData.site_id = resultingSiteId;
+    if (input.contactId !== undefined || clientChanged) updateData.contact_id = resultingContactId;
+    if (input.projectNumber !== undefined) updateData.project_number = input.projectNumber?.trim() || null;
+    if (input.plannedStartDate !== undefined) updateData.planned_start_date = input.plannedStartDate || null;
+    if (input.plannedEndDate !== undefined) updateData.planned_end_date = input.plannedEndDate || null;
 
     if (Object.keys(updateData).length === 0) {
       return { success: false, error: 'no_changes' };
     }
 
-    const { data, error } = await admin
-      .from('projects')
-      .update(updateData)
-      .eq('id', projectId)
-      .eq('organization_id', orgId)
-      .select()
-      .single();
+    // One transaction: the project and, on a customer change, its jobs, which
+    // lose the previous customer's site and contact.
+    const { data, error } = await admin.rpc(
+      'update_project_with_jobs',
+      rpcArgs('update_project_with_jobs', {
+        p_organization_id: orgId,
+        p_project_id: projectId,
+        p_changes: toJson(updateData),
+      }),
+    );
 
-    if (error || !data) {
-      console.error('Error updating project:', error);
-      return { success: false, error: 'update_failed' };
+    if (error) {
+      return workWriteFailure('Error updating project:', error, PROJECT_UPDATE_REFUSALS, 'update_failed');
     }
-
-    if (input.clientId !== undefined && input.clientId !== existing.client_id) {
-      // The customer change also invalidates each job's site/contact, which
-      // belonged to the previous customer.
-      const { error: syncJobsError } = await admin
-        .from('jobs')
-        .update({ client_id: data.client_id, site_id: null, contact_id: null })
-        .eq('organization_id', orgId)
-        .eq('project_id', projectId);
-
-      if (syncJobsError) {
-        console.error('Error syncing project job clients:', syncJobsError);
-
-        await admin
-          .from('projects')
-          .update({ client_id: existing.client_id })
-          .eq('id', projectId)
-          .eq('organization_id', orgId);
-
-        return { success: false, error: 'update_failed' };
-      }
-    }
-
-    updateTag(CACHE_TAGS.projects(orgId));
-    updateTag(CACHE_TAGS.jobs(orgId));
 
     return { success: true, project: toProject(data) };
   } catch (error) {
-    console.error('Unexpected error in updateProject:', error);
+    logError('Unexpected error in updateProject:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
-export async function deleteProject(
-  projectId: string,
-): Promise<DeleteProjectResult> {
+export async function deleteProject(rawProjectId: string): Promise<DeleteProjectResult> {
+  const parsedProjectId = uuidSchema.safeParse(rawProjectId);
+  if (!parsedProjectId.success) return { success: false, error: 'project_not_found' };
+  const projectId = parsedProjectId.data;
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
@@ -377,169 +262,114 @@ export async function deleteProject(
       return { success: false, error: 'project_not_found' };
     }
 
-    const { error } = await admin
-      .from('projects')
-      .delete()
-      .eq('id', projectId)
-      .eq('organization_id', orgId);
+    const { error } = await admin.from('projects').delete().eq('id', projectId).eq('organization_id', orgId);
 
     if (error) {
-      console.error('Error deleting project:', error);
+      logError('Error deleting project:', error);
       return { success: false, error: 'delete_failed' };
     }
 
-    updateTag(CACHE_TAGS.projects(orgId));
-    updateTag(CACHE_TAGS.jobs(orgId));
-
     return { success: true };
   } catch (error) {
-    console.error('Unexpected error in deleteProject:', error);
+    logError('Unexpected error in deleteProject:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
-export async function getOrgProjects(): Promise<
-  | { success: true; projects: ProjectWithDetails[] }
-  | { success: false; error: string }
-> {
-  try {
-    const auth = await authenticateAndAuthorize();
-    if (!auth.success) return auth;
-    const { userId, orgId, isManagerOrAbove } = auth.context;
+/**
+ * The shared tail of the project detail readers: an employee reads only a
+ * project with one of their assigned jobs; the project comes back with its
+ * customer, its jobs and the derived status.
+ */
+async function readProjectDetails(input: {
+  admin: AdminClient;
+  context: { userId: string; orgId: string; isManagerOrAbove: boolean };
+  projectData: ProjectRow;
+  operation: string;
+}): Promise<ActionResult<{ details: ProjectDetailsResult }>> {
+  const { admin, projectData } = input;
+  const { userId, orgId, isManagerOrAbove } = input.context;
 
-    const admin = createSupabaseAdminClient();
-
-    let projectRows;
-
-    if (isManagerOrAbove) {
-      const { data, error } = await readCompleteRows((from, to) => admin.from('projects').select('*').eq('organization_id', orgId).order('created_at', { ascending: false }).order('id').range(from, to), LIST_ROW_CAP);
-
-      if (error) {
-        console.error('Error fetching projects:', error);
-        return { success: false, error: 'fetch_failed' };
-      }
-
-      // Each batch arrives ordered; the merged list is not.
-      projectRows = (data ?? []).sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id));
-    } else {
-      const { data: assignments, error: assignError } = await readCompleteRows((from, to) => admin.from('job_assignments').select('job_id').eq('organization_id', orgId).eq('user_id', userId).order('id').range(from, to), LIST_ROW_CAP);
-
-      if (assignError) {
-        console.error('Error fetching assignments:', assignError);
-        return { success: false, error: 'fetch_failed' };
-      }
-
-      const assignedJobIds = (assignments ?? []).map((a) => a.job_id);
-
-      if (assignedJobIds.length === 0) {
-        return { success: true, projects: [] };
-      }
-
-      const { data: jobs, error: jobError } = await readInBatches(assignedJobIds, (ids) => admin.from('jobs').select('project_id').eq('organization_id', orgId).in('id', [...ids]).not('project_id', 'is', null));
-
-      if (jobError) {
-        console.error('Error fetching job project IDs:', jobError);
-        return { success: false, error: 'fetch_failed' };
-      }
-
-      const projectIds = [
-        ...new Set(
-          (jobs ?? [])
-            .map((j) => j.project_id)
-            .filter((id): id is string => id !== null),
-        ),
-      ];
-
-      if (projectIds.length === 0) {
-        return { success: true, projects: [] };
-      }
-
-      const { data, error } = await readInBatches(projectIds, (ids) => admin.from('projects').select('*').eq('organization_id', orgId).in('id', [...ids]).order('created_at', { ascending: false }));
-
-      if (error) {
-        console.error('Error fetching assigned projects:', error);
-        return { success: false, error: 'fetch_failed' };
-      }
-
-      projectRows = data ?? [];
+  if (!isManagerOrAbove) {
+    // One matching assignment proves access; reading every assignment of the
+    // user would truncate at the PostgREST row cap.
+    // tenant-scope: child-of-verified-parent — the inner join keeps only jobs of the project read above with this organization's filter.
+    const { data: assignments, error: accessError } = await admin
+      .from('job_assignments')
+      .select('job_id, jobs!inner(project_id)')
+      .eq('user_id', userId)
+      .eq('jobs.project_id', projectData.id)
+      .limit(1);
+    if (accessError) {
+      logReadFailure(`${input.operation}: project access check failed`, accessError);
+      return { success: false, error: 'fetch_failed' };
     }
-
-    if (projectRows.length === 0) {
-      return { success: true, projects: [] };
+    if (assignments.length === 0) {
+      return { success: false, error: 'not_authorized' };
     }
-
-    const projectIds = projectRows.map((p) => p.id);
-    const { data: allJobs, error: jobsError } = await readInBatches(projectIds, (ids) => readCompleteRows((from, to) => admin.from('jobs').select('project_id, status').eq('organization_id', orgId).in('project_id', [...ids]).order('id').range(from, to), LIST_ROW_CAP));
-    if (jobsError || allJobs.length > LIST_ROW_CAP) return { success: false, error: 'fetch_failed' };
-
-    const jobCountMap = new Map<
-      string,
-      { total: number; completed: number; inProgress: number; parked: number }
-    >();
-    for (const job of allJobs ?? []) {
-      if (!job.project_id) continue;
-      const current = jobCountMap.get(job.project_id) ?? {
-        total: 0,
-        completed: 0,
-        inProgress: 0,
-        parked: 0,
-      };
-      current.total++;
-      if (job.status === 'fertig') current.completed++;
-      if (job.status === 'in_bearbeitung') current.inProgress++;
-      if (job.status === 'geparkt') current.parked++;
-      jobCountMap.set(job.project_id, current);
-    }
-
-    const clientIds = [
-      ...new Set(
-        projectRows
-          .map((p) => p.client_id)
-          .filter((id): id is string => id !== null),
-      ),
-    ];
-
-    let clientMap = new Map<string, ReturnType<typeof toClient>>();
-    if (clientIds.length > 0) {
-      const { data: clients, error: clientsError } = await readInBatches(clientIds, (ids) => admin.from('clients').select('*').eq('organization_id', orgId).in('id', [...ids]));
-      if (clientsError) return { success: false, error: 'fetch_failed' };
-
-      clientMap = new Map((clients ?? []).map((c) => [c.id, toClient(c)]));
-    }
-
-    const projects: ProjectWithDetails[] = projectRows.map((row) => {
-      const counts = jobCountMap.get(row.id) ?? {
-        total: 0,
-        completed: 0,
-        inProgress: 0,
-        parked: 0,
-      };
-      return {
-        ...toProject(row),
-        client: row.client_id ? (clientMap.get(row.client_id) ?? null) : null,
-        jobCount: counts.total,
-        completedJobCount: counts.completed,
-        inProgressJobCount: counts.inProgress,
-        parkedJobCount: counts.parked,
-      };
-    });
-
-    return { success: true, projects };
-  } catch (error) {
-    console.error('Unexpected error in getOrgProjects:', error);
-    return { success: false, error: 'unexpected_error' };
   }
+
+  const [jobsResult, clientResult] = await Promise.all([
+    readCompleteRows(
+      (from, to) =>
+        admin
+          .from('jobs')
+          .select('*')
+          .eq('project_id', projectData.id)
+          .eq('organization_id', orgId)
+          .order('planned_date', { ascending: true, nullsFirst: false })
+          .order('created_at', { ascending: false })
+          .order('id')
+          .range(from, to),
+      LIST_ROW_CAP,
+    ),
+    projectData.client_id
+      ? admin
+          .from('clients')
+          .select('*')
+          .eq('organization_id', orgId)
+          .eq('id', projectData.client_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+  ]);
+
+  if (jobsResult.error || clientResult.error) {
+    logError('Error fetching project jobs or customer:', jobsResult.error ?? clientResult.error);
+    return { success: false, error: 'fetch_failed' };
+  }
+  const jobs = jobsResult.data.map(toJob);
+
+  let client = null;
+  if (clientResult.data) {
+    client = toClient(clientResult.data);
+  }
+
+  const project = toProject(projectData);
+  const progress = calculateProjectProgress(jobs);
+  const trafficLight = calculateTrafficLight(project, jobs);
+  const status = getEffectiveProjectStatus(project, jobs);
+
+  const derivedStatus: DerivedProjectStatus = {
+    status,
+    progress,
+    trafficLight,
+  };
+
+  return {
+    success: true,
+    details: { project, client, jobs, derivedStatus },
+  };
 }
 
 export async function getProjectDetails(
-  projectId: string,
-): Promise<
-  | { success: true; details: ProjectDetailsResult }
-  | { success: false; error: string }
-> {
+  rawProjectId: string,
+): Promise<ActionResult<{ details: ProjectDetailsResult }>> {
+  const parsedProjectId = uuidSchema.safeParse(rawProjectId);
+  if (!parsedProjectId.success) return { success: false, error: 'project_not_found' };
+  const projectId = parsedProjectId.data;
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
-    const { userId, orgId, isManagerOrAbove } = auth.context;
+    const { orgId } = auth.context;
 
     const admin = createSupabaseAdminClient();
 
@@ -551,80 +381,32 @@ export async function getProjectDetails(
       .single();
 
     if (projectError || !projectData) {
+      logReadErrors('getProjectDetails: read failed', projectError);
       return { success: false, error: 'project_not_found' };
     }
 
-    if (!isManagerOrAbove) {
-      const { data: assignments } = await admin
-        .from('job_assignments')
-        .select('job_id, jobs!inner(project_id)')
-        .eq('user_id', userId);
-
-      const hasAccess = (assignments ?? []).some((a) => {
-        const job = a.jobs as unknown as { project_id: string | null };
-        return job?.project_id === projectId;
-      });
-
-      if (!hasAccess) {
-        return { success: false, error: 'not_authorized' };
-      }
-    }
-
-    const [jobsResult, clientResult] = await Promise.all([
-      admin
-        .from('jobs')
-        .select('*')
-        .eq('project_id', projectId)
-        .eq('organization_id', orgId)
-        .order('planned_date', { ascending: true, nullsFirst: false })
-        .order('created_at', { ascending: false }),
-      projectData.client_id
-        ? admin
-            .from('clients')
-            .select('*')
-            .eq('id', projectData.client_id)
-            .single()
-        : Promise.resolve({ data: null }),
-    ]);
-
-    const jobs = (jobsResult.data ?? []).map(toJob);
-
-    let client = null;
-    if (clientResult.data) {
-      client = toClient(clientResult.data);
-    }
-
-    const project = toProject(projectData);
-    const progress = calculateProjectProgress(jobs);
-    const trafficLight = calculateTrafficLight(project, jobs);
-    const status = getEffectiveProjectStatus(project, jobs);
-
-    const derivedStatus: DerivedProjectStatus = {
-      status,
-      progress,
-      trafficLight,
-    };
-
-    return {
-      success: true,
-      details: { project, client, jobs, derivedStatus },
-    };
+    return await readProjectDetails({
+      admin,
+      context: auth.context,
+      projectData,
+      operation: 'getProjectDetails',
+    });
   } catch (error) {
-    console.error('Unexpected error in getProjectDetails:', error);
+    logError('Unexpected error in getProjectDetails:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
 export async function getProjectByNumber(
-  projectNumber: string,
-): Promise<
-  | { success: true; details: ProjectDetailsResult }
-  | { success: false; error: string }
-> {
+  rawProjectNumber: string,
+): Promise<ActionResult<{ details: ProjectDetailsResult }>> {
+  const parsedProjectNumber = z.string().max(300).safeParse(rawProjectNumber);
+  if (!parsedProjectNumber.success) return { success: false, error: 'project_not_found' };
+  const projectNumber = parsedProjectNumber.data;
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
-    const { userId, orgId, isManagerOrAbove } = auth.context;
+    const { orgId } = auth.context;
 
     const admin = createSupabaseAdminClient();
 
@@ -636,73 +418,23 @@ export async function getProjectByNumber(
       .single();
 
     if (projectError || !projectData) {
+      logReadErrors('getProjectByNumber: read failed', projectError);
       return { success: false, error: 'project_not_found' };
     }
 
-    if (!isManagerOrAbove) {
-      const { data: assignments } = await admin
-        .from('job_assignments')
-        .select('job_id, jobs!inner(project_id)')
-        .eq('user_id', userId);
-
-      const hasAccess = (assignments ?? []).some((a) => {
-        const job = a.jobs as unknown as { project_id: string | null };
-        return job?.project_id === projectData.id;
-      });
-
-      if (!hasAccess) {
-        return { success: false, error: 'not_authorized' };
-      }
-    }
-
-    const [jobsResult, clientResult] = await Promise.all([
-      admin
-        .from('jobs')
-        .select('*')
-        .eq('project_id', projectData.id)
-        .eq('organization_id', orgId)
-        .order('planned_date', { ascending: true, nullsFirst: false })
-        .order('created_at', { ascending: false }),
-      projectData.client_id
-        ? admin
-            .from('clients')
-            .select('*')
-            .eq('id', projectData.client_id)
-            .single()
-        : Promise.resolve({ data: null }),
-    ]);
-
-    const jobs = (jobsResult.data ?? []).map(toJob);
-
-    let client = null;
-    if (clientResult.data) {
-      client = toClient(clientResult.data);
-    }
-
-    const project = toProject(projectData);
-    const progress = calculateProjectProgress(jobs);
-    const trafficLight = calculateTrafficLight(project, jobs);
-    const status = getEffectiveProjectStatus(project, jobs);
-
-    const derivedStatus: DerivedProjectStatus = {
-      status,
-      progress,
-      trafficLight,
-    };
-
-    return {
-      success: true,
-      details: { project, client, jobs, derivedStatus },
-    };
+    return await readProjectDetails({
+      admin,
+      context: auth.context,
+      projectData,
+      operation: 'getProjectByNumber',
+    });
   } catch (error) {
-    console.error('Unexpected error in getProjectByNumber:', error);
+    logError('Unexpected error in getProjectByNumber:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
 
-export async function getNextProjectNumber(): Promise<
-  { success: true; projectNumber: string } | { success: false; error: string }
-> {
+export async function getNextProjectNumber(): Promise<ActionResult<{ projectNumber: string }>> {
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
@@ -714,13 +446,13 @@ export async function getNextProjectNumber(): Promise<
     });
 
     if (error || !data) {
-      console.error('Error generating project number:', error);
+      logError('Error generating project number:', error);
       return { success: false, error: 'generation_failed' };
     }
 
     return { success: true, projectNumber: data as string };
   } catch (error) {
-    console.error('Unexpected error in getNextProjectNumber:', error);
+    logError('Unexpected error in getNextProjectNumber:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }

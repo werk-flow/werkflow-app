@@ -1,8 +1,10 @@
 -- Unparking a job into the schedule applies completely or not at all
 -- (migration 20261004170300_unpark_jobs_into_schedule_atomically.sql). A
 -- refused schedule step leaves the job parked with its open blocker, a job of
--- another organization is refused, the unpark decides the status, and only
--- the service role executes the function.
+-- another organization is refused, the unpark decides the status, the visit is
+-- planned for the whole selection (migration
+-- 20261005110000_plan_unparked_visit_for_selection.sql), and only the service
+-- role executes the function.
 begin;
 
 insert into auth.users (
@@ -38,16 +40,41 @@ values
 ('26104170-0000-0000-0000-000000000059', '26104170-0000-0000-0000-000000000011',
   'UNPARK-J-9', 'Fremder Auftrag', 'nicht_bearbeitet', null, '26104170-0000-0000-0000-000000000003');
 
+-- Job 052 is planned for the admin and the employee. A calendar move then took
+-- the employee off the visit and left them on the job.
+insert into public.jobs (
+  id, organization_id, job_number, title, status, execution_state, planned_date, planned_time, created_by
+) values
+('26104170-0000-0000-0000-000000000052', '26104170-0000-0000-0000-000000000010',
+  'UNPARK-J-3', 'Heizungstausch', 'nicht_bearbeitet', null, '2026-11-01', '08:00:00',
+  '26104170-0000-0000-0000-000000000001');
+insert into public.job_assignments (job_id, user_id, assigned_by) values
+('26104170-0000-0000-0000-000000000052', '26104170-0000-0000-0000-000000000001',
+  '26104170-0000-0000-0000-000000000001'),
+('26104170-0000-0000-0000-000000000052', '26104170-0000-0000-0000-000000000002',
+  '26104170-0000-0000-0000-000000000001');
+delete from public.planning_occurrence_assignments assignment
+using public.planning_occurrences occurrence, public.employee_records employee
+where occurrence.id = assignment.occurrence_id
+  and occurrence.legacy_source_job_id = '26104170-0000-0000-0000-000000000052'
+  and employee.id = assignment.employee_record_id
+  and employee.user_id = '26104170-0000-0000-0000-000000000002';
+
 do $$
 declare
   v_job uuid;
   v_responsible uuid;
 begin
+  if (select count(*) from public.planning_occurrence_assignments assignment
+      join public.planning_occurrences occurrence on occurrence.id = assignment.occurrence_id
+      where occurrence.legacy_source_job_id = '26104170-0000-0000-0000-000000000052') <> 1
+  then raise exception 'the fixture visit is not planned for the admin alone'; end if;
   select id into v_responsible from public.employee_records
   where organization_id = '26104170-0000-0000-0000-000000000010'
     and user_id = '26104170-0000-0000-0000-000000000001';
   foreach v_job in array array[
-    '26104170-0000-0000-0000-000000000050'::uuid, '26104170-0000-0000-0000-000000000051'::uuid
+    '26104170-0000-0000-0000-000000000050'::uuid, '26104170-0000-0000-0000-000000000051'::uuid,
+    '26104170-0000-0000-0000-000000000052'::uuid
   ] loop
     perform public.park_work_target('26104170-0000-0000-0000-000000000010',
       '26104170-0000-0000-0000-000000000001', 'job', v_job, 0, 'material', null,
@@ -62,10 +89,17 @@ begin
     '2026-11-15');
   if (select count(*) from public.jobs where id in (
       '26104170-0000-0000-0000-000000000050', '26104170-0000-0000-0000-000000000051',
-      '26104170-0000-0000-0000-000000000059') and status = 'geparkt') <> 3
+      '26104170-0000-0000-0000-000000000052', '26104170-0000-0000-0000-000000000059')
+      and status = 'geparkt') <> 4
   then raise exception 'the fixture jobs are not parked'; end if;
 end;
 $$;
+
+-- Parking the planned job 052 marked this transaction as a planning write,
+-- which mutes the job-to-plan sync until the transaction ends. The app runs
+-- each call in its own transaction; this file runs in one, so the marker is
+-- cleared before the calls under test.
+select set_config('app.planning_projection_write', '', true);
 
 -- Runs one statement and requires the named refusal.
 create function pg_temp.expect_refusal(p_label text, p_statement text, p_refusal text) returns void
@@ -217,6 +251,19 @@ begin
   if v_job.status <> 'in_bearbeitung' or v_job.planned_date <> '2026-11-03' then
     raise exception 'the edit overrode the status of the unpark';
   end if;
+
+  -- Job 052 returns for both people. The employee never left the job, so the
+  -- assignment replacement inserts nothing; the visit is still planned for both.
+  v_job := public.unpark_job_into_schedule('26104170-0000-0000-0000-000000000010',
+    '26104170-0000-0000-0000-000000000001', '26104170-0000-0000-0000-000000000052', 1,
+    'Im Kalender neu eingeplant', '{"planned_date": "2026-11-04", "planned_time": "09:00:00"}', true,
+    array['26104170-0000-0000-0000-000000000001'::uuid, '26104170-0000-0000-0000-000000000002'::uuid],
+    '2026-11-04', '{}', '[]', '{}', 'fingerprint', null, null, false);
+  if (select count(*) from public.planning_occurrence_assignments assignment
+      join public.planning_occurrences occurrence on occurrence.id = assignment.occurrence_id
+      where occurrence.legacy_source_job_id = '26104170-0000-0000-0000-000000000052'
+        and occurrence.status = 'scheduled') <> 2
+  then raise exception 'the unparked visit is not planned for the whole selection'; end if;
 
   if (select status from public.jobs where id = '26104170-0000-0000-0000-000000000059') <> 'geparkt' then
     raise exception 'an unpark reached another organization';

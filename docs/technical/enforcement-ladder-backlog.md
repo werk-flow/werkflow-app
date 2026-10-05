@@ -1,6 +1,6 @@
 # Enforcement-ladder backlog
 
-Status: living — last reviewed 2026-10-04
+Status: living — last reviewed 2026-10-05
 
 This list holds the open candidates for moving a prose rule or a known gap up the ladder in [decision 0005](../decisions/0005-enforcement-ladder.md), grouped by the virtue in `AGENTS.md` that owns the rule. Each row names the rule, the gap, and the mechanism with its tier: Tier 1 makes the mistake unwritable, Tier 2 makes a check catch it. A row leaves the list in the same change that lands its mechanism, and that change adds the mechanism to the virtue's checklist. Delete a declined candidate and record the reason in the commit message. Check a row against the code before you implement it.
 
@@ -9,6 +9,7 @@ This list holds the open candidates for moving a prose rule or a known gap up th
 | Candidate | Gap today | Target tier and mechanism |
 | --- | --- | --- |
 | Dialog imports outside the wrapper | A product file can import `@radix-ui/react-dialog` or `@radix-ui/react-alert-dialog` directly and skip the refresh suspension that the `components/ui` wrappers own. | Tier 2: an import ban outside `components/ui/**` in `eslint.config.mjs`. |
+| Width audit beyond the default view | `audit:layout` measures 768, 1024 and 1280 px on the default view of each manager route and on the warehouse cards. Other tabs, dialogs and the detail routes are measured at 375 px only. | Tier 2: walk the registered tabs and the detail fixtures at the wide widths in `tests/audit/layout/mobile-viewport.spec.ts`. |
 | Raw `Button` in `AlertDialogFooter` | The `werkflow-design` skill forbids it. No check rejects it. | Tier 2: a selector in `eslint-rules/ui-rules.mjs`. |
 | Accessibility lint and axe sweep | ESLint runs only the accessibility rules that Next ships. No browser pass checks rendered pages. | Tier 2: enable `jsx-a11y/recommended` and add one `@axe-core/playwright` pass per role. |
 | Actions the server will refuse | A view can offer an action that the server rejects. The calendar asks `isStartedOccurrence` first, but no check pairs a client action with its server rule. | Tier 2: a table of pre-checks per action kind that a unit test reads against the views. |

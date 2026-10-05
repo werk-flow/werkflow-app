@@ -8,7 +8,7 @@
   "entry": [
     "lib/**/*.test.{ts,tsx,mjs}",
     // Spawned by path from unit tests and the runner, never imported.
-    "lib/testing/file-lock-worker.ts",
+    "lib/testing/runner/file-lock-worker.ts",
     "lib/testing/fixtures/*.{ts,tsx}",
     "scripts/*.ts",
     "playwright.audit.config.ts",
@@ -20,7 +20,7 @@
     "tests/ui-contracts/fixture.tsx",
     "tests/ui-contracts/playwright.config.ts",
     // Substituted for product modules by the component-contract bundler.
-    "tests/ui-contracts/*boundar*.{ts,tsx}"
+    "tests/ui-contracts/*boundar*.{ts,tsx}",
   ],
   "project": ["**/*.{ts,tsx,mjs}"],
   // Deno functions have their own import graph; the transcript folder is
@@ -32,11 +32,11 @@
     // Generated from the DEV schema; every table type is exported by design.
     "lib/supabase/database.types.ts": ["exports", "types"],
     // A boundary module mirrors the export surface of the module it replaces.
-    "tests/ui-contracts/*boundar*.{ts,tsx}": ["exports", "types"]
+    "tests/ui-contracts/*boundar*.{ts,tsx}": ["exports", "types"],
   },
   // Type-only exports are part of the gate since 2026-09-15 (owner decision, step 2).
   // The pinned Supabase CLI runs through bunx inside scripts/generate-supabase-types.ts;
   // tailwindcss is imported by app/globals.css, which knip does not compile.
   "ignoreDependencies": ["supabase", "tailwindcss"],
-  "ignoreBinaries": ["taskkill.exe", "netstat.exe", "wsl.exe"]
+  "ignoreBinaries": ["taskkill.exe", "netstat.exe", "wsl.exe"],
 }

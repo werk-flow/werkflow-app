@@ -1,46 +1,88 @@
 'use server';
 
-import { revalidatePath, updateTag } from 'next/cache';
+import type { ActionFailure, ActionResult } from '@/lib/action-result';
+import { loggedRead, logReadFailure } from '@/lib/data/read-request-cache';
+import { revalidatePath } from 'next/cache';
 
-import { CACHE_TAGS } from '@/lib/data/cached';
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
+import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
+import { rpcArgs } from '@/lib/supabase/rpc-args';
+import { toProfileReference, type ProfileReferenceRow } from '@/lib/profile-reference';
 import type { Json } from '@/lib/supabase/database.types';
 
 import { authenticateAndAuthorize } from './auth';
+import { workWriteFailure } from './write-refusals';
 import {
   toJobInstructionItem,
   type CreateJobInstructionItemResult,
   type DeleteJobInstructionItemResult,
   type GetJobInstructionItemsResult,
-  type JobInstructionActor,
   type JobInstructionItemRow,
   type JobInstructionItemWithDetails,
   type ReorderJobInstructionItemsResult,
   type ToggleJobInstructionItemCompletionResult,
   type UpdateJobInstructionItemResult,
 } from './types';
+import { logError } from '@/lib/logging';
+import { uuidSchema } from '@/lib/validation/uuid';
+import { z } from '@/lib/zod';
+
+// Boundary schemas: every argument is bounded before use. The detail limits
+// mirror update_instruction_item_details, which rejects longer values.
+const MAX_INSTRUCTION_ITEMS = 1000;
+const instructionContentSchema = z.string().max(10_000);
+const instructionItemIdsSchema = z.array(uuidSchema).max(MAX_INSTRUCTION_ITEMS);
+const createProjectItemSchema = z.object({ projectId: uuidSchema, content: instructionContentSchema });
+const reorderProjectItemsSchema = z.object({ projectId: uuidSchema, itemIds: instructionItemIdsSchema });
+const createJobItemSchema = z.object({
+  jobId: uuidSchema,
+  content: instructionContentSchema,
+  afterItemId: uuidSchema.nullish(),
+});
+const updateItemContentSchema = z.object({ itemId: uuidSchema, content: instructionContentSchema });
+const itemTargetSchema = z.object({ itemId: uuidSchema });
+const toggleItemSchema = z.object({ itemId: uuidSchema, isCompleted: z.boolean().optional() });
+const reorderJobItemsSchema = z.object({ jobId: uuidSchema, itemIds: instructionItemIdsSchema });
+const itemDetailsSchema = z.object({
+  itemId: uuidSchema,
+  itemKind: z.enum(['task', 'checklist']),
+  requirementState: z.enum(['required', 'optional']),
+  groupLabel: z.string().max(120).nullish(),
+  notes: z.string().max(2000).nullish(),
+  evidence: z
+    .array(
+      z.object({
+        id: uuidSchema,
+        description: z.string().max(2000),
+        documentCategory: z.string().max(100),
+        sortOrder: z.number().int().min(0).max(MAX_INSTRUCTION_ITEMS),
+      }),
+    )
+    .max(100),
+  predecessorItemIds: instructionItemIdsSchema,
+});
 
 type AuthorizedJobContext =
   | {
       success: true;
-      admin: ReturnType<typeof createSupabaseAdminClient>;
+      admin: AdminClient;
       jobId: string;
       orgId: string;
       userId: string;
       isManagerOrAbove: boolean;
     }
-  | { success: false; error: string };
+  | ActionFailure;
 
 type AuthorizedItemContext =
   | {
       success: true;
-      admin: ReturnType<typeof createSupabaseAdminClient>;
+      admin: AdminClient;
       item: JobInstructionItemRow;
       orgId: string;
       userId: string;
       isManagerOrAbove: boolean;
     }
-  | { success: false; error: string };
+  | ActionFailure;
 
 type CreateJobInstructionItemInput = {
   jobId: string;
@@ -67,30 +109,6 @@ type ReorderJobInstructionItemsInput = {
   itemIds: string[];
 };
 
-type ProfileRow = {
-  id: string;
-  first_name: string | null;
-  last_name: string | null;
-  email: string | null;
-  avatar_path: string | null;
-};
-
-function trimInstructionContent(content: string): string {
-  return content.trim();
-}
-
-function mapProfileToActor(profile?: ProfileRow | null): JobInstructionActor | null {
-  if (!profile) return null;
-
-  return {
-    userId: profile.id,
-    firstName: profile.first_name,
-    lastName: profile.last_name,
-    email: profile.email,
-    avatarPath: profile.avatar_path,
-  };
-}
-
 async function getAuthorizedJobContext(jobId: string): Promise<AuthorizedJobContext> {
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
@@ -98,24 +116,26 @@ async function getAuthorizedJobContext(jobId: string): Promise<AuthorizedJobCont
   const admin = createSupabaseAdminClient();
   const { userId, orgId, isManagerOrAbove } = auth.context;
 
-  const { data: job } = await admin
-    .from('jobs')
-    .select('id')
-    .eq('id', jobId)
-    .eq('organization_id', orgId)
-    .maybeSingle();
+  const { data: job } = await loggedRead(
+    'getAuthorizedJobContext: jobs read failed',
+    admin.from('jobs').select('id').eq('id', jobId).eq('organization_id', orgId).maybeSingle(),
+  );
 
   if (!job) {
     return { success: false, error: 'job_not_found' };
   }
 
   if (!isManagerOrAbove) {
-    const { data: assignment } = await admin
-      .from('job_assignments')
-      .select('id')
-      .eq('job_id', jobId)
-      .eq('user_id', userId)
-      .maybeSingle();
+    const { data: assignment } = await loggedRead(
+      'getAuthorizedJobContext: job_assignments read failed',
+      admin
+        .from('job_assignments')
+        .select('id')
+        .eq('organization_id', orgId)
+        .eq('job_id', jobId)
+        .eq('user_id', userId)
+        .maybeSingle(),
+    );
 
     if (!assignment) {
       return { success: false, error: 'not_authorized' };
@@ -139,24 +159,35 @@ async function getAuthorizedItemContext(itemId: string): Promise<AuthorizedItemC
   const admin = createSupabaseAdminClient();
   const { userId, orgId, isManagerOrAbove } = auth.context;
 
-  const { data: item } = await admin
-    .from('job_instruction_items')
-    .select('*')
-    .eq('id', itemId)
-    .eq('organization_id', orgId)
-    .maybeSingle();
+  const { data: item } = await loggedRead(
+    'getAuthorizedItemContext: job_instruction_items read failed',
+    admin
+      .from('job_instruction_items')
+      .select('*')
+      .eq('id', itemId)
+      .eq('organization_id', orgId)
+      .maybeSingle(),
+  );
 
   if (!item) {
     return { success: false, error: 'item_not_found' };
   }
 
   if (!isManagerOrAbove) {
-    const { data: assignment } = await admin
-      .from('job_assignments')
-      .select('id')
-      .eq('job_id', item.job_id)
-      .eq('user_id', userId)
-      .maybeSingle();
+    // A project-level item has no job assignment that could authorize a non-manager.
+    if (item.job_id === null) {
+      return { success: false, error: 'not_authorized' };
+    }
+    const { data: assignment } = await loggedRead(
+      'getAuthorizedItemContext: job_assignments read failed',
+      admin
+        .from('job_assignments')
+        .select('id')
+        .eq('organization_id', orgId)
+        .eq('job_id', item.job_id)
+        .eq('user_id', userId)
+        .maybeSingle(),
+    );
 
     if (!assignment) {
       return { success: false, error: 'not_authorized' };
@@ -173,147 +204,223 @@ async function getAuthorizedItemContext(itemId: string): Promise<AuthorizedItemC
   };
 }
 
+/**
+ * Adds provenance, evidence and predecessors to the rows. Returns null when any
+ * of these reads fails, so no caller shows an item without its requirements.
+ */
 async function hydrateInstructionItems(
-  admin: ReturnType<typeof createSupabaseAdminClient>,
-  rows: JobInstructionItemRow[]
-): Promise<JobInstructionItemWithDetails[]> {
+  admin: AdminClient,
+  orgId: string,
+  rows: JobInstructionItemRow[],
+): Promise<JobInstructionItemWithDetails[] | null> {
   const profileIds = Array.from(
     new Set(
       rows.flatMap((row) =>
-        [row.created_by, row.last_status_changed_by].filter(
-          (value): value is string => Boolean(value)
-        )
-      )
-    )
+        [row.created_by, row.last_status_changed_by].filter((value): value is string => Boolean(value)),
+      ),
+    ),
   );
 
-  const profileMap = new Map<string, ProfileRow>();
+  const profileMap = new Map<string, ProfileReferenceRow>();
   const itemIds = rows.map((row) => row.id);
 
-  if (profileIds.length > 0) {
-    const { data: profiles } = await admin
-      .from('profiles')
-      .select('id, first_name, last_name, email, avatar_path')
-      .in('id', profileIds);
-
-    for (const profile of profiles ?? []) {
-      profileMap.set(profile.id, profile);
-    }
+  // Each batch holds whole items, so the per-item `sort_order` survives batching.
+  const [profilesResult, evidenceResult, dependencyResult] = await Promise.all([
+    readInBatches(profileIds, (batch) =>
+      admin
+        .from('profiles')
+        .select('id, first_name, last_name, email, avatar_path')
+        .in('id', [...batch]),
+    ),
+    readInBatches(itemIds, (batch) =>
+      admin
+        .from('job_instruction_item_evidence_requirements')
+        .select('id, instruction_item_id, description, document_category')
+        .eq('organization_id', orgId)
+        .in('instruction_item_id', [...batch])
+        .order('sort_order'),
+    ),
+    readInBatches(itemIds, (batch) =>
+      admin
+        .from('job_instruction_item_dependencies')
+        .select('dependent_item_id, predecessor_item_id')
+        .eq('organization_id', orgId)
+        .in('dependent_item_id', [...batch]),
+    ),
+  ]);
+  const metadataError = profilesResult.error ?? evidenceResult.error ?? dependencyResult.error;
+  if (metadataError) {
+    logReadFailure('hydrateInstructionItems: metadata read failed', { code: metadataError.code });
+    return null;
   }
-
-  const [evidenceResult, dependencyResult] = itemIds.length > 0
-    ? await Promise.all([
-        admin.from('job_instruction_item_evidence_requirements').select('id, instruction_item_id, description, document_category').in('instruction_item_id', itemIds).order('sort_order'),
-        admin.from('job_instruction_item_dependencies').select('dependent_item_id, predecessor_item_id').in('dependent_item_id', itemIds),
-      ])
-    : [{ data: [], error: null }, { data: [], error: null }];
-  if (evidenceResult.error || dependencyResult.error) {
-    console.error('Failed to hydrate instruction item template metadata:', evidenceResult.error ?? dependencyResult.error);
-  }
-  const requirementIds = (evidenceResult.data ?? []).map((requirement) => requirement.id);
-  const [firstRow] = rows;
-  const fulfillmentResult = firstRow && requirementIds.length
-    ? await admin.from('job_instruction_item_evidence_fulfillments')
-        .select('id, evidence_requirement_id, document_id, artifact_revision_id, version')
-        .eq('organization_id', firstRow.organization_id)
-        .in('evidence_requirement_id', requirementIds).is('removed_at', null)
-    : { data: [], error: null };
-  if (fulfillmentResult.error) {
-    console.error('Failed to hydrate instruction evidence fulfillments:', fulfillmentResult.error);
-  }
-  const fulfillmentByRequirementId = new Map((fulfillmentResult.data ?? []).map((fulfillment) => [
-    fulfillment.evidence_requirement_id,
-    { id: fulfillment.id, documentId: fulfillment.document_id,
-      artifactRevisionId: fulfillment.artifact_revision_id, version: fulfillment.version },
-  ]));
+  for (const profile of profilesResult.data) profileMap.set(profile.id, profile);
+  const requirementIds = evidenceResult.data.map((requirement) => requirement.id);
   const contentById = new Map(rows.map((row) => [row.id, row.content]));
-
+  // A single saved item is hydrated alone; its predecessors still need their labels.
+  const missingPredecessorIds = dependencyResult.data
+    .map((dependency) => dependency.predecessor_item_id)
+    .filter((predecessorId) => !contentById.has(predecessorId));
+  const [fulfillmentResult, predecessorResult] = await Promise.all([
+    readInBatches(requirementIds, (batch) =>
+      admin
+        .from('job_instruction_item_evidence_fulfillments')
+        .select('id, evidence_requirement_id, document_id, artifact_revision_id, version')
+        .eq('organization_id', orgId)
+        .in('evidence_requirement_id', [...batch])
+        .is('removed_at', null),
+    ),
+    readInBatches(missingPredecessorIds, (batch) =>
+      admin
+        .from('job_instruction_items')
+        .select('id, content')
+        .eq('organization_id', orgId)
+        .in('id', [...batch]),
+    ),
+  ]);
+  const detailError = fulfillmentResult.error ?? predecessorResult.error;
+  if (detailError) {
+    logReadFailure('hydrateInstructionItems: fulfillment or predecessor read failed', {
+      code: detailError.code,
+    });
+    return null;
+  }
+  for (const predecessor of predecessorResult.data) contentById.set(predecessor.id, predecessor.content);
+  const fulfillmentByRequirementId = new Map(
+    fulfillmentResult.data.map((fulfillment) => [
+      fulfillment.evidence_requirement_id,
+      {
+        id: fulfillment.id,
+        documentId: fulfillment.document_id,
+        artifactRevisionId: fulfillment.artifact_revision_id,
+        version: fulfillment.version,
+      },
+    ]),
+  );
   return rows.map((row) => ({
     ...toJobInstructionItem(row),
-    creator: mapProfileToActor(profileMap.get(row.created_by)),
-    lastStatusChangedByProfile: mapProfileToActor(
-      row.last_status_changed_by
-        ? profileMap.get(row.last_status_changed_by)
-        : null
+    creator: toProfileReference(profileMap.get(row.created_by)),
+    lastStatusChangedByProfile: toProfileReference(
+      row.last_status_changed_by ? profileMap.get(row.last_status_changed_by) : null,
     ),
-    evidenceRequirements: (evidenceResult.data ?? []).filter((item) => item.instruction_item_id === row.id).map((item) => ({ id: item.id, description: item.description, documentCategory: item.document_category, fulfillment: fulfillmentByRequirementId.get(item.id) ?? null })),
-    predecessors: (dependencyResult.data ?? []).filter((item) => item.dependent_item_id === row.id).map((item) => ({ id: item.predecessor_item_id, content: contentById.get(item.predecessor_item_id) ?? 'Früherer Eintrag' })),
+    evidenceRequirements: evidenceResult.data
+      .filter((item) => item.instruction_item_id === row.id)
+      .map((item) => ({
+        id: item.id,
+        description: item.description,
+        documentCategory: item.document_category,
+        fulfillment: fulfillmentByRequirementId.get(item.id) ?? null,
+      })),
+    predecessors: dependencyResult.data
+      .filter((item) => item.dependent_item_id === row.id)
+      .map((item) => ({
+        id: item.predecessor_item_id,
+        content: contentById.get(item.predecessor_item_id) ?? 'Früherer Eintrag',
+      })),
   }));
 }
 
-async function getHydratedInstructionItemsForJob(
-  admin: ReturnType<typeof createSupabaseAdminClient>,
-  jobId: string
-): Promise<JobInstructionItemWithDetails[]> {
-  const { data: rows } = await admin
-    .from('job_instruction_items')
-    .select('*')
-    .eq('job_id', jobId)
-    .order('sort_order', { ascending: true })
-    .order('created_at', { ascending: true });
+/** The job or the project whose instruction list is read. */
+type InstructionListOwner = { column: 'job_id' | 'project_id'; id: string };
 
-  return hydrateInstructionItems(admin, rows ?? []);
-}
-
-async function getHydratedInstructionItemsForProject(
-  admin: ReturnType<typeof createSupabaseAdminClient>,
-  projectId: string
-): Promise<JobInstructionItemWithDetails[]> {
-  const { data: rows } = await admin
-    .from('job_instruction_items')
-    .select('*')
-    .eq('project_id', projectId)
-    .order('sort_order', { ascending: true })
-    .order('created_at', { ascending: true });
-  return hydrateInstructionItems(admin, rows ?? []);
-}
-
-async function getHydratedInstructionItemById(
-  admin: ReturnType<typeof createSupabaseAdminClient>,
-  itemId: string
-): Promise<JobInstructionItemWithDetails | null> {
-  const { data: row } = await admin
-    .from('job_instruction_items')
-    .select('*')
-    .eq('id', itemId)
-    .maybeSingle();
-
-  if (!row) return null;
-
-  const [item] = await hydrateInstructionItems(admin, [row]);
-  return item ?? null;
-}
-
-async function persistInstructionItemOrder(
-  admin: ReturnType<typeof createSupabaseAdminClient>,
-  orderedIds: string[]
-): Promise<{ success: true } | { success: false; error: string }> {
-  const updatedAt = new Date().toISOString();
-  const results = await Promise.all(
-    orderedIds.map((id, index) =>
+/** The list rows in display order, or null when the read fails. */
+async function readInstructionItemRows(
+  admin: AdminClient,
+  orgId: string,
+  owner: InstructionListOwner,
+): Promise<JobInstructionItemRow[] | null> {
+  const { data: rows, error } = await readCompleteRows(
+    (from, to) =>
       admin
         .from('job_instruction_items')
-        .update({
-          sort_order: index,
-          updated_at: updatedAt,
-        })
-        .eq('id', id)
-    )
+        .select('*')
+        .eq('organization_id', orgId)
+        .eq(owner.column, owner.id)
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true })
+        .order('id')
+        .range(from, to),
+    LIST_ROW_CAP,
+  );
+  if (error) {
+    logReadFailure('readInstructionItemRows: job_instruction_items read failed', error);
+    return null;
+  }
+  return rows;
+}
+
+async function readInstructionItemIds(
+  admin: AdminClient,
+  orgId: string,
+  owner: InstructionListOwner,
+): Promise<string[] | null> {
+  const rows = await readInstructionItemRows(admin, orgId, owner);
+  return rows ? rows.map((row) => row.id) : null;
+}
+
+async function getHydratedInstructionItems(
+  admin: AdminClient,
+  orgId: string,
+  owner: InstructionListOwner,
+): Promise<GetJobInstructionItemsResult> {
+  const rows = await readInstructionItemRows(admin, orgId, owner);
+  const items = rows ? await hydrateInstructionItems(admin, orgId, rows) : null;
+  return items ? { success: true, items } : { success: false, error: 'fetch_failed' };
+}
+
+/** The saved item after a write; a failed read is `fetch_failed`, never `item_not_found`. */
+async function getHydratedInstructionItemById(
+  admin: AdminClient,
+  orgId: string,
+  itemId: string,
+): Promise<ActionResult<{ item: JobInstructionItemWithDetails }>> {
+  const { data: row, error } = await loggedRead(
+    'getHydratedInstructionItemById: job_instruction_items read failed',
+    admin
+      .from('job_instruction_items')
+      .select('*')
+      .eq('organization_id', orgId)
+      .eq('id', itemId)
+      .maybeSingle(),
   );
 
-  const failedResult = results.find((result) => result.error);
+  if (error) return { success: false, error: 'fetch_failed' };
+  if (!row) return { success: false, error: 'item_not_found' };
 
-  if (failedResult?.error) {
-    console.error('Failed to persist instruction item order:', failedResult.error);
-    return { success: false, error: 'reorder_failed' };
+  const [item] = (await hydrateInstructionItems(admin, orgId, [row])) ?? [];
+  return item ? { success: true, item } : { success: false, error: 'fetch_failed' };
+}
+
+/**
+ * Puts the whole list in the given order in one transaction; the function
+ * refuses with invalid_reorder unless the ids are exactly the current list.
+ */
+async function persistInstructionItemOrder(
+  admin: AdminClient,
+  orgId: string,
+  owner: InstructionListOwner,
+  orderedIds: string[],
+): Promise<ActionResult> {
+  const { error } = await admin.rpc(
+    'reorder_instruction_items',
+    rpcArgs('reorder_instruction_items', {
+      p_organization_id: orgId,
+      p_job_id: owner.column === 'job_id' ? owner.id : null,
+      p_project_id: owner.column === 'project_id' ? owner.id : null,
+      p_item_ids: orderedIds,
+    }),
+  );
+  if (error) {
+    return workWriteFailure(
+      'Failed to persist instruction item order:',
+      error,
+      ['invalid_reorder', 'job_not_found', 'project_not_found'],
+      'reorder_failed',
+    );
   }
-
   return { success: true };
 }
 
-function revalidateInstructionItemPaths(orgId: string) {
-  updateTag(CACHE_TAGS.jobs(orgId));
-  updateTag(CACHE_TAGS.projects(orgId));
+function revalidateInstructionItemPaths() {
   revalidatePath('/auftraege', 'layout');
   revalidatePath('/mitarbeiter', 'layout');
 }
@@ -323,86 +430,102 @@ async function getAuthorizedProjectContext(projectId: string) {
   if (!auth.success) return auth;
   if (!auth.context.isManagerOrAbove) return { success: false as const, error: 'not_authorized' };
   const admin = createSupabaseAdminClient();
-  const { data: project } = await admin.from('projects').select('id').eq('id', projectId).eq('organization_id', auth.context.orgId).maybeSingle();
+  const { data: project } = await loggedRead(
+    'getAuthorizedProjectContext: projects read failed',
+    admin
+      .from('projects')
+      .select('id')
+      .eq('id', projectId)
+      .eq('organization_id', auth.context.orgId)
+      .maybeSingle(),
+  );
   if (!project) return { success: false as const, error: 'project_not_found' };
   return { success: true as const, admin, projectId, orgId: auth.context.orgId, userId: auth.context.userId };
 }
 
-async function getProjectInstructionItemIds(
-  admin: ReturnType<typeof createSupabaseAdminClient>,
-  organizationId: string,
-  projectId: string
-): Promise<string[]> {
-  const { data, error } = await admin
-    .from('job_instruction_items')
-    .select('id')
-    .eq('organization_id', organizationId)
-    .eq('project_id', projectId)
-    .order('sort_order')
-    .order('created_at');
-  if (error) throw error;
-  return (data ?? []).map((row) => row.id);
-}
-
 export async function getProjectInstructionItems(
-  projectId: string
+  rawProjectId: string,
 ): Promise<GetJobInstructionItemsResult> {
-  const context = await getAuthorizedProjectContext(projectId);
+  const parsedProjectId = uuidSchema.safeParse(rawProjectId);
+  if (!parsedProjectId.success) return { success: false as const, error: 'project_not_found' };
+  const context = await getAuthorizedProjectContext(parsedProjectId.data);
   if (!context.success) return context;
-  return { success: true as const, items: await getHydratedInstructionItemsForProject(context.admin, projectId) };
+  return getHydratedInstructionItems(context.admin, context.orgId, {
+    column: 'project_id',
+    id: context.projectId,
+  });
 }
 
-export async function createProjectInstructionItem(input: {
+export async function createProjectInstructionItem(rawInput: {
   projectId: string;
   content: string;
 }): Promise<CreateJobInstructionItemResult> {
+  const parsedInput = createProjectItemSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false as const, error: 'invalid_input' };
+  const input = parsedInput.data;
   const context = await getAuthorizedProjectContext(input.projectId);
   if (!context.success) return context;
-  const content = trimInstructionContent(input.content);
+  const content = input.content.trim();
   if (!content) return { success: false as const, error: 'content_required' };
-  const currentIds = await getProjectInstructionItemIds(context.admin, context.orgId, input.projectId);
-  const { data: row, error } = await context.admin.from('job_instruction_items').insert({
-    organization_id: context.orgId,
-    project_id: input.projectId,
-    content,
-    sort_order: currentIds.length,
-    created_by: context.userId,
-  }).select('*').single();
-  if (error || !row) return { success: false as const, error: 'create_failed' };
-  revalidateInstructionItemPaths(context.orgId);
-  const item = await getHydratedInstructionItemById(context.admin, row.id);
-  return item ? { success: true as const, item } : { success: false as const, error: 'item_not_found' };
+  const currentIds = await readInstructionItemIds(context.admin, context.orgId, {
+    column: 'project_id',
+    id: input.projectId,
+  });
+  if (!currentIds) return { success: false as const, error: 'create_failed' };
+  const { data: row, error } = await context.admin
+    .from('job_instruction_items')
+    .insert({
+      organization_id: context.orgId,
+      project_id: input.projectId,
+      content,
+      sort_order: currentIds.length,
+      created_by: context.userId,
+    })
+    .select('*')
+    .single();
+  if (error || !row) {
+    logError('Failed to create project instruction item:', error);
+    return { success: false as const, error: 'create_failed' };
+  }
+  revalidateInstructionItemPaths();
+  return getHydratedInstructionItemById(context.admin, context.orgId, row.id);
 }
 
-export async function reorderProjectInstructionItems(input: {
+export async function reorderProjectInstructionItems(rawInput: {
   projectId: string;
   itemIds: string[];
 }): Promise<ReorderJobInstructionItemsResult> {
+  const parsedInput = reorderProjectItemsSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false as const, error: 'invalid_reorder' };
+  const input = parsedInput.data;
   const context = await getAuthorizedProjectContext(input.projectId);
   if (!context.success) return context;
-  const currentIds = new Set(await getProjectInstructionItemIds(context.admin, context.orgId, input.projectId));
-  if (input.itemIds.length !== currentIds.size || new Set(input.itemIds).size !== input.itemIds.length || input.itemIds.some((id) => !currentIds.has(id))) {
-    return { success: false as const, error: 'invalid_reorder' };
-  }
-  const result = await persistInstructionItemOrder(context.admin, input.itemIds);
+  const result = await persistInstructionItemOrder(
+    context.admin,
+    context.orgId,
+    { column: 'project_id', id: input.projectId },
+    input.itemIds,
+  );
   if (!result.success) return result;
-  revalidateInstructionItemPaths(context.orgId);
+  revalidateInstructionItemPaths();
   return { success: true as const };
 }
 
-export async function getJobInstructionItems(
-  jobId: string
-): Promise<GetJobInstructionItemsResult> {
-  const context = await getAuthorizedJobContext(jobId);
+export async function getJobInstructionItems(rawJobId: string): Promise<GetJobInstructionItemsResult> {
+  const parsedJobId = uuidSchema.safeParse(rawJobId);
+  if (!parsedJobId.success) return { success: false, error: 'job_not_found' };
+  const context = await getAuthorizedJobContext(parsedJobId.data);
   if (!context.success) return context;
 
-  const items = await getHydratedInstructionItemsForJob(context.admin, context.jobId);
-  return { success: true, items };
+  return getHydratedInstructionItems(context.admin, context.orgId, { column: 'job_id', id: context.jobId });
 }
 
 export async function createJobInstructionItem(
-  input: CreateJobInstructionItemInput
+  rawInput: CreateJobInstructionItemInput,
 ): Promise<CreateJobInstructionItemResult> {
+  const parsedInput = createJobItemSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   const context = await getAuthorizedJobContext(input.jobId);
   if (!context.success) return context;
 
@@ -410,63 +533,43 @@ export async function createJobInstructionItem(
     return { success: false, error: 'not_authorized' };
   }
 
-  const content = trimInstructionContent(input.content);
+  const content = input.content.trim();
   if (!content) {
     return { success: false, error: 'content_required' };
   }
 
-  const currentItems = await getHydratedInstructionItemsForJob(context.admin, context.jobId);
-  const orderedIds = currentItems.map((item) => item.id);
+  // One transaction: the insert after the named item and the renumbered list.
+  const { data: createdItemId, error } = await context.admin.rpc(
+    'create_job_instruction_item',
+    rpcArgs('create_job_instruction_item', {
+      p_organization_id: context.orgId,
+      p_job_id: context.jobId,
+      p_actor_id: context.userId,
+      p_content: content,
+      p_after_item_id: input.afterItemId ?? null,
+    }),
+  );
 
-  let insertIndex = orderedIds.length;
-  if (input.afterItemId) {
-    const afterIndex = orderedIds.indexOf(input.afterItemId);
-    if (afterIndex === -1) {
-      return { success: false, error: 'item_not_found' };
-    }
-
-    insertIndex = afterIndex + 1;
+  if (error) {
+    return workWriteFailure(
+      'Failed to create instruction item:',
+      error,
+      ['job_not_found', 'content_required', 'item_not_found'],
+      'create_failed',
+    );
   }
 
-  const { data: createdRow, error } = await context.admin
-    .from('job_instruction_items')
-    .insert({
-      organization_id: context.orgId,
-      job_id: context.jobId,
-      content,
-      sort_order: orderedIds.length,
-      created_by: context.userId,
-      updated_at: new Date().toISOString(),
-    })
-    .select('*')
-    .single();
+  revalidateInstructionItemPaths();
 
-  if (error || !createdRow) {
-    console.error('Failed to create instruction item:', error);
-    return { success: false, error: 'create_failed' };
-  }
-
-  const nextOrder = [...orderedIds];
-  nextOrder.splice(insertIndex, 0, createdRow.id);
-
-  const reorderResult = await persistInstructionItemOrder(context.admin, nextOrder);
-  if (!reorderResult.success) {
-    return reorderResult;
-  }
-
-  revalidateInstructionItemPaths(context.orgId);
-
-  const item = await getHydratedInstructionItemById(context.admin, createdRow.id);
-  if (!item) {
-    return { success: false, error: 'item_not_found' };
-  }
-
-  return { success: true, item };
+  return getHydratedInstructionItemById(context.admin, context.orgId, createdItemId);
 }
 
 export async function updateJobInstructionItemContent(
-  input: UpdateJobInstructionItemInput
+  rawInput: UpdateJobInstructionItemInput,
 ): Promise<UpdateJobInstructionItemResult> {
+  const parsedInput = updateItemContentSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   const context = await getAuthorizedItemContext(input.itemId);
   if (!context.success) return context;
 
@@ -474,7 +577,7 @@ export async function updateJobInstructionItemContent(
     return { success: false, error: 'not_authorized' };
   }
 
-  const content = trimInstructionContent(input.content);
+  const content = input.content.trim();
   if (!content) {
     return { success: false, error: 'content_required' };
   }
@@ -485,28 +588,27 @@ export async function updateJobInstructionItemContent(
       content,
       updated_at: new Date().toISOString(),
     })
-    .eq('id', input.itemId)
+    .eq('organization_id', context.orgId)
+    .eq('id', context.item.id)
     .select('*')
     .single();
 
   if (error || !row) {
-    console.error('Failed to update instruction item content:', error);
+    logError('Failed to update instruction item content:', error);
     return { success: false, error: 'update_failed' };
   }
 
-  revalidateInstructionItemPaths(context.orgId);
+  revalidateInstructionItemPaths();
 
-  const item = await getHydratedInstructionItemById(context.admin, row.id);
-  if (!item) {
-    return { success: false, error: 'item_not_found' };
-  }
-
-  return { success: true, item };
+  return getHydratedInstructionItemById(context.admin, context.orgId, row.id);
 }
 
 export async function deleteJobInstructionItem(
-  input: DeleteJobInstructionItemInput
+  rawInput: DeleteJobInstructionItemInput,
 ): Promise<DeleteJobInstructionItemResult> {
+  const parsedInput = itemTargetSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   const context = await getAuthorizedItemContext(input.itemId);
   if (!context.success) return context;
 
@@ -514,49 +616,26 @@ export async function deleteJobInstructionItem(
     return { success: false, error: 'not_authorized' };
   }
 
-  const { error } = await context.admin
-    .from('job_instruction_items')
-    .delete()
-    .eq('id', context.item.id);
+  // One transaction: the delete and the renumbered rest of the list.
+  const { error } = await context.admin.rpc(
+    'delete_instruction_item',
+    rpcArgs('delete_instruction_item', { p_organization_id: context.orgId, p_item_id: context.item.id }),
+  );
 
   if (error) {
-    console.error('Failed to delete instruction item:', error);
-    return { success: false, error: 'delete_failed' };
+    return workWriteFailure('Failed to delete instruction item:', error, ['item_not_found'], 'delete_failed');
   }
 
-  if (!context.item.job_id) {
-    const remainingItems = await getHydratedInstructionItemsForProject(
-      context.admin,
-      context.item.project_id!
-    );
-    const reorderResult = await persistInstructionItemOrder(
-      context.admin,
-      remainingItems.map((item) => item.id)
-    );
-    if (!reorderResult.success) return reorderResult;
-    revalidateInstructionItemPaths(context.orgId);
-    return { success: true };
-  }
-  const remainingItems = await getHydratedInstructionItemsForJob(
-    context.admin,
-    context.item.job_id
-  );
-  const reorderResult = await persistInstructionItemOrder(
-    context.admin,
-    remainingItems.map((item) => item.id)
-  );
-
-  if (!reorderResult.success) {
-    return reorderResult;
-  }
-
-  revalidateInstructionItemPaths(context.orgId);
+  revalidateInstructionItemPaths();
   return { success: true };
 }
 
 export async function toggleJobInstructionItemCompletion(
-  input: ToggleJobInstructionItemCompletionInput
+  rawInput: ToggleJobInstructionItemCompletionInput,
 ): Promise<ToggleJobInstructionItemCompletionResult> {
+  const parsedInput = toggleItemSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
+  const input = parsedInput.data;
   const context = await getAuthorizedItemContext(input.itemId);
   if (!context.success) return context;
 
@@ -570,25 +649,24 @@ export async function toggleJobInstructionItemCompletion(
   });
 
   if (error) {
-    console.error('Failed to toggle instruction item completion:', error);
-    const known = ['instruction_predecessor_incomplete', 'instruction_item_stale_version']
-      .find((code) => error.message.includes(code));
+    logError('Failed to toggle instruction item completion:', error);
+    const known = ['instruction_predecessor_incomplete', 'instruction_item_stale_version'].find((code) =>
+      error.message.includes(code),
+    );
     return { success: false, error: known ?? 'toggle_failed' };
   }
 
-  revalidateInstructionItemPaths(context.orgId);
+  revalidateInstructionItemPaths();
 
-  const item = await getHydratedInstructionItemById(context.admin, context.item.id);
-  if (!item) {
-    return { success: false, error: 'item_not_found' };
-  }
-
-  return { success: true, item };
+  return getHydratedInstructionItemById(context.admin, context.orgId, context.item.id);
 }
 
 export async function reorderJobInstructionItems(
-  input: ReorderJobInstructionItemsInput
+  rawInput: ReorderJobInstructionItemsInput,
 ): Promise<ReorderJobInstructionItemsResult> {
+  const parsedInput = reorderJobItemsSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false, error: 'invalid_reorder' };
+  const input = parsedInput.data;
   const context = await getAuthorizedJobContext(input.jobId);
   if (!context.success) return context;
 
@@ -596,31 +674,21 @@ export async function reorderJobInstructionItems(
     return { success: false, error: 'not_authorized' };
   }
 
-  const currentItems = await getHydratedInstructionItemsForJob(context.admin, context.jobId);
-  const currentIds = currentItems.map((item) => item.id);
-
-  if (
-    input.itemIds.length !== currentIds.length ||
-    new Set(input.itemIds).size !== input.itemIds.length
-  ) {
-    return { success: false, error: 'invalid_reorder' };
-  }
-
-  const currentIdSet = new Set(currentIds);
-  if (input.itemIds.some((itemId) => !currentIdSet.has(itemId))) {
-    return { success: false, error: 'invalid_reorder' };
-  }
-
-  const reorderResult = await persistInstructionItemOrder(context.admin, input.itemIds);
+  const reorderResult = await persistInstructionItemOrder(
+    context.admin,
+    context.orgId,
+    { column: 'job_id', id: context.jobId },
+    input.itemIds,
+  );
   if (!reorderResult.success) {
     return reorderResult;
   }
 
-  revalidateInstructionItemPaths(context.orgId);
+  revalidateInstructionItemPaths();
   return { success: true };
 }
 
-export async function updateInstructionItemDetails(input: {
+export async function updateInstructionItemDetails(rawInput: {
   itemId: string;
   itemKind: 'task' | 'checklist';
   requirementState: 'required' | 'optional';
@@ -629,25 +697,40 @@ export async function updateInstructionItemDetails(input: {
   evidence: Array<{ id: string; description: string; documentCategory: string; sortOrder: number }>;
   predecessorItemIds: string[];
 }): Promise<UpdateJobInstructionItemResult> {
+  const parsedInput = itemDetailsSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { success: false as const, error: 'instruction_item_details_invalid' };
+  const input = parsedInput.data;
   const context = await getAuthorizedItemContext(input.itemId);
   if (!context.success) return context;
   if (!context.isManagerOrAbove) return { success: false as const, error: 'not_authorized' };
-  const { error } = await context.admin.rpc('update_instruction_item_details', {
-    p_organization_id: context.orgId,
-    p_instruction_item_id: input.itemId,
-    p_actor_id: context.userId,
-    p_item_kind: input.itemKind,
-    p_requirement_state: input.requirementState,
-    p_group_label: input.groupLabel ?? null,
-    p_notes: input.notes ?? null,
-    p_evidence: input.evidence.map((item) => ({ id: item.id, description: item.description.trim(), document_category: item.documentCategory, sort_order: item.sortOrder })) as Json,
-    p_predecessor_item_ids: input.predecessorItemIds,
-  });
+  const { error } = await context.admin.rpc(
+    'update_instruction_item_details',
+    rpcArgs('update_instruction_item_details', {
+      p_organization_id: context.orgId,
+      p_instruction_item_id: input.itemId,
+      p_actor_id: context.userId,
+      p_item_kind: input.itemKind,
+      p_requirement_state: input.requirementState,
+      p_group_label: input.groupLabel ?? null,
+      p_notes: input.notes ?? null,
+      p_evidence: input.evidence.map((item) => ({
+        id: item.id,
+        description: item.description.trim(),
+        document_category: item.documentCategory,
+        sort_order: item.sortOrder,
+      })) as Json,
+      p_predecessor_item_ids: input.predecessorItemIds,
+    }),
+  );
   if (error) {
-    const known = ['instruction_dependency_cycle', 'instruction_dependency_self', 'instruction_dependency_target_invalid', 'instruction_item_details_invalid'].find((code) => error.message.includes(code));
+    const known = [
+      'instruction_dependency_cycle',
+      'instruction_dependency_self',
+      'instruction_dependency_target_invalid',
+      'instruction_item_details_invalid',
+    ].find((code) => error.message.includes(code));
     return { success: false as const, error: known ?? 'update_failed' };
   }
-  revalidateInstructionItemPaths(context.orgId);
-  const item = await getHydratedInstructionItemById(context.admin, input.itemId);
-  return item ? { success: true as const, item } : { success: false as const, error: 'item_not_found' };
+  revalidateInstructionItemPaths();
+  return getHydratedInstructionItemById(context.admin, context.orgId, input.itemId);
 }

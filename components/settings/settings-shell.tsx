@@ -41,16 +41,17 @@ export function SettingsShell({ children }: SettingsShellProps) {
 
   return (
     <PageShell className="bg-background">
-      {/* Phones: the section list is route navigation, so it is an AreaNav
-          strip that scrolls within itself, not a select (thirteen sections
-          exceed the raw-Select cap and a select hides the current place).
-          From md the sidebar below takes over and the slot keeps the
-          header's bottom padding. */}
+      {/* Phones and upright tablets: the section list is route navigation,
+          so it is an AreaNav strip that scrolls within itself, not a select
+          (thirteen sections exceed the raw-Select cap and a select hides the
+          current place). From lg the sidebar below takes over and the slot
+          keeps the header's bottom padding; below lg the app sidebar and a
+          second one would leave the content less than a phone's width. */}
       <PageHeader
         title="Einstellungen"
         nav={
-          <div className="md:pb-2">
-            <div className="md:hidden">
+          <div className="lg:pb-2">
+            <div className="lg:hidden">
               <AreaNav
                 ariaLabel="Einstellungsbereiche"
                 items={[...accountSections, ...organizationSections].map((section) => ({
@@ -64,7 +65,7 @@ export function SettingsShell({ children }: SettingsShellProps) {
       />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <aside className="hidden w-72 shrink-0 border-r bg-card/40 md:block">
+        <aside className="hidden w-72 shrink-0 border-r bg-card/40 lg:block">
           <div className="h-full overflow-y-auto p-4">
             <SettingsNavGroup
               label={GROUP_LABELS.account}
@@ -80,7 +81,7 @@ export function SettingsShell({ children }: SettingsShellProps) {
           </div>
         </aside>
 
-        <PageBody>
+        <PageBody className="min-w-0">
           <div className="mx-auto w-full max-w-5xl">
             {currentSection ? (
               <div className="mb-6 flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">

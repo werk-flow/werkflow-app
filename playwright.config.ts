@@ -1,5 +1,5 @@
 import { defineConfig } from '@playwright/test';
-import { browserRunPaths } from './lib/testing/run-paths';
+import { browserRunPaths } from './lib/testing/runs/run-paths';
 
 import { loadEnvLocal } from './tests/golden/support/env';
 import { configureRunEnvironment, currentRunKey } from './tests/golden/support/run-state';

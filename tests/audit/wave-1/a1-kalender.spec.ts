@@ -240,6 +240,10 @@ test.describe('A1 Kalender @AUDIT-W1-A1', () => {
     });
     await expect(parkedPill).toHaveCount(0, { timeout: 20_000 });
     // The visit kept Bruno and gained Emil: the card sits in both rows; the drop row is the proof.
+    // The saved plan proves it, not the placement the grid shows before the answer: reload first.
+    await adminPage.reload();
+    await showPlanningMonth(adminPage, plannedDate);
+    await monthDayNumber(adminPage, plannedDate).click();
     await expect(dayCard(dayRow(adminPage, world.users.employee.id), title)).toBeVisible();
   });
 

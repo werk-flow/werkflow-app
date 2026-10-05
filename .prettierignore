@@ -1,0 +1,25 @@
+# Prettier formats code only (bun run format:check). It also skips everything in .gitignore.
+# Prose: docs tables, skills and the docs checker depend on exact lines.
+*.md
+*.mdx
+*.sql
+*.yaml
+*.yml
+
+# Generated, vendored or byte-compared content
+lib/supabase/database.types.ts
+lib/testing/selection/coverage-map.json
+lib/testing/performance-baselines.json
+bun.lock
+package-lock.json
+public/
+supabase/.temp/
+.next/
+node_modules/
+.agent-logs/
+
+# Agent tooling and transcripts
+.claude/
+.agents/
+.mcp.json
+temporary-transcripts/

@@ -17,6 +17,7 @@ import {
   prepareLayoutDetails,
 } from '../support/layout-fixtures';
 import { pressKey } from '../../golden/support/steps/interaction';
+import { inventoryLocationCard, inventoryTab } from '../../golden/support/steps/inventory';
 import {
   requestCaptureButton,
   requestCaptureDialog,
@@ -53,6 +54,15 @@ import { expectDefined } from '../../../lib/testing/spec-support/expect-defined'
 // first route that breaks either rule. Tag: @AUDIT-LAYOUT.
 
 const PHONE = { width: 375, height: 812 };
+
+// The canon names every viewport, and the office works on laptops. An upright
+// tablet keeps the app sidebar and leaves the least room beside it; 1024 and
+// 1280 px are the laptop widths where a fixed-width toolbar row stops fitting.
+const WIDE_VIEWPORTS = [
+  { width: 768, height: 1024 },
+  { width: 1024, height: 768 },
+  { width: 1280, height: 800 },
+] as const;
 
 const EMPLOYEE_ROUTES = [
   '/dashboard',
@@ -105,6 +115,47 @@ async function measure(page: Page): Promise<ViewportReport> {
   });
 }
 
+// Two frames after a resize or a tab change, so the measured layout is the settled one.
+async function expectNoSidewaysOverflow(page: Page, label: string): Promise<void> {
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
+  const report = await measure(page);
+  expect(report.documentOverflowX, `${label}: the document must not scroll sideways`).toBe(0);
+  expect(report.pageBodyOverflowX, `${label}: content wider than the page body`).toBe(0);
+}
+
+// The warehouse cards are a second layout of /inventar: every world holds one
+// warehouse whose item name is a long unbroken token.
+async function expectWarehouseCardsFit(page: Page, world: TestWorld, label: string): Promise<void> {
+  await inventoryTab(page, 'locations').click();
+  await expect(inventoryLocationCard(page, world.inventory.locationName)).toBeVisible();
+  await expectNoSidewaysOverflow(page, `${label}, warehouse cards`);
+}
+
+async function expectWideLayout(page: Page, route: string, world: TestWorld): Promise<void> {
+  await page.setViewportSize(WIDE_VIEWPORTS[0]);
+  await page.goto(route);
+  await expect(page).toHaveURL((url) => decodeURIComponent(url.pathname) === route);
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  const content = page.getByRole('main').locator('[data-page-body]');
+  await expect(content).toBeVisible();
+  await expect(content.locator('[data-slot="skeleton"]:visible')).toHaveCount(0);
+  await expect(content).not.toHaveText('');
+  for (const viewport of WIDE_VIEWPORTS) {
+    await page.setViewportSize(viewport);
+    await expectNoSidewaysOverflow(page, `${route} at ${viewport.width} px`);
+  }
+  if (route !== '/inventar') return;
+  for (const viewport of WIDE_VIEWPORTS) {
+    await page.setViewportSize(viewport);
+    await expectWarehouseCardsFit(page, world, `${route} at ${viewport.width} px`);
+  }
+}
+
 async function expectPhoneLayout(
   page: Page,
   route: string,
@@ -131,7 +182,18 @@ async function expectPhoneLayout(
   expect(report.unapprovedVisibleTables, `${route}: data table has no mobile card layout`).toBe(0);
   expect(report.nativeDateLikeInputs, `${route}: native date/time/number input rendered`).toBe(0);
   expect(await controlsUnderClockAtEnd(page), `${route}: a control stays under the clock button`).toEqual([]);
+  await expectCurrentAreaItemInView(page, route);
   await expectMainThreadSettles(page, route);
+}
+
+// A navigation strip that scrolls within itself must still show where the user is. The scroll
+// position rounds to whole pixels, so a shown item measures just under 1; a hidden one measures 0.
+async function expectCurrentAreaItemInView(page: Page, route: string): Promise<void> {
+  const current = pageHeader(page).locator('[aria-current="page"]');
+  if ((await current.count()) === 0) return;
+  await expect(current, `${route}: the current section is scrolled out of its strip`).toBeInViewport({
+    ratio: 0.95,
+  });
 }
 
 // The highest share of the main thread that tasks used in six consecutive
@@ -359,8 +421,9 @@ async function expectServiceDialogContracts(page: Page, route: string): Promise<
 
 test.describe('@AUDIT-LAYOUT phone viewport: no horizontal scroll, shell-owned scroll, no native controls', () => {
   for (const route of MANAGER_PHONE_ROUTES) {
-    test(`admin ${route} fits a 375 px viewport`, async ({ adminPage }, testInfo) => {
+    test(`admin ${route} fits a 375 px viewport`, async ({ adminPage, world }, testInfo) => {
       await expectPhoneLayout(adminPage, route, testInfo);
+      if (route === '/inventar') await expectWarehouseCardsFit(adminPage, world, `${route} at 375 px`);
       if (route === '/service/faelle') {
         await expectButtonTextContrast(adminPage, serviceCaseCaptureButton(adminPage.getByRole('main')));
         await expect(adminPage.getByRole('dialog')).toHaveCount(0);
@@ -374,6 +437,14 @@ test.describe('@AUDIT-LAYOUT phone viewport: no horizontal scroll, shell-owned s
   for (const route of EMPLOYEE_ROUTES) {
     test(`employee ${route} fits a 375 px viewport`, async ({ employeePage }, testInfo) => {
       await expectPhoneLayout(employeePage, route, testInfo);
+    });
+  }
+});
+
+test.describe('@AUDIT-LAYOUT tablet and laptop widths: no horizontal scroll', () => {
+  for (const route of MANAGER_PHONE_ROUTES) {
+    test(`admin ${route} fits 768, 1024 and 1280 px`, async ({ adminPage, world }) => {
+      await expectWideLayout(adminPage, route, world);
     });
   }
 });

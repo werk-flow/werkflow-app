@@ -110,7 +110,8 @@ export function InventoryContent({ overview }: InventoryContentProps) {
           onValueChange={(tab) => navigation.navigate({ tab, page: 1 })}
           className="mt-4"
         >
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          {/* One row only where tabs and all four filters fit beside the sidebar. */}
+          <div className="flex flex-col gap-3 2xl:flex-row 2xl:items-center 2xl:justify-between">
             <TabsList>
               <TabsTrigger value="all">Alle Artikel</TabsTrigger>
               <TabsTrigger value="locations">Lager</TabsTrigger>

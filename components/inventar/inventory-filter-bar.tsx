@@ -17,7 +17,7 @@ export function InventoryFilterBar({
   locations: InventoryLocation[];
 }) {
   return (
-    <div className="flex flex-col gap-2 md:flex-row md:items-center">
+    <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
       <SearchInput
         wrapperClassName="min-w-0 md:w-64"
         value={filters.search}
