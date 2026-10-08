@@ -125,6 +125,17 @@ async function NestedJobDetailData({
     );
   }
 
+  if (
+    !projectResult.success &&
+    (projectResult.error === 'load_failed' || projectResult.error === 'unexpected_error')
+  ) {
+    return (
+      <RegionLoadError title="Das Projekt konnte nicht geladen werden">
+        Das Projekt ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
+      </RegionLoadError>
+    );
+  }
+
   if (!projectResult.success || !jobResult.success) {
     return (
       <RouteRedirect href="/auftraege">

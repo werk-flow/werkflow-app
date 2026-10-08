@@ -1,10 +1,10 @@
 # Integrated test state
 
-Status: living — last reviewed 2026-10-02
+Status: living — last reviewed 2026-10-08
 
 Read this page when you choose a date for a test fixture, compute a date-dependent expectation, or keep a page stable during a browser step. [testing.md](testing.md) owns every other testing rule, including the rule that each test prepares its own state.
 
-Each golden and audit group runs one spec file in its own disposable organization. No test consumes the state of another test. `lib/testing/spec-support/spec-independence.ts`, run by `lib/testing/spec-support/spec-conventions.test.ts`, rejects a declared producer, a chained value, a checkpoint handoff, module state that one test writes and another reads, and a wall-clock date read at module load. The two measured performance specs are the only exception: their files are measurement-digest inputs, so they keep their seeded-profile handoff until the next re-measurement.
+Each golden and audit group runs one spec file in its own disposable organization. No test consumes the state of another test. `lib/testing/spec-support/spec-independence.ts`, run by `lib/testing/spec-support/spec-conventions.test.ts`, rejects a declared producer, a chained value, a checkpoint handoff, module state that one test writes and another reads, and a wall-clock date read at module load. A large fixture that several tests of one world read is seed-or-reuse: each test calls the helper, and the first call in the world seeds it. `ensureTypicalProfile` in `tests/audit/support/performance-profile.ts` is the example.
 
 ## Seed the state a test needs
 

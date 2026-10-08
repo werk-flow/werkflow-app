@@ -310,7 +310,7 @@ async function requireManagerRecord(employeeRecordId: string): Promise<
     return { success: false, error: 'not_authorized' };
   }
   const admin = createSupabaseAdminClient();
-  const { data: employee } = await loggedRead(
+  const { data: employee, error: employeeError } = await loggedRead(
     'requireManagerRecord: employee_records read failed',
     admin
       .from('employee_records')
@@ -319,6 +319,7 @@ async function requireManagerRecord(employeeRecordId: string): Promise<
       .eq('organization_id', auth.context.orgId)
       .maybeSingle(),
   );
+  if (employeeError) return { success: false, error: 'load_failed' };
   if (!employee) return { success: false, error: 'record_not_found' };
   return {
     success: true,
@@ -640,7 +641,7 @@ export async function savePersonnelOnboardingRequirement(
   if (!auth.success) return auth;
   if (!auth.context.isManagerOrAbove) return { success: false, error: 'not_authorized' };
   const admin = createSupabaseAdminClient();
-  const { data: plan } = await loggedRead(
+  const { data: plan, error: planError } = await loggedRead(
     'savePersonnelOnboardingRequirement: personnel_onboarding_plans read failed',
     admin
       .from('personnel_onboarding_plans')
@@ -649,6 +650,7 @@ export async function savePersonnelOnboardingRequirement(
       .eq('organization_id', auth.context.orgId)
       .maybeSingle(),
   );
+  if (planError) return { success: false, error: 'load_failed' };
   if (!plan) return { success: false, error: 'plan_not_found' };
   const request = parsed.data;
   const { data, error } = await admin.rpc('save_personnel_onboarding_requirement', {
@@ -806,7 +808,7 @@ async function getSelfContext(): Promise<
   const membership = stored ? storedMembership : candidates.length === 1 ? candidates[0] : undefined;
   if (!membership) return { success: false, error: 'not_a_member' };
   const admin = createSupabaseAdminClient();
-  const { data: employee } = await loggedRead(
+  const { data: employee, error: employeeError } = await loggedRead(
     'getSelfContext: employee_records read failed',
     admin
       .from('employee_records')
@@ -815,6 +817,7 @@ async function getSelfContext(): Promise<
       .eq('user_id', user.id)
       .maybeSingle(),
   );
+  if (employeeError) return { success: false, error: 'load_failed' };
   if (!employee) return { success: false, error: 'record_not_found' };
   return {
     success: true,
@@ -1222,9 +1225,9 @@ export async function finalizePersonnelDocumentUpload(
         .eq('storage_path', storagePath)
         .maybeSingle(),
     );
-    // Only a completed read proves that no document owns the object.
-    if (!owner && !ownerError)
-      await discardStorageObjects({ organizationId: context.organizationId, paths: [storagePath] });
+    // Only a completed read proves that no document owns the object; a failed read keeps it.
+    if (ownerError) return { success: false, error: normalized };
+    if (!owner) await discardStorageObjects({ organizationId: context.organizationId, paths: [storagePath] });
     return { success: false, error: normalized };
   }
   revalidatePersonnel();
@@ -1264,7 +1267,7 @@ export async function getPersonnelDocumentSignedUrl(
   const membership = memberships.find((item) => item.orgId === file.organization_id);
   const hasOwnLifecycleAccess =
     Boolean(membership) || prestartMemberships.some((item) => item.orgId === file.organization_id);
-  const { data: employee } = await loggedRead(
+  const { data: employee, error: employeeError } = await loggedRead(
     'getPersonnelDocumentSignedUrl: employee_records read failed',
     admin
       .from('employee_records')
@@ -1273,6 +1276,7 @@ export async function getPersonnelDocumentSignedUrl(
       .eq('id', document.employee_record_id)
       .maybeSingle(),
   );
+  if (employeeError) return { success: false, error: 'load_failed' };
   const releases = (document.personnel_document_releases ?? []) as Array<{
     document_version_number: number;
     revoked_at: string | null;

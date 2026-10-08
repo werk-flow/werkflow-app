@@ -8,9 +8,9 @@ import { Card } from '@/components/ui/card';
 import { InlinePending } from '@/components/ui/inline-pending';
 import type { AttentionNotification } from '@/lib/attention/types';
 import type { useBusyIds } from '@/hooks/use-busy-id';
-import { formatRange, formatSicknessRange } from './aufgaben-format';
+import { formatSicknessRange } from '@/lib/sickness/types';
 import { ALL_NOTIFICATIONS_ID } from './use-aufgaben-overview';
-import { formatGermanDate } from '@/lib/utils';
+import { formatGermanDate, formatGermanDateRange } from '@/lib/utils';
 
 const VACATION_DECISION_STATUS_TEXT: Record<'approved' | 'rejected' | 'cancelled', string> = {
   approved: 'genehmigt',
@@ -22,7 +22,7 @@ const VACATION_DECISION_STATUS_TEXT: Record<'approved' | 'rejected' | 'cancelled
 function sicknessNotificationText(
   notification: Extract<AttentionNotification, { sourceType: 'sickness_report' }>,
 ): string {
-  const range = formatSicknessRange(notification.startDate, notification.endDate);
+  const range = formatSicknessRange(notification);
   const portion = notification.dayPortion === 'half_day' ? ' (halbtags)' : '';
   if (notification.isOwn) {
     return notification.status === 'cancelled'
@@ -113,10 +113,10 @@ function AufgabenNotificationRow({
   const isMarkingRead = busy.isBusy(notification.sourceId);
   const range =
     notification.sourceType === 'sickness_report'
-      ? formatSicknessRange(notification.startDate, notification.endDate)
+      ? formatSicknessRange(notification)
       : notification.sourceType === 'employee_certification_expiry'
         ? formatGermanDate(notification.validUntil)
-        : formatRange(notification.startDate, notification.endDate);
+        : formatGermanDateRange(notification.startDate, notification.endDate);
   return (
     <div
       className="flex flex-wrap items-center justify-between gap-2 px-4 py-3"

@@ -1,6 +1,5 @@
 import type { Page } from '@playwright/test';
 
-import { EMPLOYMENT_TYPE_LABELS } from '../../../lib/personnel/types';
 import { HOLIDAY_REGION_LABELS, getPublicHolidaysForYear } from '../../../lib/personnel/holidays';
 import { resolveDailyTargets } from '../../../lib/personnel/targets';
 import { formatDuration } from '../../../lib/time-tracking/helpers';
@@ -141,7 +140,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     await openMemberDetailFromList(adminPage, employeeName);
     await addConditionViaDialog(adminPage, {
       validFromDigits: toDatePickerDigits(firstConditionDate),
-      employmentTypeLabel: EMPLOYMENT_TYPE_LABELS.vollzeit,
+      employmentType: 'vollzeit',
       weeklyHours: '40',
       vacationDays: '27',
       note: `A4 Anspruch 27 ${world.runId}`,
@@ -162,7 +161,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     await openMemberDetailFromList(adminPage, employeeName);
     await addConditionViaDialog(adminPage, {
       validFromDigits: toDatePickerDigits(secondConditionDate),
-      employmentTypeLabel: EMPLOYMENT_TYPE_LABELS.vollzeit,
+      employmentType: 'vollzeit',
       weeklyHours: '40',
       vacationDays: '31',
       note: `A4 Anspruch 31 ${world.runId}`,

@@ -60,6 +60,13 @@ describe('period form refusals', () => {
     }
   });
 
+  test('a failed export read takes the shared load sentence, never "not ready" or "not closed"', () => {
+    for (const action of ['generateExport', 'downloadExport'] as const) {
+      expect(isTimeAccountFailureCode(action, 'load_failed')).toBe(true);
+      expect(getTimeAccountFailureMessage(action, 'load_failed')).toBe(SHARED_FAILURE_MESSAGES.load_failed);
+    }
+  });
+
   test('every action has its own German sentence for a refusal and a fallback', () => {
     expect(getTimeAccountFailureMessage('prepare', 'prepare_failed')).toBe(
       'Die Periode konnte nicht vorbereitet werden. Versuche es erneut.',

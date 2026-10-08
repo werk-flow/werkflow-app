@@ -22,6 +22,9 @@ const callerUser = '40000000-0000-4000-8000-000000000001';
 const employeeUser = '40000000-0000-4000-8000-000000000002';
 const colleagueUser = '40000000-0000-4000-8000-000000000003';
 const strangerUser = '40000000-0000-4000-8000-000000000004';
+// Recorded entries of a person who has left the organization: no membership row.
+const formerUser = '40000000-0000-4000-8000-000000000005';
+const formerIn = '20000000-0000-4000-8000-000000000008';
 const today = new Date(Date.now() - 1000).toISOString();
 const yesterday = (hour: number): string => {
   const date = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -61,6 +64,7 @@ const tables: InMemoryTables = {
     entry(ownOut, ownOrganization, employeeUser, 'clock_out', yesterday(16)),
     entry(colleagueIn, ownOrganization, colleagueUser, 'clock_in', yesterday(8)),
     entry(foreignIn, foreignOrganization, strangerUser, 'clock_in', yesterday(8)),
+    entry(formerIn, ownOrganization, formerUser, 'clock_in', yesterday(9)),
     entry(callerIn, ownOrganization, callerUser, 'clock_in', today, foreignJob),
     { ...entry(ownPending, ownOrganization, employeeUser, 'clock_in', yesterday(6)), status: 'pending' },
     {
@@ -333,3 +337,27 @@ assert.deepEqual(
   { success: false, error: 'fetch_failed' },
 );
 assert.deepEqual(entryIds(), unchanged);
+
+// A failed read of the entry's person, of a named job or of the running job is
+// a load failure, never "not found" or a missing label; nothing changes.
+settingsReadFails = false;
+failingReadTable = 'organization_members';
+assert.deepEqual(await deleteEntry(colleagueIn), { success: false, error: 'load_failed' });
+assert.deepEqual(await updateEntry(colleagueIn, { jobId: ownJob }), { success: false, error: 'load_failed' });
+assert.deepEqual(
+  await addManualEntry({
+    organizationId: ownOrganization,
+    targetUserId: employeeUser,
+    entries: [{ entryType: 'clock_in', timestamp: yesterday(9) }],
+  }),
+  { success: false, error: 'load_failed' },
+);
+failingReadTable = 'jobs';
+assert.deepEqual(await updateEntry(colleagueIn, { jobId: ownJob }), { success: false, error: 'load_failed' });
+assert.deepEqual(await getCurrentClockState(ownOrganization), { success: false, error: 'fetch_failed' });
+failingReadTable = null;
+assert.deepEqual(entryIds(), unchanged);
+
+// A person without a membership row stays "not found" once the read succeeds.
+assert.deepEqual(await deleteEntry(formerIn), { success: false, error: 'target_not_found' });
+assert.ok(entryIds().includes(formerIn));

@@ -11,7 +11,6 @@ import {
   copyStorageObject,
   createSignedDownloadUrl,
   createSignedUploadUrl,
-  deleteStorageObjects,
   discardStorageObjects,
 } from '@/lib/storage/r2';
 import { readAllRows, readCompleteRows, readInBatches, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
@@ -622,8 +621,9 @@ export async function moveDocumentFolder(rawInput: MoveFolderInput): Promise<Fol
     return { success: false, error: 'invalid_target' };
   }
 
-  const folder = await getFolderById(auth.context.admin, auth.context.orgId, input.folderId);
-  if (!folder) return { success: false, error: 'folder_not_found' };
+  const found = await getFolderById(auth.context.admin, auth.context.orgId, input.folderId);
+  if (!found.success) return found;
+  const { folder } = found;
 
   if ((folder.parent_folder_id ?? null) === (input.parentFolderId ?? null)) {
     return { success: false, error: 'invalid_target' };
@@ -683,8 +683,9 @@ export async function copyDocumentFolder(rawInput: CopyFolderInput): Promise<Fol
   const manager = requireManager(auth.context);
   if (!manager.success) return manager;
 
-  const sourceFolder = await getFolderById(auth.context.admin, auth.context.orgId, input.folderId);
-  if (!sourceFolder) return { success: false, error: 'folder_not_found' };
+  const source = await getFolderById(auth.context.admin, auth.context.orgId, input.folderId);
+  if (!source.success) return source;
+  const sourceFolder = source.folder;
 
   const targetCheck = await ensureFolder(auth.context.admin, auth.context.orgId, input.targetParentFolderId);
   if (!targetCheck.success) return targetCheck;
@@ -1004,7 +1005,7 @@ export async function copyDocument(rawInput: CopyDocumentInput): Promise<Documen
   const existing = await getAuthorizedDocument(auth.context, input.documentId);
   if (!existing.success) return existing;
 
-  const { data: protectedDocument } = await loggedRead(
+  const { data: protectedDocument, error: protectedDocumentError } = await loggedRead(
     'copyDocument: personnel_documents read failed',
     auth.context.admin
       .from('personnel_documents')
@@ -1013,6 +1014,7 @@ export async function copyDocument(rawInput: CopyDocumentInput): Promise<Documen
       .eq('document_id', existing.document.id)
       .maybeSingle(),
   );
+  if (protectedDocumentError) return { success: false, error: 'load_failed' };
   if (protectedDocument) {
     return { success: false, error: 'protected_document_boundary' };
   }
@@ -1384,8 +1386,10 @@ export async function restoreDocument(rawDocumentId: string): Promise<DocumentMu
 
   let restoreFolderId = existing.document.folder_id;
   if (restoreFolderId) {
+    // A deleted folder restores the document to the library root; a failed read restores nothing.
     const folder = await getFolderById(auth.context.admin, auth.context.orgId, restoreFolderId);
-    restoreFolderId = folder ? restoreFolderId : null;
+    if (!folder.success && folder.error !== 'folder_not_found') return folder;
+    restoreFolderId = folder.success ? restoreFolderId : null;
   }
 
   const displayName = await getAvailableDisplayName({
@@ -1442,11 +1446,8 @@ export async function permanentlyDeleteDocument(rawDocumentId: string): Promise<
     );
   }
 
-  try {
-    await deleteStorageObjects({ organizationId: auth.context.orgId, paths: storagePaths });
-  } catch (storageError) {
-    logError('Failed to remove the storage of a permanently deleted document', storageError);
-  }
+  // The row is gone, so a storage failure leaves only an orphaned object, which discardStorageObjects logs.
+  await discardStorageObjects({ organizationId: auth.context.orgId, paths: storagePaths });
 
   revalidateDocuments();
   return { success: true };

@@ -116,17 +116,18 @@ async function getAuthorizedJobContext(jobId: string): Promise<AuthorizedJobCont
   const admin = createSupabaseAdminClient();
   const { userId, orgId, isManagerOrAbove } = auth.context;
 
-  const { data: job } = await loggedRead(
+  const { data: job, error: jobError } = await loggedRead(
     'getAuthorizedJobContext: jobs read failed',
     admin.from('jobs').select('id').eq('id', jobId).eq('organization_id', orgId).maybeSingle(),
   );
+  if (jobError) return { success: false, error: 'load_failed' };
 
   if (!job) {
     return { success: false, error: 'job_not_found' };
   }
 
   if (!isManagerOrAbove) {
-    const { data: assignment } = await loggedRead(
+    const { data: assignment, error: assignmentError } = await loggedRead(
       'getAuthorizedJobContext: job_assignments read failed',
       admin
         .from('job_assignments')
@@ -136,6 +137,7 @@ async function getAuthorizedJobContext(jobId: string): Promise<AuthorizedJobCont
         .eq('user_id', userId)
         .maybeSingle(),
     );
+    if (assignmentError) return { success: false, error: 'load_failed' };
 
     if (!assignment) {
       return { success: false, error: 'not_authorized' };
@@ -159,7 +161,7 @@ async function getAuthorizedItemContext(itemId: string): Promise<AuthorizedItemC
   const admin = createSupabaseAdminClient();
   const { userId, orgId, isManagerOrAbove } = auth.context;
 
-  const { data: item } = await loggedRead(
+  const { data: item, error: itemError } = await loggedRead(
     'getAuthorizedItemContext: job_instruction_items read failed',
     admin
       .from('job_instruction_items')
@@ -168,6 +170,7 @@ async function getAuthorizedItemContext(itemId: string): Promise<AuthorizedItemC
       .eq('organization_id', orgId)
       .maybeSingle(),
   );
+  if (itemError) return { success: false, error: 'load_failed' };
 
   if (!item) {
     return { success: false, error: 'item_not_found' };
@@ -178,7 +181,7 @@ async function getAuthorizedItemContext(itemId: string): Promise<AuthorizedItemC
     if (item.job_id === null) {
       return { success: false, error: 'not_authorized' };
     }
-    const { data: assignment } = await loggedRead(
+    const { data: assignment, error: assignmentError } = await loggedRead(
       'getAuthorizedItemContext: job_assignments read failed',
       admin
         .from('job_assignments')
@@ -188,6 +191,7 @@ async function getAuthorizedItemContext(itemId: string): Promise<AuthorizedItemC
         .eq('user_id', userId)
         .maybeSingle(),
     );
+    if (assignmentError) return { success: false, error: 'load_failed' };
 
     if (!assignment) {
       return { success: false, error: 'not_authorized' };
@@ -430,7 +434,7 @@ async function getAuthorizedProjectContext(projectId: string) {
   if (!auth.success) return auth;
   if (!auth.context.isManagerOrAbove) return { success: false as const, error: 'not_authorized' };
   const admin = createSupabaseAdminClient();
-  const { data: project } = await loggedRead(
+  const { data: project, error: projectError } = await loggedRead(
     'getAuthorizedProjectContext: projects read failed',
     admin
       .from('projects')
@@ -439,6 +443,7 @@ async function getAuthorizedProjectContext(projectId: string) {
       .eq('organization_id', auth.context.orgId)
       .maybeSingle(),
   );
+  if (projectError) return { success: false as const, error: 'load_failed' };
   if (!project) return { success: false as const, error: 'project_not_found' };
   return { success: true as const, admin, projectId, orgId: auth.context.orgId, userId: auth.context.userId };
 }

@@ -12958,22 +12958,6 @@ export type Database = {
           user_id: string;
         }[];
       };
-      classify_personnel_document: {
-        Args: {
-          p_access_class: Database["public"]["Enums"]["personnel_document_access_class"];
-          p_actor_id: string;
-          p_document_id: string;
-          p_document_type: string;
-          p_employee_record_id: string;
-          p_evidence_state: Database["public"]["Enums"]["personnel_document_evidence_state"];
-          p_expected_version: number;
-          p_operation_id: string;
-          p_organization_id: string;
-          p_request_hash: string;
-          p_valid_until: string;
-        };
-        Returns: string;
-      };
       clear_project_execution_override: {
         Args: {
           p_actor_id: string;
@@ -14579,28 +14563,6 @@ export type Database = {
           status: Database["public"]["Enums"]["invite_status"];
         }[];
       };
-      get_org_clients: {
-        Args: { p_org_id: string };
-        Returns: {
-          address: string | null;
-          client_type: Database["public"]["Enums"]["client_type"];
-          created_at: string;
-          customer_number: string | null;
-          email: string | null;
-          id: string;
-          name: string;
-          notes: string | null;
-          organization_id: string;
-          phone: string | null;
-          updated_at: string;
-        }[];
-        SetofOptions: {
-          from: "*";
-          to: "clients";
-          isOneToOne: false;
-          isSetofReturn: true;
-        };
-      };
       get_org_members_for_user: {
         Args: { p_org_id: string; p_user_id: string };
         Returns: {
@@ -14622,10 +14584,6 @@ export type Database = {
         Returns: string;
       };
       get_user_admin_or_manager_org_ids: {
-        Args: { p_user_id: string };
-        Returns: string[];
-      };
-      get_user_admin_org_ids: {
         Args: { p_user_id: string };
         Returns: string[];
       };
@@ -14662,10 +14620,6 @@ export type Database = {
           p_supplier_name: string;
         };
         Returns: string;
-      };
-      is_member_of_org: {
-        Args: { p_org_id: string; p_user_id: string };
-        Returns: boolean;
       };
       issue_planning_dispatch: {
         Args: {
@@ -15660,16 +15614,6 @@ export type Database = {
         };
         Returns: undefined;
       };
-      replace_project_capability_requirements: {
-        Args: {
-          p_actor_id: string;
-          p_capability_ids: string[];
-          p_organization_id: string;
-          p_project_id: string;
-          p_require_confirmations: boolean[];
-        };
-        Returns: undefined;
-      };
       replace_project_capability_requirements_checked: {
         Args: {
           p_actor_id: string;
@@ -16364,6 +16308,15 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      set_organization_user_preference: {
+        Args: {
+          p_organization_id: string;
+          p_path: string[];
+          p_user_id: string;
+          p_value: Json;
+        };
+        Returns: undefined;
       };
       set_personnel_access_transition: {
         Args: {
@@ -17160,55 +17113,6 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
-      };
-      update_maintenance_coverage: {
-        Args: {
-          p_actor_id: string;
-          p_expected_version: number;
-          p_idempotency_key: string;
-          p_maintenance_coverage_id: string;
-          p_organization_id: string;
-          p_payload: Json;
-          p_reason: string;
-        };
-        Returns: {
-          client_id: string;
-          coverage_number: string;
-          created_at: string;
-          created_by: string;
-          description: string | null;
-          id: string;
-          notice_date: string | null;
-          operational_note: string | null;
-          organization_id: string;
-          reference: string | null;
-          renewal_date: string | null;
-          review_due_date: string | null;
-          site_id: string;
-          status: Database["public"]["Enums"]["maintenance_coverage_status"];
-          updated_at: string;
-          updated_by: string;
-          valid_from: string | null;
-          valid_until: string | null;
-          version: number;
-        };
-        SetofOptions: {
-          from: "*";
-          to: "maintenance_coverages";
-          isOneToOne: true;
-          isSetofReturn: false;
-        };
-      };
-      update_planning_dispatch_instruction: {
-        Args: {
-          p_actor_id: string;
-          p_dispatch_id: string;
-          p_expected_revision_number: number;
-          p_note?: string;
-          p_organization_id: string;
-          p_recipient_employee_record_ids?: string[];
-        };
-        Returns: number;
       };
       update_planning_occurrence: {
         Args: {

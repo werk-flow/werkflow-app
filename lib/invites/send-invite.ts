@@ -73,7 +73,7 @@ export async function createAndMailOrganizationInvite(
   const existingUserId = userCheck?.user_id || null;
 
   if (existingUserId) {
-    const { data: existingMember } = await loggedRead(
+    const { data: existingMember, error: existingMemberError } = await loggedRead(
       'createAndMailOrganizationInvite: organization_members read failed',
       admin
         .from('organization_members')
@@ -82,6 +82,7 @@ export async function createAndMailOrganizationInvite(
         .eq('user_id', existingUserId)
         .maybeSingle(),
     );
+    if (existingMemberError) return { success: false, error: 'load_failed' };
     if (existingMember) {
       return { success: false, error: 'already_member' };
     }
@@ -96,10 +97,11 @@ export async function createAndMailOrganizationInvite(
     .eq('email', email)
     .eq('status', 'pending');
   if (send.replacedInviteId) pendingInviteQuery = pendingInviteQuery.neq('id', send.replacedInviteId);
-  const { data: existingInvite } = await loggedRead(
+  const { data: existingInvite, error: existingInviteError } = await loggedRead(
     'createAndMailOrganizationInvite: organization_invites read failed',
     pendingInviteQuery.maybeSingle(),
   );
+  if (existingInviteError) return { success: false, error: 'load_failed' };
   if (existingInvite) {
     return { success: false, error: 'invite_already_pending' };
   }

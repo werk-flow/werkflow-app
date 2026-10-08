@@ -13,9 +13,11 @@ import { listProductSources, parseProductSource } from './product-sources';
 // awaited into `{ data, error }`, into a held result (`result.data`), or into
 // an element of `await Promise.all([...])`. Writes (`insert`, `update`,
 // `delete`, `upsert`, storage calls) and reads continued by `.then(require…)`
-// are out of scope. `loggedRead(...)` is out of scope too: its sites treat a
-// missing row as a refusal or as absence on purpose (the backlog row "Read
-// errors that are only logged" tracks them).
+// are out of scope. A `loggedRead(...)` site is stricter: `loggedRead` has
+// logged the error already, and a missing-row guard (`if (!row) return
+// not_found`) would turn a failed read into „nicht gefunden“ or a skipped
+// pre-check, so its error must become a failure (`load_failed` or the module's
+// load-failure code) on its own.
 //
 // A read is a finding when its error is not turned into a failure (only
 // logged, or not read at all) and
@@ -28,7 +30,8 @@ import { listProductSources, parseProductSource } from './product-sources';
 // the error or the whole result is handed on.
 
 const READ = /\.from\(|\.rpc\(|\breadInBatches\(|\breadAllRows\(|\breadCompleteRows\(/;
-const NOT_A_READ = /\.(insert|update|delete|upsert|remove|upload)\(|\.then\(|^\s*loggedRead\(/;
+const NOT_A_READ = /\.(insert|update|delete|upsert|remove|upload)\(|\.then\(/;
+const LOGGED_READ = /^\s*loggedRead\(/;
 const LOG_CALL = /^(logError|logReadFailure|logReadErrors|console\.\w+)$/;
 
 // Reviewed reads, keyed `file::function::binding`, with the reason a failure
@@ -51,10 +54,23 @@ const ALLOWED_BEST_EFFORT: Readonly<Record<string, string>> = {
     'Label of the running clock card: the job row fails closed; a failed customer name shows the job without it.',
   'lib/org/delete-action.ts::deleteOrganization::remainingMemberships':
     'Write action, after the committed delete: a failed read leaves no active organization, and the next request resolves one.',
+  'lib/invites/send-invite.ts::createAndMailOrganizationInvite::inviterProfile':
+    'Inviter name in the mail, read after the committed invite: a failure falls back to the generic sender name, and the invite still works.',
+  'lib/settings/email-change-actions.ts::sendEmailChangeOtpEmail::profile':
+    'First name for the greeting of the code mail, read after the code is stored: a failure sends the mail without the name, and the code still works.',
+  'lib/time-accounts/actions.ts::prepareTimePeriod::calculationRow':
+    'Read after the committed prepare only to open the period detail: a failure leaves the user on the revalidated period list, which shows the prepared month.',
 };
 
 type Accessor = { name: string; property: 'data' | 'error' | null; declaration: ts.Node };
-type Read = { node: ts.Node; binding: string; query: string; error: Accessor | null; data: Accessor | null };
+type Read = {
+  node: ts.Node;
+  binding: string;
+  query: string;
+  logged: boolean;
+  error: Accessor | null;
+  data: Accessor | null;
+};
 
 function unwrap(node: ts.Expression): ts.Expression {
   let current = node;
@@ -251,11 +267,12 @@ function readsOf(declaration: ts.VariableDeclaration): Read[] {
   }
   if (!initializer || !ts.isAwaitExpression(initializer)) return [];
   const awaited = unwrap(initializer.expression);
-  const isRead = (text: string) => READ.test(text) && !NOT_A_READ.test(text);
+  const isRead = (text: string) => LOGGED_READ.test(text) || (READ.test(text) && !NOT_A_READ.test(text));
   const held = (name: ts.Identifier, node: ts.Node, query: string): Read => ({
     node,
     binding: name.text,
     query,
+    logged: LOGGED_READ.test(query),
     error: { name: name.text, property: 'error', declaration: name },
     data: { name: name.text, property: 'data', declaration: name },
   });
@@ -288,11 +305,11 @@ function readsOf(declaration: ts.VariableDeclaration): Read[] {
       data = { name: element.name.text, property: null, declaration: element.name };
   }
   if (!data) return [];
-  return [{ node: declaration, binding: data.name, query, error, data }];
+  return [{ node: declaration, binding: data.name, query, logged: LOGGED_READ.test(query), error, data }];
 }
 
-function findingsIn(file: string): string[] {
-  const source = parseProductSource(file);
+function findingsIn(file: string, text?: string): string[] {
+  const source = parseProductSource(file, text);
   const found: string[] = [];
   const visit = (node: ts.Node): void => {
     if (ts.isVariableDeclaration(node)) {
@@ -306,6 +323,11 @@ function findingsIn(file: string): string[] {
           return !isNegated(reference) && surfacesFailure(branch);
         });
         if (errorSurfaced || holderHandedOn(scope, read.error)) continue;
+        // `loggedRead` has logged the error already; a missing-row guard alone would call a failed read "not found".
+        if (read.logged) {
+          found.push(`${file}::${functionName(scope)}::${read.binding}`);
+          continue;
+        }
         const errorToEmpty = errorRefs.some((reference) => {
           const branch = conditionBranch(reference, scope);
           return branch !== null && !isNegated(reference) && returnsEmpty(branch);
@@ -333,8 +355,21 @@ function findingsIn(file: string): string[] {
   return found;
 }
 
+test('the scan catches a planted loggedRead site that calls a failed read "not found"', () => {
+  const access = `async function ensureJobAccess(context, jobId) {
+  const { data: job } = await loggedRead('label', context.admin.from('jobs').select('id').eq('id', jobId).maybeSingle());
+  if (!job) return { success: false, error: 'job_not_found' };
+  return { success: true };
+}`;
+  expect(findingsIn('lib/planted.ts', access)).toEqual(['lib/planted.ts::ensureJobAccess::job']);
+  const refused = access
+    .replace('{ data: job }', '{ data: job, error }')
+    .replace('  if (!job)', "  if (error) return { success: false, error: 'load_failed' };\n  if (!job)");
+  expect(findingsIn('lib/planted.ts', refused)).toEqual([]);
+});
+
 test('a failed read is a failure the caller shows, never empty data', () => {
-  const findings = listProductSources(['app', 'lib']).flatMap(findingsIn);
+  const findings = listProductSources(['app', 'lib']).flatMap((file) => findingsIn(file));
   expect(
     findings.filter((key) => !(key in ALLOWED_BEST_EFFORT)),
     'Turn the read error into a failure (ActionResult or the module load-failure code) that the page shows with RegionLoadError/SectionError, or add the read to ALLOWED_BEST_EFFORT with the reason a failure may continue.',

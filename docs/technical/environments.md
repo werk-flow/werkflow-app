@@ -1,6 +1,6 @@
 # Environments
 
-Status: living — last reviewed 2026-10-01
+Status: living — last reviewed 2026-10-05
 
 WerkFlow runs on two separate cloud backends ([decision 0003](../decisions/0003-dev-prod-environment-split.md)) and a local Supabase stack for the application tests ([decision 0006](../decisions/0006-testing-architecture.md)). This page owns which backend is which, who owns which env file, how tools reach each project, the migration rule, and how to set up a new machine.
 
@@ -21,11 +21,11 @@ Both projects run Micro compute. Query latency on that tier rises steeply with c
 
 ### Vercel
 
-Every variable exists twice: one row for Production and one for all pre-production environments. Production rows carry the PROD project, the production bucket and the production domain. Pre-production rows carry the DEV project, the dev bucket and the partner-preview branch URL as `NEXT_PUBLIC_SITE_URL`. The names: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `NEXT_PUBLIC_SITE_URL`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` and `EMAIL_OTP_HASH_SECRET` (one value per backend). `SUPABASE_ACCESS_TOKEN` is never on Vercel. DEV's auth redirect list must allow the partner-preview URL so that invite and password links work on the preview. Recheck the scopes when deployment configuration changes.
+Every variable exists twice: one row for Production and one for all pre-production environments. Production rows carry the PROD project, the production bucket and the production domain. Pre-production rows carry the DEV project, the dev bucket and the partner-preview branch URL as `NEXT_PUBLIC_SITE_URL`. The names are the ones `lib/env/public.ts`, `lib/env/server.ts` and `lib/storage/r2.ts` read, each with one value per backend. `SUPABASE_ACCESS_TOKEN` is never on Vercel. DEV's auth redirect list must allow the partner-preview URL so that invite and password links work on the preview. Recheck the scopes when deployment configuration changes.
 
 ### Provider configuration
 
-Project configuration (auth settings, mail templates, SMTP, rate limits) is not schema, and no migration carries it. Both projects carry the same posture so that DEV mirrors PROD. Read the current values through the Management API or the dashboard. `bun scripts/sync-dev-auth-from-prod.ts` prints the difference between the two auth configurations and, with `--apply`, copies the mail fields from PROD to DEV. Run it after every auth change on the production dashboard.
+Project configuration (auth settings, mail templates, SMTP, rate limits) is not schema, and no migration carries it. Both projects carry the same posture so that DEV mirrors PROD. Read the current values through the Management API or the dashboard. `bun scripts/sync-dev-auth-from-prod.ts` prints the difference between the two auth configurations and, with `--apply`, copies the mail fields from PROD to DEV. Run it after every auth change on the production dashboard. `bun run auth:check` compares DEV's Auth configuration with the reviewed security posture in `lib/security/supabase-project-checks.ts` and fails on a difference. Change a setting and its posture entry together.
 
 Decided and in force: leaked-password protection, custom SMTP through Resend, SSL enforcement for direct database connections, the organization spend cap, daily backups from the plan, anonymous sign-in off, Vercel Authentication on every deployment except the custom domain.
 
@@ -80,13 +80,13 @@ Vercel holds its own variables, so a local file never affects the deployed app. 
 This section is the one home of the rule. Skills and decision records link here.
 
 1. Every schema change is a committed file in `supabase/migrations/` first. No DDL exists only in a database.
-2. A migration that creates a table follows [security rule 9](security.md#checklist): RLS, policies and explicit grants in the same file.
+2. A migration that creates a table follows [add a table](security.md#add-a-table): RLS, policies and explicit grants in the same file.
 3. Apply to DEV with `bunx supabase db push`. The push records the committed file's exact version in the remote history. If a migration reached DEV through MCP `apply_migration` instead, align its history key to the committed file name afterwards, because MCP stamps its own version. `bun run migrations:check` and the canary fail on a divergence.
-4. Run `bun run types:generate` after the push and commit the result. `bun run types:check` fails when the committed types differ from a fresh DEV generation.
+4. Run `bun run types:generate` after the push and commit the result. `bun run types:check` fails when the committed types differ from a fresh DEV generation. `bun run advisors:check` runs the DEV security and performance advisors and fails on a warning, an error or a security finding without a reviewed exception in `lib/security/supabase-project-checks.ts`, and on an exception the advisor no longer reports.
 5. Apply to PROD only as part of a production release that the owner requested ([decision 0008](../decisions/0008-development-workflow.md)): MCP `apply_migration` against the production ref with the identical SQL, inside the maintenance window, before `origin/main` advances. Compare name and statement, then align the history key to the committed file name. Never `supabase link` or `db push` against production.
 6. The `*baseline*` repair migrations reconcile drift from before the split. Never edit them.
 7. Coordinate a schema change that the running app cannot tolerate with the app release that consumes it. For a change of a Realtime transport: pause writes, drain requests from the old app, change the database, deploy the compatible app, make open tabs reload, verify an authorized receiver, then reopen writes. A rollback keeps app and database compatible.
-8. A migration never drops or changes the signature of a function, column or table that the deployed build still uses. Add the replacement first. A later migration drops the old object after that build is replaced.
+8. A migration never drops or changes the signature of a function, column or table that the deployed build still uses. Add the replacement first. A later migration drops the old object after that build is replaced. Every top-level drop, truncate, delete, rename or column type change carries `-- @destructive: <reason>` directly above it; `lib/security/destructive-migrations.test.ts` checks every migration newer than its frozen baseline, because applied files cannot change. `lib/security/retired-functions.test.ts` fails on a public function that no code calls, unless it names the SQL caller or the release that may drop it.
 
 Between releases, migrations wait on DEV. Read the two migration ledgers before you claim parity. `bun run migrations:check`, `bun run types:check` and `bun run realtime:check` each compare one thing against the committed files. None compares the complete DEV and PROD schemas, and a matching migration name does not prove an identical function body. When production parity matters, compare the live object definitions with the procedure in the `supabase-live-workflow` skill.
 

@@ -96,6 +96,7 @@ const FAILURE_CODES = {
     'missing_employee_mapping',
     'payroll_employee_mapping_missing',
     'missing_code_mapping',
+    'load_failed',
     'export_failed',
   ],
   downloadExport: [
@@ -103,6 +104,7 @@ const FAILURE_CODES = {
     'forbidden',
     'responsibility_load_failed',
     'export_not_ready',
+    'load_failed',
     'download_failed',
   ],
 } as const;

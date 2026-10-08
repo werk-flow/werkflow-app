@@ -19,6 +19,11 @@ const berlinDateTime = new Intl.DateTimeFormat('de-DE', {
   timeZone: 'Europe/Berlin',
 });
 const germanMediumDateTime = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
+const berlinTime = new Intl.DateTimeFormat('de-DE', {
+  hour: '2-digit',
+  minute: '2-digit',
+  timeZone: 'Europe/Berlin',
+});
 
 /**
  * A date-only ISO string is a calendar date, not an instant: `new Date('2026-09-13')`
@@ -51,6 +56,12 @@ export function formatGermanDate(
   return germanDate.format(toCalendarAwareDate(value));
 }
 
+/** 13.09.2026 for a single day, 13.09.2026 – 15.09.2026 for several. */
+export function formatGermanDateRange(startDate: string, endDate: string): string {
+  if (startDate === endDate) return formatGermanDate(startDate);
+  return `${formatGermanDate(startDate)} – ${formatGermanDate(endDate)}`;
+}
+
 /** 13.09.2026, 08:15 */
 export function formatGermanDateTime(value: string | Date): string {
   return germanDateTime.format(toCalendarAwareDate(value));
@@ -59,6 +70,11 @@ export function formatGermanDateTime(value: string | Date): string {
 /** 13.09.2026, 08:15 in Europe/Berlin, independent of the browser's time zone. */
 export function formatBerlinDateTime(value: string | Date): string {
   return berlinDateTime.format(new Date(value));
+}
+
+/** 08:15 in Europe/Berlin, independent of the browser's and the server's time zone. */
+export function formatBerlinTime(value: string | Date): string {
+  return berlinTime.format(new Date(value));
 }
 
 /** 13. Sept. 2026, 08:15 in the browser's time zone. */
@@ -83,4 +99,9 @@ export function toLocalDateString(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+/** The Date's local wall clock as `HH:MM`, the value of a time input; the time counterpart of toLocalDateString. */
+export function toLocalTimeOfDay(date: Date): string {
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }

@@ -1,6 +1,6 @@
 # User Flow Catalog
 
-Status: living — last reviewed 2026-09-27
+Status: living — last reviewed 2026-10-05
 
 ## Purpose And Rules (for agents)
 
@@ -36,7 +36,7 @@ Diese Abschnitte beschreiben, was die App bereits konnte, bevor der Phase-1-Fahr
 ### Organisation, Konten und Rollen
 
 - `BASE-ORG-F01` — Alle: Nutzer können ein Konto anlegen, sich anmelden und abmelden.
-- `BASE-ORG-F02` — Admin: kann eine Organisation erstellen und wird deren Inhaber. Nutzer ohne Admin-Mitgliedschaft können per Organisations-Code als „Handwerker/in“ beitreten. Wer bereits Mitglied ist, kann per Code nur weiteren Organisationen desselben Inhabers beitreten.
+- `BASE-ORG-F02` — Admin: kann eine Organisation erstellen und wird deren Inhaber. Nutzer können per Organisations-Code den Beitritt als „Handwerker/in“ anfragen; Admin oder Büro nehmen die Anfrage unter „Aufgaben“ oder „Mitarbeiter“ an oder lehnen sie ab, und erst dann ist der Nutzer Mitglied. Wer bereits Mitglied ist, kann per Code nur weiteren Organisationen desselben Inhabers beitreten (Beitrittsanfrage seit der Überarbeitung vor Wave 3).
 - `BASE-ORG-F03` — Admin/Büro: können neue Mitglieder als „Büro“ oder „Handwerker/in“ per E-Mail einladen; offene Einladungen sind sichtbar und können verwaltet werden. Der Eingeladene erhält eine E-Mail, folgt dem Link und landet nach der Anmeldung direkt in der Organisation.
 - `BASE-ORG-F04` — Alle: wer mehreren Organisationen angehört, kann die aktive Organisation wechseln; alle Daten und Ansichten sind strikt auf die aktive Organisation begrenzt.
 - `BASE-ORG-F05` — Admin/Büro: sehen unter `/mitarbeiter` die Mitgliederliste mit Rolle, aktuellem Stempelstatus und Tagesfortschritt sowie eine Detailseite je Mitglied. Handwerker haben keinen Zugriff auf diese Seite.

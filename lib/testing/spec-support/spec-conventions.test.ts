@@ -18,6 +18,7 @@ import { specIndependenceProblems } from './spec-independence';
 const REPO_ROOT = join(import.meta.dir, '..', '..', '..');
 const GOLDEN_DIR = join(REPO_ROOT, 'tests', 'golden');
 const AUDIT_DIR = join(REPO_ROOT, 'tests', 'audit');
+const CANARY_DIR = join(REPO_ROOT, 'tests', 'canary');
 
 function listSpecFiles(directory: string): string[] {
   return readdirSync(directory, { recursive: true, encoding: 'utf8' })
@@ -31,6 +32,7 @@ function specName(path: string): string {
 
 const goldenSpecs = listSpecFiles(GOLDEN_DIR);
 const auditSpecs = listSpecFiles(AUDIT_DIR);
+const canarySpecs = listSpecFiles(CANARY_DIR);
 const serialConfiguration = /test\s*\.\s*describe\s*\.\s*configure\s*\(\s*\{[^}]*\bmode\s*:\s*['"]serial['"]/;
 
 describe('independence detector', () => {
@@ -70,7 +72,7 @@ describe('independence detector', () => {
 
 describe('browser spec conventions (testing.md)', () => {
   test('no browser test depends on another test, module state or the wall clock at load', () => {
-    const problems = [...goldenSpecs, ...auditSpecs].flatMap((path) =>
+    const problems = [...goldenSpecs, ...auditSpecs, ...canarySpecs].flatMap((path) =>
       specIndependenceProblems(readFileSync(path, 'utf8'), specName(path)),
     );
     expect(problems).toEqual([]);
@@ -120,9 +122,10 @@ describe('browser spec conventions (testing.md)', () => {
   test('found the spec inventory', () => {
     expect(goldenSpecs.length).toBeGreaterThan(0);
     expect(auditSpecs.length).toBeGreaterThan(0);
+    expect(canarySpecs.length).toBeGreaterThan(0);
   });
 
-  for (const path of [...goldenSpecs, ...auditSpecs]) {
+  for (const path of [...goldenSpecs, ...auditSpecs, ...canarySpecs]) {
     const source = readFileSync(path, 'utf8');
     const name = specName(path);
 

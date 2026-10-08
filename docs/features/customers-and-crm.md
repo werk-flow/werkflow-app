@@ -1,6 +1,6 @@
 # Customers And CRM
 
-Status: living — last reviewed 2026-10-04
+Status: living — last reviewed 2026-10-05
 
 Customer relationship management in WerkFlow is the operational customer context an SHK business needs to receive requests, plan visits, do the work, communicate reliably, and understand a relationship's history.
 
@@ -256,7 +256,7 @@ Phase 2 reduces intake, data-quality, and follow-up work once the customer core 
 - Can one contact belong to several customers or sites, and how is authority to approve or receive documents scoped?
 - How do landlord, tenant, property manager, owner, bill payer, and on-site contact relate without duplicate customers?
 - Can one site have several responsible customers over time, and how is that history kept?
-- Which response-time measures matter to SHK businesses? Request sources are fixed to Telefon, E-Mail, Vor Ort, and Sonstiges. Extend them only with evidence.
+- Which response-time measures matter to SHK businesses? Request sources are a short fixed list. Extend it only with evidence.
 - Which duplicate confidence and evidence trigger a warning, a block, or merge review?
 - Who may merge customers, and how is a merge reversed?
 - Which identifiers must imports and integrations keep?

@@ -117,8 +117,9 @@ export async function clearEmailChangeChallengeBeforeSignOut(): Promise<{
 }> {
   return { success: true };
 }
-export async function clockOutBeforeSignOut(): Promise<void> {
-  /* Deterministic successful cleanup boundary. */
+// The real action answers with the organizations it clocked out; the hook reads `success`.
+export async function clockOutBeforeSignOut(): Promise<{ success: true; clockedOutOrgIds: string[] }> {
+  return { success: true, clockedOutOrgIds: [] };
 }
 
 // `@/lib/time-tracking/actions`: the approval cards and the entry details dialog.

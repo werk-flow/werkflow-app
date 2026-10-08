@@ -5,7 +5,7 @@ description: Diagnosis loop for hard bugs and performance regressions. Use when 
 
 # Diagnose a defect
 
-Adapted for WerkFlow from mattpocock/skills (MIT). For a test failure, first read `docs/technical/testing.md`. That guide owns group selection, repair mode, the run's execution model, deadlines, retained diagnosis and recovery under decision 0007. Apply this skill to the suspected product, test, or environment defect. Read the owning feature contract before deciding what behavior is wrong.
+Adapted for WerkFlow from mattpocock/skills (MIT). For a test failure, first read `docs/technical/testing.md`. That guide owns group selection, repair mode, the run's execution model, deadlines, retained diagnosis and recovery under [decision 0007](../../../docs/decisions/0007-independent-test-groups.md). Apply this skill to the suspected product, test, or environment defect. Read the owning feature contract before deciding what behavior is wrong.
 
 Application tests use local Supabase. The canary and named provider checks use cloud DEV. Production is read-only during diagnosis. Use the repository wrappers and workspace ownership rules. Do not start a competing server, database reset, or test command.
 
@@ -26,6 +26,7 @@ Choose a bounded feedback method that can distinguish the leading explanations:
 - A retained diagnostic (`--reuse-run <key>`) or fresh affected group for application behavior; for a measured scenario, a focused run with `KEEP_WORLD=1` and replays on that world.
 - A read-only request or state comparison for a disputed saved result.
 - A focused timing measurement for a performance defect.
+- A human-in-the-loop script when only the user can observe the symptom: copy [hitl-loop.template.sh](scripts/hitl-loop.template.sh), edit its steps and run it.
 
 Completion means the symptom and relevant evidence are identified, with either a suitable bounded experiment or a precise reason that observation is currently blocked. Do not claim a reproduction merely because a nearby assertion failed.
 
@@ -49,19 +50,19 @@ Completion means the next experiment distinguishes explanations rather than mere
 
 Change one relevant variable at a time. Prefer existing logs, a debugger, or a focused read. Add temporary instrumentation only where it can distinguish the explanations. Prefix temporary logs with a unique marker and remove them before completion.
 
-For performance, record the start event, completion event, elapsed time, and required deadline. Do not start the clock after a loading delay or reload a receiving page to manufacture freshness. An emergency timeout does not define acceptable response time. Measure a repeatable interaction as a registered scenario (`lib/testing/measured-scenarios.ts`, recorded through `expectUsableWithin` or `expectScenarioLiveWithin` in `tests/golden/support/scenario-measurement.ts`) so the value gets a budget, a baseline comparison, and browser attribution instead of a one-off stopwatch. End a navigation or view-switch measurement on the actual usable renderer or control (`data-calendar-state`, `data-usable-content`). A server response, a dialog shell, or hydration of a parent does not prove child readiness.
+For performance, record the start event, completion event, elapsed time, and required deadline. Do not start the clock after a loading delay or reload a receiving page to manufacture freshness. An emergency timeout does not define acceptable response time. Measure a repeatable interaction as a registered scenario (`lib/testing/measured-scenarios.ts`, recorded through `expectUsableWithin` or `expectScenarioLiveWithin` in `tests/golden/support/scenario-measurement.ts`) so the value gets a budget, a baseline comparison, and browser attribution instead of a one-off stopwatch. End a navigation or view-switch measurement on the actual usable renderer or control (`data-calendar-state`, `data-usable-content-name`). A server response, a dialog shell, or hydration of a parent does not prove child readiness.
 
 If a mutation response is unclear, inspect its exact persisted identity or version before any recovery. A repeat write is not an observation.
 
 ## 5. Repair and prevent recurrence
 
-For reconnect defects, hold a read across the disconnected gap and introduce a later change before rejoining. Recovery must read after the database listener becomes ready. Supabase channel `SUBSCRIBED` can precede that boundary; the provider owns recovery on the `postgres_changes` system-ready message. A read during the gap proves no coverage of later writes. The same-scope, post-invalidation reuse rule lives in `docs/technical/realtime-and-caching.md`.
+For a reconnect defect, hold a read across the disconnected gap and introduce a later change before rejoining. A read during the gap proves no coverage of later writes. The recovery ordering and the same-scope reuse rule live in the [client freshness contract](../../../docs/technical/realtime-and-caching.md#client-freshness-contract).
 
 Repair the smallest confirmed cause without weakening the promised behavior. Exercise the real failing boundary in the regression check. A test that simulates away the cause does not establish prevention.
 
 Where practical, demonstrate that the check rejects the defect and passes the repair. Existing retained failure evidence may establish the rejected behavior. Do not spend another full browser run solely to recreate it.
 
-Use the enforcement ladder from decision 0005: first remove the invalid state through a type or shared API, then add an automated check, then document a remaining judgment. State the prevention tier. If no suitable automated boundary exists, record why and the focused follow-up needed.
+Use the enforcement ladder from [decision 0005](../../../docs/decisions/0005-enforcement-ladder.md): first remove the invalid state through a type or shared API, then add an automated check, then document a remaining judgment. State the prevention tier. If no suitable automated boundary exists, record why and the focused follow-up needed.
 
 A harness failure is a defect of the harness, not a detail of the run. The same class twice in one slice (a leaked state, a locator that matched a hidden copy, a fixture that did not fit the viewport) ends with a fixture, a convention test or a runner rule, never with a second local repair; the protocol's "Campaign Line" binds the slice's closure to that.
 

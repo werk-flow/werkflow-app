@@ -8,12 +8,7 @@ import type { ApproverVacationRequest } from '@/lib/vacation/actions';
 import { formatVacationDays } from '@/lib/vacation/balance';
 import { VACATION_PORTION_LABELS } from '@/lib/vacation/types';
 import type { VacationReasonDialogState } from './use-vacation-approvals';
-import { formatGermanDate } from '@/lib/utils';
-
-function formatRange(startDate: string, endDate: string): string {
-  if (startDate === endDate) return formatGermanDate(startDate);
-  return `${formatGermanDate(startDate)} – ${formatGermanDate(endDate)}`;
-}
+import { formatGermanDate, formatGermanDateRange } from '@/lib/utils';
 
 type VacationApprovalPendingCardProps = {
   item: ApproverVacationRequest;
@@ -38,7 +33,7 @@ export function VacationApprovalPendingCard({
               <InlinePending active={busy.isBusy(item.request.id)} />
             </p>
             <p className="mt-0.5 text-sm text-muted-foreground tabular-nums">
-              {formatRange(item.request.startDate, item.request.endDate)}
+              {formatGermanDateRange(item.request.startDate, item.request.endDate)}
               {` · ${VACATION_PORTION_LABELS[item.request.dayPortion]}`}
               {` · ${formatVacationDays(item.totalDays)}`}
             </p>
@@ -125,7 +120,7 @@ export function VacationApprovalApprovedList({
                 <InlinePending active={busy.isBusy(item.request.id)} />
               </p>
               <p className="text-xs text-muted-foreground tabular-nums">
-                {formatRange(item.request.startDate, item.request.endDate)}
+                {formatGermanDateRange(item.request.startDate, item.request.endDate)}
                 {` · ${formatVacationDays(item.totalDays)}`}
               </p>
             </div>

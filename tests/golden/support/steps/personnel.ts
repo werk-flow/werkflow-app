@@ -11,6 +11,7 @@ import type {
   PersonnelEmploymentTransitionKind,
   PersonnelRequirementType,
 } from '../../../../lib/personnel/lifecycle';
+import { EMPLOYMENT_TYPE_LABELS, type EmploymentType } from '../../../../lib/personnel/types';
 import type { OrganizationResponsibility } from '../../../../lib/responsibilities/types';
 import { ROLE_LABELS } from '../../../../lib/roles';
 import {
@@ -50,7 +51,7 @@ export const PERSONNEL_COPY = {
 } as const;
 
 /** The personnel master-data fields, keyed like the history's field names. */
-export const PERSONNEL_FIELDS = {
+const PERSONNEL_FIELDS = {
   employee_number: 'Personalnummer',
   first_name: 'Vorname',
   phone: 'Telefon',
@@ -166,13 +167,28 @@ function personnelFieldEditButton(page: Page, fieldLabel: string): Locator {
   return page.getByRole('button', { name: `${fieldLabel} bearbeiten`, exact: true });
 }
 
+/** The text fields of the shared MetadataSection on customer and project details. */
+const METADATA_TEXT_FIELDS = { name: 'Name', description: 'Beschreibung' } as const;
+
 // Inline edit of one Personalien field through the shared MetadataSection
 // pencil-edit flow (text fields only; dates use the segmented DatePicker).
-export async function editPersonnelTextField(page: Page, fieldLabel: string, value: string): Promise<void> {
-  await editMetadataTextField(page, fieldLabel, value);
+export async function editPersonnelTextField(
+  page: Page,
+  field: PersonnelField,
+  value: string,
+): Promise<void> {
+  await editInlineTextField(page, PERSONNEL_FIELDS[field], value);
 }
 
-export async function editMetadataTextField(page: Page, fieldLabel: string, value: string): Promise<void> {
+export async function editMetadataTextField(
+  page: Page,
+  field: keyof typeof METADATA_TEXT_FIELDS,
+  value: string,
+): Promise<void> {
+  await editInlineTextField(page, METADATA_TEXT_FIELDS[field], value);
+}
+
+async function editInlineTextField(page: Page, fieldLabel: string, value: string): Promise<void> {
   await personnelFieldEditButton(page, fieldLabel).click();
   // The field editor autofocuses its input; targeting :focus avoids matching
   // unrelated inputs elsewhere on the detail page (e.g. table search boxes).
@@ -236,7 +252,7 @@ export async function addConditionViaDialog(
   options: {
     // ddmmyyyy digits for the valid-from date; omitted = keep today's default.
     validFromDigits?: string;
-    employmentTypeLabel: string;
+    employmentType: EmploymentType;
     weeklyHours?: string;
     vacationDays?: string;
     note?: string;
@@ -264,7 +280,7 @@ export async function addConditionViaDialog(
 
       await dialog.locator('#condition-type').click({ timeout: 5_000 });
       await page
-        .getByRole('option', { name: options.employmentTypeLabel, exact: true })
+        .getByRole('option', { name: EMPLOYMENT_TYPE_LABELS[options.employmentType], exact: true })
         .click({ timeout: 5_000 });
 
       if (options.weeklyHours !== undefined) {

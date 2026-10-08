@@ -1,6 +1,6 @@
 # Calendar And Resource Planning
 
-Status: living — last reviewed 2026-10-03
+Status: living — last reviewed 2026-10-05
 
 Calendar and resource planning (`Kalender` and `Einsatzplanung`) connects the work the business has promised with the people, time, tools, vehicles, locations and materials needed to deliver it.
 
@@ -44,7 +44,7 @@ The calendar reduces telephone coordination, paper schedules, duplicate entry, a
 
 ### Planning rules
 
-- **Planning occurrences.** Managers create timed or all-day job visits and internal entries of the kinds `Interne Arbeit`, `Besprechung`, `Schulung` and `Sonstiges`. An entry is one-off, multi-day, cross-midnight, or a daily, weekly or monthly series. A series has an 18-month horizon that extends in six-month steps. Editing one occurrence creates an exception. `diese und zukünftige` splits the series. Skipped and cancelled occurrences stay visible as history.
+- **Planning occurrences.** Managers create timed or all-day job visits and internal entries such as a `Besprechung` or a `Schulung`. An entry is one-off, multi-day, cross-midnight, or a daily, weekly or monthly series. A series is created up to a bounded horizon, and a manager extends it step by step. Editing one occurrence creates an exception. `diese und zukünftige` splits the series. Skipped and cancelled occurrences stay visible as history.
 - **Assignments and identity.** Occurrence assignments use stable employee records, including people without a login, and control who sees the occurrence. Durable job access and responsibility stay with the job assignment. A job visit references the job's title, customer and location and does not copy them.
 - **Team shortcuts.** A team in an assignment control expands to its members who are active on that date. Team membership grants no authority.
 - **Qualification checks.** Every move, resize, schedule, unpark or reassignment runs the job qualification check again. A confirmation dialog explains the gaps. A manager can override only with a recorded reason. The optional apprentice signal warns and never blocks.
@@ -54,11 +54,11 @@ The calendar reduces telephone coordination, paper schedules, duplicate entry, a
 
 ### Dispatch, commitments and parked work
 
-- **Dispatch.** A dispatch is a versioned work instruction for exactly one scheduled visit or one unscheduled job ([decision 0002](../decisions/0002-dispatch-revision-acknowledgement-identity.md)). Any material change to schedule, location, note or recipients supersedes the current revision in the same transaction, so a moved visit never appears acknowledged from stale state. Parking cancels active dispatches. A person without a login shows „nicht möglich" and never a fabricated confirmation.
-- **The Einsätze panel.** Managers see the recipient states per visit and resolve a challenge with a keep-with-reason decision. They issue a dispatch with a readiness picture: capacity and qualification, site and access, explicit travel gaps, material always „nicht reserviert", and tools always „nicht bewertet" until `P1-32`. Batch rescheduling previews conflicts, invalidated acknowledgements and affected commitments, then applies as one all-or-nothing move.
+- **Dispatch.** A dispatch is a versioned work instruction for exactly one scheduled visit or one unscheduled job ([decision 0002](../decisions/0002-dispatch-revision-acknowledgement-identity.md)). Any material change to schedule, location, note or recipients supersedes the current revision in the same transaction, so a moved visit never appears acknowledged from stale state. Parking cancels active dispatches. A person without a login shows „nicht möglich“ and never a fabricated confirmation.
+- **The Einsätze panel.** Managers see the recipient states per visit and resolve a challenge with a keep-with-reason decision. They issue a dispatch with a readiness picture: capacity and qualification, site and access, explicit travel gaps, material always „nicht reserviert“, and tools always „nicht bewertet“ until `P1-32`. Batch rescheduling previews conflicts, invalidated acknowledgements and affected commitments, then applies as one all-or-nothing move.
 - **Acknowledgement.** Employees confirm or challenge on the job detail under **Mein Einsatz** and on `/aufgaben`. An acknowledgement never implies attendance, recorded time or a customer promise.
 - **Customer commitments.** An office user can record an agreed day and arrival window per occurrence. A schedule move never rewrites a commitment. A mismatch requires an explicit re-commit or a withdrawal with a reason. No planning action sends a message. Outbound messages are `P1-46`.
-- **Parked work.** The `Parkplatz` is the `parking` kind of the shared blocker model. Parking and unparking are one atomic manager action with reason, responsible person, review date and immutable history. Customer and priority come from the job. Planning changes touch the planned state only and never overwrite execution state.
+- **Parked work.** The `Parkplatz` is the `parking` kind of the shared blocker model. Parking and unparking are one atomic manager action with reason, responsible person, review date and immutable history. Unparking into the schedule plans the visit for exactly the people the manager selected, and a refused plan leaves the job parked. Customer and priority come from the job. Planning changes touch the planned state only and never overwrite execution state.
 
 ### Connected work
 
@@ -251,6 +251,6 @@ The system starts with proposals and previews. Automatic rescheduling, customer 
 - How job and project progress should summarize multi-visit completion. Visit planning keeps one underlying job.
 - Which supervision rules are needed beyond qualification coverage and the optional apprentice warning.
 - How `P1-26` and `P1-32` connect material and tool availability to calendar readiness while reservation and custody stay with inventory.
-- Which map, travel-time and navigation providers fit the German market and its privacy requirements. Until `P1-50` selects a provider, travel feasibility is computed only from explicit same-site and zero-gap facts, and everything else is labeled „nicht bewertet".
+- Which map, travel-time and navigation providers fit the German market and its privacy requirements. Until `P1-50` selects a provider, travel feasibility is computed only from explicit same-site and zero-gap facts, and everything else is labeled „nicht bewertet“.
 - Which customer reminder channels come first. Today the product records manual commitments only, and every outbound channel is `P1-46`.
 - Whether a one-way calendar subscription is sufficient before bidirectional Google or Microsoft synchronization.

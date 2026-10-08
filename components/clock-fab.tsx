@@ -20,15 +20,7 @@ import {
   type ClockPickerMode,
 } from '@/lib/time-tracking/clock-actions';
 import { useBanner } from '@/components/ui/banner';
-import { cn } from '@/lib/utils';
-
-function formatBerlinTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('de-DE', {
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'Europe/Berlin',
-  });
-}
+import { cn, formatBerlinTime } from '@/lib/utils';
 
 export function ClockFAB() {
   const { activeOrgId, activeOrg } = useOrganization();

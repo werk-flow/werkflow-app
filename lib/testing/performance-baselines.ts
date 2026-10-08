@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import baselineFile from './performance-baselines.json';
+import carryoverFile from './performance-reference-carryover.json';
 import { MEASUREMENT_VERSION, MEASURED_SCENARIOS, type MeasuredScenario } from './measured-scenarios';
 import {
   performanceContextSchema,
@@ -60,8 +61,57 @@ const performanceBaselinesSchema = z
 export type PerformanceBaseline = z.infer<typeof baselineSchema>;
 export type PerformanceBaselines = z.infer<typeof performanceBaselinesSchema>;
 
+const digestPattern = /^[a-f0-9]{64}$/;
+
+const referenceCarryoverSchema = z
+  .object({
+    reason: z.string().min(1),
+    entries: z.array(
+      z
+        .object({
+          scenarioId: z.string().min(1),
+          fileDigest: z.string().regex(digestPattern),
+          measuredTestDigest: z.string().regex(digestPattern),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+
+export type ReferenceCarryover = z.infer<typeof referenceCarryoverSchema>;
+
+export function readReferenceCarryover(): ReferenceCarryover {
+  return referenceCarryoverSchema.parse(carryoverFile);
+}
+
+/**
+ * Re-keys a reference recorded under the whole-file measurement digest to the
+ * measured-test digest that `performance-reference-carryover.json` proved for
+ * it. Reference values and every other context field stay as reviewed.
+ */
+export function carryOverReferences(
+  baselines: PerformanceBaselines,
+  carryover: ReferenceCarryover,
+): PerformanceBaselines {
+  return {
+    ...baselines,
+    baselines: baselines.baselines.map((baseline) => {
+      const entry = carryover.entries.find(
+        (candidate) =>
+          candidate.scenarioId === baseline.scenarioId &&
+          candidate.fileDigest === baseline.context.measurementDigest,
+      );
+      if (!entry) return baseline;
+      return { ...baseline, context: { ...baseline.context, measurementDigest: entry.measuredTestDigest } };
+    }),
+  };
+}
+
 export function readPerformanceBaselines(): PerformanceBaselines {
-  const baselines = performanceBaselinesSchema.parse(baselineFile);
+  const baselines = carryOverReferences(
+    performanceBaselinesSchema.parse(baselineFile),
+    readReferenceCarryover(),
+  );
   const problems = validatePerformanceBaselines(baselines, MEASURED_SCENARIOS);
   if (problems.length) throw new Error(`Invalid performance baseline activation: ${problems.join('; ')}`);
   return baselines;

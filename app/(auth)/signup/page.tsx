@@ -5,6 +5,8 @@ import { redirect } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { getSupabaseServerSession } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { RegionLoadError } from '@/components/shared/region-load-error';
+import { logReadFailure } from '@/lib/data/read-request-cache';
 import { getCachedUser } from '@/lib/data/cached';
 import { getAuthenticatedRedirectPath } from '@/lib/auth/redirects';
 
@@ -53,8 +55,18 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
     // The RPC returns an array, get the first result
     const invite = Array.isArray(inviteData) ? inviteData[0] : inviteData;
 
+    // A failed lookup is not an invalid invite: the link may well be valid.
+    if (inviteError) {
+      logReadFailure('Invite lookup failed', { code: inviteError.code });
+      return (
+        <RegionLoadError title="Die Einladung konnte nicht geprüft werden">
+          Der Einladungslink ist gerade nicht prüfbar. Versuche es in einem Moment erneut.
+        </RegionLoadError>
+      );
+    }
+
     // If invite doesn't exist, redirect to error page
-    if (inviteError || !invite) {
+    if (!invite) {
       redirect('/invite-error?error=invalid_invite');
     }
 

@@ -1,12 +1,11 @@
 'use server';
 
-import { cookies } from 'next/headers';
 import { updateTag } from 'next/cache';
 
 import type { ActionResult } from '@/lib/action-result';
-import { CACHE_TAGS, getAuthenticatedUser } from '@/lib/data/cached';
+import { CACHE_TAGS } from '@/lib/data/cached';
 import { logError } from '@/lib/logging';
-import { resolveActiveOrgId } from '@/lib/org/cookies';
+import { resolveActionContext } from '@/lib/org/action-context';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { LIST_ROW_CAP, readCompleteRows } from '@/lib/supabase/query-batches';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
@@ -143,23 +142,16 @@ function settingsWriteFailure(error: { message: string }): UpdateTimeTrackingSet
 export async function updateTimeTrackingSettings(
   input: TimeTrackingSettingsValues,
 ): Promise<UpdateTimeTrackingSettingsResult> {
-  const user = await getAuthenticatedUser();
-
-  if (!user) {
-    return { success: false, error: 'not_authenticated' };
+  const auth = await resolveActionContext();
+  if (!auth.success) {
+    return { success: false, error: auth.error === 'not_authenticated' ? auth.error : 'org_not_found' };
   }
+  const { userId, orgId: activeOrgId } = auth.context;
 
   const parsed = timeTrackingSettingsSchema.safeParse(input);
 
   if (!parsed.success) {
     return { success: false, error: 'invalid_input' };
-  }
-
-  const cookieStore = await cookies();
-  const activeOrgId = await resolveActiveOrgId(cookieStore, user.id);
-
-  if (!activeOrgId) {
-    return { success: false, error: 'org_not_found' };
   }
 
   const admin = createSupabaseAdminClient();
@@ -173,7 +165,7 @@ export async function updateTimeTrackingSettings(
     return { success: false, error: 'org_not_found' };
   }
 
-  if (organization.admin_id !== user.id) {
+  if (organization.admin_id !== userId) {
     return { success: false, error: 'not_authorized' };
   }
 
@@ -226,7 +218,7 @@ export async function updateTimeTrackingSettings(
     const { error: updateError } = await admin.rpc(
       'update_time_tracking_settings',
       rpcArgs('update_time_tracking_settings', {
-        p_actor_id: user.id,
+        p_actor_id: userId,
         p_organization_id: activeOrgId,
         p_expected_settings: currentRow,
         p_break_mode: nextValues.breakMode,

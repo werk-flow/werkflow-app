@@ -1,6 +1,6 @@
 # Document storage and access
 
-Status: living — last reviewed 2026-10-03
+Status: living — last reviewed 2026-10-05
 
 This page holds the rules for document bytes, storage paths, signed URLs, access, links, trash and versions. The feature spec [document-management.md](../features/document-management.md) owns what users can do, the planned scope and the open decisions. `lib/supabase/database.types.ts` and live Supabase inspection show the schema.
 
@@ -27,7 +27,7 @@ All access uses short-lived signed URLs. A view URL renders inline only for the 
 
 ## Upload flow
 
-An upload has two phases:
+An upload has three steps:
 
 1. `createDocumentUploadTicket` authorizes the user, the organization, the target and the folder. It returns a document id and a signed PUT URL with the content type pinned into the signature.
 2. The browser PUTs the bytes directly to R2.

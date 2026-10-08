@@ -75,30 +75,8 @@ export function getAuftraegePreferencesFromJson(preferences: Json | null | undef
   return parseVisibleAuftraegeColumns(typedPreferences.auftraege?.visibleColumns);
 }
 
-export function buildAuftraegePreferencesJson(
-  visibleColumns: AuftraegeColumnId[],
-  previousPreferences: Json | null | undefined,
-): Json {
-  const basePreferences =
-    previousPreferences && typeof previousPreferences === 'object' && !Array.isArray(previousPreferences)
-      ? { ...(previousPreferences as Record<string, Json | undefined>) }
-      : {};
-
-  const previousAuftraege =
-    basePreferences.auftraege &&
-    typeof basePreferences.auftraege === 'object' &&
-    !Array.isArray(basePreferences.auftraege)
-      ? { ...(basePreferences.auftraege as Record<string, Json | undefined>) }
-      : {};
-
-  return {
-    ...basePreferences,
-    auftraege: {
-      ...previousAuftraege,
-      visibleColumns,
-    },
-  };
-}
+/** Where the column choice lives in the preference document; the save sets only this key. */
+export const AUFTRAEGE_VISIBLE_COLUMNS_PREFERENCE_PATH = ['auftraege', 'visibleColumns'];
 
 export function resolveVisibleAuftraegeColumns(
   visibleColumns: AuftraegeColumnId[],

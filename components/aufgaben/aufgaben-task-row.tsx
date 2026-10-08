@@ -5,8 +5,8 @@ import type { AttentionTask } from '@/lib/attention/types';
 import { formatVacationDays } from '@/lib/vacation/balance';
 import { REQUEST_STATUS_LABELS, REQUEST_URGENCY_LABELS } from '@/lib/requests/types';
 import { WORK_ARTIFACT_KIND_LABELS } from '@/lib/work-artifacts/types';
-import { formatOpenSince, formatRange } from './aufgaben-format';
-import { formatGermanDate, formatBerlinDateTime } from '@/lib/utils';
+import { formatOpenSince } from './aufgaben-format';
+import { formatGermanDate, formatGermanDateRange, formatBerlinDateTime } from '@/lib/utils';
 
 type AttentionApprovalTask = Extract<
   AttentionTask,
@@ -122,7 +122,7 @@ function AttentionApprovalTaskRow({ task }: { task: AttentionApprovalTask }) {
     >
       <p className="text-sm font-medium">{task.personName}</p>
       <p className="text-xs text-muted-foreground tabular-nums">
-        {formatRange(task.startDate, task.endDate)}
+        {formatGermanDateRange(task.startDate, task.endDate)}
         {task.dayPortion === 'half_day' ? ' (halbtags)' : ''}
         {` · ${formatVacationDays(task.totalDays)}`}
       </p>

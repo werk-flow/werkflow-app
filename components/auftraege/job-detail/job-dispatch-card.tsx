@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { DISPATCH_RECIPIENT_STATE_LABELS, type EmployeeDispatchCard } from '@/lib/dispatch/types';
+import { formatBerlinTime } from '@/lib/utils';
 
 function formatCardSchedule(card: EmployeeDispatchCard): string {
   if (card.startAt) {
@@ -17,18 +18,8 @@ function formatCardSchedule(card: EmployeeDispatchCard): string {
       month: '2-digit',
       year: 'numeric',
     });
-    const timeText = start.toLocaleTimeString('de-DE', {
-      timeZone: 'Europe/Berlin',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-    const endText = card.endAt
-      ? new Date(card.endAt).toLocaleTimeString('de-DE', {
-          timeZone: 'Europe/Berlin',
-          hour: '2-digit',
-          minute: '2-digit',
-        })
-      : null;
+    const timeText = formatBerlinTime(start);
+    const endText = card.endAt ? formatBerlinTime(card.endAt) : null;
     return `${dateText}, ${timeText}${endText ? `–${endText}` : ''} Uhr`;
   }
   if (card.startDate) {

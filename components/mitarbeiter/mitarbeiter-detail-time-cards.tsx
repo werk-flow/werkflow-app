@@ -8,24 +8,9 @@ import { StatusBadge } from './status-badge';
 import { WeeklyHoursChart } from '@/components/zeiterfassung/weekly-hours-chart';
 import { formatDuration } from '@/lib/time-tracking/helpers';
 import type { OrgBreakMode } from '@/lib/time-tracking/settings';
-import { cn } from '@/lib/utils';
+import { cn, formatBerlinTime } from '@/lib/utils';
 import type { MitarbeiterDetailLiveTime } from './use-mitarbeiter-detail-live-time';
 import { SectionTitle } from '@/components/shared/section-title';
-
-function formatTime(dateStr: string): string {
-  return new Date(dateStr).toLocaleTimeString('de-DE', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function formatMinutesAsHours(minutes: number): string {
-  const h = Math.floor(minutes / 60);
-  const m = Math.round(minutes % 60);
-  if (h === 0) return `${m} Min.`;
-  if (m === 0) return `${h} Std.`;
-  return `${h} Std. ${m} Min.`;
-}
 
 type MitarbeiterDetailTimeCardsProps = {
   liveTime: MitarbeiterDetailLiveTime;
@@ -81,7 +66,9 @@ export function MitarbeiterDetailTimeCards({
             {status?.isClockedIn && status.clockInTime && (
               <p className="text-xs text-muted-foreground">
                 Eingestempelt seit{' '}
-                <span className="font-medium text-foreground">{formatTime(status.clockInTime)} Uhr</span>
+                <span className="font-medium text-foreground">
+                  {formatBerlinTime(status.clockInTime)} Uhr
+                </span>
               </p>
             )}
 
@@ -97,8 +84,8 @@ export function MitarbeiterDetailTimeCards({
                   )}
                 >
                   {todayTargetMinutes > 0
-                    ? `${formatMinutesAsHours(memberBreakdown.workMinutes)} / ${formatMinutesAsHours(todayTargetMinutes)} (${dailyPercentage}%)`
-                    : formatMinutesAsHours(memberBreakdown.workMinutes)}
+                    ? `${formatDuration(memberBreakdown.workMinutes)} / ${formatDuration(todayTargetMinutes)} (${dailyPercentage}%)`
+                    : formatDuration(memberBreakdown.workMinutes)}
                 </span>
               </div>
               <Progress

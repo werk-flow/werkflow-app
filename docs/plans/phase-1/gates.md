@@ -1,21 +1,18 @@
 # Phase 1 Golden Scenario Gates
 
-Status: living — last reviewed 2026-09-05
+Status: living — last reviewed 2026-10-05
 
 Gate definitions `GG-00` through `GG-16` and the run-record requirements. A gate definition changes only when a slice's acceptance extends it; runs are recorded in [`golden-gate-log.md`](audits/golden-gate-log.md). Process rules live in [protocol.md](protocol.md); the slice index in [roadmap.md](roadmap.md).
 
 
 Golden scenarios test connected business outcomes. They do not replace focused unit, integration, RLS, migration, accessibility, or feature acceptance tests.
 
-Every gate run must record:
+A gate passes when its golden groups pass in a `bun run test:verify` report ([testing](../../technical/testing.md#when-a-proof-is-valid) owns proof validity). Every gate run records in the gate log:
 
 - date and target environment;
-- build/commit identifier;
-- organization/role fixtures used;
-- scenario data setup;
-- pass/fail for each assertion;
-- screenshots, logs, automated-test output, or other evidence where useful;
-- defects and the slice responsible for resolution;
+- the verification report id and the commit or tree it ran on;
+- the selected groups, with fresh and reused results;
+- each failure with its classification and the slice responsible for resolution;
 - whether previous gates were rerun because shared behavior changed.
 
 ### `GG-00` — Existing Foundation Regression

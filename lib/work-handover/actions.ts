@@ -785,10 +785,11 @@ export async function getWorkHandoverWorkspaceByNumber(input: {
       .eq('organization_id', auth.context.orgId)
       .eq('project_number', parsed.data.targetNumber)
       .maybeSingle();
-    if (error || !project) {
+    if (error) {
       logReadErrors('getWorkHandoverWorkspaceByNumber: read failed', error);
-      return { success: false, error: 'work_handover_target_not_found' };
+      return { success: false, error: 'work_handover_target_load_failed' };
     }
+    if (!project) return { success: false, error: 'work_handover_target_not_found' };
     try {
       const loaded = await loadWorkspace(auth.context, auth.holder, {
         targetType: 'project',
@@ -809,12 +810,13 @@ export async function getWorkHandoverWorkspaceByNumber(input: {
     .eq('organization_id', auth.context.orgId)
     .eq('job_number', parsed.data.targetNumber)
     .maybeSingle();
-  if (error || !job) {
+  if (error) {
     logReadErrors('getWorkHandoverWorkspaceByNumber: read failed', error);
-    return { success: false, error: 'work_handover_target_not_found' };
+    return { success: false, error: 'work_handover_target_load_failed' };
   }
+  if (!job) return { success: false, error: 'work_handover_target_not_found' };
   if (parsed.data.projectNumber) {
-    const { data: project } = await loggedRead(
+    const { data: project, error: projectError } = await loggedRead(
       'getWorkHandoverWorkspaceByNumber: projects read failed',
       admin
         .from('projects')
@@ -823,6 +825,7 @@ export async function getWorkHandoverWorkspaceByNumber(input: {
         .eq('project_number', parsed.data.projectNumber)
         .maybeSingle(),
     );
+    if (projectError) return { success: false, error: 'work_handover_target_load_failed' };
     if (!project || project.id !== job.project_id) {
       return { success: false, error: 'work_handover_target_not_found' };
     }

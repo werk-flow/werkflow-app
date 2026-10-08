@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { useBusyIds } from '@/hooks/use-busy-id';
+import { describeFailure } from '@/lib/action-messages';
 import { getWorkArtifactDetail } from '@/lib/work-artifacts/actions';
 import type {
   WorkArtifactDetail,
@@ -128,7 +129,8 @@ export function useWorkArtifactEditor({
       );
       return true;
     }
-    setError(message);
+    // A shared code (a failed read, a missing permission) names its cause; the rest keep the action's sentence.
+    setError(describeFailure(result.error ?? '', {}, message));
     return true;
   }
 

@@ -1,6 +1,6 @@
 # Audit a wave and accept a rendered design
 
-Status: living — last reviewed 2026-10-02
+Status: living — last reviewed 2026-10-05
 
 The six virtues in `AGENTS.md` define quality for every change. Each virtue's owner doc holds its checklist, its prohibitions, its verification steps and its examples. This page holds the two procedures that the virtues refer to: how to accept a rendered design, and how to audit a wave.
 
@@ -23,7 +23,7 @@ Completion needs an explicit disposition for each visual and interaction finding
 
 ### Keep accepted screens as visual references
 
-`audit:visual` (`tests/audit/visual/references.spec.ts`) compares one viewport screenshot per page family with its reference image in `references.spec.ts-snapshots/`. Each family has a desktop and a phone reference in light mode. The shell, a list, a detail, a settings page, the calendar and the login page also have a desktop reference in dark mode. The spec seeds a world with constant names and numbers. Before each capture it replaces the text the app derives from the clock (dates, times, weekdays, relative times) and the run-specific strings (e-mail addresses, the join code) with constant stand-ins. Beside each image, a text reference (`.txt`) holds the visible text of the viewport after the same replacement, one line per text node. The text comparison is exact, so a changed word fails even when it moves fewer pixels than the image tolerance allows. The group runs in release mode and on an explicit `--group audit:visual`. A verification run never writes a reference, so a missing reference fails.
+`audit:visual` (`tests/audit/visual/references.spec.ts`) compares one viewport screenshot per page family with its reference image in `references.spec.ts-snapshots/`. Each family has a desktop and a phone reference in light mode, and a desktop reference in dark mode where dark mode changes more than the token values of a neighbouring family. The spec seeds a world with constant names and numbers. Before each capture it replaces the text the app derives from the clock (dates, times, weekdays, relative times) and the run-specific strings (e-mail addresses, the join code) with constant stand-ins. Beside each image, a text reference (`.txt`) holds the visible text of the viewport after the same replacement, one line per text node. The text comparison is exact, so a changed word fails even when it moves fewer pixels than the image tolerance allows. The group runs in release mode and on an explicit `--group audit:visual`. A verification run never writes a reference, so a missing reference fails.
 
 A reference records an appearance that the owner accepted. A failed comparison is either a design change that waits for acceptance or a regression to repair. Never update a reference to make a failing run pass.
 

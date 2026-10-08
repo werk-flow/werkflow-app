@@ -13,6 +13,7 @@ import { getProjectByNumber } from '@/lib/projects/actions';
 import { UrlFlashBanner } from '@/components/ui/banner';
 import type { OrgRole } from '@/lib/members/actions';
 import { ProjectDetailContent } from '@/components/auftraege/project-detail/project-detail-content';
+import { RegionLoadError } from '@/components/shared/region-load-error';
 import { RouteRedirect } from '@/components/shared/route-redirect';
 import ProjectDetailLoading from './loading';
 import { getWorkLifecycleSnapshot } from '@/lib/work-lifecycle/actions';
@@ -106,6 +107,15 @@ async function ProjectDetailData({ projectNumber }: { projectNumber: string }) {
     approvalHolderPromise,
     handoverWorkspacePromise,
   ]);
+
+  // A missing or forbidden project leaves the page; a failed read must not look like one.
+  if (!result.success && (result.error === 'load_failed' || result.error === 'unexpected_error')) {
+    return (
+      <RegionLoadError title="Das Projekt konnte nicht geladen werden">
+        Das Projekt ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
+      </RegionLoadError>
+    );
+  }
 
   if (!result.success) {
     return (

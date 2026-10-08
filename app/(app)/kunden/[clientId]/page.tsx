@@ -74,6 +74,18 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
     getOrganizationUserPreferencesForView(activeOrgId, user.id),
   ]);
 
+  // A missing or forbidden client leaves the page; a failed read must not look like one.
+  if (
+    !clientResult.success &&
+    (clientResult.error === 'load_failed' || clientResult.error === 'unexpected_error')
+  ) {
+    return (
+      <RegionLoadError title="Der Kunde konnte nicht geladen werden">
+        Der Kunde ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
+      </RegionLoadError>
+    );
+  }
+
   if (!clientResult.success) {
     return (
       <RouteRedirect href="/kunden">

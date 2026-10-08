@@ -464,12 +464,6 @@ export const UNIFIED_STATUS_LABELS: Record<UnifiedStatus, string> = {
 };
 
 // ============================================
-// Constants
-// ============================================
-
-export const MANAGER_ROLES: OrgRole[] = ['admin', 'buero'];
-
-// ============================================
 // Utility Functions
 // ============================================
 

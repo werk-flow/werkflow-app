@@ -89,8 +89,8 @@ Source: Kohl, The Global English Style Guide (SAS Press). Guideline text fetched
 
 - Apply the **unslop** skill to every doc this skill touches. That skill owns the slop-pattern catalog: AI vocabulary, filler, hedging, formatting tells.
 - PR descriptions and commit messages are writing too. Every layer except Diátaxis applies to them.
-- Product UI strings are not documentation. WerkFlow UI copy is natural, neutral German per `AGENTS.md`.
-- Match the file's existing formatting conventions. Write real paths and real symbols. Make every count or tree claim true at the commit that lands it, and include the command that regenerates it.
+- Product UI strings are not documentation. WerkFlow UI copy is natural German that says "du", per the Language section of `AGENTS.md`.
+- Match the file's existing formatting conventions. Write real paths and real symbols. A living doc holds no count, file list or tree ([what a doc may contain](../../../docs/README.md#what-a-doc-may-contain)).
 
 ## Worked example
 

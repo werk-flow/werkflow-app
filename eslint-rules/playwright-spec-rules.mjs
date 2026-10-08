@@ -1,3 +1,7 @@
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { dirname, resolve as resolvePath } from 'node:path';
+import { parse as parseTypeScript } from '@typescript-eslint/parser';
+
 export const noUnscopedPageSelectorsRule = {
   meta: {
     type: 'problem',
@@ -314,6 +318,80 @@ function calleeName(callee) {
   return null;
 }
 
+/**
+ * A support-helper parameter named like copy (`fieldLabel`, `reasonLabel`,
+ * `heading`) and typed as plain `string` takes wording, so static text that a
+ * spec passes there is a locator in disguise. A parameter typed as a key of the
+ * area's copy map (`keyof typeof HANDOVER_COPY.message`) is safe by type. A bare
+ * `label` is not matched: the support modules use it for diagnostics and for
+ * record names the spec creates (expectLiveWithin, goldenTestEmail).
+ */
+const COPY_PARAMETER = /(?:[a-z](?:Label|Heading|Copy|Message)|^(?:heading|copy|message))$/;
+
+const helperSignatureCache = new Map();
+
+function isPlainStringType(annotation) {
+  const type = annotation?.typeAnnotation;
+  if (!type) return false;
+  if (type.type === 'TSStringKeyword') return true;
+  return type.type === 'TSUnionType' && type.types.some((member) => member.type === 'TSStringKeyword');
+}
+
+function copyParameterOf(target) {
+  if (target?.type !== 'Identifier') return null;
+  const members = new Map();
+  const literal = target.typeAnnotation?.typeAnnotation;
+  if (literal?.type === 'TSTypeLiteral') {
+    for (const member of literal.members) {
+      if (member.type !== 'TSPropertySignature' || member.key.type !== 'Identifier') continue;
+      if (COPY_PARAMETER.test(member.key.name) && isPlainStringType(member.typeAnnotation))
+        members.set(member.key.name, true);
+    }
+  }
+  const takesCopy = COPY_PARAMETER.test(target.name) && isPlainStringType(target.typeAnnotation);
+  return { name: target.name, takesCopy, copyMembers: members };
+}
+
+/** Per exported function of a support module: which parameters, and which option members, take copy. */
+function helperSignatures(file) {
+  let modified;
+  try {
+    modified = statSync(file).mtimeMs;
+  } catch {
+    return null;
+  }
+  const cached = helperSignatureCache.get(file);
+  if (cached?.modified === modified) return cached.functions;
+  const functions = new Map();
+  let program;
+  try {
+    program = parseTypeScript(readFileSync(file, 'utf8'), { ecmaVersion: 'latest', sourceType: 'module' });
+  } catch {
+    // A support module that does not parse fails its own lint; the importing spec is not left unlinted.
+    return null;
+  }
+  for (const statement of program.body) {
+    const declaration = statement.type === 'ExportNamedDeclaration' ? statement.declaration : null;
+    if (declaration?.type !== 'FunctionDeclaration' || !declaration.id) continue;
+    functions.set(
+      declaration.id.name,
+      declaration.params.map((parameter) =>
+        copyParameterOf(parameter.type === 'AssignmentPattern' ? parameter.left : parameter),
+      ),
+    );
+  }
+  helperSignatureCache.set(file, { modified, functions });
+  return functions;
+}
+
+function resolveRelativeModule(fromFile, source) {
+  const base = resolvePath(dirname(fromFile), source);
+  for (const candidate of [`${base}.ts`, `${base}.tsx`, resolvePath(base, 'index.ts')]) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
 export const noCopyInSpecLocatorRule = {
   meta: {
     type: 'problem',
@@ -328,10 +406,40 @@ export const noCopyInSpecLocatorRule = {
     },
   },
   create(context) {
+    /** Local name of each helper imported from a relative module, with its module file. */
+    const importedHelpers = new Map();
     function report(node, messageId, method) {
       context.report({ node, messageId, data: { method } });
     }
+    function checkCopyParameters(node, name) {
+      const helper = importedHelpers.get(name);
+      const parameters = helper ? helperSignatures(helper.file)?.get(helper.name) : undefined;
+      parameters?.forEach((parameter, index) => {
+        const argument = node.arguments[index];
+        if (!parameter || !argument) return;
+        if (parameter.takesCopy) {
+          const found = copyNode(context, argument);
+          if (found) report(found, 'helper', `${name} (${parameter.name})`);
+        }
+        if (argument.type !== 'ObjectExpression') return;
+        for (const option of parameter.copyMembers.keys()) {
+          const property = propertyNamed(argument, option);
+          const found = property && copyNode(context, property.value);
+          if (found) report(found, 'helper', `${name} (${option})`);
+        }
+      });
+    }
     return {
+      ImportDeclaration(node) {
+        if (node.importKind === 'type' || typeof node.source.value !== 'string') return;
+        if (!node.source.value.startsWith('.')) return;
+        const file = resolveRelativeModule(context.filename, node.source.value);
+        if (!file) return;
+        for (const specifier of node.specifiers) {
+          if (specifier.type === 'ImportSpecifier' && specifier.imported.type === 'Identifier')
+            importedHelpers.set(specifier.local.name, { file, name: specifier.imported.name });
+        }
+      },
       CallExpression(node) {
         const name = calleeName(node.callee);
         if (!name) return;
@@ -352,10 +460,13 @@ export const noCopyInSpecLocatorRule = {
           if (found) report(found, 'assertion', name);
           return;
         }
-        if (!member && TEXT_HELPER_ARGUMENTS.has(name)) {
+        if (member) return;
+        if (TEXT_HELPER_ARGUMENTS.has(name)) {
           const found = copyNode(context, node.arguments[TEXT_HELPER_ARGUMENTS.get(name)]);
           if (found) report(found, 'helper', name);
+          return;
         }
+        checkCopyParameters(node, name);
       },
       Property(node) {
         if (node.computed || node.key.type !== 'Identifier') return;
@@ -577,6 +688,159 @@ export const noScopedHasLocatorRule = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// One-shot count comparisons. Two lists, or a list and a badge, settle from
+// separate reads, so an assertion that compares count() reads taken once races
+// the slower one (test-incident-log.md: audit:wave-1:a5, the Aufgaben badge
+// equality). Every read belongs inside one expect.poll.
+
+const FUNCTION_NODES = new Set(['ArrowFunctionExpression', 'FunctionExpression', 'FunctionDeclaration']);
+
+function isCountRead(node) {
+  return (
+    node.type === 'CallExpression' &&
+    node.arguments.length === 0 &&
+    node.callee.type === 'MemberExpression' &&
+    !node.callee.computed &&
+    node.callee.property.type === 'Identifier' &&
+    node.callee.property.name === 'count'
+  );
+}
+
+/** Visits an expression's nodes that run now: nested function bodies run later and are skipped. */
+function visitEagerNodes(visitorKeys, root, visit, parent = null) {
+  if (!root || typeof root.type !== 'string' || FUNCTION_NODES.has(root.type)) return;
+  if (visit(root, parent) === false) return;
+  for (const key of visitorKeys[root.type] ?? []) {
+    const child = root[key];
+    if (Array.isArray(child)) for (const item of child) visitEagerNodes(visitorKeys, item, visit, root);
+    else visitEagerNodes(visitorKeys, child, visit, root);
+  }
+}
+
+function containsCountRead(visitorKeys, root) {
+  let found = false;
+  visitEagerNodes(visitorKeys, root, (node) => {
+    if (isCountRead(node)) found = true;
+    return !found;
+  });
+  return found;
+}
+
+/** The local definition of an identifier: a variable initializer or a function. */
+function localDefinition(context, identifier) {
+  let scope = context.sourceCode.getScope(identifier);
+  while (scope) {
+    const variable = scope.set.get(identifier.name);
+    if (variable) {
+      const definition = variable.defs[0];
+      if (definition?.type === 'FunctionName') return definition.node;
+      if (definition?.type === 'Variable') return definition.node.init ?? null;
+      return null;
+    }
+    scope = scope.upper;
+  }
+  return null;
+}
+
+/**
+ * Counts the count() reads an expression takes when it runs once: direct
+ * reads, reads behind a local variable, and one read per call of a local
+ * function whose body reads a count.
+ */
+function countReadsIn(context, root, seen) {
+  const { visitorKeys } = context.sourceCode;
+  let reads = 0;
+  function visit(node, parent) {
+    if (seen.has(node)) return false;
+    seen.add(node);
+    if (isCountRead(node)) reads += 1;
+    if (node.type !== 'Identifier' || parent?.type === 'MemberExpression') return true;
+    if (parent?.type === 'Property' && parent.key === node && !parent.computed) return true;
+    const definition = localDefinition(context, node);
+    if (!definition) return true;
+    if (!FUNCTION_NODES.has(definition.type)) visitEagerNodes(visitorKeys, definition, visit);
+    else if (
+      parent?.type === 'CallExpression' &&
+      parent.callee === node &&
+      containsCountRead(visitorKeys, definition.body)
+    )
+      reads += 1;
+    return true;
+  }
+  visitEagerNodes(visitorKeys, root, visit);
+  return reads;
+}
+
+/** The expect(...) or expect.soft(...) call under a matcher chain; null for expect.poll. */
+function expectCallOf(matcherCallee) {
+  let current = matcherCallee.object;
+  while (current?.type === 'MemberExpression') current = current.object;
+  if (current?.type !== 'CallExpression') return null;
+  const callee = current.callee;
+  if (callee.type === 'Identifier' && callee.name === 'expect') return current;
+  const soft =
+    callee.type === 'MemberExpression' &&
+    callee.object.type === 'Identifier' &&
+    callee.object.name === 'expect' &&
+    callee.property.type === 'Identifier' &&
+    callee.property.name === 'soft';
+  return soft ? current : null;
+}
+
+/** True inside a callback handed to expect(...) for toPass or to expect.poll: those retry as a whole. */
+function insideRetriedCallback(context, node) {
+  return context.sourceCode.getAncestors(node).some((ancestor, index, ancestors) => {
+    if (!FUNCTION_NODES.has(ancestor.type)) return false;
+    const owner = ancestors[index - 1];
+    if (owner?.type !== 'CallExpression' || owner.arguments[0] !== ancestor) return false;
+    const callee = owner.callee;
+    if (callee.type === 'Identifier') return callee.name === 'expect';
+    return (
+      callee.type === 'MemberExpression' &&
+      callee.object.type === 'Identifier' &&
+      callee.object.name === 'expect' &&
+      callee.property.type === 'Identifier' &&
+      callee.property.name === 'poll'
+    );
+  });
+}
+
+export const noOneShotCountComparisonRule = {
+  meta: {
+    type: 'problem',
+    schema: [],
+    messages: {
+      oneShot:
+        'This assertion compares {{reads}} count() reads taken once. Two lists, or a list and a badge, settle from separate reads, so one read races the other. Read them together inside expect.poll(async () => ...), or assert one list with toHaveCount against a baseline read before the action.',
+      liveArgument:
+        'toHaveCount retries its locator but not the count() read in its argument, so the comparison races that second list. Read both inside expect.poll, or compare with a baseline read before the action.',
+    },
+  },
+  create(context) {
+    const { visitorKeys } = context.sourceCode;
+    return {
+      CallExpression(node) {
+        if (node.callee.type !== 'MemberExpression' || node.callee.property.type !== 'Identifier') return;
+        const expectCall = expectCallOf(node.callee);
+        if (!expectCall || insideRetriedCallback(context, node)) return;
+        if (node.callee.property.name === 'toHaveCount') {
+          // A baseline held in a variable stays valid; only a read in the argument itself races.
+          if (node.arguments.some((argument) => containsCountRead(visitorKeys, argument)))
+            context.report({ node, messageId: 'liveArgument' });
+          return;
+        }
+        const seen = new Set();
+        const reads = [expectCall.arguments[0], ...node.arguments].reduce(
+          (total, expression) => total + countReadsIn(context, expression, seen),
+          0,
+        );
+        if (reads >= 2) context.report({ node, messageId: 'oneShot', data: { reads: String(reads) } });
+      },
+    };
+  },
+};
+
 /**
  * Support modules that are measurement-digest inputs (lib/testing/performance-context.ts).
  * Their bytes are part of every reviewed performance reference, so no rule may
@@ -602,5 +866,6 @@ export const playwrightSpecRules = {
     'no-raw-key-press': noRawKeyPressRule,
     'no-transport-internals': noTransportInternalsRule,
     'no-scoped-has-locator': noScopedHasLocatorRule,
+    'no-one-shot-count-comparison': noOneShotCountComparisonRule,
   },
 };

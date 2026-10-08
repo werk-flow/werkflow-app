@@ -7,6 +7,7 @@ import { z } from 'zod';
 
 import { contentDigest } from './evidence/source-content';
 import { MEASUREMENT_VERSION, type MeasuredScenario } from './measured-scenarios';
+import { measuredTestSource } from './measured-test-source';
 
 /** Describes the experiment, independently of the application being compared. */
 export const performanceContextSchema = z
@@ -129,6 +130,27 @@ export function workloadDigest(
   return digest.digest('hex');
 }
 
+/**
+ * The modules every measurement runs through: the scenario recorder, the
+ * browser observer, the sessions and the engine. Their whole content is part
+ * of each measurement digest. The ordinary freshness and readiness helpers in
+ * live.ts are not part of the measurement.
+ */
+const MEASUREMENT_SUPPORT_FILES = [
+  'tests/golden/support/scenario-measurement.ts',
+  'tests/golden/support/browser-observation.ts',
+  'tests/golden/support/sessions.ts',
+  'lib/testing/live-observation.ts',
+  'tests/audit/support/performance-steps.ts',
+] as const;
+
+/**
+ * The identity of the measured code: the scenario contract, the tests of its
+ * spec that record it with the module-level code they reach
+ * (`measuredTestSource`), and the support modules. An edit to another test of
+ * the spec keeps the reviewed references. The workload identity keeps the
+ * whole spec of a golden-world scenario.
+ */
 export function measurementDigest(repositoryRoot: string, scenario: MeasuredScenario): string {
   const digest = createHash('sha256').update(
     JSON.stringify({
@@ -140,17 +162,17 @@ export function measurementDigest(repositoryRoot: string, scenario: MeasuredScen
       protocol: performanceProtocol(scenario),
     }),
   );
-  // The measured path only: the scenario module, the browser observer and the
-  // engine. The ordinary freshness and readiness helpers in live.ts are not
-  // part of the measurement and no longer move the reviewed references.
-  for (const file of [
+  const measuredTests = measuredTestSource(
     scenario.file,
-    'tests/golden/support/scenario-measurement.ts',
-    'tests/golden/support/browser-observation.ts',
-    'tests/golden/support/sessions.ts',
-    'lib/testing/live-observation.ts',
-    'tests/audit/support/performance-steps.ts',
-  ])
+    readFileSync(resolve(repositoryRoot, scenario.file), 'utf8'),
+    scenario.id,
+  );
+  digest
+    .update(`${scenario.file}#${scenario.id}`)
+    .update('\0')
+    .update(createHash('sha256').update(measuredTests).digest('hex'))
+    .update('\0');
+  for (const file of MEASUREMENT_SUPPORT_FILES)
     digest
       .update(file)
       .update('\0')

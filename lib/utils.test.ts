@@ -1,11 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import {
   formatBerlinDateTime,
+  formatBerlinTime,
   formatGermanDate,
+  formatGermanDateRange,
   formatGermanDateTime,
   formatGermanMediumDateTime,
   parseIsoLocalDate,
   toLocalDateString,
+  toLocalTimeOfDay,
 } from './utils';
 
 // The component copies these helpers replaced on 2026-10-01, kept here as the
@@ -104,5 +107,34 @@ describe('parseIsoLocalDate', () => {
     expect(date).toBeDefined();
     if (date) expect(toLocalDateString(date)).toBe('2026-09-13');
     expect(toLocalDateString(new Date(202, 0, 1))).toBe('0202-01-01');
+  });
+});
+
+describe('formatGermanDateRange', () => {
+  test('renders one day once and several days as a range', () => {
+    expect(formatGermanDateRange('2026-09-13', '2026-09-13')).toBe('13.09.2026');
+    expect(formatGermanDateRange('2026-09-13', '2026-09-15')).toBe('13.09.2026 – 15.09.2026');
+    expect(formatGermanDateRange('2026-12-30', '2027-01-02')).toBe('30.12.2026 – 02.01.2027');
+  });
+});
+
+describe('formatBerlinTime', () => {
+  test('renders the Berlin wall clock with two-digit hours and minutes', () => {
+    expect(formatBerlinTime('2026-09-13T06:05:00.000Z')).toBe('08:05');
+    expect(formatBerlinTime('2026-01-13T06:05:00.000Z')).toBe('07:05');
+    expect(formatBerlinTime(new Date('2026-09-13T22:30:00.000Z'))).toBe('00:30');
+  });
+
+  test('keeps the Berlin hour across the daylight-saving switch', () => {
+    expect(formatBerlinTime('2026-03-29T00:59:00.000Z')).toBe('01:59');
+    expect(formatBerlinTime('2026-03-29T01:00:00.000Z')).toBe('03:00');
+  });
+});
+
+describe('toLocalTimeOfDay', () => {
+  test("renders the Date's local hours and minutes as a time input value", () => {
+    expect(toLocalTimeOfDay(new Date(2026, 8, 13, 8, 5))).toBe('08:05');
+    expect(toLocalTimeOfDay(new Date(2026, 8, 13, 0, 0))).toBe('00:00');
+    expect(toLocalTimeOfDay(new Date(2026, 8, 13, 23, 59, 59))).toBe('23:59');
   });
 });

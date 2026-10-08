@@ -1,10 +1,11 @@
 'use server';
 
-import { cookies } from 'next/headers';
 import { z } from '@/lib/zod';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { cookies } from 'next/headers';
 import { CURRENT_ORG_COOKIE } from '@/lib/org/cookies';
-import { getAuthenticatedUser, getCachedMemberships } from '@/lib/data/cached';
+import { resolveActionContextFor } from '@/lib/org/action-context';
+import { getAuthenticatedUser } from '@/lib/data/cached';
 import { logError } from '@/lib/logging';
 import { createAndMailOrganizationInvite } from './send-invite';
 
@@ -41,22 +42,16 @@ export async function sendOrgInvite(email: string, role: InviteRole = 'employee'
       return { success: false, error: 'not_authenticated' };
     }
 
-    const orgId = cookieStore.get(CURRENT_ORG_COOKIE)?.value;
-
-    if (!orgId) {
+    // Sending trusts only the organization the cookie names, never a fallback.
+    const cookieOrgId = cookieStore.get(CURRENT_ORG_COOKIE)?.value;
+    if (!cookieOrgId) {
       return { success: false, error: 'no_active_org' };
     }
 
-    const memberships = await getCachedMemberships(user.id);
-    const callerMembership = memberships.find((m) => m.orgId === orgId);
-
-    if (!callerMembership) {
-      return { success: false, error: 'not_a_member' };
-    }
-
-    const callerRole = callerMembership.role;
-
-    if (callerRole !== 'admin' && callerRole !== 'buero') {
+    const auth = await resolveActionContextFor(cookieOrgId);
+    if (!auth.success) return auth;
+    const { orgId, isManagerOrAbove } = auth.context;
+    if (!isManagerOrAbove) {
       return { success: false, error: 'not_authorized' };
     }
 

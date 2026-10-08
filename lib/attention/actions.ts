@@ -37,6 +37,7 @@ import {
 } from '@/lib/dispatch/derivation';
 import {
   computeOpenSinceDays,
+  countAttentionItems,
   dedupeAttentionItems,
   FOLLOW_UP_ATTENTION_CAPACITY,
   isNotificationUnread,
@@ -58,6 +59,20 @@ import type {
 // ============================================
 // Derivation building blocks
 // ============================================
+
+// The viewer's own employee record. The dispatch, decision and sickness
+// derivations each need it, so one derivation starts the read once and hands
+// the same promise to all three.
+async function readOwnEmployeeRecord(context: ActionContext) {
+  return await createSupabaseAdminClient()
+    .from('employee_records')
+    .select('id')
+    .eq('organization_id', context.orgId)
+    .eq('user_id', context.userId)
+    .maybeSingle();
+}
+
+type OwnEmployeeRecordRead = ReturnType<typeof readOwnEmployeeRecord>;
 
 async function deriveApprovalTasks(
   context: ActionContext,
@@ -334,14 +349,10 @@ async function deriveJoinRequestTasks(
 
 async function deriveDispatchAcknowledgementTasks(
   context: ActionContext,
+  ownRecord: OwnEmployeeRecordRead,
 ): Promise<{ tasks: AttentionTask[]; failed: boolean }> {
   const admin = createSupabaseAdminClient();
-  const { data: record, error: recordError } = await admin
-    .from('employee_records')
-    .select('id')
-    .eq('organization_id', context.orgId)
-    .eq('user_id', context.userId)
-    .maybeSingle();
+  const { data: record, error: recordError } = await ownRecord;
   if (recordError) {
     logError('Failed to load own record for dispatch tasks', recordError);
     return { tasks: [], failed: true };
@@ -822,15 +833,11 @@ function resolveDecisionReason(
 
 async function deriveOwnNotifications(
   context: ActionContext,
+  ownRecord: OwnEmployeeRecordRead,
 ): Promise<{ notifications: AttentionNotification[]; failed: boolean }> {
   const admin = createSupabaseAdminClient();
 
-  const { data: record, error: recordError } = await admin
-    .from('employee_records')
-    .select('id')
-    .eq('organization_id', context.orgId)
-    .eq('user_id', context.userId)
-    .maybeSingle();
+  const { data: record, error: recordError } = await ownRecord;
   if (recordError) {
     logError('Failed to load own employee record', recordError);
     return { notifications: [], failed: true };
@@ -909,19 +916,17 @@ async function deriveOwnNotifications(
 // record) and admin/büro managers (reports they did not record themselves).
 // One item identity per report: when both audiences apply to one viewer, the
 // own-flavored item is listed first and deduplication keeps it.
-async function deriveSicknessNotifications(context: ActionContext): Promise<{
+async function deriveSicknessNotifications(
+  context: ActionContext,
+  ownRecordRead: OwnEmployeeRecordRead,
+): Promise<{
   notifications: AttentionNotification[];
   failed: boolean;
 }> {
   const admin = createSupabaseAdminClient();
   const isManager = context.role === 'admin' || context.role === 'buero';
 
-  const { data: ownRecord, error: ownRecordError } = await admin
-    .from('employee_records')
-    .select('id')
-    .eq('organization_id', context.orgId)
-    .eq('user_id', context.userId)
-    .maybeSingle();
+  const { data: ownRecord, error: ownRecordError } = await ownRecordRead;
   if (ownRecordError) {
     logError('Failed to load own record for sickness notices', ownRecordError);
     return { notifications: [], failed: true };
@@ -1131,6 +1136,43 @@ async function deriveCertificationExpiryNotifications(
 // Overview and counts
 // ============================================
 
+type DerivedAttention = { tasks: AttentionTask[]; notifications: AttentionNotification[] };
+
+/**
+ * Every task and notification the viewer may see, or null when any part
+ * failed: a partially failed derivation must be visible, never a silently
+ * shortened list that reads as "nothing to do". The overview and the badge
+ * counts share this one derivation.
+ */
+async function deriveAttention(context: ActionContext): Promise<DerivedAttention | null> {
+  const ownRecord = readOwnEmployeeRecord(context);
+  const [taskParts, notificationParts] = await Promise.all([
+    Promise.all([
+      deriveApprovalTasks(context),
+      deriveOpenRequestTasks(context),
+      deriveFollowUpTasks(context),
+      deriveDispatchAcknowledgementTasks(context, ownRecord),
+      deriveDispatchChallengeTasks(context),
+      deriveParkingReviewTasks(context),
+      deriveWorkArtifactTasks(context),
+      deriveWorkHandoverTasks(context),
+      deriveJoinRequestTasks(context),
+    ]),
+    Promise.all([
+      deriveOwnNotifications(context, ownRecord),
+      deriveSicknessNotifications(context, ownRecord),
+      deriveCertificationExpiryNotifications(context),
+    ]),
+  ]);
+  if (taskParts.some((part) => part.failed) || notificationParts.some((part) => part.failed)) return null;
+  return {
+    tasks: dedupeAttentionItems(taskParts.flatMap((part) => part.tasks)),
+    notifications: sortNotificationsNewestFirst(
+      dedupeAttentionItems(notificationParts.flatMap((part) => part.notifications)),
+    ),
+  };
+}
+
 export type AttentionOverviewResult = ActionResult<{ overview: AttentionOverview }>;
 
 export async function getAttentionOverview(): Promise<AttentionOverviewResult> {
@@ -1139,55 +1181,11 @@ export async function getAttentionOverview(): Promise<AttentionOverviewResult> {
     if (!auth.success) return auth;
     const { context } = auth;
 
-    const [
-      approvals,
-      openRequests,
-      followUps,
-      dispatchAcknowledgements,
-      dispatchChallenges,
-      parkingReviews,
-      workArtifacts,
-      workHandovers,
-      joinRequests,
-      notifications,
-      sicknessNotifications,
-      certificationNotifications,
-      ownOverviewResult,
-    ] = await Promise.all([
-      deriveApprovalTasks(context),
-      deriveOpenRequestTasks(context),
-      deriveFollowUpTasks(context),
-      deriveDispatchAcknowledgementTasks(context),
-      deriveDispatchChallengeTasks(context),
-      deriveParkingReviewTasks(context),
-      deriveWorkArtifactTasks(context),
-      deriveWorkHandoverTasks(context),
-      deriveJoinRequestTasks(context),
-      deriveOwnNotifications(context),
-      deriveSicknessNotifications(context),
-      deriveCertificationExpiryNotifications(context),
+    const [derived, ownOverviewResult] = await Promise.all([
+      deriveAttention(context),
       getOwnVacationOverview(),
     ]);
-
-    // A partially failed derivation must be visible, never a silently
-    // shortened list that reads as "nothing to do".
-    if (
-      approvals.failed ||
-      openRequests.failed ||
-      followUps.failed ||
-      dispatchAcknowledgements.failed ||
-      dispatchChallenges.failed ||
-      parkingReviews.failed ||
-      workArtifacts.failed ||
-      workHandovers.failed ||
-      joinRequests.failed ||
-      notifications.failed ||
-      sicknessNotifications.failed ||
-      certificationNotifications.failed ||
-      !ownOverviewResult.success
-    ) {
-      return { success: false, error: 'load_failed' };
-    }
+    if (!derived || !ownOverviewResult.success) return { success: false, error: 'load_failed' };
 
     const ownRequests: OwnAttentionRequest[] = ownOverviewResult.overview.requests.map((request) => ({
       sourceId: request.id,
@@ -1207,24 +1205,8 @@ export async function getAttentionOverview(): Promise<AttentionOverviewResult> {
       success: true,
       overview: {
         businessDate: getBusinessTodayIso(),
-        tasks: dedupeAttentionItems([
-          ...approvals.tasks,
-          ...openRequests.tasks,
-          ...followUps.tasks,
-          ...dispatchAcknowledgements.tasks,
-          ...dispatchChallenges.tasks,
-          ...parkingReviews.tasks,
-          ...workArtifacts.tasks,
-          ...workHandovers.tasks,
-          ...joinRequests.tasks,
-        ]),
-        notifications: sortNotificationsNewestFirst(
-          dedupeAttentionItems([
-            ...notifications.notifications,
-            ...sicknessNotifications.notifications,
-            ...certificationNotifications.notifications,
-          ]),
-        ),
+        tasks: derived.tasks,
+        notifications: derived.notifications,
         ownRequests,
       },
     };
@@ -1247,77 +1229,11 @@ export async function getAttentionCounts(): Promise<AttentionCountsResult> {
     if (!auth.success) return auth;
     const { context } = auth;
 
-    const [
-      approvals,
-      openRequests,
-      followUps,
-      dispatchAcknowledgements,
-      dispatchChallenges,
-      parkingReviews,
-      workArtifacts,
-      workHandovers,
-      joinRequests,
-      notifications,
-      sicknessNotifications,
-      certificationNotifications,
-    ] = await Promise.all([
-      deriveApprovalTasks(context),
-      deriveOpenRequestTasks(context),
-      deriveFollowUpTasks(context),
-      deriveDispatchAcknowledgementTasks(context),
-      deriveDispatchChallengeTasks(context),
-      deriveParkingReviewTasks(context),
-      deriveWorkArtifactTasks(context),
-      deriveWorkHandoverTasks(context),
-      deriveJoinRequestTasks(context),
-      deriveOwnNotifications(context),
-      deriveSicknessNotifications(context),
-      deriveCertificationExpiryNotifications(context),
-    ]);
-    if (
-      approvals.failed ||
-      openRequests.failed ||
-      followUps.failed ||
-      dispatchAcknowledgements.failed ||
-      dispatchChallenges.failed ||
-      parkingReviews.failed ||
-      workArtifacts.failed ||
-      workHandovers.failed ||
-      joinRequests.failed ||
-      notifications.failed ||
-      sicknessNotifications.failed ||
-      certificationNotifications.failed
-    ) {
-      return { success: false, error: 'load_failed' };
-    }
-
-    const approvalTasks = dedupeAttentionItems(approvals.tasks);
-    const requestTasks = dedupeAttentionItems(openRequests.tasks);
-    const followUpTasks = dedupeAttentionItems(followUps.tasks);
-    const dispatchTasks = dedupeAttentionItems([
-      ...dispatchAcknowledgements.tasks,
-      ...dispatchChallenges.tasks,
-      ...parkingReviews.tasks,
-      ...workArtifacts.tasks,
-      ...workHandovers.tasks,
-    ]);
-    const allNotifications = dedupeAttentionItems([
-      ...notifications.notifications,
-      ...sicknessNotifications.notifications,
-      ...certificationNotifications.notifications,
-    ]);
+    const derived = await deriveAttention(context);
+    if (!derived) return { success: false, error: 'load_failed' };
     return {
       success: true,
-      counts: {
-        approvalsCount: approvalTasks.length,
-        actionableCount:
-          approvalTasks.length +
-          requestTasks.length +
-          followUpTasks.length +
-          dispatchTasks.length +
-          dedupeAttentionItems(joinRequests.tasks).length,
-        unreadNotificationCount: allNotifications.filter((notification) => notification.unread).length,
-      },
+      counts: countAttentionItems(derived),
     };
   } catch (error) {
     logError('Unexpected error in getAttentionCounts', error);
@@ -1489,9 +1405,10 @@ export async function markAllAttentionNotificationsRead(): Promise<MarkNotificat
     // notices per the privacy-matrix audiences), so the per-item validation
     // of the single-item path is redundant here; the database function
     // repeats the audience check under lock.
+    const ownRecord = readOwnEmployeeRecord(context);
     const [derived, derivedSickness, derivedCertification] = await Promise.all([
-      deriveOwnNotifications(context),
-      deriveSicknessNotifications(context),
+      deriveOwnNotifications(context, ownRecord),
+      deriveSicknessNotifications(context, ownRecord),
       deriveCertificationExpiryNotifications(context),
     ]);
     if (derived.failed || derivedSickness.failed || derivedCertification.failed) {

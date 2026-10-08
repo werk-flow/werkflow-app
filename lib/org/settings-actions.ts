@@ -1,10 +1,7 @@
 'use server';
 
-import { cookies } from 'next/headers';
-
 import type { ActionResult } from '@/lib/action-result';
-import { getAuthenticatedUser } from '@/lib/data/cached';
-import { resolveActiveOrgId } from '@/lib/org/cookies';
+import { resolveActionContext } from '@/lib/org/action-context';
 import {
   getOrganizationCodeValidationError,
   getOrganizationNameValidationError,
@@ -58,11 +55,11 @@ export async function updateOrganizationSettings(
   input: OrganizationSettingsValues,
 ): Promise<UpdateOrganizationSettingsResult> {
   const parsedInput = settingsInputSchema.safeParse(input);
-  const user = await getAuthenticatedUser();
-
-  if (!user) {
-    return { success: false, error: 'not_authenticated' };
+  const auth = await resolveActionContext();
+  if (!auth.success) {
+    return { success: false, error: auth.error === 'not_authenticated' ? auth.error : 'org_not_found' };
   }
+  const { userId, orgId: activeOrgId } = auth.context;
   if (!parsedInput.success) {
     return { success: false, error: 'name_required' };
   }
@@ -81,13 +78,6 @@ export async function updateOrganizationSettings(
   const normalizedName = normalizeOrganizationName(name);
   const normalizedCode = normalizeOrganizationCode(uniqueCode);
   const admin = createSupabaseAdminClient();
-  const cookieStore = await cookies();
-  const activeOrgId = await resolveActiveOrgId(cookieStore, user.id);
-
-  if (!activeOrgId) {
-    return { success: false, error: 'org_not_found' };
-  }
-
   const { data: organization, error: organizationError } = await admin
     .from('organizations')
     .select('id, name, unique_code, admin_id')
@@ -98,7 +88,7 @@ export async function updateOrganizationSettings(
     return { success: false, error: 'org_not_found' };
   }
 
-  if (organization.admin_id !== user.id) {
+  if (organization.admin_id !== userId) {
     return { success: false, error: 'not_authorized' };
   }
 
@@ -112,7 +102,7 @@ export async function updateOrganizationSettings(
   const { data: siblingOrganizations, error: siblingOrganizationsError } = await admin
     .from('organizations')
     .select('id, name')
-    .eq('admin_id', user.id)
+    .eq('admin_id', userId)
     .neq('id', activeOrgId);
 
   if (siblingOrganizationsError) {

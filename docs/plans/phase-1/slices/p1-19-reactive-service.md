@@ -2,6 +2,8 @@
 
 Status: closed (2026-08-30) — accepted P1-19 acceptance record; canonical home for the slice's evidence
 
+> This record is history. Do not carry out its instructions: the living docs that the index lists hold the current rules.
+
 ## Outcome
 
 Office users can capture or qualify reactive service demand, preserve the original customer statement, triage it against one customer site and exact installed equipment, and connect it to the existing job, planning, dispatch and field-work owners. A direct repeat case remains possible without a synthetic request.

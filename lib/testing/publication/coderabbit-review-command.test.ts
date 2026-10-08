@@ -113,6 +113,16 @@ describe('CodeRabbit review command', () => {
     }
   });
 
+  test('refuses a second --dir, because CodeRabbit reviews only the last one', () => {
+    expect(() => buildCodeRabbitReviewArguments(['--dir', 'lib', '--dir', 'app'])).toThrow(
+      'one directory per pass',
+    );
+    expect(() => buildCodeRabbitReviewArguments(['--dir=lib', '--dir', 'app'])).toThrow(
+      'one directory per pass',
+    );
+    expect(buildCodeRabbitReviewArguments(['--dir', 'lib'])).toContain('lib');
+  });
+
   test('passes help through without configuring a review', () => {
     expect(buildCodeRabbitReviewArguments(['--', '--help'])).toEqual(['review', '--help']);
     expect(buildCodeRabbitReviewArguments(['--show-prompts'])).toEqual(['review', '--show-prompts']);

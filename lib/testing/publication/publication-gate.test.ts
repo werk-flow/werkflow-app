@@ -127,7 +127,8 @@ test('a review scope reads its base, its committed flag and its folders from the
     committedOnly: true,
     directories: ['lib/testing'],
   });
-  expect(reviewScope(['review', '--dir', '.githooks', '--dir', '.']).directories).toEqual(['.githooks', '']);
+  expect(reviewScope(['review', '--dir', '.githooks']).directories).toEqual(['.githooks']);
+  expect(reviewScope(['review', '--dir', '.']).directories).toEqual(['']);
   const changed = ['lib/testing/a.ts', 'lib/testingx/b.ts', 'scripts/verify.ts', 'lib/testing/a.ts'];
   expect(reviewedFiles(changed, ['lib/testing'])).toEqual(['lib/testing/a.ts']);
   expect(reviewedFiles(changed, [])).toEqual(['lib/testing/a.ts', 'lib/testingx/b.ts', 'scripts/verify.ts']);

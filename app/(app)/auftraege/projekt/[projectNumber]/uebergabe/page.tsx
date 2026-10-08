@@ -1,5 +1,3 @@
-import { redirect } from 'next/navigation';
-
 import { WorkHandoverPage } from '@/components/auftraege/handover/work-handover-page';
 import { getWorkHandoverWorkspaceByNumber } from '@/lib/work-handover/actions';
 
@@ -13,6 +11,5 @@ export default async function ProjectHandoverPage({
     targetType: 'project',
     targetNumber: decodeURIComponent(projectNumber),
   });
-  if (!result.success) redirect('/auftraege');
-  return <WorkHandoverPage workspace={result.workspace} />;
+  return <WorkHandoverPage result={result} />;
 }

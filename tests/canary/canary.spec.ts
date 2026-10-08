@@ -176,7 +176,7 @@ test.describe('Cloud-Canary @CANARY', () => {
     const customerName = `Canary Kunde ${world.runId}`;
     await createCustomer(adminPage, customerName);
     // Fresh navigation: the row must come from server-rendered persisted
-    // state, not the optimistic echo (testing rule 13).
+    // state, not the optimistic echo.
     await adminPage.goto('/kunden');
     await expect(visibleText(adminPage, customerName)).toBeVisible();
   });

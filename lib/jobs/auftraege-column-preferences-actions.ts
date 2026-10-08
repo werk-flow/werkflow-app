@@ -4,13 +4,14 @@ import { updateTag } from 'next/cache';
 
 import type { ActionResult } from '@/lib/action-result';
 import {
-  buildAuftraegePreferencesJson,
+  AUFTRAEGE_VISIBLE_COLUMNS_PREFERENCE_PATH,
   auftraegeColumnPreferencesSchema,
   type AuftraegeColumnPreferencesValues,
 } from '@/lib/jobs/auftraege-table-columns';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { CACHE_TAGS } from '@/lib/data/cached';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { logError } from '@/lib/logging';
 
 export type SaveAuftraegeColumnPreferencesResult = ActionResult<
@@ -40,32 +41,20 @@ export async function saveAuftraegeColumnPreferences(
   }
 
   const { orgId, userId } = auth.context;
-  const admin = createSupabaseAdminClient();
-  // A fresh read, not the cached row: another key of the same JSON may have changed since the cache filled.
-  const { data: current, error: readError } = await admin
-    .from('organization_user_preferences')
-    .select('preferences')
-    .eq('organization_id', orgId)
-    .eq('user_id', userId)
-    .maybeSingle();
-  if (readError) {
-    logError('Error reading Auftraege column preferences', readError);
-    return { success: false, error: 'update_failed' };
-  }
   const nextVisibleColumns = parsed.data.visibleColumns;
-
-  const { error } = await admin.from('organization_user_preferences').upsert(
-    {
-      organization_id: orgId,
-      user_id: userId,
-      preferences: buildAuftraegePreferencesJson(nextVisibleColumns, current?.preferences ?? null),
-      updated_at: new Date().toISOString(),
-    },
-    {
-      onConflict: 'organization_id,user_id',
-    },
+  // Sets this one key in the stored document; a concurrent save of another key survives.
+  const { error } = await createSupabaseAdminClient().rpc(
+    'set_organization_user_preference',
+    rpcArgs('set_organization_user_preference', {
+      p_organization_id: orgId,
+      p_user_id: userId,
+      p_path: AUFTRAEGE_VISIBLE_COLUMNS_PREFERENCE_PATH,
+      p_value: nextVisibleColumns,
+    }),
   );
-
+  if (error?.message === 'not_a_member' || error?.message === 'invalid_input') {
+    return { success: false, error: error.message };
+  }
   if (error) {
     logError('Error saving Auftraege column preferences', error);
     return { success: false, error: 'update_failed' };

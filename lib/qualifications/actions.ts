@@ -869,7 +869,7 @@ export async function setJobCapabilityRequirements(rawInput: {
     return { success: false, error: 'not_authorized' };
   }
   const admin = createSupabaseAdminClient();
-  const { data: job } = await loggedRead(
+  const { data: job, error: jobError } = await loggedRead(
     'setJobCapabilityRequirements: jobs read failed',
     admin
       .from('jobs')
@@ -878,6 +878,7 @@ export async function setJobCapabilityRequirements(rawInput: {
       .eq('organization_id', auth.context.orgId)
       .maybeSingle(),
   );
+  if (jobError) return { success: false, error: 'load_failed' };
   if (!job) return { success: false, error: 'job_not_found' };
   const normalized = [
     ...new Map(input.requirements.map((requirement) => [requirement.capabilityId, requirement])).values(),
@@ -1029,7 +1030,7 @@ export async function getProjectCapabilityRequirements(
   if (!auth.success) return auth;
   if (!auth.context.isManagerOrAbove) return { success: false as const, error: 'not_authorized' };
   const admin = createSupabaseAdminClient();
-  const { data: project } = await loggedRead(
+  const { data: project, error: projectError } = await loggedRead(
     'getProjectCapabilityRequirements: projects read failed',
     admin
       .from('projects')
@@ -1038,6 +1039,7 @@ export async function getProjectCapabilityRequirements(
       .eq('organization_id', auth.context.orgId)
       .maybeSingle(),
   );
+  if (projectError) return { success: false as const, error: 'load_failed' };
   if (!project) return { success: false as const, error: 'project_not_found' };
   const [definitionsResult, requirementsResult] = await Promise.all([
     readCompleteRows(
@@ -1142,7 +1144,7 @@ export async function expandTeamForAssignment(rawInput: {
   }
   const date = input.assessedForDate || getBusinessTodayIso();
   const admin = createSupabaseAdminClient();
-  const { data: team } = await loggedRead(
+  const { data: team, error: teamError } = await loggedRead(
     'expandTeamForAssignment: teams read failed',
     admin
       .from('teams')
@@ -1152,6 +1154,7 @@ export async function expandTeamForAssignment(rawInput: {
       .is('dissolved_at', null)
       .maybeSingle(),
   );
+  if (teamError) return { success: false, error: 'load_failed' };
   if (!team) return { success: false, error: 'team_not_found' };
   const teamExpansionFailed = (read: string, readError: unknown): ActionFailure => {
     logError(`Failed to expand team for assignment (${read}):`, readError);

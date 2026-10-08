@@ -1,6 +1,6 @@
 # Product Capability Map
 
-Status: living — last reviewed 2026-10-01
+Status: living — last reviewed 2026-10-05
 
 This document defines how WerkFlow should grow from its current operational foundation into a complete, coherent operating system for German SHK businesses and, later, an intelligent automation platform.
 
@@ -170,7 +170,7 @@ These are conceptual distinctions, not a schema proposal. Implemented domains al
 | Communication | What was sent or received, through which channel, and in which business context |
 | Automation run | A trigger, decision, proposed/performed action, approval, result, cost, and audit record |
 
-Using one vague object for several of these meanings creates the same problems the competitor research exposed—for example, calling a quotation catalog “inventory” or treating a scheduled appointment as actual working time.
+Using one vague object for several of these meanings creates the same problems the competitor research exposed, for example calling a quotation catalog “inventory” or treating a scheduled appointment as actual working time.
 
 ## Cross-Feature Handoff Rules
 
@@ -235,7 +235,7 @@ This is a dependency sequence, not a release commitment.
 
 ### Done
 
-The accepted Wave 2 checkpoint establishes this foundation. Slice counts and certification status live only in the [roadmap checkpoint](../plans/phase-1/roadmap.md#current-checkpoint). The foundation covers customer contacts, sites, requests and the relationship timeline; employee records, schedules, responsibilities, vacation, sickness, teams and qualifications; recurring planning and dispatch; work templates, the execution lifecycle, structured evidence, the field work pack and office handover; installed equipment, reactive service and maintenance plans; explicit time segments, corrections, time accounts with period close and payroll export; and the controlled people lifecycle. The shared attention pattern on `/aufgaben` carries approvals and notifications for all of them. Cross-domain search remains Wave 5 scope; feature-local search already exists. Native mobile and offline workflows also remain Wave 5 scope.
+The accepted Wave 0 to Wave 2 slices establish this foundation. Slice counts and certification status live only in the [roadmap checkpoint](../plans/phase-1/roadmap.md#current-checkpoint). The foundation covers customer contacts, sites, requests and the relationship timeline; employee records, schedules, responsibilities, vacation, sickness, teams and qualifications; recurring planning, dispatch and the `Plantafel`; document storage with versions and trash; work templates, the execution lifecycle, structured evidence, the field work pack and office handover; installed equipment, reactive service and maintenance plans; explicit time segments, corrections, time accounts with period close and payroll export; and the controlled people lifecycle. The shared attention pattern on `/aufgaben` carries approvals and notifications for all of them. Cross-domain search remains Wave 5 scope; feature-local search already exists. Native mobile and offline workflows also remain Wave 5 scope.
 
 ### Remaining
 
@@ -297,7 +297,7 @@ The competitor research supports several product guardrails:
 
 ### Native Accounting
 
-WerkFlow should build operational finance and accounting-ready records. Building a complete native financial accounting system—including double-entry bookkeeping, tax logic, fixed assets, group accounting, and statutory reporting—is a separate strategic decision requiring qualified accounting expertise and a strong reason not to integrate with established systems.
+WerkFlow should build operational finance and accounting-ready records. Building a complete native financial accounting system, with double-entry bookkeeping, tax logic, fixed assets, group accounting, and statutory reporting, is a separate strategic decision requiring qualified accounting expertise and a strong reason not to integrate with established systems.
 
 ### Native Payroll
 
@@ -335,9 +335,8 @@ Every feature spec should keep these sections current:
 6. **Phase 2 — Intelligence And Automation**
 7. **Boundaries And Decision Gates**
 8. **Open Product Decisions**
-9. **Related Docs**
 
-One spec carries extra sections by design. [document-management.md](../features/document-management.md) keeps the nine standard sections; its implementation reference lives in [document-storage-and-access.md](../technical/document-storage-and-access.md). [ai-automations.md](../features/ai-automations.md) has foundations rather than features as its Phase 1 scope, so its Phase 1 section is titled "Phase 1 — Complete Operational Core Enabling Foundations" and it adds In-App And External Automation, Human-Control Levels, and Trust, Security, And Operational Requirements.
+One spec carries extra sections by design. [ai-automations.md](../features/ai-automations.md) has foundations rather than features as its Phase 1 scope, so its Phase 1 section is titled "Phase 1 — Complete Operational Core Enabling Foundations". It adds The Phase 2 Plan, In-App And External Automation, Human-Control Levels, and Trust, Security, And Operational Requirements. A spec's implementation reference lives in its technical doc, for example [document-storage-and-access.md](../technical/document-storage-and-access.md) for documents.
 
 When behavior is implemented:
 

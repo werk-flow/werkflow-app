@@ -180,7 +180,7 @@ function releaseDrag(drag: ActiveDrag, ghost: HTMLDivElement | null): void {
     try {
       (drag.captured as HTMLElement).releasePointerCapture(drag.pointerId);
     } catch {
-      /* already released */
+      // best-effort: the browser may have released the capture already; the drag ends either way.
     }
   }
   if (drag.moved) suppressNextClick();

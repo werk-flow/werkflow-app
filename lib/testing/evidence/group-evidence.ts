@@ -7,6 +7,7 @@ import ts from 'typescript';
 import { z } from 'zod';
 import { proofEnvironmentDigest } from './proof-environment';
 import { contentDigest } from './source-content';
+import { backendHealthSchema } from '../runner/backend-health';
 
 const digestSchema = z.string().regex(/^[a-f0-9]{64}$/);
 export const inputSnapshotSchema = z.object({
@@ -287,6 +288,8 @@ export const groupResultSchema = z.object({
   buildId: z.string().nullable(),
   logPath: z.string(),
   reason: z.string().nullable(),
+  /** The application-to-backend probe before a blocked or after a failed browser group. */
+  backendHealth: backendHealthSchema.optional(),
 });
 /** The report snapshot a result was recorded under, attached when history is read. */
 export type GroupResult = z.infer<typeof groupResultSchema> & { snapshot?: InputSnapshot };

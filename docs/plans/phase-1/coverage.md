@@ -1,6 +1,6 @@
 # Phase 1 Coverage Matrices
 
-Status: living — last reviewed 2026-09-05
+Status: living — last reviewed 2026-10-05
 
 Routing aids: the starting-foundation snapshot and the feature-to-slice and cross-cutting coverage matrices. They change only when slice scope or feature routing changes. The slice index lives in [roadmap.md](roadmap.md).
 
@@ -57,5 +57,5 @@ Use this matrix to find every roadmap slice that may require a feature-doc updat
 | Interfaces and standards | Inventory `P1-34`; e-invoice `P1-40`; accounting `P1-43`; connector hardening `P1-50` |
 | Templates and settings | `P1-13`, `P1-15`, `P1-20`, `P1-29`, `P1-35`, `P1-36`, `P1-46` |
 | Security and privacy | Every slice; personnel/privacy in `P1-05`, `P1-08`, `P1-24`, `P1-45`; complete audit in `P1-51` |
-| Infrastructure stack ([decision 0001](../../decisions/0001-infrastructure-stack.md)) | Hygiene in `P1-00`; R2 direct file storage in `P1-00a`; retention archive design in `P1-45`; first Railway workers expected with `P1-44`/`P1-47`; auth re-evaluation before `P1-49` (mobile) |
+| Infrastructure stack ([decision 0001](../../decisions/0001-infrastructure-stack.md)) | Hygiene in `P1-00`; R2 direct file storage in `P1-00a`; retention archive design in `P1-45`; the first Railway worker renders documents from `P1-36` and validates e-invoices in `P1-40`, and `P1-44` extends it; auth re-evaluation before `P1-49` (mobile) |
 | Help and enablement | Contextual help as features land; complete customer enablement in `P1-52` |

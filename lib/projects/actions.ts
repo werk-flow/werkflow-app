@@ -163,7 +163,7 @@ export async function updateProject(
     }
 
     if (input.projectNumber !== undefined && input.projectNumber?.trim()) {
-      const { data: numberConflict } = await loggedRead(
+      const { data: numberConflict, error: numberConflictError } = await loggedRead(
         'updateProject: projects read failed',
         admin
           .from('projects')
@@ -173,6 +173,7 @@ export async function updateProject(
           .neq('id', projectId)
           .maybeSingle(),
       );
+      if (numberConflictError) return { success: false, error: 'load_failed' };
 
       if (numberConflict) {
         return { success: false, error: 'project_number_taken' };
@@ -417,10 +418,12 @@ export async function getProjectByNumber(
       .eq('project_number', decodeURIComponent(projectNumber))
       .single();
 
-    if (projectError || !projectData) {
+    // `.single()` reports a missing row as PGRST116; any other error is a failed read, not a missing project.
+    if (projectError && projectError.code !== 'PGRST116') {
       logReadErrors('getProjectByNumber: read failed', projectError);
-      return { success: false, error: 'project_not_found' };
+      return { success: false, error: 'load_failed' };
     }
+    if (!projectData) return { success: false, error: 'project_not_found' };
 
     return await readProjectDetails({
       admin,

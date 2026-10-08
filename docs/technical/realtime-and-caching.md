@@ -1,8 +1,8 @@
 # Realtime and caching
 
-Status: living — last reviewed 2026-10-04
+Status: living — last reviewed 2026-10-08
 
-This doc owns virtue 2 in `AGENTS.md`: immediate feedback, complete reads, caching and freshness. The app renders on the server, caches a few identity-keyed reads behind tags, and uses Supabase Realtime events as signals to read again.
+This doc owns virtue 2 in `AGENTS.md`: immediate feedback, complete reads, caching and freshness. The app renders on the server, caches a few identity-keyed reads behind tags, and treats Realtime events as signals to read again.
 
 ## How to work
 
@@ -12,7 +12,7 @@ Decide the feedback, the freshness and the read shape before you write the compo
 
 1. Write the Server Action in its domain's `actions.ts` in this order: parse the input, then [establish the caller and the permission](security.md#add-a-server-action-or-route-handler), then write. Rows that change together change in one database function call ([write related rows](code-quality.md#write-related-rows)). Use the admin client only when RLS cannot express the write.
 2. Call `updateTag()` only for a `CACHE_TAGS` entry that a cached reader of the changed data carries. Otherwise call no tag function.
-3. Pick the first-frame feedback from the pending-feedback matrix in the `werkflow-design` skill: `useOptimisticList` for a list edit, `InlinePending` with `useBusyIds` for a row action, the `isPending` of `useServerAction` otherwise.
+3. Pick the first-frame feedback from the pending-feedback matrix in the `werkflow-design` skill: `useOptimisticList` for a list edit, `InlinePending` with `useBusyIds` for a row action, `usePendingTask` for a flow of several steps, the `isPending` of `useServerAction` otherwise. A flow that leaves the page ends with `untilPageLeaves()`.
 4. Name every view that shows the changed rows. After a confirmed write, start `router.refresh()` and finish with `view.refresh()`, or pass the view's read as the `settle` option of `useServerAction`. The own write never waits for Realtime.
 5. Name the sessions that must see the change. The changed table is published, or the mutation touches a published owning root.
 6. Write a contract that holds the write open with `holdWrite` and checks the screen before and after the answer, as `tests/ui-contracts/team-qualifications.spec.ts` does. Run `bun run test:ui tests/ui-contracts/<file>.spec.ts` and `bun run test:unit lib/conventions/cache-tags.test.ts`.
@@ -22,7 +22,7 @@ Wrong turn: a button that waits for the server, or pending state from `useTransi
 ### Add Realtime data
 
 1. Confirm that the UI needs live updates and that a route refresh does not serve better than a client view.
-2. In the migration, add the table to the `supabase_realtime` publication, create the unique `(id, organization_id)` index `<table>_replident_idx`, set `REPLICA IDENTITY USING INDEX` on it, and add its `emit_realtime_deletion` trigger as `20260907010200_private_realtime_deletions.sql` does. Publish INSERT and UPDATE only.
+2. In the migration, add the table to the `supabase_realtime` publication, create the unique `(id, organization_id)` index `<table>_replident_idx` unless a unique constraint on those columns already provides one, set `REPLICA IDENTITY USING INDEX` on it, and add its `emit_realtime_deletion` trigger as `20260907010200_private_realtime_deletions.sql` does. Publish INSERT and UPDATE only.
 3. Add the table to `REALTIME_TABLES` in `lib/realtime/tables.ts`, and run `bun run realtime:check`. It fails until the migration and the list agree.
 
 Wrong turn: publishing a ledger or a link table. Publish the mutable owning root, so that one row signals one authoritative read.
@@ -64,10 +64,10 @@ Wrong turn: a channel, an interval or a focus listener of your own. It races the
 ### Check for a regression while you work
 
 1. After each change to an action, a reader or a live view, run its pending-feedback contract with `bun run test:ui`.
-2. Run `bun run test:plan`. It names each measured group whose scopes own a changed file, with the command to run it. Before the change is done, serve the build with `bun run test:server local` and run that group: `bun run test:verify --group audit:performance:<name>`. An explicit run enforces the deadlines.
+2. Run `bun run test:plan`. It names each measured group whose scopes own a changed file, with the command to run it. Before the change is done, serve the build with `bun run test:server local` and run that group: `bun run test:verify --group audit:performance:<name>`.
 3. Open the change in two signed-in sessions and watch the second one.
 
-Wrong turn: leaving the measurement to the release run. By then other changes sit on top, and the cause is hard to isolate.
+Wrong turn: leaving the measurement to the release run. By then other changes hide the cause.
 
 ## Checklist
 
@@ -78,7 +78,7 @@ A `[judgment]` item is a Tier 3 default: diverge only with the note that `AGENTS
 - Success shows only after the write is accepted. Failure keeps the user's input and offers retry. [group `ui:contracts`, judgment]
 - A saved result reaches every view that shows it, and another signed-in session within the live target. The measured scenarios cover the calendar and the time approval; for any other flow the reviewer checks a second session in the browser. [group `audit:performance:calendar-live`, group `audit:performance:field`, judgment]
 - A live surface consumes Realtime through `useLiveView` or `useRealtimeRouterRefresh`, never a channel, an auth listener or a focus listener of its own. [lint `realtimeSelectors`, lint `channelSelector`, lint `authListenerSelector`, lint `visibilitySelector`, lint `focusSelector`, lint `importRestrictions`]
-- A new published table is registered in the migration and in `REALTIME_TABLES` together, with its deletion trigger. [script `realtime:check`, group `sql:security`]
+- A new published table is registered in the migration and in `REALTIME_TABLES`, with its deletion trigger. [script `realtime:check`, group `sql:security`]
 - A reader that needs a whole collection reads it in ordered pages through `readAllRows` or `readCompleteRows` and reports an overflow as a failure. [code `lib/supabase/query-batches.ts`, group `sql:list-pagination`]
 - An organization-sized id list goes through `readInBatches`. [test `lib/conventions/id-list-batches.test.ts`]
 - An id list written into a PostgREST filter string (`.not`, `.filter`, `.or`) is a literal or a reviewed bounded site. [test `lib/conventions/id-list-string-filters.test.ts`]
@@ -89,6 +89,7 @@ A `[judgment]` item is a Tier 3 default: diverge only with the note that `AGENTS
 - A read that starts on mount or beside a save goes through the background-read registry, not the Server Action queue. [test `lib/data/background-read-http.test.ts`, test `lib/conventions/live-view-reads.test.ts`]
 - Client state adopts new server props during render, never in an effect. Inside a hydrated Suspense boundary a mount effect runs at idle priority; its update starves behind a pending route transition, React rebases every later functional update into a new value on each render, and an effect keyed on that value commits forever. After a page settles, its main thread goes idle. [lint `ui/no-derived-state-effect`, test `tests/ui-contracts/hydration-settle.spec.ts`, group `audit:layout`, judgment]
 - The authenticated layout waits for identity, organization, profile and subscription only. Optional shell reads load in their own providers. [test `lib/ui/app-layout-runtime.test.ts`]
+- A reader that runs on every event of every session pins its queries per role, and a page runs one derivation. [test `lib/attention/count-reads.test.ts`]
 - Sidebar links prefetch on intent only. [test `lib/ui/sidebar-prefetch.test.ts`]
 - A new flow whose speed matters gets a measured scenario: a step that people repeat many times a day, a view switch over a large window, or a change another session waits for. The reviewer names the flow and the decision in the slice record. [judgment]
 
@@ -120,7 +121,7 @@ These steps run once, on the final code. The in-work checks, including the measu
 
 ### Request-level deduplication
 
-Use `react.cache()` for repeated work within one Server Component render pass, such as the authenticated user, membership and organization reads. React render caching does not deduplicate calls in a GET handler. GET handlers use the `withReadRequest` scope that [security](security.md#read-request-authorization-reuse) owns.
+Use `react.cache()` for repeated work within one Server Component render pass. GET handlers, where render caching does not apply, use the `withReadRequest` scope that [security](security.md#read-request-authorization-reuse) owns.
 
 ### Cross-request caching
 
@@ -153,7 +154,7 @@ PostgREST caps every response and truncates without an error. The gateway reject
 
 ## Server-paginated lists
 
-The Aufträge, Kunden, Dokumente, Anfragen, Anlagen and Servicefälle lists, the three lists of the Wartung workspace and the correction history in Zeiterfassung select and count the matching identities in the database before they fetch page rows. These rules apply:
+A server-paginated list selects and counts the matching identities in the database before it fetches page rows. These rules apply:
 
 - Search, filters, aggregate counts and deterministic ordering apply before the page boundary. Slicing a complete organization in the client is not server pagination.
 - A generated record number such as `ANL-2026-1000` orders by prefix, year and numeric sequence, never as text. A reader that sorts in TypeScript uses `compareRecordNumbers` in `lib/format/record-number.ts`. A picker that offers a window of records by number selects that window in the database in the same order; a `.range` or `.limit` on a text-ordered number column picks the wrong records before any sort.

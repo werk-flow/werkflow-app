@@ -2,6 +2,8 @@
 
 Status: closed (2026-09-17) — the step 4 record: the deep dive, the research digests, the Wave 3 and Wave 4 detail, the owner's Phase 2 input with its mapping, the expert-review agenda, both owner rounds with every answer, and the documentation and tier cleanup with its evidence
 
+> This record is history. Do not carry out its instructions: the living docs that the index lists hold the current rules.
+
 ## Read this first
 
 Current routing, 2026-09-25: this is a closed planning record. Its opening instructions and deployment facts describe that planning session. Use the [roadmap](../roadmap.md) for current readiness and [environments](../../../technical/environments.md) for current deployment state. The [offer](../../../product/offer.md), [acquisition](../../../product/acquisition.md) and [avatar](../../../product/avatar.md) pages now route to the canonical business repo; they are no longer empty placeholders.

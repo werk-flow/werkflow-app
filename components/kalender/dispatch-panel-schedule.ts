@@ -2,6 +2,7 @@
 
 import type { DispatchOverviewOccurrence } from '@/lib/dispatch/types';
 import { getBusinessTodayIso, toBusinessIsoDate } from '@/lib/personnel/types';
+import { formatBerlinTime } from '@/lib/utils';
 
 // Also formats the batch preview's old/new instants — keep the two surfaces
 // visually identical so the preview reads like the panel rows it moves.
@@ -17,11 +18,7 @@ export function formatOccurrenceSchedule(entry: {
       day: '2-digit',
       month: '2-digit',
     });
-    const timeText = start.toLocaleTimeString('de-DE', {
-      timeZone: 'Europe/Berlin',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    const timeText = formatBerlinTime(start);
     return `${dateText}, ${timeText} Uhr`;
   }
   if (entry.startDate) {

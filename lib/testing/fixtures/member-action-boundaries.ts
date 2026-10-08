@@ -207,6 +207,10 @@ world.rpcCalls.length = 0;
 
 // Member detail is limited to the active organization and fills missing name parts with empty text.
 assert.deepEqual(await actions.getMemberDetail(foreignId), { success: false, error: 'not_found' });
+// A failed read is a load failure the page shows, never a missing member.
+world.failingTables.add('profiles');
+assert.deepEqual(await actions.getMemberDetail(workerId), { success: false, error: 'load_failed' });
+world.failingTables.clear();
 assert.deepEqual(await actions.getMemberDetail(workerId), {
   success: true,
   member: {

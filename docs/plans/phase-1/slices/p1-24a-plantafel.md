@@ -2,6 +2,8 @@
 
 Status: closed (2026-09-24) — accepted P1-24a acceptance record; canonical home for the slice's evidence (started 2026-09-18 by the implementing session after the discovery and the pre-implementation report below)
 
+> This record is history. Do not carry out its instructions: the living docs that the index lists hold the current rules.
+
 ## Read This First
 
 This record was the plan of the slice and is its closed acceptance record (2026-09-24); the [corrections of 2026-09-25](#corrections-of-2026-09-25) at the end name where the criteria as written and the accepted product differ. It grew in two steps: on 2026-09-15 pre-Wave-3 step 3 placed the `Plantafel` here as the week view's successor; on 2026-09-18, after the production release, the owner extended the slice to every calendar view, because the calendar is the office's main hub and its current state ("cropped corners, a stray scrollbar, an off-centre now dot, thick low-contrast lines, sluggish non-optimistic drags, generic error messages") is not acceptable for the product's most-used surface. The [2026-09-18 audit](#audit-of-2026-09-18) below is the verified evidence for that judgement.

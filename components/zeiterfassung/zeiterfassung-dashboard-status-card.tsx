@@ -2,7 +2,7 @@
 
 import { Clock } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
-import { cn } from '@/lib/utils';
+import { cn, formatBerlinTime } from '@/lib/utils';
 import type { useWeeklyTimeData } from '@/hooks/use-weekly-time-data';
 import { WeeklyHoursChart } from './weekly-hours-chart';
 import type { LiveClockState } from '@/lib/time-tracking/types';
@@ -56,10 +56,7 @@ export function ZeiterfassungDashboardStatusCard({
               <p className="font-medium">Arbeitszeit</p>
               <p className="text-xs text-muted-foreground">
                 {effectiveState.isClockedIn && effectiveState.clockInTime
-                  ? `Seit ${new Date(effectiveState.clockInTime).toLocaleTimeString('de-DE', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })} Uhr`
+                  ? `Seit ${formatBerlinTime(effectiveState.clockInTime)} Uhr`
                   : 'Nicht aktiv'}
               </p>
             </div>

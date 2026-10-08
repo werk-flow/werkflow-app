@@ -68,14 +68,8 @@ export function readCalendarPreferences(preferences: Json | null | undefined): C
   return calendarPreferencesSchema.parse(result);
 }
 
-/** The JSON to store: the other preference keys stay untouched. */
-export function writeCalendarPreferencesJson(
-  current: Json | null | undefined,
-  preferences: CalendarPreferences,
-): Json {
-  const base = isJsonRecord(current) ? current : {};
-  return { ...base, [CALENDAR_KEY]: preferences } as Json;
-}
+/** Where the calendar preferences live in the preference document; the save sets only this key. */
+export const CALENDAR_PREFERENCE_PATH = [CALENDAR_KEY];
 
 /** The actual-time toggle's effective value when the user has not chosen one. */
 export function resolveShowActualTime(

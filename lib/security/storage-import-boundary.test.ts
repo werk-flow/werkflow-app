@@ -179,3 +179,110 @@ test('an erased type import is not a server-only runtime boundary', () => {
     }),
   ).not.toEqual([]);
 });
+
+// File bytes never pass through a Server Action (docs/technical/security.md,
+// "Add a storage path"): the browser uploads to a signed URL. A Server Action
+// may still store a file the server generated from trusted rows. The writers
+// below are the only callers of putStorageObject; a new caller fails until it
+// is reviewed here, and an entry without a caller fails as stale.
+const GENERATED_FILE_WRITERS: Record<string, string> = {
+  'lib/time-accounts/actions.ts':
+    'The payroll ZIP that buildPayrollExportPackage builds from closed-period rows of the caller organization.',
+  'lib/work-artifacts/actions.ts':
+    'The HTML export that buildWorkArtifactExport renders from the current artifact revision.',
+  'lib/work-handover/actions.ts':
+    'The HTML handover package that buildCurrentExport renders from the loaded workspace after the holder check.',
+};
+
+const BYTE_TYPES = new Set(['File', 'Blob', 'ArrayBuffer', 'Uint8Array', 'ReadableStream', 'Buffer']);
+const BYTE_READS = new Set(['arrayBuffer', 'bytes', 'stream']);
+
+function hasServerDirective(source: ts.SourceFile): boolean {
+  let found = false;
+  const visit = (node: ts.Node): void => {
+    const statements = ts.isSourceFile(node) || ts.isBlock(node) ? node.statements : [];
+    for (const statement of statements) {
+      if (!ts.isExpressionStatement(statement) || !ts.isStringLiteral(statement.expression)) break;
+      if (statement.expression.text === 'use server') found = true;
+    }
+    if (!found) ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return found;
+}
+
+/** Places where a Server Action module accepts or reads client file bytes. */
+function serverActionByteInputs(file: string, text: string): string[] {
+  // Parsing only directive candidates keeps the scan inside the unit budget.
+  if (!text.includes('use server')) return [];
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+  if (!hasServerDirective(source)) return [];
+  const found: string[] = [];
+  const at = (node: ts.Node, what: string): void => {
+    found.push(`${file}:${source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1} ${what}`);
+  };
+  const visit = (node: ts.Node): void => {
+    if (ts.isParameter(node) && node.type) {
+      const types = new Set<string>();
+      const collect = (typeNode: ts.Node): void => {
+        if (ts.isTypeReferenceNode(typeNode)) types.add(typeNode.typeName.getText(source));
+        ts.forEachChild(typeNode, collect);
+      };
+      collect(node.type);
+      for (const name of types) if (BYTE_TYPES.has(name)) at(node, `parameter typed ${name}`);
+    }
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+      const name = node.expression.name.text;
+      if (BYTE_READS.has(name) && node.arguments.length === 0) at(node, `reads bytes with .${name}()`);
+      if (node.expression.expression.getText(source) === 'z' && (name === 'file' || name === 'instanceof'))
+        at(node, `accepts a file through z.${name}()`);
+    }
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind === ts.SyntaxKind.InstanceOfKeyword &&
+      BYTE_TYPES.has(node.right.getText(source))
+    )
+      at(node, `checks instanceof ${node.right.getText(source)}`);
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return found;
+}
+
+test('Server Actions never accept file bytes from the client', () => {
+  const found = listSources(repositoryRoot, ['app', 'components', 'hooks', 'lib']).flatMap((file) =>
+    serverActionByteInputs(file, readFileSync(resolve(repositoryRoot, file), 'utf8')),
+  );
+  expect(found, 'upload through a signed URL instead (lib/documents/upload-targets.ts)').toEqual([]);
+}, 30_000);
+
+test('only the reviewed server-generated files are written with putStorageObject', () => {
+  const callers = listSources(repositoryRoot, ['app', 'components', 'hooks', 'lib'])
+    .filter((file) => file !== storageAdapter)
+    .filter((file) => /\bputStorageObject\s*\(/.test(readFileSync(resolve(repositoryRoot, file), 'utf8')))
+    .sort();
+  expect(callers, 'a new caller needs a reviewed GENERATED_FILE_WRITERS entry').toEqual(
+    Object.keys(GENERATED_FILE_WRITERS).sort(),
+  );
+});
+
+test('byte inputs of a Server Action are found in every shape', () => {
+  const probes = [
+    `'use server'; export async function upload(file: File) { return file; }`,
+    `'use server'; export async function upload(input: { body: Uint8Array | null }) { return input; }`,
+    `'use server'; export async function upload(form: FormData) { const file = form.get('f'); if (file instanceof Blob) return file; }`,
+    `'use server'; export async function upload(form: FormData) { return (form.get('f') as Blob).arrayBuffer(); }`,
+    `'use server'; const schema = z.object({ file: z.instanceof(File) }); export async function upload(raw: unknown) { return schema.parse(raw); }`,
+    `export default function Page() { async function save(file: Blob) { 'use server'; return file; } }`,
+  ];
+  for (const probe of probes) expect(serverActionByteInputs('lib/probe.ts', probe), probe).not.toEqual([]);
+  expect(
+    serverActionByteInputs(
+      'lib/probe.ts',
+      `'use server'; export async function save(form: FormData) { return String(form.get('name') ?? ''); }`,
+    ),
+  ).toEqual([]);
+  expect(
+    serverActionByteInputs('lib/probe.ts', `export async function hash(bytes: Uint8Array) { return bytes; }`),
+  ).toEqual([]);
+});

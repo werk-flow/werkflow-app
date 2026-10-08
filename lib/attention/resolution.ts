@@ -4,7 +4,13 @@
 // resolution.test.ts; browser specs assert the surface, not these rules.
 
 import type { VacationRequest } from '@/lib/vacation/types';
-import { attentionItemKey, type AttentionItemIdentity, type AttentionNotification } from './types';
+import {
+  attentionItemKey,
+  type AttentionCounts,
+  type AttentionItemIdentity,
+  type AttentionNotification,
+  type AttentionTask,
+} from './types';
 
 export type FollowUpAttentionCandidate = {
   id: string;
@@ -59,6 +65,29 @@ export function dedupeAttentionItems<T extends AttentionItemIdentity>(items: T[]
     result.push(item);
   }
   return result;
+}
+
+const APPROVAL_SOURCE_TYPES: ReadonlySet<AttentionTask['sourceType']> = new Set([
+  'time_session_approval',
+  'time_change_request_approval',
+  'time_correction_approval',
+  'vacation_request_approval',
+]);
+
+/**
+ * The badge counts of one derivation. The server counts its own derivation
+ * with it, and the Aufgaben page counts the overview it already read, so the
+ * badge never needs a second derivation of the same items.
+ */
+export function countAttentionItems(items: {
+  tasks: readonly AttentionTask[];
+  notifications: readonly AttentionNotification[];
+}): AttentionCounts {
+  return {
+    actionableCount: items.tasks.length,
+    approvalsCount: items.tasks.filter((task) => APPROVAL_SOURCE_TYPES.has(task.sourceType)).length,
+    unreadNotificationCount: items.notifications.filter((notification) => notification.unread).length,
+  };
 }
 
 export type VacationDecisionFacts = {

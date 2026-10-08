@@ -522,7 +522,7 @@ async function readJobDetails(input: {
   const { userId, orgId, isManagerOrAbove } = input.context;
 
   if (!isManagerOrAbove) {
-    const { data: assignment } = await loggedRead(
+    const { data: assignment, error: assignmentError } = await loggedRead(
       `${input.operation}: job_assignments read failed`,
       admin
         .from('job_assignments')
@@ -530,9 +530,9 @@ async function readJobDetails(input: {
         .eq('organization_id', orgId)
         .eq('job_id', jobData.id)
         .eq('user_id', userId)
-        .single(),
-      true,
+        .maybeSingle(),
     );
+    if (assignmentError) return { success: false, error: 'load_failed' };
 
     if (!assignment) {
       return { success: false, error: 'not_authorized' };

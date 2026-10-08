@@ -5,7 +5,7 @@ description: TypeScript best practices. Use when designing types, validation bou
 
 # TypeScript best practices
 
-Adapted for WerkFlow from cursor/plugins pstack (MIT). Repo notes: `lib/supabase/database.types.ts` (generated from dev) is the authoritative schema source — derive from it instead of re-declaring database shapes. The boundaries where external data crosses in are Server Actions, Route Handlers, and Supabase/PostgREST responses; parse there, trust domain types inside (this matches `AGENTS.md`'s "validate inputs at boundaries" rule).
+Adapted for WerkFlow from cursor/plugins pstack (MIT). Repo notes: `lib/supabase/database.types.ts` (generated from dev) is the authoritative schema source — derive from it instead of re-declaring database shapes. The boundaries where external data crosses in are Server Actions, Route Handlers, and Supabase/PostgREST responses; parse there, and trust domain types inside. The [security control map](../../../docs/technical/security.md#add-a-server-action-or-route-handler) owns what a Server Action parses.
 
 | Rule | Summary |
 |------|---------|
@@ -27,7 +27,7 @@ Adapted for WerkFlow from cursor/plugins pstack (MIT). Repo notes: `lib/supabase
 
 ## Strict optional and index rules
 
-`tsconfig.json` runs with `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess` (on since 2026-09-14; 1,205 errors were fixed under these rules with zero `!` on the added lines). They bind every new and changed file:
+`tsconfig.json` runs with `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess`. They bind every new and changed file:
 
 - No non-null assertion, no cast, no `@ts-expect-error` or `@ts-ignore` to satisfy either flag.
 - An optional property that carries `undefined` on purpose is widened to `T | undefined` at its declaration. Every other site builds the object conditionally (`...(value !== undefined ? { key: value } : {})`, or a separate assignment) instead of passing `undefined` into an optional property.

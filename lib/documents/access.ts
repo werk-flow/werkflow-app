@@ -64,8 +64,8 @@ export async function getFolderById(
   admin: SupabaseAdmin,
   orgId: string,
   folderId: string,
-): Promise<DocumentFolderRow | null> {
-  const { data } = await loggedRead(
+): Promise<ActionResult<{ folder: DocumentFolderRow }>> {
+  const { data, error } = await loggedRead(
     'getFolderById: document_folders read failed',
     admin
       .from('document_folders')
@@ -76,7 +76,9 @@ export async function getFolderById(
       .maybeSingle(),
   );
 
-  return (data as DocumentFolderRow | null) ?? null;
+  if (error) return { success: false, error: 'load_failed' };
+  if (!data) return { success: false, error: 'folder_not_found' };
+  return { success: true, folder: data as DocumentFolderRow };
 }
 
 export async function ensureFolder(
@@ -87,9 +89,7 @@ export async function ensureFolder(
   if (!folderId) return { success: true };
 
   const folder = await getFolderById(admin, orgId, folderId);
-  if (!folder) {
-    return { success: false, error: 'folder_not_found' };
-  }
+  if (!folder.success) return folder;
 
   return { success: true };
 }
@@ -98,7 +98,7 @@ export async function ensureJobAccess(
   context: AuthorizedDocumentContext,
   jobId: string,
 ): Promise<ActionResult> {
-  const { data: job } = await loggedRead(
+  const { data: job, error: jobError } = await loggedRead(
     'ensureJobAccess: jobs read failed',
     context.admin
       .from('jobs')
@@ -107,6 +107,7 @@ export async function ensureJobAccess(
       .eq('organization_id', context.orgId)
       .maybeSingle(),
   );
+  if (jobError) return { success: false, error: 'load_failed' };
 
   if (!job) {
     return { success: false, error: 'job_not_found' };
@@ -116,7 +117,7 @@ export async function ensureJobAccess(
     return { success: true };
   }
 
-  const { data: assignment } = await loggedRead(
+  const { data: assignment, error: assignmentError } = await loggedRead(
     'ensureJobAccess: job_assignments read failed',
     context.admin
       .from('job_assignments')
@@ -126,6 +127,7 @@ export async function ensureJobAccess(
       .eq('user_id', context.userId)
       .maybeSingle(),
   );
+  if (assignmentError) return { success: false, error: 'load_failed' };
 
   if (!assignment) {
     return { success: false, error: 'not_authorized' };
@@ -141,7 +143,7 @@ export async function ensureProjectManagerAccess(
   const manager = requireManager(context);
   if (!manager.success) return manager;
 
-  const { data: project } = await loggedRead(
+  const { data: project, error: projectError } = await loggedRead(
     'ensureProjectManagerAccess: projects read failed',
     context.admin
       .from('projects')
@@ -150,6 +152,7 @@ export async function ensureProjectManagerAccess(
       .eq('organization_id', context.orgId)
       .maybeSingle(),
   );
+  if (projectError) return { success: false, error: 'load_failed' };
 
   if (!project) {
     return { success: false, error: 'project_not_found' };
@@ -171,7 +174,7 @@ export async function ensureProjectWorkAccess(
   if (context.isManagerOrAbove) {
     return ensureProjectManagerAccess(context, projectId);
   }
-  const { data: assignedJob } = await loggedRead(
+  const { data: assignedJob, error: assignedJobError } = await loggedRead(
     'ensureProjectWorkAccess: jobs read failed',
     context.admin
       .from('jobs')
@@ -182,6 +185,7 @@ export async function ensureProjectWorkAccess(
       .limit(1)
       .maybeSingle(),
   );
+  if (assignedJobError) return { success: false, error: 'load_failed' };
   return assignedJob ? { success: true } : { success: false, error: 'not_authorized' };
 }
 
@@ -192,7 +196,7 @@ export async function ensureClientManagerAccess(
   const manager = requireManager(context);
   if (!manager.success) return manager;
 
-  const { data: client } = await loggedRead(
+  const { data: client, error: clientError } = await loggedRead(
     'ensureClientManagerAccess: clients read failed',
     context.admin
       .from('clients')
@@ -201,6 +205,7 @@ export async function ensureClientManagerAccess(
       .eq('organization_id', context.orgId)
       .maybeSingle(),
   );
+  if (clientError) return { success: false, error: 'load_failed' };
 
   if (!client) {
     return { success: false, error: 'client_not_found' };
@@ -216,7 +221,7 @@ export async function ensureEquipmentManagerAccess(
   const manager = requireManager(context);
   if (!manager.success) return manager;
 
-  const { data: equipment } = await loggedRead(
+  const { data: equipment, error: equipmentError } = await loggedRead(
     'ensureEquipmentManagerAccess: installed_equipment read failed',
     context.admin
       .from('installed_equipment')
@@ -226,6 +231,7 @@ export async function ensureEquipmentManagerAccess(
       .is('voided_at', null)
       .maybeSingle(),
   );
+  if (equipmentError) return { success: false, error: 'load_failed' };
 
   return equipment ? { success: true } : { success: false, error: 'installed_equipment_not_found' };
 }
@@ -236,7 +242,7 @@ export async function ensureServiceCaseManagerAccess(
 ): Promise<ActionResult> {
   const manager = requireManager(context);
   if (!manager.success) return manager;
-  const { data: serviceCase } = await loggedRead(
+  const { data: serviceCase, error: serviceCaseError } = await loggedRead(
     'ensureServiceCaseManagerAccess: service_cases read failed',
     context.admin
       .from('service_cases')
@@ -245,6 +251,7 @@ export async function ensureServiceCaseManagerAccess(
       .eq('organization_id', context.orgId)
       .maybeSingle(),
   );
+  if (serviceCaseError) return { success: false, error: 'load_failed' };
   return serviceCase ? { success: true } : { success: false, error: 'service_case_not_found' };
 }
 
@@ -254,7 +261,7 @@ export async function ensureMaintenanceCoverageManagerAccess(
 ): Promise<ActionResult> {
   const manager = requireManager(context);
   if (!manager.success) return manager;
-  const { data: coverage } = await loggedRead(
+  const { data: coverage, error: coverageError } = await loggedRead(
     'ensureMaintenanceCoverageManagerAccess: maintenance_coverages read failed',
     context.admin
       .from('maintenance_coverages')
@@ -263,6 +270,7 @@ export async function ensureMaintenanceCoverageManagerAccess(
       .eq('organization_id', context.orgId)
       .maybeSingle(),
   );
+  if (coverageError) return { success: false, error: 'load_failed' };
   return coverage ? { success: true } : { success: false, error: 'maintenance_coverage_not_found' };
 }
 
@@ -274,7 +282,7 @@ export async function ensureRequestManagerAccess(
   const manager = requireManager(context);
   if (!manager.success) return manager;
 
-  const { data: request } = await loggedRead(
+  const { data: request, error: requestError } = await loggedRead(
     'ensureRequestManagerAccess: client_requests read failed',
     context.admin
       .from('client_requests')
@@ -283,6 +291,7 @@ export async function ensureRequestManagerAccess(
       .eq('organization_id', context.orgId)
       .maybeSingle(),
   );
+  if (requestError) return { success: false, error: 'load_failed' };
 
   if (!request) {
     return { success: false, error: 'request_not_found' };
@@ -298,7 +307,7 @@ export async function ensureEmployeeManagerAccess(
   const manager = requireManager(context);
   if (!manager.success) return manager;
 
-  const { data: membership } = await loggedRead(
+  const { data: membership, error: membershipError } = await loggedRead(
     'ensureEmployeeManagerAccess: organization_members read failed',
     context.admin
       .from('organization_members')
@@ -307,6 +316,7 @@ export async function ensureEmployeeManagerAccess(
       .eq('user_id', employeeId)
       .maybeSingle(),
   );
+  if (membershipError) return { success: false, error: 'load_failed' };
 
   if (!membership) {
     return { success: false, error: 'employee_not_found' };
@@ -320,7 +330,7 @@ export async function getAuthorizedDocument(
   documentId: string,
   options: { protectedVersionNumber?: number } = {},
 ): Promise<AuthorizedDocument> {
-  const { data: document } = await loggedRead(
+  const { data: document, error: documentError } = await loggedRead(
     'getAuthorizedDocument: documents read failed',
     context.admin
       .from('documents')
@@ -330,6 +340,7 @@ export async function getAuthorizedDocument(
       .is('deleted_at', null)
       .maybeSingle(),
   );
+  if (documentError) return { success: false, error: 'load_failed' };
 
   if (!document) {
     return { success: false, error: 'document_not_found' };
@@ -372,7 +383,7 @@ export async function getAuthorizedDocument(
         },
       };
     }
-    const { data: employee } = await loggedRead(
+    const { data: employee, error: employeeError } = await loggedRead(
       'getAuthorizedDocument: employee_records read failed',
       context.admin
         .from('employee_records')
@@ -381,6 +392,7 @@ export async function getAuthorizedDocument(
         .eq('organization_id', context.orgId)
         .maybeSingle(),
     );
+    if (employeeError) return { success: false, error: 'load_failed' };
     const releases = (protectedDocument.personnel_document_releases ?? []) as Array<{
       document_version_number: number;
       revoked_at: string | null;
@@ -443,7 +455,10 @@ export async function getAuthorizedDocument(
     ),
   ]);
   const accessError = linksError ?? jobAssignments.error ?? projectAssignments.error;
-  if (accessError) logReadFailure('getAuthorizedDocument: assignment access check failed', accessError);
+  if (accessError) {
+    logReadFailure('getAuthorizedDocument: assignment access check failed', accessError);
+    return { success: false, error: 'load_failed' };
+  }
 
   if (jobAssignments.data.length + projectAssignments.data.length === 0) {
     return { success: false, error: 'not_authorized' };
@@ -459,7 +474,7 @@ export async function getDeletedDocumentForManager(
   const manager = requireManager(context);
   if (!manager.success) return manager;
 
-  const { data: document } = await loggedRead(
+  const { data: document, error: documentError } = await loggedRead(
     'getDeletedDocumentForManager: documents read failed',
     context.admin
       .from('documents')
@@ -469,6 +484,7 @@ export async function getDeletedDocumentForManager(
       .not('deleted_at', 'is', null)
       .maybeSingle(),
   );
+  if (documentError) return { success: false, error: 'load_failed' };
 
   if (!document) {
     return { success: false, error: 'document_not_found' };

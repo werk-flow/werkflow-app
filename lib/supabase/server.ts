@@ -25,9 +25,7 @@ export async function createSupabaseServerClient(): Promise<SupabaseClient> {
             sameSite: options?.sameSite as 'lax' | 'strict' | 'none' | undefined,
           });
         } catch {
-          // The `set` method was called from a Server Component.
-          // This can be ignored if you have middleware refreshing
-          // user sessions.
+          // best-effort: a Server Component cannot write cookies; proxy.ts refreshes the session cookies instead.
         }
       },
       remove(name, options) {
@@ -40,9 +38,7 @@ export async function createSupabaseServerClient(): Promise<SupabaseClient> {
             maxAge: 0,
           });
         } catch {
-          // The `delete` method was called from a Server Component.
-          // This can be ignored if you have middleware refreshing
-          // user sessions.
+          // best-effort: a Server Component cannot write cookies; proxy.ts refreshes the session cookies instead.
         }
       },
     },

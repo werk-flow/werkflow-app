@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useBanner } from '@/components/ui/banner';
 import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
@@ -20,7 +20,21 @@ export async function clearEmailChangeChallengeQuietly(): Promise<void> {
     const cleanupResult = await clearEmailChangeChallengeBeforeSignOut();
     if (!cleanupResult.success) logError('auth.sign_out.email_change_cleanup_failed');
   } catch (error) {
+    // best-effort: the challenge expires on its own, and a failed cleanup must not keep the user signed in.
     logError('auth.sign_out.email_change_cleanup_failed', error);
+  }
+}
+
+/** Ends the user's open working sessions; false when one may still be running. */
+async function endOpenWorkBeforeSignOut(): Promise<boolean> {
+  try {
+    const result = await clockOutBeforeSignOut();
+    if (result.success) return true;
+    logError('auth.sign_out.clock_out_failed', { code: result.error });
+    return false;
+  } catch (error) {
+    logError('auth.sign_out.clock_out_failed', error);
+    return false;
   }
 }
 
@@ -29,6 +43,8 @@ export function useSignOut() {
   const { showBanner } = useBanner();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const { run: runSignOut, isPending: isSigningOut } = usePendingTask();
+  // A failed clock-out stops the first sign-out with a warning; the next click signs out anyway.
+  const clockOutWarningShownRef = useRef(false);
 
   const signOut = async () => {
     if (isSigningOut) {
@@ -37,11 +53,16 @@ export function useSignOut() {
 
     await runSignOut(async () => {
       try {
-        // Best-effort: ensure any open working session is clocked out before sign-out.
-        try {
-          await clockOutBeforeSignOut();
-        } catch (error) {
-          logError('auth.sign_out.clock_out_failed', error);
+        const clockedOut = await endOpenWorkBeforeSignOut();
+        if (clockedOut) clockOutWarningShownRef.current = false;
+        if (!clockedOut && !clockOutWarningShownRef.current) {
+          clockOutWarningShownRef.current = true;
+          showBanner({
+            variant: 'error',
+            message:
+              'Wir konnten dich vor der Abmeldung nicht ausstempeln. Stemple dich selbst aus oder klicke erneut auf „Abmelden“, um dich trotzdem abzumelden.',
+          });
+          return;
         }
 
         await clearEmailChangeChallengeQuietly();
@@ -68,6 +89,8 @@ export function useSignOut() {
         // The sign-out stays pending until the login page replaces this one.
         await untilPageLeaves();
       } catch {
+        // The next attempt starts over, including the clock-out warning.
+        clockOutWarningShownRef.current = false;
         showBanner({
           variant: 'error',
           message: 'Die Abmeldung konnte nicht vollständig abgeschlossen werden. Bitte versuche es erneut.',

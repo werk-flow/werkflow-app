@@ -3,7 +3,7 @@
 // replaced. Each fixture is its own process, so these module mocks never reach
 // another test file. Import the action under test only after `installActionWorld`.
 import { mock } from 'bun:test';
-import { createInMemoryAdmin, type InMemoryTables } from './in-memory-admin';
+import { createInMemoryAdmin, type BeforeWrite, type InMemoryTables } from './in-memory-admin';
 
 type FixtureRole = 'admin' | 'buero' | 'employee';
 type FixtureRow = Record<string, unknown>;
@@ -31,6 +31,13 @@ export type ActionWorld = {
   functionCalls: FunctionCall[];
   /** How often an action asked for the service-role client. */
   adminClientRequests: number;
+  /** Tables whose every read answers with a connection error instead of rows. */
+  failingTables: Set<string>;
+  /**
+   * Runs once, right before the next update or delete selects its rows, and is
+   * then cleared: the concurrent change that lands between an action's read and its write.
+   */
+  beforeNextWrite: BeforeWrite | null;
 };
 
 export function signInAs(world: ActionWorld, role: FixtureRole | null, orgId: string = ORGANIZATION_A): void {
@@ -57,14 +64,25 @@ export function installActionWorld(
     invokeFunction: () => ({ error: null }),
     functionCalls: [],
     adminClientRequests: 0,
+    failingTables: new Set(),
+    beforeNextWrite: null,
+  };
+  const beforeWrite: BeforeWrite = (table) => {
+    const interleave = world.beforeNextWrite;
+    world.beforeNextWrite = null;
+    interleave?.(table);
   };
   // Results are copies, as over the network: a later write must not change a row an action read earlier.
   const database = (): { from: (table: string) => InMemoryQuery } => ({
     from: (table) => {
-      const query = createInMemoryAdmin(world.tables, columnDefaults).from(table);
+      const query = createInMemoryAdmin(world.tables, columnDefaults, beforeWrite).from(table);
       const read = query.then.bind(query);
       query.then = (onFulfilled, onRejected) =>
-        read((result) => ({ ...result, data: structuredClone(result.data) })).then(onFulfilled, onRejected);
+        read((result) =>
+          world.failingTables.has(table)
+            ? { ...result, data: null, error: { code: '08006', message: 'connection failure' } }
+            : { ...result, data: structuredClone(result.data) },
+        ).then(onFulfilled, onRejected);
       return query;
     },
   });

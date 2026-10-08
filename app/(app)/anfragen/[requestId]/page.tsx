@@ -93,9 +93,14 @@ export default async function AnfrageDetailPage({ params }: { params: Promise<{ 
       .maybeSingle(),
   ]);
 
-  if (requestError || !requestRow) {
-    notFound();
+  if (requestError) {
+    return (
+      <RegionLoadError title="Die Anfrage konnte nicht geladen werden">
+        Die Anfrage ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
+      </RegionLoadError>
+    );
   }
+  if (!requestRow) notFound();
 
   const request = toClientRequest(requestRow);
   const events = (eventsResult.data ?? []).map(toClientRequestEvent);

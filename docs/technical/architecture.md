@@ -1,6 +1,6 @@
 # Technical architecture
 
-Status: living — last reviewed 2026-10-01
+Status: living — last reviewed 2026-10-05
 
 This document describes the runtime shape of WerkFlow and the reasons behind it. For exact schema, inspect the live Supabase project and `lib/supabase/database.types.ts`. Coding standards live in `AGENTS.md`.
 
@@ -28,7 +28,7 @@ Do not migrate the database, auth or hosting providers, and do not route file by
 
 The route tree under `app/` is the authority for what exists. `app/(app)/` holds the authenticated product shell and its pages. Authentication, onboarding, the subscription upgrade and the invite error live outside that shell.
 
-Route handlers exist for three reasons: auth callbacks, invite redemption, and authorized reads that must stay out of the browser's Server Action queue. [Realtime and caching](realtime-and-caching.md#reads-outside-the-server-action-queue) owns the reason and the rules for those reads. Route handlers are not confined to `app/api/`. The security route inventory test checks the current handler set, and [security](security.md) owns the rules for a new handler.
+Route handlers exist for four reasons: auth callbacks and flash messages, invite redemption, the browser's Content Security Policy reports, and authorized reads that must stay out of the browser's Server Action queue. [Realtime and caching](realtime-and-caching.md#reads-outside-the-server-action-queue) owns the reason and the rules for those reads. Route handlers are not confined to `app/api/`. The security route inventory test checks the current handler set, and [security](security.md) owns the rules for a new handler.
 
 ### Page shell
 
@@ -42,7 +42,7 @@ Tailwind v4 scans an explicit boundary declared in `app/globals.css`, which keep
 
 ## Supabase access model
 
-The app has five Supabase client factories under `lib/supabase/`, one per trust boundary:
+The app has one Supabase client factory per trust boundary under `lib/supabase/`:
 
 - `client.ts` is the browser singleton. It runs under the user's JWT and RLS and carries the Realtime connection.
 - `server.ts` is the client for server rendering and Server Actions. It reads the request cookies and uses the publishable key, so it is also RLS-bound.

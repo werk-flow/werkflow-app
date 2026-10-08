@@ -23,6 +23,5 @@ export default async function ScopedWorkHandoverPage({
     targetType,
     targetId: routeParams.targetId,
   });
-  if (!result.success) redirect('/auftraege');
-  return <WorkHandoverPage workspace={result.workspace} />;
+  return <WorkHandoverPage result={result} />;
 }

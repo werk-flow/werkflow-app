@@ -599,7 +599,7 @@ async function refreshServiceCasePathsById(
   organizationId: string,
   serviceCaseId: string,
 ): Promise<void> {
-  const { data } = await loggedRead(
+  const { data, error } = await loggedRead(
     'refreshServiceCasePathsById: service_cases read failed',
     admin
       .from('service_cases')
@@ -608,6 +608,8 @@ async function refreshServiceCasePathsById(
       .eq('id', serviceCaseId)
       .maybeSingle(),
   );
+  // The write has committed: without the case number, refresh every case detail page instead of leaving this one stale.
+  if (error) revalidatePath('/service/faelle/[caseNumber]', 'page');
   refreshServicePaths(data?.case_number);
 }
 

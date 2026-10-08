@@ -59,9 +59,20 @@ export async function redeemOtpInvite(
     }
     if (result.success && result.organizationId) {
       // The API already set the organization cookie; the pending code is used up.
-      await supabase.auth.updateUser({
-        data: { pending_invite_code: null },
-      });
+      try {
+        const { error: metadataError } = await supabase.auth.updateUser({
+          data: { pending_invite_code: null },
+        });
+        if (metadataError) {
+          logError('redeemOtpInvite: clearing the pending invite code failed', {
+            code: metadataError.code,
+            status: metadataError.status,
+          });
+        }
+      } catch (error) {
+        // best-effort: the code is consumed on the server, and the stale hint in the user metadata is ignored on the next redemption.
+        logError('redeemOtpInvite: clearing the pending invite code failed', error);
+      }
       if (result.alreadyMember) {
         loadDocument(`/dashboard?already_member=${result.organizationId}`);
       } else {
@@ -70,9 +81,15 @@ export async function redeemOtpInvite(
       return true;
     }
     logError('redeemOtpInvite: redemption answered without an organization');
+    return openRedeemFailedPage();
   } catch (error) {
     logError('redeemOtpInvite: redemption failed', error);
+    return openRedeemFailedPage();
   }
+}
+
+/** A redemption that failed without a known refusal opens the generic invite error page. */
+function openRedeemFailedPage(): true {
   loadDocument(inviteErrorPath('redeem_failed'));
   return true;
 }

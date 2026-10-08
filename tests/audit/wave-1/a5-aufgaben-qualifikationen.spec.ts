@@ -597,7 +597,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
       await openMemberDetailFromList(adminPage, employeeName);
       await addConditionViaDialog(adminPage, {
         validFromDigits: toDatePickerDigits(plannedDateIso),
-        employmentTypeLabel: 'Ausbildung',
+        employmentType: 'ausbildung',
         note: `A5 Ausbildungs-Hinweis ${world.runId}`,
       });
 
@@ -858,7 +858,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
       await openMemberDetailFromList(adminPage, bueroName);
       await addConditionViaDialog(adminPage, {
         validFromDigits: toDatePickerDigits(plannedDateIso),
-        employmentTypeLabel: 'Vollzeit',
+        employmentType: 'vollzeit',
         note: `A5 Begleitperson ${world.runId}`,
       });
       await createJob(adminPage, {

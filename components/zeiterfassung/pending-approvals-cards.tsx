@@ -7,19 +7,13 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import type { PendingSession, ChangeRequestWithDetails, WorkSession } from '@/lib/time-tracking/types';
 import type { OrgRole } from '@/lib/members/actions';
-import { toLocalDateString } from '@/lib/utils';
+import { formatDuration } from '@/lib/time-tracking/helpers';
+import { formatBerlinTime, toLocalDateString } from '@/lib/utils';
 
 const EntryDetailsDialog = dynamic(
   () => import('@/components/kalender/entry-details-dialog').then((mod) => mod.EntryDetailsDialog),
   { ssr: false },
 );
-
-function formatTime(timestamp: string): string {
-  return new Date(timestamp).toLocaleTimeString('de-DE', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 function formatWeekdayDate(dateStr: string): string {
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('de-DE', {
@@ -41,17 +35,9 @@ function formatWeekdayDateTime(timestamp: string): string {
   });
 }
 
-function formatDuration(clockIn: string, clockOut: string): string {
-  const start = new Date(clockIn);
-  const end = new Date(clockOut);
-  const diffMs = end.getTime() - start.getTime();
-  const hours = Math.floor(diffMs / (1000 * 60 * 60));
-  const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-  return `${minutes}m`;
+/** The clocked span in whole minutes; seconds are dropped, as the clock shows them. */
+function clockedMinutes(clockIn: string, clockOut: string): number {
+  return Math.floor((new Date(clockOut).getTime() - new Date(clockIn).getTime()) / 60_000);
 }
 
 // Badge component for request type
@@ -151,16 +137,16 @@ export function SessionRequestCard({
             <p className="mt-1 text-sm text-muted-foreground">{formatWeekdayDate(session.date)}</p>
             {session.clockIn && session.clockOut ? (
               <p className="text-xs text-muted-foreground">
-                {formatTime(session.clockIn.timestamp)} – {formatTime(session.clockOut.timestamp)}
+                {formatBerlinTime(session.clockIn.timestamp)} – {formatBerlinTime(session.clockOut.timestamp)}
                 <span className="ml-2 text-foreground/70">
-                  ({formatDuration(session.clockIn.timestamp, session.clockOut.timestamp)})
+                  ({formatDuration(clockedMinutes(session.clockIn.timestamp, session.clockOut.timestamp))})
                 </span>
               </p>
             ) : (
               <p className="text-xs text-muted-foreground">
                 {session.clockIn
-                  ? `Einstempeln: ${formatTime(session.clockIn.timestamp)}`
-                  : session.clockOut && `Ausstempeln: ${formatTime(session.clockOut.timestamp)}`}
+                  ? `Einstempeln: ${formatBerlinTime(session.clockIn.timestamp)}`
+                  : session.clockOut && `Ausstempeln: ${formatBerlinTime(session.clockOut.timestamp)}`}
               </p>
             )}
             {session.jobTitle && (
@@ -283,9 +269,9 @@ export function ChangeRequestCard({
             <>
               <p className="mt-1 text-sm text-muted-foreground">{formatWeekdayDate(dateStr)}</p>
               <p className="text-xs text-muted-foreground">
-                {formatTime(clockInEntry.timestamp)} – {formatTime(clockOutEntry.timestamp)}
+                {formatBerlinTime(clockInEntry.timestamp)} – {formatBerlinTime(clockOutEntry.timestamp)}
                 <span className="ml-2 text-foreground/70">
-                  ({formatDuration(clockInEntry.timestamp, clockOutEntry.timestamp)})
+                  ({formatDuration(clockedMinutes(clockInEntry.timestamp, clockOutEntry.timestamp))})
                 </span>
               </p>
             </>

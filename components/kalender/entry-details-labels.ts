@@ -37,10 +37,6 @@ export function formatDateTime(date: Date): string {
   });
 }
 
-export function formatTime(date: Date): string {
-  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-}
-
 export function formatActionError(error: string): string {
   if (error === 'validation_failed') {
     return 'Diese Zeitänderung würde zu einer ungültigen oder überlappenden Arbeitszeit führen.';

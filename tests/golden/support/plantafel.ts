@@ -308,12 +308,19 @@ export function calendarAbsenceBars(
   return scope.locator(`[data-calendar-bar="${ABSENCE_BAR_TONES[tone]}"]${start}`);
 }
 
-export function boardAbsenceBar(page: Page, employeeRecordId: string, label: string): Locator {
+/** The neutral word an approved absence bar starts with (lib/calendar/board-model.ts). */
+const ABSENCE_BAR_LABELS = { vacation: 'Urlaub', sickness: 'Abwesend' } as const;
+
+export function boardAbsenceBar(
+  page: Page,
+  employeeRecordId: string,
+  kind: keyof typeof ABSENCE_BAR_LABELS,
+): Locator {
   return calendarAbsenceBars(
     plantafel(page).locator(`[data-board-row="${employeeRecordId}"]`),
     'approved',
   ).filter({
-    hasText: label,
+    hasText: ABSENCE_BAR_LABELS[kind],
   });
 }
 

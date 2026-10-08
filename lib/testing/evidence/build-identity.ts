@@ -90,7 +90,7 @@ export function readBuildReceipt(repositoryRoot: string): BuildReceipt {
   const path = resolve(repositoryRoot, '.next/werkflow-build-receipt.json');
   if (!existsSync(path))
     throw new Error(
-      'Certification requires a recorded build. Run bun run build:test, then restart bun run start.',
+      'Certification requires a recorded build. Run bun run build, then restart bun run start.',
     );
   return receiptSchema.parse(JSON.parse(readFileSync(path, 'utf8')));
 }
@@ -106,7 +106,7 @@ export function assertBuildIdentity(input: {
   if (realpathSync(input.repositoryRoot) !== receipt.repositoryRoot)
     throw new Error('Build belongs to another workspace. Rebuild here.');
   if (receipt.buildId !== input.diskBuildId)
-    throw new Error('Build receipt does not match .next/BUILD_ID. Run bun run build:test.');
+    throw new Error('Build receipt does not match .next/BUILD_ID. Run bun run build.');
   if (receipt.sourceDigest !== inputs.sourceDigest)
     throw new Error('Application source changed after the build. Rebuild and restart before certification.');
   if (receipt.environmentDigest !== inputs.environmentDigest)

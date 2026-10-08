@@ -155,7 +155,7 @@ await withLocalStackLease(target === 'local', async (signal) => {
     if (target === 'local')
       await run(['wsl.exe', '--exec', 'docker', 'start', 'supabase_edge_runtime_werkflow-app']);
     await run([process.execPath, 'run', 'test:preflight', 'backend', target]);
-    await run([process.execPath, 'run', 'build:test']);
+    await run([process.execPath, 'run', 'build']);
   });
   const releaseRealtimeWarmUp = target === 'local' ? await keepRealtimeWarm() : null;
   const serverLog = openServerLog();

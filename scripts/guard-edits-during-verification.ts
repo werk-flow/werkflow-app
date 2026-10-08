@@ -5,6 +5,7 @@ import {
   editedFiles,
   guardedInputs,
   refusalMessage,
+  sharedStateCommand,
   sourceRewritingCommand,
   type GuardedToolCall,
 } from '../lib/testing/runner/edit-guard';
@@ -58,6 +59,13 @@ try {
 const command = sourceRewritingCommand(call);
 if (command) {
   console.error(refusalMessage({ ...owner, inputs: [], command }));
+  process.exit(2);
+}
+const sharedState = sharedStateCommand(call);
+if (sharedState) {
+  console.error(
+    refusalMessage({ ...owner, inputs: [], command: sharedState.name, effect: sharedState.effect }),
+  );
   process.exit(2);
 }
 

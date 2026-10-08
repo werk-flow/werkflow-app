@@ -238,7 +238,7 @@ test.describe('P1-24a Plantafel, day and month audit @AUDIT-W3-P1-24A @AUDIT-W3'
     const entriesBefore = await getOrganizationTimeEntryCount(world.orgId);
 
     await openPlantafel(adminPage, monday);
-    await expect(boardAbsenceBar(adminPage, employeeRecord.id, 'Abwesend')).toBeVisible({ timeout: 20_000 });
+    await expect(boardAbsenceBar(adminPage, employeeRecord.id, 'sickness')).toBeVisible({ timeout: 20_000 });
 
     await test.step('A drop onto an absence day is refused at the pointer and writes nothing', async () => {
       await dragCardTo(

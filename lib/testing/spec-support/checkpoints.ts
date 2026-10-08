@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { writeJsonAtomically } from '../runner/file-lock';
 import { uuidSchema } from '../../validation/uuid';
 
-// World-scoped seed-or-reuse values: the layout fixture and the measured performance profile.
+// World-scoped seed-or-reuse values: the layout fixture.
 // Tests never hand values to each other through this file (testing.md, "Spec checklist").
 const valuesSchema = z
   .object({
@@ -19,14 +19,6 @@ const valuesSchema = z
         nestedJobNumber: z.string().min(1),
         equipmentNumber: z.string().min(1),
         caseNumber: z.string().min(1),
-      })
-      .strict()
-      .optional(),
-    // Step 2 performance profile: the seeded window and the job whose assignee the list must render.
-    'performance.typicalProfile': z
-      .object({
-        windowFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-        assignedJobNumber: z.string().min(1),
       })
       .strict()
       .optional(),

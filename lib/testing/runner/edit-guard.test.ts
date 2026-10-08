@@ -5,6 +5,7 @@ import {
   guardedInputs,
   refusalMessage,
   repositoryPath,
+  sharedStateCommand,
   sourceRewritingCommand,
 } from './edit-guard';
 
@@ -72,6 +73,35 @@ test('shell commands that rewrite source files are named, checks and plain comma
   expect(
     sourceRewritingCommand({ tool_name: 'Edit', tool_input: { command: 'bun run format' } }),
   ).toBeUndefined();
+});
+
+test('commands that reset the stack or replace the build are named with their effect, mentions are not', () => {
+  const shell = (command: string): string | undefined =>
+    sharedStateCommand({ tool_name: 'Bash', tool_input: { command } })?.name;
+  expect(shell('supabase db reset')).toBe('supabase db reset');
+  expect(shell('wsl.exe --exec supabase db reset')).toBe('supabase db reset');
+  expect(shell('wsl -e bash -lc "cd /mnt/c/app && supabase db reset"')).toBe('supabase db reset');
+  expect(shell('cd app && bunx supabase stop')).toBe('supabase stop');
+  expect(shell('bunx next build')).toBe('next build');
+  expect(shell('git grep -n "supabase db reset" docs')).toBeUndefined();
+  expect(shell('echo run supabase stop later')).toBeUndefined();
+  expect(shell("cat >> notes.md <<'EOF'\nguard (supabase db reset, stop)\nEOF")).toBeUndefined();
+  expect(shell('bun run build')).toBeUndefined();
+  expect(shell('supabase status')).toBeUndefined();
+  expect(
+    sharedStateCommand({ tool_name: 'Write', tool_input: { command: 'supabase db reset' } }),
+  ).toBeUndefined();
+  const reset = sharedStateCommand({ tool_name: 'Bash', tool_input: { command: 'supabase db reset' } });
+  expect(reset).toBeDefined();
+  const message = refusalMessage({
+    operation: 'independent verification groups',
+    startedAt: '2026-10-08T08:00:00.000Z',
+    inputs: [],
+    ...(reset && { command: reset.name }),
+    ...(reset?.effect !== undefined && { effect: reset.effect }),
+  });
+  expect(message).toContain('Running supabase db reset would rebuild the local database');
+  expect(message).not.toContain('fingerprints');
 });
 
 test('the refusal names the run, the files and the way out', () => {

@@ -11,6 +11,7 @@ export const SHARED_FAILURE_MESSAGES: Readonly<Record<SharedFailureCode, string>
   not_authorized: 'Du hast keine Berechtigung für diese Aktion.',
   invalid_input: 'Bitte prüfe deine Eingaben.',
   period_closed: 'Der Monat ist bereits abgeschlossen. Ein Admin muss die Periode zuerst wieder öffnen.',
+  load_failed: 'Die Daten konnten gerade nicht geladen werden. Versuche es in einem Moment erneut.',
   responsibility_load_failed:
     'Deine Freigaberechte konnten gerade nicht geprüft werden. Versuche es in einem Moment erneut.',
   unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.',

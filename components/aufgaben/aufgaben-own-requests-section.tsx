@@ -4,7 +4,7 @@ import { Card } from '@/components/ui/card';
 import type { AttentionOverview } from '@/lib/attention/types';
 import { VACATION_STATUS_LABELS } from '@/lib/vacation/types';
 import { formatVacationDays } from '@/lib/vacation/balance';
-import { formatRange } from './aufgaben-format';
+import { formatGermanDateRange } from '@/lib/utils';
 
 export function AufgabenOwnRequestsSection({
   ownRequests,
@@ -34,7 +34,7 @@ export function AufgabenOwnRequestsSection({
             >
               <div className="min-w-0">
                 <p className="text-sm tabular-nums">
-                  {formatRange(request.startDate, request.endDate)}
+                  {formatGermanDateRange(request.startDate, request.endDate)}
                   {request.dayPortion === 'half_day' ? ' (halbtags)' : ''}
                   {` · ${formatVacationDays(request.totalDays)}`}
                 </p>

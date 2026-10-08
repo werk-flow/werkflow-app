@@ -1,13 +1,13 @@
 'use server';
 
-import type { ActionFailure } from '@/lib/action-result';
+import type { ActionFailure, ActionResult } from '@/lib/action-result';
 import { loggedRead, logReadErrors } from '@/lib/data/read-request-cache';
 import { revalidatePath } from 'next/cache';
 import { z } from '@/lib/zod';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { timeActivitySelectionSchema as selectionSchema } from './activity-selection-schema';
 
-import { getAuthenticatedUser, getCachedMemberships } from '@/lib/data/cached';
+import { resolveActionContextFor } from '@/lib/org/action-context';
 import { readOrganizationSettings } from './organization-settings-read';
 import { getBusinessTodayIso } from '@/lib/personnel/types';
 import { getJobDisplayTitle } from '@/lib/jobs/types';
@@ -86,25 +86,26 @@ export async function transitionTimeActivity(rawInput: TimeTransitionInput): Pro
   const parsed = transitionSchema.safeParse(rawInput);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const input = parsed.data;
-  const user = await getAuthenticatedUser();
-  if (!user) return { success: false, error: 'not_authenticated' };
+  const caller = await resolveActionContextFor(input.organizationId);
+  if (!caller.success) return caller;
+  const userId = caller.context.userId;
 
   const admin = createSupabaseAdminClient();
   const { data: employee, error: employeeError } = await admin
     .from('employee_records')
     .select('id')
     .eq('organization_id', input.organizationId)
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .maybeSingle();
   if (employeeError || !employee) return { success: false, error: 'not_a_member' };
 
   let sicknessNotice = false;
   if (input.action === 'start' || input.action === 'continue_legacy') {
     const today = getBusinessTodayIso();
-    if (await hasApprovedFullDayVacationOn(input.organizationId, user.id, today)) {
+    if (await hasApprovedFullDayVacationOn(input.organizationId, userId, today)) {
       return { success: false, error: 'on_approved_vacation' };
     }
-    sicknessNotice = await hasActiveSicknessOn(input.organizationId, user.id, today);
+    sicknessNotice = await hasActiveSicknessOn(input.organizationId, userId, today);
   }
 
   const selection = input.selection;
@@ -112,7 +113,7 @@ export async function transitionTimeActivity(rawInput: TimeTransitionInput): Pro
     'transition_time_activity',
     rpcArgs('transition_time_activity', {
       p_organization_id: input.organizationId,
-      p_actor_id: user.id,
+      p_actor_id: userId,
       p_operation_id: input.operationId,
       p_request_hash: hashTimeTransitionRequest(input),
       p_action: input.action,
@@ -154,8 +155,8 @@ async function readClockJobInfo(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   organizationId: string,
   jobId: string,
-): Promise<ClockJobInfo | null> {
-  const { data: job } = await loggedRead(
+): Promise<ActionResult<{ info: ClockJobInfo | null }>> {
+  const { data: job, error: jobError } = await loggedRead(
     'readClockJobInfo: jobs read failed',
     admin
       .from('jobs')
@@ -164,16 +165,20 @@ async function readClockJobInfo(
       .eq('id', jobId)
       .maybeSingle(),
   );
-  if (!job) return null;
+  if (jobError) return { success: false, error: 'fetch_failed' };
+  if (!job) return { success: true, info: null };
   const project = Array.isArray(job.projects) ? job.projects[0] : job.projects;
   const client = Array.isArray(job.clients) ? job.clients[0] : job.clients;
   return {
-    id: job.id,
-    title: getJobDisplayTitle({ title: job.title, description: job.description }),
-    jobNumber: job.job_number,
-    status: job.status === 'nicht_bearbeitet' ? 'in_bearbeitung' : job.status,
-    projectName: project?.name ?? null,
-    clientName: client?.name ?? null,
+    success: true,
+    info: {
+      id: job.id,
+      title: getJobDisplayTitle({ title: job.title, description: job.description }),
+      jobNumber: job.job_number,
+      status: job.status === 'nicht_bearbeitet' ? 'in_bearbeitung' : job.status,
+      projectName: project?.name ?? null,
+      clientName: client?.name ?? null,
+    },
   };
 }
 
@@ -183,18 +188,16 @@ export async function getCanonicalClockState(
   if (!uuidSchema.safeParse(organizationId).success) {
     return { success: false, error: 'invalid_input' };
   }
-  const user = await getAuthenticatedUser();
-  if (!user) return { success: false, error: 'not_authenticated' };
-  const memberships = await getCachedMemberships(user.id);
-  if (!memberships.some((membership) => membership.orgId === organizationId))
-    return { success: false, error: 'not_a_member' };
+  const caller = await resolveActionContextFor(organizationId);
+  if (!caller.success) return caller;
+  const userId = caller.context.userId;
   const admin = createSupabaseAdminClient();
   const [{ data: sessionData, error: sessionError }, settings] = await Promise.all([
     admin
       .from('time_sessions')
       .select('id, employee_record_id, status, started_at, version, recovery_reason')
       .eq('organization_id', organizationId)
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .is('ended_at', null)
       .maybeSingle(),
     readOrganizationSettings(organizationId),
@@ -241,12 +244,17 @@ export async function getCanonicalClockState(
     if (!resume.success) return { success: false, error: 'fetch_failed' };
     resumeActivity = resume.activity;
   }
-  const activeJobInfo = current?.jobId ? await readClockJobInfo(admin, organizationId, current.jobId) : null;
-  const resumeJobInfo = !resumeActivity?.jobId
-    ? null
+  const noJob = { success: true as const, info: null };
+  const activeJob = current?.jobId ? await readClockJobInfo(admin, organizationId, current.jobId) : noJob;
+  if (!activeJob.success) return activeJob;
+  const resumeJob = !resumeActivity?.jobId
+    ? noJob
     : resumeActivity.jobId === current?.jobId
-      ? activeJobInfo
+      ? activeJob
       : await readClockJobInfo(admin, organizationId, resumeActivity.jobId);
+  if (!resumeJob.success) return resumeJob;
+  const activeJobInfo = activeJob.info;
+  const resumeJobInfo = resumeJob.info;
   const derivedRecovery =
     session.status === 'recovery_required'
       ? session.recovery_reason

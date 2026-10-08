@@ -50,11 +50,49 @@ const SOURCE_REWRITING_COMMANDS: readonly { pattern: RegExp; name: string }[] = 
   },
 ];
 
-/** The name of the rewriting command a shell call contains, if any. */
-export function sourceRewritingCommand(call: GuardedToolCall): string | undefined {
+/**
+ * A command position: line start, after `;`, `&` or `|`, or behind a launcher
+ * such as `wsl --exec` or `bunx`. An opening parenthesis does not count,
+ * because prose in a heredoc uses it far more often than a subshell does.
+ */
+const AT_COMMAND = String.raw`(?:^|[;&|\n]|\bbash\s+-l?c\s+["']|\b(?:wsl(?:\.exe)?(?:\s+(?:--exec|-e))?|bunx|npx|sudo)\s)\s*`;
+
+/** Shell commands that change state a running test operation depends on, with that effect. */
+const SHARED_STATE_COMMANDS: readonly { pattern: RegExp; name: string; effect: string }[] = [
+  {
+    pattern: new RegExp(String.raw`${AT_COMMAND}supabase\s+db\s+reset\b`),
+    name: 'supabase db reset',
+    effect: 'would rebuild the local database and delete the test world the run uses',
+  },
+  {
+    pattern: new RegExp(String.raw`${AT_COMMAND}supabase\s+stop\b`),
+    name: 'supabase stop',
+    effect: 'would stop the local Supabase stack the run uses',
+  },
+  {
+    pattern: new RegExp(String.raw`${AT_COMMAND}next\s+build\b`),
+    name: 'next build',
+    effect: 'would replace the .next build the test server serves',
+  },
+];
+
+function shellCommand(call: GuardedToolCall): string | undefined {
   if (call.tool_name !== 'Bash' && call.tool_name !== 'PowerShell') return undefined;
   if (!call.tool_input || typeof call.tool_input !== 'object') return undefined;
-  const command = text((call.tool_input as Record<string, unknown>).command);
+  return text((call.tool_input as Record<string, unknown>).command);
+}
+
+/** The shared-state command a shell call runs, if any; mentions inside a search or a string do not count. */
+export function sharedStateCommand(call: GuardedToolCall): { name: string; effect: string } | undefined {
+  const command = shellCommand(call);
+  if (!command) return undefined;
+  const match = SHARED_STATE_COMMANDS.find((entry) => entry.pattern.test(command));
+  return match && { name: match.name, effect: match.effect };
+}
+
+/** The name of the rewriting command a shell call contains, if any. */
+export function sourceRewritingCommand(call: GuardedToolCall): string | undefined {
+  const command = shellCommand(call);
   if (!command) return undefined;
   return SOURCE_REWRITING_COMMANDS.find((entry) => entry.pattern.test(command))?.name;
 }
@@ -92,13 +130,15 @@ export function refusalMessage(input: {
   startedAt: string;
   inputs: readonly string[];
   command?: string;
+  /** What the command would do to the run; defaults to voiding it through changed proof inputs. */
+  effect?: string;
 }): string {
   const target = input.command
     ? `Running ${input.command}`
     : `Editing ${input.inputs.slice(0, 3).join(', ')}${input.inputs.length > 3 ? ` and ${input.inputs.length - 3} more` : ''}`;
   return [
     `Refused: a test operation holds the workspace lock ("${input.operation}", started ${input.startedAt}).`,
-    `${target} would change files the run fingerprints and void its results.`,
+    `${target} ${input.effect ?? 'would change files the run fingerprints and void its results'}.`,
     'Wait until the run ends, or stop it deliberately first. Documentation and files under .agent-logs stay editable.',
   ].join(' ');
 }

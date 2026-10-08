@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "dependencyDigest": "ec4f923bada6a42873ff39cf69694a7ab8ee3db0b194ed6d8b96d5cd4244f109",
+  "dependencyDigest": "ecb56bf837e6be46b688d557273ccca91f1295c22db603e2829667a375e87977",
   "exceptions": [
     {
       "package": "braces",
@@ -15,7 +15,8 @@
         "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
         "bun audit: eslint-config-next > @next/eslint-plugin-next > fast-glob > micromatch > braces",
         "bun audit: @typescript-eslint/parser > @typescript-eslint/typescript-estree > fast-glob > micromatch > braces",
-        "npm registry: 3.0.3 is the latest published version of braces"
+        "npm registry: 3.0.3 is the latest published version of braces",
+        "Re-reviewed 2026-10-08 after next 16.3.8, sharp 0.35.5, smol-toml 1.9.0 and source-map-js 1.2.2: bun audit shows the same two lint-toolchain paths to braces, and braces 3.0.3 is still the latest published version."
       ]
     }
   ]

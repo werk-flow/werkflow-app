@@ -2,6 +2,8 @@
 
 Status: closed (2026-09-01) — accepted P1-21 acceptance record; canonical home for the slice's evidence
 
+> This record is history. Do not carry out its instructions: the living docs that the index lists hold the current rules.
+
 ## Bounded Outcome
 
 Employees can capture and atomically switch explicit work, travel, break, standby, call-out, and internal-activity segments. Work, travel, and call-out support a normal job or explicit unallocated state. Invalid, duplicate, stale, overnight, abandoned, and legacy-open sequences have an attributable recovery path.

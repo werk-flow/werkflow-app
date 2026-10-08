@@ -4,7 +4,6 @@ import {
   doesDateConsumeVacation,
   formatVacationDays,
 } from '../../lib/vacation/balance';
-import { EMPLOYMENT_TYPE_LABELS } from '../../lib/personnel/types';
 import { resolveDailyTargets } from '../../lib/personnel/targets';
 import { getBusinessWeekDates } from '../../lib/personnel/schedule';
 import { VACATION_PORTION_LABELS, VACATION_STATUS_LABELS } from '../../lib/vacation/types';
@@ -119,7 +118,7 @@ test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
       await openMemberDetailFromList(adminPage, employeeName);
       await addConditionViaDialog(adminPage, {
         validFromDigits: toDatePickerDigits(todayIso),
-        employmentTypeLabel: EMPLOYMENT_TYPE_LABELS.vollzeit,
+        employmentType: 'vollzeit',
         vacationDays: '30',
       });
 

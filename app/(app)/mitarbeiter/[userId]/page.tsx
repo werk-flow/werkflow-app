@@ -123,6 +123,17 @@ async function MitarbeiterDetailData({ targetUserId }: { targetUserId: string })
     logError('Mitarbeiter detail: lifecycle read failed', lifecycleResult.error);
   }
 
+  if (
+    !memberResult.success &&
+    (memberResult.error === 'load_failed' || memberResult.error === 'unexpected_error')
+  ) {
+    return (
+      <RegionLoadError title="Der Mitarbeiter konnte nicht geladen werden">
+        Die Mitgliedschaft ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
+      </RegionLoadError>
+    );
+  }
+
   if (!memberResult.success) {
     // No active membership: personnel records without a login and exited
     // people get the personnel-only detail surface.

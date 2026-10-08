@@ -1,6 +1,6 @@
 # Document Management
 
-Status: living — last reviewed 2026-10-04
+Status: living — last reviewed 2026-10-05
 
 Document management gives SHK businesses one digital place for job photos, contracts, invoices, offers, reports, and general business files. It replaces paper folders and scattered files. Office staff get a practical library, and field workers get a very simple flow. [Document storage and access](../technical/document-storage-and-access.md) owns storage, upload, access, and audit mechanics.
 
@@ -18,15 +18,15 @@ Document management should:
 
 Admin and Büro organize ordinary organization files in the central library. Operational records show their documents in a contextual section. Field workers upload, view, and download ordinary files on assigned jobs. Protected personnel files follow separate access rules.
 
-- **Central library.** Admin and Büro browse a manual folder tree, an overview grouped by linked target, and a list of all files, with search, filters, sorting, and a separate `Papierkorb`. They create, rename, move, copy, and delete folders. They upload single files, batches, or whole folders by drag and drop. Batch move, copy, and delete work on a multi-selection. Deleting or copying a folder covers its whole tree or nothing.
+- **Central library.** Admin and Büro browse a manual folder tree, an overview grouped by linked target, a list of all files, views per category and per kind of linked record, and a view of unorganized files, with search, filters, sorting, and a separate `Papierkorb`. They create, rename, move, copy, and delete folders. They upload single files, batches, or whole folders by drag and drop. Batch move, copy, and delete work on a multi-selection, and dragging selected files onto a folder moves them. Deleting or copying a folder covers its whole tree or nothing.
 - **Paged lists.** Search, sorting, and filters cover every authorized document before the library pages its results. Paging clears the selection, so a batch action acts only on the displayed page. [Realtime and caching](../technical/realtime-and-caching.md#server-paginated-lists) owns the paging rules.
 - **One file, many links.** A document exists once. Links connect it to jobs, projects, customers, employees, requests, installed equipment, service cases, and maintenance coverage. A link never copies the file. Converting a request links each of its attachments to the created work as well. WerkFlow creates no folder when an operational record is created. Manual folders and link filters organize the library instead.
-- **Contextual sections.** Every linked record shows its documents. Managers attach existing library files, manage links in one dialog, and remove a link without deleting the file. Assigned employees upload, view, and download only on their own job, from the field work pack. On the page of a project with at least one of their jobs, they also view and download the project's own documents, read-only. Job documents there stay limited to their own jobs. They never see the library, the trash, versions, or audit history.
+- **Contextual sections.** Every linked record shows its documents. Managers attach existing library files, manage links in one dialog, and remove a link without deleting the file. Every linked record except a request offers the attach flow. Assigned employees upload, view, and download only on their own job, from the field work pack. On the page of a project with at least one of their jobs, they also view and download the project's own documents, read-only. Job documents there stay limited to their own jobs. They never see the library, the trash, versions, or audit history.
 - **Recovery and history.** Delete moves a file to the `Papierkorb`, where managers restore or permanently delete it. Contracts, invoices, offers, and reports keep numbered versions. Managers see the audit history of every document. Each upload, new version, link change, rename, category change, move, copy, delete, restore, and permanent deletion saves together with its audit entry, or not at all. An upload registers the file and its link together, and a refused upload keeps no stored file. WerkFlow infers a category at upload, and managers can change it. A category is a label, not a structured record.
 - **Viewer.** PDFs and images open in a large in-app viewer with a download fallback. A link can open one exact document, and the customer chronology uses such links.
 - **Evidence and handover.** A work-template item may name an expected evidence category without creating a file. A document can be tied to one exact work-artifact revision as evidence, closure proof, signature mark, or export. An ordinary upload never becomes evidence by itself. A handover release freezes exact document versions and stores one customer-safe package as an ordinary document. The app does not deliver the package and creates no public link.
 - **Protected personnel documents.** A personnel file is a separate access class outside the ordinary library. It belongs to the personnel record, not to an employee link. The affected employee reaches only versions that were expressly released. No job assignment or ordinary document permission widens this access. [Employee management](employee-management.md) owns the access classes.
-- **History guards.** Once an equipment-history event depends on a document link, WerkFlow rejects unlinking or permanently deleting that document. Equipment, service-case, and coverage links give an assigned employee no document access beyond the assigned job.
+- **History guards.** Linking a document to equipment writes an equipment-history event. From then on, WerkFlow rejects unlinking that document from the equipment or permanently deleting it. Only removing the equipment itself releases the link. Equipment, service-case, and coverage links give an assigned employee no document access beyond the assigned job.
 
 ### Important Current Limitations
 
@@ -35,7 +35,7 @@ Admin and Büro organize ordinary organization files in the central library. Ope
 - No dedicated offer, contract, or invoice records.
 - No version rollback. Users can only download previous versions.
 - No external delivery, public link, or customer portal for any document or handover package.
-- Attaching an existing library file works for jobs, projects, customers, and employees. Request, equipment, service-case, and coverage links start from their own detail pages.
+- A request has no attach flow. Its documents come only from upload on the request.
 
 ## Phase 1 — Complete Operational Core
 

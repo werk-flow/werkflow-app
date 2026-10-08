@@ -5,6 +5,37 @@
 type Row = Record<string, unknown>;
 export type InMemoryTables = Record<string, Row[]>;
 type QueryResult = { data: unknown; error: { code: string; message?: string } | null; count: number | null };
+/**
+ * Runs right before an update or delete selects its rows, so a test can
+ * change or remove a row between an action's read and its write.
+ */
+export type BeforeWrite = (table: string) => void;
+
+const comparators: Readonly<Record<string, (left: number | string, right: number | string) => boolean>> = {
+  eq: (left, right) => left === right,
+  neq: (left, right) => left !== right,
+  gt: (left, right) => left > right,
+  gte: (left, right) => left >= right,
+  lt: (left, right) => left < right,
+  lte: (left, right) => left <= right,
+};
+
+/** Numbers compare as numbers, everything else as text, as PostgREST filter values arrive. */
+function comparable(value: unknown, filterValue: string): [number | string, number | string] {
+  const number = Number(filterValue);
+  return typeof value === 'number' && filterValue.trim() !== '' && Number.isFinite(number)
+    ? [value, number]
+    : [String(value ?? ''), filterValue];
+}
+
+/** One `column.operator.value` term of a PostgREST `or` filter. */
+function orTerm(term: string): (row: Row) => boolean {
+  const [column = '', operator = '', ...rest] = term.split('.');
+  const compare = comparators[operator];
+  if (!compare) throw new Error(`The in-memory admin does not implement the "${operator}" or-filter.`);
+  const value = rest.join('.');
+  return (row) => compare(...comparable(row[column], value));
+}
 
 class InMemoryQuery implements PromiseLike<QueryResult> {
   private operation: 'select' | 'update' | 'delete' | 'insert' | null = null;
@@ -17,6 +48,7 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
     private readonly tables: InMemoryTables,
     private readonly table: string,
     private readonly columnDefaults: () => Row,
+    private readonly beforeWrite: BeforeWrite = () => {},
   ) {}
 
   select(_columns?: string, options?: { head?: boolean }): this {
@@ -75,6 +107,11 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
   not(): this {
     return this;
   }
+  /** Comparison terms only (`taken_quantity.gt.0,returned_quantity.gt.0`); anything else throws. */
+  or(filter: string): this {
+    const terms = filter.split(',').map(orTerm);
+    return this.where((row) => terms.some((term) => term(row)));
+  }
   single(): this {
     this.cardinality = 'single';
     return this;
@@ -85,6 +122,7 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
   }
 
   private run(): QueryResult {
+    if (this.operation === 'update' || this.operation === 'delete') this.beforeWrite(this.table);
     const rows = this.tables[this.table] ?? [];
     let affected: Row[];
     if (this.operation === 'insert') {
@@ -171,9 +209,10 @@ async function decideEntryChangeRequest(tables: InMemoryTables, args: Row): Prom
 export function createInMemoryAdmin(
   tables: InMemoryTables,
   columnDefaults: Record<string, () => Row> = {},
+  beforeWrite?: BeforeWrite,
 ): { from: (table: string) => InMemoryQuery; rpc: (name: string, args?: Row) => Promise<QueryResult> } {
   return {
-    from: (table) => new InMemoryQuery(tables, table, columnDefaults[table] ?? (() => ({}))),
+    from: (table) => new InMemoryQuery(tables, table, columnDefaults[table] ?? (() => ({})), beforeWrite),
     rpc: async (name, args = {}) => {
       if (name === 'review_time_entries' || name === 'delete_time_entries')
         return runTimeEntryBatch(tables, name, args);

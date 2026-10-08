@@ -60,7 +60,7 @@ export function ForgotPasswordForm({
           redirectTo: `${siteUrl}/reset-password`,
         });
       } catch (error) {
-        // The page never reveals whether the address exists, so the failure only reaches the log.
+        // best-effort: the page gives the same answer whether or not the address exists, so a failed request may not change it.
         logError('auth.password_reset.request_failed', error);
       }
 

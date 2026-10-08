@@ -1,6 +1,6 @@
 # Employee Management
 
-Status: living — last reviewed 2026-10-04
+Status: living — last reviewed 2026-10-05
 
 Employee management covers the operational relationship between an organization and its people: membership, access, personnel data, employment conditions, availability, qualifications, assignments, leave, personnel documents, and handoffs to time tracking and payroll.
 
@@ -31,7 +31,7 @@ Every person in an organization has one personnel record. It carries employment 
 - **Vacation.** Employees request and withdraw their own vacation. Vacation approvers decide requests and can cancel approved vacation with a reason. Entitlement comes from the employment condition. Only days with a positive target consume it. The balance is plain arithmetic, or a label that no entitlement exists. Approved vacation lowers the daily target and blocks clock-in on that day.
 - **Sickness.** A sickness report is a fact, not a request. Employees report themselves, and Admin and Büro can record a report for someone. Corrections change the same report and need a reason. There is no diagnosis field, by design. Only the person and Admin or Büro see the sickness type and evidence status. The shared calendar shows a neutral absence. Active sickness sets the target to 0 but does not block clock-in.
 - **Teams.** Teams are date-effective planning shortcuts and grant no rights. Picking a team in an assignment adds the members active on that date.
-- **Qualifications.** Admin and Büro maintain a catalog of skills and certifications, assign entries with validity and evidence status, and set requirements on jobs. Every assignment checks coverage on the planned date. A gap can be overridden only with a recorded reason. „Intern bestätigt" is an operational fact, not a legal claim. Employees see their own entries read-only, and expiring certificates appear in `Aufgaben`.
+- **Qualifications.** Admin and Büro maintain a catalog of skills and certifications, assign entries with validity and evidence status, and set requirements on jobs. Every assignment checks coverage on the planned date. A gap can be overridden only with a recorded reason. „Intern bestätigt“ is an operational fact, not a legal claim. Employees see their own entries read-only, and expiring certificates appear in `Aufgaben`.
 - **Attention.** `Aufgaben` shows the approvals a person can decide now, decision notifications, and the person's own requests. A badge never counts an item the viewer cannot act on.
 - **Dispatch acknowledgement.** Employees confirm or challenge the current revision of a dispatched work instruction. An acknowledgement never stands in for attendance or recorded time.
 - **Time facts.** Managers inspect time but never record live time on someone's behalf. A correction of one's own time always needs a second time approver. [Time tracking](time-tracking.md) owns the time rules.
@@ -42,7 +42,7 @@ Every person in an organization has one personnel record. It carries employment 
 
 ### Important Current Limitations
 
-- Capacity conflicts, minimum staffing, shift rotations, and date-specific schedule overrides belong to [planning](../plans/phase-1/slices/p1-11-planning-occurrences.md). Employee management shows only absence signals.
+- Capacity conflicts, minimum staffing, shift rotations, and date-specific schedule overrides belong to [calendar and resource planning](./calendar-and-resource-planning.md#current-product-baseline). Employee management shows only absence signals.
 - Vacation and sickness are the only absence types. Training, special leave, compensatory time, and hour-based absence are later scope.
 - Time-account adjustments, expiry, and payout are manual four-eyes events. WerkFlow applies no automatic cap, expiry, payout, or money calculation. Time-account balances carry forward. Vacation carryover does not exist.
 - Attention is in-app only. Reminders, escalation, notification preferences, and external delivery belong to `P1-46`.

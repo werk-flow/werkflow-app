@@ -21,7 +21,6 @@ import { goldenTestEmail } from '../../golden/support/seed';
 import { dismissDialog } from '../../golden/support/steps/interaction';
 import {
   PERSONNEL_COPY,
-  PERSONNEL_FIELDS,
   PERSONNEL_HISTORY_EVENTS,
   RESPONSIBILITY_COPY,
   activeDelegationsBadge,
@@ -199,13 +198,13 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     const a3RecordId = adminPage.url().match(/\/mitarbeiter\/([0-9a-f-]{36})/)?.[1];
     if (!a3RecordId) throw new Error('Could not read the A3 personnel record id.');
 
-    await editPersonnelTextField(adminPage, PERSONNEL_FIELDS.phone, '030 300030');
-    await editPersonnelTextField(adminPage, PERSONNEL_FIELDS.private_email, privateEmail);
-    await editPersonnelTextField(adminPage, PERSONNEL_FIELDS.street, 'Personalweg 30');
-    await editPersonnelTextField(adminPage, PERSONNEL_FIELDS.postal_code, '10115');
-    await editPersonnelTextField(adminPage, PERSONNEL_FIELDS.city, 'Berlin');
-    await editPersonnelTextField(adminPage, PERSONNEL_FIELDS.emergency_contact_name, 'Nina Notfall A3');
-    await editPersonnelTextField(adminPage, PERSONNEL_FIELDS.emergency_contact_phone, '030 300031');
+    await editPersonnelTextField(adminPage, 'phone', '030 300030');
+    await editPersonnelTextField(adminPage, 'private_email', privateEmail);
+    await editPersonnelTextField(adminPage, 'street', 'Personalweg 30');
+    await editPersonnelTextField(adminPage, 'postal_code', '10115');
+    await editPersonnelTextField(adminPage, 'city', 'Berlin');
+    await editPersonnelTextField(adminPage, 'emergency_contact_name', 'Nina Notfall A3');
+    await editPersonnelTextField(adminPage, 'emergency_contact_phone', '030 300031');
     await editPersonnelExitDate(adminPage, exitDate);
 
     for (const value of [
@@ -237,7 +236,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
 
     await addConditionViaDialog(adminPage, {
       validFromDigits: toDatePickerDigits(conditionDate),
-      employmentTypeLabel: EMPLOYMENT_TYPE_LABELS.ausbildung,
+      employmentType: 'ausbildung',
       weeklyHours: '35',
       vacationDays: '28',
       note: conditionNote,
@@ -272,7 +271,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     const deletedConditionNote = `A3 Minijob gelöscht ${world.runId}`;
     await addConditionViaDialog(adminPage, {
       validFromDigits: toDatePickerDigits(deletedConditionDate),
-      employmentTypeLabel: EMPLOYMENT_TYPE_LABELS.minijob,
+      employmentType: 'minijob',
       weeklyHours: '10',
       vacationDays: '12',
       note: deletedConditionNote,

@@ -6,7 +6,7 @@ import { Clock } from 'lucide-react';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Field } from '@/components/ui/field';
 import { TimeInput } from '@/components/ui/time-input';
-import { formatTime } from './entry-details-labels';
+import { toLocalTimeOfDay } from '@/lib/utils';
 
 type EntryDetailsDateTimePickerProps = {
   value: Date;
@@ -23,13 +23,13 @@ export function EntryDetailsDateTimePicker({
   dateLabel,
   disableDateEditing = false,
 }: EntryDetailsDateTimePickerProps) {
-  const [timeValue, setTimeValue] = useState(formatTime(value));
+  const [timeValue, setTimeValue] = useState(toLocalTimeOfDay(value));
 
   // Adopted during render, never in an effect (realtime-and-caching checklist).
   const [adoptedValue, setAdoptedValue] = useState(value);
   if (value !== adoptedValue) {
     setAdoptedValue(value);
-    setTimeValue(formatTime(value));
+    setTimeValue(toLocalTimeOfDay(value));
   }
 
   const handleDateChange = (newDate: Date | undefined) => {

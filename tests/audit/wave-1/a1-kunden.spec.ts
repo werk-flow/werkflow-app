@@ -117,7 +117,7 @@ test.describe('A1 Kunden und Auftragsdaten @AUDIT-W1-A1', () => {
     await openCustomerDetail(adminPage, customerName);
     await expect(visibleText(adminPage, customerAddress)).toBeVisible();
     await expect(visibleText(adminPage, customerNotes)).toBeVisible();
-    await editMetadataTextField(adminPage, 'Name', renamedCustomerName);
+    await editMetadataTextField(adminPage, 'name', renamedCustomerName);
     await expect(visibleText(adminPage, renamedCustomerName)).toBeVisible({
       timeout: 15_000,
     });
@@ -182,7 +182,7 @@ test.describe('A1 Kunden und Auftragsdaten @AUDIT-W1-A1', () => {
     });
     await adminPage.goto(`/auftraege/projekt/${projectNumber}`);
     await expect(visibleText(adminPage, WORK_DETAIL_TEXT.projectHasNoJobs)).toBeVisible();
-    await editMetadataTextField(adminPage, 'Beschreibung', 'Vollständige Projektbeschreibung');
+    await editMetadataTextField(adminPage, 'description', 'Vollständige Projektbeschreibung');
 
     await adminPage.goto('/auftraege');
     await workCreateButton(adminPage).click();

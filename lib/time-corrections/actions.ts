@@ -5,7 +5,8 @@ import { createHash } from 'node:crypto';
 import { canonicalize } from '@/lib/format/canonical-json';
 import { revalidatePath } from 'next/cache';
 
-import { getAuthenticatedUser, getCachedMemberships } from '@/lib/data/cached';
+import { getAuthenticatedUser } from '@/lib/data/cached';
+import { resolveActionContextFor } from '@/lib/org/action-context';
 import { logReadFailure, loggedRead } from '@/lib/data/read-request-cache';
 import { logError } from '@/lib/logging';
 import { canHolderApproveTarget } from '@/lib/responsibilities/resolution';
@@ -120,12 +121,11 @@ function normalizeTimestampSourceVersion(value: string): string {
     .replace(/\+00:00$/, '+00');
 }
 
-async function getMembershipRole(userId: string, organizationId: string): Promise<OrgRole | null> {
-  const memberships = await getCachedMemberships(userId);
-  return (
-    (memberships.find((membership) => membership.orgId === organizationId)?.role as OrgRole | undefined) ??
-    null
-  );
+async function getMembershipRole(
+  organizationId: string,
+): Promise<{ success: true; role: OrgRole } | ActionFailure<'not_authenticated' | 'not_a_member'>> {
+  const caller = await resolveActionContextFor(organizationId);
+  return caller.success ? { success: true, role: caller.context.role } : caller;
 }
 
 async function loadEmployeeIdentities(
@@ -416,8 +416,8 @@ export async function submitTimeCorrection(
   if (shapeError) return { success: false, error: shapeError };
   const user = await getAuthenticatedUser();
   if (!user) return { success: false, error: 'not_authenticated' };
-  const callerRole = await getMembershipRole(user.id, input.organizationId);
-  if (!callerRole) return { success: false, error: 'not_a_member' };
+  const caller = await getMembershipRole(input.organizationId);
+  if (!caller.success) return caller;
   const identities = await loadEmployeeIdentities(input.organizationId, [input.subjectEmployeeRecordId]);
   const subject = identities?.get(input.subjectEmployeeRecordId);
   if (!subject) return { success: false, error: 'subject_not_found' };
@@ -603,7 +603,7 @@ export async function reviewTimeCorrection(
   const user = await getAuthenticatedUser();
   if (!user) return { success: false, error: 'not_authenticated' };
   const admin = createSupabaseAdminClient();
-  const { data: request } = await loggedRead(
+  const { data: request, error: requestError } = await loggedRead(
     'reviewTimeCorrection: time_correction_requests read failed',
     admin
       // tenant-scope: by-id-then-verified — the caller's time-approval responsibility in the request's organization is authorized below before the decision
@@ -612,8 +612,11 @@ export async function reviewTimeCorrection(
       .eq('id', input.requestId)
       .maybeSingle(),
   );
+  if (requestError) return { success: false, error: 'load_failed' };
   if (!request) return { success: false, error: 'request_not_found' };
-  const { data: membership } = await loggedRead(
+  const caller = await resolveActionContextFor(request.organization_id);
+  if (!caller.success) return caller;
+  const { data: membership, error: membershipError } = await loggedRead(
     'reviewTimeCorrection: organization_members read failed',
     admin
       .from('organization_members')
@@ -622,6 +625,7 @@ export async function reviewTimeCorrection(
       .eq('user_id', request.subject_user_id)
       .maybeSingle(),
   );
+  if (membershipError) return { success: false, error: 'load_failed' };
   if (!membership) return { success: false, error: 'subject_not_found' };
   const authorization = await authorizeResponsibilityForTarget({
     organizationId: request.organization_id,
@@ -700,7 +704,7 @@ export async function resubmitTimeCorrection(rawInput: {
   const user = await getAuthenticatedUser();
   if (!user) return { success: false, error: 'not_authenticated' };
   const admin = createSupabaseAdminClient();
-  const { data: request } = await loggedRead(
+  const { data: request, error: requestError } = await loggedRead(
     'resubmitTimeCorrection: time_correction_requests read failed',
     admin
       // tenant-scope: by-id-then-verified — revise_time_correction_request refuses an actor who is not the request's author, and the rows read here only feed that call
@@ -709,9 +713,12 @@ export async function resubmitTimeCorrection(rawInput: {
       .eq('id', input.requestId)
       .maybeSingle(),
   );
+  if (requestError) return { success: false, error: 'load_failed' };
   if (!request || request.current_revision !== input.expectedRevision) {
     return { success: false, error: 'time_correction_stale_revision' };
   }
+  const caller = await resolveActionContextFor(request.organization_id);
+  if (!caller.success) return caller;
   const [{ data: revision, error: revisionError }, { data: sources, error: sourcesError }] =
     await Promise.all([
       loggedRead(
@@ -736,7 +743,7 @@ export async function resubmitTimeCorrection(rawInput: {
       ),
     ]);
   // A failed source read must never submit a revision without its source links.
-  if (revisionError || sourcesError || !sources) return { success: false, error: 'fetch_failed' };
+  if (revisionError || sourcesError || !sources) return { success: false, error: 'load_failed' };
   if (!revision) return { success: false, error: 'request_not_found' };
   const sourcePayload = sources.flatMap((source) => {
     const sourceId =
@@ -805,6 +812,8 @@ export async function reviewTimeCorrectionsBatch(rawInput: {
   if (organizationIds.size !== 1) return { success: false, error: 'invalid_input' };
   const organizationId = roots[0]?.organization_id;
   if (!organizationId) return { success: false, error: 'invalid_input' };
+  const caller = await resolveActionContextFor(organizationId);
+  if (!caller.success) return caller;
   const userIds = [...new Set(roots.map((request) => request.subject_user_id))];
   const { data: memberships, error: membershipError } = await readInBatches(userIds, (batch) =>
     admin
@@ -1054,8 +1063,9 @@ export async function getTimeCorrectionRequests(
   const { organizationId } = parsedInput.data;
   const user = await getAuthenticatedUser();
   if (!user) return { success: false, error: 'not_authenticated' };
-  const callerRole = await getMembershipRole(user.id, organizationId);
-  if (!callerRole) return { success: false, error: 'not_a_member' };
+  const caller = await getMembershipRole(organizationId);
+  if (!caller.success) return caller;
+  const callerRole = caller.role;
   return readCorrectionRequestList({
     organizationId,
     callerUserId: user.id,
@@ -1081,8 +1091,9 @@ export async function getTimeCorrectionHistoryPage(
   const { organizationId, page } = parsedInput.data;
   const user = await getAuthenticatedUser();
   if (!user) return { success: false, error: 'not_authenticated' };
-  const callerRole = await getMembershipRole(user.id, organizationId);
-  if (!callerRole) return { success: false, error: 'not_a_member' };
+  const caller = await getMembershipRole(organizationId);
+  if (!caller.success) return caller;
+  const callerRole = caller.role;
   // The holder lookup answers null for "not responsible" and for a failed
   // read alike; a failed read must not narrow the history silently.
   if (!(await loadResponsibilityRuntimeState(organizationId))) {
@@ -1154,9 +1165,8 @@ export async function getTimeCorrectionFormOptions(
   const organizationId = parsedOrganizationId.data;
   const user = await getAuthenticatedUser();
   if (!user) return { success: false, error: 'not_authenticated' };
-  if (!(await getMembershipRole(user.id, organizationId))) {
-    return { success: false, error: 'not_a_member' };
-  }
+  const caller = await getMembershipRole(organizationId);
+  if (!caller.success) return caller;
   const admin = createSupabaseAdminClient();
   // Every open job is selectable: a newest-300 window made older open jobs unreachable.
   const [
@@ -1267,8 +1277,9 @@ export async function getProvisionalTimeCorrectionProjection(rawInput: {
   // visibility rules as the list reader, without its names and memberships.
   const user = await getAuthenticatedUser();
   if (!user) return { entries: [], sources: [] };
-  const callerRole = await getMembershipRole(user.id, input.organizationId);
-  if (!callerRole) return { entries: [], sources: [] };
+  const caller = await getMembershipRole(input.organizationId);
+  if (!caller.success) return { entries: [], sources: [] };
+  const callerRole = caller.role;
   // Managers can view every pending request; an employee's own-subject
   // projection needs no delegated approval scope. Resolve it only for the
   // unfiltered employee view that may include another person's requests.
@@ -1372,8 +1383,9 @@ export async function getProvisionalTimeSummary(rawInput: {
   const input = parsedInput.data;
   const user = await getAuthenticatedUser();
   if (!user) return { success: false, error: 'not_authenticated' };
-  const role = await getMembershipRole(user.id, input.organizationId);
-  if (!role) return { success: false, error: 'not_a_member' };
+  const caller = await getMembershipRole(input.organizationId);
+  if (!caller.success) return caller;
+  const role = caller.role;
   if (role === 'employee' && input.userId !== user.id) {
     return { success: false, error: 'not_authorized' };
   }

@@ -1,6 +1,6 @@
 # CodeRabbit reviews
 
-Status: living — last reviewed 2026-10-01
+Status: living — last reviewed 2026-10-05
 
 CodeRabbit gives a second review of local changes and slice diffs before acceptance. Treat it as a reviewer, not as an authority. Every finding needs engineering judgment: check that a suggested fix keeps the SHK product context, the role-specific workflows, the organization boundaries and field-worker usability.
 
@@ -35,7 +35,7 @@ Choose a scope that contains the intended change:
 
 - For local edits, use the default uncommitted scope.
 - For committed work on local `main`, use `--committed --base-commit <commit before the change>`. `--base main` selects nothing, because the work is already on that branch.
-- When the diff exceeds CodeRabbit's file limit, review it in directory passes (`--dir app`, `--dir components`, `--dir lib`). Name the directories that the review did not cover.
+- When the diff exceeds CodeRabbit's file limit, review it in directory passes, one `--dir` per pass (`--dir app`, then `--dir components`, then `--dir lib`). CodeRabbit reviews only the last `--dir` of a command, so the wrapper refuses a second one. Name the directories that the review did not cover.
 
 An explicit CodeRabbit workflow that the user supplies for the current task takes precedence over this document. Use this document for the details that the custom workflow leaves open. Do not carry custom mechanics from an earlier task into a later one.
 
@@ -43,7 +43,7 @@ Stay quiet while a review runs. Report only completion, a setup or authenticatio
 
 When you capture the output in a file, write it to a gitignored location inside the repository. WSL temporary paths do not persist across invocations. If the output is lost, replay the stored findings instead of running the review again.
 
-A finished review writes its own record under `.agent-logs/review/` with the files its scope covered, so a push needs reviews that together cover every changed file. The [publication gate](testing.md#publication-gate) owns the rule.
+A finished review writes its own record under `.agent-logs/review/` with the content digest of each file its scope covered. `.githooks/pre-push` refuses a push unless these digests match every changed file that is not documentation, as it is now, so an edit after a review needs a new review of that file. The [publication gate](testing.md#publication-gate) owns the rule.
 
 ## Give the review its context
 
@@ -53,7 +53,7 @@ Per-review context goes on the command line with `-c`. Pass `AGENTS.md` and `.co
 
 ## Review quality and required use
 
-Run CodeRabbit before you accept a substantial application or testing-system change. This includes every Phase 1 slice, shared behavior repairs, and redesigns outside a numbered slice. The [protocol](../plans/phase-1/protocol.md) owns the place of the review in slice closure. Documentation-only edits and trivial presentational corrections need no remote review unless the owner requests one.
+Run CodeRabbit before you accept a substantial application or testing-system change. This includes every Phase 1 slice, shared behavior repairs, and redesigns outside a numbered slice. The [protocol](../plans/phase-1/protocol.md) owns the place of the review in slice closure. Documentation-only edits need no review unless the owner requests one. Every other change needs a completed review before it can be pushed.
 
 A useful review names the affected behavior, the evidence and the consequence. Prefer findings that can cause user-visible bugs, data loss, privacy leaks, security issues, role confusion or production instability over style remarks.
 

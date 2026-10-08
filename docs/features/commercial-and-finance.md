@@ -1,6 +1,6 @@
 # Commercial And Finance
 
-Status: living — last reviewed 2026-10-02
+Status: living — last reviewed 2026-10-05
 
 Commercial and finance capabilities connect the operational record of customers, jobs, projects, time, documents, and material with calculation, offers, orders, billing, incoming costs, payments, and post-calculation. Native accounting, payroll, and tax filing are separate product decisions. This scope does not imply them.
 
@@ -24,7 +24,7 @@ The module reduces duplicate entry and missed revenue. Every legally or financia
 
 WerkFlow has no commercial or finance module. Admin and Büro work with the operational records that the commercial loop will later consume.
 
-- **Documents.** Job, project, customer, and employee pages hold linked documents, and the central library stores business documents. An uploaded PDF is not a structured offer, contract, invoice, incoming bill, payment, or accounting record.
+- **Documents.** Operational records such as jobs, projects, customers, and service cases hold linked documents, and the central library stores business documents. An uploaded PDF is not a structured offer, contract, invoice, incoming bill, payment, or accounting record.
 - **Inventory prices.** Articles carry purchase price, sale price, tax rate, and billable defaults. No workflow turns them into offers, invoices, revenue, or profit.
 - **Time.** Time entries attach to operational work. There is no billable-time handoff, labor calculation, rate card, or post-calculation. The payroll-ready time export carries minutes only. It creates no wage calculation, posting, billable labor, or invoice.
 - **Measurements and change work.** Aufmaß and Regie- or Änderungsnachweise carry internal decisions and customer-response evidence. They carry no prices, scope acceptance, billing release, or invoice effect.

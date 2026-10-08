@@ -2,6 +2,8 @@
 
 Status: closed (2026-09-01) — accepted P1-23 acceptance record; canonical home for the slice's evidence
 
+> This record is history. Do not carry out its instructions: the living docs that the index lists hold the current rules.
+
 Navigation amendment, 2026-09-05: the accepted UI/UX hardening pass moved time-account rules and payroll mapping from `/einstellungen/zeiterfassung` to `/zeiterfassung/einstellungen`. The plan below preserves the route used at P1-23 acceptance. Current navigation belongs to the [time-tracking baseline](../../../features/time-tracking.md).
 
 ## Bounded outcome

@@ -20,7 +20,7 @@ Record each failed acceptance group and any focused failure that changes shared 
 | Prevention     | Enforced check, shared helper, spec boundary or documented rule that prevents recurrence — with its enforcement-ladder tier ([decision 0005](../decisions/0005-enforcement-ladder.md)); a Tier-3 prose-only prevention states why Tier 1 and 2 are unreachable |
 | Cleanup        | Owned-world cleanup result, unresolved ownership, and whether the affected group qualifies for another attempt under current stopping rules                                                                                                                                                                             |
 
-The run manifest receives the classification, cause and prevention through `bun run test:runs classify`. Add the concise durable entry here before closing the slice. Do not call an unexplained retry a transient.
+`bun run test:runs classify` stores the classification, cause and prevention in the run manifest and, for a failed run of the verification lane, writes the dated entry below with the run, the failure point, the cause and the prevention (`lib/testing/runs/incident-record.ts`). It refuses a prevention without its tier. Add the evidence, the correction and the focused proof under that entry when the repair lands. Write a focused failure that changes shared testing behavior by hand. Do not call an unexplained retry a transient.
 
 ## 2026-10-04: second failed release run
 

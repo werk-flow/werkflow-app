@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { OrganizationSettingsForm } from '@/components/settings/organization-settings-form';
+import { RegionLoadError } from '@/components/shared/region-load-error';
 import { getCachedMemberships, getCachedUser } from '@/lib/data/cached';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -34,9 +35,14 @@ export default async function OrganizationSettingsPage() {
     .eq('id', activeMembership.orgId)
     .single();
 
-  if (error || !organization) {
-    redirect('/dashboard');
+  if (error && error.code !== 'PGRST116') {
+    return (
+      <RegionLoadError title="Die Organisation konnte nicht geladen werden">
+        Die Organisationsdaten sind gerade nicht erreichbar. Versuche es in einem Moment erneut.
+      </RegionLoadError>
+    );
   }
+  if (!organization) redirect('/dashboard');
 
   const createdAtLabel = new Intl.DateTimeFormat('de-DE', {
     dateStyle: 'long',

@@ -2,6 +2,8 @@
 
 Status: closed (2026-09-01) — accepted P1-22 acceptance record; canonical home for the slice's evidence
 
+> This record is history. Do not carry out its instructions: the living docs that the index lists hold the current rules.
+
 ## Bounded outcome
 
 Employees and managers can use one consistent time-correction request and approval flow with a complete before/after preview, four-eyes rules, withdrawal, delegated approval and visibly provisional totals. The slice covers add, edit, delete, split, reclassification, reallocation, reassignment, missed-clock, stale-action, batch and closed-state boundary behavior without implementing time accounts or period close.

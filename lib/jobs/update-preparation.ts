@@ -91,7 +91,7 @@ export async function prepareJobUpdate({
   }
 
   if (input.jobNumber !== undefined && input.jobNumber?.trim()) {
-    const { data: numberConflict } = await loggedRead(
+    const { data: numberConflict, error: numberConflictError } = await loggedRead(
       'updateJob: jobs read failed',
       admin
         .from('jobs')
@@ -101,6 +101,7 @@ export async function prepareJobUpdate({
         .neq('id', jobId)
         .maybeSingle(),
     );
+    if (numberConflictError) return { success: false, error: 'load_failed' };
 
     if (numberConflict) {
       return { success: false, error: 'job_number_taken' };

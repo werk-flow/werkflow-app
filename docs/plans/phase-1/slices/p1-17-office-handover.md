@@ -2,6 +2,8 @@
 
 Status: closed (2026-08-28) — accepted P1-17 acceptance record; canonical home for the slice's evidence
 
+> This record is history. Do not carry out its instructions: the living docs that the index lists hold the current rules.
+
 ## Outcome
 
 Execution-complete jobs and projects gain one responsibility-owned office review that can release an exact-version customer package, record operational readiness for later commercial review and transition the existing P1-14 lifecycle to `handed_over`. Missing operational evidence stays classified as blocking, reasoned-override, warning or explicitly unassessed. Reopening never rewrites a prior review, release, override or lifecycle event.

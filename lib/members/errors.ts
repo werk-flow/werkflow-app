@@ -12,6 +12,7 @@ const MEMBER_ACTION_ERROR_MESSAGES: Record<string, string> = {
   exit_before_entry:
     'Das Eintrittsdatum dieses Mitglieds liegt in der Zukunft. Passe es in der Personalakte an, bevor du das Mitglied entfernst.',
   update_failed: 'Die Rolle konnte nicht geändert werden.',
+  member_changed: 'Die Rolle wurde inzwischen geändert. Lade die Seite neu und prüfe sie.',
 };
 
 function responsibilityRemovalMessage(responsibilities: OrganizationResponsibility[]): string {

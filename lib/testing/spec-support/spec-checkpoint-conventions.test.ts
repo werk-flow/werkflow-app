@@ -80,7 +80,7 @@ test('describe callback ownership follows nested groups but permits locals insid
 });
 
 const root = join(import.meta.dir, '..', '..', '..');
-const files = ['tests/audit', 'tests/golden'].flatMap((directory) =>
+const files = ['tests/audit', 'tests/golden', 'tests/canary'].flatMap((directory) =>
   readdirSync(join(root, directory), { recursive: true, encoding: 'utf8' })
     .filter((name) => name.endsWith('.spec.ts'))
     .map((name) => join(directory, name)),

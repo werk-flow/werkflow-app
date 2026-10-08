@@ -2,6 +2,8 @@
 
 Status: closed (2026-08-29) — accepted P1-18 acceptance record; canonical home for the slice's evidence
 
+> This record is history. Do not carry out its instructions: the living docs that the index lists hold the current rules.
+
 ## Outcome
 
 Customer sites gain service-owned installed-equipment records with stable identity, one bounded component level, organization-scoped identifiers, current lifecycle state, exact installation and commissioning origins, warranty facts, existing-document links and immutable searchable history. Customer pages show a compact site projection. Detailed management lives under `/service/anlagen`.

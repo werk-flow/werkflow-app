@@ -1,3 +1,4 @@
+import { CONTACT_ROLE_SUGGESTIONS } from '../../../lib/clients/types';
 import { expect, test } from '../support/fixtures';
 import { ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
 import { seedCustomer } from '../../golden/support/db/customers';
@@ -70,17 +71,7 @@ test.describe('A2 Kundenstamm @AUDIT-W1-A2', () => {
       await contactDialog
         .locator('#contact-role-suggestions option')
         .evaluateAll((options) => options.map((option) => option.getAttribute('value'))),
-    ).toEqual([
-      'Eigentümer/in',
-      'Mieter/in',
-      'Hausverwaltung',
-      'Hausmeister/in',
-      'Bauleitung',
-      'Architekt/in',
-      'Einkauf',
-      'Rechnungsempfänger/in',
-      'Notfallkontakt',
-    ]);
+    ).toEqual([...CONTACT_ROLE_SUGGESTIONS]);
     await contactDialog.getByRole('button', { name: SHARED_COPY.action.cancel }).click();
     await addContactOnCustomerDetail(adminPage, {
       name: firstContact,

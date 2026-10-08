@@ -18,16 +18,20 @@ export async function deleteInvite(inviteIdInput: string): Promise<DeleteInviteR
     // Only a cancelled, accepted or expired invite can be deleted.
     if (status === 'pending') return { success: false, error: 'must_cancel_first' };
 
-    const { error: deleteErr } = await admin
+    // The status filter keeps an invite that a failed resend restored to pending after the read.
+    const { data: deletedRows, error: deleteErr } = await admin
       .from('organization_invites')
       .delete()
       .eq('id', inviteId)
-      .eq('organization_id', orgId);
+      .eq('organization_id', orgId)
+      .neq('status', 'pending')
+      .select('id');
 
     if (deleteErr) {
       logError('Error deleting invite:', { code: deleteErr.code });
       return { success: false, error: 'delete_failed' };
     }
+    if (deletedRows.length !== 1) return { success: false, error: 'must_cancel_first' };
 
     return { success: true };
   } catch (error) {

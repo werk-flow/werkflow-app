@@ -1,6 +1,6 @@
 import type { Database } from '@/lib/supabase/database.types';
 import type { VacationDayPortion } from '@/lib/vacation/types';
-import { formatGermanDate } from '@/lib/utils';
+import { formatGermanDate, formatGermanDateRange } from '@/lib/utils';
 
 // ============================================
 // Database Row Aliases
@@ -109,8 +109,6 @@ export function toSicknessReport(row: SicknessReportRow): SicknessReport {
  * „05.03.2026 – bis auf Weiteres" / „05.03.2026 – 07.03.2026" / „05.03.2026".
  */
 export function formatSicknessRange(report: { startDate: string; endDate: string | null }): string {
-  const start = formatGermanDate(report.startDate);
-  if (report.endDate === null) return `${start} – bis auf Weiteres`;
-  if (report.endDate === report.startDate) return start;
-  return `${start} – ${formatGermanDate(report.endDate)}`;
+  if (report.endDate === null) return `${formatGermanDate(report.startDate)} – bis auf Weiteres`;
+  return formatGermanDateRange(report.startDate, report.endDate);
 }

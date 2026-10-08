@@ -537,6 +537,11 @@ export function formatDuration(minutes: number): string {
   return `${hours} Std. ${mins} Min.`;
 }
 
+/** A minute delta with its sign: „+1 Std. 30 Min.", „−45 Min.", „+0 Min."; zero counts as positive. */
+export function formatSignedDuration(minutes: number): string {
+  return `${minutes >= 0 ? '+' : '−'}${formatDuration(Math.abs(minutes))}`;
+}
+
 /**
  * Group entries by date (YYYY-MM-DD)
  */

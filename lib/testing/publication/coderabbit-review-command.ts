@@ -66,6 +66,14 @@ export function buildCodeRabbitReviewArguments(rawArguments: readonly string[]):
     reviewArguments.push(`--${scope}`);
   }
 
+  // CodeRabbit reviews the last --dir only, while the review record would claim every one.
+  const directoryArguments = reviewArguments.filter((argument) => argument.split('=')[0] === '--dir');
+  if (directoryArguments.length > 1) {
+    throw new Error(
+      'CodeRabbit reviews only the last --dir, so a review covers one directory per pass. Run one pass per directory.',
+    );
+  }
+
   const argumentsWithDefaults = ['review'];
   if (!reviewArguments.includes('--agent')) {
     argumentsWithDefaults.push('--agent');

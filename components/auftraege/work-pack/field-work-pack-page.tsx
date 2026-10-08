@@ -3,6 +3,7 @@ import type { ReactElement } from 'react';
 
 import { DetailPageHeader } from '@/components/shared/detail-page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
+import { RegionLoadError } from '@/components/shared/region-load-error';
 import { Badge } from '@/components/ui/badge';
 import { UrlFlashBanner } from '@/components/ui/banner';
 import { FormDisclosure } from '@/components/ui/form-disclosure';
@@ -27,6 +28,14 @@ export async function FieldWorkPackPage({
   currentUserId: string;
 }): Promise<ReactElement> {
   const jobResult = await getJobByNumber(decodeURIComponent(jobNumber));
+  // A missing or foreign job leaves the page; a failed read must not look like one.
+  if (!jobResult.success && (jobResult.error === 'fetch_failed' || jobResult.error === 'unexpected_error')) {
+    return (
+      <RegionLoadError title="Der Auftrag konnte nicht geladen werden">
+        Der Auftrag ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
+      </RegionLoadError>
+    );
+  }
   if (!jobResult.success) redirect('/auftraege');
 
   const job = jobResult.job;

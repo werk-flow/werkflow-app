@@ -74,11 +74,12 @@ Every action an automation may perform has:
 
 ### Seams the remaining Phase 1 slices add
 
-Three slices each add one small seam, so that Phase 2 features land on data and need no redesign. None of them adds Phase 2 behavior.
+Two slices each add one small seam, so that Phase 2 features land on data and need no redesign. Neither adds Phase 2 behavior.
 
 - `P1-36` stores a source per offer line: catalog, manual, later "AI proposal".
 - `P1-30` records a delivery note's file hash and supplier note number for the duplicate check.
-- `P1-17` makes the customer-safe handover package readable as data for a page renderer.
+
+`P1-17` already keeps each handover release as structured snapshots beside its rendered file, so a page renderer can read the customer-safe package as data.
 
 ### Shared Approval And Attention Model
 

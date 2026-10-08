@@ -44,3 +44,15 @@ export function findDocumentReferences(markdown: string): DocumentReference[] {
   }
   return references;
 }
+
+// German quotation marks open low („) and close high (“). A straight or English closing quote after „
+// renders as a mismatched pair. lib/conventions/german-copy.test.ts holds the same rule for product copy.
+// Written with escapes so that this line is not itself a mismatched pair.
+const MISMATCHED_GERMAN_QUOTE = /\u201E[^\u201C\u201D"\u201E\n]*["\u201D]/;
+
+/** 1-based numbers of the lines where a quotation that opens with „ closes with `"` or `”` instead of `“`. */
+export function findMismatchedGermanQuotes(markdown: string): number[] {
+  return markdown
+    .split(/\r?\n/)
+    .flatMap((line, index) => (MISMATCHED_GERMAN_QUOTE.test(line) ? [index + 1] : []));
+}

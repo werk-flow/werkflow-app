@@ -57,6 +57,12 @@ import {
   runDirectory,
   updateRunManifest,
 } from '../tests/golden/support/run-state';
+import { browserRunPaths } from '../lib/testing/runs/run-paths';
+import {
+  repeatedReplayProblem,
+  replayStageNotice,
+  retainedTestStages,
+} from '../lib/testing/runs/replay-checkpoint';
 import {
   visualReferenceUpdateCommand,
   visualReferenceUpdateMode,
@@ -178,6 +184,33 @@ async function main(signal: AbortSignal): Promise<number> {
     (group && requestedSelection.tests.some((test) => !groupFiles.includes(test.file)))
   )
     throw new Error('Group discovery did not match its registered files.');
+  if (lane === 'diagnostic' && retainedSource && reuseRunKey) {
+    const problem = repeatedReplayProblem({
+      sourceRunKey: reuseRunKey,
+      selectedTestIds: requestedSelection.titles,
+      suite,
+      grep: grep ?? '',
+      runs: listRunManifests(),
+    });
+    if (problem) throw new Error(problem);
+    const sourceOutcomes = retainedSource.outcomes ?? [];
+    const failedTestIds = sourceOutcomes
+      .filter((outcome) => !['passed', 'skipped'].includes(outcome.status))
+      .map((outcome) => outcome.id);
+    for (const testId of requestedSelection.titles)
+      console.log(
+        `[werkflow-test] ${replayStageNotice({
+          sourceRunKey: reuseRunKey,
+          testId,
+          sourceStatus: sourceOutcomes.find((outcome) => outcome.id === testId)?.status,
+          stages: retainedTestStages({
+            resultsDirectory: browserRunPaths(repositoryRoot, reuseRunKey).results,
+            testId,
+            failedTestIds,
+          }),
+        })}`,
+      );
+  }
 
   const candidateFingerprint = calculateCandidateFingerprint(repositoryRoot);
   let groupFingerprint: string | undefined = preparedRun?.fingerprint;

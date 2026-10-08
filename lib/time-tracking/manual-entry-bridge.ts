@@ -27,7 +27,7 @@ export function queueManualEntryBridge(entries: TimeEntry[]): void {
 
     window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
   } catch {
-    // Best-effort bridge only.
+    // best-effort: the bridge only shows the new entry early; the saved entry arrives with the next read.
   }
 }
 
@@ -54,6 +54,7 @@ export function consumeManualEntryBridge(organizationId: string): TimeEntry[] {
 
     return matching;
   } catch {
+    // best-effort: the bridge only shows a new entry early; the saved entry arrives with the next read.
     return [];
   }
 }

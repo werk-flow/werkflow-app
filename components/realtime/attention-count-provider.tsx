@@ -5,11 +5,12 @@
 // server-side derivation as the /aufgaben surface, so a badge can never count
 // an item its viewer cannot act on.
 
-import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { z } from '@/lib/zod';
 
 import { useOrganization } from '@/components/organization/organization-context';
-import type { AttentionCounts } from '@/lib/attention/types';
+import { countAttentionItems } from '@/lib/attention/resolution';
+import type { AttentionCounts, AttentionOverview } from '@/lib/attention/types';
 import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 
@@ -19,11 +20,14 @@ const ZERO_COUNTS: AttentionCounts = {
   unreadNotificationCount: 0,
 };
 
-type AttentionCountContextValue = AttentionCounts & {
-  refreshAttentionCounts: () => Promise<void>;
-};
+/**
+ * Counts adopted from a mounted Aufgaben overview: `undefined` while none is
+ * mounted, `null` while it is mounted without data yet.
+ */
+type AdoptedCounts = AttentionCounts | null | undefined;
 
-const AttentionCountContext = createContext<AttentionCountContextValue | null>(null);
+const AttentionCountContext = createContext<AttentionCounts | null>(null);
+const AdoptCountsContext = createContext<((counts: AdoptedCounts) => void) | null>(null);
 
 // Boundary parse of our own route handler's JSON (app/api/attention-counts).
 const attentionCountsResponseSchema = z.union([
@@ -67,6 +71,7 @@ export function AttentionCountProvider({
   initialOrganizationId?: string | null | undefined;
 }) {
   const { activeOrgId } = useOrganization();
+  const [adopted, setAdopted] = useState<AdoptedCounts>(undefined);
 
   const view = useLiveView<AttentionCounts>({
     tables: [
@@ -104,26 +109,49 @@ export function AttentionCountProvider({
     // beats a stale claim while the fetch is in flight. Keep-last-known
     // stays reserved for transient failures within the SAME organization.
     resetKey: activeOrgId,
+    // The mounted Aufgaben overview already runs the same derivation on the
+    // same events; a second one per event would double the load. Events queue
+    // meanwhile, and one catch-up read runs when the overview unmounts. An
+    // overview that has no counts yet (loading, or its read failed) leaves
+    // the provider's own reads running, so the badges never freeze.
+    suspend: adopted != null,
   });
 
   useBusinessDayRefresh(view.refresh);
 
-  const value = useMemo<AttentionCountContextValue>(
-    () => ({
-      ...(view.data ?? ZERO_COUNTS),
-      refreshAttentionCounts: view.refresh,
-    }),
-    [view.data, view.refresh],
+  const counts = adopted ?? view.data ?? ZERO_COUNTS;
+  return (
+    <AdoptCountsContext.Provider value={setAdopted}>
+      <AttentionCountContext.Provider value={counts}>{children}</AttentionCountContext.Provider>
+    </AdoptCountsContext.Provider>
   );
-
-  return <AttentionCountContext.Provider value={value}>{children}</AttentionCountContext.Provider>;
 }
 
-export function useAttentionCounts() {
+export function useAttentionCounts(): AttentionCounts {
   const context = useContext(AttentionCountContext);
   if (!context) {
     throw new Error('useAttentionCounts must be used within AttentionCountProvider');
   }
 
   return context;
+}
+
+/**
+ * Makes the badges count the given overview while the calling surface is
+ * mounted, so its optimistic echo moves the badges in the same frame and the
+ * provider skips its own derivation. Pass `null` while the overview has no
+ * data; the badges then keep their last-known counts.
+ */
+export function useAttentionCountsFromOverview(overview: AttentionOverview | null): void {
+  const adopt = useContext(AdoptCountsContext);
+  if (!adopt) {
+    throw new Error('useAttentionCountsFromOverview must be used within AttentionCountProvider');
+  }
+  const counts = useMemo(() => (overview ? countAttentionItems(overview) : null), [overview]);
+  // Synchronizes the provider, an external owner of the badges; the
+  // cleanup hands the counts back to the provider's own reads.
+  useEffect(() => {
+    adopt(counts);
+  }, [adopt, counts]);
+  useEffect(() => () => adopt(undefined), [adopt]);
 }

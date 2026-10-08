@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidateWorkEvidenceViews } from '@/lib/work-artifacts/revalidate';
-import type { ActionFailure } from '@/lib/action-result';
+import type { ActionFailure, ActionResult } from '@/lib/action-result';
 import { z } from '@/lib/zod';
 import { uuidSchema } from '@/lib/validation/uuid';
 
@@ -72,10 +72,14 @@ function mapArtifactError(error: { message?: string } | null): string {
 async function authorizeTarget(
   context: Awaited<ReturnType<typeof authenticateAndAuthorize>> & { success: true },
   target: Target,
-): Promise<boolean> {
+): Promise<ActionResult> {
   const admin = createSupabaseAdminClient();
+  const allowed: ActionResult = { success: true };
+  const refused: ActionResult = { success: false, error: 'not_authorized' };
+  // A failed read is never a refusal: the caller sees that the check could not run.
+  const loadFailed: ActionResult = { success: false, error: 'load_failed' };
   if (target.targetType === 'job') {
-    const { data: job } = await loggedRead(
+    const { data: job, error: jobError } = await loggedRead(
       'authorizeTarget: jobs read failed',
       admin
         .from('jobs')
@@ -84,9 +88,10 @@ async function authorizeTarget(
         .eq('organization_id', context.context.orgId)
         .maybeSingle(),
     );
-    if (!job) return false;
-    if (context.context.isManagerOrAbove) return true;
-    const { data: assignment } = await loggedRead(
+    if (jobError) return loadFailed;
+    if (!job) return refused;
+    if (context.context.isManagerOrAbove) return allowed;
+    const { data: assignment, error: assignmentError } = await loggedRead(
       'authorizeTarget: job_assignments read failed',
       admin
         .from('job_assignments')
@@ -96,9 +101,10 @@ async function authorizeTarget(
         .eq('user_id', context.context.userId)
         .maybeSingle(),
     );
-    return Boolean(assignment);
+    if (assignmentError) return loadFailed;
+    return assignment ? allowed : refused;
   }
-  const { data: project } = await loggedRead(
+  const { data: project, error: projectError } = await loggedRead(
     'authorizeTarget: projects read failed',
     admin
       .from('projects')
@@ -107,9 +113,10 @@ async function authorizeTarget(
       .eq('organization_id', context.context.orgId)
       .maybeSingle(),
   );
-  if (!project) return false;
-  if (context.context.isManagerOrAbove) return true;
-  const { data: assignedJob } = await loggedRead(
+  if (projectError) return loadFailed;
+  if (!project) return refused;
+  if (context.context.isManagerOrAbove) return allowed;
+  const { data: assignedJob, error: assignedJobError } = await loggedRead(
     'authorizeTarget: jobs read failed',
     admin
       .from('jobs')
@@ -120,7 +127,8 @@ async function authorizeTarget(
       .limit(1)
       .maybeSingle(),
   );
-  return Boolean(assignedJob);
+  if (assignedJobError) return loadFailed;
+  return assignedJob ? allowed : refused;
 }
 
 export async function getWorkArtifacts(
@@ -131,7 +139,8 @@ export async function getWorkArtifacts(
   const target = parsedTarget.data;
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
-  if (!(await authorizeTarget(auth, target))) return { success: false, error: 'not_authorized' };
+  const access = await authorizeTarget(auth, target);
+  if (!access.success) return access;
   const admin = createSupabaseAdminClient();
   const targetColumn = target.targetType === 'job' ? 'job_id' : 'project_id';
   const { data: artifacts, error } = await readCompleteRows(
@@ -186,7 +195,7 @@ export async function getWorkArtifactDetail(
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
   const admin = createSupabaseAdminClient();
-  const { data: artifact } = await loggedRead(
+  const { data: artifact, error: artifactError } = await loggedRead(
     'getWorkArtifactDetail: work_artifacts read failed',
     admin
       .from('work_artifacts')
@@ -195,6 +204,7 @@ export async function getWorkArtifactDetail(
       .eq('organization_id', auth.context.orgId)
       .maybeSingle(),
   );
+  if (artifactError) return { success: false, error: 'work_artifact_load_failed' };
   if (!artifact) return { success: false, error: 'work_artifact_not_found' };
   const target: Target | null = artifact.job_id
     ? { targetType: 'job', targetId: artifact.job_id }
@@ -202,7 +212,8 @@ export async function getWorkArtifactDetail(
       ? { targetType: 'project', targetId: artifact.project_id }
       : null;
   if (!target) return { success: false, error: 'work_artifact_not_found' };
-  if (!(await authorizeTarget(auth, target))) return { success: false, error: 'not_authorized' };
+  const access = await authorizeTarget(auth, target);
+  if (!access.success) return access;
   if (!auth.context.isManagerOrAbove && artifact.status === 'draft' && artifact.current_revision_id) {
     const { data: currentRevision, error: currentRevisionError } = await admin
       .from('work_artifact_revisions')
@@ -317,7 +328,8 @@ export async function saveWorkArtifact(input: SaveWorkArtifactInput): Promise<Wo
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
-  if (!(await authorizeTarget(auth, parsed.data))) return { success: false, error: 'not_authorized' };
+  const access = await authorizeTarget(auth, parsed.data);
+  if (!access.success) return access;
   const content = {
     ...parsed.data.content,
     measurementLines: parsed.data.content.measurementLines?.map((line) => ({
@@ -370,7 +382,7 @@ export async function recordWorkArtifactAction(
   const admin = createSupabaseAdminClient();
   let responsibilitySnapshot: Json | null = null;
   if (['internal_approved', 'internal_rejected', 'correction_requested'].includes(parsed.data.actionType)) {
-    const { data: revision } = await loggedRead(
+    const { data: revision, error: revisionError } = await loggedRead(
       'recordWorkArtifactAction: work_artifact_revisions read failed',
       admin
         .from('work_artifact_revisions')
@@ -379,8 +391,9 @@ export async function recordWorkArtifactAction(
         .eq('organization_id', auth.context.orgId)
         .maybeSingle(),
     );
+    if (revisionError) return { success: false, error: 'load_failed' };
     if (!revision) return { success: false, error: 'work_artifact_not_found' };
-    const { data: membership } = await loggedRead(
+    const { data: membership, error: membershipError } = await loggedRead(
       'recordWorkArtifactAction: organization_members read failed',
       admin
         .from('organization_members')
@@ -389,6 +402,7 @@ export async function recordWorkArtifactAction(
         .eq('user_id', revision.created_by)
         .maybeSingle(),
     );
+    if (membershipError) return { success: false, error: 'load_failed' };
     if (!membership) return { success: false, error: 'work_artifact_author_not_active' };
     const approval = await authorizeResponsibilityForTarget({
       organizationId: auth.context.orgId,
@@ -468,42 +482,21 @@ export async function voidWorkArtifact(input: {
   };
 }
 
-// The result of a link function: the new artifact version and its current status.
-async function linkedArtifactResult({
-  admin,
-  organizationId,
-  artifactId,
-  rpcResult,
-  readLabel,
-}: {
-  admin: ReturnType<typeof createSupabaseAdminClient>;
-  organizationId: string;
-  artifactId: string;
-  rpcResult: { data: Json | null; error: { message?: string } | null };
-  readLabel: string;
-}): Promise<WorkArtifactMutationResult> {
+// A link leaves the artifact's status as it was; the caller reloads the detail.
+type WorkArtifactLinkResult = ActionResult<{ artifactId: string; version: number; data: Json }>;
+
+// The result of a link function: the new artifact version.
+function linkedArtifactResult(
+  artifactId: string,
+  rpcResult: { data: Json | null; error: { message?: string } | null },
+): WorkArtifactLinkResult {
   const { data, error } = rpcResult;
   if (error || !data || typeof data !== 'object' || Array.isArray(data)) {
     return { success: false, error: mapArtifactError(error) };
   }
   const result = data as Record<string, Json | undefined>;
-  const { data: artifact } = await loggedRead(
-    readLabel,
-    admin
-      .from('work_artifacts')
-      .select('status')
-      .eq('organization_id', organizationId)
-      .eq('id', artifactId)
-      .maybeSingle(),
-  );
   revalidateWorkEvidenceViews();
-  return {
-    success: true,
-    artifactId,
-    version: Number(result.version),
-    status: artifact?.status ?? 'draft',
-    data,
-  };
+  return { success: true, artifactId, version: Number(result.version), data };
 }
 
 export async function linkWorkArtifactDocument(rawInput: {
@@ -514,7 +507,7 @@ export async function linkWorkArtifactDocument(rawInput: {
   documentId: string;
   relation: Database['public']['Enums']['work_artifact_document_relation'];
   description?: string;
-}): Promise<WorkArtifactMutationResult> {
+}): Promise<WorkArtifactLinkResult> {
   const parsed = linkWorkArtifactDocumentSchema.safeParse(rawInput);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const input = parsed.data;
@@ -537,13 +530,7 @@ export async function linkWorkArtifactDocument(rawInput: {
       p_content_hash: null,
     }),
   );
-  return linkedArtifactResult({
-    admin,
-    organizationId: auth.context.orgId,
-    artifactId: input.artifactId,
-    rpcResult: { data, error },
-    readLabel: 'linkWorkArtifactDocument: work_artifacts read failed',
-  });
+  return linkedArtifactResult(input.artifactId, { data, error });
 }
 
 export async function linkWorkArtifactSource(rawInput: {
@@ -555,7 +542,7 @@ export async function linkWorkArtifactSource(rawInput: {
   timeSegmentId?: string;
   inventoryMovementId?: string;
   description?: string;
-}): Promise<WorkArtifactMutationResult> {
+}): Promise<WorkArtifactLinkResult> {
   const parsed = linkWorkArtifactSourceSchema.safeParse(rawInput);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const input = parsed.data;
@@ -590,13 +577,7 @@ export async function linkWorkArtifactSource(rawInput: {
           p_description: input.description ?? null,
         }),
       );
-  return linkedArtifactResult({
-    admin,
-    organizationId: auth.context.orgId,
-    artifactId: input.artifactId,
-    rpcResult,
-    readLabel: 'linkWorkArtifactSource: work_artifacts read failed',
-  });
+  return linkedArtifactResult(input.artifactId, rpcResult);
 }
 
 export async function fulfillInstructionEvidence(rawInput: {
@@ -673,7 +654,7 @@ export async function discardUnlinkedWorkArtifactSignature(
     document.category !== 'photo'
   )
     return { success: false, error: 'not_authorized' };
-  const { data: relation } = await loggedRead(
+  const { data: relation, error: relationError } = await loggedRead(
     'discardUnlinkedWorkArtifactSignature: work_artifact_revision_documents read failed',
     admin
       .from('work_artifact_revision_documents')
@@ -682,6 +663,8 @@ export async function discardUnlinkedWorkArtifactSignature(
       .eq('document_id', documentId)
       .maybeSingle(),
   );
+  // An unread relation could be a signature in use: never delete on a failed read.
+  if (relationError) return { success: false, error: 'load_failed' };
   if (relation) return { success: false, error: 'work_artifact_signature_in_use' };
   const { error } = await admin
     .from('documents')
@@ -724,7 +707,7 @@ export async function exportWorkArtifact(
   const exportFile = buildWorkArtifactExport(artifact);
   const { bytes, contentHash, rendererVersion, fileName } = exportFile;
   const admin = createSupabaseAdminClient();
-  const { data: existing } = await loggedRead(
+  const { data: existing, error: existingError } = await loggedRead(
     'exportWorkArtifact: work_artifact_revision_documents read failed',
     admin
       .from('work_artifact_revision_documents')
@@ -736,6 +719,7 @@ export async function exportWorkArtifact(
       .eq('content_hash', contentHash)
       .maybeSingle(),
   );
+  if (existingError) return { success: false, error: 'load_failed' };
   if (existing) {
     return {
       success: true,

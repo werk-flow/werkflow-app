@@ -2,6 +2,8 @@
 
 Status: closed (2026-08-24) — accepted P1-15 acceptance record; canonical home for the slice's evidence
 
+> This record is history. Do not carry out its instructions: the living docs that the index lists hold the current rules.
+
 This record is the canonical home for P1-15 acceptance facts. The current slice index lives in [../roadmap.md](../roadmap.md); process rules live in [../protocol.md](../protocol.md).
 
 ## Bounded outcome

@@ -33,15 +33,58 @@
 //     of eslint.config.mjs, every test under lib/conventions/, lib/ui/ and lib/security/, and every
 //     test under lib/testing/ that opens with "// Rule test: " is named by AGENTS.md or an owner doc.
 // 21. Doc citations — a docs path cited outside docs/ resolves to a document and heading.
-// The checks appear below in the order 1 to 9, 11, 10, 12 to 21.
+//  9a. Browser proof — every complete roadmap slice has a browser test title with its tag or its gate's tag.
+//  9b. Spec review — a feature spec is reviewed on or after the acceptance of every slice that names it as primary.
+// 14b. Closed-record banner — every closed record opens with the fixed history banner.
+// 22. Route handlers — a backticked route handler in living guidance names a folder under app/api/.
+// 23. Numbered rules — no living doc, skill or code file cites a rule by a number that no doc defines.
+// 24. Skill paths — a repository path in a skill resolves.
+// 25. German quotes — in living guidance a quotation that opens with „ closes with “.
+// 26. Workspace — the sibling clones are present, links between them and the app resolve both ways,
+//     each sibling's AGENTS.md links back, and shared skill copies equal their canonical copy
+//     (lib/docs/workspace-links.ts). A missing clone is one problem, never a pass.
+// The checks appear below in the order 1 to 9, 9a, 9b, 11, 10, 12 to 14, 14b, 15 to 26.
 
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
-import { join, dirname, resolve, relative, sep } from 'node:path';
+import { join, dirname, isAbsolute, resolve, relative, sep } from 'node:path';
 import { findCodeRabbitInstructionViolations } from '../lib/testing/publication/coderabbit-review-command';
 import { markdownHeadingAnchors } from '../lib/docs/heading-anchors';
 import { findSliceRecordProblems } from '../lib/docs/slice-records';
-import { countWords, findDatedLines, findDocumentReferences } from '../lib/docs/living-doc-rules';
+import {
+  countWords,
+  findDatedLines,
+  findDocumentReferences,
+  findMismatchedGermanQuotes,
+} from '../lib/docs/living-doc-rules';
+import {
+  findMarkdownFileLinks,
+  findSkillCopyDifferences,
+  readSharedSkills,
+  SIBLING_REPOSITORIES,
+  siblingOfWorkspacePath,
+  skillCopyFolders,
+  type SiblingRepository,
+} from '../lib/docs/workspace-links';
 import { findDocCitations, isCitationCheckedFile } from '../lib/docs/code-citations';
+import {
+  findStaleSpecReviews,
+  logRecordsAcceptance,
+  primarySpecsOf,
+  readLogEntries,
+  readRoadmapRows,
+  type AcceptedSlice,
+} from '../lib/docs/roadmap-rules';
+import {
+  CLOSED_RECORD_BANNER,
+  CLOSED_RECORD_BANNER_LINE,
+  hasClosedRecordBanner,
+} from '../lib/docs/closed-records';
+import {
+  findNumberedRuleReferences,
+  findRepositoryPathReferences,
+  findRouteHandlerReferences,
+  repositoryPathCandidates,
+} from '../lib/docs/reference-rules';
 import {
   declaredLintRuleNames,
   declaredSelectorSetNames,
@@ -53,9 +96,28 @@ import {
   type MechanismResolver,
 } from '../lib/docs/virtue-standards';
 import { getTestGroups, listTestFiles } from '../lib/testing/selection/test-groups';
+import {
+  findSlicesWithoutBrowserProof,
+  readGoldenGates,
+  readTestTitles,
+} from '../lib/docs/slice-browser-proof';
+import { INCIDENT_TIER_PATTERN } from '../lib/testing/runs/incident-record';
 
 const repoRoot = resolve(import.meta.dir, '..');
 const docsRoot = join(repoRoot, 'docs');
+// The sibling clones sit beside the app (check 26). A link into a missing clone is counted there once
+// instead of failing link by link.
+const workspaceRoot = dirname(repoRoot);
+const missingSiblings = new Set(
+  SIBLING_REPOSITORIES.filter((sibling) => !existsSync(join(workspaceRoot, sibling))),
+);
+const uncheckedSiblingLinks = new Map<SiblingRepository, number>();
+function pointsIntoMissingSibling(path: string): boolean {
+  const sibling = siblingOfWorkspacePath(relative(workspaceRoot, path));
+  if (sibling === null || !missingSiblings.has(sibling)) return false;
+  uncheckedSiblingLinks.set(sibling, (uncheckedSiblingLinks.get(sibling) ?? 0) + 1);
+  return true;
+}
 
 function collectFiles(dir: string): string[] {
   const collected: string[] = [];
@@ -114,6 +176,7 @@ for (const file of docFiles) {
     const [pathPart = '', fragment] = target.split('#');
     const targetPath = pathPart === '' ? file : resolve(dirname(file), pathPart);
     if (!existsSync(targetPath)) {
+      if (pointsIntoMissingSibling(targetPath)) continue;
       problems.push(`link: ${relFile} → ${target} does not resolve`);
       continue;
     }
@@ -352,15 +415,12 @@ for (const match of indexContent.matchAll(indexRowPattern)) {
 //    Every complete row links its slice record, and the record's closed date matches the row.
 const roadmapPath = join(docsRoot, 'plans', 'phase-1', 'roadmap.md');
 const roadmapContent = readFileSync(roadmapPath, 'utf8');
-const sliceRowPattern = /^\| `(P1-\d{2}a?)`\s*\| `([a-z_]+)`\s*\| .*?\| ([^|]*)\| [^|]*\| ([^|]*)\|\s*$/gm;
-const sliceRows = new Map<string, { status: string; dependencies: string[]; exitEvidence: string }>();
-for (const match of roadmapContent.matchAll(sliceRowPattern)) {
-  const [, id, status, dependencyCell, exitEvidence] = match;
-  if (id === undefined || status === undefined || dependencyCell === undefined || exitEvidence === undefined)
-    continue;
-  const dependencies = [...dependencyCell.matchAll(/`(P1-\d{2}a?)`/g)].flatMap((entry) => entry[1] ?? []);
-  sliceRows.set(id, { status, dependencies, exitEvidence });
-}
+const roadmapIndex = readRoadmapRows(roadmapContent);
+problems.push(...roadmapIndex.problems.map((problem) => `roadmap: docs/plans/phase-1/roadmap.md ${problem}`));
+const sliceRows = new Map(roadmapIndex.rows.map((row) => [row.id, row]));
+const logEntries = readLogEntries(readFileSync(join(docsRoot, 'plans', 'phase-1', 'log.md'), 'utf8'));
+const featureSpecs = [...docStatuses.keys()].filter((path) => path.startsWith('features/'));
+const acceptedSlices: AcceptedSlice[] = [];
 const completeCount = [...sliceRows.values()].filter((row) => row.status === 'complete').length;
 const counterMatch = roadmapContent.match(/\*\*Formally accepted roadmap slices:\*\* (\d+) of (\d+)/);
 if (!counterMatch) {
@@ -407,7 +467,44 @@ for (const [id, row] of sliceRows) {
       `roadmap: ${id} row says accepted ${rowDate} but ${recordPath} is closed (${recordStatus.date})`,
     );
   }
+  if (!logRecordsAcceptance(logEntries, id, recordPath)) {
+    problems.push(
+      `roadmap: ${id} is complete but docs/plans/phase-1/log.md has no entry that links ${recordPath} or says "${id}" was accepted complete (protocol.md, update protocol)`,
+    );
+  }
+  const primarySpecs = primarySpecsOf(row.specs, featureSpecs);
+  if (primarySpecs === null) {
+    problems.push(
+      `roadmap: ${id} names "${row.specs.split(';')[0]?.trim()}" as its primary spec, which maps to no feature spec; name the spec or extend PRIMARY_SPEC_NAMES in lib/docs/roadmap-rules.ts`,
+    );
+  } else if (recordStatus?.date) {
+    acceptedSlices.push({ id, acceptedOn: recordStatus.date, primarySpecs });
+  }
 }
+
+// 9a. Every complete slice has a browser proof of its own outcome: a title tag or its gate's tag
+//     (lib/docs/slice-browser-proof.ts), read from the spec sources without running Playwright.
+problems.push(
+  ...findSlicesWithoutBrowserProof({
+    completeSlices: [...sliceRows.values()].filter((row) => row.status === 'complete').map((row) => row.id),
+    gates: readGoldenGates(readFileSync(join(docsRoot, 'plans', 'phase-1', 'gates.md'), 'utf8')),
+    specTitles: new Map(
+      ['tests/golden', 'tests/audit', 'tests/canary']
+        .flatMap((directory) => listTestFiles(repoRoot, directory, /\.spec\.ts$/))
+        .map((file) => [file, readTestTitles(file, readFileSync(join(repoRoot, file), 'utf8'))]),
+    ),
+  }).map((problem) => `roadmap: ${problem}`),
+);
+
+// 9b. A spec that an accepted slice names as primary was reviewed on or after the acceptance:
+//     the slice changed the product, so its Current Product Baseline was re-read then.
+//     The review date lives only in the spec's status line (maintenance rule 1).
+problems.push(
+  ...findStaleSpecReviews(
+    acceptedSlices,
+    new Map(featureSpecs.map((spec) => [spec, docStatuses.get(spec)?.date ?? null])),
+  ).map((problem) => `spec-review: ${problem}`),
+);
 
 // 11. One document per slice (protocol.md "Before Starting A Slice" step 7, decided 2026-09-03 after
 //     eight slices had grown a second "implementation plan" file that overlapped their record):
@@ -458,14 +555,12 @@ for (const [, sliceId, body] of catalogSections) {
 //     log from the decision's adoption date names Tier 1 or Tier 2, names Tier 3 with a reason in the
 //     same sentence, or states that no prevention claim follows. Sections before that date are history.
 const incidentLogRelativePath = 'technical/test-incident-log.md';
-const incidentTierRulePattern =
-  /\bTier [12]\b|\bTier 3\b[^.\n]*(?::|\bbecause\b|\()|\bno (?:\w+ )*prevention claim\b/i;
 const incidentTierSince = '2026-08-27';
 for (const section of readFileSync(join(docsRoot, incidentLogRelativePath), 'utf8').split(/^(?=#{2,3} )/m)) {
   const heading = section.split('\n')[0] ?? '';
   const date = heading.match(/\d{4}-\d{2}-\d{2}/)?.[0];
   if (!heading.startsWith('#') || !date || date < incidentTierSince) continue;
-  if (incidentTierRulePattern.test(section)) continue;
+  if (INCIDENT_TIER_PATTERN.test(section)) continue;
   problems.push(
     `incident-tier: docs/${incidentLogRelativePath} "${heading.replace(/^#+ /, '')}" names no enforcement tier; end the entry with Tier 1 or Tier 2, "Tier 3: <why no mechanism reaches it>" or "no prevention claim" (decision 0005)`,
   );
@@ -537,6 +632,16 @@ for (const [file, status] of docStatuses) {
   }
 }
 
+// 14b. A closed record keeps its plan's instructions as history; its fixed banner tells an agent
+//     not to carry them out (lib/docs/closed-records.ts says why a sentence pattern cannot).
+for (const [file, status] of docStatuses) {
+  if (status?.kind !== 'closed' || hasClosedRecordBanner(readFileSync(join(docsRoot, file), 'utf8')))
+    continue;
+  problems.push(
+    `closed-banner: docs/${file} is closed but line ${CLOSED_RECORD_BANNER_LINE} is not the banner "${CLOSED_RECORD_BANNER}" followed by a blank line`,
+  );
+}
+
 // 15. Guidance outside docs/ (AGENTS.md and the skills) may only point at files that exist:
 //     checks 2 and 7 read docs/ alone, so a renamed doc used to leave these pointers dangling.
 const guidanceFiles = [join(repoRoot, 'AGENTS.md')];
@@ -549,7 +654,7 @@ for (const file of guidanceFiles) {
   for (const reference of findDocumentReferences(readFileSync(file, 'utf8'))) {
     const resolved =
       reference.kind === 'link' ? resolve(dirname(file), reference.target) : join(repoRoot, reference.target);
-    if (!existsSync(resolved))
+    if (!existsSync(resolved) && !pointsIntoMissingSibling(resolved))
       problems.push(`guidance: ${relFile} references ${reference.target}, which does not exist`);
   }
 }
@@ -711,6 +816,140 @@ for (const file of trackedFiles) {
 for (const key of Object.keys(DEAD_CITATION_ALLOWLIST)) {
   if (!usedCitationExceptions.has(key))
     problems.push(`citation: the allowlist entry "${key}" no longer matches a dead citation; remove it`);
+}
+
+// 22 to 24. Living guidance names things by values that go stale. Living docs (not the append-only
+//     logs), AGENTS.md and the skills are checked; closed records and decision records are history.
+const appendOnlyLogs = new Set([...backtickDocPathExemptFiles]);
+const livingGuidance = [
+  ...[...docStatuses]
+    .filter(([file, status]) => status?.kind === 'living' && !appendOnlyLogs.has(file))
+    .map(([file]) => `docs/${file}`),
+  ...guidanceFiles.map((file) => relative(repoRoot, file).split(sep).join('/')),
+];
+const routeHandlers = new Set(readdirSync(join(repoRoot, 'app', 'api')));
+for (const file of livingGuidance) {
+  const text = readFileSync(join(repoRoot, file), 'utf8');
+  // 22. A backticked route handler names a folder under app/api/.
+  for (const reference of findRouteHandlerReferences(text)) {
+    if (!routeHandlers.has(reference.name))
+      problems.push(
+        `route-handler: ${file}:${reference.line} names the route handler "${reference.name}", which has no folder under app/api/`,
+      );
+  }
+  // 23. Rules are named by heading, not by a number that no doc defines (only the index numbers its rules).
+  for (const reference of findNumberedRuleReferences(text)) {
+    problems.push(
+      `numbered-rule: ${file}:${reference.line} cites "${reference.name}"; link the heading that states the rule instead`,
+    );
+  }
+  // 25. German quotation marks pair as „ and “, as lib/conventions/german-copy.test.ts requires of product copy.
+  for (const line of findMismatchedGermanQuotes(text)) {
+    problems.push(
+      `german-quote: ${file}:${line} opens a quotation with „ and closes it with " or ”; close it with “`,
+    );
+  }
+}
+// The rule's own module and test spell the phrase as fixtures; Markdown outside docs/ was read above.
+const numberedRuleFixtures = new Set(['lib/docs/reference-rules.ts', 'lib/docs/reference-rules.test.ts']);
+for (const file of trackedFiles.filter((path) => !path.endsWith('.md') && !numberedRuleFixtures.has(path))) {
+  for (const reference of findNumberedRuleReferences(readFileSync(join(repoRoot, file), 'utf8'))) {
+    problems.push(
+      `numbered-rule: ${file}:${reference.line} cites "${reference.name}"; name the rule or cite its doc heading instead`,
+    );
+  }
+}
+// 24. A repository path in a skill resolves, so a moved spec or support module cannot leave a dead pointer.
+for (const file of guidanceFiles.filter(
+  (path) => path.startsWith(claudeSkillsRoot) || path.startsWith(agentsSkillsRoot),
+)) {
+  const relFile = relative(repoRoot, file).split(sep).join('/');
+  for (const reference of findRepositoryPathReferences(readFileSync(file, 'utf8'))) {
+    if (!repositoryPathCandidates(reference.name).some((candidate) => existsSync(join(repoRoot, candidate))))
+      problems.push(
+        `skill-path: ${relFile}:${reference.line} names ${reference.name}, which does not exist; point it at the current file`,
+      );
+  }
+}
+
+// 26. The workspace (lib/docs/workspace-links.ts): this check reads the sibling clones and never edits
+//     them. A problem inside a sibling is fixed in the app target or reported to the sibling's owner.
+const appAgentsPath = join(repoRoot, 'AGENTS.md');
+function isInsideApp(path: string): boolean {
+  const fromApp = relative(repoRoot, path);
+  return !fromApp.startsWith('..') && !isAbsolute(fromApp);
+}
+for (const sibling of SIBLING_REPOSITORIES) {
+  const siblingRoot = join(workspaceRoot, sibling);
+  if (missingSiblings.has(sibling)) {
+    problems.push(
+      `workspace: ../${sibling} is not present beside werkflow-app, so ${uncheckedSiblingLinks.get(sibling) ?? 0} of the app's links into it and all of its links into the app are unchecked; clone it as docs/README.md maintenance rule 7 says`,
+    );
+    continue;
+  }
+  const listed = Bun.spawnSync(['git', 'ls-files', '--cached', '--others', '--exclude-standard', '*.md'], {
+    cwd: siblingRoot,
+  });
+  if (listed.exitCode !== 0) {
+    problems.push(`workspace: ../${sibling} is not a Git checkout, so its links into the app are unchecked`);
+    continue;
+  }
+  let linksBack = false;
+  for (const file of listed.stdout.toString().split('\n')) {
+    const path = join(siblingRoot, file);
+    if (file === '' || !existsSync(path)) continue;
+    for (const link of findMarkdownFileLinks(readFileSync(path, 'utf8'))) {
+      const target = resolve(dirname(path), link.path);
+      if (!isInsideApp(target)) continue;
+      if (file === 'AGENTS.md' && target === appAgentsPath) linksBack = true;
+      const place = `../${sibling}/${file}:${link.line}`;
+      if (!existsSync(target)) {
+        problems.push(
+          `workspace: ${place} links ${link.path}, which does not exist in werkflow-app; restore the target or report the link to the sibling's owner`,
+        );
+      } else if (
+        link.fragment !== null &&
+        target.endsWith('.md') &&
+        !headingAnchors(target).has(decodeURIComponent(link.fragment))
+      ) {
+        problems.push(
+          `workspace: ${place} links ${link.path}#${link.fragment}, a heading the app doc does not have; restore the heading or report the link to the sibling's owner`,
+        );
+      }
+    }
+  }
+  if (!linksBack)
+    problems.push(`workspace: ../${sibling}/AGENTS.md does not link back to ../werkflow-app/AGENTS.md`);
+}
+const sharedSkillTable = join(workspaceRoot, 'werkflow-business', 'docs', 'skills.md');
+if (!missingSiblings.has('werkflow-business')) {
+  if (!existsSync(sharedSkillTable)) {
+    problems.push('workspace: ../werkflow-business/docs/skills.md, the shared skill table, is missing');
+  }
+  const sharedSkills = existsSync(sharedSkillTable)
+    ? readSharedSkills(readFileSync(sharedSkillTable, 'utf8'))
+    : [];
+  for (const skill of sharedSkills) {
+    const folders = skillCopyFolders({
+      ...skill,
+      consumers: skill.consumers.filter((sibling) => !missingSiblings.has(sibling)),
+    });
+    const copies = folders.flatMap((folder) => {
+      const folderPath = join(workspaceRoot, folder);
+      if (!existsSync(folderPath)) {
+        problems.push(`workspace: ../${folder} is missing; the shared skill table names it as a copy`);
+        return [];
+      }
+      const files = new Map(
+        collectFiles(folderPath).map((file) => [
+          relative(folderPath, file).split(sep).join('/'),
+          readFileSync(file, 'utf8'),
+        ]),
+      );
+      return [{ folder: `../${folder}`, files }];
+    });
+    problems.push(...findSkillCopyDifferences(copies).map((difference) => `workspace: ${difference}`));
+  }
 }
 
 if (problems.length > 0) {

@@ -110,19 +110,24 @@ ${stderr}`,
 
 if (ISOLATED) {
   mock.module('server-only', () => ({}));
-  mock.module('next/headers', () => ({ cookies: async () => ({}) }));
+  // The harness gives the action a complete request context: a cookie store
+  // and the caller's current membership. The action reads its organization
+  // and role from that one membership read (lib/org/action-context.ts).
+  mock.module('next/headers', () => ({ cookies: async () => ({ get: () => undefined }) }));
   mock.module('next/cache', () => ({
     updateTag: (tag: string) => {
       invalidatedTags.push(tag);
     },
   }));
-  mock.module('@/lib/org/cookies', () => ({ resolveActiveOrgId: async () => 'org' }));
   mock.module('@/lib/supabase/admin', () => ({ createSupabaseAdminClient: () => admin }));
   mock.module('@/lib/data/cached', () => ({
     CACHE_TAGS: {
       organizationSettings: (organizationId: string) => `organization-settings-${organizationId}`,
     },
     getAuthenticatedUser: async () => ({ id: 'owner' }),
+    getCachedMemberships: async () => [
+      { orgId: 'org', name: 'Org', uniqueCode: 'ORG', role: 'admin', joinedAt: '2026-01-01T00:00:00.000Z' },
+    ],
     // A stale cache: it still reports the state before the recorded history existed.
     getCachedOrganizationSettings: async () => ({
       organizationId: 'org',

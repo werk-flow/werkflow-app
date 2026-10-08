@@ -6,7 +6,7 @@ import { ChevronDown, Clock } from 'lucide-react';
 import { PlainButton } from '@/components/ui/plain-button';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
-import { cn } from '@/lib/utils';
+import { cn, formatBerlinTime } from '@/lib/utils';
 import { formatDurationOrDash } from './job-detail-format';
 import { PersonAvatar, getSessionPersonName } from './job-detail-person';
 import type { JobDetailTimeSummary } from './use-job-detail-time-summary';
@@ -35,11 +35,7 @@ function JobDetailActiveWorkers({ activeWorkers }: Pick<JobDetailTimeSummary, 'a
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{worker.name}</p>
               <p className="text-xs text-muted-foreground">
-                Eingestempelt seit{' '}
-                {new Date(worker.clockIn.timestamp).toLocaleTimeString('de-DE', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
+                Eingestempelt seit {formatBerlinTime(worker.clockIn.timestamp)}
                 {' · '}
                 {formatDurationOrDash(Math.round(worker.liveMinutes))}
                 {worker.isPending ? ' · ausstehend' : ''}
@@ -163,17 +159,9 @@ function JobDetailSessionTimeline({
                       year: 'numeric',
                     })}
                     {' · '}
-                    {new Date(session.clockIn.timestamp).toLocaleTimeString('de-DE', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
+                    {formatBerlinTime(session.clockIn.timestamp)}
                     {' – '}
-                    {session.clockOut
-                      ? new Date(session.clockOut.timestamp).toLocaleTimeString('de-DE', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })
-                      : 'offen'}
+                    {session.clockOut ? formatBerlinTime(session.clockOut.timestamp) : 'offen'}
                   </p>
                 </div>
                 <span className="shrink-0 text-sm tabular-nums text-muted-foreground">

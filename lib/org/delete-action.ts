@@ -3,8 +3,9 @@
 import { cookies } from 'next/headers';
 import { updateTag } from 'next/cache';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { CURRENT_ORG_COOKIE, CURRENT_ORG_MAX_AGE, resolveActiveOrgId } from '@/lib/org/cookies';
-import { getAuthenticatedUser, CACHE_TAGS } from '@/lib/data/cached';
+import { CURRENT_ORG_COOKIE, CURRENT_ORG_MAX_AGE } from '@/lib/org/cookies';
+import { resolveActionContext } from '@/lib/org/action-context';
+import { CACHE_TAGS } from '@/lib/data/cached';
 import { logError } from '@/lib/logging';
 import { z } from '@/lib/zod';
 
@@ -29,18 +30,14 @@ const confirmationNameSchema = z.string();
 export async function deleteOrganization(confirmationName: string): Promise<DeleteOrgResult> {
   const parsedConfirmation = confirmationNameSchema.safeParse(confirmationName);
   try {
-    const user = await getAuthenticatedUser();
-    if (!user) {
-      return { success: false, error: 'not_authenticated' };
+    const auth = await resolveActionContext();
+    if (!auth.success) {
+      return { success: false, error: auth.error === 'not_authenticated' ? auth.error : 'org_not_found' };
     }
+    const { userId, orgId: activeOrgId } = auth.context;
 
     const admin = createSupabaseAdminClient();
     const cookieStore = await cookies();
-    const activeOrgId = await resolveActiveOrgId(cookieStore, user.id);
-
-    if (!activeOrgId) {
-      return { success: false, error: 'org_not_found' };
-    }
 
     const { data: org, error: orgError } = await admin
       .from('organizations')
@@ -53,7 +50,7 @@ export async function deleteOrganization(confirmationName: string): Promise<Dele
     }
 
     // Only admin can delete the organization
-    if (org.admin_id !== user.id) {
+    if (org.admin_id !== userId) {
       return { success: false, error: 'not_authorized' };
     }
 
@@ -78,7 +75,7 @@ export async function deleteOrganization(confirmationName: string): Promise<Dele
       // tenant-scope: cross-organization-by-design — the signed-in user's remaining memberships pick the next active organization
       .from('organization_members')
       .select('organization_id')
-      .eq('user_id', user.id);
+      .eq('user_id', userId);
 
     if (remainingError) {
       logError('deleteOrganization: remaining memberships read failed', remainingError);

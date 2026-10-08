@@ -5,57 +5,20 @@ description: Reviews code changes using CodeRabbit AI. Use when user asks for a 
 
 # CodeRabbit Review
 
-Use the repository wrapper for every CodeRabbit operation. Repo-specific behavior is owned by `docs/technical/coderabbit.md` and overrides generic CodeRabbit instructions.
+Run every CodeRabbit operation through the repository wrapper, `bun run review`, from the repository root. [CodeRabbit reviews](../../../docs/technical/coderabbit.md) owns the repo-specific behavior and overrides generic CodeRabbit instructions. Read it before the first review of a task:
 
-## Required Invocation
+- [Run a review](../../../docs/technical/coderabbit.md#run-a-review): the commands, the setup check (`bun run review:doctor`), the scope to choose, the standing authorization, and what to do when the binary or authentication is missing.
+- [Give the review its context](../../../docs/technical/coderabbit.md#give-the-review-its-context): which files to pass with `-c`.
+- [Record dispositions](../../../docs/technical/coderabbit.md#record-dispositions): how to handle each finding.
 
-From the repository root, run:
+## Guardrail
 
-```bash
-bun run review
-```
+Never probe `coderabbit` or `cr` on PATH, never install or reinstall CodeRabbit, and never call the CLI directly or through WSL. The wrapper owns the WSL distribution, the binary path, the working directory and agent mode. A failed PATH lookup is not an installation check.
 
-Pass review scope and context after `--`:
-
-```bash
-bun run review -- --committed --base-commit <sha> -c AGENTS.md .coderabbit.yaml
-bun run review -- --uncommitted --include-untracked -c AGENTS.md .coderabbit.yaml
-```
-
-For a setup and authentication check that does not start a review:
-
-```bash
-bun run review:doctor
-```
-
-For stored results:
-
-```bash
-bun run review -- findings
-bun run review -- --show-prompts
-```
-
-## Non-Negotiable Guardrail
-
-- Do not probe `coderabbit` or `cr` on PATH to decide whether CodeRabbit is installed.
-- Do not run an installer or reinstall CodeRabbit.
-- Do not bypass the wrapper with a direct WSL or CLI invocation.
-- If `bun run review:doctor` reports a missing binary or authentication problem, report that exact failure to the owner. Do not repair it by installing the CLI.
-
-The wrapper owns the configured WSL distribution, absolute binary path, working directory, agent mode, and safe failure message. This prevents native PowerShell and non-interactive WSL PATH behavior from being mistaken for a missing installation.
-
-## Review Behavior
-
-- `docs/technical/coderabbit.md` owns the owner's standing authorization for reviews through the wrapper. Do not ask for approval again.
-- Add the smallest useful context set with `-c`; always include `AGENTS.md` and `.coderabbit.yaml` for feature reviews.
-- The wrapper includes untracked files in uncommitted reviews by default. Use `--committed` or a base argument for a different review scope.
-- Stay silent while an active review runs. Report only completion, a prerequisite failure, or a timeout after the full wait window.
-- Treat findings as review input, verify them against the code, and apply valid fixes within the current task's scope.
-- Do not claim that a manual review came from CodeRabbit.
-
-## Result Format
+## Result format
 
 - State the review scope briefly.
 - Say how many issues CodeRabbit raised.
 - Order issues by severity and include file, impact, and a concrete fix.
 - If there are none, say `CodeRabbit raised 0 issues.`
+- Never present a manual review as a CodeRabbit review.

@@ -20,6 +20,48 @@ begin
 end;
 $$;
 
+-- Every public table belongs to an organization through its organization_id
+-- column, which the RLS policies and lib/conventions/tenant-scope.test.ts key
+-- on. A table that is not organization-owned joins this list with the reason
+-- its rows belong to no organization; a listed table that gains the column or
+-- no longer exists fails until the list shrinks.
+do $$
+declare
+  global_tables constant text[] := array[
+    'email_change_challenges',    -- one row per Auth account; the change is account-wide.
+    'organization_join_attempts', -- failed join attempts of a user before any membership exists.
+    'organizations',              -- the tenant itself; its id is the organization key.
+    'profiles',                   -- one row per Auth account; a person can belong to several organizations.
+    'rate_limit_attempts',        -- keyed subject hashes; a limit can apply before an organization is known.
+    'subscriptions'               -- billing per paying account (user_id); closes with the payment slice.
+  ];
+  offender text; stale text;
+begin
+  select string_agg(c.relname, ', ' order by c.relname) into offender
+  from pg_class c join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public' and c.relkind in ('r', 'p')
+    and c.relname <> all (global_tables)
+    and not exists (
+      select 1 from pg_attribute a
+      where a.attrelid = c.oid and a.attname = 'organization_id' and not a.attisdropped
+    );
+  if offender is not null then
+    raise exception 'Public table without organization_id and not in the reviewed global-table list: %', offender;
+  end if;
+  select string_agg(name, ', ' order by name) into stale
+  from unnest(global_tables) as name
+  where to_regclass('public.' || quote_ident(name)) is null
+    or exists (
+      select 1 from pg_attribute a
+      where a.attrelid = to_regclass('public.' || quote_ident(name))
+        and a.attname = 'organization_id' and not a.attisdropped
+    );
+  if stale is not null then
+    raise exception 'Global-table list names a missing or organization-owned table: %', stale;
+  end if;
+end;
+$$;
+
 -- Anonymous row privileges are a closed, reviewed inventory
 -- (docs/technical/security.md, "Trust boundaries", Database). The signed-out
 -- app reads and writes no public table with the anon role, so the inventory is

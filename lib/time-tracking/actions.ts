@@ -1,5 +1,5 @@
 'use server';
-import type { ActionFailure } from '@/lib/action-result';
+import type { ActionFailure, ActionResult } from '@/lib/action-result';
 import { logReadFailure, loggedRead, logReadErrors } from '@/lib/data/read-request-cache';
 import { revalidatePath } from 'next/cache';
 import { logError } from '@/lib/logging';
@@ -9,6 +9,7 @@ import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { readCompleteRows, readInBatches, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getAuthenticatedUser, getCachedMemberships } from '@/lib/data/cached';
+import { resolveActionContextFor } from '@/lib/org/action-context';
 import { readOrganizationSettings } from './organization-settings-read';
 import {
   addManualEntryInputSchema,
@@ -182,18 +183,17 @@ async function getUserTodayEntries(
  * per-request membership read (never a cross-request cache); null when the
  * caller is not a current operational member.
  */
-async function verifyCurrentMembership(userId: string, orgId: string): Promise<OrgRole | null> {
-  const memberships = await getCachedMemberships(userId);
-  const membership = memberships.find((m) => m.orgId === orgId);
-  return (membership?.role as OrgRole) ?? null;
+async function verifyCurrentMembership(orgId: string): Promise<OrgRole | null> {
+  const caller = await resolveActionContextFor(orgId);
+  return caller.success ? caller.context.role : null;
 }
 
 async function getClockJobInfo(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   organizationId: string,
   jobId: string,
-): Promise<ClockJobInfo | null> {
-  const { data: job } = await loggedRead(
+): Promise<ActionResult<{ info: ClockJobInfo | null }>> {
+  const { data: job, error: jobError } = await loggedRead(
     'getClockJobInfo: jobs read failed',
     admin
       .from('jobs')
@@ -202,10 +202,8 @@ async function getClockJobInfo(
       .eq('organization_id', organizationId)
       .maybeSingle(),
   );
-
-  if (!job) {
-    return null;
-  }
+  if (jobError) return { success: false, error: 'fetch_failed' };
+  if (!job) return { success: true, info: null };
 
   const [projectData, clientData] = await Promise.all([
     job.project_id
@@ -227,15 +225,18 @@ async function getClockJobInfo(
   ]);
 
   return {
-    id: job.id,
-    title: getJobDisplayTitle({
-      title: job.title,
-      description: job.description,
-    }),
-    jobNumber: job.job_number,
-    status: job.status === 'nicht_bearbeitet' ? 'in_bearbeitung' : job.status,
-    projectName: (projectData.data as { name: string } | null)?.name ?? null,
-    clientName: (clientData.data as { name: string } | null)?.name ?? null,
+    success: true,
+    info: {
+      id: job.id,
+      title: getJobDisplayTitle({
+        title: job.title,
+        description: job.description,
+      }),
+      jobNumber: job.job_number,
+      status: job.status === 'nicht_bearbeitet' ? 'in_bearbeitung' : job.status,
+      projectName: (projectData.data as { name: string } | null)?.name ?? null,
+      clientName: (clientData.data as { name: string } | null)?.name ?? null,
+    },
   };
 }
 
@@ -434,7 +435,7 @@ export async function addManualEntry(rawParams: AddManualEntryParams): Promise<A
     if (!firstEntry) return { success: false, error: 'validation_failed' };
 
     const [callerRole, organizationSettings] = await Promise.all([
-      verifyCurrentMembership(user.id, organizationId),
+      verifyCurrentMembership(organizationId),
       readOrganizationSettings(organizationId),
     ]);
     if (!callerRole) {
@@ -453,20 +454,17 @@ export async function addManualEntry(rawParams: AddManualEntryParams): Promise<A
     const admin = createSupabaseAdminClient();
 
     // Get target user's role
-    const { data: targetMember } = await loggedRead(
+    const { data: targetMember, error: targetMemberError } = await loggedRead(
       'addManualEntry: organization_members read failed',
       admin
         .from('organization_members')
         .select('role')
         .eq('user_id', targetUserId)
         .eq('organization_id', organizationId)
-        .single(),
-      true,
+        .maybeSingle(),
     );
-
-    if (!targetMember) {
-      return { success: false, error: 'target_not_a_member' };
-    }
+    if (targetMemberError) return { success: false, error: 'load_failed' };
+    if (!targetMember) return { success: false, error: 'target_not_a_member' };
 
     const targetRole = targetMember.role as OrgRole;
 
@@ -632,7 +630,7 @@ export async function reviewEntries(
       return { success: false, error: 'invalid_input' };
     }
 
-    const callerRole = await verifyCurrentMembership(user.id, organizationId);
+    const callerRole = await verifyCurrentMembership(organizationId);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
@@ -727,32 +725,28 @@ export async function updateEntry(
       .from('time_entries')
       .select('*')
       .eq('id', entryId)
-      .single();
+      .maybeSingle();
 
-    if (entryError || !entry) {
-      return { success: false, error: 'entry_not_found' };
-    }
+    if (entryError) return { success: false, error: 'load_failed' };
+    if (!entry) return { success: false, error: 'entry_not_found' };
 
-    const callerRole = await verifyCurrentMembership(user.id, entry.organization_id);
+    const callerRole = await verifyCurrentMembership(entry.organization_id);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
 
     // Get target user's role
-    const { data: targetMember } = await loggedRead(
+    const { data: targetMember, error: targetMemberError } = await loggedRead(
       'updateEntry: organization_members read failed',
       admin
         .from('organization_members')
         .select('role')
         .eq('user_id', entry.user_id)
         .eq('organization_id', entry.organization_id)
-        .single(),
-      true,
+        .maybeSingle(),
     );
-
-    if (!targetMember) {
-      return { success: false, error: 'target_not_found' };
-    }
+    if (targetMemberError) return { success: false, error: 'load_failed' };
+    if (!targetMember) return { success: false, error: 'target_not_found' };
 
     const targetRole = targetMember.role as OrgRole;
     const isOwnEntry = entry.user_id === user.id;
@@ -827,7 +821,7 @@ export async function updateEntry(
 
     // A caller-supplied job must belong to the entry's organization before it is written.
     if (fields.jobId) {
-      const { data: job } = await loggedRead(
+      const { data: job, error: jobError } = await loggedRead(
         'updateEntry: jobs read failed',
         admin
           .from('jobs')
@@ -836,6 +830,7 @@ export async function updateEntry(
           .eq('organization_id', entry.organization_id)
           .maybeSingle(),
       );
+      if (jobError) return { success: false, error: 'load_failed' };
       if (!job) {
         return { success: false, error: 'job_not_found' };
       }
@@ -897,32 +892,28 @@ export async function deleteEntry(
       .from('time_entries')
       .select('*')
       .eq('id', entryId)
-      .single();
+      .maybeSingle();
 
-    if (entryError || !entry) {
-      return { success: false, error: 'entry_not_found' };
-    }
+    if (entryError) return { success: false, error: 'load_failed' };
+    if (!entry) return { success: false, error: 'entry_not_found' };
 
-    const callerRole = await verifyCurrentMembership(user.id, entry.organization_id);
+    const callerRole = await verifyCurrentMembership(entry.organization_id);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
 
     // Get target user's role
-    const { data: targetMember } = await loggedRead(
+    const { data: targetMember, error: targetMemberError } = await loggedRead(
       'deleteEntry: organization_members read failed',
       admin
         .from('organization_members')
         .select('role')
         .eq('user_id', entry.user_id)
         .eq('organization_id', entry.organization_id)
-        .single(),
-      true,
+        .maybeSingle(),
     );
-
-    if (!targetMember) {
-      return { success: false, error: 'target_not_found' };
-    }
+    if (targetMemberError) return { success: false, error: 'load_failed' };
+    if (!targetMember) return { success: false, error: 'target_not_found' };
 
     const targetRole = targetMember.role as OrgRole;
     const isOwnEntry = entry.user_id === user.id;
@@ -939,7 +930,7 @@ export async function deleteEntry(
     // The paired entry is caller-supplied: it must be a row of the same
     // person in the same organization as the authorized entry.
     if (pairedEntryId) {
-      const { data: pairedEntry } = await loggedRead(
+      const { data: pairedEntry, error: pairedEntryError } = await loggedRead(
         'deleteEntry: time_entries read failed',
         admin
           .from('time_entries')
@@ -949,6 +940,7 @@ export async function deleteEntry(
           .eq('user_id', entry.user_id)
           .maybeSingle(),
       );
+      if (pairedEntryError) return { success: false, error: 'load_failed' };
       if (!pairedEntry) {
         return { success: false, error: 'entry_not_found' };
       }
@@ -1001,7 +993,8 @@ export async function deleteEntriesBatch(rawEntryIds: string[]): Promise<DeleteE
         .in('id', [...batch]),
     );
 
-    if (entriesError || !entries || entries.length !== uniqueEntryIds.length) {
+    if (entriesError || !entries) return { success: false, error: 'load_failed' };
+    if (entries.length !== uniqueEntryIds.length) {
       return { success: false, error: 'entry_not_found' };
     }
 
@@ -1010,7 +1003,7 @@ export async function deleteEntriesBatch(rawEntryIds: string[]): Promise<DeleteE
       return { success: false, error: 'not_authorized' };
     }
 
-    const callerRole = await verifyCurrentMembership(user.id, organizationId);
+    const callerRole = await verifyCurrentMembership(organizationId);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
@@ -1092,7 +1085,7 @@ export async function getTimeEntries(rawParams: GetTimeEntriesParams): Promise<G
     const normalizedFrom = new Date(fromTimestamp).toISOString();
     const normalizedTo = new Date(toTimestamp).toISOString();
 
-    const callerRole = await verifyCurrentMembership(user.id, organizationId);
+    const callerRole = await verifyCurrentMembership(organizationId);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
@@ -1240,7 +1233,7 @@ export async function getPendingSessions(organizationId?: string): Promise<GetPe
       return { success: false, error: 'no_active_org' };
     }
 
-    const callerRole = await verifyCurrentMembership(user.id, orgId);
+    const callerRole = await verifyCurrentMembership(orgId);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
@@ -1292,7 +1285,7 @@ export async function getPendingChangeRequests(organizationId?: string): Promise
       return { success: false, error: 'no_active_org' };
     }
 
-    const callerRole = await verifyCurrentMembership(user.id, orgId);
+    const callerRole = await verifyCurrentMembership(orgId);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
@@ -1362,7 +1355,7 @@ export async function reviewChangeRequest(
       return { success: false, error: 'request_not_found' };
     }
 
-    const callerRole = await verifyCurrentMembership(user.id, request.organization_id);
+    const callerRole = await verifyCurrentMembership(request.organization_id);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
@@ -1515,13 +1508,13 @@ export async function getTimeEntriesForJob(rawJobId: string): Promise<GetTimeEnt
       return { success: false, error: 'fetch_failed' };
     }
 
-    const callerRole = await verifyCurrentMembership(user.id, job.organization_id);
+    const callerRole = await verifyCurrentMembership(job.organization_id);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
 
     if (callerRole !== 'admin' && callerRole !== 'buero') {
-      const { data: assignment } = await loggedRead(
+      const { data: assignment, error: assignmentError } = await loggedRead(
         'getTimeEntriesForJob: job_assignments read failed',
         admin
           .from('job_assignments')
@@ -1531,6 +1524,7 @@ export async function getTimeEntriesForJob(rawJobId: string): Promise<GetTimeEnt
           .eq('user_id', user.id)
           .maybeSingle(),
       );
+      if (assignmentError) return { success: false, error: 'fetch_failed' };
 
       if (!assignment) {
         return { success: false, error: 'not_authorized' };
@@ -1734,7 +1728,7 @@ export async function getTimeEntriesForProjectJobs(
       return { success: false, error: 'fetch_failed' };
     }
 
-    const callerRole = await verifyCurrentMembership(user.id, project.organization_id);
+    const callerRole = await verifyCurrentMembership(project.organization_id);
     if (!callerRole) return { success: false, error: 'not_a_member' };
 
     const { data: projectJobs, error: jobsError } = await admin
@@ -1819,7 +1813,7 @@ export async function getCurrentClockState(
 
     const admin = createSupabaseAdminClient();
     const [userRole, todayRows, organizationSettings] = await Promise.all([
-      verifyCurrentMembership(user.id, organizationId),
+      verifyCurrentMembership(organizationId),
       getUserTodayEntries(admin, user.id, organizationId),
       readOrganizationSettings(organizationId),
     ]);
@@ -1841,19 +1835,22 @@ export async function getCurrentClockState(
     const trackedBreakMinutes = calculateBreakMinutes(breakSessions);
     const todayMinutes = trackedWorkMinutes + trackedBreakMinutes;
     const breakdown = computeBreakdownForSettings(todayMinutes, trackedBreakMinutes, organizationSettings);
-    const activeJobInfo = currentState.activeJobId
+    const noJob = { success: true as const, info: null };
+    const activeJob = currentState.activeJobId
       ? await getClockJobInfo(admin, organizationId, currentState.activeJobId)
-      : null;
+      : noJob;
+    if (!activeJob.success) return activeJob;
     // Legacy events know only work and breaks, so the resumable activity is
     // work on the job the break interrupted (or unallocated work).
     const resumeActivity: TimeActivitySelection | null = currentState.isClockedIn
       ? createActivitySelection('work', currentState.resumeJobId)
       : null;
-    const resumeJobInfo = !currentState.resumeJobId
-      ? null
+    const resumeJob = !currentState.resumeJobId
+      ? noJob
       : currentState.resumeJobId === currentState.activeJobId
-        ? activeJobInfo
+        ? activeJob
         : await getClockJobInfo(admin, organizationId, currentState.resumeJobId);
+    if (!resumeJob.success) return resumeJob;
 
     return {
       success: true,
@@ -1873,7 +1870,7 @@ export async function getCurrentClockState(
         breakMinutes: breakdown.breakMinutes,
         timelineSegments,
         activeJobId: currentState.activeJobId,
-        activeJobInfo,
+        activeJobInfo: activeJob.info,
         captureModel: currentState.isClockedIn ? 'legacy' : 'none',
         sessionId: null,
         sessionVersion: null,
@@ -1897,7 +1894,7 @@ export async function getCurrentClockState(
                 }
           : null,
         resumeActivity,
-        resumeJobInfo,
+        resumeJobInfo: resumeJob.info,
         recoveryReason: null,
         legacyOpen: currentState.isClockedIn,
         standbyMinutes: 0,
@@ -1929,7 +1926,7 @@ export async function getActiveJobIdsForOrg(
       return { success: false, error: 'not_authenticated' };
     }
 
-    const callerRole = await verifyCurrentMembership(user.id, organizationId);
+    const callerRole = await verifyCurrentMembership(organizationId);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }

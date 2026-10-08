@@ -76,6 +76,15 @@ import { runPlaywrightPreflight } from './playwright-preflight';
 import { lastCommitTime, readCampaignReports } from './campaign-summary';
 import { probeRealtimeReadiness, restartLocalRealtimeContainer } from './realtime-probe';
 import { requireEnv } from '../tests/golden/support/env';
+import { getR2Endpoint } from '../lib/storage/r2';
+import {
+  backendDownBeforeGroupReason,
+  backendHealthAfterFailureNote,
+  backendHealthBeforeGroup,
+  backendHealthProbes,
+  checkBackendHealth,
+  type BackendHealth,
+} from '../lib/testing/runner/backend-health';
 
 const repository = resolve(import.meta.dir, '..');
 const archive = resolve(repository, '.agent-logs/verification');
@@ -207,6 +216,18 @@ function commandForGroup(group: TestGroup, target: 'local' | 'cloud'): string[] 
 /** The manifest of a run the parent named itself; a missing file means Playwright never started. */
 function readRunManifestIfPresent(runKey: string): RunManifest | undefined {
   return existsSync(manifestPath(runKey)) ? readRunManifest(runKey) : undefined;
+}
+
+/** One bounded probe of the application-to-backend path a browser group writes through. */
+function probeBrowserBackend(): Promise<BackendHealth> {
+  return checkBackendHealth(
+    backendHealthProbes({
+      appOrigin: 'http://localhost:3000',
+      supabaseUrl: requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
+      publishableKey: requireEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'),
+      storageEndpoint: getR2Endpoint(),
+    }),
+  );
 }
 
 async function main(): Promise<void> {
@@ -582,6 +603,31 @@ async function main(): Promise<void> {
                 signal,
                 log: (line) => console.log(`[verify] ${line}`),
               });
+              // The preflight proved the backend once per run; one that died since blocks the group instead of failing it.
+              const before = await backendHealthBeforeGroup({
+                check: probeBrowserBackend,
+                wait: (milliseconds) => new Promise((done) => setTimeout(done, milliseconds)),
+              });
+              if (!before.healthy) {
+                const reason = backendDownBeforeGroupReason(before);
+                console.log(`[verify] ${entry.group.id}: blocked; ${reason}`);
+                const blockedAt = new Date().toISOString();
+                report.results.push({
+                  groupId: entry.group.id,
+                  fingerprint: entry.fingerprint,
+                  status: 'blocked',
+                  startedAt: blockedAt,
+                  completedAt: blockedAt,
+                  durationMs: 0,
+                  runKey: null,
+                  buildId: null,
+                  logPath,
+                  reason,
+                  backendHealth: before,
+                });
+                publish();
+                return;
+              }
             }
             const startedAt = new Date().toISOString();
             const runKey = runKeys.get(entry.group.id);
@@ -669,9 +715,17 @@ async function main(): Promise<void> {
               run?.failures[0]?.message,
               ...latencyProblems,
             ].filter((detail): detail is string => Boolean(detail));
+            // The probe after a failure only suggests environment; the trace and the classification decide (P1-08).
+            const backendHealth =
+              browser && !passed && !signal.aborted ? await probeBrowserBackend() : undefined;
             const reason = passed
               ? null
-              : failureDetails.join('; ') || `Command exited ${exitCode}; inspect ${logPath}`;
+              : [
+                  failureDetails.join('; ') || `Command exited ${exitCode}; inspect ${logPath}`,
+                  backendHealth && backendHealthAfterFailureNote(backendHealth),
+                ]
+                  .filter((detail): detail is string => Boolean(detail))
+                  .join('; ');
             report.results.push({
               groupId: entry.group.id,
               fingerprint: entry.fingerprint,
@@ -683,6 +737,7 @@ async function main(): Promise<void> {
               buildId: run?.buildId ?? null,
               logPath,
               reason,
+              ...(backendHealth ? { backendHealth } : {}),
             });
             publish();
             console.log(

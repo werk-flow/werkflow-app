@@ -1,6 +1,6 @@
 # Inventory Management
 
-Status: living — last reviewed 2026-10-04
+Status: living — last reviewed 2026-10-05
 
 Inventory is WerkFlow's operational system for SHK materials, consumables, tools, assets, Lager locations, stock movements, and job material usage. This spec separates the current baseline from the complete product direction. It defines outcomes and domain boundaries, not a database design.
 
@@ -25,18 +25,19 @@ Admin and Büro get an organization-scoped catalog, their own Lager locations, m
 - **Catalog.** Item types are material, consumable, tool, and asset. An item can carry several barcodes. The barcode entered on the item becomes its primary barcode, and the previous primary barcode stays attached. A barcode that belongs to another item refuses the save. Saving an item, its barcode, and its first stock count is all or nothing. Minimum and target stock are set once per item and apply across all locations. The web app has no camera scanning.
 - **Central inventory.** Only Admin and Büro open `/inventar`, with views for all items, Lager, planned material, and movements. Search, filters, and summary counts cover the whole organization, not only the visible page.
 - **Availability.** The overview shows stock by item and by location, open planned quantity, and `Verfügbar`. Today `Verfügbar` is total stock minus open planned demand. It is not a reservation.
-- **Stock movements.** Managers record additions and removals at a location. Only managers correct stock. An employee cannot correct their own last movement. Stock cannot go below zero. Every movement keeps quantity before and after, type, location, time, reason, and the linked job or project. There is no transfer flow for users.
+- **Stock movements.** Only managers record manual additions and removals at a location. There is no correction flow: a wrong booking is fixed with a new addition or removal. Stock cannot go below zero. Every movement records who booked it, when, where, why, and the quantity before and after. A movement from job material also keeps its job or project. There is no transfer flow for users.
 - **Locations and categories.** Managers create their own locations labeled Lager, room, shelf, vehicle, or other. WerkFlow creates no default warehouse, so the inventory mirrors the real rooms, shelves, and vehicles of the business. Each organization starts with editable SHK categories. Category names carry no product logic.
 - **Units.** Every unit accepts a decimal quantity. The planned rule that only Meter, Liter, and Kilogramm accept decimals is not implemented.
 - **CSV import.** The initial inventory audit at onboarding goes through CSV import with column mapping. Import creates missing categories, suppliers, and locations. Matching checks the internal SKU first, then a barcode. Each row's quantity becomes a stock movement at the row's Lager. A matched row adds its quantity to the existing item as an `Eingang`. Each row imports completely or not at all: a row whose lookup or write fails, or whose barcode belongs to another item, is counted as failed and leaves nothing behind. A row with a quantity but without a Lager keeps its item, books no quantity, and the result counts it separately.
 - **Job and project material.** Managers plan catalog items on jobs and projects without changing stock. Managers and assigned employees take items from a location or return them. A take or return changes stock immediately, with no approval step. An employee may take an existing item that was never planned, and the line is marked unplanned. A refused take creates no unplanned line. Projects show direct material, material from child jobs, and the total separately. Lines keep planned, taken, returned, and billable quantities apart.
 - **Field material actions.** An assigned employee works with the material of the job inside the field work pack. The unplanned-item search hides supplier, price, valuation, and billability. Employees cannot create items, open `/inventar`, or use project-level material.
 - **Read-only consumers.** Templates, dispatch readiness, the work lifecycle, handover, service cases, and maintenance plans show material facts and never create, reserve, consume, or return stock. Readiness labels planned material as not reserved and tools as not assessed until `P1-32`.
-- **Tools and assets.** Tools and assets are catalog items, and individual asset instances exist. Assigning an instance to a person or job is a plain field edit without a checkout event. There is no checkout, custody, maintenance, inspection, loss, or retirement workflow. `P1-32` adds it.
+- **Tools and assets.** Tools and assets are catalog items. No screen creates, tracks, or assigns an individual instance. There is no checkout, custody, maintenance, inspection, loss, or retirement workflow. `P1-32` adds it.
 
 ### Important Current Limitations
 
 - There is no reservation, picking, approval, procurement, invoice, or post-calculation workflow. Billable quantities exist, but nothing commercial uses them yet.
+- The movements view shows only the most recent movements of the organization, with no paging or search.
 - There is no paired transfer, purchase order, goods receipt, supplier return, reorder worklist, formal stock count, valuation report, or wholesale-standard integration.
 - The CSV import books every row as soon as it starts. It has no confirmation step, no row preview, no warning for a file that was already imported, and no duplicate resolution, reconciliation total, or error report. The result names only the counts of imported rows, rows without a Lager, and failed rows. Excel import does not exist.
 
@@ -290,7 +291,7 @@ Decided by the owner:
 - Wholesaler integrations come in this order: IDS Connect 2.5 first, UGL 5.0 where a beta wholesaler uses it, Open Masterdata after IDS for single-article refresh, and Open Connect only as the endpoint directory.
 - `P1-25` imports DATANORM version 4 files with rebate groups as first-class data.
 - Employee takes and returns change stock immediately. There is no approval queue for employee stock movements.
-- An imported row that matches an existing item, by internal SKU and then barcode, adds its quantity and is never skipped. A business often exports its stock per Lager or vehicle and imports the files one after the other, so five screws in the first file and five in the second make ten. The import confirmation step protects against an accidental double import.
+- An imported row that matches an existing item, by internal SKU and then barcode, adds its quantity and is never skipped. A business often exports its stock per Lager or vehicle and imports the files one after the other, so five screws in the first file and five in the second make ten. The planned import confirmation step of `P1-25` protects against an accidental double import.
 
 Still open:
 

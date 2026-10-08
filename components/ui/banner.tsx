@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AlertCircle, CheckCircle, Info, Loader2, Undo2, X } from 'lucide-react';
+import { AlertCircle, CheckCircle, Info, Loader2, X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
@@ -29,7 +29,7 @@ export type BannerState = {
   variant: BannerVariant;
   message: string;
   actionLabel?: string;
-  /** Icon rendered inside the action button (e.g. Undo2 for „Rückgängig"). */
+  /** Icon rendered inside the action button (e.g. Undo2 for „Rückgängig“). */
   actionIcon?: ReactNode;
   onAction?: () => void;
 };
@@ -95,7 +95,7 @@ export function Banner({
         <p className="min-w-0 flex-1 break-words text-sm">{banner.message}</p>
         {banner.actionLabel && banner.onAction && (
           // A real button with an icon, not underlined text: the action (e.g.
-          // „Rückgängig") must read as a clickable control at a glance.
+          // „Rückgängig“) must read as a clickable control at a glance.
           <button
             type="button"
             onClick={() => {
@@ -280,40 +280,4 @@ export function UrlFlashBanner({
 
   if (!banner) return null;
   return <Banner key={banner.id} banner={banner} onDismiss={dismiss} isExiting={isExiting} />;
-}
-
-/**
- * Success banner with an undo action, auto-dismissing after 5 s.
- * Prop-driven so callers can re-arm it per performed action.
- */
-export function UndoBanner({
-  banner,
-  onDismiss,
-  actionLabel = 'Rückgängig',
-}: {
-  banner: { id: number; message: string; onUndo: () => void } | null;
-  onDismiss: () => void;
-  actionLabel?: string;
-}) {
-  useEffect(() => {
-    if (!banner) return;
-    const timer = setTimeout(onDismiss, ACTION_DISMISS_MS);
-    return () => clearTimeout(timer);
-  }, [banner, onDismiss]);
-
-  if (!banner) return null;
-  return (
-    <Banner
-      key={banner.id}
-      banner={{
-        id: banner.id,
-        variant: 'success',
-        message: banner.message,
-        actionLabel,
-        actionIcon: <Undo2 className="size-3.5" />,
-        onAction: banner.onUndo,
-      }}
-      onDismiss={onDismiss}
-    />
-  );
 }

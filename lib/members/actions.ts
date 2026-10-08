@@ -2,12 +2,11 @@
 
 import type { ActionFailure, ActionResult } from '@/lib/action-result';
 import { logReadErrors } from '@/lib/data/read-request-cache';
-import { cookies } from 'next/headers';
 import { updateTag } from 'next/cache';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { resolveActiveOrgId } from '@/lib/org/cookies';
+import { resolveActionContext, resolveActionContextFor } from '@/lib/org/action-context';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
-import { getAuthenticatedUser, getCachedMemberships, CACHE_TAGS } from '@/lib/data/cached';
+import { getAuthenticatedUser, CACHE_TAGS } from '@/lib/data/cached';
 import { getResponsibilitiesStrandedByMemberRemoval } from '@/lib/responsibilities/server';
 import { getOrgMembersForUser, getProfileNamesVisibleTo, type ProfileNamesRead } from './queries';
 import { z } from '@/lib/zod';
@@ -61,24 +60,19 @@ export async function updateMemberRole(
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const { memberId, newRole } = parsed.data;
   try {
-    const [user, cookieStore] = await Promise.all([getAuthenticatedUser(), cookies()]);
-    if (!user) {
-      return { success: false, error: 'not_authenticated' };
-    }
-
-    const orgId = await resolveActiveOrgId(cookieStore, user.id);
-
-    if (!orgId) {
-      return { success: false, error: 'no_active_org' };
-    }
+    const auth = await resolveActionContext();
+    if (!auth.success) return auth;
+    const { userId: callerId, orgId } = auth.context;
 
     const admin = createSupabaseAdminClient();
 
+    // The role is read again from the membership row, so a membership removed
+    // after this request's membership read refuses as not_a_member.
     const { data: callerMembership, error: callerError } = await admin
       .from('organization_members')
       .select('role')
       .eq('organization_id', orgId)
-      .eq('user_id', user.id)
+      .eq('user_id', callerId)
       .single();
 
     if (callerError || !callerMembership) {
@@ -105,7 +99,7 @@ export async function updateMemberRole(
 
     const targetRole = targetMember.role as OrgRole;
 
-    if (targetMember.user_id === user.id) {
+    if (targetMember.user_id === callerId) {
       return { success: false, error: 'cannot_change_own_role' };
     }
 
@@ -129,17 +123,21 @@ export async function updateMemberRole(
       }
     }
 
-    // Update the role using admin client
-    const { error: updateError } = await admin
+    // The role filter keeps a role changed after the checks above (an admin raising
+    // the target to Büro) from being overwritten by a decision made on the old role.
+    const { data: updatedRows, error: updateError } = await admin
       .from('organization_members')
       .update({ role: newRole })
       .eq('organization_id', orgId)
-      .eq('user_id', memberId);
+      .eq('user_id', memberId)
+      .eq('role', targetRole)
+      .select('user_id');
 
     if (updateError) {
       logError('Error updating member role:', updateError);
       return { success: false, error: 'update_failed' };
     }
+    if (updatedRows.length !== 1) return { success: false, error: 'member_changed' };
 
     return { success: true };
   } catch (error) {
@@ -162,24 +160,19 @@ export async function removeMember(memberIdInput: string): Promise<RemoveMemberR
   if (!parsedMemberId.success) return { success: false, error: 'invalid_input' };
   const memberId = parsedMemberId.data;
   try {
-    const [user, cookieStore] = await Promise.all([getAuthenticatedUser(), cookies()]);
-    if (!user) {
-      return { success: false, error: 'not_authenticated' };
-    }
-
-    const orgId = await resolveActiveOrgId(cookieStore, user.id);
-
-    if (!orgId) {
-      return { success: false, error: 'no_active_org' };
-    }
+    const auth = await resolveActionContext();
+    if (!auth.success) return auth;
+    const { userId: callerId, orgId } = auth.context;
 
     const admin = createSupabaseAdminClient();
 
+    // The role is read again from the membership row, so a membership removed
+    // after this request's membership read refuses as not_a_member.
     const { data: callerMembership, error: callerError } = await admin
       .from('organization_members')
       .select('role')
       .eq('organization_id', orgId)
-      .eq('user_id', user.id)
+      .eq('user_id', callerId)
       .single();
 
     if (callerError || !callerMembership) {
@@ -207,7 +200,7 @@ export async function removeMember(memberIdInput: string): Promise<RemoveMemberR
     const targetRole = targetMember.role as OrgRole;
 
     // Cannot remove self
-    if (targetMember.user_id === user.id) {
+    if (targetMember.user_id === callerId) {
       return { success: false, error: 'cannot_remove_self' };
     }
 
@@ -245,7 +238,7 @@ export async function removeMember(memberIdInput: string): Promise<RemoveMemberR
     const { error: deleteError } = await admin.rpc('remove_member_with_time_capture', {
       p_organization_id: orgId,
       p_target_user_id: memberId,
-      p_actor_id: user.id,
+      p_actor_id: callerId,
       p_operation_id: crypto.randomUUID(),
     });
 
@@ -303,29 +296,19 @@ export async function getOrgMembersAction(
   if (!parsedOrganizationId.success) return { success: false, error: 'invalid_input' };
   const organizationId = parsedOrganizationId.data;
   try {
-    const user = await getAuthenticatedUser();
-    if (!user) {
-      return { success: false, error: 'not_authenticated' };
-    }
-
-    const memberships = await getCachedMemberships(user.id);
-    const membership = memberships.find((m) => m.orgId === organizationId);
-
-    if (!membership) {
-      return { success: false, error: 'not_a_member' };
-    }
-
-    const userRole = membership.role as OrgRole;
+    const auth = await resolveActionContextFor(organizationId);
+    if (!auth.success) return auth;
+    const { userId, role: userRole } = auth.context;
     if (userRole !== 'admin' && userRole !== 'buero') {
       return { success: false, error: 'not_authorized' };
     }
 
-    const membersRead = await getOrgMembersForUser(organizationId, user.id);
+    const membersRead = await getOrgMembersForUser(organizationId, userId);
     if (!membersRead.success) return membersRead;
 
     const members =
       userRole === 'buero'
-        ? membersRead.members.filter((m) => m.role === 'employee' || m.user_id === user.id)
+        ? membersRead.members.filter((m) => m.role === 'employee' || m.user_id === userId)
         : membersRead.members;
 
     return { success: true, members };
@@ -399,15 +382,13 @@ export async function getMemberDetail(userIdInput: string): Promise<ActionResult
     const { data: membership, error: membershipError } = membershipResult;
     const { data: profile, error: profileError } = profileResult;
 
-    if (membershipError || !membership) {
-      logReadErrors('getMemberDetail: read failed', membershipError);
-      return { success: false, error: 'not_found' };
+    // `.single()` reports a missing row as PGRST116; any other error is a failed read, not a missing member.
+    const readError = [membershipError, profileError].find((error) => error && error.code !== 'PGRST116');
+    if (readError) {
+      logReadErrors('getMemberDetail: read failed', readError);
+      return { success: false, error: 'load_failed' };
     }
-
-    if (profileError || !profile) {
-      logReadErrors('getMemberDetail: read failed', profileError);
-      return { success: false, error: 'not_found' };
-    }
+    if (!membership || !profile) return { success: false, error: 'not_found' };
 
     return {
       success: true,

@@ -5,39 +5,35 @@ description: Use for Supabase-related work in this WerkFlow repo: database schem
 
 # Supabase Live Workflow
 
-WerkFlow runs two cloud Supabase projects plus a local stack. Project IDs, plan and compute posture, per-backend configuration, and which tool reaches which backend live in `docs/technical/environments.md`; read it before any Supabase work and do not restate its facts elsewhere.
+WerkFlow runs two cloud Supabase projects and a local stack. [Environments](../../../docs/technical/environments.md) owns their facts. Read it before any Supabase work, and do not restate its facts here or elsewhere:
 
-- **Prod** serves the deployed Vercel app and real customers. Treat as read-only outside the migration rule.
-- **Dev** supports local development, the cloud canary, and explicitly scoped provider checks. Routine wave and release verification uses the local release plan plus the cloud canary under decision 0007. Read `docs/technical/testing.md` for selection and acceptance.
-- **Local stack** (WSL Docker, `supabase db reset` over the committed migrations) is the default backend for application test groups. Reached through the Supabase CLI in WSL and direct psql, not through MCP.
-
-`.env.local` has no permanent target: `bun run env:local` / `env:dev` / `env:prod` switch it between the three backends. The shared migration history in `supabase/migrations/` is intended to keep schemas aligned. Verify live parity rather than inferring it from shared filenames.
+- [The two cloud backends](../../../docs/technical/environments.md#the-two-cloud-backends): project refs, what each one serves, provider configuration.
+- [The local test stack](../../../docs/technical/environments.md#the-local-test-stack): the default backend of the application test groups.
+- [Env-file ownership](../../../docs/technical/environments.md#env-file-ownership): which backend `.env.local` points at, and the `env:*` switches.
+- [Which tool reaches what](../../../docs/technical/environments.md#which-tool-reaches-what): MCP, the CLI and psql per backend.
+- [Work on production](../../../docs/technical/environments.md#work-on-production): reads, releases and a production-local session.
 
 ## Required workflow
 
-1. Inspect the real project before making schema-aware claims or edits. Inspect production for production-state claims. Dev and the migration files describe their own state and intended rollout; they are not substitutes for a production parity check.
-2. Prefer MCP or project inspection over guessing from app code or older architecture docs.
+1. Inspect the real project before you make a schema-aware claim or edit. Inspect production for a production-state claim. Dev and the migration files describe their own state and the intended rollout. They do not replace a production parity check.
+2. Prefer MCP or project inspection over guesses from app code or older architecture docs.
 3. When a schema change affects app code, run `bun run types:generate`. It reads dev, covers the `graphql_public` and `public` schemas, and uses the pinned tools in `package.json`. `bun run types:check` fails when the committed `lib/supabase/database.types.ts` differs from a fresh generation.
 
 ## The migration rule
 
-`docs/technical/environments.md` ("The migration rule") is the one home of the rule. Read it before you write or apply a migration. Do not restate it here or anywhere else.
-
-A migration that creates a table also follows the table item of the checklist in `docs/technical/security.md`: RLS, policies and explicit grants in the same file. A new table that feeds the period calculation also gets the closed-period trigger, and `sql:closed-period-writes` covers it. `bun run test:verify --group sql:security` fails on a table that misses them.
-
-Never run tests or bulk scripts while `.env.local` points at prod. A `bun run env:prod` session is a deliberate, temporary exception. Switch back with `bun run env:dev`.
+[The migration rule](../../../docs/technical/environments.md#the-migration-rule) has one home. Read it before you write or apply a migration. For a new table, also follow "Add a table" in the [security control map](../../../docs/technical/security.md#add-a-table).
 
 ## Edge functions
 
-Sources are versioned in `supabase/functions/` and deployed with `bunx supabase functions deploy <slug> --project-ref <ref> --no-verify-jwt --use-api`. Each project's secret store holds its own Resend key; the prod key never leaves prod.
+Sources are versioned in `supabase/functions/`. Deploy one with `bunx supabase functions deploy <slug> --project-ref <ref> --no-verify-jwt --use-api`.
 
 ## Verification
 
-- Ground database-related claims in actual Supabase inspection when needed.
-- Confirm live auth, RLS, table, function, or storage state before relying on it.
-- After Supabase-sensitive changes, verify the relevant behavior with MCP queries or the most direct available check, on dev first.
-- Run the guards that cover the change: `bun run migrations:check` (dev history matches the committed files), `bun run types:check`, `bun run realtime:check` (publication and replica-identity parity), and the SQL groups that own the change (`bun run test:verify --group sql:p1-24`, `sql:security`, `sql:list-pagination`); the registry in `lib/testing/selection/test-groups.ts` is the only list of a group's SQL files.
+- Ground a database claim in live Supabase inspection when it matters.
+- Confirm live auth, RLS, table, function or storage state before you rely on it.
+- After a Supabase-sensitive change, verify the behavior with MCP queries or the most direct available check, on dev first.
+- Run the guards in [Verify your work](../../../docs/technical/security.md#verify-your-work) of the security control map, and the SQL group that owns the change (for example `bun run test:verify --group sql:p1-24`). `lib/testing/selection/test-groups.ts` is the only list of a group's SQL files.
 
 ## Parity check between DEV and PROD
 
-None of the guards above compares the two cloud catalogs, and matching migration names or identical generated types do not detect a changed function body. To compare the projects, run read-only catalog queries on each through MCP `execute_sql`: `pg_class` (tables and their RLS flag), `pg_policies`, `pg_proc` with `pg_get_functiondef`, `information_schema.columns`, `pg_constraint`, `pg_indexes`, `pg_trigger`, `pg_publication_tables`, and `supabase_migrations.schema_migrations`. Compare by schema-qualified object identity, and normalize whitespace and comments before dismissing a differing function body as formatting. `supabase/tests/security_boundaries.sql` holds the function-definition and ACL part of these queries, and `canary:security` repeats the grant comparison on DEV. Record the result in the slice or cross-slice record; `docs/technical/environments.md` explains why no gate does this automatically.
+None of the guards above compares the two cloud catalogs, and matching migration names or identical generated types do not detect a changed function body. To compare the projects, run read-only catalog queries on each through MCP `execute_sql`: `pg_class` (tables and their RLS flag), `pg_policies`, `pg_proc` with `pg_get_functiondef`, `information_schema.columns`, `pg_constraint`, `pg_indexes`, `pg_trigger`, `pg_publication_tables`, and `supabase_migrations.schema_migrations`. Compare by schema-qualified object identity, and normalize whitespace and comments before you dismiss a differing function body as formatting. `supabase/tests/security_boundaries.sql` holds the function-definition and ACL part of these queries, and `canary:security` repeats the grant comparison on DEV. Record the result in the slice or cross-slice record. [The migration rule](../../../docs/technical/environments.md#the-migration-rule) explains why no gate does this automatically.

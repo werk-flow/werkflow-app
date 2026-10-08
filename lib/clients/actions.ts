@@ -277,10 +277,12 @@ export async function getClientDetail(rawClientId: string): Promise<ActionResult
       .eq('organization_id', orgId)
       .single();
 
-    if (error && error.code !== 'PGRST116') logReadFailure('getClientDetail: client read failed', error);
-    if (error || !data) {
-      return { success: false, error: 'not_found' };
+    // `.single()` reports a missing row as PGRST116; any other error is a failed read, not a missing client.
+    if (error && error.code !== 'PGRST116') {
+      logReadFailure('getClientDetail: client read failed', error);
+      return { success: false, error: 'load_failed' };
     }
+    if (!data) return { success: false, error: 'not_found' };
 
     return { success: true, client: toClient(data) };
   } catch (error) {

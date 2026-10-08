@@ -3,44 +3,75 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import ts from 'typescript';
 
-// Tier 2 guard for SI-025. Every exported function of a 'use server' module is
-// a public POST endpoint. Each one must establish the caller's identity through
-// one of the approved helpers, or be listed below with the reason it may not.
-// This proves the presence of a check, not its correctness; the boundary
-// tests own that.
+// Tier 1 and 2 guard for SI-025. Every exported function of a 'use server'
+// module is a public POST endpoint. It establishes the caller's organization
+// context through the one owner module, lib/org/action-context.ts, directly
+// or through a named wrapper that this file proves is built on it. An action
+// that needs no organization (the caller's own account, a step before any
+// membership) is listed with its reason and reaches the session identity. This
+// proves the presence of the right kind of check, not its correctness; the
+// boundary tests own that.
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
 
-const identityHelpers = new Set([
-  'getAuthenticatedUser',
-  'getCachedUser',
-  'authenticateAndAuthorize',
-  'requireAuth',
-  'resolveActionContext',
-  'getAuthContext',
-  'getAuthorizedDocumentContext',
-  'getAuthorizedProjectContext',
-  'getAuthorizedJobContext',
-  'getAuthorizedWorkContext',
-  'requireManagerAndClient',
-  'verifyCurrentMembership',
-]);
+const OWNER_MODULE = 'lib/org/action-context.ts';
+const CONTEXT_ROOTS = new Set(['resolveActionContext', 'resolveActionContextFor']);
 
-function isIdentityHelper(name: string): boolean {
-  return (
-    identityHelpers.has(name) ||
-    /^require[A-Z]/.test(name) ||
-    /^getAuthorized[A-Z]\w*Context$/.test(name) ||
-    /^authorize[A-Z]/.test(name)
-  );
-}
-
-// Exports that intentionally run without a caller identity. Keep each reason
-// true; removing an entry requires the function to gain a check.
-const allowlist: Record<string, string> = {
-  'lib/dispatch/actions.ts#previewDispatchReadiness':
-    'delegates to authenticateAndAuthorize inside the first statement chain',
+// Exported guards of other modules. Each one must reach a root (checked below).
+const CONTEXT_WRAPPERS: Record<string, string> = {
+  authenticateAndAuthorize: 'lib/jobs/auth.ts',
+  getAuthorizedDocumentContext: 'lib/documents/access.ts',
+  requireServiceManager: 'lib/service-cases/manager-context.ts',
+  requireAuth: 'lib/time-accounts/access.ts',
+  requireManagerAndClient: 'lib/clients/manager-access.ts',
+  requireManagedInvite: 'lib/invites/managed-invite.ts',
 };
+
+const SESSION_IDENTITY = 'getAuthenticatedUser';
+
+const OWN_ACCOUNT = "Changes the caller's own account, which belongs to no organization.";
+const PRESTART =
+  'Prestart employees act on their own items; the owner module resolves operational memberships only.';
+
+// Actions that run on the verified session identity alone. Keep each reason
+// true; an entry whose action gains an organization check, or disappears,
+// fails as stale.
+const IDENTITY_ONLY_ACTIONS: Record<string, string> = {
+  'lib/auth/actions.ts#deleteAccount': OWN_ACCOUNT,
+  'lib/auth/actions.ts#invalidateProfileCache': OWN_ACCOUNT,
+  'lib/settings/actions.ts#removeProfileAvatar': OWN_ACCOUNT,
+  'lib/settings/actions.ts#updateProfileAvatar': OWN_ACCOUNT,
+  'lib/settings/actions.ts#updateProfileSettings': OWN_ACCOUNT,
+  'lib/settings/email-change-actions.ts#clearEmailChangeChallengeBeforeSignOut': OWN_ACCOUNT,
+  'lib/settings/email-change-actions.ts#requestCurrentEmailChangeOtp': OWN_ACCOUNT,
+  'lib/settings/email-change-actions.ts#resetEmailChangeWizard': OWN_ACCOUNT,
+  'lib/settings/email-change-actions.ts#savePendingNewEmailVerification': OWN_ACCOUNT,
+  'lib/settings/email-change-actions.ts#touchPendingNewEmailVerification': OWN_ACCOUNT,
+  'lib/settings/email-change-actions.ts#verifyCurrentEmailChangeOtp': OWN_ACCOUNT,
+  'lib/settings/email-change-actions.ts#verifyNewEmailChangeOtp': OWN_ACCOUNT,
+  'lib/org/actions.ts#createOrganization': 'Runs before the caller has a membership.',
+  'lib/org/actions.ts#setActiveOrgCookie':
+    'Sets the hint cookie only for a current membership it checks itself.',
+  'lib/org/join-request-actions.ts#requestOrganizationJoin': 'Runs before the caller has a membership.',
+  'lib/org/join-request-actions.ts#withdrawOrganizationJoinRequest':
+    "Withdraws the caller's own request, which exists before any membership.",
+  'lib/subscription/actions.ts#simulatePayment':
+    'Activates the subscription before the first organization exists.',
+  'lib/members/actions.ts#getProfilesByIds':
+    'Names are visible across every organization the caller shares with the person (SI-015).',
+  'lib/time-tracking/actions.ts#clockOutBeforeSignOut':
+    "Ends the caller's own open sessions in every organization at sign-out.",
+  'lib/time-tracking/actions.ts#getChangeRequestsForEntries':
+    "Reads only organizations from the caller's current memberships, with the role in each.",
+  'lib/time-corrections/actions.ts#withdrawTimeCorrection':
+    "withdraw_time_correction accepts only the request's author and changes only that request.",
+  'lib/personnel/lifecycle-actions.ts#acknowledgePersonnelDocument': PRESTART,
+  'lib/personnel/lifecycle-actions.ts#acknowledgePersonnelRequirement': PRESTART,
+  'lib/personnel/lifecycle-actions.ts#getOwnPersonnelActions': PRESTART,
+  'lib/personnel/lifecycle-actions.ts#getPersonnelDocumentSignedUrl': PRESTART,
+};
+
+type Reach = { context: boolean; identity: boolean };
 
 function listApplicationSources(): string[] {
   const found: string[] = [];
@@ -147,16 +178,8 @@ function exportedActions(file: string, source: ts.SourceFile): ExportedAction[] 
   return actions;
 }
 
-function unguardedActions(
-  file: string,
-  source: ts.SourceFile,
-  actions = exportedActions(file, source),
-): string[] {
-  const unguarded: string[] = [];
-  if (!actions.length) return unguarded;
-
-  // Module-local helpers count when they reach an identity helper, directly
-  // or through other local helpers (fixpoint over the call graph).
+/** For each module-local function: whether it reaches an accepted guard or the session identity. */
+function localReach(source: ts.SourceFile, guards: ReadonlySet<string>): Map<string, Reach> {
   const callsByLocalFunction = new Map<string, Set<string>>();
   for (const statement of source.statements) {
     if (ts.isFunctionDeclaration(statement) && statement.name && statement.body) {
@@ -179,34 +202,62 @@ function unguardedActions(
       }
     }
   }
-  const localHelpers = new Set<string>();
+  const reach = new Map<string, Reach>();
+  for (const name of callsByLocalFunction.keys()) reach.set(name, { context: false, identity: false });
   let changed = true;
   while (changed) {
     changed = false;
     for (const [name, calls] of callsByLocalFunction) {
-      if (localHelpers.has(name)) continue;
-      if ([...calls].some((call) => isIdentityHelper(call) || localHelpers.has(call))) {
-        localHelpers.add(name);
+      const current = reach.get(name) ?? { context: false, identity: false };
+      const next = { ...current };
+      for (const call of calls) {
+        if (guards.has(call)) next.context = true;
+        if (call === SESSION_IDENTITY) next.identity = true;
+        const helper = call === name ? undefined : reach.get(call);
+        if (helper?.context) next.context = true;
+        if (helper?.identity) next.identity = true;
+      }
+      if (next.context !== current.context || next.identity !== current.identity) {
+        reach.set(name, next);
         changed = true;
       }
     }
   }
+  return reach;
+}
+
+const ACCEPTED_GUARDS = new Set([...CONTEXT_ROOTS, ...Object.keys(CONTEXT_WRAPPERS)]);
+
+function actionReach(source: ts.SourceFile, action: ExportedAction): Reach {
+  const local = localReach(source, ACCEPTED_GUARDS);
+  const calls = new Set<string>();
+  if (action.body) calledIdentifiers(action.body, calls);
+  return {
+    context: [...calls].some((call) => ACCEPTED_GUARDS.has(call) || local.get(call)?.context === true),
+    identity: [...calls].some((call) => call === SESSION_IDENTITY || local.get(call)?.identity === true),
+  };
+}
+
+function unguardedActions(
+  file: string,
+  source: ts.SourceFile,
+  actions = exportedActions(file, source),
+): string[] {
+  const unguarded: string[] = [];
   for (const action of actions) {
     const key = `${file}#${action.name}`;
-    const calls = new Set<string>();
-    if (action.body) calledIdentifiers(action.body, calls);
-    const guarded = [...calls].some((call) => isIdentityHelper(call) || localHelpers.has(call));
-    if (allowlist[key]) {
-      continue;
-    }
-    if (!guarded) unguarded.push(key);
+    const reach = actionReach(source, action);
+    if (reach.context) continue;
+    if (key in IDENTITY_ONLY_ACTIONS && reach.identity) continue;
+    unguarded.push(key);
   }
   return unguarded;
 }
 
-test('module and inline Server Actions establish identity or have a reviewed exception', () => {
+test('module and inline Server Actions establish organization context or are reviewed identity-only actions', () => {
   const unguarded: string[] = [];
   const existing = new Set<string>();
+  const contextGuarded = new Set<string>();
   for (const file of listApplicationSources()) {
     const text = readFileSync(resolve(repositoryRoot, file), 'utf8');
     // Most files contain no directive. Keep escaped spellings eligible for AST
@@ -214,14 +265,36 @@ test('module and inline Server Actions establish identity or have a reviewed exc
     if (!couldContainServerDirective(text)) continue;
     const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
     const actions = exportedActions(file, source);
-    for (const action of actions) existing.add(`${file}#${action.name}`);
+    for (const action of actions) {
+      existing.add(`${file}#${action.name}`);
+      if (actionReach(source, action).context) contextGuarded.add(`${file}#${action.name}`);
+    }
     unguarded.push(...unguardedActions(file, source, actions));
   }
-  expect(unguarded).toEqual([]);
   expect(
-    Object.keys(allowlist).filter((key) => !existing.has(key)),
-    'stale action exceptions',
+    unguarded,
+    'call resolveActionContext or resolveActionContextFor (lib/org/action-context.ts) or a named wrapper',
   ).toEqual([]);
+  expect(
+    Object.keys(IDENTITY_ONLY_ACTIONS).filter((key) => !existing.has(key) || contextGuarded.has(key)),
+    'stale identity-only entries: the action is gone or now has an organization check',
+  ).toEqual([]);
+});
+
+test('every named wrapper is built on the owner module', () => {
+  const unbuilt: string[] = [];
+  for (const [name, file] of Object.entries(CONTEXT_WRAPPERS)) {
+    const text = readFileSync(resolve(repositoryRoot, file), 'utf8');
+    const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+    const others = new Set([
+      ...CONTEXT_ROOTS,
+      ...Object.keys(CONTEXT_WRAPPERS).filter((other) => other !== name),
+    ]);
+    if (localReach(source, others).get(name)?.context !== true) unbuilt.push(`${file}#${name}`);
+  }
+  expect(unbuilt, `a wrapper must call a root of ${OWNER_MODULE} or another wrapper`).toEqual([]);
+  const owner = readFileSync(resolve(repositoryRoot, OWNER_MODULE), 'utf8');
+  for (const root of CONTEXT_ROOTS) expect(owner).toContain(`export async function ${root}(`);
 });
 
 function couldContainServerDirective(text: string): boolean {
@@ -248,7 +321,7 @@ test('inline use-server functions inside an ordinary page cannot bypass the iden
   ).toHaveLength(1);
   expect(
     fixture(
-      `export default function Page() { async function save() { 'use server'; await getAuthenticatedUser(); return readPrivate(); } }`,
+      `export default function Page() { async function save() { 'use server'; await resolveActionContext(); return readPrivate(); } }`,
     ),
   ).toEqual([]);
 });
@@ -275,7 +348,7 @@ test('direct functions and directive prologues are inventoried while literal tex
   expect(fixture(`const explanation = 'use server'; export const value = 1;`)).toEqual([]);
   expect(
     fixture(
-      `'use server'; export async function save() { const unused = async () => getAuthenticatedUser(); return readPrivate(); }`,
+      `'use server'; export async function save() { const unused = async () => resolveActionContext(); return readPrivate(); }`,
     ),
   ).toHaveLength(1);
   const escaped = String.raw`'use\x20server'; export async function save() { return readPrivate(); }`;
@@ -283,20 +356,43 @@ test('direct functions and directive prologues are inventoried while literal tex
   expect(fixture(escaped)).toHaveLength(1);
 });
 
-test('called arrow and expression helpers establish identity, unused closures do not', () => {
+test('only the owner module and its wrappers count; identity alone or a lookalike name does not', () => {
   expect(
     fixture(
-      `'use server'; const guard = async () => getAuthenticatedUser(); export async function save() { await guard(); return readPrivate(); }`,
+      `'use server'; export async function save() { await getAuthenticatedUser(); return readPrivate(); }`,
+    ),
+  ).toHaveLength(1);
+  for (const lookalike of [
+    'requirePresent',
+    'requireJsonRecord',
+    'authorizeTarget',
+    'getAuthorizedItemContext',
+  ]) {
+    expect(
+      fixture(`'use server'; export async function save() { ${lookalike}(); return readPrivate(); }`),
+    ).toHaveLength(1);
+  }
+  expect(
+    fixture(
+      `'use server'; export async function save(id) { await resolveActionContextFor(id); return readPrivate(); }`,
+    ),
+  ).toEqual([]);
+});
+
+test('called arrow and expression helpers establish context, unused closures do not', () => {
+  expect(
+    fixture(
+      `'use server'; const guard = async () => resolveActionContext(); export async function save() { await guard(); return readPrivate(); }`,
     ),
   ).toEqual([]);
   expect(
     fixture(
-      `'use server'; const guard = async function() { await getAuthenticatedUser(); }; export async function save() { await guard(); return readPrivate(); }`,
+      `'use server'; const guard = async function() { await authenticateAndAuthorize(); }; export async function save() { await guard(); return readPrivate(); }`,
     ),
   ).toEqual([]);
   expect(
     fixture(
-      `'use server'; const guard = async () => { const unused = () => getAuthenticatedUser(); }; export async function save() { await guard(); return readPrivate(); }`,
+      `'use server'; const guard = async () => { const unused = () => resolveActionContext(); }; export async function save() { await guard(); return readPrivate(); }`,
     ),
   ).toHaveLength(1);
 });

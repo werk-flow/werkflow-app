@@ -59,6 +59,7 @@ export function getActionErrorMessage(error: string, mode: MaterialDialogMode): 
     item_not_found: 'Der ausgewählte Artikel wurde nicht gefunden.',
     location_not_found: 'Das ausgewählte Lager wurde nicht gefunden.',
     line_not_found: 'Die Materialposition wurde nicht gefunden.',
+    line_changed: 'Die Materialposition wurde inzwischen geändert. Versuche es noch einmal.',
     create_failed: 'Die Materialposition konnte nicht gespeichert werden.',
     update_failed: 'Die Materialposition konnte nicht aktualisiert werden.',
     delete_failed: 'Die Materialposition konnte nicht entfernt werden.',

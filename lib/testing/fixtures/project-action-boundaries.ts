@@ -173,6 +173,10 @@ assert.deepEqual(await actions.getProjectByNumber('P-2026-900'), {
   success: false,
   error: 'project_not_found',
 });
+// A failed read is a load failure the page shows, never a missing project.
+world.failingTables.add('projects');
+assert.deepEqual(await actions.getProjectByNumber('P-2026-002'), { success: false, error: 'load_failed' });
+world.failingTables.clear();
 assert.deepEqual(await actions.updateProject(foreignProjectId, { name: 'Übernommen' }), {
   success: false,
   error: 'project_not_found',

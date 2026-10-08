@@ -2,8 +2,10 @@
  * The failure codes that the shared guards return, whatever the area: the
  * session and organization checks, the role check, the boundary parse, the
  * closed-period refusal (`timeWriteFailure` in lib/time-tracking/closed-periods.ts),
- * a responsibility read that could not complete, and the last-resort catch. `lib/action-messages.ts` gives each one German
- * sentence, so a component never repeats them.
+ * a read that could not complete (`load_failed`: a failed read is never "not
+ * found" and never skips a pre-check), a responsibility read that could not
+ * complete, and the last-resort catch. `lib/action-messages.ts` gives each one
+ * German sentence, so a component never repeats them.
  */
 export const SHARED_FAILURE_CODES = [
   'not_authenticated',
@@ -12,6 +14,7 @@ export const SHARED_FAILURE_CODES = [
   'not_authorized',
   'invalid_input',
   'period_closed',
+  'load_failed',
   'responsibility_load_failed',
   'unexpected_error',
 ] as const;

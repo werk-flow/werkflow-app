@@ -1,6 +1,6 @@
 # Code quality and maintainability
 
-Status: living — last reviewed 2026-10-03
+Status: living — last reviewed 2026-10-05
 
 This doc owns virtue 4 in `AGENTS.md`. Good code here is the smallest amount of clear code that delivers the confirmed outcome. A domain rule has one owner module with precise types and focused tests. The `typescript-best-practices` skill owns the type patterns. This page owns the checklist, the prohibitions, the deletion pass and the independent review.
 
@@ -67,13 +67,17 @@ A `[judgment]` item is a Tier 3 default: diverge only with the note that `AGENTS
 - A Server Action or reader returns `ActionResult` or `ActionFailure` from `lib/action-result.ts` with a stable error code. A richer failure intersects `ActionFailure<Code>` with its extra fields instead of declaring its own `success: false` type. [code `lib/action-result.ts`, test `lib/conventions/action-failure-shape.test.ts`]
 - A surface turns a failure code into German through `describeFailure` from `lib/action-messages.ts`. A code in `SHARED_FAILURE_CODES` has its one sentence there; a surface lists only the codes its area owns. A message map drops a code that no action, client check or database function names any more. [test `lib/action-messages.test.ts`, test `lib/conventions/failure-messages.test.ts`]
 - Rows that one action changes together change in one database function call, all or nothing, as [write related rows](#write-related-rows) describes. [test `lib/conventions/related-writes.test.ts`]
+- A write that depends on a state the action read (a status, a version, a quantity) filters on that state, so a change in between leaves zero rows and the action reports it as stale. [test `lib/conventions/status-guarded-writes.test.ts`]
+- A save of one key in a shared JSON document, such as a user preference, sets that key in one database call and never writes back a document it read. [group `sql:user-preference-writes`, test `lib/jobs/column-preferences-write-path.test.ts`]
 - A write between a job's team and its visit plan keeps the [job team and visit plan](data-model.md#job-team-and-visit-plan) rules, and only `app_private.project_plan_onto_job` writes the plan onto the job. [group `sql:job-plan-bridge`]
 - An internal navigation goes through the router. A deliberate full document load, after a session, account or organization change or to a non-page target, goes through `loadDocument`. [code `lib/navigation/document-load.ts`, lint `@next/next/no-location-assign-relative-destination`]
-- A failure reaches the user or the log. A `.catch` that ends in nothing handles its null on the next lines or logs. [lint `swallowedRejectionSelectors`]
-- A failed Supabase read becomes a failure that the page shows with a retry, never `[]`, `{}` or a missing row. A deliberate best-effort read has a reviewed reason. [test `lib/conventions/read-error-visibility.test.ts`]
+- A failure reaches the user or the log. A `.catch` that ends in nothing handles its null on the next lines or logs. A `catch` that only logs carries a named best-effort reason. [lint `swallowedRejectionSelectors`, lint `quality/no-silent-catch`]
+- A failed Supabase read becomes a failure that the page shows with a retry, never `[]`, `{}` or a missing row. A `loggedRead` site turns its error into `load_failed` before any missing-row guard, so a failed read never says „nicht gefunden“. A deliberate best-effort read has a reviewed reason. [test `lib/conventions/read-error-visibility.test.ts`]
+- A page whose section read failed passes the failure to a prop or region that shows `SectionError` or `RegionLoadError`, never an empty fallback, and a loader keeps „nicht gefunden“ for absence only. [test `lib/conventions/detail-loader-failures.test.ts`]
 - "Today" for a business decision is the Berlin business date from `getBusinessTodayIso`. [test `lib/conventions/business-date.test.ts`]
+- A clock time is formatted by `formatBerlinTime` or `toLocalTimeOfDay` from `lib/utils.ts`, never by an inline `toLocaleTimeString`. [lint `timeOfDaySelectors`]
 - A React `key` names a stable identity. A remount for fresh data uses a `resetKey`. [test `lib/conventions/collection-keys.test.ts`]
-- A module stays under 2,000 lines, a component or route file under 500, and a function under 200. A file or function that outgrows its limit is split, never exempted or suppressed. [lint `max-lines`, lint `max-lines-per-function`, test `lib/conventions/module-caps.test.ts`]
+- A module, a component or route file, and a function each stay under their line limit in `eslint-rules/size-caps.mjs`. A file or function that outgrows its limit is split, never exempted or suppressed. [lint `max-lines`, lint `max-lines-per-function`, test `lib/conventions/module-caps.test.ts`]
 - `lib/` imports nothing from `components/`. [lint `libToComponentsPattern`]
 - Every lint suppression names its rule and carries a `-- reason`. [lint `@eslint-community/eslint-comments/require-description`, lint `reportUnusedDisableDirectives`]
 - Nothing is left unused: no file, export, dependency, local or parameter. [group `static:unused`, group `static:typecheck`]
@@ -96,6 +100,7 @@ A `[judgment]` item is a Tier 3 default: diverge only with the note that `AGENTS
 - Build a React `key` from a mapped or joined collection. [test `lib/conventions/collection-keys.test.ts`]
 - Exempt or suppress a size limit to fit new code. [test `lib/conventions/module-caps.test.ts`]
 - Suppress a rule without a reason. [lint `@eslint-community/eslint-comments/require-description`]
+- Add a package that a decision or an owner doc bans. [test `lib/conventions/dependency-denylist.test.ts`]
 - Add an abstraction for possible future scope. [judgment]
 - Remove authorization, validation, audit history or failure visibility to save lines. [judgment]
 - Rename existing short identifiers in passing. The owner decided this. [judgment]
@@ -109,7 +114,7 @@ A `[judgment]` item is a Tier 3 default: diverge only with the note that `AGENTS
 5. Run `bun run test:unit`. The convention tests under `lib/conventions/` run there and must pass.
 6. Do the deletion pass below and record it.
 7. Have a fresh session do the independent review below. Record a disposition for each finding.
-8. Before a push, `bun run test:verify` runs all static gates again. The publication gate refuses a push without a passing report and a review record.
+8. Before a push, `bun run test:verify` runs all static gates again. The publication gate refuses a push without a passing report and review records that cover every changed file.
 
 ## Deletion pass and independent review
 

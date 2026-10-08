@@ -3,7 +3,7 @@ name: grilling
 description: Grill the user relentlessly about a plan, decision, or idea. Use when the user wants to stress-test their thinking, uses any 'grill' trigger phrases, or when resolving a slice's open product or design decisions with the owner before implementation.
 ---
 
-Adapted for WerkFlow from mattpocock/skills (MIT). In this repo the most common use is the pre-implementation report of a Phase 1 slice: the open decisions in report items are a design tree, and each owner round should follow the frontier method below. Facts about the codebase, live Supabase state, or the harness are always your job to look up, never the owner's.
+Adapted for WerkFlow from mattpocock/skills (MIT). In this repo the most common use is a Phase 1 slice: the protocol's [stop rule](../../../docs/plans/phase-1/protocol.md#standing-authorizations-and-the-stop-rule) names the decisions that go to the owner, and those form the design tree. Each owner round follows the frontier method below. Facts about the codebase, live Supabase state, or the harness are always your job to look up, never the owner's.
 
 Interview the user relentlessly until you reach a shared understanding. Map this as a **design tree**: every decision branches into the decisions that hang off it.
 

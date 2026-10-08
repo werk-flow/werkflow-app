@@ -14,12 +14,13 @@ function invalidInput(): NextResponse {
   );
 }
 
-function parseInput(raw: string | null): unknown {
-  if (raw === null) return {};
+/** The JSON input of a request, or null when it is not valid JSON. */
+function parseInput(raw: string | null): { value: unknown } | null {
+  if (raw === null) return { value: {} };
   try {
-    return JSON.parse(raw);
+    return { value: JSON.parse(raw) };
   } catch {
-    return undefined;
+    return null;
   }
 }
 
@@ -41,7 +42,9 @@ export async function GET(request: Request): Promise<NextResponse> {
       return invalidInput();
     }
     const definition = BACKGROUND_READS[kind];
-    const input = definition.input.safeParse(parseInput(query.get('input')));
+    const rawInput = parseInput(query.get('input'));
+    if (rawInput === null) return invalidInput();
+    const input = definition.input.safeParse(rawInput.value);
     if (!input.success) return invalidInput();
     const result = await withReadRequest(
       request,

@@ -11,7 +11,7 @@ import {
   VACATION_STATUS_LABELS,
   type VacationRequestStatus,
 } from '@/lib/vacation/types';
-import { cn, formatGermanDate } from '@/lib/utils';
+import { cn, formatGermanDateRange } from '@/lib/utils';
 
 const STATUS_BADGE_CLASSES: Record<VacationRequestStatus, string> = {
   pending: 'bg-warning-soft text-warning-soft-foreground',
@@ -20,11 +20,6 @@ const STATUS_BADGE_CLASSES: Record<VacationRequestStatus, string> = {
   withdrawn: 'bg-muted text-muted-foreground',
   cancelled: 'bg-muted text-muted-foreground',
 };
-
-function formatRange(startDate: string, endDate: string): string {
-  if (startDate === endDate) return formatGermanDate(startDate);
-  return `${formatGermanDate(startDate)} – ${formatGermanDate(endDate)}`;
-}
 
 type OwnVacationRequestListProps = {
   requests: VacationRequestListItem[];
@@ -50,7 +45,7 @@ export function OwnVacationRequestList({
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-sm font-medium tabular-nums">
-                      {formatRange(request.startDate, request.endDate)}
+                      {formatGermanDateRange(request.startDate, request.endDate)}
                     </span>
                     <span
                       className={cn(
@@ -82,7 +77,7 @@ export function OwnVacationRequestList({
                     size="sm"
                     onClick={() => void handleWithdraw(request)}
                     disabled={busy.isBusy(request.id)}
-                    aria-label={`Urlaubsantrag vom ${formatRange(request.startDate, request.endDate)} zurückziehen`}
+                    aria-label={`Urlaubsantrag vom ${formatGermanDateRange(request.startDate, request.endDate)} zurückziehen`}
                   >
                     Zurückziehen
                   </Button>

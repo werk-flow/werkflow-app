@@ -1,7 +1,7 @@
 'use server';
 
 import type { ActionFailure } from '@/lib/action-result';
-import { getAuthenticatedUser, getCachedMemberships } from '@/lib/data/cached';
+import { resolveActionContextFor } from '@/lib/org/action-context';
 import { getJobDisplayTitle } from '@/lib/jobs/types';
 import { getBusinessTodayIso } from '@/lib/personnel/types';
 import { logReadFailure } from '@/lib/data/read-request-cache';
@@ -72,19 +72,11 @@ export async function getJobsForPicker(
     const parsed = uuidSchema.safeParse(rawOrganizationId);
     if (!parsed.success) return { success: false, error: 'invalid_input' };
     const organizationId = parsed.data;
-    const user = await getAuthenticatedUser();
-    if (!user) {
-      return { success: false, error: 'not_authenticated' };
-    }
-
-    const memberships = await getCachedMemberships(user.id);
-    const role = memberships.find((membership) => membership.orgId === organizationId)?.role ?? null;
-    if (!role) {
-      return { success: false, error: 'not_a_member' };
-    }
+    const auth = await resolveActionContextFor(organizationId);
+    if (!auth.success) return auth;
+    const { userId, isManagerOrAbove } = auth.context;
 
     const admin = createSupabaseAdminClient();
-    const isManagerOrAbove = role === 'admin' || role === 'buero';
 
     let jobIds: string[] | null = null;
 
@@ -95,7 +87,7 @@ export async function getJobsForPicker(
             .from('job_assignments')
             .select('job_id')
             .eq('organization_id', organizationId)
-            .eq('user_id', user.id)
+            .eq('user_id', userId)
             .order('id')
             .range(from, to),
         LIST_ROW_CAP,
@@ -161,7 +153,7 @@ export async function getJobsForPicker(
           .eq('organization_id', organizationId)
           .in('id', [...batch]),
       ),
-      getJobIdsPlannedTodayForUser(admin, organizationId, user.id),
+      getJobIdsPlannedTodayForUser(admin, organizationId, userId),
     ]);
     const labelError = projectsData.error ?? clientsData.error;
     if (labelError) logReadFailure('getJobsForPicker: project or customer names failed', labelError);

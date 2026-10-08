@@ -1,6 +1,6 @@
 # Phase 1 Execution Protocol
 
-Status: living — last reviewed 2026-10-03
+Status: living — last reviewed 2026-10-05
 
 This file holds the durable process rules for Phase 1. It changes only when the process itself changes, and any such change needs an explicit progress-log entry naming the decision. The hot status and slice index live in [roadmap.md](roadmap.md); gate definitions in [gates.md](gates.md); routing matrices in [coverage.md](coverage.md); history in [log.md](log.md); per-slice acceptance evidence in `slices/`.
 
@@ -83,7 +83,7 @@ Use only these status values in the master slice index in [roadmap.md](roadmap.m
 | --- | --- |
 | `planned` | The slice belongs to Phase 1 but one or more prerequisites are not accepted. |
 | `ready` | All prerequisites and required decisions are accepted; work may begin. |
-| `in_progress` | An identified task/branch owns active implementation. |
+| `in_progress` | An identified task and session own active implementation on local `main`. |
 | `verification` | Implementation is complete enough for acceptance testing, review, migration checks, and documentation reconciliation. |
 | `complete` | Exit evidence is recorded, required golden gates pass, and affected docs reflect current behavior. |
 | `decision_blocked` | A named unresolved product/technical/legal decision prevents safe progress. |
@@ -97,7 +97,7 @@ These are deliberate warnings for future agents and the product owner, recorded 
 
 1. **Process-to-progress ratio.** The full slice set in [roadmap.md](roadmap.md) with full exit evidence is realistically a multi-year effort for a small team. The discipline exists to prevent an incoherent product, not to become the product. For low-risk slices (no schema migration, no permission change, no money/time/stock semantics), lighter evidence is acceptable — say so explicitly in the slice record instead of silently skipping items. When a slice consistently costs more in ceremony than in implementation, propose splitting or trimming it rather than abandoning the protocol.
 2. **Wave 4 is the risk concentration.** Invoices, controlled number ranges, XRechnung/ZUGFeRD profiles, GoBD-adjacent retention claims, and DATEV handoffs cannot be validated from documentation or competitor behavior. Budget for qualified German tax/legal/accounting review **before** accepting `P1-39`–`P1-43`, and treat its absence as a `decision_blocked` condition, not a footnote.
-3. **Select and qualify independent groups.** Run `bun run test:plan` before expensive verification. The automatic change plan controls slice acceptance; release mode controls wave and release acceptance ([testing](../../technical/testing.md#how-selection-works)). After a failed browser group, fix the cause and rerun the plan: repair mode selects only the failed groups, and their pass verifies the repair.
+3. **Select and qualify independent groups.** Run `bun run test:plan` before expensive verification. The automatic change plan controls slice acceptance; release mode controls wave and release acceptance ([testing](../../technical/testing.md#how-selection-works)). After a failed group, follow [Failures](../../technical/testing.md#failures), then rerun the plan: repair mode selects only the failed groups, and their pass verifies the repair.
 
 ## External Resources And Cost Gates
 
@@ -139,7 +139,7 @@ The agent stops and asks, with the `grilling` skill's numbered questions and a r
 - Make consequential actions explicit, previewable, attributable, and correctable.
 - Use backward-compatible migrations and preserve historical meaning.
 - Make failures and partial external states visible with a recovery path.
-- Cover every promised clause at the real boundary that can prove it. Use domain units for rules, SQL for database permissions and invariants, component browser checks for controls, and application browser groups for connected outcomes and visible role behavior. A slice still needs an automated browser proof of its own outcome. Reuse shared actions where they remove duplication; a browser helper lives in the domain module of its product area under `tests/golden/support/steps/` or `db/`, never in a file every group imports.
+- Cover every promised clause at the real boundary that can prove it. Use domain units for rules, SQL for database permissions and invariants, component browser checks for controls, and application browser groups for connected outcomes and visible role behavior. A slice still needs an automated browser proof of its own outcome. Reuse shared actions where they remove duplication; [Specs](../../technical/testing.md#specs) owns where a browser helper lives.
 - Use explicit groups during implementation and the automatic change plan for acceptance. Every browser test prepares its own prerequisites and passes alone and in any order; a connected business transaction stays inside one test with named steps, and no test consumes another test's output ([the spec checklist](../../technical/testing.md#spec-checklist)). Each independent group owns its world and output files. Retained diagnostics explain failures but do not qualify as fresh acceptance evidence.
 - Ship complete catalog coverage with the slice. Update `lib/testing/selection/coverage-map.json` and the owning executable groups in `lib/testing/selection/test-groups.ts`. Record which assertions prove each observable clause and review their meaning. Audit browser specs cover the clauses that require the running app; other clauses can use domain, SQL, or component evidence. Remove duplicate execution only when its coverage remains explicit. The wave ledger records accepted evidence and links its owners.
 - Keep field-worker paths simpler than office paths and use natural German for user-facing language.
@@ -165,7 +165,8 @@ The slice is not complete until all applicable items are satisfied:
 - the slice's acceptance is recorded in its owning files: the slice record under `slices/` closes with the full acceptance evidence, completion date, follow-up work, and any split/superseding slices (the record is the canonical home for the slice's facts); [roadmap.md](roadmap.md) updates the index-row status, the checkpoint table, the accepted counter, and the recomputed `ready` set; [log.md](log.md) gains one short appended entry linking the record;
 - the automatic local change plan passes, including the selected browser groups on a recorded production build; provider changes also receive the applicable cloud canary evidence; the slice record and [gate log](audits/golden-gate-log.md) identify the verification report, selected scope, reused results, and fresh runs;
 - every failure is diagnosed, classified and recorded as [testing.md](../../technical/testing.md#failures) requires; an unresolved selected group blocks acceptance, and retained worlds are cleaned before closure;
-- the deletion pass and the independent review below are recorded in the slice record, and the review leaves no unresolved correctness, security, data-loss, or documentation issue.
+- the deletion pass and the independent review below are recorded in the slice record, and the review leaves no unresolved correctness, security, data-loss, or documentation issue;
+- the commit on local `main` reaches `partner-preview` through the [publication gate](../../technical/testing.md#publication-gate), without an override the owner did not give.
 
 ### Campaign Line
 
@@ -223,7 +224,7 @@ Parallel delivery is allowed only when it reduces risk rather than creating comp
 - A dependent slice cannot begin merely because its prerequisite is “mostly done”; the prerequisite must be accepted or the child must explicitly narrow its dependency.
 - Two slices must not independently introduce shared task, approval, notification, communication, audit, identity, or permission primitives.
 - Agents sharing local `main` must agree file ownership and a migration sequence before concurrent edits. Decision 0008 excludes separate implementation branches.
-- Checks covering both changes run against the combined, stable working tree after both writers finish. Do not qualify evidence while another agent edits its inputs.
+- Checks covering both changes run against the combined, stable working tree after both writers finish. Do not qualify evidence while another agent edits its inputs; while a run holds the workspace lock, the [edit guard](../../technical/testing.md#how-a-run-executes) refuses edits to proof inputs.
 - If a parallel slice discovers a new prerequisite, update the slice index in [roadmap.md](roadmap.md) and return the slice to `planned` or `decision_blocked`; do not implement a local substitute.
 
 ## Slice Brief Template
@@ -334,7 +335,7 @@ Status changes touch the files that own them: the index row and checkpoint in [r
 ### When A Slice Completes
 
 - Close the slice record with the full acceptance evidence and completion date — the record is the canonical home of the evidence and the reasoning; other docs link it for those.
-- Move every lasting fact out of the record before it closes (owner rule 2026-09-17, [README maintenance rule 6](../../README.md#maintenance-rules)): deferred items, open decisions, constraints, research findings and follow-ups go to the owning spec, the technical doc, the backlog or the roadmap, stated in full there, and the record's `## Durable homes` section lists the destinations. A closed record is never the only home of something a later slice needs; `docs:check` check 14 refuses to close one without the section.
+- Move every lasting fact out of the record before it closes (owner rule 2026-09-17, [README maintenance rule 6](../../README.md#maintenance-rules)): deferred items, open decisions, constraints, research findings and follow-ups go to the owning spec, the technical doc, the backlog or the roadmap, stated in full there, and the record's `## Durable homes` section lists the destinations. A closed record is never the only home of something a later slice needs; `docs:check` refuses to close one without the section.
 - Change the index-row status to `complete`, and bump the accepted counter in the status blockquote.
 - Append a short completion entry in [log.md](log.md) that links the slice record.
 - Move delivered behavior into the primary and connected feature baselines.

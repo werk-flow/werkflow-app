@@ -2,6 +2,8 @@
 
 Status: closed (2026-08-31) — accepted P1-20 acceptance record; canonical home for the slice's evidence
 
+> This record is history. Do not carry out its instructions: the living docs that the index lists hold the current rules.
+
 ## Outcome
 
 Admin and Büro can define service-owned maintenance plans and operational coverage for one customer site and a bounded set of exact installed-equipment records. Plans generate stable due work before a job exists. A manager deliberately creates and schedules each normal visit job, while existing planning, work-template, execution, evidence, equipment-history, document, follow-up and reactive-service owners retain their facts.

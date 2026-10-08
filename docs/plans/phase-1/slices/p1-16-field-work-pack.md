@@ -2,6 +2,8 @@
 
 Status: closed (2026-08-25) — accepted P1-16 acceptance record; canonical home for the slice's evidence
 
+> This record is history. Do not carry out its instructions: the living docs that the index lists hold the current rules.
+
 ## Outcome
 
 Assigned field workers receive one focused job work pack that composes the existing job, dispatch, lifecycle, instruction, evidence, document, time, inventory and blocker owners. Admin and Büro keep the existing full job detail. The slice creates no work-pack storage, schema, external service, offline queue, customer package or parallel business state.

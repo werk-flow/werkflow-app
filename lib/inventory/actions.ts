@@ -276,12 +276,13 @@ async function getJobContext(
   );
 
   const job = asRow<{ id: string; project_id: string | null }>(data);
-  if (error || !job) {
+  if (error) return { success: false, error: 'load_failed' };
+  if (!job) {
     return { success: false, error: 'job_not_found' };
   }
 
   if (!context.isManagerOrAbove) {
-    const { data: assignment } = await loggedRead(
+    const { data: assignment, error: assignmentError } = await loggedRead(
       'getJobContext: job_assignments read failed',
       admin
         .from('job_assignments')
@@ -291,6 +292,7 @@ async function getJobContext(
         .eq('user_id', context.userId)
         .maybeSingle(),
     );
+    if (assignmentError) return { success: false, error: 'load_failed' };
 
     if (!assignment) {
       return { success: false, error: 'not_authorized' };
@@ -316,7 +318,8 @@ async function getProjectContext(
   );
 
   const project = asRow<{ id: string }>(data);
-  if (error || !project) {
+  if (error) return { success: false, error: 'load_failed' };
+  if (!project) {
     return { success: false, error: 'project_not_found' };
   }
 
@@ -775,7 +778,7 @@ async function insertMaterialLine(
   const plannedQuantity = normalizeQuantity(input.plannedQuantity);
   if (plannedQuantity <= 0) return { success: false, error: 'quantity_required' };
 
-  const { data: itemRow } = await loggedRead(
+  const { data: itemRow, error: itemRowError } = await loggedRead(
     readLabel,
     admin
       .from('inventory_items')
@@ -784,6 +787,7 @@ async function insertMaterialLine(
       .eq('organization_id', context.orgId)
       .maybeSingle(),
   );
+  if (itemRowError) return { success: false, error: 'load_failed' };
 
   const item = itemRow ? toInventoryItem(itemRow as InventoryItemRow) : null;
   if (!item) return { success: false, error: 'item_not_found' };
@@ -877,7 +881,7 @@ export async function updateJobMaterialLine(
   if (!auth.success) return auth;
 
   const admin = createSupabaseAdminClient();
-  const { data: existing } = await loggedRead(
+  const { data: existing, error: existingError } = await loggedRead(
     'updateJobMaterialLine: job_material_lines read failed',
     admin
       .from('job_material_lines')
@@ -886,6 +890,7 @@ export async function updateJobMaterialLine(
       .eq('organization_id', auth.context.orgId)
       .maybeSingle(),
   );
+  if (existingError) return { success: false, error: 'load_failed' };
 
   if (!existing) return { success: false, error: 'line_not_found' };
 
@@ -899,7 +904,7 @@ export async function updateJobMaterialLine(
       return { success: false, error: 'line_has_movements' };
     }
 
-    const { data: itemRow } = await loggedRead(
+    const { data: itemRow, error: itemRowError } = await loggedRead(
       'updateJobMaterialLine: inventory_items read failed',
       admin
         .from('inventory_items')
@@ -908,6 +913,7 @@ export async function updateJobMaterialLine(
         .eq('organization_id', auth.context.orgId)
         .maybeSingle(),
     );
+    if (itemRowError) return { success: false, error: 'load_failed' };
 
     const item = itemRow ? toInventoryItem(itemRow as InventoryItemRow) : null;
     if (!item) return { success: false, error: 'item_not_found' };
@@ -940,18 +946,24 @@ export async function updateJobMaterialLine(
     return { success: false, error: 'no_changes' };
   }
 
-  const { data, error } = await admin
+  const lineUpdate = admin
     .from('job_material_lines')
     .update(updateData)
     .eq('id', input.lineId)
-    .eq('organization_id', auth.context.orgId)
-    .select()
-    .single();
+    .eq('organization_id', auth.context.orgId);
+  // A new item needs a line without movements; the filters refuse a movement booked after the check.
+  const itemChanges = updateData.item_id !== undefined;
+  const { data, error } = await (
+    itemChanges ? lineUpdate.eq('taken_quantity', 0).eq('returned_quantity', 0) : lineUpdate
+  )
+    .select('id')
+    .maybeSingle();
 
-  if (error || !data) {
+  if (error) {
     logError('Error updating job material line:', error);
     return { success: false, error: 'update_failed' };
   }
+  if (!data) return { success: false, error: itemChanges ? 'line_has_movements' : 'line_not_found' };
 
   invalidateInventory();
   revalidatePath('/auftraege', 'layout');
@@ -969,7 +981,7 @@ export async function deleteJobMaterialLine(lineIdInput: string): Promise<Action
   if (!auth.success) return auth;
 
   const admin = createSupabaseAdminClient();
-  const { data: existing } = await loggedRead(
+  const { data: existing, error: existingError } = await loggedRead(
     'deleteJobMaterialLine: job_material_lines read failed',
     admin
       .from('job_material_lines')
@@ -978,10 +990,13 @@ export async function deleteJobMaterialLine(lineIdInput: string): Promise<Action
       .eq('organization_id', auth.context.orgId)
       .maybeSingle(),
   );
+  if (existingError) return { success: false, error: 'load_failed' };
 
   const line = asRow<JobMaterialLineRow>(existing);
   if (!line) return { success: false, error: 'line_not_found' };
 
+  // A line with movements is cancelled so its ledger keeps the line; one without
+  // is deleted. The quantity filters refuse a movement booked after the check.
   const hasMovement = toNumber(line.taken_quantity) > 0 || toNumber(line.returned_quantity) > 0;
   const result = hasMovement
     ? await admin
@@ -989,16 +1004,22 @@ export async function deleteJobMaterialLine(lineIdInput: string): Promise<Action
         .update({ status: 'cancelled' })
         .eq('id', lineId)
         .eq('organization_id', auth.context.orgId)
+        .or('taken_quantity.gt.0,returned_quantity.gt.0')
+        .select('id')
     : await admin
         .from('job_material_lines')
         .delete()
         .eq('id', lineId)
-        .eq('organization_id', auth.context.orgId);
+        .eq('organization_id', auth.context.orgId)
+        .eq('taken_quantity', 0)
+        .eq('returned_quantity', 0)
+        .select('id');
 
   if (result.error) {
     logError('Error deleting job material line:', result.error);
     return { success: false, error: 'delete_failed' };
   }
+  if (result.data.length !== 1) return { success: false, error: 'line_changed' };
 
   invalidateInventory();
   revalidatePath('/auftraege', 'layout');
@@ -1280,7 +1301,7 @@ export async function takeJobMaterial(
 
   let result: ActionResult<{ quantityAfter: number }>;
   if (input.lineId) {
-    const { data: line } = await loggedRead(
+    const { data: line, error: lineError } = await loggedRead(
       'takeJobMaterial: job_material_lines read failed',
       admin
         .from('job_material_lines')
@@ -1290,6 +1311,7 @@ export async function takeJobMaterial(
         .eq('job_id', input.jobId)
         .maybeSingle(),
     );
+    if (lineError) return { success: false, error: 'load_failed' };
     const existingLine = asRow<JobMaterialLineRow>(line);
     if (!existingLine) return { success: false, error: 'line_not_found' };
     result = await recordMovement(admin, auth.context, {
@@ -1340,7 +1362,7 @@ export async function takeProjectMaterial(
 
   let result: ActionResult<{ quantityAfter: number }>;
   if (input.lineId) {
-    const { data: line } = await loggedRead(
+    const { data: line, error: lineError } = await loggedRead(
       'takeProjectMaterial: job_material_lines read failed',
       admin
         .from('job_material_lines')
@@ -1351,6 +1373,7 @@ export async function takeProjectMaterial(
         .is('job_id', null)
         .maybeSingle(),
     );
+    if (lineError) return { success: false, error: 'load_failed' };
     const existingLine = asRow<JobMaterialLineRow>(line);
     if (!existingLine) return { success: false, error: 'line_not_found' };
     result = await recordMovement(admin, auth.context, {
@@ -1394,7 +1417,7 @@ export async function returnJobMaterial(
   if (quantity <= 0) return { success: false, error: 'quantity_required' };
 
   const admin = createSupabaseAdminClient();
-  const { data: lineData } = await loggedRead(
+  const { data: lineData, error: lineDataError } = await loggedRead(
     'returnJobMaterial: job_material_lines read failed',
     admin
       .from('job_material_lines')
@@ -1403,6 +1426,7 @@ export async function returnJobMaterial(
       .eq('organization_id', auth.context.orgId)
       .maybeSingle(),
   );
+  if (lineDataError) return { success: false, error: 'load_failed' };
 
   const line = asRow<JobMaterialLineRow>(lineData);
   if (!line) return { success: false, error: 'line_not_found' };

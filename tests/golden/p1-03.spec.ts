@@ -66,13 +66,13 @@ test.describe('P1-03 Personalidentität und Konditionen @P1-03', () => {
     // A past version and a version effective today.
     await addConditionViaDialog(adminPage, {
       validFromDigits: toDatePickerDigits(pastIso),
-      employmentTypeLabel: EMPLOYMENT_TYPE_LABELS.vollzeit,
+      employmentType: 'vollzeit',
       weeklyHours: '40',
       vacationDays: '30',
     });
     await addConditionViaDialog(adminPage, {
       validFromDigits: toDatePickerDigits(businessDate),
-      employmentTypeLabel: EMPLOYMENT_TYPE_LABELS.teilzeit,
+      employmentType: 'teilzeit',
       weeklyHours: '25',
     });
 

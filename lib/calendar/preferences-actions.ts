@@ -7,8 +7,9 @@ import { CACHE_TAGS } from '@/lib/data/cached';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { logError } from '@/lib/logging';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { uuidSchema } from '@/lib/validation/uuid';
-import { calendarPreferencesSchema, writeCalendarPreferencesJson } from './preferences';
+import { CALENDAR_PREFERENCE_PATH, calendarPreferencesSchema } from './preferences';
 
 export type SaveCalendarPreferencesResult = ActionResult<
   object,
@@ -49,27 +50,19 @@ export async function saveCalendarPreferences(
   if (!parsed.success) return { success: false, error: 'invalid_input' };
 
   const { orgId, userId } = auth.context;
-  // A fresh read, not the cached row: another key of the same JSON may have changed since the cache filled.
-  const admin = createSupabaseAdminClient();
-  const { data: current, error: readError } = await admin
-    .from('organization_user_preferences')
-    .select('preferences')
-    .eq('organization_id', orgId)
-    .eq('user_id', userId)
-    .maybeSingle();
-  if (readError) {
-    logError('Error reading calendar preferences', readError);
-    return { success: false, error: 'update_failed' };
-  }
-  const { error } = await admin.from('organization_user_preferences').upsert(
-    {
-      organization_id: orgId,
-      user_id: userId,
-      preferences: writeCalendarPreferencesJson(current?.preferences ?? null, parsed.data),
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'organization_id,user_id' },
+  // Sets this one key in the stored document; a concurrent save of another key survives.
+  const { error } = await createSupabaseAdminClient().rpc(
+    'set_organization_user_preference',
+    rpcArgs('set_organization_user_preference', {
+      p_organization_id: orgId,
+      p_user_id: userId,
+      p_path: CALENDAR_PREFERENCE_PATH,
+      p_value: parsed.data,
+    }),
   );
+  if (error?.message === 'not_a_member' || error?.message === 'invalid_input') {
+    return { success: false, error: error.message };
+  }
   if (error) {
     logError('Error saving calendar preferences', error);
     return { success: false, error: 'update_failed' };

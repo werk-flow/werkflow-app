@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { countWords, findDatedLines, findDocumentReferences } from './living-doc-rules';
+import {
+  countWords,
+  findDatedLines,
+  findDocumentReferences,
+  findMismatchedGermanQuotes,
+} from './living-doc-rules';
 
 describe('dates in a living doc', () => {
   test('allows the status line and a dated anchor inside a link target', () => {
@@ -47,5 +52,16 @@ describe('references from guidance files', () => {
   test('ignores external links, bare anchors, code paths and skill-relative names', () => {
     const markdown = '[site](https://example.com) [here](#top) `lib/storage/r2.ts` `references/README.md`';
     expect(findDocumentReferences(markdown)).toEqual([]);
+  });
+});
+
+describe('German quotation marks', () => {
+  test('a quotation that opens with „ closes with “', () => {
+    expect(findMismatchedGermanQuotes('The button says „Speichern“ and „Hinweis schließen“.')).toEqual([]);
+  });
+
+  test('a straight or English closing quote after „ fails on its line', () => {
+    const markdown = ['Fine „Kalender“.', 'Name it „Hinweis schließen".', 'Or „Rückgängig” here.'].join('\n');
+    expect(findMismatchedGermanQuotes(markdown)).toEqual([2, 3]);
   });
 });

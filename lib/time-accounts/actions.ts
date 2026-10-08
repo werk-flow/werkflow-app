@@ -556,6 +556,7 @@ async function readBlockingSessionNames(
     const sessions = await readOpenPeriodSessions(admin, organizationId, period.period_end_date);
     return [...new Set(sessions.map((session) => session.employeeName))];
   } catch (error) {
+    // best-effort: the close is still refused; only the names in the refusal are missing.
     logError('closeTimePeriod: open session names failed', error);
     return [];
   }
@@ -1243,22 +1244,27 @@ async function buildAndStorePayrollExport(
   periodId: string,
 ): Promise<void> {
   const admin = createSupabaseAdminClient();
-  const { data: period } = await loggedRead(
+  const { data: period, error: periodError } = await loggedRead(
     'generatePayrollExport: time_periods read failed',
-    admin.from('time_periods').select('*').eq('id', periodId).eq('organization_id', context.orgId).single(),
-    true,
+    admin
+      .from('time_periods')
+      .select('*')
+      .eq('id', periodId)
+      .eq('organization_id', context.orgId)
+      .maybeSingle(),
   );
+  if (periodError) throw new Error('load_failed');
   if (!period?.current_calculation_id || !period.current_close_version_id)
     throw new Error('period_not_closed');
-  const { data: profile } = await loggedRead(
+  const { data: profile, error: profileError } = await loggedRead(
     'generatePayrollExport: payroll_mapping_profiles read failed',
     admin
       .from('payroll_mapping_profiles')
       .select('current_version_id')
       .eq('organization_id', context.orgId)
-      .single(),
-    true,
+      .maybeSingle(),
   );
+  if (profileError) throw new Error('load_failed');
   if (!profile?.current_version_id) throw new Error('mapping_not_configured');
   const {
     calculation,
@@ -1428,7 +1434,7 @@ export async function downloadPayrollExport(
 
 async function createPayrollExportDownloadUrl(context: { orgId: string }, exportId: string): Promise<string> {
   const admin = createSupabaseAdminClient();
-  const { data: exportRow } = await loggedRead(
+  const { data: exportRow, error: exportError } = await loggedRead(
     'downloadPayrollExport: payroll_exports read failed',
     admin
       .from('payroll_exports')
@@ -1436,20 +1442,20 @@ async function createPayrollExportDownloadUrl(context: { orgId: string }, export
       .eq('id', exportId)
       .eq('organization_id', context.orgId)
       .eq('state', 'ready')
-      .single(),
-    true,
+      .maybeSingle(),
   );
+  if (exportError) throw new Error('load_failed');
   if (!exportRow?.document_id) throw new Error('export_not_ready');
-  const { data: document } = await loggedRead(
+  const { data: document, error: documentError } = await loggedRead(
     'downloadPayrollExport: documents read failed',
     admin
       .from('documents')
       .select('storage_path, original_file_name')
       .eq('id', exportRow.document_id)
       .eq('organization_id', context.orgId)
-      .single(),
-    true,
+      .maybeSingle(),
   );
+  if (documentError) throw new Error('load_failed');
   if (!document) throw new Error('document_not_found');
   return createSignedDownloadUrl({
     path: document.storage_path,

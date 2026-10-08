@@ -1,7 +1,7 @@
 'use client';
 
 import { useBanner } from '@/components/ui/banner';
-import { useAttentionCounts } from '@/components/realtime/attention-count-provider';
+import { useAttentionCountsFromOverview } from '@/components/realtime/attention-count-provider';
 import { markAllAttentionNotificationsRead, markAttentionNotificationRead } from '@/lib/attention/actions';
 import type { AttentionNotification, AttentionOverview } from '@/lib/attention/types';
 import { readInBackground } from '@/lib/data/background-read-client';
@@ -22,7 +22,6 @@ function notificationKey(notification: AttentionNotification): string {
 export function useAufgabenOverview() {
   const { showBanner } = useBanner();
   const busy = useBusyIds();
-  const { refreshAttentionCounts } = useAttentionCounts();
 
   // Keep last-known data on transient failures; only a failed initial
   // load shows the visible failure state.
@@ -59,6 +58,9 @@ export function useAufgabenOverview() {
   useBusinessDayRefresh(view.refresh);
 
   const overview = view.data ?? null;
+  // The badges count this overview while the page is open: one derivation
+  // per event instead of two, and a mark-as-read moves them with the dot.
+  useAttentionCountsFromOverview(overview);
   const refetch = view.refresh;
   const isMarkingAllRead = busy.isBusy(ALL_NOTIFICATIONS_ID);
 
@@ -117,7 +119,6 @@ export function useAufgabenOverview() {
         return;
       }
       await refetch();
-      void refreshAttentionCounts();
     });
   };
 

@@ -36,7 +36,12 @@ import {
 import { readPerformanceBaselines } from '../lib/testing/performance-baselines';
 import { recordGroupDiagnosis } from '../lib/testing/evidence/group-diagnosis';
 import { classificationProblem } from '../lib/testing/evidence/browser-group-evidence';
-import { readdirSync, readFileSync, rmSync } from 'node:fs';
+import { readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  incidentPreventionProblem,
+  recordsIncident,
+  withIncidentEntry,
+} from '../lib/testing/runs/incident-record';
 
 function printRuns(): void {
   for (const line of formatRunInventory(listRunManifests())) console.log(line);
@@ -237,12 +242,13 @@ async function main(): Promise<void> {
       );
       return;
     }
-    const refusal = classificationProblem({
-      classification,
-      run: readRunManifest(runKey),
-      runs: listRunManifests(),
-    });
+    const run = readRunManifest(runKey);
+    const refusal = classificationProblem({ classification, run, runs: listRunManifests() });
     if (refusal) throw new Error(refusal);
+    // A failed acceptance run gets its incident-log entry from this command (testing.md, "Failures").
+    const writesIncident = recordsIncident(run, classification);
+    const preventionProblem = writesIncident ? incidentPreventionProblem(prevention) : null;
+    if (preventionProblem) throw new Error(preventionProblem);
     updateRunManifest(runKey, {
       classification,
       classifiedAt: new Date().toISOString(),
@@ -250,6 +256,27 @@ async function main(): Promise<void> {
       prevention,
     });
     console.log(`[werkflow-test] classified ${runKey} as ${classification}`);
+    if (!writesIncident || !run.groupId) return;
+    const incidentLog = resolve(import.meta.dir, '../docs/technical/test-incident-log.md');
+    const firstFailure = run.failures[0];
+    writeFileSync(
+      incidentLog,
+      withIncidentEntry(readFileSync(incidentLog, 'utf8'), {
+        runKey,
+        groupId: run.groupId,
+        target: run.target ?? 'cloud',
+        groupFingerprint: run.groupFingerprint ?? null,
+        worldId: run.world?.runId ?? null,
+        startedAt: run.startedAt,
+        classification,
+        firstFailure: firstFailure ? { title: firstFailure.title, message: firstFailure.message } : null,
+        rootCause,
+        prevention,
+      }),
+    );
+    console.log(
+      `[werkflow-test] wrote the incident entry of ${runKey} into docs/technical/test-incident-log.md; add the evidence, correction and focused proof under it when the repair lands.`,
+    );
     return;
   }
   throw new Error(`Unknown command: ${command}`);

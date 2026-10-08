@@ -2,6 +2,8 @@
 
 Status: closed (2026-09-02) — accepted P1-24 acceptance record; canonical home for the slice's evidence
 
+> This record is history. Do not carry out its instructions: the living docs that the index lists hold the current rules.
+
 ## Bounded outcome
 
 Protected personnel documents, bounded onboarding requirements and acknowledgements, organization-scoped access transitions, employment transitions, and explicit responsibility handoff form one controlled people lifecycle around the existing stable personnel identity. The slice preserves operational history and leaves physical asset return, final settlement, immutable retention, legal hold, and full organization export to their owning later slices.

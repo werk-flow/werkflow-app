@@ -1,10 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import {
-  DEFAULT_CALENDAR_PREFERENCES,
-  readCalendarPreferences,
-  resolveShowActualTime,
-  writeCalendarPreferencesJson,
-} from './preferences';
+import { DEFAULT_CALENDAR_PREFERENCES, readCalendarPreferences, resolveShowActualTime } from './preferences';
 
 describe('calendar preferences', () => {
   test('reads defaults for missing, damaged and foreign JSON', () => {
@@ -33,18 +28,6 @@ describe('calendar preferences', () => {
       search: 'Heizung',
       view: 'week',
     });
-  });
-
-  test('writes beside other preference keys without touching them', () => {
-    const json = writeCalendarPreferencesJson(
-      { auftraege: { visibleColumns: ['title'] } },
-      { ...DEFAULT_CALENDAR_PREFERENCES, hideWeekends: true },
-    );
-    expect(json).toEqual({
-      auftraege: { visibleColumns: ['title'] },
-      calendar: { ...DEFAULT_CALENDAR_PREFERENCES, hideWeekends: true },
-    });
-    expect(readCalendarPreferences(json).hideWeekends).toBe(true);
   });
 
   test('actual time follows the horizon until the user chooses', () => {
