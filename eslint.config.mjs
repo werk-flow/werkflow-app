@@ -6,6 +6,7 @@ import {
   MEASUREMENT_DIGEST_SUPPORT_FILES,
   playwrightSpecRules,
 } from './eslint-rules/playwright-spec-rules.mjs';
+import { qualityRules } from './eslint-rules/quality-rules.mjs';
 import { uiRules } from './eslint-rules/ui-rules.mjs';
 import {
   COMPONENT_FILE_LINE_LIMIT,
@@ -462,6 +463,16 @@ const dateTextSelectors = [
   },
 ];
 
+// A clock time has one home: an inline toLocaleTimeString copy drifts to the
+// browser's time zone and renders differently on the server (code-quality.md).
+const timeOfDaySelectors = [
+  {
+    selector: 'CallExpression[callee.property.name="toLocaleTimeString"]',
+    message:
+      'Format a clock time with formatBerlinTime (lib/utils), or toLocalTimeOfDay for a time input value; one home per formatter (code-quality.md).',
+  },
+];
+
 // Color literals in component code: a raw hex or functional color value
 // escapes the arbitrary-class ban above. JSX files only; test fixtures may hold hex.
 const colorLiteralSelectors = [
@@ -669,6 +680,35 @@ const transitionExemptFiles = [
   'components/dokumente/document-library-content.tsx',
 ];
 
+// Injected inline scripts: the script policy still allows 'unsafe-inline'
+// (docs/technical/security.md, "Known residual exposure"), so the code must
+// not create a raw HTML or code sink. React escapes every rendered value; these
+// are the ways around it. No product file uses one.
+const htmlSinkSelectors = [
+  {
+    selector: 'JSXAttribute[name.name="dangerouslySetInnerHTML"]',
+    message: 'No raw HTML: render values as React children, which escapes them (security.md, Browser).',
+  },
+  {
+    selector: 'AssignmentExpression > MemberExpression.left[property.name=/^(innerHTML|outerHTML)$/]',
+    message: 'No innerHTML or outerHTML assignment: it parses the value as HTML (security.md, Browser).',
+  },
+  {
+    selector: 'CallExpression[callee.object.name="document"][callee.property.name=/^(write|writeln)$/]',
+    message: 'No document.write: it parses the value as HTML (security.md, Browser).',
+  },
+  {
+    selector: 'CallExpression[callee.property.name="insertAdjacentHTML"]',
+    message: 'No insertAdjacentHTML: it parses the value as HTML (security.md, Browser).',
+  },
+  {
+    selector:
+      'CallExpression[callee.name="eval"], NewExpression[callee.name="Function"], CallExpression[callee.name="Function"]',
+    message:
+      "No eval or Function constructor: the script policy has no 'unsafe-eval' (security.md, Browser).",
+  },
+];
+
 // Every exception subtracts only its named permission from a complete scope.
 // Flat-config replacement can no longer omit an unrelated newly added selector.
 function productRestrictions({ jsx = false, allow = [] } = {}) {
@@ -683,6 +723,8 @@ function productRestrictions({ jsx = false, allow = [] } = {}) {
       ...transitionSelectors,
       ...swallowedRejectionSelectors,
       ...doubleCastSelectors,
+      ...timeOfDaySelectors,
+      ...htmlSinkSelectors,
       ...(jsx
         ? [
             ...shellSelectors,
@@ -818,14 +860,16 @@ const eslintConfig = defineConfig([
     rules: {
       'playwright-spec/no-unscoped-page-selectors': 'error',
       'playwright-spec/no-visible-text-zero-count': 'error',
+      'playwright-spec/no-one-shot-count-comparison': 'error',
       'no-restricted-syntax': ['error', ...alwaysOnSelectors, ...prodRefSelectors, ...specSelectors],
     },
   },
   // Locator ownership (docs/technical/testing.md): a browser spec passes data,
   // and its area module under tests/golden/support/steps/ owns the copy, the
   // structure hooks and the key presses. The performance specs are exempt:
-  // they are measurement-digest inputs (lib/testing/performance-context.ts),
-  // and editing one orphans every reviewed performance reference.
+  // the tests that record a scenario are measurement-digest inputs
+  // (lib/testing/measured-test-source.ts) and change only with a recalibration
+  // (enforcement-ladder backlog, "Locators of the performance specs").
   {
     files: ['tests/golden/*.spec.ts', 'tests/audit/**/*.spec.ts', 'tests/canary/**/*.spec.ts'],
     ignores: ['tests/audit/performance/**'],
@@ -850,6 +894,7 @@ const eslintConfig = defineConfig([
       'playwright-spec/no-raw-key-press': 'error',
       'playwright-spec/no-transport-internals': 'error',
       'playwright-spec/no-scoped-has-locator': 'error',
+      'playwright-spec/no-one-shot-count-comparison': 'error',
     },
   },
   // Product code: auth + prod-ref + Realtime ownership + styling canon. The
@@ -879,6 +924,16 @@ const eslintConfig = defineConfig([
           message: 'Log through logError from lib/logging.ts: a raw error object can carry personal data.',
         },
       ],
+    },
+  },
+  // A catch that only logs or drops the failure hides it from the user and
+  // the caller; a genuine best effort says so with `// best-effort: <reason>`.
+  {
+    files: [...productFiles, 'proxy.ts'],
+    ignores: ['**/*.test.*', 'lib/testing/**'],
+    plugins: { quality: qualityRules },
+    rules: {
+      'quality/no-silent-catch': 'error',
     },
   },
   // Test doubles under lib/ may build partial fixtures through a double cast.
