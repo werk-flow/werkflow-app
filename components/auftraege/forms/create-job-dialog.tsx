@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -52,7 +51,6 @@ export function CreateJobDialog({
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : internalOpen;
   const setOpen = isControlled ? (v: boolean) => controlledOnOpenChange?.(v) : setInternalOpen;
-  const router = useRouter();
   const [isCreating, setIsCreating] = useState(false);
 
   return (
@@ -90,13 +88,10 @@ export function CreateJobDialog({
           readOnlyClient={readOnlyClient}
           readOnlyProject={readOnlyProject}
           onPendingChange={setIsCreating}
+          // createJob's response renders the route, so no refresh follows.
           onSuccess={async (payload) => {
             setOpen(false);
-            if (onJobCreated) {
-              await onJobCreated(payload);
-              return;
-            }
-            router.refresh();
+            await onJobCreated?.(payload);
           }}
         />
       </DialogContent>

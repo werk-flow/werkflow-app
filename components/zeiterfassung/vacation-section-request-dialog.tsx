@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -26,6 +25,7 @@ import { getBusinessTodayIso } from '@/lib/personnel/types';
 import { describeFailure } from '@/lib/action-messages';
 import { useVacationDaysPreview } from './use-vacation-section-days-preview';
 import { getVacationRequestErrorMessage, REQUEST_ERROR_MESSAGES } from './vacation-section-messages';
+import { Spinner } from '@/components/ui/spinner';
 
 const PREVIEW_ERROR_MESSAGES = {
   no_employee_record: REQUEST_ERROR_MESSAGES.no_employee_record,
@@ -141,7 +141,7 @@ function VacationDaysPreviewStatus({
     <div aria-live="polite" className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
       {isPreviewing ? (
         <span className="flex items-center gap-2 text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" />
+          <Spinner />
           Urlaubstage werden berechnet…
         </span>
       ) : previewDays !== null ? (
@@ -284,8 +284,7 @@ export function OwnVacationRequestDialog({
             <Button type="button" variant="outline" onClick={() => onClose(false)} disabled={isSaving}>
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isSaving || isPreviewing}>
-              {isSaving && <Loader2 className="size-4 animate-spin" />}
+            <Button pending={isSaving} type="submit" disabled={isSaving || isPreviewing}>
               {isSaving ? 'Wird eingereicht…' : 'Antrag einreichen'}
             </Button>
           </DialogFooter>

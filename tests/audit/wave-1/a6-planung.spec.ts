@@ -742,7 +742,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     });
 
     // A6 creates its own no-login personnel record and plans ONLY that record.
-    const noLoginRecordId = await createPersonnelRecordViaDialog(adminPage, {
+    const { id: noLoginRecordId } = await createPersonnelRecordViaDialog(adminPage, {
       firstName: 'Nora',
       lastName: `Nachweis-${world.runId}`,
     });

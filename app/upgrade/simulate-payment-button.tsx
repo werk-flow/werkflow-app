@@ -3,12 +3,12 @@ import { ErrorText } from '@/components/ui/error-text';
 
 import { useState } from 'react';
 import { unstable_rethrow } from 'next/navigation';
-import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { simulatePayment } from '@/lib/subscription/actions';
+import { Spinner } from '@/components/ui/spinner';
 
 const PAYMENT_ERROR_MESSAGES: Readonly<Record<string, string>> = {
   too_many_attempts: 'Zu viele Versuche. Bitte warte etwas und versuche es dann erneut.',
@@ -45,7 +45,7 @@ export function SimulatePaymentButton() {
       <Button onClick={handleClick} disabled={isLoading} className="w-full" size="lg">
         {isLoading ? (
           <>
-            <Loader2 className="mr-2 size-4 animate-spin" />
+            <Spinner className="mr-2" />
             Wird verarbeitet…
           </>
         ) : (

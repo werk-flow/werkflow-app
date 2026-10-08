@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertTriangle, Loader2, Repeat2 } from 'lucide-react';
+import { AlertTriangle, Repeat2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -62,13 +62,13 @@ export function PlanningSeriesScopeField({
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">Die Serie ist zunächst 18 Monate im Voraus geplant.</p>
           <Button
+            pending={extending}
             type="button"
             variant="outline"
             size="sm"
             disabled={extending}
             onClick={() => void extension.handleExtendSeries()}
           >
-            {extending && <Loader2 className="size-4 animate-spin" />}
             {extending
               ? 'Wird verlängert …'
               : extendConflicts.length > 0

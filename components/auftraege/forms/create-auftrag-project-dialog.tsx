@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Briefcase, FolderKanban, Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -56,7 +55,6 @@ export function CreateAuftragProjectDialog({
   onJobSubmit,
   onProjectSubmit,
 }: CreateAuftragProjectDialogProps) {
-  const router = useRouter();
   const [internalOpen, setInternalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('job');
   const [isCreatingJob, setIsCreatingJob] = useState(false);
@@ -128,13 +126,10 @@ export function CreateAuftragProjectDialog({
                     }
                   : undefined
               }
+              // createJob's response renders the route, so no refresh follows.
               onSuccess={async (payload) => {
                 setOpen(false);
-                if (onJobCreated) {
-                  await onJobCreated(payload);
-                  return;
-                }
-                router.refresh();
+                await onJobCreated?.(payload);
               }}
             />
           </TabsContent>
@@ -155,13 +150,10 @@ export function CreateAuftragProjectDialog({
                     }
                   : undefined
               }
+              // createProject's response renders the route, so no refresh follows.
               onSuccess={async (payload) => {
                 setOpen(false);
-                if (onProjectCreated) {
-                  await onProjectCreated(payload);
-                  return;
-                }
-                router.refresh();
+                await onProjectCreated?.(payload);
               }}
             />
           </TabsContent>

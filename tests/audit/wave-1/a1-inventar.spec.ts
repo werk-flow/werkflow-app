@@ -7,6 +7,7 @@ import {
   INVENTORY_MOVEMENT_TYPE_LABELS,
 } from '../../../lib/inventory/types';
 import { getInventoryLedgerState } from '../../golden/support/db/inventory';
+import { observeRouteRenders } from '../../golden/support/route-renders';
 import {
   billableQuantityPattern,
   createInventoryItem,
@@ -263,8 +264,12 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     const itemName = `A1 Bestandsartikel ${world.runId}`;
     const inboundReason = testData`A1 Zugang`;
     const outboundReason = testData`A1 Ausgang`;
+    // Each save renders the route once at most (tests/golden/route-renders.json).
+    const renders = observeRouteRenders(adminPage, 'a1-inventar');
     await createInventoryLocation(adminPage, locationName);
-    await createInventoryItem(adminPage, { name: itemName, locationName, initialQuantity: 5 });
+    await renders.forSave('item.create', () =>
+      createInventoryItem(adminPage, { name: itemName, locationName, initialQuantity: 5 }),
+    );
     await adminPage.goto('/inventar');
     const row = inventoryRow(adminPage, itemName);
     const stockDialog = inventoryDialog(adminPage, 'adjustStock');
@@ -272,8 +277,10 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     await openItemRowAction(adminPage, row, 'adjustStock');
     await stockDialog.locator('#inventory-stock-quantity').fill('2');
     await stockDialog.locator('#inventory-stock-reason').fill(inboundReason);
-    await stockDialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
-    await expect(stockDialog).toHaveCount(0, { timeout: 20_000 });
+    await renders.forSave('stock.adjust', async () => {
+      await stockDialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
+      await expect(stockDialog).toHaveCount(0, { timeout: 20_000 });
+    });
 
     await openItemRowAction(adminPage, row, 'adjustStock');
     await stockDialog.getByRole('button', { name: INVENTORY_COPY.withdraw }).click();

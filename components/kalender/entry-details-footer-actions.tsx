@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, Loader2, Pencil, Trash2, X } from 'lucide-react';
+import { Check, Pencil, Trash2, X } from 'lucide-react';
 
 import {
   AlertDialog,
@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import type { EntryDetailsActionId } from './entry-details-commands';
+import { Spinner } from '@/components/ui/spinner';
 
 type EntryDetailsReviewActionsProps = {
   isPending: boolean;
@@ -26,6 +27,7 @@ export function EntryDetailsReviewActions({ isPending, isBusy, onReview }: Entry
   return (
     <div className="flex gap-2">
       <Button
+        pending={isBusy('approve')}
         type="button"
         variant="outline"
         size="sm"
@@ -33,10 +35,11 @@ export function EntryDetailsReviewActions({ isPending, isBusy, onReview }: Entry
         disabled={isPending}
         className="gap-1"
       >
-        {isBusy('approve') ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+        <Check className="h-4 w-4" />
         Genehmigen
       </Button>
       <Button
+        pending={isBusy('reject')}
         type="button"
         variant="outline"
         size="sm"
@@ -44,7 +47,7 @@ export function EntryDetailsReviewActions({ isPending, isBusy, onReview }: Entry
         disabled={isPending}
         className="gap-1 text-destructive hover:text-destructive"
       >
-        {isBusy('reject') ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+        <X className="h-4 w-4" />
         Ablehnen
       </Button>
     </div>
@@ -89,11 +92,7 @@ export function EntryDetailsManageActions({
               disabled={isPending}
               className="gap-1 text-destructive hover:text-destructive"
             >
-              {isBusy('delete') ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Trash2 className="h-4 w-4" />
-              )}
+              {isBusy('delete') ? <Spinner className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
               Löschen
             </Button>
           </AlertDialogTrigger>

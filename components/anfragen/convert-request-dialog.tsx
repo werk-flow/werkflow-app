@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowRightLeft, Loader2 } from 'lucide-react';
+import { ArrowRightLeft } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -24,6 +24,7 @@ import { QualificationWarningDialog } from '@/components/auftraege/shared/qualif
 import { ConvertRequestCustomerFields } from './convert-request-customer-fields';
 import { ConvertRequestJobFields } from './convert-request-job-fields';
 import { useConvertRequestForm, type ConversionTarget } from './use-convert-request-form';
+import { Spinner } from '@/components/ui/spinner';
 
 interface ConvertRequestDialogProps {
   request: ClientRequest;
@@ -138,11 +139,7 @@ export function ConvertRequestDialog({
                 Abbrechen
               </Button>
               <Button type="submit" disabled={isLoading}>
-                {isLoading ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <ArrowRightLeft className="size-4" />
-                )}
+                {isLoading ? <Spinner /> : <ArrowRightLeft className="size-4" />}
                 {target === 'job' ? 'In Auftrag umwandeln' : 'In Projekt umwandeln'}
               </Button>
             </DialogFooter>

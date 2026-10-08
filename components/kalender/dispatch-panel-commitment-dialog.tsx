@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import { useServerAction } from '@/hooks/use-server-action';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
@@ -137,8 +136,7 @@ export function CommitmentDialog({
             <Button type="button" variant="outline" onClick={onClose} disabled={isSaving}>
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isSaving}>
-              {isSaving && <Loader2 className="size-4 animate-spin" />}
+            <Button pending={isSaving} type="submit" disabled={isSaving}>
               Zusage erfassen
             </Button>
           </DialogFooter>

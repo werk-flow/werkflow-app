@@ -1,6 +1,5 @@
 'use client';
 
-import { type useRouter } from 'next/navigation';
 import { type UseFormReturn } from 'react-hook-form';
 
 import {
@@ -28,7 +27,6 @@ type NewEmailStepContext = {
   pendingNewEmail: string | null;
   newEmailOtpCode: string;
   supabase: ReturnType<typeof createSupabaseBrowserClient>;
-  router: ReturnType<typeof useRouter>;
   refreshProfile: () => Promise<void>;
   showBanner: ReturnType<typeof useBanner>['showBanner'];
   setWizardState: (state: EmailChangeWizardState) => void;
@@ -59,7 +57,6 @@ export function createNewEmailStepHandlers({
   pendingNewEmail,
   newEmailOtpCode,
   supabase,
-  router,
   refreshProfile,
   showBanner,
   setWizardState,
@@ -160,8 +157,8 @@ export function createNewEmailStepHandlers({
             }),
           });
         }
+        // The action's response renders the route; the profile context reads its own copy.
         await refreshProfile();
-        router.refresh();
         setCompletionState({
           previousEmail,
           newEmail: pendingNewEmail,

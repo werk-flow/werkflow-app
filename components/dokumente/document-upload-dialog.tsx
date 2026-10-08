@@ -2,9 +2,10 @@
 
 import { formatFileSize } from '@/lib/documents/format';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import { CheckCircle, FileText, Loader2, XCircle } from 'lucide-react';
+import { CheckCircle, FileText, XCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { ErrorText } from '@/components/ui/error-text';
 import {
   Dialog,
@@ -136,19 +137,15 @@ function DocumentUploadRowList({ rows }: { rows: UploadRow[] }): ReactElement {
         <div className="divide-y">
           {rows.map((row) => {
             const StatusIcon =
-              row.status === 'done'
-                ? CheckCircle
-                : row.status === 'error'
-                  ? XCircle
-                  : row.status === 'uploading'
-                    ? Loader2
-                    : FileText;
+              row.status === 'done' ? CheckCircle : row.status === 'error' ? XCircle : FileText;
 
             return (
               <div key={row.id} className="flex items-center gap-3 px-3 py-2.5">
-                <StatusIcon
-                  className={`size-4 shrink-0 ${row.status === 'uploading' ? 'animate-spin' : ''}`}
-                />
+                {row.status === 'uploading' ? (
+                  <Spinner className="shrink-0" />
+                ) : (
+                  <StatusIcon className="size-4 shrink-0" />
+                )}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{row.file.name}</p>
                   <p className="truncate text-xs text-muted-foreground">

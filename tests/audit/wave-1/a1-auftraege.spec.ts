@@ -50,6 +50,7 @@ import {
 } from '../../golden/support/steps/work';
 import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
 import { setJobStatus } from '../support/a1-steps';
+import { observeRouteRenders } from '../../golden/support/route-renders';
 
 function dateDigits(date: string): string {
   return date.split('-').reverse().join('');
@@ -82,6 +83,8 @@ test.describe('A1 Aufträge, Lebenszyklus und Auftragsliste @AUDIT-W1-A1', () =>
     await employeePage.goto('/auftraege');
     await expect(visibleText(employeePage, jobNumber)).toBeVisible();
 
+    // Each save renders the route once at most (tests/golden/route-renders.json).
+    const renders = observeRouteRenders(adminPage, 'a1-auftraege');
     await adminPage.goto(`/auftraege/${jobNumber}`);
     await detailActionsButton(adminPage).click();
     await jobDetailMenuItem(adminPage, 'edit').click();
@@ -100,9 +103,11 @@ test.describe('A1 Aufträge, Lebenszyklus und Auftragsliste @AUDIT-W1-A1', () =>
     // label changed with the deselection, so target it by its open state.
     await dialog.locator('button[role="combobox"][aria-expanded="true"]').click();
     await expect(adminPage.getByRole('listbox')).toBeHidden();
-    await dialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
-    await expect(dialog).toHaveCount(0, { timeout: 20_000 });
-    await expect(visibleText(adminPage, testData`${title} geändert`)).toBeVisible();
+    await renders.forSave('job.edit', async () => {
+      await dialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
+      await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+      await expect(visibleText(adminPage, testData`${title} geändert`)).toBeVisible();
+    });
     await employeePage.reload();
     await expect(textInDom(employeePage, jobNumber)).toHaveCount(0);
 

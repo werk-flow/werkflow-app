@@ -24,7 +24,7 @@ async function moveItemsIntoFolder({
   foldersToMove: DocumentFolder[];
   targetFolderId: string | null;
 }): Promise<void> {
-  const { documentList, runMutation, showFeedback, refreshDocuments } = mutations;
+  const { documentList, runMutation, showFeedback } = mutations;
   let failedCount = 0;
 
   for (const document of documentsToMove) {
@@ -59,8 +59,6 @@ async function moveItemsIntoFolder({
   } else {
     showFeedback('success', 'Auswahl wurde verschoben.');
   }
-
-  refreshDocuments();
 }
 
 type DraggedRowsScope = {

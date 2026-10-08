@@ -2,7 +2,7 @@
 
 import { useState, type ReactElement } from 'react';
 import Link from 'next/link';
-import { CheckCircle2, Download, Loader2 } from 'lucide-react';
+import { CheckCircle2, Download } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -162,6 +162,7 @@ export function FieldWorkHandoverStatus({ status }: { status: WorkHandoverFieldS
       </div>
       {status.documentId && (
         <Button
+          pending={pending}
           type="button"
           size="sm"
           variant="outline"
@@ -173,7 +174,7 @@ export function FieldWorkHandoverStatus({ status }: { status: WorkHandoverFieldS
             void runDocumentTask(async () => setError(await openPromise));
           }}
         >
-          {pending ? <Loader2 className="animate-spin" /> : <Download />}
+          <Download />
           Übergabedokument
         </Button>
       )}

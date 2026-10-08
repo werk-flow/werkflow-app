@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -218,8 +218,7 @@ export function PersonnelOnboardingTemplateSettings({
               <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isPending}>
                 Abbrechen
               </Button>
-              <Button type="submit" disabled={isPending}>
-                {isPending && <Loader2 className="size-4 animate-spin" />}
+              <Button pending={isPending} type="submit" disabled={isPending}>
                 Veröffentlichen
               </Button>
             </DialogFooter>

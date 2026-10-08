@@ -33,7 +33,7 @@ export function StatusBadge({
   if (effectiveStatus === 'working' && isPending) {
     return (
       <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning-soft-foreground">
-        <span className="h-1.5 w-1.5 rounded-full bg-warning animate-pulse" />
+        <span className="h-1.5 w-1.5 rounded-full bg-warning animate-live" />
         Arbeitet (ausstehend)
       </span>
     );
@@ -42,7 +42,7 @@ export function StatusBadge({
   if (effectiveStatus === 'on_break') {
     return (
       <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning-soft-foreground">
-        <span className="h-1.5 w-1.5 rounded-full bg-warning animate-pulse" />
+        <span className="h-1.5 w-1.5 rounded-full bg-warning animate-live" />
         Macht Pause
       </span>
     );
@@ -60,7 +60,7 @@ export function StatusBadge({
       <span
         className={cn(
           'h-1.5 w-1.5 rounded-full',
-          effectiveStatus === 'working' ? 'bg-success animate-pulse' : 'bg-muted-foreground',
+          effectiveStatus === 'working' ? 'bg-success animate-live' : 'bg-muted-foreground',
         )}
       />
       {effectiveStatus === 'working' ? 'Arbeitet' : 'Nicht eingestempelt'}

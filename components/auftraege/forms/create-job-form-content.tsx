@@ -1,7 +1,5 @@
 'use client';
 
-import { Loader2 } from 'lucide-react';
-
 import { Button } from '@/components/ui/button';
 import { useReportPending } from '@/hooks/use-report-pending';
 import { DialogBody, DialogFooter } from '@/components/ui/dialog';
@@ -73,8 +71,7 @@ export function CreateJobFormContent({
           <ErrorText>{form.error}</ErrorText>
         </DialogBody>
         <DialogFooter>
-          <Button type="submit" disabled={form.submitDisabled}>
-            {isLoading && <Loader2 className="size-4 animate-spin" />}
+          <Button pending={isLoading} type="submit" disabled={form.submitDisabled}>
             {isLoading ? 'Wird erstellt…' : 'Auftrag erstellen'}
           </Button>
         </DialogFooter>

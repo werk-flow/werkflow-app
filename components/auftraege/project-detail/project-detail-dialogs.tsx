@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo, useState, type Dispatch, type SetStateAction } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import {
   AlertDialog,
@@ -24,6 +23,7 @@ import { CreateJobDialog } from '../forms/create-job-dialog';
 import { EditProjectDialog } from '../forms/edit-project-dialog';
 import { ProjectJobsAssignmentDialog } from './project-jobs-assignment-dialog';
 import type { ProjectDetailDialogState } from './use-project-detail-dialog-state';
+import { Spinner } from '@/components/ui/spinner';
 
 type ProjectDetailDialogsProps = {
   project: Project;
@@ -329,7 +329,7 @@ function ProjectDetailDeleteDialog({
             disabled={isDeleting}
             variant="destructive"
           >
-            {isDeleting && <Loader2 className="mr-2 size-4 animate-spin" />}
+            {isDeleting && <Spinner className="mr-2" />}
             Löschen
           </AlertDialogAction>
         </AlertDialogFooter>

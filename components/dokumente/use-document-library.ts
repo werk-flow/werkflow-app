@@ -95,7 +95,6 @@ export function useDocumentLibrary({
   const folderCreation = useDocumentFolderCreation({
     currentFolderId,
     isTrashView,
-    refreshDocuments: mutations.refreshDocuments,
   });
   const rename = useDocumentRename(libraryScope);
   const deleteActions = useDocumentDeleteActions({ mutations, selection });

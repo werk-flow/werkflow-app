@@ -1,6 +1,5 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useBanner } from '@/components/ui/banner';
 import { describeFailure } from '@/lib/action-messages';
 import { updateJob } from '@/lib/jobs/actions';
@@ -27,7 +26,6 @@ type EditJobSubmitInput = {
 
 /** Validates and saves the edit-job draft, including the date-removal and qualification confirmations. */
 export function useEditJobSubmit({ job, form, onOpenChange, onSuccess }: EditJobSubmitInput) {
-  const router = useRouter();
   const { showBanner } = useBanner();
   const {
     title,
@@ -93,14 +91,11 @@ export function useEditJobSubmit({ job, form, onOpenChange, onSuccess }: EditJob
         setConfirmedDateRemovalForWarning(false);
         onOpenChange(false);
         showBanner({ variant: 'success', message: 'Auftrag gespeichert.' });
-        if (onSuccess) {
-          await onSuccess({
-            job: result.success ? result.job : job,
-            selectedEmployeeIds: selectedEmployees,
-          });
-        } else {
-          router.refresh();
-        }
+        // updateJob's response renders the route; 'no_changes' changed nothing.
+        await onSuccess?.({
+          job: result.success ? result.job : job,
+          selectedEmployeeIds: selectedEmployees,
+        });
       } catch {
         setError('Ein unerwarteter Fehler ist aufgetreten.');
       }

@@ -182,8 +182,8 @@ export function useEquipmentForm({
       onSaved();
       return;
     }
+    // The action revalidates, so its response already carries fresh route data.
     router.push(`/service/anlagen/${encodeURIComponent(result.equipment.equipment_number)}`);
-    router.refresh();
   }
 
   return {

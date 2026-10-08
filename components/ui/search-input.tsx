@@ -1,10 +1,11 @@
 'use client';
 
 import * as React from 'react';
-import { Loader2, Search, X } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 
 import { Input, type InputProps } from '@/components/ui/input';
 import { PlainButton } from '@/components/ui/plain-button';
+import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 
 type SearchInputProps = Omit<InputProps, 'type' | 'value' | 'onChange'> & {
@@ -47,10 +48,9 @@ export const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
         {...props}
       />
       {pending ? (
-        <Loader2
-          className="absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground"
-          role="status"
-          aria-label="Einträge werden gesucht"
+        <Spinner
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+          label="Einträge werden gesucht"
         />
       ) : value ? (
         <PlainButton

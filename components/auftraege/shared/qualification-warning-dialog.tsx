@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Loader2 } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -175,8 +175,7 @@ function QualificationWarningDialogContent({
           <Button variant="outline" onClick={onCancel} disabled={isSubmitting}>
             Auswahl ändern
           </Button>
-          <Button onClick={() => void handleConfirm()} disabled={isSubmitting}>
-            {isSubmitting && <Loader2 className="size-4 animate-spin" />}
+          <Button pending={isSubmitting} onClick={() => void handleConfirm()} disabled={isSubmitting}>
             Trotz Hinweis zuweisen
           </Button>
         </DialogFooter>

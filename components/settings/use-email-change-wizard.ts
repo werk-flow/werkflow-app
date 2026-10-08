@@ -1,7 +1,6 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm, type UseFormReturn } from 'react-hook-form';
 
@@ -59,7 +58,6 @@ export type EmailChangeWizard = {
  * new-address form, the one-second clock and every step transition.
  */
 export function useEmailChangeWizard(initialState: EmailChangeWizardState): EmailChangeWizard {
-  const router = useRouter();
   const { profile, refreshProfile } = useUserProfile();
   const { showBanner } = useBanner();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
@@ -174,7 +172,6 @@ export function useEmailChangeWizard(initialState: EmailChangeWizardState): Emai
       pendingNewEmail,
       newEmailOtpCode,
       supabase,
-      router,
       refreshProfile,
       showBanner,
       setWizardState,

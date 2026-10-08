@@ -2,7 +2,7 @@
 
 import { normalizeSearchText } from '@/lib/ui/search';
 import { useEffect, useMemo, useState, type ReactElement } from 'react';
-import { BriefcaseBusiness, FolderKanban, LinkIcon, Loader2, UserRound, Users, Wrench } from 'lucide-react';
+import { BriefcaseBusiness, FolderKanban, LinkIcon, UserRound, Users, Wrench } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -405,8 +405,13 @@ export function DocumentLinkDialog({
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
             Abbrechen
           </Button>
-          <Button type="button" onClick={handleSave} disabled={isSaving || changeCount === 0}>
-            {isSaving ? <Loader2 className="size-4 animate-spin" /> : <LinkIcon className="size-4" />}
+          <Button
+            pending={isSaving}
+            type="button"
+            onClick={handleSave}
+            disabled={isSaving || changeCount === 0}
+          >
+            <LinkIcon className="size-4" />
             Speichern
           </Button>
         </DialogFooter>

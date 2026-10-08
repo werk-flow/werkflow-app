@@ -3,7 +3,6 @@ import { describeFailure } from '@/lib/action-messages';
 import { focusFirstInvalidField, REASON_MIN_3_MESSAGE } from '@/lib/ui/field-validation';
 
 import { useState, type ReactElement } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
@@ -152,8 +151,8 @@ export function RelationDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending && <Loader2 className="size-4 animate-spin" />}Verknüpfen
+            <Button pending={isPending} type="submit" disabled={isPending}>
+              Verknüpfen
             </Button>
           </DialogFooter>
         </form>
@@ -232,8 +231,8 @@ export function EvidenceDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending && <Loader2 className="size-4 animate-spin" />}Verknüpfen
+            <Button pending={isPending} type="submit" disabled={isPending}>
+              Verknüpfen
             </Button>
           </DialogFooter>
         </form>
@@ -352,8 +351,8 @@ export function FollowUpDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending && <Loader2 className="size-4 animate-spin" />}Speichern
+            <Button pending={isPending} type="submit" disabled={isPending}>
+              Speichern
             </Button>
           </DialogFooter>
         </form>

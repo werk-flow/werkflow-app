@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 
 import { JoinOrgCodeForm } from '@/components/organization/join-org-code-form';
 import {
@@ -13,6 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { loadDocument } from '@/lib/navigation/document-load';
 import type { OwnJoinRequest } from '@/lib/org/types';
+import { Spinner } from '@/components/ui/spinner';
 
 type FlowState =
   | { kind: 'form'; declinedBy: string | null }
@@ -38,7 +39,7 @@ export function JoinOrganizationForm({
   if (state.kind === 'approved') {
     return (
       <p className="flex items-center gap-2 text-sm font-medium" role="status">
-        <Loader2 className="size-4 animate-spin" />
+        <Spinner />
         {state.request.organizationName} hat deine Anfrage freigegeben. Du wirst weitergeleitet …
       </p>
     );
@@ -79,8 +80,7 @@ export function JoinOrganizationForm({
         inputId="org-code"
         onRequest={(request) => setState({ kind: 'pending', request })}
         renderActions={(isPending) => (
-          <Button type="submit" className="w-full" disabled={isPending}>
-            {isPending && <Loader2 className="size-4 animate-spin" />}
+          <Button pending={isPending} type="submit" className="w-full" disabled={isPending}>
             Beitritt anfragen
           </Button>
         )}

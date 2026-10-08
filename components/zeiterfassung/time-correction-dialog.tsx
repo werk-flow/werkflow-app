@@ -1,7 +1,7 @@
 'use client';
 
 import { useId } from 'react';
-import { Loader2, Pencil, Plus } from 'lucide-react';
+import { Pencil, Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -90,21 +90,21 @@ export function TimeCorrectionDialog({
           </Button>
           {kind === 'delete' ? (
             <Button
+              pending={submitting}
               type="button"
               onClick={() => void submit()}
               disabled={loadingOptions || submitting || !options}
             >
-              {submitting ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
               Speichern
             </Button>
           ) : (
             <Button
+              pending={submitting}
               type="submit"
               form={correctionFormId}
               // eslint-disable-next-line ui/submit-disabled-only-while-pending -- the form options have not loaded, so there is nothing to submit yet
               disabled={loadingOptions || submitting || !options}
             >
-              {submitting ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
               Speichern
             </Button>
           )}

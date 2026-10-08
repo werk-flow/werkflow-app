@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, type ReactElement } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -162,8 +161,7 @@ export function EquipmentSourceDialog({ actions, state }: EquipmentSourceDialogP
             >
               Abbrechen
             </Button>
-            <Button type="submit" disabled={busy.isBusy('source')}>
-              {busy.isBusy('source') && <Loader2 className="size-4 animate-spin" />}
+            <Button pending={busy.isBusy('source')} type="submit" disabled={busy.isBusy('source')}>
               Verknüpfen
             </Button>
           </DialogFooter>

@@ -46,6 +46,7 @@ import {
 import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
 import { expectDefined } from '../../../lib/testing/spec-support/expect-defined';
 import { representativeReadinessState } from '../support/p1-14-steps';
+import { observeRouteRenders } from '../../golden/support/route-renders';
 
 function digits(dateIso: string): string {
   const [year, month, day] = dateIso.split('-');
@@ -101,9 +102,13 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
     await expect(lifecycleState(bueroPage, 'in_progress')).toBeVisible();
 
     await adminPage.reload();
-    await transitionWork(adminPage, 'in_progress', 'interrupted', {
-      reason: 'Kunde ist vorübergehend nicht vor Ort.',
-    });
+    // Each save renders the route once at most (tests/golden/route-renders.json).
+    const renders = observeRouteRenders(adminPage, 'p1-14');
+    await renders.forSave('lifecycle.interrupt', () =>
+      transitionWork(adminPage, 'in_progress', 'interrupted', {
+        reason: 'Kunde ist vorübergehend nicht vor Ort.',
+      }),
+    );
     const state = await getWorkLifecycleState(world.orgId, { jobNumber });
     expect(state.entity).toMatchObject({
       execution_state: 'interrupted',

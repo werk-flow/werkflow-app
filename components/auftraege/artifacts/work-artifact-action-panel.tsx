@@ -1,6 +1,6 @@
 'use client';
 
-import { Download, Loader2, Trash2 } from 'lucide-react';
+import { Download, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
@@ -75,25 +75,31 @@ function WorkArtifactCustomerDecision({
           />
         </Field>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" onClick={() => customerAction('customer_acknowledged')} disabled={anyBusy}>
-            {isBusy('customer_acknowledged') && <Loader2 className="size-4 animate-spin" />}Bestätigung
-            erfassen
+          <Button
+            pending={isBusy('customer_acknowledged')}
+            type="button"
+            onClick={() => customerAction('customer_acknowledged')}
+            disabled={anyBusy}
+          >
+            Bestätigung erfassen
           </Button>
           <Button
+            pending={isBusy('customer_reserved')}
             type="button"
             variant="outline"
             onClick={() => customerAction('customer_reserved')}
             disabled={anyBusy}
           >
-            {isBusy('customer_reserved') && <Loader2 className="size-4 animate-spin" />}Vorbehalt erfassen
+            Vorbehalt erfassen
           </Button>
           <Button
+            pending={isBusy('customer_refused')}
             type="button"
             variant="outline"
             onClick={() => customerAction('customer_refused')}
             disabled={anyBusy}
           >
-            {isBusy('customer_refused') && <Loader2 className="size-4 animate-spin" />}Ablehnung erfassen
+            Ablehnung erfassen
           </Button>
         </div>
         <SignaturePad disabled={anyBusy || Boolean(pendingSignatureDocumentId)} onChange={setSignatureFile} />
@@ -102,8 +108,8 @@ function WorkArtifactCustomerDecision({
             Der Upload ist bereit. Du kannst das Speichern erneut versuchen.
           </p>
         )}
-        <Button type="button" onClick={captureSignature} disabled={anyBusy}>
-          {isBusy('signature') && <Loader2 className="size-4 animate-spin" />}Unterschrift speichern
+        <Button pending={isBusy('signature')} type="button" onClick={captureSignature} disabled={anyBusy}>
+          Unterschrift speichern
         </Button>
       </div>
     </FormDisclosure>
@@ -170,8 +176,14 @@ function WorkArtifactLinkDisclosures({
                 <SelectItem value="closure_proof">Abschlussnachweis</SelectItem>
               </SelectContent>
             </Select>
-            <Button type="button" variant="outline" onClick={linkDocument} disabled={anyBusy}>
-              {isBusy('document') && <Loader2 className="size-4 animate-spin" />}Verknüpfen
+            <Button
+              pending={isBusy('document')}
+              type="button"
+              variant="outline"
+              onClick={linkDocument}
+              disabled={anyBusy}
+            >
+              Verknüpfen
             </Button>
           </div>
         </FormDisclosure>
@@ -194,8 +206,14 @@ function WorkArtifactLinkDisclosures({
                 emptyMessage="Kein Zeiteintrag gefunden"
               />
             </Field>
-            <Button type="button" variant="outline" onClick={linkTimeEntry} disabled={anyBusy}>
-              {isBusy('time') && <Loader2 className="size-4 animate-spin" />}Verknüpfen
+            <Button
+              pending={isBusy('time')}
+              type="button"
+              variant="outline"
+              onClick={linkTimeEntry}
+              disabled={anyBusy}
+            >
+              Verknüpfen
             </Button>
           </div>
         </FormDisclosure>
@@ -274,23 +292,33 @@ export function WorkArtifactActionPanel({
           Neue Version
         </Button>
         {detail.status === 'draft' && (
-          <Button type="button" onClick={() => act('review_requested')} disabled={anyBusy}>
-            {isBusy('review_requested') && <Loader2 className="size-4 animate-spin" />}Zur Prüfung einreichen
+          <Button
+            pending={isBusy('review_requested')}
+            type="button"
+            onClick={() => act('review_requested')}
+            disabled={anyBusy}
+          >
+            Zur Prüfung einreichen
           </Button>
         )}
         {detail.status === 'submitted' && canApprove && currentRevision.created_by !== currentUserId && (
           <>
-            <Button type="button" onClick={() => act('internal_approved')} disabled={anyBusy}>
-              {isBusy('internal_approved') && <Loader2 className="size-4 animate-spin" />}Intern freigeben
+            <Button
+              pending={isBusy('internal_approved')}
+              type="button"
+              onClick={() => act('internal_approved')}
+              disabled={anyBusy}
+            >
+              Intern freigeben
             </Button>
             <Button
+              pending={isBusy('correction_requested')}
               type="button"
               variant="outline"
               onClick={() => act('correction_requested', actionReason)}
               disabled={anyBusy}
             >
-              {isBusy('correction_requested') && <Loader2 className="size-4 animate-spin" />}Korrektur
-              anfordern
+              Korrektur anfordern
             </Button>
           </>
         )}
@@ -303,18 +331,25 @@ export function WorkArtifactActionPanel({
                 action.created_by === currentUserId,
             )) && (
             <Button
+              pending={isBusy('review_withdrawn')}
               type="button"
               variant="outline"
               onClick={() => act('review_withdrawn')}
               disabled={anyBusy}
             >
-              {isBusy('review_withdrawn') && <Loader2 className="size-4 animate-spin" />}Prüfung zurückziehen
+              Prüfung zurückziehen
             </Button>
           )}
         {/* A project export is a project document write, which needs a manager. */}
         {(isManager || !detail.project_id) && (
-          <Button type="button" variant="outline" onClick={exportArtifact} disabled={anyBusy}>
-            {isBusy('export') ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+          <Button
+            pending={isBusy('export')}
+            type="button"
+            variant="outline"
+            onClick={exportArtifact}
+            disabled={anyBusy}
+          >
+            <Download className="size-4" />
             Export
           </Button>
         )}
@@ -328,12 +363,13 @@ export function WorkArtifactActionPanel({
       </Field>
       {detail.status === 'submitted' && canApprove && currentRevision.created_by !== currentUserId && (
         <Button
+          pending={isBusy('internal_rejected')}
           type="button"
           variant="destructive"
           onClick={() => act('internal_rejected', actionReason)}
           disabled={anyBusy}
         >
-          {isBusy('internal_rejected') && <Loader2 className="size-4 animate-spin" />}Ablehnen
+          Ablehnen
         </Button>
       )}
       {currentRevision.visibility === 'customer_facing' && (
@@ -350,13 +386,14 @@ export function WorkArtifactActionPanel({
       {canVoid && (
         <div className="flex justify-end">
           <Button
+            pending={isBusy('void')}
             type="button"
             variant="ghost"
             className="text-destructive"
             onClick={setVoid}
             disabled={anyBusy}
           >
-            {isBusy('void') ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+            <Trash2 className="size-4" />
             Ungültig setzen
           </Button>
         </div>

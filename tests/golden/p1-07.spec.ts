@@ -121,10 +121,11 @@ test.describe('GG-02 Freigaben und Aufmerksamkeit @P1-07 @GG-02', () => {
 
     await test.step('Anfrage-Aufgabe zeigt Zuständigkeit, verlinkt in die Anfrage und verschwindet nach der Auflösung', async () => {
       const requestSummary = `Heizung klopft im Mehrfamilienhaus ${world.runId}`;
-      const requestId = await createRequestViaDialog(adminPage, {
+      const request = await createRequestViaDialog(adminPage, {
         summary: requestSummary,
         requestNumber,
       });
+      expect([request.summary, request.requestNumber]).toEqual([requestSummary, requestNumber]);
       await assignRequestAssigneeViaEditDialog(adminPage, bueroName);
 
       // The assignee sees "Mir zugewiesen", others see the responsible person.
@@ -144,7 +145,7 @@ test.describe('GG-02 Freigaben und Aufmerksamkeit @P1-07 @GG-02', () => {
 
       // Deep link into the owning context, resolve it there, and the item disappears.
       await adminRequestTask.click();
-      await adminPage.waitForURL(`**/anfragen/${requestId}`, { timeout: 20_000 });
+      await adminPage.waitForURL(`**/anfragen/${request.id}`, { timeout: 20_000 });
       await expect(visibleText(adminPage, requestSummary)).toBeVisible({
         timeout: 15_000,
       });

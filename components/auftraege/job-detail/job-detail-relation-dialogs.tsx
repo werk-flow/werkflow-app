@@ -53,6 +53,7 @@ export function JobDetailRelationDialogs({
   const { run: runClientUpdateTask, isPending: isUpdatingClient } = usePendingTask();
   const { run: runProjectUpdateTask, isPending: isUpdatingProject } = usePendingTask();
 
+  // updateProject's and updateJob's responses render the route, so no refresh follows a save.
   const handleClientSave = async (clientId: string) => {
     setClientSaveError(null);
     void runClientUpdateTask(async () => {
@@ -85,9 +86,6 @@ export function JobDetailRelationDialogs({
         return;
       }
       setShowClientDialog(false);
-      if (parentProject?.id) {
-        router.refresh();
-      }
     });
   };
 
@@ -141,8 +139,8 @@ export function JobDetailRelationDialogs({
       // The dialog only opens for a job without a project and saves a selected one.
       const nextProject = projects.find((entry) => entry.id === projectId);
       if (!nextProject?.projectNumber) {
+        // updateJob's response already rendered the route.
         suppressRefreshRef.current = false;
-        router.refresh();
         return;
       }
 

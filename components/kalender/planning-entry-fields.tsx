@@ -1,7 +1,5 @@
 'use client';
 
-import { Loader2 } from 'lucide-react';
-
 import { Button } from '@/components/ui/button';
 import { DialogFooter } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
@@ -267,8 +265,12 @@ export function PlanningEntrySubmitFooter({
 }: PlanningEntrySubmitFooterProps) {
   return (
     <DialogFooter className="pt-4">
-      <Button type="submit" className="w-full" disabled={submitting || resolvingDefaults}>
-        {submitting && <Loader2 className="size-4 animate-spin" />}
+      <Button
+        pending={submitting}
+        type="submit"
+        className="w-full"
+        disabled={submitting || resolvingDefaults}
+      >
         {submitting
           ? 'Planung wird geprüft …'
           : hasConflicts

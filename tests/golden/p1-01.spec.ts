@@ -1,6 +1,7 @@
 import { formatSiteAddress } from '../../lib/clients/types';
 import { expect, test } from './support/fixtures';
 import { seedCustomer } from './support/db/customers';
+import { observeRouteRenders } from './support/route-renders';
 import {
   addContactOnCustomerDetail,
   addSiteOnCustomerDetail,
@@ -41,21 +42,28 @@ test.describe('P1-01 Kontakte und Einsatzorte @P1-01', () => {
       accessNotes: 'Schlüssel beim Hausmeister',
     };
 
+    // Each save renders the route once at most (tests/golden/route-renders.json).
+    const renders = observeRouteRenders(adminPage, 'p1-01');
+
     await test.step('Admin pflegt Ansprechpartner und Einsatzorte am Kunden', async () => {
-      await createCustomer(adminPage, customer);
+      await renders.forSave('customer.create', () => createCustomer(adminPage, customer));
       await openCustomerDetail(adminPage, customer);
-      await addContactOnCustomerDetail(adminPage, manager);
-      await addContactOnCustomerDetail(adminPage, {
-        name: 'Jörg Weber',
-        role: 'Hausmeister/in',
-      });
-      await addSiteOnCustomerDetail(adminPage, {
-        name: 'Gebäude A',
-        street: 'Musterstraße 1',
-        postalCode: '10115',
-        city: 'Berlin',
-      });
-      await addSiteOnCustomerDetail(adminPage, buildingB);
+      await renders.forSave('contact.add.first', () => addContactOnCustomerDetail(adminPage, manager));
+      await renders.forSave('contact.add.second', () =>
+        addContactOnCustomerDetail(adminPage, {
+          name: 'Jörg Weber',
+          role: 'Hausmeister/in',
+        }),
+      );
+      await renders.forSave('site.add.first', () =>
+        addSiteOnCustomerDetail(adminPage, {
+          name: 'Gebäude A',
+          street: 'Musterstraße 1',
+          postalCode: '10115',
+          city: 'Berlin',
+        }),
+      );
+      await renders.forSave('site.add.second', () => addSiteOnCustomerDetail(adminPage, buildingB));
       await expect(visibleText(adminPage, manager.name)).toBeVisible();
       await expect(visibleText(adminPage, buildingB.name)).toBeVisible();
       await expect(visibleText(adminPage, formatSiteAddress(buildingB))).toBeVisible();
@@ -102,7 +110,9 @@ test.describe('P1-01 Kontakte und Einsatzorte @P1-01', () => {
     await test.step('Adressänderung am Einsatzort ändert den erfassten Auftrags-Ort nicht', async () => {
       const editedStreet = 'Beispielweg 99';
       await openCustomerDetail(adminPage, customer);
-      await editSiteStreetOnCustomerDetail(adminPage, buildingB.name, editedStreet);
+      await renders.forSave('site.edit', () =>
+        editSiteStreetOnCustomerDetail(adminPage, buildingB.name, editedStreet),
+      );
       await adminPage.goto(`/auftraege/${jobNumber}`);
       // The Ort snapshot keeps the address recorded at selection time…
       await expect(visibleText(adminPage, formatSiteAddress(buildingB))).toBeVisible();

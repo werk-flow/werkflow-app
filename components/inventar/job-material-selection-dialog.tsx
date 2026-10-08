@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -164,8 +163,7 @@ export function MaterialSelectionDialog({
             <Button type="button" variant="outline" onClick={() => setDialog(null)} disabled={isSaving}>
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isSaving}>
-              {isSaving && <Loader2 className="mr-2 size-4 animate-spin" />}
+            <Button pending={isSaving} type="submit" disabled={isSaving}>
               {mode === 'take' ? 'Entnahme buchen' : mode === 'return' ? 'Zurücklegen' : 'Speichern'}
             </Button>
           </DialogFooter>

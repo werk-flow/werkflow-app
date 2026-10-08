@@ -1,0 +1,20 @@
+{
+  "p1-01": {
+    "customer.create": { "renders": 0 },
+    "contact.add.first": { "renders": 1 },
+    "contact.add.second": { "renders": 1 },
+    "site.add.first": { "renders": 1 },
+    "site.add.second": { "renders": 1 },
+    "site.edit": { "renders": 1 }
+  },
+  "a1-inventar": {
+    "item.create": { "renders": 1 },
+    "stock.adjust": { "renders": 1 }
+  },
+  "a1-auftraege": {
+    "job.edit": { "renders": 1 }
+  },
+  "p1-14": {
+    "lifecycle.interrupt": { "renders": 1 }
+  }
+}

@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import { usePendingTask } from '@/hooks/use-server-action';
 import { Button } from '@/components/ui/button';
@@ -81,8 +80,7 @@ export function ReasonDialog({ title, description, submitLabel, onClose, onSubmi
             <Button type="button" variant="outline" onClick={onClose} disabled={pending}>
               Abbrechen
             </Button>
-            <Button type="submit" disabled={pending}>
-              {pending && <Loader2 className="size-4 animate-spin" />}
+            <Button pending={pending} type="submit" disabled={pending}>
               {submitLabel}
             </Button>
           </DialogFooter>

@@ -6,7 +6,6 @@
 // belongs to the calendar container (`onSaved`), which also owns the undo.
 
 import { useEffect, useState } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import { OptionsLoadError } from '@/components/auftraege/shared/options-load-error';
 import { usePendingTask } from '@/hooks/use-server-action';
@@ -268,8 +267,7 @@ export function ParkingContextDialog({
             <Button type="button" variant="outline" onClick={onClose} disabled={isSaving}>
               {isAlreadyParked ? 'Ohne Kontext lassen' : 'Abbrechen'}
             </Button>
-            <Button type="submit" disabled={isSaving}>
-              {isSaving && <Loader2 className="size-4 animate-spin" />}
+            <Button pending={isSaving} type="submit" disabled={isSaving}>
               Kontext speichern
             </Button>
           </DialogFooter>

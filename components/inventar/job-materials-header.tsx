@@ -1,11 +1,12 @@
 'use client';
 
-import { ClipboardList, Loader2, PackagePlus, Plus } from 'lucide-react';
+import { ClipboardList, PackagePlus, Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { cn } from '@/lib/utils';
 import { SectionTitle } from '@/components/shared/section-title';
+import { Spinner } from '@/components/ui/spinner';
 
 /** The section heading with the plan and take commands. */
 export function JobMaterialsHeader({
@@ -66,7 +67,7 @@ export function JobMaterialsHeader({
             disabled={isPickerLoading || (isAdminOrManager && inventoryItemCount === 0)}
           >
             {isPickerLoading ? (
-              <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+              <Spinner className="size-3.5" />
             ) : (
               <PackagePlus className="size-3.5" aria-hidden="true" />
             )}

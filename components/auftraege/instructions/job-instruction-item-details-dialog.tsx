@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type Dispatch, type SetStateAction } from 'react';
-import { Loader2, Trash2 } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -126,8 +126,7 @@ export function InstructionItemDetailsDialog({
             <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending && <Loader2 className="size-4 animate-spin" />}
+            <Button pending={isPending} type="submit" disabled={isPending}>
               Speichern
             </Button>
           </DialogFooter>

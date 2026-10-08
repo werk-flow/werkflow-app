@@ -207,7 +207,7 @@ test(
 );
 
 test(
-  'office lifecycle success reconciles owning route metadata without Realtime or an action RSC patch',
+  "office lifecycle success reconciles route metadata from the action's own render, with no second client refresh and no Realtime",
   { annotation: { type: 'fixture', description: 'lifecycle' } },
   async ({ page }) => {
     const section = page.getByRole('region', {
@@ -234,8 +234,12 @@ test(
     await expect(metadata).toHaveText(WORK_EXECUTION_LABELS.in_progress);
     expect(await page.evaluate(() => window.uiContractLifecycle.transitions)).toBe(1);
     const reconciliation = await page.evaluate(() => window.uiContractServices.navigation);
-    expect(reconciliation.indexOf('refresh')).toBeGreaterThanOrEqual(0);
-    expect(reconciliation.indexOf('read-work-lifecycle')).toBeGreaterThan(reconciliation.indexOf('refresh'));
+    // One save is one route render: the action's response, never a client refresh after it.
+    expect(reconciliation).not.toContain('refresh');
+    expect(reconciliation.indexOf('action-render')).toBeGreaterThanOrEqual(0);
+    expect(reconciliation.indexOf('read-work-lifecycle')).toBeGreaterThan(
+      reconciliation.indexOf('action-render'),
+    );
   },
 );
 

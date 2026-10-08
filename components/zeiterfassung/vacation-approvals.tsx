@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2, Palmtree } from 'lucide-react';
+import { Palmtree } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
 import { SectionError } from '@/components/ui/section-error';
@@ -214,8 +214,7 @@ function ReasonDialog({
             <Button type="button" variant="outline" onClick={onClose} disabled={isBusy}>
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isBusy}>
-              {isBusy && <Loader2 className="size-4 animate-spin" />}
+            <Button pending={isBusy} type="submit" disabled={isBusy}>
               {confirmLabel}
             </Button>
           </DialogFooter>

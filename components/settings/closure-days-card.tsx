@@ -2,8 +2,7 @@
 
 import { describeFailure } from '@/lib/action-messages';
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Loader2, Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
@@ -18,6 +17,7 @@ import { addClosureDay, removeClosureDay } from '@/lib/org/calendar-actions';
 import type { ClosureDay } from '@/lib/personnel/targets';
 import { toLocalDateString } from '@/lib/utils';
 import { getBusinessTodayIso } from '@/lib/personnel/types';
+import { Spinner } from '@/components/ui/spinner';
 
 const CLOSURE_ERROR_MESSAGES = {
   not_authorized: 'Du bist nicht berechtigt, Betriebsruhe-Tage zu ändern.',
@@ -81,11 +81,7 @@ function ClosureDayList({
                   disabled={isRemoving(dayId)}
                   onClick={() => onRemove(dayId)}
                 >
-                  {isRemoving(dayId) ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="size-4" />
-                  )}
+                  {isRemoving(dayId) ? <Spinner /> : <Trash2 className="size-4" />}
                 </Button>
               </div>
             )}
@@ -103,7 +99,6 @@ export function ClosureDaysCard({
   closureDays: ClosureDay[];
   canEditClosureDays: boolean;
 }) {
-  const router = useRouter();
   const { showBanner } = useBanner();
 
   const [closureDate, setClosureDate] = useState<string>('');
@@ -140,7 +135,7 @@ export function ClosureDaysCard({
       }
       setClosureDate('');
       setClosureLabel('');
-      router.refresh();
+      // The action's response renders the route with the new day.
       showBanner({
         message: 'Der Betriebsruhe-Tag wurde eingetragen.',
         variant: 'success',
@@ -166,7 +161,6 @@ export function ClosureDaysCard({
           });
           return;
         }
-        router.refresh();
         showBanner({
           message: 'Der Betriebsruhe-Tag wurde entfernt.',
           variant: 'success',
@@ -220,8 +214,14 @@ export function ClosureDaysCard({
                 disabled={isAddingClosure}
               />
             </Field>
-            <Button type="submit" variant="outline" className="gap-1.5" disabled={isAddingClosure}>
-              {isAddingClosure ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+            <Button
+              pending={isAddingClosure}
+              type="submit"
+              variant="outline"
+              className="gap-1.5"
+              disabled={isAddingClosure}
+            >
+              <Plus className="size-4" />
               Eintragen
             </Button>
           </form>

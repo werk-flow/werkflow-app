@@ -107,17 +107,22 @@ test.describe('P1-03 Personalidentität und Konditionen @P1-03', () => {
     const recordId = await test.step('Akte für eine künftige Mitarbeiterin anlegen', async () => {
       // Entry date in the next calendar year: always a future starter.
       const nextYear = Number(businessDate.slice(0, 4)) + 1;
-      const createdId = await createPersonnelRecordViaDialog(adminPage, {
+      const created = await createPersonnelRecordViaDialog(adminPage, {
         firstName: world.personnelInvitee.firstName,
         lastName: world.personnelInvitee.lastName,
         entryDateDigits: `0101${nextYear}`,
       });
+      // The saved record carries the names the dialog was given.
+      expect([created.firstName, created.lastName]).toEqual([
+        world.personnelInvitee.firstName,
+        world.personnelInvitee.lastName,
+      ]);
       const recordHeader = personnelRecordHeader(adminPage, recordName);
       await expect(recordHeader.getByText(EMPLOYMENT_STATE_LABELS.geplant, { exact: true })).toBeVisible({
         timeout: 15_000,
       });
       await expect(recordHeader.getByText(ACCESS_STATE_LABELS.ohne_zugang, { exact: true })).toBeVisible();
-      return createdId;
+      return created.id;
     });
 
     await test.step('Die Akte steht unter Weiteres Personal und in keiner Auswahl', async () => {

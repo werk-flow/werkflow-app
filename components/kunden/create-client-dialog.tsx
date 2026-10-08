@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Loader2 } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -155,10 +155,9 @@ export function CreateClientDialog({
     }
     clientCreations.publish({ kind: 'commit', tempId, confirmed: result.client });
     showBanner({ variant: 'success', message: 'Kunde erfolgreich erstellt!' });
-    // No router.refresh(): the action's tag update already re-renders this
-    // route in its response, and a second refresh renders the same page again.
-    // The list's post-save read and the route snapshot effect reconcile the
-    // confirmed row.
+    // No router.refresh(): createClient revalidates nothing, so the list page
+    // renders no route for this save. The list's post-save read and the route
+    // snapshot effect reconcile the confirmed row.
   };
 
   const resetForm = () => {
@@ -276,8 +275,7 @@ export function CreateClientDialog({
             <ErrorText>{error}</ErrorText>
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading && <Loader2 className="size-4 animate-spin" />}
+            <Button pending={isLoading} type="submit" disabled={isLoading}>
               {isLoading ? 'Wird erstellt…' : 'Kunde erstellen'}
             </Button>
           </DialogFooter>

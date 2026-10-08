@@ -2,7 +2,6 @@
 import { ErrorText } from '@/components/ui/error-text';
 
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import {
   Dialog,
@@ -20,6 +19,7 @@ import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages'
 import { logError } from '@/lib/logging';
 import { loadDocument } from '@/lib/navigation/document-load';
 import { createOrganization } from '@/lib/org/actions';
+import { Spinner } from '@/components/ui/spinner';
 
 const ERROR_MESSAGES: Readonly<Record<string, string>> = {
   name_required: 'Bitte gib einen Namen ein.',
@@ -113,7 +113,7 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
             >
               {isLoading ? (
                 <>
-                  <Loader2 className="mr-2 size-4 animate-spin" />
+                  <Spinner className="mr-2" />
                   Wird erstellt…
                 </>
               ) : (

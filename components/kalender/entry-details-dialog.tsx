@@ -3,7 +3,6 @@
 import { useId } from 'react';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useRouter } from 'next/navigation';
-import { Loader2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -167,8 +166,7 @@ export function EntryDetailsDialog({
               >
                 Abbrechen
               </Button>
-              <Button type="submit" form={editFormId} size="sm" disabled={isPending}>
-                {isBusy('save') && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Button pending={isBusy('save')} type="submit" form={editFormId} size="sm" disabled={isPending}>
                 Speichern
               </Button>
             </div>

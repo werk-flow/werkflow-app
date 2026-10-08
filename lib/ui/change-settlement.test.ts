@@ -23,3 +23,12 @@ test('unmount cancellation is distinct from timeout and supports a fresh mounted
   settlement.changed();
   expect(await current).toBe('changed');
 });
+
+test('a wait from a mark settles at once when a change landed after the mark', async () => {
+  const settlement = createChangeSettlement();
+  const before = settlement.mark();
+  settlement.changed();
+  expect(await settlement.wait(1, before)).toBe('changed');
+  // A mark taken after the change waits for the next one.
+  expect(await settlement.wait(1, settlement.mark())).toBe('timed-out');
+});

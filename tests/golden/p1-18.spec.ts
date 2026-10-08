@@ -80,7 +80,8 @@ test.describe('P1-18 installed equipment vertical slice @P1-18', () => {
       const installationDate = ownedBerlinDateAtOffset('p1-18', 95);
       const commissioningDate = ownedBerlinDateAtOffset('p1-18', 96);
       const warrantyEndDate = ownedBerlinDateAtOffset('p1-18', 99);
-      const registeredNumber = await createInstalledEquipment(adminPage, {
+      const registered = await createInstalledEquipment(adminPage, {
+        orgId: world.orgId,
         customerName: names.customer,
         siteName: names.site,
         name: names.equipment,
@@ -94,6 +95,8 @@ test.describe('P1-18 installed equipment vertical slice @P1-18', () => {
         warrantyProvider: 'WerkFlow Testtechnik',
         warrantyEndDate,
       });
+      expect(registered.name).toBe(names.equipment);
+      const registeredNumber = registered.equipmentNumber;
       await expect(visibleText(adminPage, registeredNumber)).toBeVisible();
       await expect(visibleText(adminPage, names.serialNumber)).toBeVisible();
       await expect(equipmentEvent(adminPage, 'registered')).toBeVisible();
@@ -169,7 +172,8 @@ test.describe('P1-18 installed equipment vertical slice @P1-18', () => {
 
     await test.step('Replace the equipment and keep its predecessor', async () => {
       await adminPage.goto(`/service/anlagen/${equipmentNumber}`);
-      const successorNumber = await replaceInstalledEquipment(adminPage, {
+      const successorRow = await replaceInstalledEquipment(adminPage, {
+        orgId: world.orgId,
         successorName: names.successor,
         serialNumber: names.successorSerial,
         reason: 'Anlage nach dokumentiertem Austausch ersetzt',
@@ -177,7 +181,9 @@ test.describe('P1-18 installed equipment vertical slice @P1-18', () => {
       await expect(equipmentRelation(adminPage, 'predecessor', names.equipment)).toBeVisible();
       const predecessor = await getInstalledEquipmentState(world.orgId, equipmentNumber);
       expect(predecessor.equipment.state).toBe('replaced');
-      const successor = await getInstalledEquipmentState(world.orgId, successorNumber);
+      expect(successorRow.name).toBe(names.successor);
+      expect(successorRow.predecessorId).toBe(predecessor.equipment.id);
+      const successor = await getInstalledEquipmentState(world.orgId, successorRow.equipmentNumber);
       expect(successor.equipment.predecessor_equipment_id).toBe(predecessor.equipment.id);
     });
   });

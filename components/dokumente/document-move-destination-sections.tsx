@@ -1,7 +1,7 @@
 'use client';
 
 import { createElement, type ReactNode } from 'react';
-import { ChevronRight, Folder, Loader2 } from 'lucide-react';
+import { ChevronRight, Folder } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
@@ -239,8 +239,7 @@ export function MoveDestinationFooter({
         <Button type="button" variant="outline" onClick={onCancel} disabled={isPending}>
           Abbrechen
         </Button>
-        <Button type="button" onClick={onConfirm} disabled={confirmDisabled}>
-          {isPending && <Loader2 className="size-4 animate-spin" />}
+        <Button pending={isPending} type="button" onClick={onConfirm} disabled={confirmDisabled}>
           {mode === 'copy' ? 'Hierhin kopieren' : 'Hierhin verschieben'}
         </Button>
       </div>

@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 import { useBanner } from '@/components/ui/banner';
 import { useBusyIds } from '@/hooks/use-busy-id';
@@ -73,7 +72,6 @@ function useInventoryItemEditor(
   overview: InventoryOverview,
   { setFormError, busyItems, waitForItems }: SharedItemFeedback,
 ): ItemEditor {
-  const router = useRouter();
   const { showBanner } = useBanner();
   const [itemDialogOpen, setItemDialogOpen] = useState(false);
   const [itemForm, setItemForm] = useState<ItemFormState>(EMPTY_ITEM_FORM);
@@ -139,9 +137,8 @@ function useInventoryItemEditor(
         showBanner({ variant: 'success', message: 'Der Artikel wurde angelegt.' });
         const confirmedDraft = { ...draft, confirmedId: result.item.id };
         setPendingItemDraft((current) => (current === draft ? confirmedDraft : current));
-        const refreshed = waitForItems();
-        router.refresh();
-        await refreshed;
+        // The action's response renders the route with the new item.
+        await waitForItems();
         setPendingItemDraft((current) => (current === confirmedDraft ? null : current));
       })();
       return;
@@ -156,7 +153,6 @@ function useInventoryItemEditor(
       }
       setItemDialogOpen(false);
       showBanner({ variant: 'success', message: 'Der Artikel wurde gespeichert.' });
-      router.refresh();
       void busyItems.run(itemId, waitForItems);
     })();
   }
@@ -178,7 +174,6 @@ function useInventoryLocationCreator(
   locations: InventoryLocation[],
   setFormError: (error: string | null) => void,
 ): LocationCreator {
-  const router = useRouter();
   const { showBanner } = useBanner();
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
   const [locationForm, setLocationForm] = useState<LocationFormState>(EMPTY_LOCATION_FORM);
@@ -217,9 +212,7 @@ function useInventoryLocationCreator(
       const confirmedDraft = { ...draft, confirmedId: result.location.id };
       setPendingLocationDraft((current) => (current === draft ? confirmedDraft : current));
       showBanner({ variant: 'success', message: 'Das Lager wurde angelegt.' });
-      const settled = waitForLocations();
-      router.refresh();
-      await settled;
+      await waitForLocations();
       setPendingLocationDraft((current) => (current === confirmedDraft ? null : current));
     })();
   }
@@ -239,7 +232,6 @@ function useInventoryStockAdjuster(
   locations: InventoryLocation[],
   { setFormError, busyItems, waitForItems }: SharedItemFeedback,
 ): StockAdjuster {
-  const router = useRouter();
   const { showBanner } = useBanner();
   const [stockDialog, setStockDialog] = useState<StockDialogState>(null);
   const stockSave = useServerAction(adjustInventoryStock);
@@ -265,7 +257,6 @@ function useInventoryStockAdjuster(
       }
       setStockDialog(null);
       showBanner({ variant: 'success', message: 'Der Bestand wurde angepasst.' });
-      router.refresh();
       void busyItems.run(itemId, waitForItems);
     })();
   }

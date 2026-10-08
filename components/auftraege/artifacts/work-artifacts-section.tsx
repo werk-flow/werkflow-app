@@ -3,7 +3,7 @@
 import { PlainButton } from '@/components/ui/plain-button';
 import { useId, useState, type ReactElement } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ClipboardList, Loader2, Plus } from 'lucide-react';
+import { ClipboardList, Plus } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -302,6 +302,7 @@ function WorkArtifactDialog({
             <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/30 p-3 text-sm">
               <p>Dieser Arbeitsnachweis wurde zwischenzeitlich geändert.</p>
               <Button
+                pending={isBusy('reload')}
                 type="button"
                 size="sm"
                 variant="outline"
@@ -313,7 +314,7 @@ function WorkArtifactDialog({
                   });
                 }}
               >
-                {isBusy('reload') && <Loader2 className="size-4 animate-spin" />}Aktualisieren
+                Aktualisieren
               </Button>
             </div>
           )}
@@ -388,21 +389,59 @@ function WorkArtifactDialog({
           <ErrorText>{error}</ErrorText>
         </DialogBody>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={requestClose} disabled={anyBusy}>
-            {isBusy('close') && <Loader2 className="size-4 animate-spin" />}Schließen
-          </Button>
+          <WorkArtifactSecondaryActions
+            isBusy={isBusy}
+            anyBusy={anyBusy}
+            canEdit={!readOnly && editing}
+            onClose={requestClose}
+            onSaveDraft={() => save(false)}
+          />
           {!readOnly && editing && (
-            <>
-              <Button type="button" variant="outline" onClick={() => save(false)} disabled={anyBusy}>
-                {isBusy('draft') && <Loader2 className="size-4 animate-spin" />}Als Entwurf speichern
-              </Button>
-              <Button type="submit" form={artifactFormId} disabled={anyBusy || loading}>
-                {isBusy('submit') && <Loader2 className="size-4 animate-spin" />}Zur Prüfung einreichen
-              </Button>
-            </>
+            <Button
+              pending={isBusy('submit')}
+              type="submit"
+              form={artifactFormId}
+              disabled={anyBusy || loading}
+            >
+              Zur Prüfung einreichen
+            </Button>
           )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** The footer's close and draft actions; the dialog keeps its submit beside its form. */
+function WorkArtifactSecondaryActions({
+  isBusy,
+  anyBusy,
+  canEdit,
+  onClose,
+  onSaveDraft,
+}: {
+  isBusy: (state: string) => boolean;
+  anyBusy: boolean;
+  canEdit: boolean;
+  onClose: () => void;
+  onSaveDraft: () => void;
+}) {
+  return (
+    <>
+      <Button pending={isBusy('close')} type="button" variant="outline" onClick={onClose} disabled={anyBusy}>
+        Schließen
+      </Button>
+      {canEdit && (
+        <Button
+          pending={isBusy('draft')}
+          type="button"
+          variant="outline"
+          onClick={onSaveDraft}
+          disabled={anyBusy}
+        >
+          Als Entwurf speichern
+        </Button>
+      )}
+    </>
   );
 }

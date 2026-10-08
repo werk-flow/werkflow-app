@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { MoreHorizontal, ExternalLink, Pencil, Trash2, Loader2 } from 'lucide-react';
+import { MoreHorizontal, ExternalLink, Pencil, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -44,8 +44,8 @@ export function ClientActionsMenu({ client, isBusy = false, onSaved, onDelete }:
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" disabled={isBusy}>
-            {isBusy ? <Loader2 className="size-4 animate-spin" /> : <MoreHorizontal className="size-4" />}
+          <Button pending={isBusy} variant="ghost" size="sm" className="h-8 w-8 p-0" disabled={isBusy}>
+            <MoreHorizontal className="size-4" />
             <span className="sr-only">Aktionen öffnen</span>
           </Button>
         </DropdownMenuTrigger>

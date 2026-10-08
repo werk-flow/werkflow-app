@@ -1,6 +1,6 @@
 'use client';
 
-import { MoreVertical, UserCog, UserMinus, Loader2 } from 'lucide-react';
+import { MoreVertical, UserCog, UserMinus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -33,13 +33,14 @@ export function MitarbeiterDetailActionsMenu({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
+          pending={isUpdatingRole}
           variant="outline"
           size="icon"
           className="size-8"
           aria-label="Aktionen"
           disabled={isUpdatingRole}
         >
-          {isUpdatingRole ? <Loader2 className="size-4 animate-spin" /> : <MoreVertical className="size-4" />}
+          <MoreVertical className="size-4" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">

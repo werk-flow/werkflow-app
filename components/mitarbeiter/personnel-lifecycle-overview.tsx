@@ -1,9 +1,10 @@
 'use client';
 
-import { FileDown, Loader2, UserRoundCheck } from 'lucide-react';
+import { FileDown, UserRoundCheck } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { ErrorText } from '@/components/ui/error-text';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { ACCESS_STATE_LABELS, EMPLOYMENT_LIFECYCLE_LABELS } from '@/lib/personnel/lifecycle';
@@ -32,12 +33,7 @@ export function PersonnelLifecycleHeader({ lifecycle, canAdministerAccess }: Per
             Zugang, Onboarding und Übergänge bleiben getrennt und nachvollziehbar.
           </p>
         </div>
-        {isPending ? (
-          <Loader2
-            className="size-4 animate-spin text-muted-foreground"
-            aria-label="Änderung wird gespeichert"
-          />
-        ) : null}
+        {isPending ? <Spinner className="text-muted-foreground" label="Änderung wird gespeichert" /> : null}
         {canAdministerAccess ? (
           <Button size="sm" variant="outline" onClick={() => void downloadManifest()} disabled={isPending}>
             <FileDown className="size-4" /> Arbeitsstand exportieren

@@ -2,7 +2,6 @@
 
 import type { OriginRequestLink } from '../shared/origin-request-line';
 import { useState, useCallback, useMemo, useRef } from 'react';
-import { useRouter } from 'next/navigation';
 import { useActiveJobs } from '@/hooks/use-active-jobs';
 
 import { PageBody, PageShell } from '@/components/shared/page-shell';
@@ -155,7 +154,6 @@ export function JobDetailContent({
   handoverWorkspace,
   originRequest,
 }: JobDetailContentProps) {
-  const router = useRouter();
   const { liveJob, setLiveJob, applyLiveJobPatch } = useJobDetailLiveJob(job);
   const { activeJobIds } = useActiveJobs();
   const displayTitle = getJobDisplayTitle(liveJob);
@@ -165,13 +163,9 @@ export function JobDetailContent({
   const [showAssignDialog, setShowAssignDialog] = useState(false);
   const [showClientDialog, setShowClientDialog] = useState(false);
   const [showProjectDialog, setShowProjectDialog] = useState(false);
-  // The shared open-dialog context suspends Realtime refreshes while the
-  // edit dialog is open; the close refresh picks up the dialog's own edits
-  // (freshness contract rule 4).
-  const handleEditDialogOpenChange = (open: boolean) => {
-    setShowEditDialog(open);
-    if (!open) router.refresh();
-  };
+  // No refresh on close: updateJob's response renders the route, and a
+  // Realtime refresh deferred while the dialog was open runs once it closes.
+  const handleEditDialogOpenChange = (open: boolean) => setShowEditDialog(open);
   const {
     dialogClients,
     dialogMembers,

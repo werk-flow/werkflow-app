@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import { usePendingTask } from '@/hooks/use-server-action';
 import { useBanner } from '@/components/ui/banner';
@@ -134,8 +133,8 @@ export function WorkTransitionDialog({
             <Button type="button" variant="outline" onClick={onClose} disabled={pending}>
               Abbrechen
             </Button>
-            <Button type="submit" disabled={pending}>
-              {pending && <Loader2 className="size-4 animate-spin" />}Änderung speichern
+            <Button pending={pending} type="submit" disabled={pending}>
+              Änderung speichern
             </Button>
           </DialogFooter>
         </form>

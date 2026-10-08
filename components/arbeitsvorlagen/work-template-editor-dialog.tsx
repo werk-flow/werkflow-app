@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type ReactElement } from 'react';
-import { History, Loader2, Plus, Save, Send } from 'lucide-react';
+import { History, Plus, Save, Send } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -294,18 +294,23 @@ function TemplateEditorFooter({
       </Button>
       {editable ? (
         <>
-          <Button type="submit" variant="outline" disabled={isPending || isOptionPending}>
-            {isSaving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+          <Button pending={isSaving} type="submit" variant="outline" disabled={isPending || isOptionPending}>
+            <Save className="size-4" />
             Speichern
           </Button>
-          <Button type="button" onClick={onPublish} disabled={isPending || isOptionPending}>
-            {isPublishing ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+          <Button
+            pending={isPublishing}
+            type="button"
+            onClick={onPublish}
+            disabled={isPending || isOptionPending}
+          >
+            <Send className="size-4" />
             Veröffentlichen
           </Button>
         </>
       ) : (
-        <Button type="button" onClick={onCreateNextDraft} disabled={isPending}>
-          {isCreatingNextDraft ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+        <Button pending={isCreatingNextDraft} type="button" onClick={onCreateNextDraft} disabled={isPending}>
+          <Plus className="size-4" />
           Neue Version
         </Button>
       )}

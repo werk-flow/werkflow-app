@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, type ReactElement } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
@@ -144,8 +143,7 @@ export function MaintenanceCoverageFollowUpDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending && <Loader2 className="size-4 animate-spin" />}
+            <Button pending={isPending} type="submit" disabled={isPending}>
               Speichern
             </Button>
           </DialogFooter>

@@ -1,6 +1,5 @@
 'use client';
 
-import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -145,8 +144,7 @@ export function CommunicationSettingsDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending && <Loader2 className="size-4 animate-spin" />}
+            <Button pending={isPending} type="submit" disabled={isPending}>
               Speichern
             </Button>
           </DialogFooter>

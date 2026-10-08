@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 import { useBanner } from '@/components/ui/banner';
 import { useLiveView } from '@/hooks/use-live-view';
@@ -24,7 +23,6 @@ export type PersonnelLifecycleController = ReturnType<typeof usePersonnelLifecyc
  */
 export function usePersonnelLifecycleView(initialData: PersonnelLifecycleView) {
   const { showBanner } = useBanner();
-  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -65,7 +63,7 @@ export function usePersonnelLifecycleView(initialData: PersonnelLifecycleView) {
   const rowBusy = useBusyIds();
 
   function reconcileMutation(): void {
-    router.refresh();
+    // Every lifecycle mutation revalidates, so its response already renders the route.
     // The owned reader settles independently of route commits and mutation pending.
     void view.refresh();
   }

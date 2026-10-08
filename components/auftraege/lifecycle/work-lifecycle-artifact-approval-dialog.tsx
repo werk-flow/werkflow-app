@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import { usePendingTask } from '@/hooks/use-server-action';
 import { Button } from '@/components/ui/button';
@@ -142,8 +141,8 @@ export function ArtifactApprovalDependencyDialog({
             <Button type="button" variant="outline" onClick={onClose} disabled={pending}>
               Abbrechen
             </Button>
-            <Button type="submit" disabled={pending}>
-              {pending && <Loader2 className="size-4 animate-spin" />}Verknüpfen
+            <Button pending={pending} type="submit" disabled={pending}>
+              Verknüpfen
             </Button>
           </DialogFooter>
         </form>

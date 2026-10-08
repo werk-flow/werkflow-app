@@ -1,7 +1,5 @@
 'use client';
 
-import { Loader2 } from 'lucide-react';
-
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -153,8 +151,7 @@ export function EditRequestDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading && <Loader2 className="size-4 animate-spin" />}
+            <Button pending={isLoading} type="submit" disabled={isLoading}>
               Speichern
             </Button>
           </DialogFooter>

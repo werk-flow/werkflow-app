@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import type { ReactElement } from 'react';
-import { ArrowRight, ExternalLink, LinkIcon, Loader2, MapPin, RefreshCw, Unlink } from 'lucide-react';
+import { ArrowRight, ExternalLink, LinkIcon, MapPin, RefreshCw, Unlink } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { InlinePending } from '@/components/ui/inline-pending';
@@ -11,6 +11,7 @@ import { setInstalledEquipmentWorkLink } from '@/lib/installed-equipment/actions
 import { EQUIPMENT_IDENTIFIER_TYPE_LABELS, type EquipmentDetail } from '@/lib/installed-equipment/types';
 import { Fact } from './equipment-detail-sections';
 import type { EquipmentDetailActions } from './use-equipment-detail-actions';
+import { Spinner } from '@/components/ui/spinner';
 
 function EquipmentClientSection({ item }: { item: EquipmentDetail }): ReactElement {
   return (
@@ -197,11 +198,7 @@ export function EquipmentDetailSidebar({
         onClick={onOpenSource}
         disabled={busy.isBusy('source-options')}
       >
-        {busy.isBusy('source-options') ? (
-          <Loader2 className="size-4 animate-spin" />
-        ) : (
-          <LinkIcon className="size-4" />
-        )}
+        {busy.isBusy('source-options') ? <Spinner /> : <LinkIcon className="size-4" />}
         Herkunftsnachweis verknüpfen
       </Button>
       {canCorrectTerminalAction && (

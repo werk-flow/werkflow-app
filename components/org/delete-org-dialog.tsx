@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Trash2, Loader2, AlertTriangle } from 'lucide-react';
+import { Trash2, AlertTriangle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -22,6 +22,7 @@ import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import { loadDocument } from '@/lib/navigation/document-load';
 import { deleteOrganization } from '@/lib/org/delete-action';
+import { Spinner } from '@/components/ui/spinner';
 
 const ERROR_MESSAGES: Readonly<Record<string, string>> = {
   org_not_found: 'Organisation nicht gefunden.',
@@ -135,7 +136,7 @@ export function DeleteOrgDialog({ orgName, disabled = false }: DeleteOrgDialogPr
             disabled={isLoading || !isNameMatch}
             variant="destructive"
           >
-            {isLoading && <Loader2 className="size-4 animate-spin" />}
+            {isLoading && <Spinner />}
             {isLoading ? 'Wird gelöscht…' : 'Endgültig löschen'}
           </AlertDialogAction>
         </AlertDialogFooter>

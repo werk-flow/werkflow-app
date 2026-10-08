@@ -2,6 +2,7 @@ import * as React from 'react';
 import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
 
+import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
@@ -38,19 +39,41 @@ const buttonVariants = cva(
 type ButtonProps = React.ComponentProps<'button'> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean;
+    /**
+     * A running action: the button is busy (`aria-busy`) and disabled, and a
+     * spinner takes the place of its leading icon, so an icon button keeps
+     * its size.
+     */
+    pending?: boolean;
   };
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
+  ({ className, variant, size, asChild = false, pending = false, disabled, children, ...props }, ref) => {
     const Comp = asChild ? Slot : 'button';
+    // A slotted child renders its own content, so it cannot take the spinner.
+    const busy = pending && !asChild;
 
     return (
       <Comp
         data-slot="button"
-        className={cn(buttonVariants({ variant, size, className }))}
+        className={cn(
+          buttonVariants({ variant, size, className }),
+          busy && '[&>svg:not([data-slot=spinner])]:hidden',
+        )}
         ref={ref}
+        disabled={disabled || busy || undefined}
+        aria-busy={busy || undefined}
         {...props}
-      />
+      >
+        {busy ? (
+          <>
+            <Spinner />
+            {children}
+          </>
+        ) : (
+          children
+        )}
+      </Comp>
     );
   },
 );

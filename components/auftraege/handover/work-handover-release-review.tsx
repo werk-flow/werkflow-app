@@ -1,6 +1,6 @@
 'use client';
 
-import { CheckCircle2, Eye, Loader2 } from 'lucide-react';
+import { CheckCircle2, Eye } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
@@ -107,20 +107,22 @@ export function WorkHandoverReleaseReview({
       </Field>
       <div className="flex flex-wrap gap-2">
         <Button
+          pending={isBusy('preview')}
           type="button"
           variant="outline"
           onClick={createPreview}
           disabled={anyBusy || !canPreview || activeClocks > 0}
         >
-          {isBusy('preview') ? <Loader2 className="animate-spin" /> : <Eye />}
+          <Eye />
           Vorschau öffnen
         </Button>
         <Button
+          pending={isBusy('release')}
           type="button"
           onClick={release}
           disabled={anyBusy || !preview || preview.packageVersion !== packageVersion || activeClocks > 0}
         >
-          {isBusy('release') ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}
+          <CheckCircle2 />
           Freigeben und übergeben
         </Button>
       </div>

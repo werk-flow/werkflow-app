@@ -1,7 +1,6 @@
 'use client';
 
 import type { FormEvent } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -77,8 +76,7 @@ export function JobDispatchChallengeDialog({
             >
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isChallenging}>
-              {isChallenging && <Loader2 className="size-4 animate-spin" />}
+            <Button pending={isChallenging} type="submit" disabled={isChallenging}>
               Rückfrage senden
             </Button>
           </DialogFooter>

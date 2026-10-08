@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { createAdminClient } from './shared';
+import { createAdminClient, persisted, type Persisted } from './shared';
 
 export type EmployeeRecordState = {
   id: string;
@@ -472,4 +472,29 @@ export async function seedNoLoginPersonnelRecord(input: {
   });
   if (eventError) throw new Error(`No-login personnel event setup failed: ${eventError.message}`);
   return data.id;
+}
+
+export type PersistedEmployeeRecord = Persisted<{
+  id: string;
+  organizationId: string;
+  firstName: string | null;
+  lastName: string | null;
+  employeeNumber: string | null;
+}>;
+
+/** The personnel record a dialog just created, read back by the id its detail URL carries. */
+export async function getEmployeeRecordById(id: string): Promise<PersistedEmployeeRecord> {
+  const { data, error } = await createAdminClient()
+    .from('employee_records')
+    .select('id, organization_id, first_name, last_name, employee_number')
+    .eq('id', id)
+    .single();
+  if (error) throw new Error(`Employee record ${id} lookup failed: ${error.message}`);
+  return persisted({
+    id: data.id,
+    organizationId: data.organization_id,
+    firstName: data.first_name,
+    lastName: data.last_name,
+    employeeNumber: data.employee_number,
+  });
 }

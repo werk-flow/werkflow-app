@@ -1,7 +1,7 @@
 'use client';
 
 import type { RefObject } from 'react';
-import { Download, Loader2 } from 'lucide-react';
+import { Download } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -23,6 +23,7 @@ import {
   getUploaderName,
 } from './document-library-file-labels';
 import type { LoadedDocumentDetails } from './use-document-details-dialog';
+import { Spinner } from '@/components/ui/spinner';
 
 type DocumentDetailsMetadataProps = {
   document: OrganizationDocument;
@@ -147,13 +148,13 @@ function DocumentDetailsVersions({
         {!isTrashView && ['contract', 'invoice', 'offer', 'report'].includes(document.category) && (
           <>
             <Button
+              pending={isBusy}
               type="button"
               variant="outline"
               size="sm"
               onClick={() => versionInputRef.current?.click()}
               disabled={isBusy}
             >
-              {isBusy && <Loader2 className="size-4 animate-spin" />}
               Neue Version
             </Button>
             <input
@@ -174,13 +175,14 @@ function DocumentDetailsVersions({
             </p>
           </div>
           <Button
+            pending={isBusy}
             type="button"
             variant="ghost"
             size="sm"
             onClick={() => onDownload(document)}
             disabled={isBusy}
           >
-            {isBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+            <Download className="size-4" />
             Download
           </Button>
         </div>
@@ -212,11 +214,7 @@ function DocumentDetailsVersions({
                   onClick={() => onDownloadVersion(version.id)}
                   disabled={isItemBusy(version.id)}
                 >
-                  {isItemBusy(version.id) ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Download className="size-4" />
-                  )}
+                  {isItemBusy(version.id) ? <Spinner /> : <Download className="size-4" />}
                   Download
                 </Button>
               </div>

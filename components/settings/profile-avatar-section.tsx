@@ -2,7 +2,7 @@
 
 import 'react-easy-crop/react-easy-crop.css';
 
-import { ImagePlus, Loader2, Trash2, User } from 'lucide-react';
+import { ImagePlus, Trash2, User } from 'lucide-react';
 
 import { ProfileAvatarCropControls } from '@/components/settings/profile-avatar-crop-controls';
 import { useProfileAvatarUpload } from '@/components/settings/use-profile-avatar-upload';
@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Spinner } from '@/components/ui/spinner';
 
 export function ProfileAvatarSection() {
   const {
@@ -79,7 +80,7 @@ export function ProfileAvatarSection() {
               >
                 {isUploading ? (
                   <>
-                    <Loader2 className="mr-2 size-4 animate-spin" />
+                    <Spinner className="mr-2" />
                     Wird hochgeladen…
                   </>
                 ) : (
@@ -99,7 +100,7 @@ export function ProfileAvatarSection() {
                 >
                   {isRemoving ? (
                     <>
-                      <Loader2 className="mr-2 size-4 animate-spin" />
+                      <Spinner className="mr-2" />
                       Wird entfernt…
                     </>
                   ) : (
@@ -156,7 +157,7 @@ export function ProfileAvatarSection() {
             <Button type="button" onClick={handleUploadAvatar} disabled={isUploading || !croppedAreaPixels}>
               {isUploading ? (
                 <>
-                  <Loader2 className="mr-2 size-4 animate-spin" />
+                  <Spinner className="mr-2" />
                   Speichert…
                 </>
               ) : (

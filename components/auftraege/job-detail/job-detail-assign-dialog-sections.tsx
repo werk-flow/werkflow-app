@@ -1,7 +1,5 @@
 'use client';
 
-import { Loader2 } from 'lucide-react';
-
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
@@ -82,10 +80,10 @@ function JobDetailAssignDialogFooter({
         Abbrechen
       </Button>
       <Button
+        pending={isAssigning}
         onClick={handleAssignEmployees}
         disabled={isAssigning || isLoadingDialogOptions || isExpandingAssignmentTeam}
       >
-        {isAssigning && <Loader2 className="mr-2 size-4 animate-spin" />}
         Speichern
       </Button>
     </DialogFooter>

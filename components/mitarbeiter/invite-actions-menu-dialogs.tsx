@@ -1,7 +1,5 @@
 'use client';
 
-import { Loader2 } from 'lucide-react';
-
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,6 +11,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { ErrorText } from '@/components/ui/error-text';
+import { Spinner } from '@/components/ui/spinner';
 
 type InviteConfirmDialogProps = {
   open: boolean;
@@ -56,7 +55,7 @@ export function InviteCancelConfirmDialog({
           >
             {isLoading ? (
               <>
-                <Loader2 className="mr-2 size-4 animate-spin" />
+                <Spinner className="mr-2" />
                 Wird storniert…
               </>
             ) : (
@@ -100,7 +99,7 @@ export function InviteDeleteConfirmDialog({
           >
             {isLoading ? (
               <>
-                <Loader2 className="mr-2 size-4 animate-spin" />
+                <Spinner className="mr-2" />
                 Wird gelöscht…
               </>
             ) : (

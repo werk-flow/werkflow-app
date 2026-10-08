@@ -7,7 +7,6 @@
 // or records a commitment silently.
 
 import { useCallback } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useBanner } from '@/components/ui/banner';
@@ -153,8 +152,11 @@ export function DispatchPanel({
               <Button variant="outline" onClick={() => setBatchPreview(null)} disabled={isBatchWorking}>
                 Abbrechen
               </Button>
-              <Button disabled={isBatchWorking} onClick={() => void runBatchCommit()}>
-                {isBatchWorking && <Loader2 className="size-4 animate-spin" />}
+              <Button
+                pending={isBatchWorking}
+                disabled={isBatchWorking}
+                onClick={() => void runBatchCommit()}
+              >
                 Jetzt verschieben
               </Button>
             </DialogFooter>

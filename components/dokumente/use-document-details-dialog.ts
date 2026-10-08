@@ -23,7 +23,7 @@ export function useDocumentDetailsDialog({
   isTrashView: boolean;
   mutations: DocumentLibraryMutations;
 }) {
-  const { busy, refreshDocuments } = mutations;
+  const { busy } = mutations;
   const [detailsDialog, setDetailsDialog] = useState<OrganizationDocument | null>(null);
   const detailsDialogIdRef = useRef<string | null>(null);
   const [detailsData, setDetailsData] = useState<LoadedDocumentDetails | null>(null);
@@ -91,7 +91,6 @@ export function useDocumentDetailsDialog({
         if (detailsDialogIdRef.current === document.id) {
           setDetailsDialog(result.document);
         }
-        refreshDocuments();
       })
       .catch(revert);
   }

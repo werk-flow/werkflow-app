@@ -11,7 +11,7 @@ import { addLocalMonthsClamped } from '../../../../lib/planning/date-time';
 import { serviceCaseCreateSchema } from '../../../../lib/service-cases/validation';
 import { toJson } from '../../../../lib/supabase/json';
 import type { ServiceCaseChargeContext } from '../../../../lib/service-cases/types';
-import { createAdminClient } from './shared';
+import { createAdminClient, persisted, type Persisted } from './shared';
 
 // Seeds below call the same guarded RPCs as the manager actions, with payloads
 // parsed by the product schemas, so a test that claims a later service flow
@@ -536,4 +536,58 @@ export async function getMaintenancePlanNumbersByClient(orgId: string, clientId:
     .order('plan_number');
   if (error) throw new Error(`Maintenance plan lookup failed: ${error.message}`);
   return (data ?? []).map((plan) => plan.plan_number);
+}
+
+export type PersistedEquipment = Persisted<{
+  id: string;
+  equipmentNumber: string;
+  name: string;
+  predecessorId: string | null;
+}>;
+
+/** The installed equipment a dialog just saved, read back by the number its detail URL carries. */
+export async function getInstalledEquipmentByNumber(
+  orgId: string,
+  equipmentNumber: string,
+): Promise<PersistedEquipment> {
+  const { data, error } = await createAdminClient()
+    .from('installed_equipment')
+    .select('id, equipment_number, name, predecessor_equipment_id')
+    .eq('organization_id', orgId)
+    .eq('equipment_number', equipmentNumber)
+    .single();
+  if (error) throw new Error(`Equipment ${equipmentNumber} lookup failed: ${error.message}`);
+  return persisted({
+    id: data.id,
+    equipmentNumber: data.equipment_number,
+    name: data.name,
+    predecessorId: data.predecessor_equipment_id,
+  });
+}
+
+export type PersistedServiceCase = Persisted<{
+  id: string;
+  caseNumber: string;
+  summary: string;
+  sourceRequestId: string | null;
+}>;
+
+/** The service case a dialog just saved, read back by the number its detail URL carries. */
+export async function getServiceCaseByNumber(
+  orgId: string,
+  caseNumber: string,
+): Promise<PersistedServiceCase> {
+  const { data, error } = await createAdminClient()
+    .from('service_cases')
+    .select('id, case_number, summary, source_request_id')
+    .eq('organization_id', orgId)
+    .eq('case_number', caseNumber)
+    .single();
+  if (error) throw new Error(`Service case ${caseNumber} lookup failed: ${error.message}`);
+  return persisted({
+    id: data.id,
+    caseNumber: data.case_number,
+    summary: data.summary,
+    sourceRequestId: data.source_request_id,
+  });
 }

@@ -8,6 +8,22 @@ import { testSupabaseClientOptions } from '.././client-options';
 // the UI cannot prove (the invite code inside the email link, and the stock
 // ledger behind the visible quantities).
 
+declare const persistedBrand: unique symbol;
+
+/**
+ * A row read back from the database after the UI saved it. A mutation step
+ * helper that returns a value returns this type, so it must call a reader in
+ * this folder: the screen or the URL can show an optimistic echo, the database
+ * cannot (testing.md, "Spec checklist"). Only `persisted` below builds one;
+ * ESLint refuses a cast to it and an import of `persisted` outside db/.
+ */
+export type Persisted<Row> = Row & { readonly [persistedBrand]: true };
+
+/** Brands a row that a reader in this folder just read through the admin client. */
+export function persisted<Row extends object>(row: Row): Persisted<Row> {
+  return row as Persisted<Row>;
+}
+
 export function createAdminClient(): SupabaseClient<Database> {
   return createClient<Database>(
     requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
@@ -46,6 +62,19 @@ export async function getOrganizationJoinCode(orgId: string): Promise<string> {
     .single();
   if (error) throw new Error(`Organization join code lookup failed: ${error.message}`);
   return data.unique_code;
+}
+
+export type PersistedJoinCode = Persisted<{ organizationId: string; name: string; code: string }>;
+
+/** The organization that owns a join code, read after the screen showed the code. */
+export async function getOrganizationByJoinCode(code: string): Promise<PersistedJoinCode> {
+  const { data, error } = await createAdminClient()
+    .from('organizations')
+    .select('id, name, unique_code')
+    .eq('unique_code', code)
+    .single();
+  if (error) throw new Error(`Organization lookup by the shown join code failed: ${error.message}`);
+  return persisted({ organizationId: data.id, name: data.name, code: data.unique_code });
 }
 
 // The stored states of one person's join requests to one organization, oldest first.

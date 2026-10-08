@@ -15,8 +15,8 @@ import type { OrganizationDocument } from '@/lib/documents/types';
 type ContextualDocumentRowActionsOptions = {
   /** Row-scoped pending runner (`useBusyIds().run`) keyed by document id. */
   runBusy: (documentId: string, task: () => Promise<void>) => Promise<void>;
-  /** Refreshes the route and resolves once the refreshed documents arrived. */
-  settleAfterRefresh: () => Promise<void>;
+  /** Resolves once the documents rendered by the action's response arrived. */
+  waitForDocuments: () => Promise<void>;
   showBanner: ReturnType<typeof useBanner>['showBanner'];
   setRecentlyUploadedDocuments: Dispatch<SetStateAction<OrganizationDocument[]>>;
 };
@@ -38,7 +38,7 @@ type ContextualDocumentRowActions = {
 /** Rename, unlink and trash of one document row, each pending on its own row. */
 export function useContextualDocumentRowActions({
   runBusy,
-  settleAfterRefresh,
+  waitForDocuments,
   showBanner,
   setRecentlyUploadedDocuments,
 }: ContextualDocumentRowActionsOptions): ContextualDocumentRowActions {
@@ -96,7 +96,7 @@ export function useContextualDocumentRowActions({
         ),
       );
       setRenameDocument(null);
-      await settleAfterRefresh();
+      await waitForDocuments();
     }).catch(() => setRenameError(renameFailure));
   }
 
@@ -114,7 +114,7 @@ export function useContextualDocumentRowActions({
           current.filter((recentDocument) => recentDocument.id !== document.id),
         );
         showFeedback('success', 'Verknüpfung wurde entfernt. Die Datei bleibt in der Dokumentenablage.');
-        await settleAfterRefresh();
+        await waitForDocuments();
       },
       unlinkFailure,
     );
@@ -149,12 +149,12 @@ export function useContextualDocumentRowActions({
                   return;
                 }
                 showFeedback('success', 'Datei wurde wiederhergestellt.');
-                await settleAfterRefresh();
+                await waitForDocuments();
               },
               restoreFailure,
             ),
         });
-        await settleAfterRefresh();
+        await waitForDocuments();
       },
       trashFailure,
     );

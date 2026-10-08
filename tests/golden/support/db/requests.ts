@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Database } from '../../../../lib/supabase/database.types';
-import { createAdminClient } from './shared';
+import { createAdminClient, persisted, type Persisted } from './shared';
 
 type RequestEnums = Database['public']['Enums'];
 
@@ -254,4 +254,31 @@ export async function countOpenClientRequests(orgId: string): Promise<number> {
     throw new Error(`Open request count failed: ${error.message}`);
   }
   return count ?? 0;
+}
+
+export type PersistedRequest = Persisted<{
+  id: string;
+  organizationId: string;
+  requestNumber: string | null;
+  summary: string;
+  status: RequestEnums['request_status'];
+  clientId: string | null;
+}>;
+
+/** The request a dialog just captured, read back by the id its detail URL carries. */
+export async function getRequestById(id: string): Promise<PersistedRequest> {
+  const { data, error } = await createAdminClient()
+    .from('client_requests')
+    .select('id, organization_id, request_number, summary, status, client_id')
+    .eq('id', id)
+    .single();
+  if (error) throw new Error(`Request ${id} lookup failed: ${error.message}`);
+  return persisted({
+    id: data.id,
+    organizationId: data.organization_id,
+    requestNumber: data.request_number,
+    summary: data.summary,
+    status: data.status,
+    clientId: data.client_id,
+  });
 }

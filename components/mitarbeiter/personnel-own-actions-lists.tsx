@@ -1,11 +1,12 @@
 'use client';
 
-import { Check, Download, Loader2 } from 'lucide-react';
+import { Check, Download } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { OwnPersonnelActions } from '@/lib/personnel/lifecycle-actions';
 import { REQUIREMENT_STATE_LABELS } from '@/lib/personnel/lifecycle';
+import { Spinner } from '@/components/ui/spinner';
 
 type PersonnelOwnRequirementListProps = {
   requirements: OwnPersonnelActions['requirements'];
@@ -41,12 +42,7 @@ export function PersonnelOwnRequirementList({
                 onClick={() => void onAcknowledge(requirement.id, requirement.version)}
                 disabled={isBusy(requirement.id)}
               >
-                {isBusy(requirement.id) ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Check className="size-4" />
-                )}{' '}
-                Bestätigen
+                {isBusy(requirement.id) ? <Spinner /> : <Check className="size-4" />} Bestätigen
               </Button>
             ) : null}
           </div>
@@ -86,12 +82,7 @@ export function PersonnelOwnDocumentList({
               onClick={() => void onDownload(document.id, document.documentId)}
               disabled={isBusy(document.id)}
             >
-              {isBusy(document.id) ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Download className="size-4" />
-              )}{' '}
-              Öffnen
+              {isBusy(document.id) ? <Spinner /> : <Download className="size-4" />} Öffnen
             </Button>
             <Button
               size="sm"
@@ -99,12 +90,7 @@ export function PersonnelOwnDocumentList({
               onClick={() => void onAcknowledge(document.id, document.currentVersionNumber)}
               disabled={isBusy(document.id)}
             >
-              {isBusy(document.id) ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Check className="size-4" />
-              )}{' '}
-              Erhalt bestätigen
+              {isBusy(document.id) ? <Spinner /> : <Check className="size-4" />} Erhalt bestätigen
             </Button>
           </div>
         </li>

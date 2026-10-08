@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { useRouter } from 'next/navigation';
 
 import { useServerAction } from '@/hooks/use-server-action';
 import { getMaintenanceEvidenceOptions } from '@/lib/maintenance/actions';
@@ -62,7 +61,6 @@ export function useMaintenanceDueAction({
   plannedDurationMinutes,
   onSaved,
 }: UseMaintenanceDueActionOptions): MaintenanceDueActionController {
-  const router = useRouter();
   const [action, setAction] = useState<MaintenanceDueActionKind>(defaultAction);
   const [reason, setReason] = useState('');
   const [date, setDate] = useState(due.dueDate);
@@ -128,11 +126,8 @@ export function useMaintenanceDueAction({
       return;
     }
     onOpenChange(false);
-    if (onSaved) {
-      onSaved();
-    } else {
-      router.refresh();
-    }
+    // Without a caller's live read, the action's response renders the route.
+    onSaved?.();
   });
   // The reason field is hidden for schedule, so it must never count as missing there.
   const showReason = action !== 'schedule';

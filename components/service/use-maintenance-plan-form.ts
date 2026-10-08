@@ -3,7 +3,6 @@
 import type { ActionFailure } from '@/lib/action-result';
 import { describeFailure } from '@/lib/action-messages';
 import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { useRouter } from 'next/navigation';
 
 import { useServerAction } from '@/hooks/use-server-action';
 import { createMaintenancePlan, reviseMaintenancePlan } from '@/lib/maintenance/actions';
@@ -71,7 +70,6 @@ export function useMaintenancePlanForm({
   onSubmitted,
   onSaved,
 }: UseMaintenancePlanFormOptions): MaintenancePlanFormController {
-  const router = useRouter();
   const [form, setForm] = useState<MaintenancePlanFormState>(() =>
     initial ? formFromPlan(initial) : EMPTY_MAINTENANCE_PLAN_FORM,
   );
@@ -105,11 +103,8 @@ export function useMaintenancePlanForm({
         return;
       }
       onOpenChange(false);
-      if (initial && onSaved) {
-        onSaved();
-      } else if (!onSubmitted) {
-        router.refresh();
-      }
+      // Without a caller's live read, the action's response renders the route.
+      if (initial && onSaved) onSaved();
     },
   );
   const fieldErrors = attempted ? missingFields(form, Boolean(initial)) : {};

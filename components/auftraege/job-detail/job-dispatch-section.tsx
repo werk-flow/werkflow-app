@@ -6,7 +6,6 @@
 // attendance, time, or a customer promise.
 
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
-import { useRouter } from 'next/navigation';
 import { Send } from 'lucide-react';
 
 import { useBusyIds } from '@/hooks/use-busy-id';
@@ -88,7 +87,6 @@ export function JobDispatchSection({
   readOnly = false,
   onStateChange,
 }: JobDispatchSectionProps): ReactElement | null {
-  const router = useRouter();
   // The acknowledge failure belongs to the card it was clicked on.
   const [actionError, setActionError] = useState<{
     dispatchId: string;
@@ -110,13 +108,12 @@ export function JobDispatchSection({
         const result = await runOnCard(card.dispatchId, () =>
           acknowledgeDispatch(card.dispatchId, card.revisionNumber),
         );
+        // A success renders the route in acknowledgeDispatch's response.
         if (!result.success) {
           setActionError({
             dispatchId: card.dispatchId,
             message: dispatchErrorMessage(result.error),
           });
-        } else {
-          router.refresh();
         }
       } catch {
         setActionError({
@@ -128,13 +125,12 @@ export function JobDispatchSection({
       // card itself changed (new revision, withdrawn dispatch).
       await refresh();
     },
-    [refresh, router, runOnCard],
+    [refresh, runOnCard],
   );
 
   const challenge = useJobDispatchChallenge({
     readOnly,
     refresh,
-    router,
     runChallenge,
   });
 

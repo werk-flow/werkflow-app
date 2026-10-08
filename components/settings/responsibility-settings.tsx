@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2, ShieldCheck } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 
 import { OwnResponsibilitySummary } from '@/components/settings/own-responsibility-summary';
 import {
@@ -274,13 +274,16 @@ function ConfigurationDialog({
             Abbrechen
           </Button>
           {preview ? (
-            <Button type="button" disabled={isSaving} onClick={() => void handleSave()}>
-              {isSaving && <Loader2 className="animate-spin" />}
+            <Button pending={isSaving} type="button" disabled={isSaving} onClick={() => void handleSave()}>
               Änderung bestätigen
             </Button>
           ) : (
-            <Button type="button" disabled={isLoadingPreview} onClick={() => void handlePreview()}>
-              {isLoadingPreview && <Loader2 className="animate-spin" />}
+            <Button
+              pending={isLoadingPreview}
+              type="button"
+              disabled={isLoadingPreview}
+              onClick={() => void handlePreview()}
+            >
               Wirkung prüfen
             </Button>
           )}

@@ -1,7 +1,6 @@
 'use client';
 
 import type { ReactElement } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import {
   AlertDialog,
@@ -22,6 +21,7 @@ import {
 } from '@/lib/installed-equipment/actions';
 import type { EquipmentDetail } from '@/lib/installed-equipment/types';
 import type { EquipmentDetailActions } from './use-equipment-detail-actions';
+import { Spinner } from '@/components/ui/spinner';
 
 type EquipmentCorrectionDialogProps = {
   open: boolean;
@@ -80,7 +80,7 @@ export function EquipmentCorrectionDialog({
               );
             }}
           >
-            {busy.isBusy('correction') && <Loader2 className="size-4 animate-spin" />}
+            {busy.isBusy('correction') && <Spinner />}
             Korrektur festhalten
           </AlertDialogAction>
         </AlertDialogFooter>
@@ -143,7 +143,7 @@ export function EquipmentArchiveDialog({
               );
             }}
           >
-            {busy.isBusy('archive') && <Loader2 className="size-4 animate-spin" />}
+            {busy.isBusy('archive') && <Spinner />}
             {item.archivedAt ? 'Wiederherstellen' : 'Archivieren'}
           </AlertDialogAction>
         </AlertDialogFooter>

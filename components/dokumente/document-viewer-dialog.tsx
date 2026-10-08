@@ -3,7 +3,7 @@
 import { formatGermanDateTime as formatDate } from '@/lib/utils';
 import { formatFileSize } from '@/lib/documents/format';
 import { useEffect, useState } from 'react';
-import { Download, ExternalLink, FileText, Info, Loader2, Maximize2, Minimize2 } from 'lucide-react';
+import { Download, ExternalLink, FileText, Info, Maximize2, Minimize2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -171,13 +171,14 @@ export function DocumentViewerDialog({ document, open, onOpenChange }: DocumentV
                 </Button>
               )}
               <Button
+                pending={isPending}
                 type="button"
                 size="sm"
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
                 onClick={handleDownload}
                 disabled={isPending}
               >
-                {isPending ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                <Download className="size-4" />
                 Herunterladen
               </Button>
             </div>

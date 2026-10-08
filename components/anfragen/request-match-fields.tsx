@@ -1,7 +1,5 @@
 'use client';
 
-import { Loader2 } from 'lucide-react';
-
 import { ClientSelectWithCreate } from '@/components/auftraege/shared/client-select-with-create';
 import { SiteContactFields } from '@/components/auftraege/shared/site-contact-fields';
 import { Button } from '@/components/ui/button';
@@ -68,8 +66,7 @@ export function RequestMatchFields({
         <Button type="button" variant="outline" onClick={onCancel} disabled={isPending}>
           Abbrechen
         </Button>
-        <Button type="button" onClick={onConfirm} disabled={isPending}>
-          {isPending && <Loader2 className="size-4 animate-spin" />}
+        <Button pending={isPending} type="button" onClick={onConfirm} disabled={isPending}>
           Zuordnen
         </Button>
       </DialogFooter>

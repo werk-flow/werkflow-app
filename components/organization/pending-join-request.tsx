@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Clock, Loader2 } from 'lucide-react';
+import { Clock } from 'lucide-react';
 import { z } from '@/lib/zod';
 
 import { RealtimeProvider } from '@/components/realtime/realtime-provider';
@@ -129,12 +129,12 @@ export function PendingJoinRequest({
       </div>
       <ErrorText>{error}</ErrorText>
       <Button
+        pending={withdraw.isPending}
         type="button"
         variant="outline"
         onClick={() => void handleWithdraw()}
         disabled={withdraw.isPending}
       >
-        {withdraw.isPending && <Loader2 className="size-4 animate-spin" />}
         Anfrage zurückziehen
       </Button>
     </div>

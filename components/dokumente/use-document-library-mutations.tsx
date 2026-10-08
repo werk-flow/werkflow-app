@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Undo2 } from 'lucide-react';
 
 import { useBanner } from '@/components/ui/banner';
@@ -25,9 +24,13 @@ export type DocumentLibraryMutations = ReturnType<typeof useDocumentLibraryMutat
  * through the optimistic overlay and roll back on failure; every other row
  * action marks its own row busy until the refreshed props land; the
  * move/copy dialog reports a determinate batch.
+ *
+ * Every document action revalidates (`revalidateDocuments`), so its response
+ * renders the route: no client refresh follows a save. `waitForDocuments`
+ * resolves when those props land; a batch waits from a mark taken before its
+ * first action.
  */
 export function useDocumentLibraryMutations(serverDocuments: OrganizationDocument[]) {
-  const router = useRouter();
   const documentList = useOptimisticList({
     items: serverDocuments,
     getId: getDocumentId,
@@ -57,21 +60,12 @@ export function useDocumentLibraryMutations(serverDocuments: OrganizationDocumen
     });
   }
 
-  function refreshDocuments() {
-    router.refresh();
-  }
-
   /** Runs one mutation under the row's busy id; a thrown action counts as a failure. */
   function runMutation(id: string, mutation: () => Promise<{ success: boolean }>): Promise<boolean> {
     return busy
       .run(id, mutation)
       .then((result) => result.success)
       .catch(() => false);
-  }
-
-  async function settleAfterRefresh() {
-    refreshDocuments();
-    await waitForDocuments();
   }
 
   async function runDocumentMutationFlow<Result>(mutation: () => Promise<Result>): Promise<Result> {
@@ -105,6 +99,7 @@ export function useDocumentLibraryMutations(serverDocuments: OrganizationDocumen
   async function trashDocuments(documentsToTrash: OrganizationDocument[]) {
     return runDocumentMutationFlow(async () => {
       const total = documentsToTrash.length;
+      const since = waitForDocuments.markChange();
       const { failedCount } = await mutateDocuments(documentsToTrash, deleteDocument);
       if (failedCount > 0) {
         showFeedback(
@@ -121,13 +116,14 @@ export function useDocumentLibraryMutations(serverDocuments: OrganizationDocumen
           () => restoreDocuments(documentsToTrash),
         );
       }
-      if (failedCount < total) await settleAfterRefresh();
+      if (failedCount < total) await waitForDocuments(since);
     });
   }
 
   async function restoreDocuments(documentsToRestore: OrganizationDocument[]) {
     return runDocumentMutationFlow(async () => {
       const total = documentsToRestore.length;
+      const since = waitForDocuments.markChange();
       const { failedCount } = await mutateDocuments(documentsToRestore, restoreDocument);
       if (failedCount > 0) {
         showFeedback(
@@ -142,7 +138,7 @@ export function useDocumentLibraryMutations(serverDocuments: OrganizationDocumen
           () => trashDocuments(documentsToRestore),
         );
       }
-      if (failedCount < total) await settleAfterRefresh();
+      if (failedCount < total) await waitForDocuments(since);
     });
   }
 
@@ -152,9 +148,8 @@ export function useDocumentLibraryMutations(serverDocuments: OrganizationDocumen
     busy,
     hasPendingDocumentMutation,
     showFeedback,
-    refreshDocuments,
     runMutation,
-    settleAfterRefresh,
+    waitForDocuments,
     runDocumentMutationFlow,
     mutateDocuments,
     trashDocuments,

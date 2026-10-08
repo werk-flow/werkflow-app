@@ -93,7 +93,7 @@ export function EntryDetailsSummary({
         <div
           className={cn(
             'rounded-md border border-success/30 bg-success-soft px-3 py-3',
-            isActiveBlock && 'animate-pulse',
+            isActiveBlock && 'animate-live',
           )}
         >
           <div className="flex items-center justify-between">

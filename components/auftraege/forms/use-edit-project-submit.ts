@@ -1,6 +1,5 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useBanner } from '@/components/ui/banner';
 import { describeFailure } from '@/lib/action-messages';
 import { updateProject, type UpdateProjectInput } from '@/lib/projects/actions';
@@ -18,7 +17,6 @@ type EditProjectSubmitInput = {
 
 /** Saves the edit-project draft, then links and unlinks the jobs whose selection changed. */
 export function useEditProjectSubmit({ project, form, onOpenChange, onSuccess }: EditProjectSubmitInput) {
-  const router = useRouter();
   const { showBanner } = useBanner();
   const {
     name,
@@ -115,14 +113,11 @@ export function useEditProjectSubmit({ project, form, onOpenChange, onSuccess }:
               }
             : { variant: 'success', message: 'Projekt gespeichert.' },
         );
-        if (onSuccess) {
-          await onSuccess({
-            project: result.success ? result.project : project,
-            selectedJobIds,
-          });
-        } else {
-          router.refresh();
-        }
+        // updateProject's and updateJob's responses render the route; 'no_changes' changed nothing.
+        await onSuccess?.({
+          project: result.success ? result.project : project,
+          selectedJobIds,
+        });
       } catch {
         setError('Ein unerwarteter Fehler ist aufgetreten.');
       }

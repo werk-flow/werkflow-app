@@ -19,11 +19,9 @@ export type DocumentFolderCreation = ReturnType<typeof useDocumentFolderCreation
 export function useDocumentFolderCreation({
   currentFolderId,
   isTrashView,
-  refreshDocuments,
 }: {
   currentFolderId: string | null;
   isTrashView: boolean;
-  refreshDocuments: () => void;
 }) {
   const createFolder = useServerAction(createDocumentFolder);
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
@@ -56,7 +54,6 @@ export function useDocumentFolderCreation({
         setFolderName('');
         setFolderDialogOpen(false);
         setFolderDialogParentFolderId(undefined);
-        refreshDocuments();
       })
       .catch(() => setFolderError(folderFailure));
   }

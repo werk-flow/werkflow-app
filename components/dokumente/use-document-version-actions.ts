@@ -24,7 +24,7 @@ export function useDocumentVersionActions({
   details: DocumentDetailsDialogState;
   mutations: DocumentLibraryMutations;
 }) {
-  const { busy, showFeedback, refreshDocuments } = mutations;
+  const { busy, showFeedback } = mutations;
   const {
     detailsDialog,
     setDetailsDialog,
@@ -102,7 +102,6 @@ export function useDocumentVersionActions({
             setIsDetailsLoading(false);
           }
         }
-        refreshDocuments();
       })
       .catch(() => {
         if (detailsDialogIdRef.current === documentId) {

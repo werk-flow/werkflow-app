@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -131,8 +130,7 @@ export function CloseRequestDialog({ requestId, open, onOpenChange, onSaved }: C
             >
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading && <Loader2 className="size-4 animate-spin" />}
+            <Button pending={isLoading} type="submit" disabled={isLoading}>
               Anfrage schließen
             </Button>
           </DialogFooter>

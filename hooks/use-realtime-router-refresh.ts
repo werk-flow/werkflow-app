@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouterRefresh } from '@/components/ui/refresh-button';
 import {
   useRealtimeSubscribe,
@@ -14,6 +14,7 @@ import {
 } from '@/lib/realtime/events';
 import { createTrailingScheduler, type TrailingScheduler } from '@/lib/realtime/scheduler';
 import { useAnyDialogOpen } from '@/components/ui/open-dialog-context';
+import { countRealtimeRefresh, markRouteRefresh } from '@/lib/ui/route-refresh-signal';
 
 type UseRealtimeRouterRefreshOptions = {
   tables: readonly RealtimeTable[];
@@ -41,6 +42,8 @@ export function useRealtimeRouterRefresh({
   const { refresh, isPending } = useRouterRefresh();
   const subscribe = useRealtimeSubscribe();
   const schedulerRef = useRef<TrailingScheduler | null>(null);
+  // A queued refresh is a busy signal; one parked behind a dialog or a running render is not.
+  const [queuedHolder] = useState(() => Symbol('queued route refresh'));
 
   const anyDialogOpen = useAnyDialogOpen();
   const suspended = anyDialogOpen || isPending || !enabled;
@@ -71,11 +74,16 @@ export function useRealtimeRouterRefresh({
       schedulerRef.current ??= createTrailingScheduler({
         delayMs: REALTIME_DEBOUNCE_MS,
         maxWaitMs: REALTIME_MAX_DEFER_MS,
-        run: refresh,
+        run: () => {
+          markRouteRefresh(queuedHolder, false);
+          countRealtimeRefresh();
+          refresh();
+        },
       });
+      markRouteRefresh(queuedHolder, true);
       schedulerRef.current.schedule();
     },
-    [refresh],
+    [refresh, queuedHolder],
   );
 
   useEffect(() => {
@@ -86,6 +94,7 @@ export function useRealtimeRouterRefresh({
       if (schedulerRef.current?.cancel()) {
         pendingWhileSuspendedRef.current = true;
       }
+      markRouteRefresh(queuedHolder, false);
       return;
     }
 
@@ -93,18 +102,20 @@ export function useRealtimeRouterRefresh({
       pendingWhileSuspendedRef.current = false;
       scheduleRefresh();
     }
-  }, [suspended, scheduleRefresh]);
+  }, [suspended, scheduleRefresh, queuedHolder]);
 
   useEffect(() => {
     return () => {
       schedulerRef.current?.cancel();
+      markRouteRefresh(queuedHolder, false);
     };
-  }, []);
+  }, [queuedHolder]);
 
   useEffect(() => {
     if (enabled) return;
     schedulerRef.current?.cancel();
-  }, [enabled]);
+    markRouteRefresh(queuedHolder, false);
+  }, [enabled, queuedHolder]);
 
   const tablesKey = tables.join(',');
   useEffect(() => {

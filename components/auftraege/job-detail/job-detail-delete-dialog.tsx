@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, type RefObject } from 'react';
-import { Loader2 } from 'lucide-react';
 import { usePendingTask } from '@/hooks/use-server-action';
 import { ErrorText } from '@/components/ui/error-text';
 import {
@@ -18,6 +17,7 @@ import { deleteJob } from '@/lib/jobs/actions';
 import { JOB_DELETE_FAILED_MESSAGE } from '@/lib/jobs/messages';
 import { loadDocument } from '@/lib/navigation/document-load';
 import { describeJobDeleteError } from '../list/job-actions-menu';
+import { Spinner } from '@/components/ui/spinner';
 
 type JobDetailDeleteDialogProps = {
   open: boolean;
@@ -100,7 +100,7 @@ export function JobDetailDeleteDialog({
             disabled={isDeleting}
             variant="destructive"
           >
-            {isDeleting && <Loader2 className="mr-2 size-4 animate-spin" />}
+            {isDeleting && <Spinner className="mr-2" />}
             Löschen
           </AlertDialogAction>
         </AlertDialogFooter>

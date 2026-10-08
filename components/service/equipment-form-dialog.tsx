@@ -1,7 +1,6 @@
 'use client';
 
 import type { ReactElement } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -240,8 +239,7 @@ export function EquipmentFormDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending && <Loader2 className="size-4 animate-spin" />}
+            <Button pending={isPending} type="submit" disabled={isPending}>
               {mode === 'replace' ? 'Nachfolger anlegen' : 'Speichern'}
             </Button>
           </DialogFooter>

@@ -1,7 +1,5 @@
 'use client';
 
-import { Loader2 } from 'lucide-react';
-
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
@@ -66,6 +64,7 @@ export function DispatchPanelBatchForm({ batch }: { batch: DispatchPanelBatch })
       {/* While the preview dialog is open the error belongs inside it. */}
       <ErrorText>{batchPreview ? null : batchError}</ErrorText>
       <Button
+        pending={isBatchWorking}
         className="w-full"
         // eslint-disable-next-line ui/action-disabled-only-while-pending -- batch bar: with no visit selected there is nothing to check, not a field to fill
         disabled={selectedIds.size === 0 || isBatchWorking}
@@ -75,7 +74,6 @@ export function DispatchPanelBatchForm({ batch }: { batch: DispatchPanelBatch })
           void runBatchPreview();
         }}
       >
-        {isBatchWorking && <Loader2 className="size-4 animate-spin" />}
         Auswirkungen prüfen
       </Button>
     </div>

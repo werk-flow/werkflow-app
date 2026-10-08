@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { useServerAction } from '@/hooks/use-server-action';
@@ -99,8 +98,7 @@ export function ManagerEndDialog({
             <Button type="button" variant="outline" onClick={() => onClose(false)} disabled={isSaving}>
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isSaving}>
-              {isSaving && <Loader2 className="size-4 animate-spin" />}
+            <Button pending={isSaving} type="submit" disabled={isSaving}>
               {isSaving ? 'Wird gespeichert…' : 'Enddatum speichern'}
             </Button>
           </DialogFooter>
@@ -198,8 +196,7 @@ export function EvidenceDialog({
             <Button type="button" variant="outline" onClick={() => onClose(false)} disabled={isSaving}>
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isSaving}>
-              {isSaving && <Loader2 className="size-4 animate-spin" />}
+            <Button pending={isSaving} type="submit" disabled={isSaving}>
               {isSaving ? 'Wird gespeichert…' : 'Speichern'}
             </Button>
           </DialogFooter>
@@ -286,8 +283,7 @@ export function ManagerCancelDialog({
             <Button type="button" variant="outline" onClick={() => onClose(false)} disabled={isSaving}>
               Abbrechen
             </Button>
-            <Button type="submit" variant="destructive" disabled={isSaving}>
-              {isSaving && <Loader2 className="size-4 animate-spin" />}
+            <Button pending={isSaving} type="submit" variant="destructive" disabled={isSaving}>
               {isSaving ? 'Wird storniert…' : 'Stornieren'}
             </Button>
           </DialogFooter>

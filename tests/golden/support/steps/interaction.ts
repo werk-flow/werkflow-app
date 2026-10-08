@@ -1,10 +1,16 @@
 import { expect, type Locator, type Page } from '@playwright/test';
+import {
+  BUSY_SIGNAL_SELECTOR,
+  ROUTE_REFRESH_SIGNAL,
+  SETTLED_CALENDAR_STATES,
+} from '../../../../lib/testing/spec-support/busy-signals';
 
 /**
  * The one home of settling and key presses in browser tests (testing.md,
  * "Write a spec that stands alone"). A spec acts only after the app's own busy
- * signals are clear: `aria-busy`, `data-pending` (a dialog refuses dismissal
- * while its request runs) and the calendar's `data-calendar-state`. Two races
+ * signals are clear (lib/testing/spec-support/busy-signals.ts): `aria-busy`,
+ * `data-pending`, a skeleton, a spinner, a queued or running route refresh,
+ * and the calendar's `data-calendar-state`. Two races
  * that failed runs proved are unwritable through these steps: Escape while a
  * dialog still saves, and a shortcut key typed into a focused combobox.
  *
@@ -14,7 +20,6 @@ import { expect, type Locator, type Page } from '@playwright/test';
 
 type Scope = Page | Locator;
 
-const BUSY_SELECTOR = '[aria-busy="true"], [data-pending="true"]';
 const TEXT_ENTRY_ROLES = new Set(['combobox', 'listbox', 'textbox', 'searchbox', 'spinbutton']);
 
 function isPage(scope: Scope): scope is Page {
@@ -28,40 +33,48 @@ function pageOf(scope: Scope): Page {
 /** Describes the busy elements inside a scope, the scope itself included; empty when settled. */
 async function busyElements(scope: Scope): Promise<string[]> {
   const root = isPage(scope) ? scope.locator('body') : scope;
-  return root.evaluateAll((elements, selector) => {
-    const describe = (element: Element): string => {
-      const name =
-        element.getAttribute('aria-label') ??
-        element.getAttribute('data-testid') ??
-        element.textContent?.trim().slice(0, 60) ??
-        '';
-      return `<${element.tagName.toLowerCase()} role="${element.getAttribute('role') ?? ''}"> ${name}`;
-    };
-    const busy: string[] = [];
-    for (const element of elements) {
-      const candidates = [element, ...element.querySelectorAll(selector)];
-      for (const candidate of candidates) {
-        if (!candidate.matches(selector)) continue;
-        const box = candidate.getBoundingClientRect();
-        // A hidden responsive copy is not what the user waits on.
-        if (box.width === 0 && box.height === 0) continue;
-        busy.push(describe(candidate));
+  return root.evaluateAll(
+    (elements, { selector, routeRefresh, settledCalendarStates }) => {
+      const describe = (element: Element): string => {
+        const name =
+          element.getAttribute('aria-label') ??
+          element.getAttribute('data-testid') ??
+          element.textContent?.trim().slice(0, 60) ??
+          '';
+        return `<${element.tagName.toLowerCase()} role="${element.getAttribute('role') ?? ''}"> ${name}`;
+      };
+      const busy: string[] = [];
+      if (document.documentElement.hasAttribute(routeRefresh)) busy.push('route refresh queued or running');
+      for (const element of elements) {
+        const candidates = [element, ...element.querySelectorAll(selector)];
+        for (const candidate of candidates) {
+          if (!candidate.matches(selector)) continue;
+          const box = candidate.getBoundingClientRect();
+          // A hidden responsive copy is not what the user waits on.
+          if (box.width === 0 && box.height === 0) continue;
+          busy.push(describe(candidate));
+        }
+        for (const calendar of element.querySelectorAll('[data-calendar-state]')) {
+          const state = calendar.getAttribute('data-calendar-state') ?? '';
+          if (!settledCalendarStates.includes(state)) busy.push(`calendar in state ${state}`);
+        }
       }
-      // `ready` and `unavailable` are final; any other readiness kind is still loading.
-      for (const calendar of element.querySelectorAll('[data-calendar-state]')) {
-        const state = calendar.getAttribute('data-calendar-state') ?? '';
-        if (state !== 'ready' && state !== 'unavailable') busy.push(`calendar in state ${state}`);
-      }
-    }
-    return busy;
-  }, BUSY_SELECTOR);
+      return busy;
+    },
+    {
+      selector: BUSY_SIGNAL_SELECTOR,
+      routeRefresh: ROUTE_REFRESH_SIGNAL,
+      settledCalendarStates: [...SETTLED_CALENDAR_STATES],
+    },
+  );
 }
 
 /** Waits until nothing inside the scope is busy; a failure names the busy elements. */
 export async function settled(scope: Scope, options: { timeout?: number } = {}): Promise<void> {
   await expect
     .poll(() => busyElements(scope), {
-      message: 'The scope settles: no aria-busy, no pending dialog and every calendar ready',
+      message:
+        'The scope settles: no aria-busy, pending dialog, skeleton, spinner or route refresh, and every calendar ready',
       ...(options.timeout !== undefined ? { timeout: options.timeout } : {}),
     })
     .toEqual([]);

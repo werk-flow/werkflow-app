@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ExternalLink, Loader2, Trash2, Pencil } from 'lucide-react';
+import { ExternalLink, Trash2, Pencil } from 'lucide-react';
 
 import { ErrorText } from '@/components/ui/error-text';
 import { RowActionsMenu } from '@/components/ui/row-actions-menu';
@@ -23,6 +23,7 @@ import { deleteJob } from '@/lib/jobs/actions';
 import { JOB_DELETE_FAILED_MESSAGE, JOB_DELETE_HISTORY_MESSAGE } from '@/lib/jobs/messages';
 import { getJobDisplayTitle, type Client, type Job, type ProjectWithDetails } from '@/lib/jobs/types';
 import type { OrgMemberOption } from '../shared/employee-multi-select';
+import { Spinner } from '@/components/ui/spinner';
 
 const JOB_DELETE_ERROR_MESSAGES = {
   planning_history_exists: JOB_DELETE_HISTORY_MESSAGE,
@@ -159,7 +160,7 @@ export function JobActionsMenu({
             >
               {isDeleting ? (
                 <>
-                  <Loader2 className="mr-2 size-4 animate-spin" />
+                  <Spinner className="mr-2" />
                   Wird gelöscht…
                 </>
               ) : (

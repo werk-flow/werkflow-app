@@ -1,7 +1,5 @@
 'use client';
 
-import { Loader2 } from 'lucide-react';
-
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -108,8 +106,7 @@ export function RecordSicknessDialog({
                 <Button type="button" variant="outline" onClick={() => onClose(false)} disabled={isSaving}>
                   Abbrechen
                 </Button>
-                <Button type="submit" disabled={isSaving}>
-                  {isSaving && <Loader2 className="size-4 animate-spin" />}
+                <Button pending={isSaving} type="submit" disabled={isSaving}>
                   {isSaving ? 'Wird gespeichert…' : 'Krankmeldung erfassen'}
                 </Button>
               </>

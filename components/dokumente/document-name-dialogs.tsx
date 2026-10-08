@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -76,8 +75,7 @@ export function DocumentRenameDialog({ rename }: { rename: DocumentRename }) {
             >
               Abbrechen
             </Button>
-            <Button type="submit" disabled={rename.isRenamePending}>
-              {rename.isRenamePending && <Loader2 className="size-4 animate-spin" />}
+            <Button pending={rename.isRenamePending} type="submit" disabled={rename.isRenamePending}>
               Umbenennen
             </Button>
           </DialogFooter>
@@ -128,8 +126,11 @@ export function DocumentCreateFolderDialog({ folderCreation }: { folderCreation:
             >
               Abbrechen
             </Button>
-            <Button type="submit" disabled={folderCreation.isCreatePending}>
-              {folderCreation.isCreatePending && <Loader2 className="size-4 animate-spin" />}
+            <Button
+              pending={folderCreation.isCreatePending}
+              type="submit"
+              disabled={folderCreation.isCreatePending}
+            >
               Erstellen
             </Button>
           </DialogFooter>

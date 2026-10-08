@@ -2,6 +2,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
 import { REQUEST_STATUS_LABELS } from '../../../../lib/requests/types';
 import { documentOpenButton, documentsRegion, uploadIntoDocumentsSection } from './documents';
 import { workTemplateSelect } from './work';
+import { getRequestById, type PersistedRequest } from '../db/requests';
 import {
   assignDespiteQualificationWarning,
   customerPicker,
@@ -220,7 +221,7 @@ export async function createRequestViaDialog(
     receivedAtLocal?: string;
     assigneeName?: string;
   },
-): Promise<string> {
+): Promise<PersistedRequest> {
   if ((options.siteName || options.contactName) && !options.clientName) {
     throw new Error('createRequestViaDialog: siteName/contactName require clientName');
   }
@@ -311,7 +312,7 @@ export async function createRequestViaDialog(
   if (!requestId) {
     throw new Error('createRequestViaDialog: could not read the request id from the URL');
   }
-  return requestId;
+  return getRequestById(requestId);
 }
 
 export async function uploadDocumentOnRequestDetail(

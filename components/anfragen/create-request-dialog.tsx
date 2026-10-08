@@ -1,6 +1,6 @@
 'use client';
 
-import { Loader2, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -166,8 +166,7 @@ export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogP
             <ErrorText>{showReceivedAtError ? null : error}</ErrorText>
           </DialogBody>
           <DialogFooter>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading && <Loader2 className="size-4 animate-spin" />}
+            <Button pending={isLoading} type="submit" disabled={isLoading}>
               {isLoading ? 'Wird gespeichert…' : 'Anfrage erfassen'}
             </Button>
           </DialogFooter>

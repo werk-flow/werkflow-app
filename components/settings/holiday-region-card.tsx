@@ -2,7 +2,6 @@
 
 import { describeFailure } from '@/lib/action-messages';
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
@@ -30,7 +29,6 @@ export function HolidayRegionCard({
   holidayRegion: string | null;
   canEditRegion: boolean;
 }) {
-  const router = useRouter();
   const { showBanner } = useBanner();
 
   const [selectedRegion, setSelectedRegion] = useState<string>(
@@ -52,7 +50,7 @@ export function HolidayRegionCard({
         });
         return;
       }
-      router.refresh();
+      // The action's response renders the route with the saved region.
       showBanner({
         message: 'Der Feiertagskalender wurde gespeichert.',
         variant: 'success',

@@ -11,8 +11,9 @@ import {
   type ReactNode,
 } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AlertCircle, CheckCircle, Info, Loader2, X } from 'lucide-react';
+import { AlertCircle, CheckCircle, Info, X } from 'lucide-react';
 
+import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 
 /**
@@ -54,7 +55,7 @@ function BannerIcon({ variant }: { variant: BannerVariant }) {
   if (variant === 'success') return <CheckCircle className="size-5 shrink-0" />;
   if (variant === 'error') return <AlertCircle className="size-5 shrink-0" />;
   if (variant === 'info') return <Info className="size-5 shrink-0" />;
-  return <Loader2 className="size-5 shrink-0 animate-spin" />;
+  return <Spinner className="size-5 shrink-0" />;
 }
 
 /** Presentational banner. Prefer `useBanner()`; use directly only in wrappers. */

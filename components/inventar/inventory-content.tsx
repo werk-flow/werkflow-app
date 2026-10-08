@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { FileUp, Plus, Warehouse } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -47,7 +46,6 @@ type InventoryContentProps = {
 };
 
 export function InventoryContent({ overview }: InventoryContentProps) {
-  const router = useRouter();
   const navigation = useListNavigation();
   const query = overview.page.query;
   const filters = useInventoryFilters(query, navigation);
@@ -205,7 +203,6 @@ export function InventoryContent({ overview }: InventoryContentProps) {
         existingItemCount={overview.summary.totalItems}
         locations={overview.locations}
         categories={overview.categories}
-        onImported={() => router.refresh()}
       />
     </PageShell>
   );

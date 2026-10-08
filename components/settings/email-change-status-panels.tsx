@@ -1,11 +1,12 @@
 'use client';
 
-import { CheckCircle2, Loader2, Mail } from 'lucide-react';
+import { CheckCircle2, Mail } from 'lucide-react';
 
 import { type CompletionState } from '@/components/settings/email-change-wizard-state';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { type EmailChangeWizardState } from '@/lib/settings/email-change.types';
+import { Spinner } from '@/components/ui/spinner';
 
 export function EmailChangeCompletionPendingNotice({ wizardState }: { wizardState: EmailChangeWizardState }) {
   return (
@@ -92,7 +93,7 @@ export function CurrentEmailPanel({
           <Button type="button" onClick={onStart} disabled={isStarting || !currentEmail}>
             {isStarting ? (
               <>
-                <Loader2 className="mr-2 size-4 animate-spin" />
+                <Spinner className="mr-2" />
                 Startet…
               </>
             ) : (

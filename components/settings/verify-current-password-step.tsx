@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowRight, Loader2 } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { type UseFormReturn } from 'react-hook-form';
 
 import { type CurrentPasswordValues } from '@/components/settings/use-password-change-flow';
@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Form, FormField } from '@/components/ui/form';
 import { PasswordInput } from '@/components/ui/password-input';
+import { Spinner } from '@/components/ui/spinner';
 
 type VerifyCurrentPasswordStepProps = {
   currentPasswordForm: UseFormReturn<CurrentPasswordValues>;
@@ -57,7 +58,7 @@ export function VerifyCurrentPasswordStep({
           >
             {isForgotPasswordRedirecting ? (
               <>
-                <Loader2 className="mr-2 size-4 animate-spin" />
+                <Spinner className="mr-2" />
                 Weiterleitung…
               </>
             ) : (
@@ -80,7 +81,7 @@ export function VerifyCurrentPasswordStep({
           <Button type="submit" disabled={isCurrentPasswordSubmitting || isForgotPasswordRedirecting}>
             {isCurrentPasswordSubmitting ? (
               <>
-                <Loader2 className="mr-2 size-4 animate-spin" />
+                <Spinner className="mr-2" />
                 Wird geprüft…
               </>
             ) : (

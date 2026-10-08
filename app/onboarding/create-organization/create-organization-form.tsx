@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
@@ -11,6 +10,7 @@ import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import { loadDocument } from '@/lib/navigation/document-load';
 import { createOrganization } from '@/lib/org/actions';
+import { Spinner } from '@/components/ui/spinner';
 
 const ERROR_MESSAGES: Readonly<Record<string, string>> = {
   name_required: 'Bitte gib einen Namen ein.',
@@ -79,7 +79,7 @@ export function CreateOrganizationForm() {
       >
         {isLoading ? (
           <>
-            <Loader2 className="mr-2 size-4 animate-spin" />
+            <Spinner className="mr-2" />
             Wird erstellt…
           </>
         ) : (

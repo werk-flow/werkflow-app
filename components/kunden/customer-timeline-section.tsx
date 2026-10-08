@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Clock3, ExternalLink, Filter, History, Loader2 } from 'lucide-react';
+import { Clock3, ExternalLink, Filter, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PlainButton } from '@/components/ui/plain-button';
 import type { TimelineItem } from '@/lib/customer-relationships/types';
@@ -163,12 +163,12 @@ export function CustomerTimelineSection({
             </p>
           )}
           <Button
+            pending={isPending}
             variant="outline"
             size="sm"
             disabled={isPending}
             onClick={() => onLoadOlder(olderTimelineCursor)}
           >
-            {isPending && <Loader2 className="size-3.5 animate-spin" />}
             Ältere Einträge laden
           </Button>
         </div>

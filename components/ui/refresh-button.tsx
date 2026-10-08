@@ -2,11 +2,13 @@
 
 import { RefreshCw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useCallback, useTransition } from 'react';
+import { useCallback, useEffect, useState, useTransition } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { useServerAction } from '@/hooks/use-server-action';
 import { useHydrated } from '@/hooks/use-hydrated';
+import { markRouteRefresh } from '@/lib/ui/route-refresh-signal';
 import { cn } from '@/lib/utils';
 
 /**
@@ -21,11 +23,18 @@ import { cn } from '@/lib/utils';
 export function useRouterRefresh(): { refresh: () => void; isPending: boolean } {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [holder] = useState(() => Symbol('route refresh'));
   const refresh = useCallback(() => {
+    markRouteRefresh(holder, true);
     startTransition(() => {
       router.refresh();
     });
-  }, [router]);
+  }, [router, holder]);
+  // The transition's end clears the busy signal; an unmount mid-refresh too.
+  useEffect(() => {
+    if (!isPending) markRouteRefresh(holder, false);
+  }, [isPending, holder]);
+  useEffect(() => () => markRouteRefresh(holder, false), [holder]);
   return { refresh, isPending };
 }
 
@@ -64,7 +73,7 @@ export function RefreshButton({
       aria-label={label}
       title={label}
     >
-      <RefreshCw className={cn('size-4', isPending && 'animate-spin')} />
+      {isPending ? <Spinner icon={RefreshCw} /> : <RefreshCw className="size-4" />}
     </Button>
   );
 }

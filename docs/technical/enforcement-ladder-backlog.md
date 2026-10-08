@@ -21,7 +21,6 @@ This list holds the open candidates for moving a prose rule or a known gap up th
 | Candidate | Gap today | Target tier and mechanism |
 | --- | --- | --- |
 | Unpaged organization reads | PostgREST stops at its row cap without an error. A reader without `.range`, `.limit`, `.single`, or `.maybeSingle` truncates silently. | Tier 2: a unit scan over `lib/` and `app/` with a reviewed allowlist for reads bounded by a small parent set. |
-| One route render per mutation | A dialog can call `router.refresh()` twice for one save. No check counts the renders. | Tier 2: count the `_rsc` route requests per save in the customer browser journey. |
 
 ## Security
 
@@ -38,11 +37,9 @@ This list holds the open candidates for moving a prose rule or a known gap up th
 
 | Candidate | Gap today | Target tier and mechanism |
 | --- | --- | --- |
-| Step helpers that return the optimistic echo | A mutation helper can return what the UI showed before the write persisted. | Tier 1: step helpers return the persisted row from a `db/` read or a reload. |
 | Visual acceptance evidence | A slice record can cite a capture that shows a connection or readiness error. | Tier 2: validate the capture metadata and success before a record cites it. The design judgment stays Tier 3. |
 | Locators of the performance specs | `tests/audit/performance/**` keep copy, structural locators and key presses. The locator-ownership rules exempt the folder. The measurement digest covers only the tests that record a scenario, so the other tests can adopt the rules now; a measured test needs a recalibration. | Tier 2: switch the rules on for the folder, with the measured tests changed in the run that recalibrates their references. |
 | Classification of a repaired group | `bun run test:runs classify` refuses a group whose latest attempt passed, and a `ui:contracts` attempt inside a verification run has no run manifest, so a failure that was repaired before it was classified leaves no incident row and no classification. | Tier 2: `classify` accepts the report id and group of a past failed attempt, reads its log, and records the row. |
-| Busy signals the settle step cannot see | The visual settle waits on the `animate-pulse` and `animate-spin` classes: the app shell's loading placeholders do not use `Skeleton`, no shared spinner exists, and `Button` exposes no pending state. | Tier 1: shell placeholders render `Skeleton`, a shared spinner and `Button` carry `data-slot` and `aria-busy`. Tier 2: settle on those attributes only. |
 
 ## Documentation
 

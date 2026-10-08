@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2, ParkingSquare } from 'lucide-react';
+import { ParkingSquare } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { ErrorText } from '@/components/ui/error-text';
 import { useServerAction } from '@/hooks/use-server-action';
+import { Spinner } from '@/components/ui/spinner';
 
 const CONFIRM_FAILED_MESSAGE = 'Die Änderung konnte nicht gespeichert werden. Bitte versuche es erneut.';
 
@@ -125,7 +126,7 @@ export function ParkConfirmationDialog({
           >
             {isLoading ? (
               <>
-                <Loader2 className="mr-2 size-4 animate-spin" />
+                <Spinner className="mr-2" />
                 {loadingLabel}
               </>
             ) : (

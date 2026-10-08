@@ -4,7 +4,7 @@ import { useBanner } from '@/components/ui/banner';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { usePendingTask } from '@/hooks/use-server-action';
 import { useRef, useState } from 'react';
-import { CircleAlert, Loader2 } from 'lucide-react';
+import { CircleAlert } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -162,8 +162,7 @@ export function useCommunicationContactGuard({ clientId }: { clientId: string })
           <Button variant="outline" onClick={() => setPendingContact(null)} disabled={isPending}>
             Abbrechen
           </Button>
-          <Button onClick={continueWithException} disabled={isPending}>
-            {isPending && <Loader2 className="size-4 animate-spin" />}
+          <Button pending={isPending} onClick={continueWithException} disabled={isPending}>
             Begründet fortfahren
           </Button>
         </DialogFooter>

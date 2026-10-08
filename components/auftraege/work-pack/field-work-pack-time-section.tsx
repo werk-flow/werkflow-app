@@ -2,8 +2,7 @@
 
 import { formatBerlinDateTime as formatDateTime } from '@/lib/utils';
 import { formatDuration } from '@/lib/time-tracking/helpers';
-import { Clock3, Loader2, LogIn, LogOut } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { Clock3, LogIn, LogOut } from 'lucide-react';
 import { useState, type ReactElement } from 'react';
 
 import { useClockState } from '@/components/clock-state-provider';
@@ -16,6 +15,7 @@ import { usePendingTask } from '@/hooks/use-server-action';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 import { SectionTitle } from '@/components/shared/section-title';
+import { Spinner } from '@/components/ui/spinner';
 
 function formatDurationOrRunning(minutes: number | null): string {
   return minutes === null ? 'läuft' : formatDuration(Math.max(0, minutes));
@@ -63,7 +63,6 @@ export function FieldWorkPackTimeSection({
   loadError: boolean;
   readOnly: boolean;
 }): ReactElement {
-  const router = useRouter();
   const { showBanner } = useBanner();
   const {
     state,
@@ -112,6 +111,7 @@ export function FieldWorkPackTimeSection({
       });
       return;
     }
+    // transitionTimeActivity's response renders the route with the new entries.
     showBanner({
       variant: 'success',
       message: isClockedIntoThisJob
@@ -120,7 +120,6 @@ export function FieldWorkPackTimeSection({
           ? 'Die Zeiterfassung läuft jetzt für diesen Auftrag.'
           : 'Die Arbeitszeit wurde für diesen Auftrag gestartet.',
     });
-    router.refresh();
   }
 
   return (
@@ -155,7 +154,7 @@ export function FieldWorkPackTimeSection({
               onClick={() => void runClockChange(changeClock)}
             >
               {isClockBusy ? (
-                <Loader2 className="size-4 animate-spin" />
+                <Spinner />
               ) : isClockedIntoThisJob ? (
                 <LogOut className="size-4" />
               ) : (

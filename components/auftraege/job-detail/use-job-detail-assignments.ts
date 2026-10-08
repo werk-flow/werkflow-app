@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, type Dispatch, type SetStateAction } from 'react';
-import { useRouter } from 'next/navigation';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { usePendingTask, useServerAction } from '@/hooks/use-server-action';
 import { useBanner } from '@/components/ui/banner';
@@ -27,7 +26,6 @@ function useJobDetailQualificationOverride({
   assignmentTeamSourceId,
   onSaved,
 }: JobDetailQualificationOverrideInput) {
-  const router = useRouter();
   const [qualificationOverrideError, setQualificationOverrideError] = useState<string | null>(null);
   const [qualificationWarning, setQualificationWarning] = useState<AssignmentEvaluation | null>(null);
   const [pendingAssignmentIds, setPendingAssignmentIds] = useState<string[]>([]);
@@ -56,8 +54,8 @@ function useJobDetailQualificationOverride({
       }
       setQualificationWarning(null);
       setPendingAssignmentIds([]);
+      // The action's response renders the route with the new assignments.
       onSaved();
-      router.refresh();
     } catch {
       setQualificationOverrideError('Die begründete Zuweisung konnte nicht gespeichert werden.');
     }

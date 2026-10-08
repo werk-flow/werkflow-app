@@ -68,7 +68,8 @@ test.describe('P1-18 exhaustive installed-equipment audit @AUDIT-W2-P1-18 @AUDIT
   }) => {
     const { names, root } = await seedEquipmentAtSite(world, 'component');
     const componentName = `P118 Audit Umwälzpumpe ${world.runId}-component`;
-    const componentNumber = await createInstalledEquipment(adminPage, {
+    const { equipmentNumber: componentNumber } = await createInstalledEquipment(adminPage, {
+      orgId: world.orgId,
       customerName: names.customer,
       siteName: names.site,
       name: componentName,

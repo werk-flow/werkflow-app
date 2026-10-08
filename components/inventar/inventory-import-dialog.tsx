@@ -1,7 +1,5 @@
 'use client';
 
-import { Loader2 } from 'lucide-react';
-
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -26,14 +24,12 @@ export function ImportDialog({
   existingItemCount,
   locations,
   categories,
-  onImported,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   existingItemCount: number;
   locations: InventoryLocation[];
   categories: InventoryCategory[];
-  onImported: () => void;
 }) {
   const {
     headers,
@@ -48,7 +44,7 @@ export function ImportDialog({
     handleOpenChange,
     handleFile,
     handleImport,
-  } = useInventoryCsvImport({ onOpenChange, onImported });
+  } = useInventoryCsvImport({ onOpenChange });
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange} pending={isPending}>
@@ -129,8 +125,7 @@ export function ImportDialog({
             >
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
+            <Button pending={isPending} type="submit" disabled={isPending}>
               Importieren
             </Button>
           </DialogFooter>

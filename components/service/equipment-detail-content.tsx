@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, type ReactElement } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
 import { Button } from '@/components/ui/button';
@@ -126,8 +125,7 @@ function EquipmentStateForm({
           >
             Abbrechen
           </Button>
-          <Button type="submit" disabled={busy.isBusy('state')}>
-            {busy.isBusy('state') && <Loader2 className="size-4 animate-spin" />}
+          <Button pending={busy.isBusy('state')} type="submit" disabled={busy.isBusy('state')}>
             Änderung speichern
           </Button>
         </DialogFooter>

@@ -1,5 +1,4 @@
-import { Loader2 } from 'lucide-react';
-
+import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 
 /**
@@ -29,7 +28,7 @@ export function InlinePending({
       aria-hidden={active ? undefined : true}
       className={cn('inline-flex size-4 shrink-0 items-center justify-center', className)}
     >
-      {active && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
+      {active && <Spinner className="text-muted-foreground" />}
     </span>
   );
 }

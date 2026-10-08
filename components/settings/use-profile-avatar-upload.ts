@@ -2,7 +2,6 @@
 
 import { type Area } from 'react-easy-crop';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 import { createCroppedAvatarBlob } from '@/components/settings/profile-avatar-crop';
 import { useBanner } from '@/components/ui/banner';
@@ -41,7 +40,6 @@ type ProfileAvatarUpload = {
 
 /** File selection, crop state, upload and removal of the signed-in user's profile picture. */
 export function useProfileAvatarUpload(): ProfileAvatarUpload {
-  const router = useRouter();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const { profile, refreshProfile } = useUserProfile();
   const { showBanner } = useBanner();
@@ -163,8 +161,8 @@ export function useProfileAvatarUpload(): ProfileAvatarUpload {
           return;
         }
 
+        // The action's response renders the route; the profile context reads its own copy.
         await refreshProfile();
-        router.refresh();
         resetCropState();
         showBanner({
           message: 'Dein Profilbild wurde aktualisiert.',
@@ -196,7 +194,6 @@ export function useProfileAvatarUpload(): ProfileAvatarUpload {
         }
 
         await refreshProfile();
-        router.refresh();
         showBanner({
           message: 'Dein Profilbild wurde entfernt.',
           variant: 'success',

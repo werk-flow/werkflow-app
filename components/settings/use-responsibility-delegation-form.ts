@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 import { ERROR_MESSAGES, responsibilityErrorMessage } from '@/components/settings/responsibility-display';
 import { useBanner } from '@/components/ui/banner';
@@ -47,7 +46,6 @@ export function useResponsibilityDelegationForm({
   responsibility: OrganizationResponsibility;
   onOpenChange: (open: boolean) => void;
 }): ResponsibilityDelegationForm {
-  const router = useRouter();
   const { showBanner } = useBanner();
   const baseHolders = data.effective[responsibility].holders.filter(
     (holder) => holder.source.kind !== 'delegation',
@@ -120,8 +118,8 @@ export function useResponsibilityDelegationForm({
         setSaveError(responsibilityErrorMessage(result.error));
         return;
       }
+      // The action's response renders the route with the new delegation.
       handleOpenChange(false);
-      router.refresh();
       showBanner({ message: 'Die Vertretung wurde eingetragen.', variant: 'success' });
     } catch {
       setSaveError(ERROR_MESSAGES.save_failed);

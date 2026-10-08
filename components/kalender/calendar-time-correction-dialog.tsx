@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -183,12 +182,13 @@ export function CalendarTimeCorrectionDialog({
             Abbrechen
           </Button>
           <Button
+            pending={submitting}
             type="submit"
             form="calendar-time-correction"
             // eslint-disable-next-line ui/submit-disabled-only-while-pending -- no field to fill: the person left the loaded calendar, which the dialog states
             disabled={!subject || submitting}
           >
-            {submitting ? <Loader2 className="size-4 animate-spin" /> : null}Korrektur einreichen
+            Korrektur einreichen
           </Button>
         </DialogFooter>
       </DialogContent>

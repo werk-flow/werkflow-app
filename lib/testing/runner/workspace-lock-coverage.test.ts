@@ -76,5 +76,11 @@ test('the hosted build stays plain next build, outside the local build receipt a
 
 test('every bun test process loads the shared hang guard', () => {
   expect(readRepositoryFile('bunfig.toml')).toContain('preload = ["./scripts/unit-test-preload.ts"]');
-  expect(readRepositoryFile('scripts/unit-test-preload.ts')).toMatch(/^setDefaultTimeout\(60_000\);$/m);
+  expect(readRepositoryFile('scripts/unit-test-preload.ts')).toMatch(
+    /^setDefaultTimeout\(UNIT_TEST_TIMEOUT_MS\);$/m,
+  );
+  // The preload bounds only the first file of a run in Bun 1.3.14; the flag bounds every file.
+  expect(readRepositoryFile('scripts/run-unit-tests.ts')).toContain(
+    "'--timeout',\n      String(UNIT_TEST_TIMEOUT_MS)",
+  );
 });

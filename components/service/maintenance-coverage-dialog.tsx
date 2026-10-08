@@ -2,7 +2,6 @@
 
 import type { ActionFailure } from '@/lib/action-result';
 import type { ReactElement } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import { ClientSelectWithCreate } from '@/components/auftraege/shared/client-select-with-create';
 import { Button } from '@/components/ui/button';
@@ -189,8 +188,7 @@ export function MaintenanceCoverageDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending && <Loader2 className="size-4 animate-spin" />}
+            <Button pending={isPending} type="submit" disabled={isPending}>
               Abdeckung speichern
             </Button>
           </DialogFooter>

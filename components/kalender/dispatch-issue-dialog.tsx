@@ -5,7 +5,7 @@
 // manager sends the work instruction. Issuing sends NO customer message.
 
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CircleCheck, CircleHelp, Loader2 } from 'lucide-react';
+import { AlertTriangle, CircleCheck, CircleHelp } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { SearchableMultiSelect } from '@/components/ui/searchable-select';
@@ -220,8 +220,7 @@ export function DispatchIssueDialog({
           <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
             Abbrechen
           </Button>
-          <Button disabled={!canSubmit} onClick={() => void handleSubmit()}>
-            {isSubmitting && <Loader2 className="size-4 animate-spin" />}
+          <Button pending={isSubmitting} disabled={!canSubmit} onClick={() => void handleSubmit()}>
             Einsatz senden
           </Button>
         </DialogFooter>

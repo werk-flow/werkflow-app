@@ -1,6 +1,6 @@
 'use client';
 
-import { Download, Loader2, RotateCcw } from 'lucide-react';
+import { Download, RotateCcw } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
@@ -37,13 +37,14 @@ export function WorkHandoverReleasedActions({
         </span>
         {currentReleaseDocumentId && (
           <Button
+            pending={isBusy('document')}
             type="button"
             size="sm"
             variant="outline"
             onClick={() => downloadReleaseDocument(currentReleaseDocumentId)}
             disabled={anyBusy}
           >
-            {isBusy('document') ? <Loader2 className="animate-spin" /> : <Download />}
+            <Download />
             Dokument herunterladen
           </Button>
         )}
@@ -61,8 +62,14 @@ export function WorkHandoverReleasedActions({
           placeholder="Was muss in einer neuen Freigabe korrigiert werden?"
         />
       </Field>
-      <Button type="button" variant="outline" onClick={() => reopen('withdraw')} disabled={anyBusy}>
-        {isBusy('withdraw') ? <Loader2 className="animate-spin" /> : <RotateCcw />}
+      <Button
+        pending={isBusy('withdraw')}
+        type="button"
+        variant="outline"
+        onClick={() => reopen('withdraw')}
+        disabled={anyBusy}
+      >
+        <RotateCcw />
         Übergabe zurücknehmen
       </Button>
     </div>
@@ -90,8 +97,14 @@ export function WorkHandoverCorrectionRequest({
           placeholder="Welche Korrektur ist vor Ort erforderlich?"
         />
       </Field>
-      <Button type="button" variant="outline" onClick={() => reopen('correction')} disabled={anyBusy}>
-        {isBusy('correction') ? <Loader2 className="animate-spin" /> : <RotateCcw />}
+      <Button
+        pending={isBusy('correction')}
+        type="button"
+        variant="outline"
+        onClick={() => reopen('correction')}
+        disabled={anyBusy}
+      >
+        <RotateCcw />
         Zur Korrektur in Ausführung geben
       </Button>
     </div>

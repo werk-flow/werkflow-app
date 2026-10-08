@@ -3,7 +3,7 @@
 import { PlainButton } from '@/components/ui/plain-button';
 import { formatFileSize } from '@/lib/documents/format';
 import { useEffect, useState } from 'react';
-import { Check, FileText, LinkIcon, Loader2 } from 'lucide-react';
+import { Check, FileText, LinkIcon } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -252,8 +252,8 @@ export function AttachDocumentDialog({
           >
             Abbrechen
           </Button>
-          <Button type="button" onClick={handleAttach} disabled={isPending}>
-            {isPending ? <Loader2 className="size-4 animate-spin" /> : <LinkIcon className="size-4" />}
+          <Button pending={isPending} type="button" onClick={handleAttach} disabled={isPending}>
+            <LinkIcon className="size-4" />
             Verknüpfen
           </Button>
         </DialogFooter>

@@ -392,7 +392,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     await openDispatchPanel(adminPage);
     await issueDispatchForOccurrence(adminPage, title);
     await acknowledgeDispatchOnJobPage(employeePage, jobNumber);
-    const noLoginRecordId = await createPersonnelRecordViaDialog(adminPage, {
+    const { id: noLoginRecordId } = await createPersonnelRecordViaDialog(adminPage, {
       firstName: 'Nils',
       lastName: noLoginLastName,
     });

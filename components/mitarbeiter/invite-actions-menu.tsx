@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { MoreHorizontal, XCircle, Trash2, Loader2 } from 'lucide-react';
+import { MoreHorizontal, XCircle, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -106,8 +106,8 @@ export function InviteActionsMenu({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" disabled={isLoading}>
-            {isLoading ? <Loader2 className="size-4 animate-spin" /> : <MoreHorizontal className="size-4" />}
+          <Button pending={isLoading} variant="ghost" size="sm" className="h-8 w-8 p-0" disabled={isLoading}>
+            <MoreHorizontal className="size-4" />
             <span className="sr-only">Aktionen öffnen</span>
           </Button>
         </DropdownMenuTrigger>

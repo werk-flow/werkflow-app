@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import {
   Dialog,
@@ -74,8 +73,7 @@ export function JoinOrgDialog({ open, onOpenChange }: JoinOrgDialogProps) {
                 >
                   Abbrechen
                 </Button>
-                <Button type="submit" disabled={isPending}>
-                  {isPending && <Loader2 className="size-4 animate-spin" />}
+                <Button pending={isPending} type="submit" disabled={isPending}>
                   Beitritt anfragen
                 </Button>
               </DialogFooter>

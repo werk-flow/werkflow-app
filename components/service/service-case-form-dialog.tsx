@@ -1,7 +1,6 @@
 'use client';
 
 import type { ReactElement } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -96,8 +95,8 @@ export function ServiceCaseFormDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending && <Loader2 className="size-4 animate-spin" />}Speichern
+            <Button pending={isPending} type="submit" disabled={isPending}>
+              Speichern
             </Button>
           </DialogFooter>
         </form>

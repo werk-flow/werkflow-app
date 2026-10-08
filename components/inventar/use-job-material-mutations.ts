@@ -39,6 +39,8 @@ type MaterialContext = {
 };
 
 type OptimisticMaterialLines = ReturnType<typeof useOptimisticList<JobMaterialLine>>;
+/** The booked line ids of a dialog save, and the mark taken before its first booking. */
+type SavedLines = { lineIds: string[]; since: number };
 
 /** Books one dialog row with the action its mode and context call for. */
 async function bookMaterialRow(
@@ -152,6 +154,7 @@ export function useJobMaterialMutations({
   lines,
   busyLines,
   readFreshLines,
+  markLines,
   pickerItems,
   pickerLocations,
   jobId,
@@ -161,8 +164,10 @@ export function useJobMaterialMutations({
   setDialog: Dispatch<SetStateAction<MaterialDialogState | null>>;
   lines: OptimisticMaterialLines;
   busyLines: ReturnType<typeof useBusyIds<string>>;
-  /** Starts the authoritative read of the lines and resolves when it landed. */
-  readFreshLines: () => Promise<void>;
+  /** Resolves when the authoritative lines landed, counting from `since` (`markLines`). */
+  readFreshLines: (since?: number) => Promise<void>;
+  /** Marks the lines seen so far, before a save of several bookings. */
+  markLines: () => number;
   pickerItems: InventoryPickerOption[];
   pickerLocations: InventoryLocation[];
 }): {
@@ -179,12 +184,15 @@ export function useJobMaterialMutations({
     run: runDialogSave,
     isPending: isSaving,
     isSettling,
-  } = useServerAction(async (task: () => Promise<string[] | null>) => task(), {
-    settle: async (savedLineIds) => {
-      if (!savedLineIds) return;
+  } = useServerAction(async (task: () => Promise<SavedLines | null>) => task(), {
+    settle: async (saved) => {
+      if (!saved) return;
+      const savedLineIds = saved.lineIds;
       // The fresh lines are the authority; an edit echo must not outlive them.
       for (const lineId of savedLineIds) lines.settle(lineId);
-      const read = readFreshLines();
+      // Each booking renders the route in its own response, so an earlier
+      // row's render can land before this wait starts.
+      const read = readFreshLines(saved.since);
       for (const lineId of savedLineIds) void busyLines.run(lineId, () => read);
       await read;
     },
@@ -201,6 +209,7 @@ export function useJobMaterialMutations({
     // Resolves with the booked line ids on success (the settle read marks
     // them), null when the dialog stays open with an error.
     void runDialogSave(async () => {
+      const since = markLines();
       const validation = validateDialogRows(dialog);
       if (!validation.ok) {
         updateDialogError(validation.error, dialog.mode);
@@ -236,7 +245,7 @@ export function useJobMaterialMutations({
             rows: dialog.rows.slice(rowIndex),
             error: getActionErrorMessage(result.error, mode),
           });
-          return rowIndex > 0 ? [] : null;
+          return rowIndex > 0 ? { lineIds: [], since } : null;
         }
         const echo = echoes[rowIndex];
         if (echo && mode === 'plan' && result.lineId) {
@@ -254,7 +263,7 @@ export function useJobMaterialMutations({
               ? 'Das Material wurde zurückgelegt.'
               : 'Die Materialplanung wurde gespeichert.',
       });
-      return dialog.rows.flatMap((row) => (row.lineId ? [row.lineId] : []));
+      return { lineIds: dialog.rows.flatMap((row) => (row.lineId ? [row.lineId] : [])), since };
     }).catch(() => updateDialogError('unexpected_error', dialog.mode));
   }
 

@@ -94,7 +94,9 @@ test.describe('A1 Organisation, Rollen und Stempeluhr @AUDIT-W1-A1', () => {
 
     await createOrganizationInOnboarding(page, organizationName);
     await expect(visibleText(page, organizationName)).toBeVisible();
-    expect(await readOrganizationCode(page)).toMatch(/^[A-Z0-9]{6}$/);
+    const ownCode = await readOrganizationCode(page);
+    expect(ownCode.code).toMatch(/^[A-Z0-9]{6}$/);
+    expect(ownCode.name).toBe(organizationName);
     await page.goto('/mitarbeiter');
     const ownerRow = memberRow(page, `${firstName} ${lastName}`);
     await expect(ownerRow).toContainText(ROLE_LABELS.admin);
@@ -183,7 +185,9 @@ test.describe('A1 Organisation, Rollen und Stempeluhr @AUDIT-W1-A1', () => {
       await adminPage.goto('/dashboard');
       await createAdditionalOrganization(adminPage, secondaryOrganizationName);
       await expect(visibleText(adminPage, secondaryOrganizationName)).toBeVisible();
-      const secondaryOrganizationCode = await readOrganizationCode(adminPage);
+      const secondaryOrganization = await readOrganizationCode(adminPage);
+      expect(secondaryOrganization.name).toBe(secondaryOrganizationName);
+      const secondaryOrganizationCode = secondaryOrganization.code;
       expect(secondaryOrganizationCode).toMatch(/^[A-Z0-9]{6}$/);
       await createCustomer(adminPage, secondaryOrganizationCustomer);
 

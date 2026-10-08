@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useState, type FormEvent } from 'react';
-import type { useRouter } from 'next/navigation';
 
 import type { challengeDispatch } from '@/lib/dispatch/actions';
 import { dispatchErrorMessage, type EmployeeDispatchCard } from '@/lib/dispatch/types';
@@ -10,17 +9,11 @@ import { REASON_MIN_8_MESSAGE } from '@/lib/ui/field-validation';
 type JobDispatchChallengeOptions = {
   readOnly: boolean;
   refresh: () => Promise<unknown>;
-  router: ReturnType<typeof useRouter>;
   runChallenge: typeof challengeDispatch;
 };
 
 /** The open challenge ("Rückfrage") of one dispatch card: target, reason and submit. */
-export function useJobDispatchChallenge({
-  readOnly,
-  refresh,
-  router,
-  runChallenge,
-}: JobDispatchChallengeOptions) {
+export function useJobDispatchChallenge({ readOnly, refresh, runChallenge }: JobDispatchChallengeOptions) {
   const [challengeTarget, setChallengeTarget] = useState<EmployeeDispatchCard | null>(null);
   const [challengeReason, setChallengeReason] = useState('');
   const [challengeError, setChallengeError] = useState<string | null>(null);
@@ -47,13 +40,13 @@ export function useJobDispatchChallenge({
         }
         setChallengeTarget(null);
         setChallengeReason('');
-        router.refresh();
+        // challengeDispatch's response renders the route; the cards read their own view.
         await refresh();
       } catch {
         setChallengeError(dispatchErrorMessage('unexpected_error'));
       }
     },
-    [challengeTarget, challengeReason, readOnly, refresh, router, runChallenge],
+    [challengeTarget, challengeReason, readOnly, refresh, runChallenge],
   );
 
   function startChallenge(card: EmployeeDispatchCard) {

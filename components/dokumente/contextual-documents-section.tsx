@@ -4,7 +4,6 @@ import { PlainButton } from '@/components/ui/plain-button';
 import { formatGermanDate as formatDate } from '@/lib/utils';
 import { formatFileSize } from '@/lib/documents/format';
 import { useState, type DragEvent, type ReactElement } from 'react';
-import { useRouter } from 'next/navigation';
 import { ChevronRight, FileText } from 'lucide-react';
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -188,9 +187,8 @@ export function ContextualDocumentsSection({
 }: ContextualDocumentsSectionProps): ReactElement {
   const context = getContextualDocumentLinkContext(documentTarget);
   const attachTarget = canManage ? getContextualAttachTarget(context) : null;
-  const router = useRouter();
   // Row-scoped pending: the acting row shows a spinner and stays busy until
-  // the refreshed props land, so the rename/unlink/trash result is on screen
+  // the action's rendered props land, so the rename/unlink/trash result is on screen
   // before the indicator goes away (feedback canon).
   const { isBusy, run: runBusy } = useBusyIds();
   const waitForDocuments = useSettleOnChange(documents);
@@ -217,14 +215,11 @@ export function ContextualDocumentsSection({
     showBanner({ variant, message });
   }
 
-  async function settleAfterRefresh() {
-    router.refresh();
-    await waitForDocuments();
-  }
-
+  // Every document action here revalidates (`revalidateDocuments`), so its
+  // response renders the route: no client refresh follows a save.
   const rowActions = useContextualDocumentRowActions({
     runBusy,
-    settleAfterRefresh,
+    waitForDocuments,
     showBanner,
     setRecentlyUploadedDocuments: uploads.setRecentlyUploadedDocuments,
   });
@@ -311,7 +306,6 @@ export function ContextualDocumentsSection({
             showFeedback('error', `${failedCount} Datei(en) konnten nicht hochgeladen werden.`);
           }
           uploads.handleUploadFinished(uploadedDocuments);
-          router.refresh();
         }}
       />
 
@@ -326,10 +320,7 @@ export function ContextualDocumentsSection({
         document={linkDialogDocument}
         open={!!linkDialogDocument}
         onOpenChange={(open) => !open && setLinkDialogDocument(null)}
-        onComplete={(variant, message) => {
-          showFeedback(variant, message);
-          router.refresh();
-        }}
+        onComplete={showFeedback}
       />
 
       <Dialog
@@ -371,10 +362,7 @@ export function ContextualDocumentsSection({
           targetType={attachTarget.targetType}
           targetId={attachTarget.targetId}
           targetLabel={contextLabel}
-          onAttached={(variant, message) => {
-            showFeedback(variant, message);
-            router.refresh();
-          }}
+          onAttached={showFeedback}
         />
       )}
     </ContextualDocumentsFrame>

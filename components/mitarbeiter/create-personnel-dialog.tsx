@@ -1,6 +1,6 @@
 'use client';
 
-import { Loader2, UserRoundPlus } from 'lucide-react';
+import { UserRoundPlus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -96,8 +96,7 @@ export function CreatePersonnelDialog() {
             <ErrorText>{error}</ErrorText>
           </DialogBody>
           <DialogFooter>
-            <Button type="submit" disabled={isSaving}>
-              {isSaving && <Loader2 className="size-4 animate-spin" />}
+            <Button pending={isSaving} type="submit" disabled={isSaving}>
               {isSaving ? 'Wird angelegt…' : 'Personalakte anlegen'}
             </Button>
           </DialogFooter>

@@ -1,7 +1,6 @@
 'use client';
 
 import type { ReactElement } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -255,6 +254,7 @@ export function MaintenanceDueActionDialog({
             Abbrechen
           </Button>
           <Button
+            pending={isPending}
             type="button"
             onClick={controller.submit}
             disabled={
@@ -262,7 +262,6 @@ export function MaintenanceDueActionDialog({
               (action === 'complete' && (controller.isEvidenceLoading || controller.evidenceLoadFailed))
             }
           >
-            {isPending && <Loader2 className="size-4 animate-spin" />}
             Aktion ausführen
           </Button>
         </DialogFooter>

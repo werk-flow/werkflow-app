@@ -1,7 +1,7 @@
 'use client';
 
 import { type ReactElement } from 'react';
-import { ClipboardPlus, Loader2 } from 'lucide-react';
+import { ClipboardPlus } from 'lucide-react';
 
 import { QualificationWarningDialog } from '@/components/auftraege/shared/qualification-warning-dialog';
 import { Button } from '@/components/ui/button';
@@ -138,8 +138,13 @@ export function ApplyWorkTemplateCard({
             <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isPending}>
               Abbrechen
             </Button>
-            <Button type="button" onClick={() => submit()} disabled={isPending || previewPending}>
-              {isPending && <Loader2 className="size-4 animate-spin" />}Anwenden
+            <Button
+              pending={isPending}
+              type="button"
+              onClick={() => submit()}
+              disabled={isPending || previewPending}
+            >
+              Anwenden
             </Button>
           </DialogFooter>
         </DialogContent>

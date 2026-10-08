@@ -1,7 +1,6 @@
 'use client';
 
 import type { ReactElement } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { DialogBody, DialogFooter } from '@/components/ui/dialog';
@@ -51,8 +50,7 @@ export function ContextualDocumentsRenameForm({
         <Button type="button" variant="outline" onClick={onCancel} disabled={isPending}>
           Abbrechen
         </Button>
-        <Button type="submit" disabled={isPending}>
-          {isPending && <Loader2 className="size-4 animate-spin" />}
+        <Button pending={isPending} type="submit" disabled={isPending}>
           Umbenennen
         </Button>
       </DialogFooter>

@@ -1,7 +1,6 @@
 'use client';
 
 import { useLayoutEffect, useRef, useState } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import { useServerAction } from '@/hooks/use-server-action';
 
@@ -197,8 +196,7 @@ function CreateLocationDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
+            <Button pending={isPending} type="submit" disabled={isPending}>
               Speichern
             </Button>
           </DialogFooter>

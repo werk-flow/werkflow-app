@@ -1,7 +1,6 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Loader2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 
@@ -20,6 +19,7 @@ import {
 
 import { PasswordRequirements } from './PasswordRequirements';
 import { PasswordStrengthMeter } from './PasswordStrengthMeter';
+import { Spinner } from '@/components/ui/spinner';
 
 type NewPasswordFieldsFormProps = {
   formError?: string | null;
@@ -137,7 +137,7 @@ export function NewPasswordFieldsForm({
           >
             {isSubmitting ? (
               <>
-                <Loader2 className="mr-2 size-4 animate-spin" />
+                <Spinner className="mr-2" />
                 {submittingLabel}
               </>
             ) : (

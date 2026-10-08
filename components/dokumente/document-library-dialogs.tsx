@@ -38,7 +38,6 @@ export function DocumentLibraryDialogs({
             mutations.showFeedback('error', `${failedCount} Datei(en) konnten nicht hochgeladen werden.`);
           }
           upload.resetFileInputs();
-          mutations.refreshDocuments();
         }}
       />
 
@@ -53,10 +52,7 @@ export function DocumentLibraryDialogs({
         document={linkDialog}
         open={!!linkDialog}
         onOpenChange={(open) => !open && library.closeLinkDialog()}
-        onComplete={(variant, message) => {
-          mutations.showFeedback(variant, message);
-          mutations.refreshDocuments();
-        }}
+        onComplete={(variant, message) => mutations.showFeedback(variant, message)}
       />
 
       <DocumentRenameDialog rename={library.rename} />

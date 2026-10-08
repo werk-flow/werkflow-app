@@ -1,7 +1,5 @@
 'use client';
 
-import { Loader2 } from 'lucide-react';
-
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -197,8 +195,7 @@ export function PersonnelLifecycleDialogFooter({
       <Button variant="outline" onClick={onCancel} disabled={isPending}>
         Abbrechen
       </Button>
-      <Button onClick={() => void onSubmit()} disabled={mutationDisabled}>
-        {isPending && <Loader2 className="size-4 animate-spin" />}
+      <Button pending={isPending} onClick={() => void onSubmit()} disabled={mutationDisabled}>
         {submitLabel}
       </Button>
     </DialogFooter>

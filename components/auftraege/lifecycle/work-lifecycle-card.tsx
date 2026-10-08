@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo, useState, type ReactElement } from 'react';
-import { useRouter } from 'next/navigation';
 import { LockKeyhole } from 'lucide-react';
 
 import { useLiveView } from '@/hooks/use-live-view';
@@ -57,7 +56,6 @@ function useWorkLifecycleCardState({
   initialSnapshot,
   fieldMode,
 }: Pick<WorkLifecycleCardProps, 'initialSnapshot'> & { fieldMode: boolean }) {
-  const router = useRouter();
   const [dialog, setDialog] = useState<WorkLifecycleDialogState | null>(null);
   // Holds the dialog the remote change arrived under: identity comparison
   // hides the hint automatically once that dialog closes (the queued
@@ -123,8 +121,8 @@ function useWorkLifecycleCardState({
       return;
     }
     // Header metadata and project summaries are owned by the route, not this
-    // card's snapshot. Local success must reconcile them without Realtime.
-    router.refresh();
+    // card's snapshot: every write here revalidates (revalidateWork), so its
+    // response renders the route. The card reads its own snapshot.
     await refresh();
     if (message) showBanner({ variant: 'success', message });
   };

@@ -26,6 +26,12 @@ import {
   typeIntoDatePickerById,
   visibleText,
 } from './shared';
+import {
+  getInstalledEquipmentByNumber,
+  getServiceCaseByNumber,
+  type PersistedEquipment,
+  type PersistedServiceCase,
+} from '../db/service';
 
 /**
  * The service area (P1-18 to P1-20): installed equipment (Anlagen), service
@@ -228,6 +234,7 @@ export function equipmentWorkTargetPicker(dialog: Locator): Locator {
 export async function createInstalledEquipment(
   page: Page,
   options: {
+    orgId: string;
     customerName: string;
     siteName: string;
     name: string;
@@ -243,7 +250,7 @@ export async function createInstalledEquipment(
     warrantyProvider?: string;
     warrantyEndDate?: string;
   },
-): Promise<string> {
+): Promise<PersistedEquipment> {
   await page.goto('/service/anlagen');
   await page.getByRole('button', { name: EQUIPMENT_COPY.create }).first().click();
   const dialog = page.getByRole('dialog');
@@ -312,7 +319,7 @@ export async function createInstalledEquipment(
   });
   const equipmentNumber = page.url().split('/').at(-1);
   if (!equipmentNumber) throw new Error('Equipment number missing from detail route.');
-  return decodeURIComponent(equipmentNumber);
+  return getInstalledEquipmentByNumber(options.orgId, decodeURIComponent(equipmentNumber));
 }
 
 function equipmentWorkLinkSection(page: Page): Locator {
@@ -384,8 +391,8 @@ export async function linkInstalledEquipmentSourceToJob(
 
 export async function replaceInstalledEquipment(
   page: Page,
-  options: { successorName: string; serialNumber: string; reason: string },
-): Promise<string> {
+  options: { orgId: string; successorName: string; serialNumber: string; reason: string },
+): Promise<PersistedEquipment> {
   const predecessorUrl = page.url();
   await page.getByRole('button', { name: EQUIPMENT_COPY.replace }).click();
   const dialog = page.getByRole('dialog');
@@ -399,7 +406,7 @@ export async function replaceInstalledEquipment(
     { timeout: 20_000 },
   );
   await expect(page.getByRole('heading', { name: options.successorName })).toBeVisible();
-  return decodeURIComponent(page.url().split('/').at(-1) ?? '');
+  return getInstalledEquipmentByNumber(options.orgId, decodeURIComponent(page.url().split('/').at(-1) ?? ''));
 }
 
 export async function expectDuplicateInstalledEquipmentRejected(
@@ -485,6 +492,7 @@ export function serviceCaseEvidenceLinkedBanner(page: Page): Locator {
 export async function createDirectServiceCase(
   page: Page,
   options: {
+    orgId: string;
     customerName: string;
     siteName: string;
     statement: string;
@@ -495,7 +503,7 @@ export async function createDirectServiceCase(
     triageNote?: string;
     equipmentName?: string;
   },
-): Promise<string> {
+): Promise<PersistedServiceCase> {
   await page.goto('/service/faelle');
   await page.getByRole('button', { name: SERVICE_CASE_COPY.create }).click();
   const dialog = page.getByRole('dialog');
@@ -553,10 +561,10 @@ export async function createDirectServiceCase(
   await expect(visibleText(page, options.statement)).toBeVisible({
     timeout: 15_000,
   });
-  return serviceCaseNumber;
+  return getServiceCaseByNumber(options.orgId, serviceCaseNumber);
 }
 
-export async function convertRequestToServiceCase(page: Page): Promise<string> {
+export async function convertRequestToServiceCase(page: Page, orgId: string): Promise<PersistedServiceCase> {
   await page.getByRole('button', { name: SERVICE_CASE_COPY.convert }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByRole('heading', { name: SERVICE_CASE_COPY.convertDialog })).toBeVisible();
@@ -566,7 +574,7 @@ export async function convertRequestToServiceCase(page: Page): Promise<string> {
   });
   const serviceCaseNumber = page.url().match(/\/service\/faelle\/(SRV-\d{4}-\d{3})/)?.[1];
   if (!serviceCaseNumber) throw new Error('convertRequestToServiceCase: service case number missing');
-  return serviceCaseNumber;
+  return getServiceCaseByNumber(orgId, serviceCaseNumber);
 }
 
 export async function updateServiceCaseViaDialog(

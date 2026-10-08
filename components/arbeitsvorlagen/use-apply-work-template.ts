@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 import { useBanner } from '@/components/ui/banner';
 import { usePendingTask } from '@/hooks/use-server-action';
@@ -75,7 +74,6 @@ export function useApplyWorkTemplate({
   const [qualificationWarning, setQualificationWarning] = useState<AssignmentEvaluation | null>(null);
   const { run: runPendingTask, isPending } = usePendingTask();
   const { showBanner } = useBanner();
-  const router = useRouter();
   // Selecting a version clears preview and error; the window until either lands must not look idle.
   const previewPending = Boolean(versionId) && preview === null && error === null && loadError === null;
 
@@ -194,8 +192,8 @@ export function useApplyWorkTemplate({
       setOpen(false);
       setVersionId('');
       setPreview(null);
+      // applyWorkTemplate's response renders the route with the new planning.
       onApplied?.();
-      router.refresh();
       showBanner({
         variant: 'success',
         message: 'Arbeitsvorlage wurde als bearbeitbare Planung übernommen.',

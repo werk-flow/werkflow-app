@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
@@ -98,8 +97,11 @@ export function ProjectJobsAssignmentDialog({
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
               Abbrechen
             </Button>
-            <Button onClick={handleSave} disabled={isSaving || isLoading || Boolean(loadError)}>
-              {(isSaving || isLoading) && <Loader2 className="mr-2 size-4 animate-spin" />}
+            <Button
+              pending={isSaving || isLoading}
+              onClick={handleSave}
+              disabled={isSaving || isLoading || Boolean(loadError)}
+            >
               Speichern
             </Button>
           </DialogFooter>

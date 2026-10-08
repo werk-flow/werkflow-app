@@ -158,7 +158,6 @@ Items marked Tier 2 fail `bun run test:unit` (`spec-conventions.test.ts` with `l
 - [ ] **Right boundary.** A rule that only reads database state is an SQL assertion in `supabase/tests/`: one transaction, rolled back, an explicit failure message per invariant. A calculation is a unit test, a shared control a component contract. The browser keeps navigation, the visible confirmation, cross-session delivery, and one persisted-row check per mutation. Point the coverage map at the boundary that proves the rule.
 - [ ] **No wall clock.** Dates come from the `businessDate` fixture or `berlinDateAtOffset` inside the test. Seed "yesterday" or "a completed time today" relative to that date, never from the current minute. Tier 2: no `new Date()` or `Date.now()` at module scope.
 - [ ] **Bounded group.** A group's expected duration stays at about four minutes, including about one minute of world setup. Split a growing file by catalog area into its own group with its scopes and date window.
-- [ ] **Steps.** A step prepares, submits once, and verifies at both boundaries: the visible confirmation and the persisted row. Capture the baseline before an action and wait for the exact changed fact.
 - [ ] **Locators.** The area module locates by accessible role and name, the spec passes data. Tier 2: the [checklist](#checklist) and [Never](#never) rules; use `expectDefined` instead of `!`.
 
 ## Deadlines and measured scenarios
@@ -200,7 +199,7 @@ The [spec checklist](#spec-checklist) adds the detail for a single spec. A `[jud
 - Locators are scoped to their semantic owner: no raw page-root selector, no positional selection, no zero-count check on visible text. [lint `playwright-spec/no-unscoped-page-selectors`, lint `playwright-spec/no-visible-text-zero-count`, lint `specSelectors`, test `lib/testing/spec-support/playwright-spec-rules.test.mjs`, test `lib/testing/spec-support/work-artifact-locators.test.ts`]
 - A spec passes data; its area module owns copy, locator functions and structure hooks, and a helper takes copy as a key, never a plain string. No parent hop, xpath or CSS class locates a control, and no spec reads a Server Action payload. [lint `playwright-spec/no-copy-in-spec-locator`, lint `playwright-spec/no-locator-function-in-spec`, lint `playwright-spec/no-structural-locator`, lint `playwright-spec/no-transport-internals`, lint `playwright-spec/no-scoped-has-locator`, test `lib/testing/spec-support/playwright-spec-rules.test.mjs`]
 - A key press settles its scope first and never types into a focused field. [lint `playwright-spec/no-raw-key-press`, group `ui:contracts`]
-- A step waits on a real app signal and verifies both the visible confirmation and the persisted row. [lint `specSelectors`, judgment]
+- A step submits once, waits on the app's busy signals and verifies both the visible confirmation and the persisted row: a mutation helper that returns a value returns `Persisted<Row>`, which only a reader in `tests/golden/support/db/` builds. [code `lib/testing/spec-support/busy-signals.ts`, test `lib/testing/spec-support/busy-signals.test.ts`, lint `testBusySelectors`, lint `specSelectors`, code `tests/golden/support/db/shared.ts`, test `lib/testing/spec-support/persisted-returns.test.ts`, lint `persistedCastSelectors`, lint `persistedImportSelectors`]
 - Describe and checkpoint ownership follow the spec convention. [test `lib/testing/spec-support/spec-checkpoint-conventions.test.ts`]
 - Expectations name semantic tokens, never palette classes. [test `lib/conventions/palette-classes-in-tests.test.ts`]
 - Every catalog flow maps to evidence, and a changed catalog clause reopens its mapping. Whether a mapped assertion proves its clause is the reviewer's reading. [group `static:coverage`, test `lib/testing/selection/coverage-map.test.ts`, judgment]
@@ -212,7 +211,7 @@ The [spec checklist](#spec-checklist) adds the detail for a single spec. A `[jud
 - A browser group starts only after a bounded backend probe, and a failed group records a second probe as a hint, never a class. A diagnostic replay prints the source run's completed stages and refuses a second replay of a test on the same world. [test `lib/testing/runner/backend-health.test.ts`, test `lib/testing/runs/replay-checkpoint.test.ts`]
 - After two failed release runs, the diagnosis goes into the incident log first. [test `lib/testing/publication/release-breaker.test.ts`]
 - Runner changes carry focused unit tests. [group `unit:all`, judgment]
-- Unit tests assert no duration; the preload sets one hang guard. [code `scripts/unit-test-preload.ts`]
+- Unit tests assert no duration; the preload and the runner set one hang guard for every file. [code `scripts/unit-test-preload.ts`, code `scripts/run-unit-tests.ts`]
 - Every change gets `bun run review` and a disposition per finding. [script `review`, judgment]
 - A push passes the publication gate: a passing report, and review records whose per-file digests cover every changed file of the pushed tree. [code `.githooks/pre-push`, test `lib/testing/publication/publication-gate.test.ts`]
 

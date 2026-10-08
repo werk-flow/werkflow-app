@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, type ReactElement } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { Button } from '@/components/ui/button';
@@ -143,8 +142,7 @@ export function EquipmentWorkLinkDialog({
             >
               Abbrechen
             </Button>
-            <Button type="submit" disabled={busy.isBusy('work-link')}>
-              {busy.isBusy('work-link') && <Loader2 className="size-4 animate-spin" />}
+            <Button pending={busy.isBusy('work-link')} type="submit" disabled={busy.isBusy('work-link')}>
               Verknüpfen
             </Button>
           </DialogFooter>

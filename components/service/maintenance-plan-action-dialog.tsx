@@ -2,8 +2,6 @@
 
 import { describeFailure } from '@/lib/action-messages';
 import { useRef, useState, type ReactElement } from 'react';
-import { useRouter } from 'next/navigation';
-import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -34,10 +32,9 @@ export function MaintenancePlanActionDialog({
   plan: MaintenancePlanItem;
   toStatus?: Exclude<MaintenancePlanStatus, 'draft'>;
   archived?: boolean;
-  /** Settled by the caller (a live-view refresh) instead of a route refresh. */
+  /** Settled by the caller (a live-view refresh); without it the action's response renders the route. */
   onSaved?: () => void;
 }): ReactElement {
-  const router = useRouter();
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [reasonError, setReasonError] = useState<string | null>(null);
@@ -79,11 +76,7 @@ export function MaintenancePlanActionDialog({
       return;
     }
     onOpenChange(false);
-    if (onSaved) {
-      onSaved();
-    } else {
-      router.refresh();
-    }
+    onSaved?.();
   });
   const title =
     toStatus === 'active'
@@ -119,12 +112,12 @@ export function MaintenancePlanActionDialog({
             Abbrechen
           </Button>
           <Button
+            pending={isPending}
             type="button"
             variant={toStatus === 'terminated' ? 'destructive' : 'default'}
             onClick={() => void run()}
             disabled={isPending}
           >
-            {isPending && <Loader2 className="size-4 animate-spin" />}
             {title}
           </Button>
         </DialogFooter>

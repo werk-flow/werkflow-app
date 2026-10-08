@@ -347,7 +347,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     const activeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
     const exitedEmployeeNumber = `MA-A3-E-${world.runId}`;
 
-    const plannedRecordId = await createPersonnelRecordViaDialog(adminPage, {
+    const { id: plannedRecordId } = await createPersonnelRecordViaDialog(adminPage, {
       firstName: 'Pia',
       lastName: `Planung-A3-${world.runId}`,
       entryDateDigits: toDatePickerDigits(berlinDateAtOffset(30)),

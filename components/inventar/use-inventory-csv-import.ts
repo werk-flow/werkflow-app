@@ -31,10 +31,8 @@ type InventoryCsvImport = {
 /** The CSV import dialog's state: the parsed file, the column mapping, the import run. */
 export function useInventoryCsvImport({
   onOpenChange,
-  onImported,
 }: {
   onOpenChange: (open: boolean) => void;
-  onImported: () => void;
 }): InventoryCsvImport {
   const { showBanner } = useBanner();
   const [fileName, setFileName] = useState('');
@@ -100,8 +98,8 @@ export function useInventoryCsvImport({
       }
 
       handleOpenChange(false);
+      // The action's response renders the route with the imported items.
       showBanner(importResultBanner(result));
-      onImported();
     });
   }
 

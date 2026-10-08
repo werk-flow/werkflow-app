@@ -132,7 +132,7 @@ export function useDocumentMoveCopy({
   mutations: DocumentLibraryMutations;
   selection: DocumentLibrarySelection;
 }) {
-  const { documentList, showFeedback, refreshDocuments } = mutations;
+  const { documentList, showFeedback } = mutations;
   const { selectedDocuments, selectedFolders, selectedItemCount } = selection;
   const moveCopyBatch = useBatchProgress<BulkStep>();
   const [moveCopyError, setMoveCopyError] = useState<string | null>(null);
@@ -210,7 +210,6 @@ export function useDocumentMoveCopy({
             }
           : current,
       );
-      if (failures < steps.length) refreshDocuments();
       return;
     }
 
@@ -222,7 +221,6 @@ export function useDocumentMoveCopy({
     }
     onSuccess();
     selection.clearSelection();
-    refreshDocuments();
     showFeedback(
       'success',
       itemCount === 1 ? `1 Eintrag wurde ${actionLabel}.` : `${itemCount} Einträge wurden ${actionLabel}.`,

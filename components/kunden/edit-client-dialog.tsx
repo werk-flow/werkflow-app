@@ -2,7 +2,6 @@
 
 import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -194,8 +193,7 @@ export function EditClientDialog({ client, open, onOpenChange, onSaved }: EditCl
             <ErrorText>{error}</ErrorText>
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading && <Loader2 className="size-4 animate-spin" />}
+            <Button pending={isLoading} type="submit" disabled={isLoading}>
               {isLoading ? 'Wird gespeichert…' : 'Speichern'}
             </Button>
           </DialogFooter>

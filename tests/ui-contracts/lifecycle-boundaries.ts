@@ -121,7 +121,10 @@ export async function transitionWorkExecution(
     executionState: input.toState,
     executionVersion: state.snapshot.executionVersion + 1,
   };
-  // Deliberately no RSC patch or event: those independent channels can be absent.
+  // The real action revalidates (revalidateWork), so its response renders the
+  // route; the stub delivers that render. No Realtime event: it can be absent.
+  window.uiContractServices.navigation.push('action-render');
+  window.dispatchEvent(new Event(ROUTE_REFRESH_EVENT));
   return {
     success: true,
     transition: {

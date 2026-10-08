@@ -1,7 +1,5 @@
 'use client';
 
-import { Loader2 } from 'lucide-react';
-
 import { ErrorText } from '@/components/ui/error-text';
 import {
   AlertDialog,
@@ -13,6 +11,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Spinner } from '@/components/ui/spinner';
 
 type MemberRemoveConfirmDialogProps = {
   open: boolean;
@@ -66,7 +65,7 @@ export function MemberRemoveConfirmDialog({
           >
             {isRemoving ? (
               <>
-                <Loader2 className="mr-2 size-4 animate-spin" />
+                <Spinner className="mr-2" />
                 Wird entfernt…
               </>
             ) : removalBlockedMessage ? (

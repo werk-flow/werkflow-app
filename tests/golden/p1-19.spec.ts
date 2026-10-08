@@ -108,7 +108,8 @@ test.describe('P1-19 reactive service vertical slice @P1-19 @GG-05', () => {
 
     const directCaseNumber =
       await test.step('Record a repeat fault directly with its equipment', async () => {
-        const caseNumber = await createDirectServiceCase(adminPage, {
+        const directCase = await createDirectServiceCase(adminPage, {
+          orgId: world.orgId,
           customerName: names.customer,
           siteName: names.site,
           statement: 'Die Anlage macht wieder dieselben Geräusche.',
@@ -117,7 +118,8 @@ test.describe('P1-19 reactive service vertical slice @P1-19 @GG-05', () => {
           chargeContext: 'suspected_rework',
           equipmentName: names.equipment,
         });
-        const state = await getServiceCaseStateByNumber(world.orgId, caseNumber);
+        expect(directCase.summary).toBe(names.directSummary);
+        const state = await getServiceCaseStateByNumber(world.orgId, directCase.caseNumber);
         expect(state.serviceCase).toMatchObject({
           intake_type: 'direct',
           source_request_id: null,
@@ -125,13 +127,15 @@ test.describe('P1-19 reactive service vertical slice @P1-19 @GG-05', () => {
           charge_context: 'suspected_rework',
         });
         expect(state.equipmentLinks).toHaveLength(1);
-        return caseNumber;
+        return directCase.caseNumber;
       });
 
     const caseNumber = await test.step('Take over the customer request as a service case', async () => {
       await adminPage.goto(`/anfragen/${requestId}`);
-      const requestCaseNumber = await convertRequestToServiceCase(adminPage);
+      const requestCase = await convertRequestToServiceCase(adminPage, world.orgId);
       await expect(serviceCaseSourceRequestLink(adminPage)).toBeVisible();
+      expect(requestCase.sourceRequestId).toBe(requestId);
+      const requestCaseNumber = requestCase.caseNumber;
       const state = await getServiceCaseStateByNumber(world.orgId, requestCaseNumber);
       expect(state.serviceCase).toMatchObject({
         intake_type: 'request',

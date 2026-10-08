@@ -2,7 +2,7 @@
 
 import { PlainButton } from '@/components/ui/plain-button';
 import { useId, useMemo, useState, type ReactNode } from 'react';
-import { Pencil, Loader2, RotateCcw } from 'lucide-react';
+import { Pencil, RotateCcw } from 'lucide-react';
 import { useServerAction } from '@/hooks/use-server-action';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -394,8 +394,13 @@ function MetadataFieldRow({
                 Leeren
               </Button>
             )}
-            <Button type="button" variant="default" onClick={onSave} disabled={isPending || !hasChanges}>
-              {isPending && <Loader2 className="mr-2 size-3.5 animate-spin" />}
+            <Button
+              pending={isPending}
+              type="button"
+              variant="default"
+              onClick={onSave}
+              disabled={isPending || !hasChanges}
+            >
               Speichern
             </Button>
             <Button type="button" variant="outline" onClick={onCancel} disabled={isPending}>

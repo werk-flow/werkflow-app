@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowRight, Loader2, ShieldCheck } from 'lucide-react';
+import { ArrowRight, ShieldCheck } from 'lucide-react';
 
 import { type EmailChangeWizard } from '@/components/settings/use-email-change-wizard';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 import { PlainButton } from '@/components/ui/plain-button';
+import { Spinner } from '@/components/ui/spinner';
 
 function OtpCodeInput({
   id,
@@ -103,7 +104,7 @@ export function VerifyCurrentEmailStep({ wizard }: { wizard: EmailChangeWizard }
         >
           {isResetting ? (
             <>
-              <Loader2 className="mr-2 size-4 animate-spin" />
+              <Spinner className="mr-2" />
               Wird abgebrochen…
             </>
           ) : (
@@ -113,7 +114,7 @@ export function VerifyCurrentEmailStep({ wizard }: { wizard: EmailChangeWizard }
         <Button type="submit" disabled={isCurrentOtpSubmitting || isResetting}>
           {isCurrentOtpSubmitting ? (
             <>
-              <Loader2 className="mr-2 size-4 animate-spin" />
+              <Spinner className="mr-2" />
               Code wird geprüft…
             </>
           ) : (
@@ -155,7 +156,7 @@ export function EnterNewEmailStep({ wizard }: { wizard: EmailChangeWizard }) {
           <Button type="button" variant="outline" onClick={handleResetFlow} disabled={isResetting}>
             {isResetting ? (
               <>
-                <Loader2 className="mr-2 size-4 animate-spin" />
+                <Spinner className="mr-2" />
                 Wird abgebrochen…
               </>
             ) : (
@@ -185,7 +186,7 @@ export function EnterNewEmailStep({ wizard }: { wizard: EmailChangeWizard }) {
               >
                 {isResetting ? (
                   <>
-                    <Loader2 className="mr-2 size-4 animate-spin" />
+                    <Spinner className="mr-2" />
                     Wird abgebrochen…
                   </>
                 ) : (
@@ -195,7 +196,7 @@ export function EnterNewEmailStep({ wizard }: { wizard: EmailChangeWizard }) {
               <Button type="submit" disabled={isSavingNewEmail || isResetting}>
                 {isSavingNewEmail ? (
                   <>
-                    <Loader2 className="mr-2 size-4 animate-spin" />
+                    <Spinner className="mr-2" />
                     Neue Adresse wird vorbereitet…
                   </>
                 ) : (
@@ -285,7 +286,7 @@ export function VerifyNewEmailStep({ wizard }: { wizard: EmailChangeWizard }) {
         >
           {isResetting ? (
             <>
-              <Loader2 className="mr-2 size-4 animate-spin" />
+              <Spinner className="mr-2" />
               Wird abgebrochen…
             </>
           ) : (
@@ -295,7 +296,7 @@ export function VerifyNewEmailStep({ wizard }: { wizard: EmailChangeWizard }) {
         <Button type="submit" disabled={isNewEmailOtpSubmitting || isResetting}>
           {isNewEmailOtpSubmitting ? (
             <>
-              <Loader2 className="mr-2 size-4 animate-spin" />
+              <Spinner className="mr-2" />
               Neue Adresse wird bestätigt…
             </>
           ) : (

@@ -2,7 +2,7 @@
 
 import { useState, type ReactElement } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, Wrench } from 'lucide-react';
+import { Wrench } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -80,8 +80,7 @@ export function ConvertRequestToServiceDialog({
             <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isBusy}>
               Abbrechen
             </Button>
-            <Button type="button" onClick={() => void run()} disabled={isBusy}>
-              {isBusy && <Loader2 className="size-4 animate-spin" />}
+            <Button pending={isBusy} type="button" onClick={() => void run()} disabled={isBusy}>
               {isBusy ? 'Übernimmt…' : 'Übernehmen'}
             </Button>
           </DialogFooter>

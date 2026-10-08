@@ -1,6 +1,6 @@
 'use client';
 
-import { Loader2, Save } from 'lucide-react';
+import { Save } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -62,8 +62,14 @@ export function WorkHandoverSourceSelection({
           Es gibt noch keine freigegebenen kundenfähigen Nachweise, Dokumentversionen oder Auftragsübergaben.
         </p>
       )}
-      <Button type="button" variant="outline" onClick={saveDraft} disabled={anyBusy}>
-        {isBusy('draft') ? <Loader2 className="animate-spin" /> : <Save />}
+      <Button
+        pending={isBusy('draft')}
+        type="button"
+        variant="outline"
+        onClick={saveDraft}
+        disabled={anyBusy}
+      >
+        <Save />
         Entwurf speichern
       </Button>
       <FeedbackText feedback={feedbackFor('draft')} />

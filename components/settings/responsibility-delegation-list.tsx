@@ -1,7 +1,5 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-
 import {
   ERROR_MESSAGES,
   responsibilityErrorMessage,
@@ -25,7 +23,6 @@ export function DelegationList({
   delegations: ResponsibilityDelegation[];
   canEdit: boolean;
 }) {
-  const router = useRouter();
   const { showBanner } = useBanner();
   const ending = useBusyIds();
 
@@ -40,7 +37,7 @@ export function DelegationList({
           });
           return;
         }
-        router.refresh();
+        // The action's response renders the route with the ended delegation.
         showBanner({ message: 'Die Vertretung wurde beendet.', variant: 'success' });
       } catch {
         showBanner({ message: ERROR_MESSAGES.save_failed, variant: 'error' });

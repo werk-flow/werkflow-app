@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ExternalLink, Loader2, Trash2, Pencil } from 'lucide-react';
+import { ExternalLink, Trash2, Pencil } from 'lucide-react';
 
 import { ErrorText } from '@/components/ui/error-text';
 import { RowActionsMenu } from '@/components/ui/row-actions-menu';
@@ -20,6 +20,7 @@ import {
 import { EditProjectDialog } from '../forms/edit-project-dialog';
 import { deleteProject } from '@/lib/projects/actions';
 import { type Client, type Job, type Project, type ProjectWithDetails } from '@/lib/jobs/types';
+import { Spinner } from '@/components/ui/spinner';
 
 export const PROJECT_DELETE_FAILED_MESSAGE = 'Das Projekt konnte nicht gelöscht werden.';
 
@@ -148,7 +149,7 @@ export function ProjectActionsMenu({
             >
               {isDeleting ? (
                 <>
-                  <Loader2 className="mr-2 size-4 animate-spin" />
+                  <Spinner className="mr-2" />
                   Wird gelöscht…
                 </>
               ) : (

@@ -65,6 +65,8 @@ export async function setHolidayRegion(region: string | null): Promise<CalendarA
     }
 
     if ((settingsRow?.holiday_region ?? null) === selectedRegion) {
+      // Nothing to write, but the caller saw a stale region: its response must still render the route.
+      updateTag(CACHE_TAGS.organizationSettings(orgId));
       return { success: true };
     }
 

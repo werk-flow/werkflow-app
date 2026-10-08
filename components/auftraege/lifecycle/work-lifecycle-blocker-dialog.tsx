@@ -1,7 +1,5 @@
 'use client';
 
-import { Loader2 } from 'lucide-react';
-
 import { Button } from '@/components/ui/button';
 import { DatePicker } from '@/components/ui/date-picker';
 import {
@@ -103,8 +101,8 @@ export function WorkBlockerDialog(props: WorkBlockerDialogProps) {
             <Button type="button" variant="outline" onClick={onClose} disabled={pending}>
               Abbrechen
             </Button>
-            <Button type="submit" disabled={pending}>
-              {pending && <Loader2 className="size-4 animate-spin" />}Speichern
+            <Button pending={pending} type="submit" disabled={pending}>
+              Speichern
             </Button>
           </DialogFooter>
         </form>

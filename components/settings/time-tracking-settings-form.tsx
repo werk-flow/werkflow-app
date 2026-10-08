@@ -3,7 +3,6 @@
 import { describeFailure } from '@/lib/action-messages';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { useForm, useWatch } from 'react-hook-form';
 import { z } from '@/lib/zod';
 
@@ -40,7 +39,6 @@ type TimeTrackingSettingsFormInput = z.input<typeof timeTrackingSettingsSchema>;
 type TimeTrackingSettingsFormOutput = z.output<typeof timeTrackingSettingsSchema>;
 
 export function TimeTrackingSettingsForm({ initialSettings, role }: TimeTrackingSettingsFormProps) {
-  const router = useRouter();
   const { showBanner } = useBanner();
   const { run: runSave, isPending: isSaving } = useServerAction(updateTimeTrackingSettings);
   const canEdit = role === 'admin';
@@ -82,12 +80,12 @@ export function TimeTrackingSettingsForm({ initialSettings, role }: TimeTracking
         return;
       }
 
+      // The action's response renders the route with the saved rules.
       form.reset({
         breakMode: result.breakMode,
         autoBreakThresholdMinutes: result.autoBreakThresholdMinutes,
         autoBreakDurationMinutes: result.autoBreakDurationMinutes,
       });
-      router.refresh();
       showBanner({
         message: 'Die Regeln für die Zeiterfassung wurden gespeichert.',
         variant: 'success',

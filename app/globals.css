@@ -127,6 +127,10 @@
 }
 
 @theme inline {
+  /* A live status (a running block, a working employee's dot) pulses like a
+     skeleton but is not a busy signal: the settle step waits on Skeleton and
+     Spinner by their data-slot, never on this class. */
+  --animate-live: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --color-background: var(--background);

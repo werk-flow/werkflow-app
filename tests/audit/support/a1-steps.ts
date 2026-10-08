@@ -4,6 +4,7 @@ import { WORK_EXECUTION_LABELS } from '../../../lib/work-lifecycle/types';
 import { materialRowLocation, materialRowQuantity } from '../../golden/support/steps/inventory';
 import { detailsRegion, retryDialogTransaction } from '../../golden/support/steps/shared';
 import { lifecycleAction, transitionWork, workLifecycleCard } from '../../golden/support/steps/work';
+import { getOrganizationByJoinCode, type PersistedJoinCode } from '../../golden/support/db/shared';
 
 /** The search field of the material dialog's location picker, named by its placeholder. */
 const MATERIAL_LOCATION_SEARCH = 'Lager suchen …';
@@ -84,16 +85,12 @@ export async function expectSignedWindowOpen(page: Page, clickDownload: () => Pr
   await popup.close().catch(() => undefined);
 }
 
-export async function readOrganizationCode(page: Page): Promise<string> {
+/** The join code the organization page shows, read back from the organization that owns it. */
+export async function readOrganizationCode(page: Page): Promise<PersistedJoinCode> {
   // The generated code is rendered as bare code text without a semantic label.
-  return (
-    (
-      await page
-        .locator('code')
-        .filter({ hasText: /[A-Z0-9]{6}/ })
-        .textContent()
-    )?.trim() ?? ''
-  );
+  const code = page.locator('code').filter({ hasText: /[A-Z0-9]{6}/ });
+  await expect(code).toBeVisible();
+  return getOrganizationByJoinCode(((await code.textContent()) ?? '').trim());
 }
 
 export function upgradeChoiceLink(page: Page): Locator {

@@ -3,7 +3,7 @@
 import { INVITE_ROLE_OPTIONS } from '@/lib/roles';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, MailPlus } from 'lucide-react';
+import { MailPlus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { useServerAction } from '@/hooks/use-server-action';
@@ -155,11 +155,11 @@ export function PersonnelInviteDialog({ recordId, personName }: PersonnelInviteD
           </div>
           <DialogFooter>
             <Button
+              pending={isSending}
               type="submit"
               // eslint-disable-next-line ui/submit-disabled-only-while-pending -- the invitation is sent; the dialog confirms it and closes
               disabled={isSending || success}
             >
-              {isSending && <Loader2 className="size-4 animate-spin" />}
               {isSending ? 'Wird gesendet…' : 'Einladung senden'}
             </Button>
           </DialogFooter>

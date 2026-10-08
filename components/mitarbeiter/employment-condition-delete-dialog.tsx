@@ -1,7 +1,5 @@
 'use client';
 
-import { Loader2 } from 'lucide-react';
-
 import { ErrorText } from '@/components/ui/error-text';
 import {
   AlertDialog,
@@ -15,6 +13,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import type { EmploymentCondition } from '@/lib/personnel/types';
 import { formatGermanDate } from '@/lib/utils';
+import { Spinner } from '@/components/ui/spinner';
 
 type EmploymentConditionDeleteDialogProps = {
   deleteTarget: EmploymentCondition | null;
@@ -60,7 +59,7 @@ export function EmploymentConditionDeleteDialog({
           >
             {isDeleting ? (
               <>
-                <Loader2 className="mr-2 size-4 animate-spin" />
+                <Spinner className="mr-2" />
                 Wird gelöscht…
               </>
             ) : (

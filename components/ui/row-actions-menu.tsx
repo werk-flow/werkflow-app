@@ -10,9 +10,10 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { Loader2, MoreHorizontal } from 'lucide-react';
+import { MoreHorizontal } from 'lucide-react';
 
 import { buttonVariants } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 
 export type RowActionMenuItem = {
@@ -138,7 +139,7 @@ export function RowActionsMenu({ actions, disabled = false }: RowActionsMenuProp
           if (!open) openMenu();
         }}
       >
-        {disabled ? <Loader2 className="size-4 animate-spin" /> : <MoreHorizontal className="size-4" />}
+        {disabled ? <Spinner /> : <MoreHorizontal className="size-4" />}
       </button>
 
       {open &&

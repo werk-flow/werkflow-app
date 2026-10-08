@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Building2, Loader2, Phone, UserPlus } from 'lucide-react';
+import { Building2, Phone, UserPlus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
@@ -93,8 +93,14 @@ export function RequestCustomerCard({
               <Button size="sm" variant="outline" onClick={onMatch} disabled={isPending}>
                 Vorhandenem Kunden zuordnen
               </Button>
-              <Button size="sm" variant="outline" onClick={onPromote} disabled={isPending}>
-                {isPending ? <Loader2 className="size-4 animate-spin" /> : <UserPlus className="size-4" />}
+              <Button
+                pending={isPending}
+                size="sm"
+                variant="outline"
+                onClick={onPromote}
+                disabled={isPending}
+              >
+                <UserPlus className="size-4" />
                 Als neuen Kunden anlegen
               </Button>
             </div>

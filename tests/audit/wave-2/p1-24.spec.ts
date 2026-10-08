@@ -28,7 +28,7 @@ test.describe('P1-24 lifecycle audit @AUDIT-W2-P1-24 @AUDIT-W2', () => {
     bueroPage,
     world,
   }) => {
-    const noLoginRecordId = await createPersonnelRecordViaDialog(adminPage, {
+    const { id: noLoginRecordId } = await createPersonnelRecordViaDialog(adminPage, {
       firstName: 'Lina',
       lastName: `Lebenslauf-${world.runId}`,
       entryDateDigits: datePickerDigits(ownedBerlinDateAtOffset('p1-24', 125)),

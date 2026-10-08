@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2, Thermometer } from 'lucide-react';
+import { Thermometer } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -200,12 +200,12 @@ function SicknessCancelDialog({
             Abbrechen
           </Button>
           <Button
+            pending={isSaving}
             type="button"
             variant="destructive"
             onClick={() => void handleConfirm()}
             disabled={isSaving}
           >
-            {isSaving && <Loader2 className="size-4 animate-spin" />}
             {isSaving ? 'Wird storniert…' : 'Stornieren'}
           </Button>
         </DialogFooter>

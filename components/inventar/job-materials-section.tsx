@@ -1,7 +1,6 @@
 'use client';
 
 import type { ReactElement } from 'react';
-import { useRouter } from 'next/navigation';
 
 import { ErrorText } from '@/components/ui/error-text';
 import { SectionError } from '@/components/ui/section-error';
@@ -48,7 +47,6 @@ export function JobMaterialsSection({
   totals = [],
   readOnly = false,
 }: JobMaterialsSectionProps): ReactElement {
-  const router = useRouter();
   const {
     dialog,
     setDialog,
@@ -81,14 +79,14 @@ export function JobMaterialsSection({
     getId: getLineId,
   });
 
-  // The authoritative read after a booking: managers wait for the refreshed
-  // route props, field workers for the live view's own read.
+  // The authoritative read after a booking: managers wait for the route
+  // props that the booking's Server Action renders into its response (it
+  // revalidates the Auftrag pages), field workers for the live view's own read.
   const waitForLines = useSettleOnChange(initialLines);
   const busyLines = useBusyIds();
-  function readFreshLines(): Promise<void> {
+  function readFreshLines(since?: number): Promise<void> {
     if (!isAdminOrManager) return fieldView.refresh();
-    router.refresh();
-    return waitForLines();
+    return waitForLines(since);
   }
   const { handleDialogSave, handleDelete, isSaving, isSettling } = useJobMaterialMutations({
     dialog,
@@ -96,6 +94,7 @@ export function JobMaterialsSection({
     lines,
     busyLines,
     readFreshLines,
+    markLines: waitForLines.markChange,
     pickerItems,
     pickerLocations,
     jobId,

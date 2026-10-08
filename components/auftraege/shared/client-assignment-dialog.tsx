@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -76,8 +75,7 @@ export function ClientAssignmentDialog({
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
               Abbrechen
             </Button>
-            <Button onClick={handleSave} disabled={isSaving}>
-              {isSaving && <Loader2 className="mr-2 size-4 animate-spin" />}
+            <Button pending={isSaving} onClick={handleSave} disabled={isSaving}>
               Speichern
             </Button>
           </DialogFooter>

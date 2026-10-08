@@ -1,6 +1,6 @@
 'use client';
 
-import { CalendarClock, Loader2 } from 'lucide-react';
+import { CalendarClock } from 'lucide-react';
 
 import { formatDelegationDate, personName } from '@/components/settings/responsibility-display';
 import { useResponsibilityDelegationForm } from '@/components/settings/use-responsibility-delegation-form';
@@ -161,8 +161,7 @@ export function DelegationDialog({
             >
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isSaving}>
-              {isSaving && <Loader2 className="animate-spin" />}
+            <Button pending={isSaving} type="submit" disabled={isSaving}>
               Vertretung speichern
             </Button>
           </DialogFooter>

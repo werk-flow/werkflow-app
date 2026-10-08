@@ -11,6 +11,7 @@ import { AnimatePresence, LazyMotion, domAnimation, m } from 'framer-motion';
 import { Menu, X } from 'lucide-react';
 
 import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useOrganization } from '@/components/organization/organization-context';
@@ -24,7 +25,7 @@ const OrganizationSwitcher = dynamic(
   () => import('@/components/organization/organization-switcher').then((mod) => mod.OrganizationSwitcher),
   {
     ssr: false,
-    loading: () => <div className="h-9 w-full rounded-md border border-input bg-muted animate-pulse" />,
+    loading: () => <Skeleton className="h-9 w-full rounded-md border border-input" />,
   },
 );
 
@@ -68,7 +69,7 @@ function SidebarSkeleton() {
       </div>
       <Separator />
       <div className="p-4">
-        <div className="h-9 w-full rounded-md border border-input bg-muted animate-pulse" />
+        <Skeleton className="h-9 w-full rounded-md border border-input" />
       </div>
       <Separator />
       <nav className="flex-1 p-4">
@@ -76,8 +77,8 @@ function SidebarSkeleton() {
           {Array.from({ length: 4 }).map((_, i) => (
             <li key={i}>
               <div className="flex items-center gap-3 rounded-md px-3 py-2">
-                <div className="size-4 rounded bg-muted animate-pulse" />
-                <div className="h-4 w-24 rounded bg-muted animate-pulse" />
+                <Skeleton className="size-4 rounded" />
+                <Skeleton className="h-4 w-24 rounded" />
               </div>
             </li>
           ))}
@@ -85,10 +86,10 @@ function SidebarSkeleton() {
       </nav>
       <div className="mt-auto border-t">
         <div className="flex items-center gap-3 p-3">
-          <div className="size-9 rounded-full bg-muted animate-pulse" />
+          <Skeleton className="size-9 rounded-full" />
           <div className="flex-1 min-w-0">
-            <div className="h-4 w-24 mb-1 rounded bg-muted animate-pulse" />
-            <div className="h-3 w-32 rounded bg-muted animate-pulse" />
+            <Skeleton className="h-4 w-24 mb-1 rounded" />
+            <Skeleton className="h-3 w-32 rounded" />
           </div>
         </div>
       </div>

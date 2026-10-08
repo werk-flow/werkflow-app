@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { MoreHorizontal, UserCog, UserMinus, Loader2, ExternalLink } from 'lucide-react';
+import { MoreHorizontal, UserCog, UserMinus, ExternalLink } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
@@ -125,8 +125,8 @@ export function MemberActionsMenu({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" disabled={isLoading}>
-            {isLoading ? <Loader2 className="size-4 animate-spin" /> : <MoreHorizontal className="size-4" />}
+          <Button pending={isLoading} variant="ghost" size="sm" className="h-8 w-8 p-0" disabled={isLoading}>
+            <MoreHorizontal className="size-4" />
             <span className="sr-only">Aktionen öffnen</span>
           </Button>
         </DropdownMenuTrigger>

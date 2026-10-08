@@ -1,7 +1,5 @@
 'use client';
 
-import { Loader2 } from 'lucide-react';
-
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -58,8 +56,7 @@ export function EditProjectDialog({
             <ErrorText>{error}</ErrorText>
           </DialogBody>
           <DialogFooter>
-            <Button type="submit" disabled={formDisabled}>
-              {isLoading && <Loader2 className="size-4 animate-spin" />}
+            <Button pending={isLoading} type="submit" disabled={formDisabled}>
               {isLoading ? 'Wird gespeichert…' : 'Speichern'}
             </Button>
           </DialogFooter>

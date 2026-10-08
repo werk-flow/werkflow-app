@@ -2,7 +2,6 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 
 import { updateProfileSettings } from '@/lib/settings/actions';
@@ -19,7 +18,6 @@ import { InlinePending } from '@/components/ui/inline-pending';
 import { usePendingTask } from '@/hooks/use-server-action';
 
 export function ProfileSettingsForm() {
-  const router = useRouter();
   const { profile, refreshProfile } = useUserProfile();
   const { showBanner } = useBanner();
   const { run: runSave, isPending: isSaving } = usePendingTask();
@@ -52,8 +50,8 @@ export function ProfileSettingsForm() {
           return;
         }
 
+        // The action's response renders the route; the profile context reads its own copy.
         await refreshProfile();
-        router.refresh();
         showBanner({
           message: 'Dein Profil wurde gespeichert.',
           variant: 'success',

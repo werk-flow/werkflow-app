@@ -1,6 +1,6 @@
 'use client';
 
-import { Loader2, Warehouse } from 'lucide-react';
+import { Warehouse } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { isServerRow, withPendingDraft } from '@/lib/inventory/pending-drafts';
@@ -11,6 +11,7 @@ import {
   type InventoryLocationType,
   type InventoryOverviewItem,
 } from '@/lib/inventory/types';
+import { Spinner } from '@/components/ui/spinner';
 
 export type PendingLocationDraft = {
   confirmedId: string | null;
@@ -51,7 +52,7 @@ export function LocationsView({
               className="min-w-0 rounded-lg border bg-card p-4 opacity-70"
             >
               <div className="flex items-center gap-2">
-                <Loader2 className="size-4 animate-spin text-muted-foreground" aria-hidden="true" />
+                <Spinner className="text-muted-foreground" />
                 <Warehouse className="size-4 text-muted-foreground" />
                 <h2 className="font-semibold">{location.name}</h2>
               </div>

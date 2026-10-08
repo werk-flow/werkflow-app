@@ -117,12 +117,11 @@ export function useServiceCaseForm({
       return;
     }
     onOpenChange(false);
+    // Without a caller's live read, the action's response renders the route.
     if (!initial) {
       router.push(`/service/faelle/${result.serviceCase.case_number}`);
     } else if (onSaved) {
       onSaved();
-    } else {
-      router.refresh();
     }
   });
   // Sites, contacts and equipment of the chosen customer only.

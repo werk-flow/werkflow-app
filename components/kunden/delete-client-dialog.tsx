@@ -1,7 +1,5 @@
 'use client';
 
-import { Loader2 } from 'lucide-react';
-
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,6 +11,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { ErrorText } from '@/components/ui/error-text';
+import { Spinner } from '@/components/ui/spinner';
 
 interface DeleteClientDialogProps {
   clientName: string;
@@ -54,7 +53,7 @@ export function DeleteClientDialog({
           >
             {isDeleting ? (
               <>
-                <Loader2 className="mr-2 size-4 animate-spin" />
+                <Spinner className="mr-2" />
                 Wird gelöscht…
               </>
             ) : (

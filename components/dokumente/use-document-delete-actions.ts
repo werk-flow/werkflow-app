@@ -31,9 +31,11 @@ async function trashDocumentsAndFolders({
   documentsToDelete: OrganizationDocument[];
   foldersToDelete: DocumentFolder[];
 }): Promise<void> {
-  const { mutateDocuments, runMutation, showFeedback, settleAfterRefresh } = mutations;
+  const { mutateDocuments, runMutation, showFeedback, waitForDocuments } = mutations;
   const itemCount = documentsToDelete.length + foldersToDelete.length;
   const selectedItemLabel = itemCount === 1 ? '1 Eintrag' : `${itemCount} Einträge`;
+  // Several revalidating actions: an earlier one's render can land before the wait.
+  const since = waitForDocuments.markChange();
   const { failedCount: failedDocumentCount } = await mutateDocuments(documentsToDelete, deleteDocument);
   let failedCount = failedDocumentCount;
   for (const folder of foldersToDelete) {
@@ -53,7 +55,7 @@ async function trashDocumentsAndFolders({
       `${selectedItemLabel} ${itemCount === 1 ? 'wurde' : 'wurden'} in den Papierkorb verschoben.`,
     );
   }
-  if (failedCount < itemCount) await settleAfterRefresh();
+  if (failedCount < itemCount) await waitForDocuments(since);
 }
 
 /**
@@ -71,9 +73,8 @@ export function useDocumentDeleteActions({
     documentList,
     busy,
     showFeedback,
-    refreshDocuments,
     runMutation,
-    settleAfterRefresh,
+    waitForDocuments,
     runDocumentMutationFlow,
     trashDocuments,
     restoreDocuments,
@@ -93,7 +94,7 @@ export function useDocumentDeleteActions({
           const result = await deleteDocumentFolder(folder.id);
           if (!result.success) return result;
           showFeedback('success', 'Ordner wurde in den Papierkorb verschoben.');
-          await settleAfterRefresh();
+          await waitForDocuments();
           return result;
         }).then((succeeded) => {
           if (!succeeded) showFeedback('error', 'Der Ordner konnte nicht gelöscht werden.');
@@ -149,7 +150,6 @@ export function useDocumentDeleteActions({
               return;
             }
             showFeedback('success', 'Datei wurde endgültig gelöscht.');
-            refreshDocuments();
           });
       },
     });

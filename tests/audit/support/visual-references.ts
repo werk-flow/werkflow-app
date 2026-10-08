@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
+import { settled } from '../../golden/support/steps/interaction';
 import { clockInLauncher } from '../../golden/support/steps/time-tracking';
 
 // Capture rules for the visual reference group (docs/technical/standards-audit.md,
@@ -97,15 +98,13 @@ async function normalizeText(
 }
 
 /**
- * Waits until the page shows its settled content: no skeleton, fonts loaded, the clock launcher ready.
- * The pulse wait stays a class wait: the app shell's loading placeholders
- * (components/sidebar/app-shell.tsx, app-shell-skeleton.tsx) pulse without the
- * Skeleton primitive's data-slot, and the spinner has no shared primitive.
+ * Waits until the page shows its settled content: the busy signals clear
+ * (`settled`: no skeleton, spinner, busy region or route refresh), fonts
+ * loaded, the clock launcher ready.
  */
 export async function settlePage(page: Page, ready: Locator): Promise<void> {
   await expect(ready).toBeVisible();
-  await expect(page.locator('.animate-pulse:visible')).toHaveCount(0);
-  await expect(page.locator('.animate-spin:visible')).toHaveCount(0);
+  await settled(page);
   const launcher = clockInLauncher(page);
   if (await launcher.count()) await expect(launcher).toBeEnabled();
   await page.evaluate(async () => {

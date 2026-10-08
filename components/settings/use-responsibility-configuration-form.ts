@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 import { ERROR_MESSAGES, responsibilityErrorMessage } from '@/components/settings/responsibility-display';
 import { useBanner } from '@/components/ui/banner';
@@ -41,7 +40,6 @@ export function useResponsibilityConfigurationForm({
   responsibility: OrganizationResponsibility;
   onOpenChange: (open: boolean) => void;
 }): ResponsibilityConfigurationForm {
-  const router = useRouter();
   const { showBanner } = useBanner();
   const current = data.effective[responsibility];
   const baseHolderIds = useMemo(
@@ -118,8 +116,8 @@ export function useResponsibilityConfigurationForm({
         });
         return;
       }
+      // The action's response renders the route with the saved holders.
       handleOpenChange(false);
-      router.refresh();
       showBanner({
         message: `${RESPONSIBILITY_LABELS[responsibility]} wurden gespeichert.`,
         variant: 'success',

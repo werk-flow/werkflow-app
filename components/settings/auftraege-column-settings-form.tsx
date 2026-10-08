@@ -3,7 +3,6 @@
 import { describeFailure } from '@/lib/action-messages';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 
 import { useBanner } from '@/components/ui/banner';
@@ -36,7 +35,6 @@ export function AuftraegeColumnSettingsForm({
   initialVisibleColumns,
   organizationName,
 }: AuftraegeColumnSettingsFormProps) {
-  const router = useRouter();
   const { showBanner } = useBanner();
   const { run: runSave, isPending: isSaving } = useServerAction(saveAuftraegeColumnPreferences);
 
@@ -77,10 +75,10 @@ export function AuftraegeColumnSettingsForm({
         return;
       }
 
+      // The action's response renders the route with the saved columns.
       form.reset({
         visibleColumns: result.visibleColumns,
       });
-      router.refresh();
       showBanner({
         message: 'Deine Aufträge-Spalten wurden gespeichert.',
         variant: 'success',

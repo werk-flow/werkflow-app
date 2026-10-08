@@ -26,6 +26,7 @@ import {
   visibleText,
 } from './shared';
 import { workCreateButton, workCreateTab } from './work';
+import { getEmployeeRecordById, type PersistedEmployeeRecord } from '../db/personnel';
 
 /**
  * Copy of the personnel area (P1-03 records and conditions, P1-04 schedules
@@ -339,7 +340,7 @@ export async function createPersonnelRecordViaDialog(
     entryDateDigits?: string;
     employeeNumber?: string;
   },
-): Promise<string> {
+): Promise<PersistedEmployeeRecord> {
   await page.goto('/mitarbeiter');
   await createPersonnelRecordButton(page).click();
   await expect(page.getByRole('heading', { name: PERSONNEL_COPY.createRecord })).toBeVisible();
@@ -384,7 +385,7 @@ export async function createPersonnelRecordViaDialog(
   if (!recordId) {
     throw new Error('createPersonnelRecordViaDialog: could not read the record id');
   }
-  return recordId;
+  return getEmployeeRecordById(recordId);
 }
 
 export async function sendInviteFromPersonnelRecord(

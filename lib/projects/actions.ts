@@ -1,7 +1,7 @@
 'use server';
 
 import type { ActionResult } from '@/lib/action-result';
-import { updateTag } from 'next/cache';
+import { revalidatePath, updateTag } from 'next/cache';
 import { readCompleteRows, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
 import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
@@ -230,6 +230,9 @@ export async function updateProject(
     if (error) {
       return workWriteFailure('Error updating project:', error, PROJECT_UPDATE_REFUSALS, 'update_failed');
     }
+
+    // Like updateJob: the response renders the acting page, so no client refresh follows a save.
+    revalidatePath('/auftraege', 'layout');
 
     return { success: true, project: toProject(data) };
   } catch (error) {

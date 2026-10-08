@@ -2,7 +2,6 @@
 
 import { describeFailure } from '@/lib/action-messages';
 import { useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 import { useServerAction } from '@/hooks/use-server-action';
 import { createMaintenanceCoverage } from '@/lib/maintenance/actions';
@@ -29,7 +28,6 @@ export function useMaintenanceCoverageForm({
   clients: MaintenanceClientOption[];
   onSubmitted: ((submission: MaintenanceCoverageCreateSubmission) => void) | undefined;
 }) {
-  const router = useRouter();
   const [clientId, setClientId] = useState('');
   const [siteId, setSiteId] = useState('');
   const [reference, setReference] = useState('');
@@ -71,8 +69,8 @@ export function useMaintenanceCoverageForm({
       setError(errorMessage(result.error));
       return;
     }
+    // The action's response renders the route with the new coverage.
     onOpenChange(false);
-    router.refresh();
   });
   const clientError = attempted && !clientId ? 'Bitte wähle einen Kunden.' : undefined;
   const siteError = attempted && !siteId ? 'Bitte wähle einen Einsatzort.' : undefined;

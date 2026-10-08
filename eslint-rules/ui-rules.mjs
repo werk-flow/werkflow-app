@@ -164,6 +164,14 @@ const noLucideStrokeWidthRule = {
   },
 };
 
+// `disabled` and `Button pending` both disable the control, so both answer
+// to the pending-only rules below.
+function disablingExpressions(openingElement) {
+  return ['disabled', 'pending']
+    .map((name) => jsxAttribute(openingElement, name))
+    .filter((attribute) => attribute?.value?.type === 'JSXExpressionContainer');
+}
+
 function jsxAttribute(openingElement, name) {
   return openingElement.attributes.find(
     (candidate) =>
@@ -290,13 +298,13 @@ const submitDisabledOnlyWhilePendingRule = {
         if (node.name.type !== 'JSXIdentifier' || !/^(Button|button|PlainButton)$/.test(node.name.name))
           return;
         if (staticAttributeValue(jsxAttribute(node, 'type')) !== 'submit') return;
-        const disabled = jsxAttribute(node, 'disabled');
-        if (!disabled || !disabled.value || disabled.value.type !== 'JSXExpressionContainer') return;
-        const offending = referencedFlagNames(disabled.value.expression, conditionResolver(context)).find(
-          (name) => !PENDING_FLAG.test(name) && !AVAILABILITY_FLAG.test(name),
-        );
-        if (offending)
-          context.report({ node: disabled, messageId: 'validationHint', data: { name: offending } });
+        for (const disabled of disablingExpressions(node)) {
+          const offending = referencedFlagNames(disabled.value.expression, conditionResolver(context)).find(
+            (name) => !PENDING_FLAG.test(name) && !AVAILABILITY_FLAG.test(name),
+          );
+          if (offending)
+            context.report({ node: disabled, messageId: 'validationHint', data: { name: offending } });
+        }
       },
     };
   },
@@ -360,10 +368,10 @@ const actionDisabledOnlyWhilePendingRule = {
         if (node.name.type !== 'JSXIdentifier' || !/^(Button|button|PlainButton)$/.test(node.name.name))
           return;
         if (staticAttributeValue(jsxAttribute(node, 'type')) === 'submit') return;
-        const disabled = jsxAttribute(node, 'disabled');
-        if (!disabled || !disabled.value || disabled.value.type !== 'JSXExpressionContainer') return;
-        const input = validityInput(disabled.value.expression, conditionResolver(context));
-        if (input) context.report({ node: disabled, messageId: 'validationHint', data: { input } });
+        for (const disabled of disablingExpressions(node)) {
+          const input = validityInput(disabled.value.expression, conditionResolver(context));
+          if (input) context.report({ node: disabled, messageId: 'validationHint', data: { input } });
+        }
       },
     };
   },
@@ -805,10 +813,9 @@ const dialogPendingWhileWaitingRule = {
         // request that runs after a confirmation closed it at once.
         if (node !== element && (DIALOG_ROOTS.has(elementName) || elementName.endsWith('Trigger'))) return;
         if (node.type === 'JSXOpeningElement') {
-          const disabled = jsxAttribute(node, 'disabled');
-          if (disabled?.value?.type === 'JSXExpressionContainer') {
+          for (const disabled of disablingExpressions(node)) {
             const flag = referencedFlagNames(disabled.value.expression, resolve).find(isWritePendingName);
-            if (flag) found = flag;
+            if (flag && !found) found = flag;
           }
           const name = node.name.type === 'JSXIdentifier' ? node.name.name : null;
           const onClick = jsxAttribute(node, 'onClick');

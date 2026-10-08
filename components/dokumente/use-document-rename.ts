@@ -21,7 +21,7 @@ export function useDocumentRename({
   isTrashView: boolean;
   mutations: DocumentLibraryMutations;
 }) {
-  const { busy, settleAfterRefresh } = mutations;
+  const { busy, waitForDocuments } = mutations;
   const [renameDialog, setRenameDialog] = useState<RenameDialogState>(null);
   const [renameValue, setRenameValue] = useState('');
   const [renameError, setRenameError] = useState<string | null>(null);
@@ -79,7 +79,7 @@ export function useDocumentRename({
           return;
         }
         setRenameDialog(null);
-        await settleAfterRefresh();
+        await waitForDocuments();
       })
       .catch(() => setRenameError(renameFailure));
   }

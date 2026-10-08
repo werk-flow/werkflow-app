@@ -1,7 +1,5 @@
 'use client';
 
-import { Loader2 } from 'lucide-react';
-
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -136,8 +134,8 @@ export function WorkDependencyDialog(props: WorkDependencyDialogProps) {
             <Button type="button" variant="outline" onClick={onClose} disabled={pending}>
               Abbrechen
             </Button>
-            <Button type="submit" disabled={pending}>
-              {pending && <Loader2 className="size-4 animate-spin" />}Hinzufügen
+            <Button pending={pending} type="submit" disabled={pending}>
+              Hinzufügen
             </Button>
           </DialogFooter>
         </form>

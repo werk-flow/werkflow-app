@@ -1,7 +1,6 @@
 'use client';
 
 import { Plus } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ManualEntryDialog } from '@/components/manual-entry-dialog';
 import { useClockState } from '@/components/clock-state-provider';
@@ -9,7 +8,6 @@ import { MANUAL_ENTRY_CREATED_EVENT, queueManualEntryBridge } from '@/lib/time-t
 
 /** The overview's toolbar action: opens the manual entry dialog and refreshes the live clock afterwards. */
 export function ManualEntryButton() {
-  const router = useRouter();
   const { refresh } = useClockState();
 
   return (
@@ -23,7 +21,7 @@ export function ManualEntryButton() {
             }),
           );
         }
-        router.refresh();
+        // addManualEntry revalidates, so its response already renders the route.
         await refresh();
       }}
       trigger={

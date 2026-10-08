@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -154,8 +153,7 @@ export function StockAdjustmentDialog({
             <Button type="button" variant="outline" onClick={() => setState(null)} disabled={isSaving}>
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isSaving}>
-              {isSaving && <Loader2 className="mr-2 size-4 animate-spin" />}
+            <Button pending={isSaving} type="submit" disabled={isSaving}>
               Speichern
             </Button>
           </DialogFooter>

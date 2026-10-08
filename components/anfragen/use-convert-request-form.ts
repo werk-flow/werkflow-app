@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 import { useBanner } from '@/components/ui/banner';
 import { usePendingTask } from '@/hooks/use-server-action';
@@ -122,7 +121,6 @@ export function useConvertRequestForm({
   onOpenChange: (open: boolean) => void;
   onSaved: (() => void) | undefined;
 }): ConvertRequestForm {
-  const router = useRouter();
   const { showBanner } = useBanner();
   const [target, setTarget] = useState<ConversionTarget>('job');
   const [title, setTitle] = useState(request.summary);
@@ -231,7 +229,6 @@ export function useConvertRequestForm({
             variant: 'success',
             message: 'Anfrage wurde in einen Auftrag umgewandelt.',
           });
-          router.refresh();
         } else {
           const result = await convertRequestToProject(request.id, {
             name: title.trim(),
@@ -252,7 +249,6 @@ export function useConvertRequestForm({
             variant: 'success',
             message: 'Anfrage wurde in ein Projekt umgewandelt.',
           });
-          router.refresh();
         }
       } catch {
         setError('Ein unerwarteter Fehler ist aufgetreten.');

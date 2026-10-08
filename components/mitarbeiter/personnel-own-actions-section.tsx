@@ -1,7 +1,7 @@
 'use client';
 
 import { useId, useState } from 'react';
-import { FileUp, Loader2 } from 'lucide-react';
+import { FileUp } from 'lucide-react';
 
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
@@ -113,8 +113,8 @@ function PersonnelEvidenceUploadDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
             Abbrechen
           </Button>
-          <Button type="submit" form={formId} disabled={isPending}>
-            {isPending && <Loader2 className="size-4 animate-spin" />}Hochladen
+          <Button pending={isPending} type="submit" form={formId} disabled={isPending}>
+            Hochladen
           </Button>
         </DialogFooter>
       </DialogContent>

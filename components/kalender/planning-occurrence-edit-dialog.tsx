@@ -4,8 +4,6 @@ import { useEffect, useState } from 'react';
 import { usePlanningOptions } from '@/hooks/use-planning-options';
 import { usePendingTask } from '@/hooks/use-server-action';
 
-import { Loader2 } from 'lucide-react';
-
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import {
@@ -313,8 +311,7 @@ function PlanningOccurrenceEditFooter({
       <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
         Schließen
       </Button>
-      <Button type="submit" disabled={submitting}>
-        {submitting && <Loader2 className="size-4 animate-spin" />}
+      <Button pending={submitting} type="submit" disabled={submitting}>
         {submitting ? 'Wird geprüft …' : statusIntent ? 'Status speichern' : 'Änderung speichern'}
       </Button>
     </DialogFooter>
