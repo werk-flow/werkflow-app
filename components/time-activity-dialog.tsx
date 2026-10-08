@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import { JobPickerModal } from '@/components/job-picker-modal';
 import { useClockState } from '@/components/clock-state-provider';
@@ -237,21 +236,21 @@ function TimeActivityDialogForm({
           <DialogFooter>
             {state?.isClockedIn && (
               <Button
+                pending={endAction.isPending}
                 type="button"
                 variant="outline"
                 disabled={!isReady || isPending}
                 onClick={() => void endAction.run()}
               >
-                {endAction.isPending && <Loader2 className="size-4 animate-spin" />}
                 Erfassung beenden
               </Button>
             )}
             <Button
+              pending={submitAction.isPending}
               type="button"
               disabled={!isReady || isPending || isUnchanged}
               onClick={() => void submitAction.run()}
             >
-              {submitAction.isPending && <Loader2 className="size-4 animate-spin" />}
               {recovery ? 'Prüfen und fortsetzen' : state?.isClockedIn ? 'Aktivität wechseln' : 'Starten'}
             </Button>
           </DialogFooter>

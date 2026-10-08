@@ -5,7 +5,6 @@ import {
   ArrowLeftRight,
   BriefcaseBusiness,
   Coffee,
-  Loader2,
   Play,
   Route,
   SlidersHorizontal,
@@ -30,6 +29,7 @@ import {
 } from '@/lib/time-tracking/clock-actions';
 import type { TimeTransitionResult } from '@/lib/time-tracking/types';
 import { cn } from '@/lib/utils';
+import { Spinner } from '@/components/ui/spinner';
 
 const ICONS: Record<ClockActionIcon, typeof Play> = {
   work: BriefcaseBusiness,
@@ -191,11 +191,7 @@ export function ClockActionList({
               aria-busy={pendingId === action.id || undefined}
               onClick={() => activate(action)}
             >
-              {pendingId === action.id ? (
-                <Loader2 className="size-5 animate-spin" />
-              ) : (
-                <Icon className="size-5" />
-              )}
+              {pendingId === action.id ? <Spinner className="size-5" /> : <Icon className="size-5" />}
               <span className="min-w-0 flex-1 truncate">{action.label}</span>
             </Button>
           );

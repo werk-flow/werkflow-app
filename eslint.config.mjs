@@ -495,6 +495,66 @@ const colorLiteralSelectors = [
   },
 ];
 
+// Busy signals (werkflow-design skill, "Loading states"): a placeholder is
+// Skeleton and a running action is Spinner or `Button pending`, which carry
+// the data-slot and aria-busy the settle step waits on
+// (lib/testing/spec-support/busy-signals.ts). The app shell once pulsed
+// through hand-built divs that no attribute named, so the visual settle had to
+// wait on an animation class. A live status that pulses uses `animate-live`.
+const busySignalMessage =
+  'Render Skeleton for a placeholder and Spinner or Button pending for a running action (werkflow-design skill: Loading states). A live status that pulses uses animate-live.';
+const busySignalSelectors = [
+  { selector: 'Literal[value=/\\banimate-(pulse|spin)\\b/]', message: busySignalMessage },
+  { selector: 'TemplateElement[value.raw=/\\banimate-(pulse|spin)\\b/]', message: busySignalMessage },
+  {
+    selector:
+      'ImportDeclaration[source.value="lucide-react"] > ImportSpecifier[imported.name=/^Loader2(Icon)?$/]',
+    message: busySignalMessage,
+  },
+];
+
+// Tests settle on the busy attributes, never on an animation class: a class
+// wait misses a busy control and blocks forever on a decorative pulse.
+const testBusySelectors = [
+  {
+    selector: 'Literal[value=/\\banimate-(pulse|spin)\\b/]',
+    message:
+      'Settle on the busy attributes (lib/testing/spec-support/busy-signals.ts), never on an animation class.',
+  },
+  {
+    selector: 'TemplateElement[value.raw=/\\banimate-(pulse|spin)\\b/]',
+    message:
+      'Settle on the busy attributes (lib/testing/spec-support/busy-signals.ts), never on an animation class.',
+  },
+];
+
+// A mutation step helper returns `Persisted<Row>`, which only the readers in
+// tests/golden/support/db/ build (testing.md, "Spec checklist"): a cast would
+// pass a screen or URL value off as a database read, and `persisted()` used
+// outside db/ would brand one without reading.
+const persistedCastSelectors = [
+  {
+    selector:
+      'TSAsExpression > TSTypeReference[typeName.name=/^Persisted/], TSTypeAssertion > TSTypeReference[typeName.name=/^Persisted/]',
+    message:
+      'Never cast to Persisted: return the row a reader in tests/golden/support/db/ read back after the save.',
+  },
+];
+const persistedImportSelectors = [
+  {
+    selector: 'ImportSpecifier[imported.name="persisted"]',
+    message:
+      'Only the readers in tests/golden/support/db/ brand a row as persisted; call one of them instead.',
+  },
+];
+const testSelectors = [
+  ...alwaysOnSelectors,
+  ...prodRefSelectors,
+  ...testBusySelectors,
+  ...persistedCastSelectors,
+  ...persistedImportSelectors,
+];
+
 // Spec-lint set (docs/technical/testing.md). Spec files compose named steps
 // and semantically scoped locators; the banned patterns below are the
 // recurring flake classes from the incident log. The full Playwright API stays
@@ -728,6 +788,7 @@ function productRestrictions({ jsx = false, allow = [] } = {}) {
       ...(jsx
         ? [
             ...shellSelectors,
+            ...busySignalSelectors,
             ...registrySelectors,
             ...hoverSelectors,
             ...colorLiteralSelectors,
@@ -849,7 +910,29 @@ const eslintConfig = defineConfig([
   {
     files: ['tests/**/*.{ts,tsx}'],
     rules: {
-      'no-restricted-syntax': ['error', ...alwaysOnSelectors, ...prodRefSelectors],
+      'no-restricted-syntax': ['error', ...testSelectors],
+    },
+  },
+  // The db readers brand what they read; shared.ts holds the one constructor.
+  {
+    files: ['tests/golden/support/db/**/*.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...testSelectors.filter((restriction) => !persistedImportSelectors.includes(restriction)),
+      ],
+    },
+  },
+  {
+    files: ['tests/golden/support/db/shared.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...testSelectors.filter(
+          (restriction) =>
+            !persistedImportSelectors.includes(restriction) && !persistedCastSelectors.includes(restriction),
+        ),
+      ],
     },
   },
   // Spec files additionally carry the spec-lint set; the shared support
@@ -861,7 +944,7 @@ const eslintConfig = defineConfig([
       'playwright-spec/no-unscoped-page-selectors': 'error',
       'playwright-spec/no-visible-text-zero-count': 'error',
       'playwright-spec/no-one-shot-count-comparison': 'error',
-      'no-restricted-syntax': ['error', ...alwaysOnSelectors, ...prodRefSelectors, ...specSelectors],
+      'no-restricted-syntax': ['error', ...testSelectors, ...specSelectors],
     },
   },
   // Locator ownership (docs/technical/testing.md): a browser spec passes data,

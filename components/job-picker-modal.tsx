@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Play, ArrowLeftRight, Loader2, Briefcase } from 'lucide-react';
+import { Play, ArrowLeftRight, Briefcase } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { SearchInput } from '@/components/ui/search-input';
@@ -22,6 +22,7 @@ import {
   JobPickerOptionList,
   type PickerJob,
 } from '@/components/job-picker-modal-options';
+import { Spinner } from '@/components/ui/spinner';
 
 const NO_JOBS: PickerJob[] = [];
 
@@ -176,7 +177,7 @@ export function JobPickerModal({
               }
             >
               {isPending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Spinner className="mr-2 h-4 w-4" />
               ) : mode === 'switch' ? (
                 <ArrowLeftRight className="mr-2 h-4 w-4" />
               ) : (

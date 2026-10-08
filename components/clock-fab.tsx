@@ -1,7 +1,7 @@
 'use client';
 
 import { PlainButton } from '@/components/ui/plain-button';
-import { Clock3, Coffee, Loader2, Play } from 'lucide-react';
+import { Clock3, Coffee, Play } from 'lucide-react';
 import { useState } from 'react';
 
 import { ClockActionList } from '@/components/clock-action-list';
@@ -21,6 +21,7 @@ import {
 } from '@/lib/time-tracking/clock-actions';
 import { useBanner } from '@/components/ui/banner';
 import { cn, formatBerlinTime } from '@/lib/utils';
+import { Spinner } from '@/components/ui/spinner';
 
 export function ClockFAB() {
   const { activeOrgId, activeOrg } = useOrganization();
@@ -120,6 +121,7 @@ export function ClockFAB() {
         )}
         {hotKeys.map((action) => (
           <Button
+            pending={pendingHotKey === action.id}
             key={action.id}
             type="button"
             variant="outline"
@@ -127,7 +129,6 @@ export function ClockFAB() {
             disabled={busy}
             onClick={() => activateHotKey(action)}
           >
-            {pendingHotKey === action.id && <Loader2 className="size-4 animate-spin" />}
             <span className="min-w-0 truncate">{action.label}</span>
           </Button>
         ))}
@@ -146,7 +147,7 @@ export function ClockFAB() {
           title={isClockedIn ? 'Zeiterfassung öffnen' : 'Zeiterfassung starten'}
         >
           {isLoading || isPending ? (
-            <Loader2 className="size-6 animate-spin" />
+            <Spinner className="size-6" />
           ) : isOnBreak ? (
             <Coffee className="size-6" />
           ) : isClockedIn ? (

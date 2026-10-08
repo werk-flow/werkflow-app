@@ -3,7 +3,6 @@
 import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
 import { useReportPending } from '@/hooks/use-report-pending';
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
 import { OptionsLoadError } from '@/components/auftraege/shared/options-load-error';
@@ -20,6 +19,7 @@ import {
 } from '@/components/manual-entry-form-content-fields';
 import { useManualEntryMembers } from '@/components/use-manual-entry-form-members';
 import { useManualEntrySubmit } from '@/components/use-manual-entry-form-submit';
+import { Spinner } from '@/components/ui/spinner';
 
 type OrgMember = CalendarEntryDialogMember;
 type JobOption = CalendarEntryDialogJobOption;
@@ -166,7 +166,7 @@ export function ManualEntryFormContent({
         <Button type="submit" className="h-11 sm:h-9" disabled={isPending}>
           {isPending ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Spinner className="mr-2 h-4 w-4" />
               Speichern…
             </>
           ) : (
