@@ -6,6 +6,7 @@ import { SectionError } from '@/components/ui/section-error';
 import type { OrgRole } from '@/lib/members/actions';
 import type { OrganizationTimeTrackingSettings } from '@/lib/time-tracking/settings';
 import type { WorkSession } from '@/lib/time-tracking/types';
+import { unconfirmedMarker } from '@/lib/ui/unconfirmed';
 import { cn, toLocalDateString } from '@/lib/utils';
 import { Plantafel } from './board/plantafel';
 import type { CalendarSurfaceActions } from './board/types';
@@ -40,7 +41,10 @@ type CalendarSurfaceProps = {
 /**
  * The calendar's own scroller with the active view and, on a desktop, the
  * Parkplatz beside it. The scroller carries the readiness marker and goes
- * busy and inert while an uncovered window loads or the data is stale.
+ * busy and inert while an uncovered window loads or the data is stale. The
+ * pair carries the unconfirmed marker from an optimistic move until the
+ * settlement read lands: the range owner knows that window, not which card
+ * moved, so every card in it counts as unconfirmed (lib/ui/unconfirmed.ts).
  */
 export function CalendarBody({
   overlays,
@@ -59,13 +63,14 @@ export function CalendarBody({
   showUnavailable: boolean;
 }): React.JSX.Element {
   const { parkFlowRef, setParkingContextJob, setScheduleParkedJob } = surface.parkFlow;
+  const unconfirmed = surface.data.range.isUnconfirmed || surface.data.parkedJobsUnconfirmed;
   return (
     <>
       {/* The calendar keeps its own scroller (the day grid and the wide board
           scroll sideways inside it, a named canon exception), so PageBody only
           supplies the column slot: padding and clock clearance switched off. */}
       {/* The Parkplatz sits beside the calendar on a desktop, so the board keeps every column reachable. */}
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1" {...unconfirmedMarker(unconfirmed)}>
         <PageBody className="flex min-w-0 flex-col overflow-hidden p-0 pb-0 sm:p-0 sm:pb-0">
           <div
             className={cn(

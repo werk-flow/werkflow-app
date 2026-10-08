@@ -3,14 +3,16 @@ import {
   BUSY_SIGNAL_SELECTOR,
   ROUTE_REFRESH_SIGNAL,
   SETTLED_CALENDAR_STATES,
+  UNCONFIRMED_LAYER_SIGNAL,
 } from '../../../../lib/testing/spec-support/busy-signals';
 
 /**
  * The one home of settling and key presses in browser tests (testing.md,
  * "Write a spec that stands alone"). A spec acts only after the app's own busy
  * signals are clear (lib/testing/spec-support/busy-signals.ts): `aria-busy`,
- * `data-pending`, a skeleton, a spinner, a queued or running route refresh,
- * and the calendar's `data-calendar-state`. Two races
+ * `data-pending`, a skeleton, a spinner, an unconfirmed row or optimistic
+ * layer, a queued or running route refresh, and the calendar's
+ * `data-calendar-state`. Two races
  * that failed runs proved are unwritable through these steps: Escape while a
  * dialog still saves, and a shortcut key typed into a focused combobox.
  *
@@ -34,7 +36,7 @@ function pageOf(scope: Scope): Page {
 async function busyElements(scope: Scope): Promise<string[]> {
   const root = isPage(scope) ? scope.locator('body') : scope;
   return root.evaluateAll(
-    (elements, { selector, routeRefresh, settledCalendarStates }) => {
+    (elements, { selector, routeRefresh, unconfirmedLayer, settledCalendarStates }) => {
       const describe = (element: Element): string => {
         const name =
           element.getAttribute('aria-label') ??
@@ -45,6 +47,8 @@ async function busyElements(scope: Scope): Promise<string[]> {
       };
       const busy: string[] = [];
       if (document.documentElement.hasAttribute(routeRefresh)) busy.push('route refresh queued or running');
+      if (document.documentElement.hasAttribute(unconfirmedLayer))
+        busy.push('an optimistic list holds an unconfirmed entry');
       for (const element of elements) {
         const candidates = [element, ...element.querySelectorAll(selector)];
         for (const candidate of candidates) {
@@ -64,6 +68,7 @@ async function busyElements(scope: Scope): Promise<string[]> {
     {
       selector: BUSY_SIGNAL_SELECTOR,
       routeRefresh: ROUTE_REFRESH_SIGNAL,
+      unconfirmedLayer: UNCONFIRMED_LAYER_SIGNAL,
       settledCalendarStates: [...SETTLED_CALENDAR_STATES],
     },
   );
@@ -74,7 +79,7 @@ export async function settled(scope: Scope, options: { timeout?: number } = {}):
   await expect
     .poll(() => busyElements(scope), {
       message:
-        'The scope settles: no aria-busy, pending dialog, skeleton, spinner or route refresh, and every calendar ready',
+        'The scope settles: no aria-busy, pending dialog, skeleton, spinner, unconfirmed content or route refresh, and every calendar ready',
       ...(options.timeout !== undefined ? { timeout: options.timeout } : {}),
     })
     .toEqual([]);

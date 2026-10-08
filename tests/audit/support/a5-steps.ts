@@ -1,4 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
+import { confirmed } from '../../golden/support/steps/shared';
 
 const A5_COPY = {
   gapList: 'Offene Qualifikationshinweise',
@@ -8,7 +9,7 @@ const A5_COPY = {
 
 export function taskRows(page: Page): Locator {
   // Task links expose their source identity only through this data attribute.
-  return page.locator('[data-task-source]');
+  return confirmed(page.locator('[data-task-source]'));
 }
 
 export function taskRowByText(page: Page, text: string): Locator {
@@ -25,7 +26,7 @@ export function aufgabenDecisionButtons(page: Page): Locator {
 
 export function ownRequestRow(page: Page, sourceId: string): Locator {
   // Own-request rows expose the persisted source id only through this marker.
-  return page.locator(`[data-own-request-source="${sourceId}"]`);
+  return confirmed(page.locator(`[data-own-request-source="${sourceId}"]`));
 }
 
 export function visibleSearchResult(page: Page, personName: string): Locator {
@@ -35,23 +36,29 @@ export function visibleSearchResult(page: Page, personName: string): Locator {
 }
 
 export function qualificationWarningGapRow(dialog: Locator, capabilityName: string): Locator {
-  return dialog
-    .getByRole('list', { name: A5_COPY.gapList })
-    .getByRole('listitem', { name: capabilityName, exact: true });
+  return confirmed(
+    dialog
+      .getByRole('list', { name: A5_COPY.gapList })
+      .getByRole('listitem', { name: capabilityName, exact: true }),
+  );
 }
 
 export function visibleStrongestQualificationEntry(dialog: Locator, employeeName: string): Locator {
   // Several independent gaps may name the same contributor. The contract is
   // that at least one rendered warning identifies the strongest entry.
-  return dialog.getByText(`stärkster Eintrag: ${employeeName}`).filter({ visible: true }).first();
+  return confirmed(dialog.getByText(`stärkster Eintrag: ${employeeName}`).filter({ visible: true }).first());
 }
 
 export function qualificationCoverageRow(page: Page, capabilityName: string): Locator {
-  return page.locator(`[data-testid="qualification-coverage-row"][data-capability-name="${capabilityName}"]`);
+  return confirmed(
+    page.locator(`[data-testid="qualification-coverage-row"][data-capability-name="${capabilityName}"]`),
+  );
 }
 
 export function ownQualificationCard(page: Page, capabilityName: string): Locator {
-  return page.locator(`[data-testid="own-qualification-card"][data-capability-name="${capabilityName}"]`);
+  return confirmed(
+    page.locator(`[data-testid="own-qualification-card"][data-capability-name="${capabilityName}"]`),
+  );
 }
 
 /** The open picker's listbox. */

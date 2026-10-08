@@ -13,7 +13,7 @@ import {
   type WorkArtifactStatus,
 } from '../../../../lib/work-artifacts/types';
 import { pressKey } from '../steps/interaction';
-import { escapeRegExp, SHARED_COPY, typeIntoDateTimeField } from '../steps/shared';
+import { confirmed, escapeRegExp, SHARED_COPY, typeIntoDateTimeField } from '../steps/shared';
 
 /**
  * The Arbeitsnachweis section and dialog (P1-15), shared by the work, service
@@ -141,9 +141,11 @@ export function workArtifactDialog(page: Page): Locator {
 
 /** The section entry that opens an existing Arbeitsnachweis; its name starts with the title. */
 export function workArtifactEntry(page: Page, title: string): Locator {
-  return workArtifactsSection(page).getByRole('button', {
-    name: new RegExp(`^${escapeRegExp(title)}`),
-  });
+  return confirmed(
+    workArtifactsSection(page).getByRole('button', {
+      name: new RegExp(`^${escapeRegExp(title)}`),
+    }),
+  );
 }
 
 /**

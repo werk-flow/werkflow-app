@@ -31,6 +31,7 @@ export function TeamManagementSection({ teams, teamMemberships, employees }: Tea
                 return (
                   <Card
                     key={team.id}
+                    unconfirmed
                     className="gap-4 p-4 opacity-70"
                     role="status"
                     aria-label="Team wird gespeichert"

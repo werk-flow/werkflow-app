@@ -1,4 +1,8 @@
 import { expect, type Locator, type Page } from '@playwright/test';
+import {
+  UNCONFIRMED_LAYER_SIGNAL,
+  UNCONFIRMED_SIGNAL,
+} from '../../../../lib/testing/spec-support/busy-signals';
 import { retryBeforeSubmit } from '../../../../lib/testing/spec-support/retry-before-submit';
 import { pressKey } from './interaction';
 
@@ -188,8 +192,41 @@ export function detailActionsButton(page: Page): Locator {
 }
 
 /**
+ * The confirmed state of a record (testing.md, "Spec checklist"): the row,
+ * card or value the locator finds, minus every match that shows an optimistic
+ * layer's content. A match is unconfirmed when it carries `data-unconfirmed`
+ * (lib/ui/unconfirmed.ts), sits inside an element that does, or contains one
+ * (an active `InlinePending`). An assertion on the result therefore waits for
+ * the authoritative read, and fails when that read disagrees with the echo.
+ * Every record locator of the area modules returns through it
+ * (lib/testing/spec-support/confirmed-locators.test.ts).
+ */
+export function confirmed(locator: Locator): Locator {
+  const page = locator.page();
+  return locator
+    .and(page.locator(`:not([${UNCONFIRMED_SIGNAL}]):not([${UNCONFIRMED_SIGNAL}] *)`))
+    .filter({ hasNot: page.locator(`[${UNCONFIRMED_SIGNAL}]`) });
+}
+
+/**
+ * The absence of a record after a change. A confirmed locator finds nothing
+ * while its record is unconfirmed, and an optimistic removal leaves nothing
+ * to mark, so absence is asserted only once no unconfirmed content and no
+ * optimistic layer remain on the page.
+ */
+export async function expectGone(locator: Locator, options: { timeout?: number } = {}): Promise<void> {
+  const page = locator.page();
+  await expect(
+    page.locator(`html[${UNCONFIRMED_LAYER_SIGNAL}], [${UNCONFIRMED_SIGNAL}]`),
+    'No unconfirmed content or optimistic layer remains',
+  ).toHaveCount(0, options);
+  await expect(locator).toHaveCount(0, options);
+}
+
+/**
  * The optimistic row of a record that is still being saved, by a text it
- * shows; its marker clears when the confirmed row replaces it.
+ * shows; its marker clears when the confirmed row replaces it. A pending-state
+ * locator by purpose (PENDING_STATE_LOCATORS in confirmed-locators.test.ts).
  */
 export function pendingRow(page: Page, text: string): Locator {
   return page.locator('[data-pending-row]').filter({ hasText: text });

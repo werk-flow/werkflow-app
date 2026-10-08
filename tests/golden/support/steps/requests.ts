@@ -5,12 +5,13 @@ import { workTemplateSelect } from './work';
 import { getRequestById, type PersistedRequest } from '../db/requests';
 import {
   assignDespiteQualificationWarning,
+  confirmed,
   customerPicker,
   customerPickerSearch,
   expectBannerAfter,
-  SHARED_COPY,
   expectVisibleAfterSave,
   selectFromSearchable,
+  SHARED_COPY,
   typeIntoDatePickerById,
   typeIntoDateTimeField,
   visibleText,
@@ -170,9 +171,9 @@ export function requestCloseSubmit(dialog: Locator): Locator {
 
 /** Moves a file of the request's „Dokumente & Bilder“ frame to the trash through its row menu. */
 export async function moveRequestDocumentToTrash(page: Page, fileName: string): Promise<void> {
-  const row = documentsRegion(page.getByRole('main'))
-    .locator('[data-row-id]')
-    .filter({ has: documentOpenButton(page, fileName) });
+  const row = confirmed(documentsRegion(page.getByRole('main')).locator('[data-row-id]')).filter({
+    has: documentOpenButton(page, fileName),
+  });
   await row.getByRole('button', { name: REQUEST_DOCUMENT_COPY.actions }).click();
   await page.getByRole('menuitem', { name: REQUEST_DOCUMENT_COPY.moveToTrash }).click();
   await page

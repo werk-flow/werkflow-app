@@ -75,7 +75,7 @@ A `[judgment]` item is a Tier 3 default: diverge only with the note that `AGENTS
 
 - An action shows pending feedback in its first frame through an owner hook: `useServerAction` for one action, `usePendingTask` for several steps, `useBusyIds` for a row, `untilPageLeaves()` when the page leaves. The field worker's clock tap is measured. [code `hooks/use-server-action.ts`, code `hooks/use-busy-id.ts`, test `lib/conventions/server-action-feedback.test.ts`, test `lib/ui/until-page-leaves.test.ts`, group `ui:contracts`, group `audit:performance:field`]
 - One save is one route render: no client refresh follows a revalidating Server Action, and each counted save stays at its entry in `tests/golden/route-renders.json`. [test `lib/conventions/route-render-owner.test.ts`, test `lib/testing/route-render-count.test.ts`, group `golden:p1-01`, group `audit:wave-1:a1-inventar`]
-- A list edit appears at once through `useOptimisticList` and leaves the list only after an authoritative read confirms it. [code `hooks/use-optimistic-list.ts`, test `lib/ui/optimistic-overlay.test.ts`, test `lib/ui/change-settlement.test.ts`]
+- A list edit appears at once through `useOptimisticList` and leaves the list only after an authoritative read confirms it. Until then its row, card or surface carries `data-unconfirmed` and `aria-busy` from the registry primitive, and `<html data-unconfirmed-layer>` covers a removal. Content that is not confirmed never looks confirmed to a test or a screen reader. [code `hooks/use-optimistic-list.ts`, code `lib/ui/unconfirmed.ts`, test `lib/ui/optimistic-overlay.test.ts`, test `lib/ui/change-settlement.test.ts`, test `lib/conventions/unconfirmed-marker.test.ts`, group `ui:contracts`]
 - Success shows only after the write is accepted. Failure keeps the user's input and offers retry. [group `ui:contracts`, judgment]
 - A saved result reaches every view that shows it, and another signed-in session within the live target. The measured scenarios cover the calendar and the time approval; for any other flow the reviewer checks a second session in the browser. [group `audit:performance:calendar-live`, group `audit:performance:field`, judgment]
 - A live surface consumes Realtime through `useLiveView` or `useRealtimeRouterRefresh`, never a channel, an auth listener or a focus listener of its own. [lint `realtimeSelectors`, lint `channelSelector`, lint `authListenerSelector`, lint `visibilitySelector`, lint `focusSelector`, lint `importRestrictions`]
@@ -199,17 +199,16 @@ One browser client's Server Actions and router refreshes run one after another. 
 
 ### Live list pages
 
-A paginated live list reads through the same server reader for its first render and its GET refresh, so search, total and page selection stay database-owned. A same-scope event during a read queues one follow-up. A failed refresh keeps the rows, marks them stale and disables row actions while retry stays available. A create dialog on a list page issues no `router.refresh()` of its own. A confirmed creation leaves the overlay only after a successful read that started after the confirmation.
+A paginated live list reads through the same server reader for its first render and its GET refresh, so search, total and page selection stay database-owned. A same-scope event during a read queues one follow-up. A failed refresh keeps the rows, marks them stale and disables row actions while retry stays available. A confirmed creation leaves the overlay only after a successful read that started after the confirmation.
 
 ### Range-scoped data owner
 
 A surface that reads a window of data owns that window through one typed range state. The calendar's owner builds on `useLiveView` and the pure state in `lib/calendar/range-data.ts`. These rules apply:
 
-- Each dataset records its authoritative range, its newest request generation and its last outcome. The reducer rejects a response with a foreign scope or an obsolete generation.
+- Each dataset records its authoritative range, its newest request generation, its last outcome and whether it holds an unconfirmed local edit. The reducer rejects a response with a foreign scope or an obsolete generation. Only a committed read confirms an edit; the server's answer does not.
 - A view that returns to a covered window before a read for another window lands cancels that read, so it cannot replace the covered data. A cancelled catch-up or settlement read is replaced by a read of the covered window, because that data predates the invalidation (`planRunningWindowRead` in `lib/calendar/window-read-plan.ts`).
 - Readiness is derived per needed window and never stored. An uncovered window keeps the grid mounted and inert while data for another window exists, and shows the skeleton only when a required dataset has no data yet. A failed read shows `SectionError` with retry. Old data never counts as coverage of dates it was not read for.
 - All datasets of one window commit together under one generation. One failed read fails the window.
-- Window reads use private, uncached GET handlers that verify the requested organization. Every collection in the window is a complete read.
 
 The user's own calendar mutations show pending feedback before the write resolves, and Confirmation and Undo appear only after persistence. A mutation holds the shared mutation owner until it settles, including rollback, failed Undo and transport failure. Range navigation, manual refresh and Realtime queue behind it. Repeated moves of one entry persist in gesture order. When an earlier write fails, the owner discards the dependent queued gestures and restores the last confirmed position with visible feedback. This ordering covers job moves and their Undo. Resizing recorded time and parking have separate mutation paths that still need their own overlap assessment.
 
@@ -232,7 +231,6 @@ Connection catch-up runs after database readiness, not after channel join: the d
 
 Correctness and responsiveness are separate results. A correct value that appears too late fails the responsiveness check.
 
-- The initiating user gets immediate pending feedback. An optimistic value does not prove persistence or cross-session delivery.
 - A change made in one session is visible in another signed-in session within two seconds (`LIVE_TARGET_MS` in `lib/testing/responsiveness-tolerance.ts`).
 - The time-correction dialog reaches usable form options within five seconds of opening (`TIME_CORRECTION_READY_MS`). This target applies to that dialog only.
 
@@ -244,7 +242,7 @@ The authenticated layout waits for identity, organization, profile and subscript
 
 ## Organization switch confirmation
 
-The organization provider publishes a new active organization only after the cookie write completes, and keeps its switch lock until matching server props arrive. A rejected write keeps the current scope with visible failure. GET readers compare the requested organization with the authenticated cookie. Do not relax that check to hide a scope mismatch. `tests/ui-contracts/organization.spec.ts` covers held and rejected writes.
+The organization provider publishes a new active organization only after the cookie write completes, and keeps its switch lock until matching server props arrive. A rejected write keeps the current scope with visible failure. GET readers compare the requested organization with the authenticated cookie. `tests/ui-contracts/organization.spec.ts` covers held and rejected writes.
 
 ## Examples
 

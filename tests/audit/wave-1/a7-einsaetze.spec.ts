@@ -70,9 +70,10 @@ import {
   parkplatzButton,
 } from '../../golden/support/plantafel';
 import {
-  SHARED_COPY,
+  expectGone,
   planningWarningDialog,
   selectFromSearchable,
+  SHARED_COPY,
   testData,
   typeIntoDatePickerById,
   typeIntoTimeInput,
@@ -492,7 +493,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       )?.challengeResolution,
     ).toBe('superseded');
     await openAufgaben(adminPage);
-    await expect(challengeTaskLink(adminPage, brunoName, title)).toHaveCount(0);
+    await expectGone(challengeTaskLink(adminPage, brunoName, title));
 
     // The recipient sees "ausstehend" WITH the new state (the moved date).
     await bueroPage.goto(`/auftraege/${jobNumber}`);
@@ -703,7 +704,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     await employeePage.goto(`/auftraege/${schedNumber}`);
     await expect(jobDispatchSection(employeePage)).toHaveCount(0);
     await openDispatchPanel(adminPage);
-    await expect(dispatchOccurrenceRow(adminPage, schedTitle)).toHaveCount(0);
+    await expectGone(dispatchOccurrenceRow(adminPage, schedTitle));
 
     // The overdue Wiedervorlage is a task for the responsible person.
     await openAufgaben(bueroPage);
@@ -807,7 +808,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     await expect(recordCommitmentButton(movedRow)).toBeVisible({
       timeout: 20_000,
     });
-    await expect(movedRow.locator('[data-commitment-mismatch]')).toHaveCount(0);
+    await expectGone(movedRow.locator('[data-commitment-mismatch]'));
   });
 
   test('A7-T8: Batch-Auswahl kennt nur die Zukunft; ganztägige Besuche brauchen eine Tagesverschiebung — alles oder nichts [P1-12-F15/P1-12-F17]', async ({

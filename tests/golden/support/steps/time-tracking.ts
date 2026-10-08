@@ -16,9 +16,11 @@ import { pressKey } from './interaction';
 import { memberDetailActionsButton } from './organization';
 import { openMemberDetailFromList } from './personnel';
 import {
+  confirmed,
   datePickerDigits,
   escapeRegExp,
   expectBannerAfter,
+  expectGone,
   pageHeader,
   selectFromSearchable,
   SHARED_COPY,
@@ -535,7 +537,7 @@ export function refreshTimeHistoryButton(history: Locator): Locator {
 
 /** The rows of the history table. */
 export function timeHistoryRows(history: Locator): Locator {
-  return history.locator('tbody tr');
+  return confirmed(history.locator('tbody tr'));
 }
 
 // ---------------------------------------------------------------------------
@@ -575,7 +577,7 @@ export async function expectTimeApprovalsUnavailable(page: Page): Promise<void> 
 }
 
 function pendingTimeApprovalCard(page: Page, userId: string): Locator {
-  return page.locator(`[data-testid^="pending-session-"][data-user-id="${userId}"]`);
+  return confirmed(page.locator(`[data-testid^="pending-session-"][data-user-id="${userId}"]`));
 }
 
 export async function expectPendingTimeApprovalVisible(page: Page, userId: string): Promise<void> {
@@ -585,7 +587,7 @@ export async function expectPendingTimeApprovalVisible(page: Page, userId: strin
 }
 
 export async function expectPendingTimeApprovalHidden(page: Page, userId: string): Promise<void> {
-  await expect(pendingTimeApprovalCard(page, userId)).toHaveCount(0, {
+  await expectGone(pendingTimeApprovalCard(page, userId), {
     timeout: 15_000,
   });
 }
@@ -612,7 +614,7 @@ export async function expectExpiredResponsibilityDeniedAtAction(page: Page, user
   const card = pendingTimeApprovalCard(page, userId);
   await card.getByTitle(TIME_ENTRY_COPY.approveEntry).click();
   await expect(page.getByText(TIME_ENTRY_COPY.responsibilityExpired)).toBeVisible({ timeout: 15_000 });
-  await expect(card).toHaveCount(0, { timeout: 15_000 });
+  await expectGone(card, { timeout: 15_000 });
 }
 
 export async function expectMemberRemovalBlockedByResponsibility(
@@ -719,7 +721,7 @@ export function timeCorrectionSaveButton(dialog: Locator): Locator {
 
 /** A correction's card on the history or the approvals, by request id. */
 export function timeCorrectionCard(page: Page, requestId: string): Locator {
-  return page.getByRole('main').getByTestId(`time-correction-${requestId}`);
+  return confirmed(page.getByRole('main').getByTestId(`time-correction-${requestId}`));
 }
 
 /** The status badge of a correction card. */
@@ -822,9 +824,9 @@ function openingBalanceLabel(employeeName: string): string {
 
 // One table row per person; its fields join the row's form by the form attribute.
 function openingBalanceRow(settings: Locator, employeeName: string): Locator {
-  return settings
-    .getByRole('row')
-    .filter({ has: settings.page().getByLabel(openingBalanceLabel(employeeName)) });
+  return confirmed(
+    settings.getByRole('row').filter({ has: settings.page().getByLabel(openingBalanceLabel(employeeName)) }),
+  );
 }
 
 /** Types the opening date and balance of one person's missing time account. */
@@ -858,9 +860,9 @@ export async function assignTimePolicy(
 ): Promise<void> {
   const dateName = `Regel gültig ab für ${employeeName}`;
   // One table row per person; its fields join the row's form by the form attribute.
-  const row = settings
-    .getByRole('row')
-    .filter({ has: settings.page().getByRole('group', { name: dateName }) });
+  const row = confirmed(settings.getByRole('row')).filter({
+    has: settings.page().getByRole('group', { name: dateName }),
+  });
   await typeIntoDatePicker(row, dateName, datePickerDigits(input.validFrom));
   await row.getByRole('button', { name: input.policyLabel }).click();
 }
@@ -872,9 +874,9 @@ export async function requestTimeAccountAdjustment(
   input: { minutes: number; reason: string; effectiveDate: string },
 ): Promise<void> {
   const dateName = `Wirksamkeitsdatum für ${employeeName}`;
-  const row = settings
-    .getByRole('row')
-    .filter({ has: settings.page().getByRole('group', { name: dateName }) });
+  const row = confirmed(settings.getByRole('row')).filter({
+    has: settings.page().getByRole('group', { name: dateName }),
+  });
   await row.getByLabel(TIME_ACCOUNT_COPY.adjustmentMinutes).fill(String(input.minutes));
   await row.getByLabel(TIME_ACCOUNT_COPY.adjustmentReason).fill(input.reason);
   await typeIntoDatePicker(row, dateName, datePickerDigits(input.effectiveDate));
@@ -928,7 +930,7 @@ export function monthlyResults(page: Page): Locator {
 
 /** One person's monthly result in the narrow (list) layout. */
 export function monthlyResultListRow(results: Locator, employeeName: string): Locator {
-  return results.locator('[data-slot="list-row"]').filter({ hasText: employeeName });
+  return confirmed(results.locator('[data-slot="list-row"]').filter({ hasText: employeeName }));
 }
 
 /** Every definition term one monthly result shows in the narrow layout. */

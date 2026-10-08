@@ -9,6 +9,7 @@ import { InlinePending } from '@/components/ui/inline-pending';
 import type { AttentionNotification } from '@/lib/attention/types';
 import type { useBusyIds } from '@/hooks/use-busy-id';
 import { formatSicknessRange } from '@/lib/sickness/types';
+import { unconfirmedMarker } from '@/lib/ui/unconfirmed';
 import { ALL_NOTIFICATIONS_ID } from './use-aufgaben-overview';
 import { formatGermanDate, formatGermanDateRange } from '@/lib/utils';
 
@@ -122,6 +123,7 @@ function AufgabenNotificationRow({
       className="flex flex-wrap items-center justify-between gap-2 px-4 py-3"
       data-notification-source={notification.sourceId}
       data-unread={notification.unread ? 'true' : 'false'}
+      {...unconfirmedMarker(isMarkingRead || busy.isBusy(ALL_NOTIFICATIONS_ID))}
     >
       <div className="flex min-w-0 items-start gap-2">
         {notification.unread && (

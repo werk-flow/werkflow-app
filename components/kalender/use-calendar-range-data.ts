@@ -18,6 +18,7 @@ import {
   composeCalendarReadiness,
   createDatasetState,
   datasetNeedsRead,
+  holdsUnconfirmedEdits,
   presentDataset,
   readCommitted,
   reduceCalendarRange,
@@ -390,6 +391,8 @@ export type CalendarRangeData = {
   readiness: CalendarReadiness;
   /** True while the initiating user's own mutation still owns the data. */
   isMutating: boolean;
+  /** True from an optimistic edit until a committed read replaced it (lib/ui/unconfirmed.ts). */
+  isUnconfirmed: boolean;
   updateEntries: (update: (previous: TimeEntry[]) => TimeEntry[]) => void;
   updateJobs: (update: (previous: CalendarJob[]) => CalendarJob[]) => void;
   /** Takes ownership and returns this operation's idempotent, scope-bound release. */
@@ -629,6 +632,7 @@ export function useCalendarRangeData(options: UseCalendarRangeDataOptions): Cale
     changeRequestMap,
     readiness,
     isMutating,
+    isUnconfirmed: holdsUnconfirmedEdits(ALL_DATASETS.map((dataset) => state.datasets[dataset])),
     updateEntries,
     updateJobs,
     beginMutation,

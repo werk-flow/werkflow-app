@@ -19,10 +19,11 @@ import {
   type ServiceCaseStatus,
 } from '../../../../lib/service-cases/types';
 import {
-  SHARED_COPY,
+  confirmed,
   escapeRegExp,
   pendingRow,
   selectFromSearchable,
+  SHARED_COPY,
   typeIntoDatePickerById,
   visibleText,
 } from './shared';
@@ -189,7 +190,7 @@ export async function filterEquipmentListByCategory(page: Page, category: Equipm
 
 /** A history entry of the equipment detail. */
 export function equipmentEvent(page: Page, event: keyof typeof EQUIPMENT_EVENT_LABELS): Locator {
-  return visibleText(page, EQUIPMENT_EVENT_LABELS[event]);
+  return confirmed(visibleText(page, EQUIPMENT_EVENT_LABELS[event]));
 }
 
 /** A relation line of the equipment sidebar, such as „Vorgänger: <name>“. */
@@ -708,7 +709,9 @@ export function maintenanceRenewalSignal(page: Page, signal: MaintenanceRenewalS
 
 /** The coverage row that names this reference. */
 export function maintenanceCoverageRow(page: Page, reference: string): Locator {
-  return page.getByRole('main').getByTestId('maintenance-coverage-row').filter({ hasText: reference });
+  return confirmed(
+    page.getByRole('main').getByTestId('maintenance-coverage-row').filter({ hasText: reference }),
+  );
 }
 
 export function maintenanceCoverageAction(
@@ -742,11 +745,13 @@ export async function recordCoverageFollowUp(page: Page, reference: string): Pro
 
 /** The due row of one plan on one due date (as the list formats it). */
 export function maintenanceDueRow(page: Page, planNumber: string, dueDateLabel: string): Locator {
-  return page
-    .getByRole('main')
-    .getByTestId('maintenance-due-row')
-    .filter({ hasText: planNumber })
-    .filter({ hasText: dueDateLabel });
+  return confirmed(
+    page
+      .getByRole('main')
+      .getByTestId('maintenance-due-row')
+      .filter({ hasText: planNumber })
+      .filter({ hasText: dueDateLabel }),
+  );
 }
 
 export function maintenanceDueRowAction(
@@ -894,9 +899,7 @@ export async function createMaintenancePlanViaDialog(
   await expect(dialog).toHaveCount(0, { timeout: 20_000 });
   await maintenanceTab(page, 'plans').click();
   await expect(
-    page
-      .getByRole('main')
-      .getByTestId('maintenance-plan-card')
+    confirmed(page.getByRole('main').getByTestId('maintenance-plan-card'))
       .filter({ hasText: options.clientName })
       .filter({ hasText: options.equipmentName }),
   ).toBeVisible({ timeout: 20_000 });
@@ -915,10 +918,9 @@ export async function openMaintenancePlanAction(
 ): Promise<Locator> {
   await page.goto(maintenanceSearchUrl(planNumber));
   await maintenanceTab(page, 'plans').click();
-  const card = page
-    .getByRole('main')
-    .getByTestId('maintenance-plan-card')
-    .filter({ has: page.getByRole('heading', { name: planNumber }) });
+  const card = confirmed(page.getByRole('main').getByTestId('maintenance-plan-card')).filter({
+    has: page.getByRole('heading', { name: planNumber }),
+  });
   await card.getByRole('button', { name: MAINTENANCE_PLAN_ACTIONS[action].open, exact: true }).click();
   return page.getByRole('dialog');
 }

@@ -24,7 +24,7 @@ import {
   resolveDispatchChallengeInPanel,
   startBatchRescheduleInPanel,
 } from './support/steps/dispatch';
-import { testData } from './support/steps/shared';
+import { expectGone, testData } from './support/steps/shared';
 import { createJob, parkJobOnJobPage } from './support/steps/work';
 
 // P1-12 — the dispatch journeys an office walks: parked backlog work sent and
@@ -275,7 +275,7 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
     await openDispatchPanel(bueroPage);
     const bueroRow = dispatchPanelOccurrences(dispatchPanelRegion(bueroPage), liveTitle);
     await expect(bueroRow).toBeVisible({ timeout: 20_000 });
-    await expect(bueroRow.locator('[data-recipient-state]')).toHaveCount(0);
+    await expectGone(bueroRow.locator('[data-recipient-state]'));
 
     await openDispatchPanel(adminPage);
     await expectLiveWithin(bueroRow.locator('[data-recipient-state]'), {

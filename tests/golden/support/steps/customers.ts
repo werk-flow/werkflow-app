@@ -11,6 +11,7 @@ import type {
   CommunicationPurpose,
 } from '../../../../lib/customer-relationships/types';
 import {
+  confirmed,
   expectBannerAfter,
   expectVisibleAfterSave,
   metadataField,
@@ -178,7 +179,9 @@ export function followUpActionButton(
 
 /** The follow-up row that offers editing this follow-up. */
 export function editableFollowUpRow(page: Page, title: string): Locator {
-  return page.locator('[data-follow-up-id]').filter({ has: followUpActionButton(page, title, 'edit') });
+  return confirmed(
+    page.locator('[data-follow-up-id]').filter({ has: followUpActionButton(page, title, 'edit') }),
+  );
 }
 
 /** The contact warning's button that continues with a reason. */
@@ -226,7 +229,7 @@ export async function createCustomer(
 
 export async function openCustomerDetail(page: Page, customerName: string): Promise<void> {
   await page.goto('/kunden');
-  const customerRow = page.locator('tbody tr:visible').filter({ hasText: customerName }).first();
+  const customerRow = confirmed(page.locator('tbody tr:visible')).filter({ hasText: customerName }).first();
   await expect(customerRow).toBeVisible({ timeout: 15_000 });
   const customerLink = customerRow.getByRole('link', {
     name: customerName,
@@ -482,8 +485,7 @@ export async function archiveCustomerRelation(
 ): Promise<void> {
   const kind = CUSTOMER_RELATION_NAMES[relation];
   const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const row = page
-    .locator('li')
+  const row = confirmed(page.locator('li'))
     .filter({ has: page.getByRole('button', { name: `${kind} archivieren` }) })
     .filter({
       has: page.locator('p').filter({ hasText: new RegExp(`^${escapedName}$`) }),
@@ -491,8 +493,7 @@ export async function archiveCustomerRelation(
     .filter({ visible: true })
     .first();
   await row.getByRole('button', { name: `${kind} archivieren` }).click();
-  const archivedRow = page
-    .locator('li')
+  const archivedRow = confirmed(page.locator('li'))
     .filter({
       has: page.getByRole('button', { name: `${kind} wiederherstellen` }),
     })
@@ -514,8 +515,7 @@ export async function restoreCustomerRelation(
   name: string,
 ): Promise<void> {
   const kind = CUSTOMER_RELATION_NAMES[relation];
-  const row = page
-    .locator('li')
+  const row = confirmed(page.locator('li'))
     .filter({
       has: page.getByRole('button', { name: `${kind} wiederherstellen` }),
     })
@@ -525,8 +525,7 @@ export async function restoreCustomerRelation(
   await row.getByRole('button', { name: `${kind} wiederherstellen` }).click();
   const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const activeRow = () =>
-    page
-      .locator('li')
+    confirmed(page.locator('li'))
       .filter({
         has: page.getByRole('button', { name: `${kind} archivieren` }),
       })
@@ -558,7 +557,10 @@ export async function editSiteStreetOnCustomerDetail(
   siteName: string,
   newStreet: string,
 ): Promise<void> {
-  const siteRow = page.locator('li').filter({ hasText: siteName }).filter({ visible: true }).first();
+  const siteRow = confirmed(page.locator('li'))
+    .filter({ hasText: siteName })
+    .filter({ visible: true })
+    .first();
   await siteRow.getByRole('button', { name: 'Einsatzort bearbeiten' }).click();
   await expect(page.getByRole('heading', { name: 'Einsatzort bearbeiten' })).toBeVisible();
   await page.locator('#site-street').fill(newStreet);
@@ -608,7 +610,7 @@ export function customerTimelineFact(timeline: Locator, fact: keyof typeof TIMEL
 
 /** Every timeline entry, each carrying its deduplication key. */
 export function customerTimelineEntries(timeline: Locator): Locator {
-  return timeline.locator('[data-timeline-key]');
+  return confirmed(timeline.locator('[data-timeline-key]'));
 }
 
 /** The timeline entry that names this record. */
@@ -628,10 +630,12 @@ export function customerTimelineFilter(page: Page, filter: keyof typeof TIMELINE
 
 /** A follow-up row in the customer's Nachfassaktionen section. */
 export function followUpRow(page: Page, title: string): Locator {
-  return page
-    .getByRole('region', { name: TIMELINE_COPY.followUps })
-    .locator('[data-follow-up-id]')
-    .filter({ hasText: title });
+  return confirmed(
+    page
+      .getByRole('region', { name: TIMELINE_COPY.followUps })
+      .locator('[data-follow-up-id]')
+      .filter({ hasText: title }),
+  );
 }
 
 /** The visible „Nicht erlaubt“ state of a communication preference. */

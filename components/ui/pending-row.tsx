@@ -33,6 +33,7 @@ export function PendingRow({
       role="status"
       aria-label={label}
       data-pending-row=""
+      unconfirmed
       className="opacity-70"
     >
       {columns.map((column, index) => (

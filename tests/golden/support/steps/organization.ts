@@ -3,7 +3,7 @@ import { ROLE_LABELS } from '../../../../lib/roles';
 import { confirmTestUserEmail } from '../seed';
 import { pressKey } from './interaction';
 import { openMemberDetailFromList } from './personnel';
-import { SHARED_COPY, openDialogWithRetry, pendingRow, visibleText } from './shared';
+import { confirmed, openDialogWithRetry, pendingRow, SHARED_COPY, visibleText } from './shared';
 
 /** Copy of accounts, organizations, membership and the member list. */
 const ORGANIZATION_COPY = {
@@ -199,7 +199,7 @@ export function memberJoinedBanner(page: Page): Locator {
 
 /** A row of the member list or the invitations tab, by member name or invited email. */
 export function memberRow(page: Page, nameOrEmail: string): Locator {
-  return page.getByRole('row').filter({ hasText: nameOrEmail });
+  return confirmed(page.getByRole('row').filter({ hasText: nameOrEmail }));
 }
 
 export function memberRowActionsButton(row: Locator): Locator {

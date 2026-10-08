@@ -1,8 +1,16 @@
 import * as React from 'react';
 
+import { unconfirmedMarker } from '@/lib/ui/unconfirmed';
 import { cn } from '@/lib/utils';
 
-function Card({ className, ...props }: React.ComponentProps<'div'>) {
+function Card({
+  className,
+  unconfirmed,
+  ...props
+}: React.ComponentProps<'div'> & {
+  /** The card shows an optimistic layer's content, not yet an authoritative read (lib/ui/unconfirmed.ts). */
+  unconfirmed?: boolean | undefined;
+}) {
   return (
     <div
       data-slot="card"
@@ -11,6 +19,7 @@ function Card({ className, ...props }: React.ComponentProps<'div'>) {
         className,
       )}
       {...props}
+      {...unconfirmedMarker(unconfirmed)}
     />
   );
 }

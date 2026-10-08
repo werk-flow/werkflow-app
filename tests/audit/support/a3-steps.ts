@@ -1,14 +1,15 @@
 import type { Locator, Page } from '@playwright/test';
+import { confirmed } from '../../golden/support/steps/shared';
 import { calendarHolidayLabel } from '../../golden/support/plantafel';
 
 /** Holiday and closure labels in the month grid; informational only. */
 export function informationalCalendarEvent(page: Page, label: string): Locator {
-  return calendarHolidayLabel(page, label).first();
+  return confirmed(calendarHolidayLabel(page, label).first());
 }
 
 /** Several edits share one label; the first row is a representative attribution check. */
 export function firstPersonnelHistoryEvent(page: Page, eventLabel: string): Locator {
-  return page.getByRole('listitem').filter({ hasText: eventLabel }).first();
+  return confirmed(page.getByRole('listitem').filter({ hasText: eventLabel }).first());
 }
 
 /** The time overview's „Überstunden heute“ figure. */

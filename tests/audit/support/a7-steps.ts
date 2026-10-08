@@ -8,7 +8,7 @@ import {
   jobDispatchSection,
   openIssueDialogForPanelRow,
 } from '../../golden/support/steps/dispatch';
-import { SHARED_COPY } from '../../golden/support/steps/shared';
+import { confirmed, SHARED_COPY } from '../../golden/support/steps/shared';
 import { jobDetailMenuItem, jobEditDialog } from '../../golden/support/steps/work';
 
 // A travel warning can appear on both affected occurrence rows. This assertion
@@ -18,7 +18,7 @@ export function firstDispatchPanelText(page: Page, text: string | RegExp): Locat
 }
 
 export function unscheduledDispatchRow(page: Page, title: string): Locator {
-  return page.locator('[data-dispatch-job]').filter({ hasText: title });
+  return confirmed(page.locator('[data-dispatch-job]').filter({ hasText: title }));
 }
 
 /** Sends the panel row's dispatch with a note. */

@@ -9,6 +9,7 @@ import { InlinePending } from '@/components/ui/inline-pending';
 import { ListRow } from '@/components/ui/list-row';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { SkeletonColumn } from '@/components/ui/skeleton-table';
+import { unconfirmedMarker } from '@/lib/ui/unconfirmed';
 import { cn } from '@/lib/utils';
 import {
   MAINTENANCE_COVERAGE_STATUS_LABELS,
@@ -250,6 +251,7 @@ export function MaintenanceCoverageList({
         {pendingCoverages.map((draft) => (
           <div
             key={draft.id}
+            {...unconfirmedMarker(true)}
             role="status"
             aria-label="Wird gespeichert"
             data-pending-row=""

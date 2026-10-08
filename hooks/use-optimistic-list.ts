@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { expireOptimisticOverlay, type OptimisticOverlayEntry } from '@/lib/ui/optimistic-overlay';
+import { markUnconfirmedLayer } from '@/lib/ui/unconfirmed';
 
 /**
  * Optimistic overlay for a list whose authority is server data (props from a
@@ -24,6 +25,11 @@ import { expireOptimisticOverlay, type OptimisticOverlayEntry } from '@/lib/ui/o
  *   rollback after it.
  * - Callers that own a `useLiveView` call `view.invalidate()` before applying
  *   an entry, per the live-view contract.
+ * - Unconfirmed marker (lib/ui/unconfirmed.ts): an entry stays `isOptimistic`
+ *   until the authoritative list carries it, a committed insert included, and
+ *   the surface passes that flag as `unconfirmed` to the row primitive. While
+ *   any entry is held, `<html data-unconfirmed-layer>` is set, so a removal,
+ *   which leaves no row to mark, keeps the settle step waiting too.
  */
 
 export interface OptimisticListItem<Item> {
@@ -64,6 +70,14 @@ export function useOptimisticList<Item>({
   useEffect(() => {
     setOverlay((current) => expireOptimisticOverlay(current, serverItems, getIdRef.current));
   }, [serverItems]);
+
+  const hasPending = overlay.size > 0;
+  useEffect(() => {
+    if (!hasPending) return;
+    const holder = Symbol('optimistic-list');
+    markUnconfirmedLayer(holder, true);
+    return () => markUnconfirmedLayer(holder, false);
+  }, [hasPending]);
 
   const items = useMemo(() => {
     const merged: OptimisticListItem<Item>[] = [];
@@ -163,6 +177,6 @@ export function useOptimisticList<Item>({
     rollback,
     settle,
     isOptimistic,
-    hasPending: overlay.size > 0,
+    hasPending,
   };
 }

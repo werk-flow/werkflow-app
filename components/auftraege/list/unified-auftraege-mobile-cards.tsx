@@ -72,6 +72,7 @@ function JobCard({
   return (
     <ListRow
       interactive={!isPending}
+      unconfirmed={isPending || isSettling}
       role={isPending ? 'status' : undefined}
       aria-label={isPending ? 'Wird gespeichert' : undefined}
       className={cn('items-start', indented && 'ml-6', isPending && 'opacity-70')}
@@ -186,6 +187,7 @@ function ProjectCard({
     <div>
       <ListRow
         interactive={!isPending}
+        unconfirmed={isPending || rowFeedback.settlingIds.has(project.id)}
         role={isPending ? 'status' : undefined}
         aria-label={isPending ? 'Wird gespeichert' : undefined}
         className={cn('items-start gap-2 bg-muted/30', isPending && 'opacity-70')}

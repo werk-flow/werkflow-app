@@ -7,6 +7,7 @@ import { ClipboardList, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { MAINTENANCE_PLAN_STATUS_LABELS, type MaintenancePlanItem } from '@/lib/maintenance/types';
+import { unconfirmedMarker } from '@/lib/ui/unconfirmed';
 import { formatMaintenanceDate } from './maintenance-lists';
 import type { MaintenancePlanPendingDraft } from './maintenance-plan-dialog';
 
@@ -52,6 +53,7 @@ export function MaintenancePlanCards({
       {pendingPlans.map((draft) => (
         <section
           key={draft.id}
+          {...unconfirmedMarker(true)}
           role="status"
           aria-label="Wird gespeichert"
           data-pending-row=""

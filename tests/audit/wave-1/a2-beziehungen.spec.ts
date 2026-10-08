@@ -31,7 +31,13 @@ import {
   joinOrganizationViaInviteLink,
   removeMemberFromDetail,
 } from '../../golden/support/steps/organization';
-import { selectFromSearchable, SHARED_COPY, testData, visibleText } from '../../golden/support/steps/shared';
+import {
+  expectGone,
+  selectFromSearchable,
+  SHARED_COPY,
+  testData,
+  visibleText,
+} from '../../golden/support/steps/shared';
 import {
   CHANNEL_LABELS,
   PURPOSE_LABELS,
@@ -113,7 +119,7 @@ test.describe('A2 Kundenbeziehungen @AUDIT-W1-A2', () => {
     await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 
     await openAufgaben(adminPage);
-    await expect(followUpTaskLink(adminPage, title, customer)).toHaveCount(0, {
+    await expectGone(followUpTaskLink(adminPage, title, customer), {
       timeout: 15_000,
     });
     await openAufgaben(bueroPage);

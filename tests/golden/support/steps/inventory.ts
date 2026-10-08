@@ -4,7 +4,14 @@ import {
   INVENTORY_ITEM_TYPE_LABELS,
   type InventoryItemType,
 } from '../../../../lib/inventory/types';
-import { expectBannerAfter, listPager, SHARED_COPY, selectFromSearchable, visibleText } from './shared';
+import {
+  confirmed,
+  expectBannerAfter,
+  listPager,
+  selectFromSearchable,
+  SHARED_COPY,
+  visibleText,
+} from './shared';
 
 /** Copy of the Lager area that no pure product module owns. Type and unit labels come from lib/inventory/types. */
 export const INVENTORY_COPY = {
@@ -119,7 +126,7 @@ export function pendingLocationStatus(page: Page): Locator {
 
 /** A table row on /inventar (items or movements) that mentions this text. */
 export function inventoryRow(page: Page, text: string): Locator {
-  return page.getByRole('row').filter({ hasText: text });
+  return confirmed(page.getByRole('row').filter({ hasText: text }));
 }
 
 const ITEM_LIST_COPY = {
@@ -136,10 +143,12 @@ export function inventoryItemPager(page: Page): Locator {
 
 /** The item row whose name cell shows exactly this name. */
 export function inventoryItemRow(page: Page, name: string): Locator {
-  return page
-    .getByRole('main')
-    .getByRole('row')
-    .filter({ has: page.getByText(name, { exact: true }) });
+  return confirmed(
+    page
+      .getByRole('main')
+      .getByRole('row')
+      .filter({ has: page.getByText(name, { exact: true }) }),
+  );
 }
 
 export function inventoryItemCreatedMessage(page: Page): Locator {
@@ -176,14 +185,16 @@ export async function openItemRowAction(
 
 /** One location card in the „Lager“ view, a region named by the location. */
 export function inventoryLocationCard(page: Page, locationName: string): Locator {
-  return page.getByRole('main').getByRole('region', { name: locationName, exact: true });
+  return confirmed(page.getByRole('main').getByRole('region', { name: locationName, exact: true }));
 }
 
 /** One item's tile in the project's „Projekt gesamt“ totals. */
 export function projectMaterialTotal(page: Page, itemId: string): Locator {
-  return page
-    .getByRole('region', { name: INVENTORY_COPY.material.projectTotal, exact: true })
-    .locator(`[data-row-id="${itemId}"]`);
+  return confirmed(
+    page
+      .getByRole('region', { name: INVENTORY_COPY.material.projectTotal, exact: true })
+      .locator(`[data-row-id="${itemId}"]`),
+  );
 }
 
 /** The billable pill text of a project total with this quantity. */
@@ -215,7 +226,7 @@ export function materialStillOutText(quantity: number, unit = 'piece'): string {
 }
 
 export function jobMaterialLine(page: Page, itemName: string): Locator {
-  return page.getByRole('main').getByTestId('job-material-line').filter({ hasText: itemName });
+  return confirmed(page.getByRole('main').getByTestId('job-material-line').filter({ hasText: itemName }));
 }
 
 export function jobMaterialLineAction(line: Locator, action: JobMaterialAction): Locator {

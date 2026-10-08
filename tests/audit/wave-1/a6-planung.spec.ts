@@ -45,7 +45,12 @@ import {
   removeClosureDayViaSettings,
   setHolidayRegionViaSettings,
 } from '../../golden/support/steps/personnel';
-import { SHARED_COPY, employeeAssignmentPicker, typeIntoTimeInput } from '../../golden/support/steps/shared';
+import {
+  employeeAssignmentPicker,
+  expectGone,
+  SHARED_COPY,
+  typeIntoTimeInput,
+} from '../../golden/support/steps/shared';
 import { cancelOwnSicknessReport, reportOwnSicknessViaDialog } from '../../golden/support/steps/sickness';
 import {
   approveVacationRequestFor,
@@ -787,6 +792,6 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       timeout: 20_000,
     });
     await showPlanningMonth(employeePage, noLoginDate);
-    await expect(occurrenceInDateCell(employeePage, noLoginDate, noLoginTitle)).toHaveCount(0);
+    await expectGone(occurrenceInDateCell(employeePage, noLoginDate, noLoginTitle));
   });
 });

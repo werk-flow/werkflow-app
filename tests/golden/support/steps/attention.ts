@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
+import { confirmed, expectGone } from './shared';
 
 // ============================================
 // P1-07 — Shared attention pattern (/aufgaben)
@@ -27,7 +28,7 @@ export async function openAufgaben(page: Page): Promise<void> {
 // Task links carry stable German aria-labels that name their source. Counting
 // via the accessible name doubles as the per-viewer deduplication assertion.
 function attentionTaskLink(scope: Page | Locator, ariaLabel: string): Locator {
-  return scope.getByRole('link', { name: ariaLabel, exact: true });
+  return confirmed(scope.getByRole('link', { name: ariaLabel, exact: true }));
 }
 
 /** The task link of an open customer request (P1-02). */
@@ -58,7 +59,7 @@ export function workArtifactTaskLink(
   task: keyof typeof WORK_ARTIFACT_TASKS,
   title: string,
 ): Locator {
-  return page.getByRole('link', { name: `${WORK_ARTIFACT_TASKS[task]} für ${title} öffnen` });
+  return confirmed(page.getByRole('link', { name: `${WORK_ARTIFACT_TASKS[task]} für ${title} öffnen` }));
 }
 
 /** The /aufgaben group of dispatch confirmations (P1-12). */
@@ -97,13 +98,13 @@ export function taskResponsible(row: Locator, personName: string): Locator {
 }
 
 export function attentionNotificationRow(page: Page, sourceId: string): Locator {
-  return page.locator(`[data-notification-source="${sourceId}"]`);
+  return confirmed(page.locator(`[data-notification-source="${sourceId}"]`));
 }
 
 /** Every notification row still marked unread. */
 export function unreadNotificationRows(page: Page): Locator {
   // The unread marker is persisted as a data attribute without a semantic role.
-  return page.locator('[data-unread="true"]');
+  return confirmed(page.locator('[data-unread="true"]'));
 }
 
 /** The phase text of a qualification expiry notice that has not expired yet. */
@@ -144,7 +145,7 @@ export async function markAttentionNotificationReadViaButton(page: Page, sourceI
 export async function markAllAttentionNotificationsReadViaButton(page: Page): Promise<void> {
   const button = page.getByRole('button', { name: ATTENTION_COPY.markAllRead });
   await button.click();
-  await expect(unreadNotificationRows(page)).toHaveCount(0, {
+  await expectGone(unreadNotificationRows(page), {
     timeout: 15_000,
   });
   // Keep the bulk control observable until the persisted write and reconcile

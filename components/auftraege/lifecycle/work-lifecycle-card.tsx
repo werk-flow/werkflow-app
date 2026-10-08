@@ -216,7 +216,12 @@ export function WorkLifecycleCard({
   const ownOwnerId = isManager ? null : snapshot.ownOwnerId;
 
   return (
-    <Card id="arbeitsstand" className="gap-4 p-4" data-testid="work-lifecycle-card">
+    <Card
+      id="arbeitsstand"
+      className="gap-4 p-4"
+      data-testid="work-lifecycle-card"
+      unconfirmed={pendingState !== null}
+    >
       <WorkLifecycleStatusHeader
         snapshot={snapshot}
         pendingState={pendingState}

@@ -79,6 +79,7 @@ function ServiceCaseMobileList({
       {visiblePending.map((draft) => (
         <ListRow
           key={draft.id}
+          unconfirmed
           role="status"
           aria-label="Wird gespeichert"
           data-pending-row=""

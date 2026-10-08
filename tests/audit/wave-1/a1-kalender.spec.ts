@@ -17,7 +17,7 @@ import {
   parkingContextSave,
 } from '../../golden/support/steps/dispatch';
 import { dismissDialog } from '../../golden/support/steps/interaction';
-import { planningWarningDialog, textInDom, visibleText } from '../../golden/support/steps/shared';
+import { expectGone, planningWarningDialog, textInDom, visibleText } from '../../golden/support/steps/shared';
 import { createOwnManualTimeEntry } from '../../golden/support/steps/time-tracking';
 import {
   calendarConfirmation,
@@ -238,7 +238,7 @@ test.describe('A1 Kalender @AUDIT-W1-A1', () => {
     await expect(scheduledFromParkplatzConfirmation(adminPage)).toBeVisible({
       timeout: 20_000,
     });
-    await expect(parkedPill).toHaveCount(0, { timeout: 20_000 });
+    await expectGone(parkedPill, { timeout: 20_000 });
     // The visit kept Bruno and gained Emil: the card sits in both rows; the drop row is the proof.
     // The saved plan proves it, not the placement the grid shows before the answer: reload first.
     await adminPage.reload();
@@ -292,7 +292,7 @@ test.describe('A1 Kalender @AUDIT-W1-A1', () => {
     await expect(plannedBlock).toBeVisible({ timeout: 20_000 });
     await expect(workBlock).toBeVisible({ timeout: 20_000 });
     await calendarLayerToggle(adminPage, 'planned').click();
-    await expect(plannedBlock).toHaveCount(0);
+    await expectGone(plannedBlock);
     await expect(workBlock).toBeVisible();
     await calendarLayerToggle(adminPage, 'planned').click();
     await visibleCalendarLayerToggle(adminPage, 'work').click();

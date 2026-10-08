@@ -9,10 +9,11 @@ import {
 import { PLANNING_OCCURRENCE_STATUS_LABELS } from '../../../../lib/planning/types';
 import { calendarStepButton, calendarViewTab } from '../plantafel';
 import {
-  SHARED_COPY,
+  confirmed,
   employeeAssignmentPicker,
   employeeAssignmentSearch,
   planningWarningDialog,
+  SHARED_COPY,
   typeIntoDatePickerById,
   typeIntoTimeInput,
   visibleText,
@@ -420,15 +421,14 @@ export async function createPlannedCalendarEntry(
 }
 
 export function plannedCalendarEvent(page: Page, title: string, index = 0): Locator {
-  return page.locator('[data-calendar-card]').filter({ hasText: title }).nth(index);
+  return confirmed(page.locator('[data-calendar-card]').filter({ hasText: title }).nth(index));
 }
 
 /** The month grid keys one day's items by data-month-day; the run-scoped title narrows the visit. */
 export function occurrenceInDateCell(page: Page, dateIso: string, title: string): Locator {
-  return page
-    .locator(`[data-month-day="${dateIso}"]`)
-    .locator('[data-calendar-card]')
-    .filter({ hasText: title });
+  return confirmed(
+    page.locator(`[data-month-day="${dateIso}"]`).locator('[data-calendar-card]').filter({ hasText: title }),
+  );
 }
 
 /** A completed pointer gesture is evidence only after the calendar drag engine owns the drag. */
@@ -446,7 +446,7 @@ export async function dragPlanningMonthEvent(
   const sourceDay = main.locator(`[data-month-day="${input.sourceDate}"]`);
   // The cell background sits under its day column; the column is the hit area.
   const targetDay = main.locator(`[data-month-day="${input.targetDate}"]`);
-  const event = sourceDay.locator('[data-calendar-card]').filter({ hasText: input.title });
+  const event = confirmed(sourceDay.locator('[data-calendar-card]').filter({ hasText: input.title }));
   await expect(event).toHaveCount(1);
   await expect(event).toBeVisible();
   await expect(event).toHaveClass(/\bcursor-grab\b/);

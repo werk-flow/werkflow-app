@@ -5,6 +5,7 @@ import {
   composeCalendarReadiness,
   createDatasetState,
   datasetNeedsRead,
+  holdsUnconfirmedEdits,
   presentDataset,
   reduceCalendarRange,
   type CalendarRangeAction,
@@ -197,6 +198,35 @@ describe('calendar range data (PF-02, PF-03)', () => {
       },
     );
     expect(state.datasets.jobs.data).toEqual([1, 2, 3]);
+  });
+
+  test('a local edit stays unconfirmed through acceptance and a failed read, until a committed read', () => {
+    let state = apply(
+      initial(),
+      { type: 'read-started', scopeKey: 'org-a', dataset: 'jobs', generation: 1, range: day },
+      { type: 'read-committed', scopeKey: 'org-a', dataset: 'jobs', generation: 1, range: day, data: [1] },
+    );
+    expect(holdsUnconfirmedEdits(Object.values(state.datasets))).toBe(false);
+    state = apply(
+      state,
+      { type: 'reads-invalidated', scopeKey: 'org-a', dataset: 'jobs', generation: 2 },
+      { type: 'data-updated', scopeKey: 'org-a', dataset: 'jobs', update: (jobs) => [...jobs, 2] },
+    );
+    // The server answering changes nothing here: only the settlement read confirms the edit (A1-23).
+    expect(holdsUnconfirmedEdits(Object.values(state.datasets))).toBe(true);
+    state = apply(
+      state,
+      { type: 'read-started', scopeKey: 'org-a', dataset: 'jobs', generation: 3, range: day },
+      { type: 'read-failed', scopeKey: 'org-a', dataset: 'jobs', generation: 3, range: day },
+    );
+    expect(state.datasets.jobs.unconfirmed).toBe(true);
+    state = apply(
+      state,
+      { type: 'read-started', scopeKey: 'org-a', dataset: 'jobs', generation: 4, range: day },
+      { type: 'read-committed', scopeKey: 'org-a', dataset: 'jobs', generation: 4, range: day, data: [1] },
+    );
+    expect(state.datasets.jobs.data).toEqual([1]);
+    expect(holdsUnconfirmedEdits(Object.values(state.datasets))).toBe(false);
   });
 
   test('a mutation clears a failed outcome so the catch-up read is required again', () => {

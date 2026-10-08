@@ -47,7 +47,7 @@ import {
 } from '../../golden/support/steps/documents';
 import { dismissDialog, pressKey } from '../../golden/support/steps/interaction';
 import { expectRedirectedAway } from '../../golden/support/steps/organization';
-import { SHARED_COPY } from '../../golden/support/steps/shared';
+import { expectGone, SHARED_COPY } from '../../golden/support/steps/shared';
 import { createJob, createProject } from '../../golden/support/steps/work';
 import { expectSignedWindowOpen, SIGNED_URL_PATTERN } from '../support/a1-steps';
 
@@ -265,7 +265,7 @@ test.describe('A1 Dokumente @AUDIT-W1-A1', () => {
     await chooseDocumentLinkFilter(adminPage, 'all');
     await documentSearch.fill('kein-a1-dokument');
     await pressKey(adminPage, 'Enter', { into: documentSearch });
-    await expect(documentRows).toHaveCount(0);
+    await expectGone(documentRows);
     await documentSearch.fill('');
     await pressKey(adminPage, 'Enter', { into: documentSearch });
     // A cleared search stays cleared: no late route commit may restore the

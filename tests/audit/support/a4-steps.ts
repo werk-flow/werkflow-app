@@ -1,7 +1,7 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { formatVacationDays } from '../../../lib/vacation/balance';
 import { calendarAbsenceBars } from '../../golden/support/plantafel';
-import { SHARED_COPY } from '../../golden/support/steps/shared';
+import { confirmed, SHARED_COPY } from '../../golden/support/steps/shared';
 import {
   openOwnVacationSection,
   requestVacationButton,
@@ -29,17 +29,17 @@ export function vacationCalendarEvent(
   personName: string,
 ): Locator {
   // Absence bars carry their tone as data; the person name scopes the bar.
-  return calendarAbsenceBars(page, status).filter({ hasText: personName }).first();
+  return confirmed(calendarAbsenceBars(page, status).filter({ hasText: personName }).first());
 }
 
 export function vacationRequestCard(page: Page, personName: string): Locator {
   // Approval cards expose only their data marker, so the raw selector stays in
   // this audit support helper and the person name scopes it to one request.
-  return page.locator('[data-vacation-request]').filter({ hasText: personName });
+  return confirmed(page.locator('[data-vacation-request]').filter({ hasText: personName }));
 }
 
 export function absenceCalendarEvent(page: Page, label: string): Locator {
-  return calendarAbsenceBars(page, 'approved').filter({ hasText: label });
+  return confirmed(calendarAbsenceBars(page, 'approved').filter({ hasText: label }));
 }
 
 /** Opens the request dialog for one day, reads its day preview and cancels without saving. */

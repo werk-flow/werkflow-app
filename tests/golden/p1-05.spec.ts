@@ -22,6 +22,7 @@ import {
   openTimeApprovals,
 } from './support/steps/time-tracking';
 import type { TestRole, TestWorld } from './support/world';
+import { freezeLiveUpdates } from './support/live';
 
 // P1-05 — Scoped responsibilities and substitution (@P1-05). Every test pins
 // the time-approval holders it builds on through the product's configuration
@@ -173,6 +174,10 @@ test.describe('P1-05 Verantwortlichkeiten und Vertretung @P1-05', () => {
       clockInDigits: '0800',
       clockOutDigits: '0900',
     });
+    // The employee keeps the approval card it opened with, so the click below
+    // reaches the server after the substitution ended, whatever a catch-up
+    // read would show meanwhile.
+    const releaseEmployee = await freezeLiveUpdates(employeePage);
     await openTimeApprovals(employeePage);
     await expectPendingTimeApprovalVisible(employeePage, world.users.buero.id);
 
@@ -181,6 +186,7 @@ test.describe('P1-05 Verantwortlichkeiten und Vertretung @P1-05', () => {
     // resolution, not merely disappear after a UI refresh.
     await endResponsibilityDelegationViaSettings(adminPage, 'time_approval', employeeName);
     await expectExpiredResponsibilityDeniedAtAction(employeePage, world.users.buero.id);
+    await releaseEmployee();
     expect((await getLatestManualTimeEntryState(world.orgId, world.users.buero.id)).status).toBe('pending');
 
     await openTimeApprovals(adminPage);

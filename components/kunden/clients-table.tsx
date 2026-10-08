@@ -127,7 +127,14 @@ function ClientContactLine({ client }: { client: Client }) {
 /** Mobile counterpart of `PendingRow`: the draft, dimmed, without actions. */
 function PendingClientCard({ client }: { client: Client }) {
   return (
-    <ListRow interactive role="status" aria-label={PENDING_LABEL} data-pending-row="" className="opacity-70">
+    <ListRow
+      interactive
+      unconfirmed
+      role="status"
+      aria-label={PENDING_LABEL}
+      data-pending-row=""
+      className="opacity-70"
+    >
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-center gap-2">
           <InlinePending active label={PENDING_LABEL} />

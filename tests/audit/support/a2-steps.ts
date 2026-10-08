@@ -1,4 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
+import { confirmed } from '../../golden/support/steps/shared';
 import { customerTimeline, customerTimelineEntries } from '../../golden/support/steps/customers';
 
 /** Timeline entry labels of the customer history (customer-timeline-section.tsx). */
@@ -25,9 +26,9 @@ export function newestCustomerTimelineRow(
 }
 
 export function customerContactRow(page: Page, contactName: string): Locator {
-  return page.locator('#ansprechpartner').getByRole('listitem').filter({ hasText: contactName });
+  return confirmed(page.locator('#ansprechpartner').getByRole('listitem').filter({ hasText: contactName }));
 }
 
 export function customerSiteRow(page: Page, siteNameOrAddress: string): Locator {
-  return page.locator('#einsatzorte').getByRole('listitem').filter({ hasText: siteNameOrAddress });
+  return confirmed(page.locator('#einsatzorte').getByRole('listitem').filter({ hasText: siteNameOrAddress }));
 }

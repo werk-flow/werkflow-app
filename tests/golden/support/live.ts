@@ -113,3 +113,34 @@ export async function expectReadyWithin(
     }),
   );
 }
+
+/**
+ * Holds a session on the state it reads from now on, as a laptop that woke up
+ * without its connection does (testing.md, "Spec checklist": a stale premise
+ * is made deterministic). The Realtime socket is swallowed and the catch-up
+ * reads on `visibilitychange` and `focus` never start, so another session's
+ * change cannot reach this one within milliseconds and dissolve the premise.
+ * Call it before the session opens the page whose state must stay old; the
+ * returned release lets later navigations of the page receive live updates.
+ */
+export async function freezeLiveUpdates(page: Page): Promise<() => Promise<void>> {
+  await page.routeWebSocket(
+    (url) => url.toString().includes('realtime'),
+    () => {
+      // Swallowed: the page-side socket never reaches Supabase.
+    },
+  );
+  await page.addInitScript(() => {
+    // The flag survives navigations of the tab, so the release holds for every later page.
+    const frozen = (): boolean => sessionStorage.getItem('werkflow-live-frozen') !== 'false';
+    const swallow = (event: Event): void => {
+      if (frozen()) event.stopImmediatePropagation();
+    };
+    document.addEventListener('visibilitychange', swallow, true);
+    window.addEventListener('focus', swallow, true);
+  });
+  return async () => {
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    await page.evaluate(() => sessionStorage.setItem('werkflow-live-frozen', 'false'));
+  };
+}

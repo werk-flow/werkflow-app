@@ -2,7 +2,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
 import { SICKNESS_EVIDENCE_LABELS, SICKNESS_TYPE_LABELS } from '../../../../lib/sickness/types';
 import type { SicknessAbsenceType, SicknessEvidenceStatus } from '../../../../lib/sickness/types';
 import { VACATION_PORTION_LABELS } from '../../../../lib/vacation/types';
-import { SHARED_COPY, typeIntoDatePicker, visibleText } from './shared';
+import { confirmed, SHARED_COPY, typeIntoDatePicker, visibleText } from './shared';
 import {
   clockInConfirmationButton,
   clockInLauncher,
@@ -311,7 +311,10 @@ export async function cancelSicknessReportViaMenuWithReason(
   // The row flips to the terminal state — the precise transition, not a text
   // an inherited row could already satisfy.
   await expect(
-    page.locator('[data-sickness-report]').filter({ hasText: rangeText }).getByText('Storniert').first(),
+    confirmed(page.locator('[data-sickness-report]'))
+      .filter({ hasText: rangeText })
+      .getByText('Storniert')
+      .first(),
   ).toBeVisible({ timeout: 15_000 });
 }
 

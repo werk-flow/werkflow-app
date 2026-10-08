@@ -2,7 +2,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
 import { CALENDAR_DISPATCH_STATE_LABELS, type CalendarDispatchState } from '../../../lib/calendar/board';
 import { calendarRefusalMessage } from '../../../lib/calendar/messages';
 import { occurrenceStatusLabel } from './steps/calendar';
-import { SHARED_COPY, visibleMatchingText, visibleText } from './steps/shared';
+import { confirmed, SHARED_COPY, visibleMatchingText, visibleText } from './steps/shared';
 
 /**
  * Named lookups for the calendar of P1-24a (the Plantafel, the day and the
@@ -190,7 +190,7 @@ export function plantafel(page: Page): Locator {
 }
 
 export function boardRows(page: Page): Locator {
-  return plantafel(page).locator('[data-board-row]');
+  return confirmed(plantafel(page).locator('[data-board-row]'));
 }
 
 export function boardTeamHeader(page: Page, teamName: string): Locator {
@@ -203,6 +203,19 @@ export function boardColumn(page: Page, dateIso: string): Locator {
 
 /** A visit card in one person's row; `dateIso` narrows to the card that starts on that date. */
 export function boardCard(page: Page, employeeRecordId: string, title: string, dateIso?: string): Locator {
+  return confirmed(boardCardAsShown(page, employeeRecordId, title, dateIso));
+}
+
+/**
+ * The same card as the grid shows it, an optimistic placement included: for
+ * the first-frame feedback of a drop, never for a saved result.
+ */
+export function boardCardAsShown(
+  page: Page,
+  employeeRecordId: string,
+  title: string,
+  dateIso?: string,
+): Locator {
   const row = plantafel(page).locator(`[data-board-row="${employeeRecordId}"]`);
   const scope = dateIso ? row.locator(`[data-board-item-date="${dateIso}"]`) : row;
   return scope.locator('[data-calendar-card]').filter({ hasText: title });
@@ -216,7 +229,7 @@ export function boardCell(page: Page, employeeRecordId: string, dateIso: string)
 
 /** The cards with this title across every board row. */
 export function boardRowCards(page: Page, title: string): Locator {
-  return boardRows(page).locator('[data-calendar-card]').filter({ hasText: title });
+  return confirmed(boardRows(page).locator('[data-calendar-card]').filter({ hasText: title }));
 }
 
 /** The cards with this title that are not marked cancelled. */
@@ -305,7 +318,7 @@ export function calendarAbsenceBars(
   startDateIso?: string,
 ): Locator {
   const start = startDateIso ? `[data-bar-start="${startDateIso}"]` : '';
-  return scope.locator(`[data-calendar-bar="${ABSENCE_BAR_TONES[tone]}"]${start}`);
+  return confirmed(scope.locator(`[data-calendar-bar="${ABSENCE_BAR_TONES[tone]}"]${start}`));
 }
 
 /** The neutral word an approved absence bar starts with (lib/calendar/board-model.ts). */
@@ -352,7 +365,7 @@ export function parkplatzButton(page: Page): Locator {
 }
 
 export function parkplatzCardOf(page: Page, title: string): Locator {
-  return page.locator('[data-parkplatz-panel] [data-parkplatz-card]').filter({ hasText: title });
+  return confirmed(page.locator('[data-parkplatz-panel] [data-parkplatz-card]').filter({ hasText: title }));
 }
 
 /** The keyboard route of a Parkplatz card back onto the board. */
@@ -371,7 +384,7 @@ export function scheduleParkedSubmit(dialog: Locator): Locator {
 }
 
 export function dayRow(page: Page, userId: string): Locator {
-  return page.getByRole('main').locator(`[data-day-view] [data-day-row="${userId}"]`);
+  return confirmed(page.getByRole('main').locator(`[data-day-view] [data-day-row="${userId}"]`));
 }
 
 export function dayTimeline(row: Locator): Locator {
@@ -379,12 +392,12 @@ export function dayTimeline(row: Locator): Locator {
 }
 
 export function dayCard(row: Locator, title: string): Locator {
-  return row.locator('[data-calendar-card]').filter({ hasText: title });
+  return confirmed(row.locator('[data-calendar-card]').filter({ hasText: title }));
 }
 
 /** The day view's cards with this title in any row; a visit with two people shows in both rows. */
 export function dayViewCards(page: Page, title: string): Locator {
-  return page.locator('[data-day-view] [data-calendar-card]').filter({ hasText: title });
+  return confirmed(page.locator('[data-day-view] [data-calendar-card]').filter({ hasText: title }));
 }
 
 export function monthDay(page: Page, dateIso: string): Locator {
@@ -410,7 +423,7 @@ export function monthDayPopover(page: Page, dateIso: string): Locator {
 }
 
 export function monthCards(scope: Locator, title?: string): Locator {
-  const cards = scope.locator('[data-calendar-card]');
+  const cards = confirmed(scope.locator('[data-calendar-card]'));
   return title ? cards.filter({ hasText: title }) : cards;
 }
 
@@ -420,7 +433,7 @@ export function monthMoreButton(day: Locator): Locator {
 }
 
 export function calendarHolidayLabel(page: Page, label: string): Locator {
-  return page.getByRole('main').locator('[data-calendar-holiday]').filter({ hasText: label });
+  return confirmed(page.getByRole('main').locator('[data-calendar-holiday]').filter({ hasText: label }));
 }
 
 export function calendarAbsenceBarStarting(page: Page, dateIso: string, label: string): Locator {

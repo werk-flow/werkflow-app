@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import { plannedQualificationsRegion } from '../../golden/support/steps/qualifications';
-import { inputByValue, SHARED_COPY, visibleText } from '../../golden/support/steps/shared';
+import { confirmed, inputByValue, SHARED_COPY, visibleText } from '../../golden/support/steps/shared';
 
 /**
  * Copy of the work template surfaces that only the P1-13 audit checks: list
@@ -116,16 +116,16 @@ export async function templateItemCard(editor: Locator, itemName: string): Promi
   // The name field's id carries the generated item id; the card keeps it in
   // data-row-id, so the locator follows this item when the editor reorders.
   const rowId = inputId.slice('item-'.length);
-  return editor.getByTestId('work-template-item').and(editor.locator(`[data-row-id="${rowId}"]`));
+  return confirmed(editor.getByTestId('work-template-item').and(editor.locator(`[data-row-id="${rowId}"]`)));
 }
 
 /** The item card the editor appended last; it has no name until the test fills it. */
 export function appendedTemplateItemCard(editor: Locator): Locator {
-  return editor.getByTestId('work-template-item').last();
+  return confirmed(editor.getByTestId('work-template-item').last());
 }
 
 export function templateMaterialCard(editor: Locator): Locator {
-  return editor.getByTestId('work-template-material');
+  return confirmed(editor.getByTestId('work-template-material'));
 }
 
 export function materialArticlePicker(materialCard: Locator): Locator {
@@ -140,5 +140,5 @@ export function materialLocationPicker(materialCard: Locator): Locator {
 
 /** The capability row the editor appended last, inside „Geplante Qualifikationen“. */
 export function templateQualificationRow(editor: Locator): Locator {
-  return plannedQualificationsRegion(editor).getByTestId('work-template-capability').last();
+  return confirmed(plannedQualificationsRegion(editor).getByTestId('work-template-capability').last());
 }

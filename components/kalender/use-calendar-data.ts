@@ -54,7 +54,8 @@ export function useCalendarData({
   const calendarJobsRef = useRef<CalendarJob[]>([]);
   const {
     parkedJobs,
-    setParkedJobs,
+    parkedJobsUnconfirmed,
+    updateParkedJobs,
     fetchParkedJobs,
     readPlanningExtras,
     parkedJobsRequestIdRef,
@@ -113,7 +114,8 @@ export function useCalendarData({
     range,
     calendarJobsRef,
     parkedJobs,
-    setParkedJobs,
+    parkedJobsUnconfirmed,
+    updateParkedJobs,
     fetchParkedJobs,
     parkingContexts,
     parkingContextsRef,

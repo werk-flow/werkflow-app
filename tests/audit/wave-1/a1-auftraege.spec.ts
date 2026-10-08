@@ -194,19 +194,15 @@ test.describe('A1 Aufträge, Lebenszyklus und Auftragsliste @AUDIT-W1-A1', () =>
     });
     const persistedInstruction = await jobInstructionEditorRow(adminPage, pressureTest);
     await expect(persistedInstruction.field).toHaveValue(pressureTest);
-    await expect(persistedInstruction.row).not.toHaveClass(/opacity-80/, {
-      timeout: 15_000,
-    });
     await addJobInstruction(adminPage, labelValves);
     const secondInstruction = await jobInstructionEditorRow(adminPage, labelValves);
     await expect(secondInstruction.field).toBeVisible({ timeout: 15_000 });
-    await expect(secondInstruction.row).not.toHaveClass(/opacity-80/, {
-      timeout: 15_000,
-    });
-    const moveSecondInstructionUp = jobInstructionMoveUp(secondInstruction.row);
+    // The first frame of the move: the row as shown, while its order is unconfirmed.
+    const moveSecondInstructionUp = jobInstructionMoveUp(secondInstruction.shown);
     await moveSecondInstructionUp.click();
     await expect(moveSecondInstructionUp).toBeDisabled();
-    await expect(moveSecondInstructionUp).toBeEnabled({ timeout: 20_000 });
+    // Saved: the confirmed first point moved down, and reordering is available again.
+    await expect(jobInstructionMoveUp(persistedInstruction.row)).toBeEnabled({ timeout: 20_000 });
     await adminPage.reload();
     const orderedInstructions = jobInstructionEditorFields(adminPage);
     await expect(orderedInstructions).toHaveCount(2);

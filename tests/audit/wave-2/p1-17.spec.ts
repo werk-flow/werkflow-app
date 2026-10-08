@@ -29,6 +29,7 @@ import {
 import { ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
 import { artifactsDirectory, type TestWorld } from '../../golden/support/world';
 import { expectDefined } from '../../../lib/testing/spec-support/expect-defined';
+import { freezeLiveUpdates } from '../../golden/support/live';
 
 type SeededProjectScope = {
   projectNumber: string;
@@ -241,22 +242,22 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
       // P1-17-F72…F88: child integrity, one mutable root, stale-write recovery,
       // exact child release IDs, project readiness and lifecycle registration.
       await completeManagerWork(adminPage, `/auftraege/projekt/${scope.projectNumber}`, true);
+      // The office session keeps the state it opened with, as a tab that lost
+      // its connection does. Live, it would receive the saved draft within a
+      // fraction of a second and no longer hold a stale one.
+      const releaseBuero = await freezeLiveUpdates(bueroPage);
       await Promise.all([adminPage.goto(projectRoute), bueroPage.goto(projectRoute)]);
       const adminSection = workHandoverSection(adminPage);
       const bueroSection = workHandoverSection(bueroPage);
       await expect(handoverAction(bueroSection, 'saveDraft')).toBeVisible();
-      // The office session is offline while the admin saves, as a tab that
-      // lost its connection is. Online it receives the saved draft within a
-      // fraction of a second and would no longer hold a stale one.
-      await bueroPage.context().setOffline(true);
       await selectAllHandoverSources(adminSection);
       await handoverAction(adminSection, 'saveDraft').click();
       await expect(handoverMessage(adminSection, 'draftSaved')).toBeVisible({
         timeout: 20_000,
       });
-      await bueroPage.context().setOffline(false);
       await handoverAction(bueroSection, 'saveDraft').click();
       await expect(bueroSection).toContainText(HANDOVER_TEXT.staleDraft);
+      await releaseBuero();
 
       await adminPage.reload();
       const refreshed = workHandoverSection(adminPage);

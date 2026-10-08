@@ -28,7 +28,7 @@ function StandaloneJobRow({ job, ...cellProps }: StandaloneJobRowProps) {
   const detailHref = jobDetailHref(job);
 
   return (
-    <TableRow interactive onClick={() => router.push(detailHref)}>
+    <TableRow interactive unconfirmed={cellProps.isSettling} onClick={() => router.push(detailHref)}>
       <UnifiedAuftraegeJobRowCells job={job} detailHref={detailHref} {...cellProps} />
     </TableRow>
   );
@@ -115,7 +115,12 @@ function ProjectRow({
 
   return (
     <>
-      <TableRow interactive className="bg-muted/30" onClick={() => router.push(projectHref)}>
+      <TableRow
+        interactive
+        unconfirmed={rowFeedback.settlingIds.has(project.id)}
+        className="bg-muted/30"
+        onClick={() => router.push(projectHref)}
+      >
         <UnifiedAuftraegeProjectRowCells
           project={project}
           projectHref={projectHref}
@@ -162,7 +167,13 @@ function ProjectRow({
           const childHref = jobDetailHref(job, project);
           const childAssigned = jobAssignmentMap[job.id] ?? [];
           return (
-            <TableRow key={job.id} interactive className="bg-muted/10" onClick={() => router.push(childHref)}>
+            <TableRow
+              key={job.id}
+              interactive
+              unconfirmed={rowFeedback.settlingIds.has(job.id)}
+              className="bg-muted/10"
+              onClick={() => router.push(childHref)}
+            >
               <UnifiedAuftraegeJobRowCells
                 job={job}
                 detailHref={childHref}

@@ -15,13 +15,14 @@ import { EMPLOYMENT_TYPE_LABELS, type EmploymentType } from '../../../../lib/per
 import type { OrganizationResponsibility } from '../../../../lib/responsibilities/types';
 import { ROLE_LABELS } from '../../../../lib/roles';
 import {
-  SHARED_COPY,
+  confirmed,
   datePickerDigits,
   employeeAssignmentPicker,
   employeeAssignmentSearch,
   expectVisibleAfterSave,
   pageHeader,
   selectFromSearchable,
+  SHARED_COPY,
   typeIntoDatePicker,
   visibleText,
 } from './shared';
@@ -120,7 +121,7 @@ export function weeklyScheduleText(total: { hours: number } | { minutes: number 
 
 /** One row of the personnel list (members table or further personnel) by the person's name. */
 export function personnelListRow(page: Page, name: string): Locator {
-  return page.getByRole('row').filter({ hasText: name }).filter({ visible: true });
+  return confirmed(page.getByRole('row').filter({ hasText: name }).filter({ visible: true }));
 }
 
 /** The daily progress bar of a list row at a percentage. */
@@ -237,10 +238,12 @@ export function addConditionButton(page: Page): Locator {
 
 /** One visible condition version by its valid-from date (dd.mm.yyyy). */
 export function conditionRow(page: Page, validFromLabel: string): Locator {
-  return page
-    .getByRole('listitem')
-    .filter({ hasText: `${SHARED_COPY.field.validFrom} ${validFromLabel}` })
-    .filter({ visible: true });
+  return confirmed(
+    page
+      .getByRole('listitem')
+      .filter({ hasText: `${SHARED_COPY.field.validFrom} ${validFromLabel}` })
+      .filter({ visible: true }),
+  );
 }
 
 /** The actions menu trigger of one condition version. */
@@ -607,7 +610,7 @@ export function substituteForText(delegatorName: string): string {
 
 /** The settings card of one responsibility. */
 export function responsibilityCard(page: Page, responsibility: OrganizationResponsibility): Locator {
-  return page.getByRole('main').getByTestId(`responsibility-${responsibility}`);
+  return confirmed(page.getByRole('main').getByTestId(`responsibility-${responsibility}`));
 }
 
 /** The admin action that opens the responsibility change dialog. */
@@ -711,8 +714,7 @@ export async function createResponsibilityDelegationViaSettings(
   await dialog.getByRole('button', { name: 'Vertretung speichern' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
   const activeDelegationRow = (scope: Locator): Locator =>
-    scope
-      .locator('li')
+    confirmed(scope.locator('li'))
       .filter({ hasText: options.substituteName })
       .filter({ has: page.getByRole('button', { name: END_DELEGATION_TODAY }) })
       .first();
@@ -733,14 +735,12 @@ export async function endResponsibilityDelegationViaSettings(
 ): Promise<void> {
   await page.goto('/einstellungen/mitarbeiter');
   const card = responsibilityCard(page, responsibility);
-  const row = card
-    .locator('li')
+  const row = confirmed(card.locator('li'))
     .filter({ hasText: substituteName })
     .filter({ has: page.getByRole('button', { name: END_DELEGATION_TODAY }) })
     .first();
   await row.getByRole('button', { name: END_DELEGATION_TODAY }).click();
-  const endedRow = card
-    .locator('li')
+  const endedRow = confirmed(card.locator('li'))
     .filter({ hasText: substituteName })
     .filter({ has: page.getByText('Beendet', { exact: true }) })
     .first();
@@ -870,8 +870,7 @@ export async function uploadProtectedPersonnelFile(
 
 /** The release action of one protected file in the lifecycle section. */
 export function protectedFileReleaseButton(lifecycle: Locator, fileName: string): Locator {
-  return lifecycle
-    .getByRole('listitem')
+  return confirmed(lifecycle.getByRole('listitem'))
     .filter({ hasText: fileName })
     .getByRole('button', { name: LIFECYCLE_CONTROLS.release });
 }

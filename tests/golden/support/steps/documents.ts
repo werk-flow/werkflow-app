@@ -5,10 +5,11 @@ import {
   type DocumentLibraryLinkFilter,
 } from '../../../../lib/documents/types';
 import {
-  SHARED_COPY,
+  confirmed,
   escapeRegExp,
   expectVisibleAfterSave,
   listPager,
+  SHARED_COPY,
   textInDom,
   visibleText,
 } from './shared';
@@ -280,10 +281,12 @@ export function documentLibraryPager(page: Page): Locator {
 
 /** The library's folder row of one job, by its exact title. */
 export function documentWorkRow(page: Page, jobTitle: string): Locator {
-  return page
-    .getByRole('main')
-    .getByRole('row')
-    .filter({ has: page.getByText(jobTitle, { exact: true }) });
+  return confirmed(
+    page
+      .getByRole('main')
+      .getByRole('row')
+      .filter({ has: page.getByText(jobTitle, { exact: true }) }),
+  );
 }
 
 export function documentWorkRowJobLink(row: Locator): Locator {
@@ -296,7 +299,7 @@ export function documentWorkRowExpandButton(row: Locator): Locator {
 
 /** The table rows of the library's „Alle Dateien“ view that show the file. */
 export function documentTableRows(page: Page, fileName: string): Locator {
-  return page.getByRole('row').filter({ hasText: fileName });
+  return confirmed(page.getByRole('row').filter({ hasText: fileName }));
 }
 
 /** The button that opens a file in the contextual frame; its name starts with the file name. */
@@ -368,7 +371,7 @@ export function documentCurrentVersion(details: Locator, versionNumber: number):
 }
 
 export function documentAuditEvent(details: Locator, event: keyof typeof AUDIT_EVENT_LABELS): Locator {
-  return details.getByText(AUDIT_EVENT_LABELS[event], { exact: true });
+  return confirmed(details.getByText(AUDIT_EVENT_LABELS[event], { exact: true }));
 }
 
 export function documentCategoryLabel(category: DocumentCategory): string {

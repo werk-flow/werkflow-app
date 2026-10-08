@@ -14,10 +14,15 @@ type ParkingReadOptions = {
 /**
  * Parked jobs are not range-scoped; they ride the planning invalidation set
  * through `readPlanningExtras` and keep their own generation guard. The
- * request id ref lets an operation start obsolete a running read.
+ * request id ref lets an operation start obsolete a running read. An
+ * optimistic edit through `updateParkedJobs` stays unconfirmed until the next
+ * read replaces the list (lib/ui/unconfirmed.ts).
  */
 export function useParkedJobs({ isScopeActive, isAdminOrManager, reportReadFailure }: ParkingReadOptions) {
-  const [parkedJobs, setParkedJobs] = useState<CalendarJob[]>([]);
+  const [parked, setParked] = useState<{ jobs: CalendarJob[]; unconfirmed: boolean }>({
+    jobs: [],
+    unconfirmed: false,
+  });
   const parkedJobsRequestIdRef = useRef(0);
   const parkedJobsLoadedRef = useRef(false);
   const fetchParkedJobs = useCallback(async (): Promise<boolean> => {
@@ -29,7 +34,7 @@ export function useParkedJobs({ isScopeActive, isAdminOrManager, reportReadFailu
       reportReadFailure();
       return false;
     }
-    setParkedJobs(result.jobs);
+    setParked({ jobs: result.jobs, unconfirmed: false });
     parkedJobsLoadedRef.current = true;
     return true;
   }, [reportReadFailure, isAdminOrManager, isScopeActive]);
@@ -37,9 +42,15 @@ export function useParkedJobs({ isScopeActive, isAdminOrManager, reportReadFailu
     async () => (isAdminOrManager ? fetchParkedJobs() : true),
     [isAdminOrManager, fetchParkedJobs],
   );
+  const updateParkedJobs = useCallback(
+    (update: (previous: CalendarJob[]) => CalendarJob[]) =>
+      setParked((current) => ({ jobs: update(current.jobs), unconfirmed: true })),
+    [],
+  );
   return {
-    parkedJobs,
-    setParkedJobs,
+    parkedJobs: parked.jobs,
+    parkedJobsUnconfirmed: parked.unconfirmed,
+    updateParkedJobs,
     fetchParkedJobs,
     readPlanningExtras,
     parkedJobsRequestIdRef,

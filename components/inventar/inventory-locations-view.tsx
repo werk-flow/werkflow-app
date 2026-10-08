@@ -12,6 +12,7 @@ import {
   type InventoryOverviewItem,
 } from '@/lib/inventory/types';
 import { Spinner } from '@/components/ui/spinner';
+import { unconfirmedMarker } from '@/lib/ui/unconfirmed';
 
 export type PendingLocationDraft = {
   confirmedId: string | null;
@@ -47,6 +48,7 @@ export function LocationsView({
           return (
             <div
               key="pending-location"
+              {...unconfirmedMarker(true)}
               role="status"
               aria-label="Lager wird angelegt"
               className="min-w-0 rounded-lg border bg-card p-4 opacity-70"

@@ -1,6 +1,7 @@
 import { Slot } from '@radix-ui/react-slot';
 import * as React from 'react';
 
+import { unconfirmedMarker } from '@/lib/ui/unconfirmed';
 import { cn } from '@/lib/utils';
 
 /**
@@ -28,6 +29,8 @@ type ListRowProps = React.HTMLAttributes<HTMLDivElement> & {
   skeleton?: boolean;
   /** Stable identity for tests and row-scoped lookups; never styled. */
   rowId?: string | undefined;
+  /** The row shows an optimistic layer's content, not yet an authoritative read (lib/ui/unconfirmed.ts). */
+  unconfirmed?: boolean | undefined;
 };
 
 export function listRowClassName(
@@ -43,7 +46,7 @@ export function listRowClassName(
 }
 
 export const ListRow = React.forwardRef<HTMLDivElement, ListRowProps>(
-  ({ interactive, variant, asChild, skeleton, rowId, className, ...props }, ref) => {
+  ({ interactive, variant, asChild, skeleton, rowId, unconfirmed, className, ...props }, ref) => {
     const Comp = asChild ? Slot : 'div';
     return (
       <Comp
@@ -54,6 +57,7 @@ export const ListRow = React.forwardRef<HTMLDivElement, ListRowProps>(
         aria-hidden={skeleton ? true : undefined}
         className={listRowClassName(interactive, className, variant)}
         {...props}
+        {...unconfirmedMarker(unconfirmed)}
       />
     );
   },

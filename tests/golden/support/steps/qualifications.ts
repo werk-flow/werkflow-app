@@ -7,15 +7,16 @@ import {
   type EvidenceState,
 } from '../../../../lib/qualifications/types';
 import {
+  confirmed,
   employeeAssignmentHeading,
   employeeAssignmentPicker,
   employeeAssignmentSearch,
+  expectBannerAfter,
   openEmployeeAssignmentDialog,
   qualificationOverrideReason,
-  expectBannerAfter,
   qualificationWarningDialog,
-  SHARED_COPY,
   selectFromSearchable,
+  SHARED_COPY,
   typeIntoDatePicker,
   typeIntoDatePickerById,
   visibleText,
@@ -84,12 +85,12 @@ export async function openManagementTab(page: Page, tab: ManagementTab): Promise
 
 /** A current team's management card inside its owner (`main`). */
 function teamCard(scope: Locator, teamName: string): Locator {
-  return scope.getByTestId('team-card').filter({ hasText: teamName });
+  return confirmed(scope.getByTestId('team-card').filter({ hasText: teamName }));
 }
 
 /** A current member row on a team card. */
 function teamMemberRow(card: Locator, memberName: string): Locator {
-  return card.getByTestId('team-member-row').filter({ hasText: memberName });
+  return confirmed(card.getByTestId('team-member-row').filter({ hasText: memberName }));
 }
 
 export async function createTeamViaManagement(page: Page, teamName: string): Promise<void> {
@@ -209,10 +210,9 @@ export async function createCapabilityViaManagement(
     await page.locator('#capability-warning-days').fill(String(options.warningDays));
   }
   await page.getByRole('button', { name: 'Anlegen', exact: true }).click();
-  const definitionRow = page
-    .getByRole('main')
-    .getByTestId('capability-definition-row')
-    .filter({ hasText: options.name });
+  const definitionRow = confirmed(page.getByRole('main').getByTestId('capability-definition-row')).filter({
+    hasText: options.name,
+  });
   try {
     await expect(definitionRow).toBeVisible({ timeout: 15_000 });
   } catch {
@@ -273,9 +273,7 @@ export async function assignCapabilityViaManagement(
     page.getByRole('button', { name: 'Eintrag speichern' }).click(),
   );
   await expect(
-    page
-      .getByRole('main')
-      .getByTestId('employee-capability-row')
+    confirmed(page.getByRole('main').getByTestId('employee-capability-row'))
       .filter({ hasText: options.employeeName })
       .filter({ hasText: options.capabilityName }),
   ).toBeVisible({ timeout: 15_000 });
@@ -291,9 +289,7 @@ export async function renewCapabilityViaManagement(
   },
 ): Promise<void> {
   await openManagementTab(page, 'qualifications');
-  const row = page
-    .getByRole('main')
-    .getByTestId('employee-capability-row')
+  const row = confirmed(page.getByRole('main').getByTestId('employee-capability-row'))
     .filter({ hasText: options.employeeName })
     .filter({ hasText: options.capabilityName });
   await row.getByRole('button', { name: QUALIFICATION_COPY.renew }).click();
@@ -303,9 +299,7 @@ export async function renewCapabilityViaManagement(
     page.getByRole('button', { name: 'Erneuerung speichern' }).click(),
   );
   await expect(
-    page
-      .getByRole('main')
-      .getByTestId('employee-capability-row')
+    confirmed(page.getByRole('main').getByTestId('employee-capability-row'))
       .filter({ hasText: options.capabilityName })
       // The row reads the date as people write it (01.09.2026).
       .filter({ hasText: `bis ${options.validUntil.split('-').reverse().join('.')}` }),
@@ -349,10 +343,9 @@ export async function addJobCapabilityRequirement(
   }
   await page.getByRole('button', { name: 'Anforderung hinzufügen', exact: true }).click();
   await expect(
-    page
-      .getByRole('main')
-      .getByTestId('qualification-coverage-row')
-      .filter({ hasText: options.capabilityName }),
+    confirmed(page.getByRole('main').getByTestId('qualification-coverage-row')).filter({
+      hasText: options.capabilityName,
+    }),
   ).toBeVisible({ timeout: 15_000 });
 }
 

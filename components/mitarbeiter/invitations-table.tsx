@@ -121,7 +121,7 @@ function RoleBadge({ role, compact }: { role: OrgRole; compact?: boolean }) {
 /** Mobile counterpart of `PendingRow`: the draft, dimmed, without actions. */
 function PendingInviteCard({ invite }: { invite: Invite }) {
   return (
-    <ListRow role="status" aria-label={PENDING_LABEL} data-pending-row="" className="opacity-70">
+    <ListRow unconfirmed role="status" aria-label={PENDING_LABEL} data-pending-row="" className="opacity-70">
       <div className="flex-1 min-w-0 space-y-1">
         <div className="flex items-center gap-2">
           <InlinePending active label={PENDING_LABEL} />

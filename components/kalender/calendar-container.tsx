@@ -140,7 +140,7 @@ function ScopedCalendarContainer({
   const mutations = useCalendarMutations({
     beginMutation: handleOperationStart,
     updateJobs: range.updateJobs,
-    updateParkedJobs: data.setParkedJobs,
+    updateParkedJobs: data.updateParkedJobs,
     jobsRef: data.calendarJobsRef,
     showBanner: (banner) => {
       if (!scopeActive.current) return () => {};

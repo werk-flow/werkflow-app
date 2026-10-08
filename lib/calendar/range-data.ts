@@ -22,6 +22,12 @@ export type DatasetState<TData> = {
   /** Newest request generation that may still commit. */
   generation: number;
   read: DatasetRead;
+  /**
+   * True from an optimistic local edit until a committed read replaces the
+   * data. The server may have accepted the edit already; only the read
+   * confirms what the server stored (lib/ui/unconfirmed.ts).
+   */
+  unconfirmed: boolean;
 };
 
 export type DatasetMap = Record<string, unknown>;
@@ -64,7 +70,7 @@ export function createDatasetState<TData>(
   data: TData,
   coverage: CalendarFetchRange | null = null,
 ): DatasetState<TData> {
-  return { data, coverage, generation: 0, read: { kind: 'idle' } };
+  return { data, coverage, generation: 0, read: { kind: 'idle' }, unconfirmed: false };
 }
 
 function reduceDataset<TData>(
@@ -86,6 +92,7 @@ function reduceDataset<TData>(
         coverage: action.range,
         generation: state.generation,
         read: { kind: 'idle' },
+        unconfirmed: false,
       };
     case 'read-failed':
       if (action.generation !== state.generation) return state;
@@ -100,7 +107,7 @@ function reduceDataset<TData>(
         read: { kind: 'idle' },
       };
     case 'data-updated':
-      return { ...state, data: action.update(state.data) };
+      return { ...state, data: action.update(state.data), unconfirmed: true };
     default: {
       const exhaustive: never = action;
       return exhaustive;
@@ -121,6 +128,7 @@ export function reduceCalendarRange<TData extends DatasetMap>(
         // Every in-flight response predates the new scope: move past it.
         generation: state.datasets[key].generation + 1,
         read: { kind: 'idle' },
+        unconfirmed: false,
       };
     }
     return { scopeKey: action.scopeKey, datasets };
@@ -162,6 +170,11 @@ export function presentDataset(
     return 'unavailable';
   }
   return state.coverage === null ? 'loading' : 'reloading';
+}
+
+/** True while one of the datasets shows a local edit no committed read has confirmed. */
+export function holdsUnconfirmedEdits(states: readonly DatasetState<unknown>[]): boolean {
+  return states.some((state) => state.unconfirmed);
 }
 
 /** True when the effect must start a read to cover `needed`. */

@@ -13,7 +13,7 @@ import {
   openAufgaben,
 } from './support/steps/attention';
 import { TARGET_COPY, openMemberDetailFromList, weeklyTargetText } from './support/steps/personnel';
-import { visibleText, textInDom } from './support/steps/shared';
+import { expectGone, textInDom, visibleText } from './support/steps/shared';
 import { showCalendarMonth } from './support/steps/calendar';
 import {
   SICKNESS_COPY,
@@ -159,7 +159,7 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
         await expect(bueroRow).toHaveCount(1, { timeout: 15_000 });
         await expect(bueroRow).toHaveAttribute('data-unread', 'true');
         await expect(bueroRow.getByText(sicknessNoticeText(employeeName))).toBeVisible();
-        await expect(bueroRow.getByText(SICKNESS_TYPE_LABELS.krankheit)).toHaveCount(0);
+        await expectGone(bueroRow.getByText(SICKNESS_TYPE_LABELS.krankheit));
         await markAttentionNotificationReadViaButton(bueroPage, reportState.id);
 
         await openAufgaben(adminPage);
@@ -168,7 +168,7 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
         });
 
         await openAufgaben(employeePage);
-        await expect(attentionNotificationRow(employeePage, reportState.id)).toHaveCount(0);
+        await expectGone(attentionNotificationRow(employeePage, reportState.id));
 
         // A second overlapping own report is impossible, race-safe, explained.
         await expectSicknessOverlapRejectedViaDialog(employeePage, {
@@ -230,7 +230,7 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
         await markAttentionNotificationReadViaButton(bueroPage, reportState.id);
 
         await openAufgaben(adminPage);
-        await expect(attentionNotificationRow(adminPage, reportState.id)).toHaveCount(0);
+        await expectGone(attentionNotificationRow(adminPage, reportState.id));
         return reportState.id;
       });
 

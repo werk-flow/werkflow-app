@@ -2,7 +2,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
 import { WORK_BLOCKER_REASON_LABELS, type WorkBlockerReason } from '../../../../lib/work-lifecycle/types';
 import { parkplatzButton } from '../plantafel';
 import { planningWarningReason, planningWarningSave, showPlanningMonth } from './calendar';
-import { planningWarningDialog, selectFromSearchable, typeIntoDatePickerById } from './shared';
+import { confirmed, planningWarningDialog, selectFromSearchable, typeIntoDatePickerById } from './shared';
 
 // P1-12: dispatch, Parkplatz context, customer commitments, batch moves.
 
@@ -104,7 +104,7 @@ export function dispatchOccurrenceRow(page: Page, title: string): Locator {
 
 /** The visit rows with this title inside a scope (the page, the panel or its landmark). */
 export function dispatchPanelOccurrences(scope: Page | Locator, title: string): Locator {
-  return scope.locator('[data-dispatch-occurrence]').filter({ hasText: title });
+  return confirmed(scope.locator('[data-dispatch-occurrence]').filter({ hasText: title }));
 }
 
 export function dispatchIssueDialog(page: Page): Locator {
@@ -275,7 +275,9 @@ export async function openParkplatzPanel(page: Page): Promise<void> {
 
 export function parkplatzCard(page: Page, title: string): Locator {
   // Filter instead of interpolating the title into a CSS selector.
-  return page.locator('[data-parkplatz-card]').filter({ has: page.getByText(title, { exact: true }) });
+  return confirmed(
+    page.locator('[data-parkplatz-card]').filter({ has: page.getByText(title, { exact: true }) }),
+  );
 }
 
 /** The send action of a Parkplatz card. */

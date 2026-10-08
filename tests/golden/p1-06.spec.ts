@@ -40,6 +40,7 @@ import {
 import { showCalendarMonth } from './support/steps/calendar';
 import { expectCalendarVacationEventOnDate } from './support/p1-06-calendar';
 import type { TestWorld } from './support/world';
+import { freezeLiveUpdates } from './support/live';
 
 // P1-06 — Vacation requests, decisions, balances, availability, and target
 // effects (@P1-06). The employee's balance is one connected journey: the
@@ -321,20 +322,9 @@ test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
       startDigits: toDatePickerDigits(requestIso),
       endDigits: toDatePickerDigits(requestIso),
     });
-    // Freeze Büro's browser in a genuinely stale state — the woken-up-laptop
-    // scenario that action-time enforcement exists for. Swallow the Realtime
-    // websocket AND suppress visibilitychange (the app deliberately refreshes
-    // all listeners when a tab becomes visible again, which would self-heal
-    // the stale card before the click can prove server-side denial).
-    await bueroPage.routeWebSocket(
-      (url) => url.toString().includes('realtime'),
-      () => {
-        // Swallowed: the page-side socket never reaches Supabase.
-      },
-    );
-    await bueroPage.addInitScript(() => {
-      document.addEventListener('visibilitychange', (event) => event.stopImmediatePropagation(), true);
-    });
+    // Freeze Büro's browser in a genuinely stale state: the woken-up-laptop
+    // scenario that action-time enforcement exists for.
+    const releaseBuero = await freezeLiveUpdates(bueroPage);
     await openVacationApprovals(bueroPage);
     const staleApproveButton = approveVacationButton(bueroPage, employeeName);
     await expect(staleApproveButton).toBeVisible({ timeout: 15_000 });
@@ -356,7 +346,7 @@ test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
     const pendingState = await getLatestVacationRequestState(world.orgId, employeeRecord.id);
     expect(pendingState.startDate).toBe(requestIso);
     expect(pendingState.status).toBe('pending');
-    await bueroPage.unrouteAll();
+    await releaseBuero();
 
     // The remaining holder rejects with an auditable reason the employee sees.
     const rejectionReason = testData`Betriebsurlaub bereits geplant`;

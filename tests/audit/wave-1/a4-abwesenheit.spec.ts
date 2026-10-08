@@ -24,7 +24,7 @@ import {
   removeClosureDayViaSettings,
   setHolidayRegionViaSettings,
 } from '../../golden/support/steps/personnel';
-import { SHARED_COPY, visibleText, textInDom } from '../../golden/support/steps/shared';
+import { expectGone, SHARED_COPY, textInDom, visibleText } from '../../golden/support/steps/shared';
 import {
   SICKNESS_COPY,
   absenceCalendarLabel,
@@ -522,7 +522,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     await expect(vacationCalendarEvent(employeePage, 'pending', employeeName)).toBeVisible({
       timeout: 15_000,
     });
-    await expect(vacationCalendarEvent(employeePage, 'pending', bueroName)).toHaveCount(0);
+    await expectGone(vacationCalendarEvent(employeePage, 'pending', bueroName));
 
     await approveVacationRequestFor(adminPage, employeeName);
     await approveVacationRequestFor(adminPage, bueroName);
@@ -553,7 +553,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     await expect(vacationCalendarEvent(employeePage, 'approved', employeeName)).toBeVisible({
       timeout: 15_000,
     });
-    await expect(vacationCalendarEvent(employeePage, 'approved', bueroName)).toHaveCount(0);
+    await expectGone(vacationCalendarEvent(employeePage, 'approved', bueroName));
 
     await cancelApprovedVacationForRangeText(
       adminPage,

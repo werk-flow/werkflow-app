@@ -7,6 +7,7 @@ import { InlinePending } from '@/components/ui/inline-pending';
 import { PlainButton } from '@/components/ui/plain-button';
 import { Textarea } from '@/components/ui/textarea';
 import type { JobInstructionItemWithDetails } from '@/lib/jobs/types';
+import { unconfirmedMarker } from '@/lib/ui/unconfirmed';
 import { cn, formatGermanDateTime } from '@/lib/utils';
 import type { JobInstructionRowActions } from './job-instruction-row-actions';
 import { resizeTextareaElement } from './job-instruction-textarea';
@@ -57,6 +58,7 @@ export function JobInstructionItemRow({
     <div
       data-testid="job-instruction-item"
       data-row-id={item.id}
+      {...unconfirmedMarker(item.isOptimistic)}
       className={cn(
         'min-w-0 w-full rounded-md border px-3 py-3 transition-colors',
         item.isCompleted && 'border-primary/30 bg-primary/5',

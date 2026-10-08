@@ -26,7 +26,7 @@ import {
   closeRequestViaDialog,
   createRequestViaDialog,
 } from './support/steps/requests';
-import { expectBannerAfter, testData, visibleText, textInDom } from './support/steps/shared';
+import { expectBannerAfter, expectGone, testData, textInDom, visibleText } from './support/steps/shared';
 import {
   approvePendingTimeEntry,
   createOwnManualTimeEntry,
@@ -151,7 +151,7 @@ test.describe('GG-02 Freigaben und Aufmerksamkeit @P1-07 @GG-02', () => {
       });
       await closeRequestViaDialog(adminPage, REQUEST_CLOSE_REASON_LABELS.anderweitig_geloest);
       await openAufgaben(adminPage);
-      await expect(requestTaskLink(adminPage, requestNumber)).toHaveCount(0);
+      await expectGone(requestTaskLink(adminPage, requestNumber));
     });
 
     await test.step('Zeitfreigabe erreicht genau die verantwortliche Person und wird über den Deep-Link entschieden', async () => {

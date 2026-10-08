@@ -20,7 +20,7 @@ import {
   typePlanningDate,
 } from '../../golden/support/steps/calendar';
 import { dismissDialog } from '../../golden/support/steps/interaction';
-import { SHARED_COPY, employeeAssignmentPicker } from '../../golden/support/steps/shared';
+import { confirmed, employeeAssignmentPicker, SHARED_COPY } from '../../golden/support/steps/shared';
 import { openOwnVacationSection } from '../../golden/support/steps/vacation';
 
 /**
@@ -49,8 +49,10 @@ export function capacityWarningLine(
   warning: Locator,
   input: { employeeName: string; kind: CapacityWarning; dateIso: string },
 ): Locator {
-  return warning.getByText(
-    `${input.employeeName}: ${CAPACITY_WARNINGS[input.kind]} (${formatGermanDate(input.dateIso)})`,
+  return confirmed(
+    warning.getByText(
+      `${input.employeeName}: ${CAPACITY_WARNINGS[input.kind]} (${formatGermanDate(input.dateIso)})`,
+    ),
   );
 }
 

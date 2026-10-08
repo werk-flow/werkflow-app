@@ -89,8 +89,9 @@ import {
 } from '../../golden/support/steps/qualifications';
 import {
   employeeSelectionSummary,
-  SHARED_COPY,
+  expectGone,
   selectFromSearchable,
+  SHARED_COPY,
   testData,
 } from '../../golden/support/steps/shared';
 import { createJob } from '../../golden/support/steps/work';
@@ -408,7 +409,7 @@ test.describe('P1-24a Plantafel, day and month audit @AUDIT-W3-P1-24A @AUDIT-W3'
 
     await test.step('Search narrows the cards; the filter popover holds the conflict filter', async () => {
       await boardSearch(adminPage).fill(searched.title);
-      await expect(boardRowCards(adminPage, moved.title)).toHaveCount(0);
+      await expectGone(boardRowCards(adminPage, moved.title));
       await expect(boardRowCards(adminPage, searched.title)).toHaveCount(1);
       await boardSearch(adminPage).fill('');
       await boardFilterButton(adminPage).click();

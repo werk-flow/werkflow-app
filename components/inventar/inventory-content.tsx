@@ -245,6 +245,7 @@ function InventoryTable({
             ) : (
               <ListRow
                 key="pending-item"
+                unconfirmed
                 role="status"
                 aria-label={PENDING_ITEM_LABEL}
                 className="items-start opacity-70"

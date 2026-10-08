@@ -16,7 +16,7 @@ import {
   OWN_QUALIFICATION_COPY,
   renewCapabilityViaManagement,
 } from './support/steps/qualifications';
-import { visibleText, textInDom } from './support/steps/shared';
+import { expectGone, textInDom, visibleText } from './support/steps/shared';
 import { createJob } from './support/steps/work';
 
 // P1-09 — Teams and qualifications (@P1-09). One journey: a team and a
@@ -149,7 +149,7 @@ test.describe('P1-09 Teams und Qualifikationen @P1-09', () => {
       expect(after.employeeEventTypes).toEqual(['qualification_added', 'qualification_renewed']);
 
       await openAufgaben(adminPage);
-      await expect(attentionNotificationRow(adminPage, expiredRow.id)).toHaveCount(0, { timeout: 15_000 });
+      await expectGone(attentionNotificationRow(adminPage, expiredRow.id), { timeout: 15_000 });
     });
   });
 });

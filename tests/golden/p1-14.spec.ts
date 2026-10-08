@@ -10,6 +10,7 @@ import {
   lifecycleState,
   workLifecycleCard,
 } from './support/steps/work';
+import { expectGone } from './support/steps/shared';
 
 // Manager transitions, parking, prerequisites, gates and project overrides are
 // edge cases in tests/audit/wave-2/p1-14.spec.ts; ledger side effects and the
@@ -41,9 +42,9 @@ test.describe('P1-14 work lifecycle @P1-14', () => {
       });
       await expect(dialog).toHaveCount(0, { timeout: 15_000 });
       await expect(lifecycleNextStep(employeePage, 'not_started', 'blocker')).toBeVisible();
-      await expect(
+      await expectGone(
         workLifecycleCard(employeePage).getByRole('button', { name: lifecycleCardActionName('park') }),
-      ).toHaveCount(0);
+      );
       const state = await getWorkLifecycleState(world.orgId, { jobNumber });
       expect(state.blockers).toEqual([
         expect.objectContaining({ kind: 'blocker', reason: 'site_access', state: 'open', version: 1 }),

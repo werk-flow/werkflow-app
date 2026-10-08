@@ -24,7 +24,13 @@ import {
   renameInventoryItem,
 } from '../../golden/support/steps/inventory';
 import { pressKey } from '../../golden/support/steps/interaction';
-import { pagerButton, pagerCount, pagerRange, visibleText } from '../../golden/support/steps/shared';
+import {
+  expectGone,
+  pagerButton,
+  pagerCount,
+  pagerRange,
+  visibleText,
+} from '../../golden/support/steps/shared';
 
 test.describe('Bounded document and inventory pages @AUDIT-PERFORMANCE-PAGINATION', () => {
   test('inventory pages preserve global filters, editing and creation @AUDIT-PERFORMANCE-PAGINATION-INVENTORY', async ({
@@ -37,7 +43,7 @@ test.describe('Bounded document and inventory pages @AUDIT-PERFORMANCE-PAGINATIO
     const pages = inventoryItemPager(adminPage);
     await search.fill(seeded.prefix);
     await expect(pagerCount(pages)).toHaveText(pagerRange(1, 50, 61));
-    await expect(inventoryItemRow(adminPage, seeded.tailName)).toHaveCount(0);
+    await expectGone(inventoryItemRow(adminPage, seeded.tailName));
     await pagerButton(pages, 'next').click();
     await expect(pagerCount(pages)).toHaveText(pagerRange(51, 61, 61));
     await expect(inventoryItemRow(adminPage, seeded.tailName)).toBeVisible();
@@ -72,7 +78,7 @@ test.describe('Bounded document and inventory pages @AUDIT-PERFORMANCE-PAGINATIO
     await adminPage.goto('/dokumente?view=work');
     const pages = documentLibraryPager(adminPage);
     await expect(pagerCount(pages)).toHaveText(pagerRange(1, 50, 61));
-    await expect(documentWorkRow(adminPage, seeded.tailJobTitle)).toHaveCount(0);
+    await expectGone(documentWorkRow(adminPage, seeded.tailJobTitle));
     await pagerButton(pages, 'next').click();
     await expect(pagerCount(pages)).toHaveText(pagerRange(51, 61, 61));
     const tailJob = documentWorkRow(adminPage, seeded.tailJobTitle);

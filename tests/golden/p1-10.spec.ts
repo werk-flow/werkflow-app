@@ -24,7 +24,7 @@ import {
   timelineSourceLinks,
 } from './support/steps/customers';
 import { documentViewerHeading, uploadDocumentOnJobPage } from './support/steps/documents';
-import { SHARED_COPY, testData, visibleText } from './support/steps/shared';
+import { expectGone, SHARED_COPY, testData, visibleText } from './support/steps/shared';
 import { expectLiveWithin } from './support/live';
 
 // P1-10 owns no effective-date keys. Every test seeds its own run-scoped
@@ -133,7 +133,7 @@ test.describe('P1-10 customer relationships @P1-10', () => {
     await completeFollowUpOnCustomerDetail(bueroPage, title);
 
     await openAufgaben(bueroPage);
-    await expect(followUpTaskLink(bueroPage, title, customer)).toHaveCount(0, { timeout: 15_000 });
+    await expectGone(followUpTaskLink(bueroPage, title, customer), { timeout: 15_000 });
 
     const state = await getCustomerRelationshipState(world.orgId, customer);
     expect(state.followUps.find((row) => row.title === title)).toMatchObject({

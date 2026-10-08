@@ -12,6 +12,7 @@ import {
   activeBoardRowCards,
   bannerUndo,
   boardCard,
+  boardCardAsShown,
   boardCell,
   boardRows,
   calendarBanner,
@@ -155,7 +156,7 @@ test.describe('P1-24a independent Plantafel scenarios @P1-24a', () => {
     await dragCardTo(adminPage, boardCard(adminPage, employeeRecord.id, title), parkplatzButton(adminPage));
     const dialog = adminPage.getByRole('dialog');
     await expect(dialog).toBeVisible({ timeout: 20_000 });
-    await expect(boardCard(adminPage, employeeRecord.id, title)).toHaveCount(0);
+    await expect(boardCardAsShown(adminPage, employeeRecord.id, title)).toHaveCount(0);
     await dialog.getByRole('button', { name: SHARED_COPY.action.cancel, exact: true }).click();
     await expect(boardCard(adminPage, employeeRecord.id, title)).toBeVisible({ timeout: 20_000 });
 

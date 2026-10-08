@@ -17,15 +17,18 @@ import {
   type WorkDependencyEffect,
   type WorkExecutionState,
 } from '../../../../lib/work-lifecycle/types';
+import { expectDefined } from '../../../../lib/testing/spec-support/expect-defined';
 import { pressKey } from './interaction';
 import {
   assignDespiteQualificationWarning,
+  confirmed,
   customerPicker,
   customerPickerSearch,
   detailsRegion,
   employeeAssignmentPicker,
   employeeAssignmentSearch,
   escapeRegExp,
+  expectGone,
   metadataField,
   pendingRow,
   selectFromSearchable,
@@ -119,7 +122,7 @@ export function workHandoverSection(page: Page): Locator {
 }
 
 export function workLifecycleCard(page: Page): Locator {
-  return page.getByRole('main').getByTestId('work-lifecycle-card');
+  return confirmed(page.getByRole('main').getByTestId('work-lifecycle-card'));
 }
 
 // ---------------------------------------------------------------------------
@@ -239,10 +242,10 @@ export function workLifecycleDialogCancel(dialog: Locator): Locator {
 export async function expectWorkTransitionSaved(page: Page, label: string): Promise<void> {
   const lifecycle = workLifecycleCard(page);
   await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 20_000 });
-  await expect(lifecycle.getByRole('status', { name: LIFECYCLE_COPY.savingStatus })).toHaveCount(0, {
+  await expectGone(lifecycle.getByRole('status', { name: LIFECYCLE_COPY.savingStatus }), {
     timeout: 20_000,
   });
-  await expect(lifecycle.getByRole('button', { name: label, exact: true })).toHaveCount(0, {
+  await expectGone(lifecycle.getByRole('button', { name: label, exact: true }), {
     timeout: 20_000,
   });
 }
@@ -426,9 +429,11 @@ export async function addDeclaredWorkDependency(
 
 /** A dependency row of the card, by its description; linked work has the generic name. */
 export function workDependencyRow(page: Page, description?: string): Locator {
-  return workLifecycleCard(page)
-    .getByTestId('work-dependency-row')
-    .filter({ hasText: description ?? LIFECYCLE_COPY.linkedWork });
+  return confirmed(
+    workLifecycleCard(page)
+      .getByTestId('work-dependency-row')
+      .filter({ hasText: description ?? LIFECYCLE_COPY.linkedWork }),
+  );
 }
 
 /** The satisfaction text of a dependency row. */
@@ -579,26 +584,49 @@ export function jobInstructionEditorFields(page: Page): Locator {
 }
 
 /**
- * The manager's checklist row whose text field holds exactly this content, and
- * that field. Addressed by position, as the list renders it: an optimistic row
- * changes its id when the server confirms it.
+ * A checklist row by its server id as the list shows it, unconfirmed state
+ * included: for the first-frame feedback of a row action, never for a saved
+ * result.
+ */
+function jobInstructionRowAsShown(page: Page, rowId: string): Locator {
+  return page
+    .getByRole('main')
+    .getByTestId('job-instruction-item')
+    .and(page.locator(`[data-row-id="${rowId}"]`));
+}
+
+/**
+ * The manager's confirmed checklist row whose text field holds exactly this
+ * content, that field, and the same row as shown while an action on it is
+ * pending. Found by position among the confirmed rows (an optimistic row
+ * changes its id when the server confirms it), then held by its server id.
  */
 export async function jobInstructionEditorRow(
   page: Page,
   content: string,
-): Promise<{ row: Locator; field: Locator }> {
-  const rows = page
-    .getByRole('main')
-    .getByTestId('job-instruction-item')
-    .filter({ has: jobInstructionEditorFields(page) });
-  await expect(rows).not.toHaveCount(0, { timeout: 15_000 });
-  const count = await rows.count();
-  for (let index = 0; index < count; index += 1) {
-    const row = rows.nth(index);
-    const field = row.getByRole('textbox', { name: INSTRUCTION_EDITOR_COPY.editItem });
-    if ((await field.inputValue()) === content) return { row, field };
-  }
-  throw new Error(`No checklist point holds the text "${content}".`);
+): Promise<{ row: Locator; field: Locator; shown: Locator }> {
+  const rows = confirmed(page.getByRole('main').getByTestId('job-instruction-item')).filter({
+    has: jobInstructionEditorFields(page),
+  });
+  const fields = rows.getByRole('textbox', { name: INSTRUCTION_EDITOR_COPY.editItem });
+  let index = -1;
+  // The confirmed rows only: an optimistic point joins them once the server's row replaced it.
+  await expect
+    .poll(
+      async () => {
+        const values = await fields.evaluateAll((elements) =>
+          elements.map((element) => (element as HTMLTextAreaElement).value),
+        );
+        index = values.indexOf(content);
+        return index;
+      },
+      { message: `A confirmed checklist point holds the text "${content}"`, timeout: 15_000 },
+    )
+    .toBeGreaterThanOrEqual(0);
+  const rowId = expectDefined(await rows.nth(index).getAttribute('data-row-id'), 'the checklist row id');
+  const shown = jobInstructionRowAsShown(page, rowId);
+  const row = confirmed(shown);
+  return { row, field: row.getByRole('textbox', { name: INSTRUCTION_EDITOR_COPY.editItem }), shown };
 }
 
 export function jobInstructionMoveUp(row: Locator): Locator {
@@ -1360,12 +1388,14 @@ export async function openFieldWorkPack(
  * whole text of an element.
  */
 export function jobInstructionItem(page: Page, label: string): Locator {
-  return page
-    .getByRole('main')
-    .getByTestId('job-instruction-item')
-    .filter({
-      has: page.getByText(label, { exact: true }),
-    });
+  return confirmed(
+    page
+      .getByRole('main')
+      .getByTestId('job-instruction-item')
+      .filter({
+        has: page.getByText(label, { exact: true }),
+      }),
+  );
 }
 
 /** The row's primary label. */

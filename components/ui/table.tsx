@@ -1,5 +1,6 @@
 import * as React from 'react';
 
+import { unconfirmedMarker } from '@/lib/ui/unconfirmed';
 import { cn } from '@/lib/utils';
 
 const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(
@@ -61,10 +62,12 @@ type TableRowProps = React.HTMLAttributes<HTMLTableRowElement> & {
   skeleton?: boolean;
   /** Stable identity for tests and row-scoped lookups; never styled. */
   rowId?: string | undefined;
+  /** The row shows an optimistic layer's content, not yet an authoritative read (lib/ui/unconfirmed.ts). */
+  unconfirmed?: boolean | undefined;
 };
 
 const TableRow = React.forwardRef<HTMLTableRowElement, TableRowProps>(
-  ({ className, interactive, skeleton, rowId, ...props }, ref) => (
+  ({ className, interactive, skeleton, rowId, unconfirmed, ...props }, ref) => (
     <tr
       ref={ref}
       data-row-id={rowId}
@@ -72,6 +75,7 @@ const TableRow = React.forwardRef<HTMLTableRowElement, TableRowProps>(
       aria-hidden={skeleton ? true : undefined}
       className={tableRowClassName(interactive, className)}
       {...props}
+      {...unconfirmedMarker(unconfirmed)}
     />
   ),
 );
