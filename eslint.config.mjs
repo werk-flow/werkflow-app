@@ -562,6 +562,11 @@ const testSelectors = [
 // the bounded, documented exceptions.
 const specSelectors = [
   {
+    selector: 'CallExpression[callee.property.name=/^(setOffline|routeWebSocket)$/]',
+    message:
+      'A session that must keep outdated state is frozen with freezeLiveUpdates (tests/golden/support/live.ts) before it opens the page, so a live update cannot dissolve the premise within milliseconds (testing.md, "Spec checklist").',
+  },
+  {
     selector: 'CallExpression[callee.object.name="test"][callee.property.name="setTimeout"]',
     message:
       'Per-test timeout overrides hide regressions and make target budgets meaningless. Use the measured target-keyed default in the Playwright config and fix or classify tests that exceed it.',
