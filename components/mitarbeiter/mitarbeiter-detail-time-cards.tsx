@@ -11,6 +11,7 @@ import type { OrgBreakMode } from '@/lib/time-tracking/settings';
 import { cn, formatBerlinTime } from '@/lib/utils';
 import type { MitarbeiterDetailLiveTime } from './use-mitarbeiter-detail-live-time';
 import { SectionTitle } from '@/components/shared/section-title';
+import { StaleRegion } from '@/components/shared/stale-region';
 
 type MitarbeiterDetailTimeCardsProps = {
   liveTime: MitarbeiterDetailLiveTime;
@@ -29,8 +30,11 @@ export function MitarbeiterDetailTimeCards({
   const {
     status,
     statusError,
+    statusStale,
     refetchStatus,
     weekData,
+    weekStale,
+    refetchWeek,
     weekTargets,
     todayIndex,
     weekLabel,
@@ -50,12 +54,12 @@ export function MitarbeiterDetailTimeCards({
         <SectionTitle icon={<Clock className="size-4" />} className="mb-3">
           Aktueller Status
         </SectionTitle>
-        {statusError ? (
+        {statusError && !statusStale ? (
           <SectionError onRetry={() => void refetchStatus()}>
             Der aktuelle Status konnte nicht geladen werden.
           </SectionError>
         ) : (
-          <div className="space-y-2.5">
+          <StaleRegion stale={statusStale} onRetry={refetchStatus} className="space-y-2.5">
             <StatusBadge
               status={status?.status}
               isClockedIn={status?.isClockedIn ?? false}
@@ -132,7 +136,7 @@ export function MitarbeiterDetailTimeCards({
                 </span>
               </span>
             </div>
-          </div>
+          </StaleRegion>
         )}
       </div>
 
@@ -143,17 +147,19 @@ export function MitarbeiterDetailTimeCards({
           Anwesenheit & Stunden
         </SectionTitle>
         {weekData.length > 0 ? (
-          <WeeklyHoursChart
-            weekData={weekData}
-            todayIndex={todayIndex}
-            liveTodayMinutes={liveTotalMinutes}
-            liveTodayBreakMinutes={liveBreakMinutes}
-            liveTodayBreakMode={status?.breakMode ?? breakMode}
-            liveAutoBreakThresholdMinutes={status?.autoBreakThresholdMinutes ?? autoBreakThresholdMinutes}
-            liveAutoBreakDurationMinutes={status?.autoBreakDurationMinutes ?? autoBreakDurationMinutes}
-            weekLabel={weekLabel}
-            weekTargets={weekTargets}
-          />
+          <StaleRegion stale={weekStale} onRetry={refetchWeek}>
+            <WeeklyHoursChart
+              weekData={weekData}
+              todayIndex={todayIndex}
+              liveTodayMinutes={liveTotalMinutes}
+              liveTodayBreakMinutes={liveBreakMinutes}
+              liveTodayBreakMode={status?.breakMode ?? breakMode}
+              liveAutoBreakThresholdMinutes={status?.autoBreakThresholdMinutes ?? autoBreakThresholdMinutes}
+              liveAutoBreakDurationMinutes={status?.autoBreakDurationMinutes ?? autoBreakDurationMinutes}
+              weekLabel={weekLabel}
+              weekTargets={weekTargets}
+            />
+          </StaleRegion>
         ) : (
           <p className="py-4 text-center text-xs text-muted-foreground">Keine Daten für diese Woche</p>
         )}

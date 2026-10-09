@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, posix } from 'node:path';
 import ts from 'typescript';
+import { isLabSpec, labStepsForFiles } from '../lab-steps';
 import { scenariosForFiles } from '../measured-scenarios';
 
 export interface TestGroup {
@@ -20,6 +21,8 @@ export interface GroupTimingRequirements {
   readonly exclusive: boolean;
   /** Registered measured-scenario ids the group must record (Step 2). */
   readonly requiredScenarios?: readonly string[];
+  /** Registered lab-step ids the group must record once each (docs/technical/performance.md). */
+  readonly requiredLabSteps?: readonly string[];
 }
 
 const untimed: GroupTimingRequirements = {
@@ -54,11 +57,14 @@ function declaredTiming(files: readonly string[]): GroupTimingRequirements {
   const requireFreshness = files.some((file) => freshnessFiles.has(file));
   const requireReadiness = files.some((file) => readinessSources[file] !== undefined);
   const requiredScenarios = scenariosForFiles(files).map((scenario) => scenario.id);
+  const requiredLabSteps = labStepsForFiles(files).map((step) => step.id);
   return {
     requireFreshness,
     requireReadiness,
     requiredScenarios,
-    exclusive: requireFreshness || requireReadiness || requiredScenarios.length > 0,
+    requiredLabSteps,
+    exclusive:
+      requireFreshness || requireReadiness || requiredScenarios.length > 0 || requiredLabSteps.length > 0,
   };
 }
 
@@ -256,6 +262,9 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['performance:calendar-live', 'performance/calendar-live.spec.ts', ['planning', 'time', 'personnel']],
   ['performance:planning', 'performance/planning-benchmark.spec.ts', ['planning', 'work', 'personnel']],
   ['performance:field', 'performance/field.spec.ts', ['time', 'personnel', 'attention']],
+  // Lab counts and payloads of the daily journeys (lib/testing/journeys.ts); release mode and explicit request only.
+  ['lab:field', 'lab/field.spec.ts', ['work', 'time', 'documents', 'personnel', 'attention']],
+  ['lab:office', 'lab/office.spec.ts', ['work', 'customers', 'planning', 'time', 'personnel', 'attention']],
 ];
 
 // One row per SQL group: id, its assertion files under supabase/tests/, and its scopes.
@@ -325,9 +334,9 @@ export function isPerformanceSpec(file: string): boolean {
   return file.startsWith('tests/audit/performance/');
 }
 
-/** Performance and visual reference specs run in release mode and on explicit request only. */
+/** Performance, lab and visual reference specs run in release mode and on explicit request only. */
 export function isReleaseOnlySpec(file: string): boolean {
-  return isPerformanceSpec(file) || file.startsWith('tests/audit/visual/');
+  return isPerformanceSpec(file) || isLabSpec(file) || file.startsWith('tests/audit/visual/');
 }
 
 export function listTestFiles(repositoryRoot: string, directory: string, pattern: RegExp): string[] {
@@ -525,6 +534,9 @@ export function getGroupTimingRequirements(
     requireFreshness,
     requireReadiness,
     requiredScenarios: [...new Set(requiredScenarios)],
+    requiredLabSteps: [
+      ...new Set([...(group.timing.requiredLabSteps ?? []), ...(declared.requiredLabSteps ?? [])]),
+    ],
     exclusive: group.timing.exclusive || requireFreshness || requireReadiness || requiredScenarios.length > 0,
   };
 }

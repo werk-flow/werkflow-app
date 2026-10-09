@@ -155,7 +155,7 @@ describe('browser spec conventions (testing.md)', () => {
 
     test(`${name} carries an audit grep tag`, () => {
       // Cross-wave audits name their purpose instead of claiming a wave.
-      expect(source).toMatch(/@AUDIT-(W\d|LAYOUT|SECURITY|PERFORMANCE|VISUAL)(?:-|\b)/);
+      expect(source).toMatch(/@AUDIT-(W\d|LAYOUT|SECURITY|PERFORMANCE|LAB|VISUAL)(?:-|\b)/);
     });
   }
 });

@@ -149,6 +149,7 @@ export const TIME_CORRECTION_COPY = {
   resubmit: 'Erneut einreichen',
   approveSelection: 'Auswahl freigeben',
   noEntryBefore: 'Kein Eintrag',
+  withdraw: 'Zurückziehen',
 } as const;
 
 /** The banner after a batch review of corrections. */
@@ -732,6 +733,11 @@ export function timeCorrectionStatus(card: Locator, status: TimeCorrectionStatus
 /** Approves one correction from its card. */
 export function approveCorrectionButton(card: Locator): Locator {
   return card.getByRole('button', { name: TIME_CORRECTION_COPY.approve });
+}
+
+/** The employee's withdraw button on one of their submitted corrections. */
+export function withdrawCorrectionButton(card: Locator): Locator {
+  return card.getByRole('button', { name: TIME_CORRECTION_COPY.withdraw, exact: true });
 }
 
 /** Asks the employee a question about one correction. */

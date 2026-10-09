@@ -61,6 +61,7 @@ export function useMitarbeiterDetailLiveTime({
 
   const {
     statusMap,
+    isStale: statusStale,
     error: statusError,
     refetch: refetchStatus,
   } = useMemberStatus({
@@ -72,7 +73,14 @@ export function useMitarbeiterDetailLiveTime({
   });
   const status = statusMap[userId];
 
-  const { weekData, weekTargets, todayIndex, weekLabel } = useWeeklyTimeData({
+  const {
+    weekData,
+    weekTargets,
+    todayIndex,
+    weekLabel,
+    isStale: weekStale,
+    refetch: refetchWeek,
+  } = useWeeklyTimeData({
     organizationId,
     userId,
     breakMode,
@@ -117,8 +125,11 @@ export function useMitarbeiterDetailLiveTime({
   return {
     status,
     statusError,
+    statusStale,
     refetchStatus,
     weekData,
+    weekStale,
+    refetchWeek,
     weekTargets,
     todayIndex,
     weekLabel,

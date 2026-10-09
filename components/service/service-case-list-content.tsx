@@ -172,7 +172,13 @@ function ServiceCaseTable({
           {filtered.map((item) => {
             const href = serviceCaseHref(item.caseNumber);
             return (
-              <TableRow key={item.id} interactive onClick={() => router.push(href)}>
+              <TableRow
+                key={item.id}
+                interactive
+                onClick={() => router.push(href)}
+                onMouseEnter={() => router.prefetch(href)}
+                onFocus={() => router.prefetch(href)}
+              >
                 <TableCell>
                   <Link href={href} className="font-medium" onClick={(event) => event.stopPropagation()}>
                     {item.summary}

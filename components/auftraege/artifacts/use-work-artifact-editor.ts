@@ -159,6 +159,7 @@ export function useWorkArtifactEditor({
     isBusy,
     anyBusy,
     load,
+    applyDetail,
     currentRevision,
     requiresCorrectionReason,
     measurementLines,

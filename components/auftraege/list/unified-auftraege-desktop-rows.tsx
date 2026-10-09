@@ -28,7 +28,13 @@ function StandaloneJobRow({ job, ...cellProps }: StandaloneJobRowProps) {
   const detailHref = jobDetailHref(job);
 
   return (
-    <TableRow interactive unconfirmed={cellProps.isSettling} onClick={() => router.push(detailHref)}>
+    <TableRow
+      interactive
+      unconfirmed={cellProps.isSettling}
+      onClick={() => router.push(detailHref)}
+      onMouseEnter={() => router.prefetch(detailHref)}
+      onFocus={() => router.prefetch(detailHref)}
+    >
       <UnifiedAuftraegeJobRowCells job={job} detailHref={detailHref} {...cellProps} />
     </TableRow>
   );
@@ -120,6 +126,8 @@ function ProjectRow({
         unconfirmed={rowFeedback.settlingIds.has(project.id)}
         className="bg-muted/30"
         onClick={() => router.push(projectHref)}
+        onMouseEnter={() => router.prefetch(projectHref)}
+        onFocus={() => router.prefetch(projectHref)}
       >
         <UnifiedAuftraegeProjectRowCells
           project={project}
@@ -173,6 +181,8 @@ function ProjectRow({
               unconfirmed={rowFeedback.settlingIds.has(job.id)}
               className="bg-muted/10"
               onClick={() => router.push(childHref)}
+              onMouseEnter={() => router.prefetch(childHref)}
+              onFocus={() => router.prefetch(childHref)}
             >
               <UnifiedAuftraegeJobRowCells
                 job={job}

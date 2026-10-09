@@ -22,6 +22,56 @@ Record each failed acceptance group and any focused failure that changes shared 
 
 `bun run test:runs classify` stores the classification, cause and prevention in the run manifest and, for a failed run of the verification lane, writes the dated entry below with the run, the failure point, the cause and the prevention (`lib/testing/runs/incident-record.ts`). It refuses a prevention without its tier. Add the evidence, the correction and the focused proof under that entry when the repair lands. Write a focused failure that changes shared testing behavior by hand. Do not call an unexplained retry a transient.
 
+## 2026-10-09: golden:p1-23 harness failure
+
+<!-- incident-run: 2026-10-09T054629455Z-e075b0 -->
+
+- Run: run `2026-10-09T054629455Z-e075b0`, group `golden:p1-23`, target local, fingerprint `edd99a5b0d09`, world `54fa50ceffa547659bf62c10d1894165`.
+- Failure point:  >  > p1-23.spec.ts > P1-23 time accounts and payroll handoff @P1-23 @GG-07 > configures, closes and exports a month, shows the employee account and reopens with history @P1-23-stage-configure @P1-23-stage-close @P1-23-stage-visibility @P1-23-stage-reopen: Error: P1-23 account fixture RPC failed: duplicate key value violates unique constraint "time_accounts_employee_unique"
+- Root cause: The P1-23 account fixture read the existing time accounts and then opened every missing one; the admin's account, opened through the UI just before, committed between the lookup and the RPC under two parallel workers, so the fixture opened it a second time and hit time_accounts_employee_unique.
+- Prevention: Tier 3: the helper treats an account that exists by the time it opens it as the precondition it establishes. Tier 1 and 2 cannot reach the cause: whether a seeding helper races a UI write depends on the order of a spec's steps at run time, which neither the types nor a static scan can see.
+- Cleanup: the world was cleaned; no ownership is left. Correction: `openRemainingP123Accounts` in tests/golden/support/db/personnel.ts accepts an account that the UI opened meanwhile. Focused proof: the repair plan `2026-10-09T064616316Z-75bc091a` passed golden:p1-23.
+
+## 2026-10-09: audit:visual environment failure
+
+<!-- incident-run: 2026-10-09T031331756Z-748aac -->
+
+- Run: run `2026-10-09T031331756Z-748aac`, group `audit:visual`, target local, fingerprint `34d8dd4ca5aa`, world `1a2d87055acc40e4bf675c1eafe0b163`.
+- Failure point:  >  > visual\references.spec.ts > @AUDIT-VISUAL rendered references of every page family > dashboard matches its references: Error: expect(string).toMatchSnapshot(expected) failed
+- Root cause: The office dashboard capture missed the sidebar task badge (3 offene Aufgaben): the badge comes from the attention count read, which the slow machine state delivered after the capture; a diagnostic replay of the same test on the same retained world passed (2026-10-09T035536486Z-de337a).
+- Prevention: Tier 3: no mechanism; the rerun on the next build decides, and a second miss is a product finding on the badge's readiness.
+- Cleanup: the world was cleaned after the diagnostic replay; no ownership is left. The group ran again on the next build and passed (report `2026-10-09T045039015Z-143d6008`, run `2026-10-09T045345382Z-736cc8`), with the badge in its capture.
+
+## 2026-10-09: audit:performance:planning environment failure
+
+<!-- incident-run: 2026-10-09T031331756Z-4990a3 -->
+
+- Run: run `2026-10-09T031331756Z-4990a3`, group `audit:performance:planning`, target local, fingerprint `86c66885d490`, world `490e7742d55549a485e6b5f827112077`.
+- Failure point: Execution evidence: scenario-latencies.ndjson (planning.occurrence.cross-session median): regressed to 961.5ms against the reviewed 683.800048828125ms baseline (limit 934ms).
+- Root cause: The workstation ran slower than at calibration: the HEAD build, replayed on the same retained calendar world, regressed the same scenarios (calendar.board.cold-open 1622 ms, six-weeks 1360 ms against references 1088 and 795), and a fresh HEAD lists run regressed jobs.detail.open 730 and tasks.list.open 1080 ms; the deterministic lab counts of the same routes did not change.
+- Prevention: Tier 3: machine load is outside the repository; the lab counts (audit:lab:*) now separate a product regression from a slow machine, and a wall-clock regression is judged against a HEAD replay before it is called product.
+- Cleanup: the retained world and the diagnostic worlds were cleaned; no ownership is left. The source tree changed afterwards, so the group qualified for its next attempt, which passed against the unchanged references in report `2026-10-09T045039015Z-143d6008`.
+
+## 2026-10-09: audit:performance:lists environment failure
+
+<!-- incident-run: 2026-10-09T031331756Z-78f2cb -->
+
+- Run: run `2026-10-09T031331756Z-78f2cb`, group `audit:performance:lists`, target local, fingerprint `92b104506838`, world `d05365cc75504172995459298fcccee4`.
+- Failure point: Execution evidence: scenario-latencies.ndjson (customers.list.open median): regressed to 1423.800048828125ms against the reviewed 821.599853515625ms baseline (limit 1072ms).
+- Root cause: The workstation ran slower than at calibration: the HEAD build, replayed on the same retained calendar world, regressed the same scenarios (calendar.board.cold-open 1622 ms, six-weeks 1360 ms against references 1088 and 795), and a fresh HEAD lists run regressed jobs.detail.open 730 and tasks.list.open 1080 ms; the deterministic lab counts of the same routes did not change.
+- Prevention: Tier 3: machine load is outside the repository; the lab counts (audit:lab:*) now separate a product regression from a slow machine, and a wall-clock regression is judged against a HEAD replay before it is called product.
+- Cleanup: the retained world and the diagnostic worlds were cleaned; no ownership is left. The source tree changed afterwards, so the group qualified for its next attempt, which passed against the unchanged references in report `2026-10-09T045039015Z-143d6008`.
+
+## 2026-10-09: audit:performance:calendar environment failure
+
+<!-- incident-run: 2026-10-09T031331756Z-e49332 -->
+
+- Run: run `2026-10-09T031331756Z-e49332`, group `audit:performance:calendar`, target local, fingerprint `6db87a4e4f2c`, world `cfcc3881744d466f83c0f5433301943f`.
+- Failure point: Execution evidence: scenario-latencies.ndjson (calendar.board.cold-open median): regressed to 1887.900146484375ms against the reviewed 1087.60009765625ms baseline (limit 1360ms).
+- Root cause: The workstation ran slower than at calibration: the HEAD build, replayed on the same retained calendar world, regressed the same scenarios (calendar.board.cold-open 1622 ms, six-weeks 1360 ms against references 1088 and 795), and a fresh HEAD lists run regressed jobs.detail.open 730 and tasks.list.open 1080 ms; the deterministic lab counts of the same routes did not change.
+- Prevention: Tier 3: machine load is outside the repository; the lab counts (audit:lab:*) now separate a product regression from a slow machine, and a wall-clock regression is judged against a HEAD replay before it is called product.
+- Cleanup: the retained world and the diagnostic worlds were cleaned; no ownership is left. The source tree changed afterwards, so the group qualified for its next attempt, which passed against the unchanged references in report `2026-10-09T045039015Z-143d6008`.
+
 ## 2026-10-04: second failed release run
 
 Release report `2026-10-04T040507844Z-1804df7b` (local target) passed 88 of 91 groups. It followed the failed report `2026-10-01T215342873Z-4181463d`, so the release breaker asked for this entry.

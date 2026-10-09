@@ -33,7 +33,9 @@ export function useProjectDetailTime(projectId: string, liveJobs: Job[]) {
   });
   const projectTimeEntries = useMemo(() => timeView.data ?? [], [timeView.data]);
   const isLoadingTime = timeView.isLoading;
-  const timeLoadError = !isLoadingTime && (timeView.error !== null || timeView.data === undefined);
+  // Only a read that never produced data is a load error; a failed refresh
+  // keeps the totals and marks them stale (freshness contract rule 5).
+  const timeLoadError = !isLoadingTime && timeView.data === undefined;
 
   const projectTimeSummary = useMemo(() => {
     let totalMinutes = 0;

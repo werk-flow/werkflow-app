@@ -181,6 +181,11 @@ export function customerPickerSearch(page: Page): Locator {
   return page.getByPlaceholder(SHARED_COPY.picker.searchCustomer);
 }
 
+/** The search field of the open job picker; the popover renders outside the form. */
+export function jobPickerSearch(page: Page): Locator {
+  return page.getByPlaceholder(SHARED_COPY.picker.searchJob);
+}
+
 /** The page header of the open page (title, breadcrumb, actions, area navigation). */
 export function pageHeader(page: Page): Locator {
   return page.getByRole('main').locator('[data-page-header]');
@@ -262,7 +267,17 @@ export function pagerButton(pager: Locator, direction: 'previous' | 'next'): Loc
 
 /** The text of the entry count status for one page. */
 export function pagerRange(first: number, last: number, total: number): string {
-  return `${first}–${last} von ${total}`;
+  return `${pagerRangeStart(first, last)} ${total}`;
+}
+
+/** The entry count status of one page up to its total („1–50 von“), for a total the test does not fix. */
+export function pagerRangeStart(first: number, last: number): string {
+  return `${first}–${last} von`;
+}
+
+/** The retry button of a region whose read failed (SectionError). */
+export function retryButton(scope: Page | Locator): Locator {
+  return scope.getByRole('button', { name: SHARED_COPY.action.retry, exact: true });
 }
 
 // Pages often render the same text twice (desktop table + hidden mobile card);

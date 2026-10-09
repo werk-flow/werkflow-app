@@ -48,6 +48,10 @@ const BOARD_COPY = {
   memberFilterWithCount: /Mitarbeiter \(\d+\)/,
   memberFilterPicker: 'Mitarbeiter filtern',
   lockedCard: /begonnen oder vergangen/,
+  /** The persistent banner of a failed read that keeps the last-known rows (calendar-container.tsx). */
+  readFailed: 'Der Kalender konnte nicht aktualisiert werden',
+  /** The section error that replaces an uncovered view (calendar-body.tsx). */
+  unavailable: 'Kalender konnte nicht geladen werden',
 } as const;
 
 /** The two layers a calendar view shows and can hide. */
@@ -136,6 +140,19 @@ export function calendarPageHeading(page: Page): Locator {
 export function calendarRefreshButton(page: Page): Locator {
   return page.getByRole('button', { name: BOARD_COPY.refresh, exact: true });
 }
+
+/** The banner of a failed calendar read that keeps the last-known rows. */
+export function calendarReadFailureBanner(page: Page): Locator {
+  return page.getByRole('alert').filter({ hasText: BOARD_COPY.readFailed });
+}
+
+/** The close button of one calendar banner. */
+export function bannerCloseButton(banner: Locator): Locator {
+  return banner.getByRole('button', { name: BOARD_COPY.closeBanner, exact: true });
+}
+
+/** The title of the section error that replaces an uncovered calendar view. */
+export const CALENDAR_UNAVAILABLE_TITLE = BOARD_COPY.unavailable;
 
 /** The header's step back or forward by one period of the current view. */
 export function calendarStepButton(page: Page, direction: keyof typeof CALENDAR_STEPS): Locator {

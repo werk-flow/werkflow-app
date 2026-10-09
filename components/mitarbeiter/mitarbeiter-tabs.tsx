@@ -103,6 +103,7 @@ export function MitarbeiterTabs({
   const {
     statusMap,
     isLoading: isStatusLoading,
+    isStale: isStatusStale,
     error: statusError,
     refetch: refetchStatus,
   } = useMemberStatus({
@@ -118,10 +119,12 @@ export function MitarbeiterTabs({
 
   // A failed status read must not read as "nobody works": the count is
   // withheld and the members tab names the failure with a retry.
+  // `statusError` stays null when the read threw, so a stale map counts as failed too.
+  const statusFailed = statusError !== null || isStatusStale;
   const activeWorkingCount = useMemo(() => {
-    if (statusError) return null;
+    if (statusFailed) return null;
     return Object.values(statusMap).filter((status) => status.status === 'working').length;
-  }, [statusMap, statusError]);
+  }, [statusMap, statusFailed]);
 
   // Reload server-rendered records and break-policy props. Member status
   // refetches time entries itself, then recomputes when these props change.
@@ -167,7 +170,7 @@ export function MitarbeiterTabs({
         />
 
         <TabsContent value="members" className="mt-4">
-          {statusError ? (
+          {statusFailed ? (
             <SectionError
               className="mb-4"
               onRetry={() => void retryStatus()}
@@ -184,7 +187,7 @@ export function MitarbeiterTabs({
             onRoleChange={handleRoleChange}
             statusMap={statusMap}
             isStatusLoading={isStatusLoading}
-            isStatusUnavailable={statusError !== null}
+            isStatusUnavailable={statusFailed}
             busyMemberIds={busyIds}
             targetsByUserId={targetsByUserId}
             personnelByUserId={personnelByUserId}

@@ -1,5 +1,6 @@
 'use client';
 
+import { StaleRegion } from '@/components/shared/stale-region';
 import { useCallback, useState } from 'react';
 import { CalendarCheck, FileCheck, MoreVertical, Pencil, Plus, Thermometer, XCircle } from 'lucide-react';
 
@@ -89,14 +90,18 @@ export function SicknessReportsSection({ recordId }: { recordId: string }) {
         <SectionError onRetry={() => void refresh()} retryPending={view.isRefreshing}>
           Die Krankmeldungen konnten nicht geladen werden.
         </SectionError>
-      ) : sorted.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Keine Krankmeldungen erfasst.</p>
       ) : (
-        <ul className="grid gap-2">
-          {sorted.map((report) => (
-            <SicknessReportRow key={report.id} report={report} setDialogState={setDialogState} />
-          ))}
-        </ul>
+        <StaleRegion stale={view.isStale} onRetry={refresh}>
+          {sorted.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Keine Krankmeldungen erfasst.</p>
+          ) : (
+            <ul className="grid gap-2">
+              {sorted.map((report) => (
+                <SicknessReportRow key={report.id} report={report} setDialogState={setDialogState} />
+              ))}
+            </ul>
+          )}
+        </StaleRegion>
       )}
 
       {dialogState.mode === 'record' && <RecordSicknessDialog recordId={recordId} onClose={closeDialog} />}

@@ -1,5 +1,6 @@
 'use client';
 
+import { StaleRegion } from '@/components/shared/stale-region';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Play, ArrowLeftRight, Briefcase } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -143,16 +144,18 @@ export function JobPickerModal({
             {isLoading && jobs.length === 0 ? (
               <JobPickerLoadingRows />
             ) : (
-              <JobPickerOptionList
-                filteredJobs={filteredJobs}
-                plannedTodayCount={plannedTodayCount}
-                selectedJobId={selectedJobId}
-                setSelectedJobId={setSelectedJobId}
-                isLoading={isLoading}
-                loadFailed={view.data === undefined}
-                onRetry={() => void view.refresh()}
-                searchQuery={searchQuery}
-              />
+              <StaleRegion stale={view.isStale} onRetry={view.refresh}>
+                <JobPickerOptionList
+                  filteredJobs={filteredJobs}
+                  plannedTodayCount={plannedTodayCount}
+                  selectedJobId={selectedJobId}
+                  setSelectedJobId={setSelectedJobId}
+                  isLoading={isLoading}
+                  loadFailed={view.data === undefined}
+                  onRetry={() => void view.refresh()}
+                  searchQuery={searchQuery}
+                />
+              </StaleRegion>
             )}
           </DialogBody>
 

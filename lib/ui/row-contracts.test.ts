@@ -159,6 +159,34 @@ describe('row interaction and mobile-table contracts', () => {
     expect(violations).toEqual([]);
   });
 
+  // Load on intent (docs/technical/performance.md, "Prefetch"): a table row that
+  // navigates on click carries no link the router could prefetch, so it warms
+  // its destination's shell when the pointer or the keyboard reaches it. The
+  // office points at a row before it clicks; the shell, its loading state and
+  // its code are then ready, and the data is still read at the click.
+  test('a clickable table row that navigates warms the same destination on intent', () => {
+    const violations: string[] = [];
+    for (const [file, source] of sources) {
+      if (!source.includes('router.push') || !source.includes('TableRow')) continue;
+      const syntax = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+      function visit(node: ts.Node): void {
+        const opening = isOpening(node) ? node : undefined;
+        if (opening && opening.tagName.getText() === 'TableRow') {
+          const push = attribute(opening, 'onClick')
+            ?.getText()
+            .match(/router\.push\(([^)]+)\)/)?.[1];
+          if (push)
+            for (const handler of ['onMouseEnter', 'onFocus'])
+              if (!attribute(opening, handler)?.getText().includes(`router.prefetch(${push})`))
+                violations.push(`${file}: ${handler} does not prefetch ${push}`);
+        }
+        ts.forEachChild(node, visit);
+      }
+      visit(syntax);
+    }
+    expect(violations).toEqual([]);
+  });
+
   test('detects a skeleton losing hover independently of its live row', () => {
     const rows = rowInteractions('<><ListRow interactive onClick={open} /><SkeletonList /></>');
     expect(rows).toEqual([

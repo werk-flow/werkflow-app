@@ -6,6 +6,7 @@
 // with a server-computed preview. No drag gesture here ever sends a message
 // or records a commitment silently.
 
+import { StaleRegion } from '@/components/shared/stale-region';
 import { useCallback } from 'react';
 
 import { useBusyIds } from '@/hooks/use-busy-id';
@@ -54,7 +55,7 @@ export function DispatchPanel({
   const rowBusy = useBusyIds();
   const dialogs = useDispatchPanelRowDialogs();
   const { requestApproval, warningDialog } = usePlanningWarningConfirmation();
-  const { today, overview, loadError, refresh, openChallenges } = useDispatchPanelOverview();
+  const { today, overview, loadError, isStale, refresh, openChallenges } = useDispatchPanelOverview();
   const panelRef = useDispatchPanelFocus(onClose);
   const afterMutation = useCallback(async () => {
     await refresh();
@@ -63,7 +64,7 @@ export function DispatchPanel({
   // Success path of a row action: the banner fires after persistence (the
   // dialog only reports success once the server confirmed), then the row
   // shows its settle indicator until the re-read lands. `refresh` never
-  // rejects — a failed read surfaces through the stale-state SectionError.
+  // rejects — a failed read surfaces through the StaleRegion notice.
   const settleRow = useCallback(
     (rowKey: string, message: string) => {
       showBanner({ variant: 'success', message });
@@ -112,25 +113,27 @@ export function DispatchPanel({
           </div>
         )}
 
-        {openChallenges.length > 0 && (
-          <DispatchPanelChallenges
-            openChallenges={openChallenges}
-            rowBusy={rowBusy}
-            setResolveChallengeId={dialogs.setResolveChallengeId}
-          />
-        )}
+        <StaleRegion stale={isStale} onRetry={refresh} className="space-y-5">
+          {openChallenges.length > 0 && (
+            <DispatchPanelChallenges
+              openChallenges={openChallenges}
+              rowBusy={rowBusy}
+              setResolveChallengeId={dialogs.setResolveChallengeId}
+            />
+          )}
 
-        <DispatchPanelOccurrences overview={overview} rowBusy={rowBusy} dialogs={dialogs} batch={batch} />
+          <DispatchPanelOccurrences overview={overview} rowBusy={rowBusy} dialogs={dialogs} batch={batch} />
 
-        {overview && overview.unscheduledJobs.length > 0 && (
-          <DispatchPanelUnscheduledJobs
-            overview={overview}
-            rowBusy={rowBusy}
-            setCancelDispatch={dialogs.setCancelDispatch}
-          />
-        )}
+          {overview && overview.unscheduledJobs.length > 0 && (
+            <DispatchPanelUnscheduledJobs
+              overview={overview}
+              rowBusy={rowBusy}
+              setCancelDispatch={dialogs.setCancelDispatch}
+            />
+          )}
 
-        {overview && overview.travelNotes.length > 0 && <DispatchPanelTravelNotes overview={overview} />}
+          {overview && overview.travelNotes.length > 0 && <DispatchPanelTravelNotes overview={overview} />}
+        </StaleRegion>
       </div>
 
       {batchMode && <DispatchPanelBatchForm batch={batch} />}

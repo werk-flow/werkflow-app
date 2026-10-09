@@ -29,6 +29,7 @@ export function useWorkArtifactSave({
     setEditing,
     setError,
     load,
+    applyDetail,
     handleMutationFailure,
     runArtifactTask,
   } = editor;
@@ -71,7 +72,9 @@ export function useWorkArtifactSave({
           await handleMutationFailure(result, 'Der Arbeitsnachweis konnte nicht gespeichert werden.', false);
         return;
       }
-      await load(result.artifactId);
+      // The save returns the stored detail; only a failed read after the write needs a second round trip.
+      if (result.artifact) applyDetail(result.artifact);
+      else await load(result.artifactId);
       setEditing(false);
       setCorrectionReason('');
       showBanner({

@@ -191,6 +191,8 @@ type JobDetailSideColumnProps = {
   inventoryItems: InventoryPickerOption[] | null;
   inventoryLocations: InventoryLocation[] | null;
   isLoadingTime: boolean;
+  isTimeStale: boolean;
+  refreshTime: () => Promise<void>;
   timeSummary: JobDetailTimeSummary;
   setShowProjectDialog: (open: boolean) => void;
 };
@@ -205,6 +207,8 @@ export function JobDetailSideColumn({
   inventoryItems,
   inventoryLocations,
   isLoadingTime,
+  isTimeStale,
+  refreshTime,
   timeSummary,
   setShowProjectDialog,
 }: JobDetailSideColumnProps) {
@@ -264,6 +268,8 @@ export function JobDetailSideColumn({
       {/* Zeiterfassung und Aktivität */}
       <JobDetailTimeCard
         isLoadingTime={isLoadingTime}
+        isTimeStale={isTimeStale}
+        refreshTime={refreshTime}
         progressTargetMinutes={liveJob.plannedWorkingMinutes}
         timeSummary={timeSummary}
       />

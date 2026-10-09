@@ -109,6 +109,8 @@ export function PersonnelRecordsSection({ entries, profileNames }: PersonnelReco
                   key={record.id}
                   interactive
                   onClick={() => router.push(`/mitarbeiter/${record.id}`)}
+                  onMouseEnter={() => router.prefetch(`/mitarbeiter/${record.id}`)}
+                  onFocus={() => router.prefetch(`/mitarbeiter/${record.id}`)}
                 >
                   <TableCell className="max-w-0">
                     {/* Real link inside the clickable row for keyboard users,

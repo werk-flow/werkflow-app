@@ -34,6 +34,7 @@ import type {
   WorkArtifactDetail,
   WorkArtifactActionType,
   WorkArtifactMutationResult,
+  WorkArtifactSaveResult,
   WorkArtifactStatus,
   WorkArtifactSummary,
 } from './types';
@@ -323,7 +324,7 @@ export async function getWorkArtifactDetail(
   };
 }
 
-export async function saveWorkArtifact(input: SaveWorkArtifactInput): Promise<WorkArtifactMutationResult> {
+export async function saveWorkArtifact(input: SaveWorkArtifactInput): Promise<WorkArtifactSaveResult> {
   const parsed = saveWorkArtifactSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const auth = await authenticateAndAuthorize();
@@ -362,12 +363,15 @@ export async function saveWorkArtifact(input: SaveWorkArtifactInput): Promise<Wo
   }
   const result = data as Record<string, Json | undefined>;
   revalidateWorkEvidenceViews();
+  // The authoritative detail after the write, read with the same permission checks as an open.
+  const saved = await getWorkArtifactDetail(parsed.data.artifactId);
   return {
     success: true,
     artifactId: parsed.data.artifactId,
     version: Number(result.version),
     status: String(result.status) as WorkArtifactStatus,
     data,
+    artifact: saved.success ? saved.artifact : null,
   };
 }
 

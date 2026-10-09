@@ -38,7 +38,7 @@ To update the references after an intended design change:
 
 1. Run the release plan on the wave's final tree (`bun run test:verify --mode release`) and the cloud canary. Do not audit a wave on a partial plan.
 2. For each of the six virtues, read its block in `AGENTS.md` and the checklist of its owner doc. Walk the wave's slice records against the items tagged `judgment` and against the recorded divergences. Write one finding list per virtue with file and line. A divergence that recurs is a sign that its default should change.
-3. Check registration. Every flow the wave added is a measured scenario, a component contract, a control-map row, or a catalog clause with coverage. A declined registration states its reason in the slice record.
+3. Check registration. Every flow the wave added is a journey in `lib/testing/journeys.ts` or a measured scenario, a component contract, a control-map row, or a catalog clause with coverage. A declined registration states its reason in the slice record.
 4. Push every finding up the ladder ([decision 0005](../decisions/0005-enforcement-ladder.md)). Build the mechanism or the check where one is reachable. Otherwise add a row to the backlog. Change the virtue's rule in the same change when the finding shows that the rule was missing or wrong.
 5. Record the audit in the wave's ledger under `docs/plans/phase-1/audits/`. Move every lasting fact to its living home before the ledger closes.
 

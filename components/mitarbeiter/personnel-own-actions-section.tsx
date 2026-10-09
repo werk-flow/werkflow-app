@@ -1,5 +1,6 @@
 'use client';
 
+import { StaleRegion } from '@/components/shared/stale-region';
 import { useId, useState } from 'react';
 import { FileUp } from 'lucide-react';
 
@@ -144,7 +145,9 @@ export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisi
     },
   });
 
-  if (view.isLoading) return <Skeleton className="h-28 w-full" />;
+  // On the task list the section stays empty for most people, so a placeholder there
+  // would collapse and pull the list up while it loads (audit:layout streaming shift).
+  if (view.isLoading) return forceVisible ? <Skeleton className="h-28 w-full" /> : null;
   if (!view.data) {
     return forceVisible ? (
       <SectionError onRetry={() => void view.refresh()} retryPending={view.isRefreshing}>
@@ -268,26 +271,28 @@ export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisi
           setUploadOpen(true);
         }}
       />
-      {requirements.length === 0 && documents.length === 0 ? (
-        <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-          Keine offenen Personalaufgaben oder freigegebenen Unterlagen.
-        </p>
-      ) : null}
-      {requirements.length > 0 ? (
-        <PersonnelOwnRequirementList
-          requirements={requirements}
-          isBusy={isBusy}
-          onAcknowledge={acknowledge}
-        />
-      ) : null}
-      {documents.length > 0 ? (
-        <PersonnelOwnDocumentList
-          documents={documents}
-          isBusy={isBusy}
-          onDownload={download}
-          onAcknowledge={acknowledgeDocument}
-        />
-      ) : null}
+      <StaleRegion stale={view.isStale} onRetry={view.refresh} className="space-y-4">
+        {requirements.length === 0 && documents.length === 0 ? (
+          <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+            Keine offenen Personalaufgaben oder freigegebenen Unterlagen.
+          </p>
+        ) : null}
+        {requirements.length > 0 ? (
+          <PersonnelOwnRequirementList
+            requirements={requirements}
+            isBusy={isBusy}
+            onAcknowledge={acknowledge}
+          />
+        ) : null}
+        {documents.length > 0 ? (
+          <PersonnelOwnDocumentList
+            documents={documents}
+            isBusy={isBusy}
+            onDownload={download}
+            onAcknowledge={acknowledgeDocument}
+          />
+        ) : null}
+      </StaleRegion>
       {!uploadOpen && <ErrorText>{error}</ErrorText>}
 
       <PersonnelEvidenceUploadDialog

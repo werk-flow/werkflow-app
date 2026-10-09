@@ -5,6 +5,7 @@
 // that this person saw this exact work instruction revision — never
 // attendance, time, or a customer promise.
 
+import { StaleRegion } from '@/components/shared/stale-region';
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
 import { Send } from 'lucide-react';
 
@@ -77,7 +78,7 @@ function useJobDispatchCards({
     });
   }, [view.data, view.isLoading, initialError]);
 
-  return { cards, loadError, refresh, isRefreshing: view.isRefreshing };
+  return { cards, loadError, refresh, isRefreshing: view.isRefreshing, isStale: view.isStale };
 }
 
 export function JobDispatchSection({
@@ -94,7 +95,7 @@ export function JobDispatchSection({
   } | null>(null);
   const { run: runOnCard, isBusy: isCardBusy } = useBusyIds();
   const { run: runChallenge, isPending: isChallenging } = useServerAction(challengeDispatch);
-  const { cards, loadError, refresh, isRefreshing } = useJobDispatchCards({
+  const { cards, loadError, refresh, isRefreshing, isStale } = useJobDispatchCards({
     jobId,
     initialCards,
     initialError,
@@ -164,7 +165,7 @@ export function JobDispatchSection({
       <SectionTitle id="job-dispatch-heading" icon={<Send className="size-4" />} className="mb-4">
         Mein Einsatz
       </SectionTitle>
-      <div className="space-y-3">
+      <StaleRegion stale={isStale} onRetry={refresh} className="space-y-3">
         {cards.map((card) => (
           <JobDispatchCard
             key={card.dispatchId}
@@ -177,7 +178,7 @@ export function JobDispatchSection({
             onChallenge={() => challenge.startChallenge(card)}
           />
         ))}
-      </div>
+      </StaleRegion>
 
       <JobDispatchChallengeDialog
         isOpen={!readOnly && challenge.challengeTarget !== null}

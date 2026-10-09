@@ -1,5 +1,6 @@
 'use client';
 
+import { StaleRegion } from '@/components/shared/stale-region';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useRef, useState } from 'react';
 import { Clock, Pencil } from 'lucide-react';
@@ -381,9 +382,7 @@ export function EntryHistory({ organizationId, members = [] }: EntryHistoryProps
         isSettlingNewEntry={settling.isBusy(NEW_ENTRY_ID)}
       />
 
-      {/* Results: a failed refresh keeps the last rows below its retry. */}
-      {view.isStale ? loadError : null}
-
+      {/* Results: a failed refresh keeps the last rows, marked stale and inert below its retry. */}
       {!hasRange ? (
         <EmptyState
           icon={Clock}
@@ -394,32 +393,36 @@ export function EntryHistory({ organizationId, members = [] }: EntryHistoryProps
         <EntryHistorySkeleton />
       ) : view.data === undefined ? (
         loadError
-      ) : entries.length === 0 ? (
-        <EmptyState
-          icon={Clock}
-          title="Keine Einträge gefunden"
-          description="Für den ausgewählten Zeitraum gibt es keine Einträge. Wähle einen anderen Zeitraum."
-        />
       ) : (
-        <>
-          <p className="text-sm text-muted-foreground">
-            {entries.length} {entries.length === 1 ? 'Eintrag' : 'Einträge'} gefunden
-          </p>
+        <StaleRegion stale={view.isStale} onRetry={view.refresh} className="space-y-4">
+          {entries.length === 0 ? (
+            <EmptyState
+              icon={Clock}
+              title="Keine Einträge gefunden"
+              description="Für den ausgewählten Zeitraum gibt es keine Einträge. Wähle einen anderen Zeitraum."
+            />
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                {entries.length} {entries.length === 1 ? 'Eintrag' : 'Einträge'} gefunden
+              </p>
 
-          <EntryHistoryCards
-            entries={entries}
-            settling={settling}
-            hydrated={hydrated}
-            setCorrectionEntry={setCorrectionEntry}
-          />
+              <EntryHistoryCards
+                entries={entries}
+                settling={settling}
+                hydrated={hydrated}
+                setCorrectionEntry={setCorrectionEntry}
+              />
 
-          <EntryHistoryTable
-            entries={entries}
-            settling={settling}
-            hydrated={hydrated}
-            setCorrectionEntry={setCorrectionEntry}
-          />
-        </>
+              <EntryHistoryTable
+                entries={entries}
+                settling={settling}
+                hydrated={hydrated}
+                setCorrectionEntry={setCorrectionEntry}
+              />
+            </>
+          )}
+        </StaleRegion>
       )}
       {correctionEntry !== undefined ? (
         <TimeCorrectionDialog

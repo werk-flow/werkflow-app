@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { getJobInstructionItems, getProjectInstructionItems } from '@/lib/jobs/instruction-items-actions';
 import type { InstructionListOwner, JobInstructionItemWithDetails } from '@/lib/jobs/types';
@@ -34,10 +34,14 @@ export function useJobInstructionItemList({
     setItems((currentItems) => [...initialItems, ...currentItems.filter((item) => item.isOptimistic)]);
   }
 
+  // The project detail route renders these rows into `initialItems`, so the
+  // list reads them again only when its owner raises the refresh signal.
+  const syncedSignalRef = useRef(refreshSignal);
   useEffect(() => {
-    if (owner.projectId) void syncItemsFromServer();
-    // The project detail route does not preload these rows.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- syncItemsFromServer reads the current project; it runs once per project or refresh signal
+    if (!owner.projectId || refreshSignal === syncedSignalRef.current) return;
+    syncedSignalRef.current = refreshSignal;
+    void syncItemsFromServer();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- syncItemsFromServer reads the current project; it runs once per raised refresh signal
   }, [owner.projectId, refreshSignal]);
 
   /** Never throws: a failed refresh keeps the rows, and the caller's own feedback still runs. */

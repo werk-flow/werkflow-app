@@ -139,6 +139,8 @@ export function useWeeklyTimeData({
     todayIndex: view.data?.todayIndex ?? getTodayIndex(),
     weekLabel: view.data?.weekLabel ?? computeWeekLabel(getWeekBounds().monday),
     isLoading: view.isLoading,
+    /** A refresh failed: the week is last-known. */
+    isStale: view.isStale,
     error: view.error,
     refetch: view.refresh,
   };

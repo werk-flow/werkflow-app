@@ -11,6 +11,7 @@ import { formatDurationOrDash } from './job-detail-format';
 import { PersonAvatar, getSessionPersonName } from './job-detail-person';
 import type { JobDetailTimeSummary } from './use-job-detail-time-summary';
 import { SectionTitle } from '@/components/shared/section-title';
+import { StaleRegion } from '@/components/shared/stale-region';
 
 function JobDetailActiveWorkers({ activeWorkers }: Pick<JobDetailTimeSummary, 'activeWorkers'>) {
   return (
@@ -178,12 +179,17 @@ function JobDetailSessionTimeline({
 
 type JobDetailTimeCardProps = {
   isLoadingTime: boolean;
+  /** A refresh failed: the recorded times are last-known. */
+  isTimeStale: boolean;
+  refreshTime: () => Promise<void>;
   progressTargetMinutes: number | null;
   timeSummary: JobDetailTimeSummary;
 };
 
 export function JobDetailTimeCard({
   isLoadingTime,
+  isTimeStale,
+  refreshTime,
   progressTargetMinutes,
   timeSummary,
 }: JobDetailTimeCardProps) {
@@ -215,7 +221,7 @@ export function JobDetailTimeCard({
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <StaleRegion stale={isTimeStale} onRetry={refreshTime} className="space-y-4">
           {activeWorkers.length > 0 && <JobDetailActiveWorkers activeWorkers={activeWorkers} />}
 
           {hasProgressTarget ? (
@@ -246,7 +252,7 @@ export function JobDetailTimeCard({
               setShowAllSessions={setShowAllSessions}
             />
           )}
-        </div>
+        </StaleRegion>
       )}
     </div>
   );

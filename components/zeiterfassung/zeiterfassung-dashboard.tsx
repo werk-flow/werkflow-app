@@ -1,5 +1,6 @@
 'use client';
 
+import { StaleRegion } from '@/components/shared/stale-region';
 import { ErrorText } from '@/components/ui/error-text';
 import { ClockActionList } from '@/components/clock-action-list';
 import { getTargetSourceHint } from '@/lib/personnel/targets';
@@ -28,7 +29,14 @@ export function ZeiterfassungDashboard({
   const effectiveState =
     state && state.organizationId === organizationId ? state : initialOverview.clockState;
 
-  const { weekData, weekTargets, todayIndex, weekLabel } = useWeeklyTimeData({
+  const {
+    weekData,
+    weekTargets,
+    todayIndex,
+    weekLabel,
+    isStale: weekStale,
+    refetch: refetchWeek,
+  } = useWeeklyTimeData({
     organizationId,
     userId,
     breakMode: effectiveState.breakMode,
@@ -78,15 +86,17 @@ export function ZeiterfassungDashboard({
       <div className="space-y-3">
         <h3 className="text-sm font-medium text-muted-foreground px-1">Status</h3>
 
-        <ZeiterfassungDashboardStatusCard
-          effectiveState={effectiveState}
-          weekData={weekData}
-          weekTargets={weekTargets}
-          todayIndex={todayIndex}
-          weekLabel={weekLabel}
-          liveTotalMinutes={liveTotalMinutes}
-          liveBreakMinutes={totals.liveBreakMinutes}
-        />
+        <StaleRegion stale={weekStale} onRetry={refetchWeek}>
+          <ZeiterfassungDashboardStatusCard
+            effectiveState={effectiveState}
+            weekData={weekData}
+            weekTargets={weekTargets}
+            todayIndex={todayIndex}
+            weekLabel={weekLabel}
+            liveTotalMinutes={liveTotalMinutes}
+            liveBreakMinutes={totals.liveBreakMinutes}
+          />
+        </StaleRegion>
       </div>
 
       <ErrorText className="text-center text-xs">{statusError}</ErrorText>

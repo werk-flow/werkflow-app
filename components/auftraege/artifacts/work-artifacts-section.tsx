@@ -1,5 +1,6 @@
 'use client';
 
+import { StaleRegion } from '@/components/shared/stale-region';
 import { PlainButton } from '@/components/ui/plain-button';
 import { useId, useState, type ReactElement } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -130,32 +131,34 @@ export function WorkArtifactsSection({
           </Button>
         )}
       </div>
-      {artifacts.length === 0 ? (
-        <p className="mt-4 rounded-md border border-dashed bg-muted/20 px-4 py-6 text-center text-sm text-muted-foreground">
-          Noch keine Arbeitsnachweise erfasst.
-        </p>
-      ) : (
-        <div className="mt-4 divide-y rounded-md border">
-          {artifacts.map((artifact) => (
-            <PlainButton
-              key={artifact.id}
-              type="button"
-              data-artifact-id={artifact.id}
-              onClick={() => setSelectedId(artifact.id)}
-              className="flex min-h-14 w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-muted/40"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{artifact.currentRevision.title}</p>
-                <p className="text-xs text-muted-foreground">
-                  {WORK_ARTIFACT_KIND_LABELS[artifact.kind]} · Version{' '}
-                  {artifact.currentRevision.revision_number}
-                </p>
-              </div>
-              <Badge variant="outline">{WORK_ARTIFACT_STATUS_LABELS[artifact.status]}</Badge>
-            </PlainButton>
-          ))}
-        </div>
-      )}
+      <StaleRegion stale={view.isStale} onRetry={refresh}>
+        {artifacts.length === 0 ? (
+          <p className="mt-4 rounded-md border border-dashed bg-muted/20 px-4 py-6 text-center text-sm text-muted-foreground">
+            Noch keine Arbeitsnachweise erfasst.
+          </p>
+        ) : (
+          <div className="mt-4 divide-y rounded-md border">
+            {artifacts.map((artifact) => (
+              <PlainButton
+                key={artifact.id}
+                type="button"
+                data-artifact-id={artifact.id}
+                onClick={() => setSelectedId(artifact.id)}
+                className="flex min-h-14 w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-muted/40"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{artifact.currentRevision.title}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {WORK_ARTIFACT_KIND_LABELS[artifact.kind]} · Version{' '}
+                    {artifact.currentRevision.revision_number}
+                  </p>
+                </div>
+                <Badge variant="outline">{WORK_ARTIFACT_STATUS_LABELS[artifact.status]}</Badge>
+              </PlainButton>
+            ))}
+          </div>
+        )}
+      </StaleRegion>
       {view.isRefreshing && (
         <p className="mt-2 text-xs text-muted-foreground">Arbeitsnachweise werden aktualisiert…</p>
       )}

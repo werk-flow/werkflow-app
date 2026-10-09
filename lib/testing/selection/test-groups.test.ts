@@ -13,6 +13,7 @@ import {
   type TestGroup,
 } from './test-groups';
 import { expectDefined } from '../spec-support/expect-defined';
+import { labStepsForFiles } from '../lab-steps';
 import { groupSelections } from './group-selection';
 
 function group(id: string, files: string[]): TestGroup {
@@ -96,6 +97,7 @@ describe('independent group registry', () => {
       requireFreshness: false,
       requireReadiness: true,
       requiredScenarios: [],
+      requiredLabSteps: [],
       exclusive: true,
     });
     // Clearing incidental caller metadata cannot erase the required helper contract.
@@ -104,12 +106,30 @@ describe('independent group registry', () => {
         { ...audit, timing: { requireFreshness: false, requireReadiness: false, exclusive: false } },
         root,
       ),
-    ).toEqual({ requireFreshness: false, requireReadiness: true, requiredScenarios: [], exclusive: true });
+    ).toEqual({
+      requireFreshness: false,
+      requireReadiness: true,
+      requiredScenarios: [],
+      requiredLabSteps: [],
+      exclusive: true,
+    });
     expect(
       getGroupTimingRequirements(expectDefined(groups.find((entry) => entry.id === 'golden:p1-22')), root)
         .requireReadiness,
     ).toBe(true);
     expect(groups.some((entry) => entry.id === 'golden:integrated')).toBe(false);
+  });
+
+  test('a lab group runs alone, in release mode and on request only, and must record each of its steps', () => {
+    const root = resolve(import.meta.dir, '../../..');
+    for (const id of ['audit:lab:field', 'audit:lab:office']) {
+      const group = expectDefined(getTestGroups(root).find((entry) => entry.id === id));
+      expect(group.files.every(isReleaseOnlySpec)).toBe(true);
+      const timing = getGroupTimingRequirements(group, root);
+      expect(timing.exclusive).toBe(true);
+      expect(timing.requiredLabSteps).toEqual(labStepsForFiles(group.files).map((step) => step.id));
+      expect(timing.requiredLabSteps?.length).toBeGreaterThan(0);
+    }
   });
 
   test('the actual Plantafel freshness measurement is exclusive even without caller metadata', () => {

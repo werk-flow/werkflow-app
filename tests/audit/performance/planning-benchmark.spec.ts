@@ -30,6 +30,7 @@ import { currentRunKey, runDirectory } from '../../golden/support/run-state';
 const PLANNING_DATE = '2026-06-11';
 const LEGACY_DATE = '2026-06-28';
 
+/* eslint-disable playwright-spec/no-copy-in-spec-locator -- measured scenarios planning.occurrence.cross-session, calendar.month.employee-open-to-event and calendar.month.admin-open-to-legacy-event: its locators change only in the run that recalibrates its references (docs/technical/testing.md#deadlines-and-measured-scenarios) */
 test('fixed planning workload proves overlapping saves and both role openings @AUDIT-PERFORMANCE-PLANNING @FRESHNESS', async ({
   adminPage,
   bueroPage,
@@ -198,3 +199,4 @@ test('fixed planning workload proves overlapping saves and both role openings @A
   expect(savedLegacy.occurrenceCount).toBe(1);
   expect(savedLegacy.occurrences[0]?.legacySourceJobId).toBe(savedLegacy.jobId);
 });
+/* eslint-enable playwright-spec/no-copy-in-spec-locator -- the measured test ends here */

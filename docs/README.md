@@ -38,6 +38,7 @@ Examples. "The migration that creates a table grants explicitly; `sql:security` 
 | [environments.md](technical/environments.md) | Anything touches Supabase, env files, R2, a migration or a new machine: project identities, tool access, the migration rule. |
 | [security.md](technical/security.md) | You add a route handler, Server Action, table, privileged function, storage path or provider setting: invariants, mechanisms and checks. |
 | [realtime-and-caching.md](technical/realtime-and-caching.md) | You change a cache tag, a Realtime subscription, a list reader or freshness behavior. |
+| [performance.md](technical/performance.md) | You add a step people repeat daily, read a lab table, change a skeleton, or make a flow faster: journeys, lab counts, payload budgets, layout stability. |
 | [document-storage-and-access.md](technical/document-storage-and-access.md) | You touch document bytes, signed URLs, storage paths, access classes, trash or versions. |
 | [code-quality.md](technical/code-quality.md) | You write or review code: the code-quality checklist, the deletion pass and the independent review. |
 | [testing.md](technical/testing.md) | You implement or verify a change, investigate a failed test, or prepare a release. |

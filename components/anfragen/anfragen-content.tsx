@@ -246,6 +246,8 @@ export function AnfragenContent({ entries, total, hasAnyRequest, query }: Anfrag
                     key={entry.request.id}
                     interactive
                     onClick={() => router.push(`/anfragen/${entry.request.id}`)}
+                    onMouseEnter={() => router.prefetch(`/anfragen/${entry.request.id}`)}
+                    onFocus={() => router.prefetch(`/anfragen/${entry.request.id}`)}
                   >
                     <TableCell className="whitespace-nowrap text-muted-foreground">
                       {entry.request.requestNumber || '—'}

@@ -344,7 +344,8 @@ export function ProjectDetailContent({
               <ProjectDetailTimeSummaryCard
                 isLoadingTime={isLoadingTime}
                 timeLoadError={timeLoadError}
-                onRetry={() => void timeView.refresh()}
+                timeStale={timeView.isStale}
+                onRetry={timeView.refresh}
                 retryPending={timeView.isRefreshing}
                 projectTimeSummary={projectTimeSummary}
               />

@@ -92,6 +92,7 @@ test.describe('Performance profile field work @AUDIT-PERFORMANCE', () => {
     }
   });
 
+  /* eslint-disable playwright-spec/no-copy-in-spec-locator -- measured scenario time.approval.cross-session: its locators change only in the run that recalibrates its reference (docs/technical/testing.md#deadlines-and-measured-scenarios) */
   test("PERF-F2 an approval reaches the employee's open history within the live target @AUDIT-PERFORMANCE-F2", async ({
     bueroPage,
     employeePage,
@@ -141,4 +142,5 @@ test.describe('Performance profile field work @AUDIT-PERFORMANCE', () => {
       ]);
     }
   });
+  /* eslint-enable playwright-spec/no-copy-in-spec-locator -- the measured test ends here */
 });

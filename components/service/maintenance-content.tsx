@@ -6,7 +6,7 @@ import { FileCheck2, Plus } from 'lucide-react';
 import { useOrganization } from '@/components/organization/organization-context';
 import { ListPagination } from '@/components/shared/list-pagination';
 import { useBanner } from '@/components/ui/banner';
-import { SectionError } from '@/components/ui/section-error';
+import { StaleRegion } from '@/components/shared/stale-region';
 import { Button } from '@/components/ui/button';
 import { SearchInput } from '@/components/ui/search-input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -146,78 +146,75 @@ function MaintenanceWorkspaceView({
 
   return (
     <>
-      {live.isStale && (
-        <SectionError onRetry={() => void live.refresh()} retryPending={live.isRefreshing}>
-          Die Wartungsdaten konnten nicht aktualisiert werden.
-        </SectionError>
-      )}
-      <Tabs
-        value={tab}
-        onValueChange={(value) => {
-          if (isMaintenanceList(value)) onTabChange(value);
-        }}
-        className="gap-4"
-      >
-        <TabsList aria-label="Wartungsbereiche">
-          <TabsTrigger value="due">
-            Fälligkeiten <span className="text-xs text-muted-foreground">{totals.due.total}</span>
-          </TabsTrigger>
-          <TabsTrigger value="plans">
-            Pläne <span className="text-xs text-muted-foreground">{totals.plans.total}</span>
-          </TabsTrigger>
-          <TabsTrigger value="coverages">
-            Abdeckungen <span className="text-xs text-muted-foreground">{totals.coverages.total}</span>
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="due" className="space-y-3">
-          <MaintenanceDueList
-            openDue={workspace.dueWork}
-            hasAnyDue={totals.due.hasAny}
-            isBusy={settling.isBusy}
-            onDueActionClick={setDueAction}
-          />
-          <ListPagination
-            label="Fälligkeiten"
-            page={query.duePage}
-            total={totals.due.total}
-            busy={busy}
-            onPageChange={(page) => onPageChange('due', page)}
-          />
-        </TabsContent>
-        <TabsContent value="plans" className="space-y-3">
-          <MaintenancePlanCards
-            plans={workspace.plans}
-            hasAnyPlan={totals.plans.hasAny}
-            pendingPlans={pendingPlans}
-            isBusy={settling.isBusy}
-            onEditClick={setEditPlan}
-            onActionClick={setPlanAction}
-          />
-          <ListPagination
-            label="Wartungspläne"
-            page={query.planPage}
-            total={totals.plans.total}
-            busy={busy}
-            onPageChange={(page) => onPageChange('plans', page)}
-          />
-        </TabsContent>
-        <TabsContent value="coverages" className="space-y-3">
-          <MaintenanceCoverageList
-            coverages={workspace.coverages}
-            hasAnyCoverage={totals.coverages.hasAny}
-            pendingCoverages={pendingCoverages}
-            onFollowUpClick={setCoverageFollowUp}
-            onDocumentsClick={setCoverageDocuments}
-          />
-          <ListPagination
-            label="Abdeckungen"
-            page={query.coveragePage}
-            total={totals.coverages.total}
-            busy={busy}
-            onPageChange={(page) => onPageChange('coverages', page)}
-          />
-        </TabsContent>
-      </Tabs>
+      <StaleRegion stale={live.isStale} onRetry={live.refresh}>
+        <Tabs
+          value={tab}
+          onValueChange={(value) => {
+            if (isMaintenanceList(value)) onTabChange(value);
+          }}
+          className="gap-4"
+        >
+          <TabsList aria-label="Wartungsbereiche">
+            <TabsTrigger value="due">
+              Fälligkeiten <span className="text-xs text-muted-foreground">{totals.due.total}</span>
+            </TabsTrigger>
+            <TabsTrigger value="plans">
+              Pläne <span className="text-xs text-muted-foreground">{totals.plans.total}</span>
+            </TabsTrigger>
+            <TabsTrigger value="coverages">
+              Abdeckungen <span className="text-xs text-muted-foreground">{totals.coverages.total}</span>
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="due" className="space-y-3">
+            <MaintenanceDueList
+              openDue={workspace.dueWork}
+              hasAnyDue={totals.due.hasAny}
+              isBusy={settling.isBusy}
+              onDueActionClick={setDueAction}
+            />
+            <ListPagination
+              label="Fälligkeiten"
+              page={query.duePage}
+              total={totals.due.total}
+              busy={busy}
+              onPageChange={(page) => onPageChange('due', page)}
+            />
+          </TabsContent>
+          <TabsContent value="plans" className="space-y-3">
+            <MaintenancePlanCards
+              plans={workspace.plans}
+              hasAnyPlan={totals.plans.hasAny}
+              pendingPlans={pendingPlans}
+              isBusy={settling.isBusy}
+              onEditClick={setEditPlan}
+              onActionClick={setPlanAction}
+            />
+            <ListPagination
+              label="Wartungspläne"
+              page={query.planPage}
+              total={totals.plans.total}
+              busy={busy}
+              onPageChange={(page) => onPageChange('plans', page)}
+            />
+          </TabsContent>
+          <TabsContent value="coverages" className="space-y-3">
+            <MaintenanceCoverageList
+              coverages={workspace.coverages}
+              hasAnyCoverage={totals.coverages.hasAny}
+              pendingCoverages={pendingCoverages}
+              onFollowUpClick={setCoverageFollowUp}
+              onDocumentsClick={setCoverageDocuments}
+            />
+            <ListPagination
+              label="Abdeckungen"
+              page={query.coveragePage}
+              total={totals.coverages.total}
+              busy={busy}
+              onPageChange={(page) => onPageChange('coverages', page)}
+            />
+          </TabsContent>
+        </Tabs>
+      </StaleRegion>
       {coverageDocuments && (
         <MaintenanceCoverageDocumentsDialog
           open

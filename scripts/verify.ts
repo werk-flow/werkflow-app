@@ -46,6 +46,7 @@ import {
   type RunManifest,
 } from '../tests/golden/support/run-state';
 import { checkLatencyEvidence, latencyEvidenceSchema } from '../lib/testing/latency-evidence';
+import { checkLabEvidence, labEvidenceSchema, type LabEvidenceCheck } from '../lib/testing/lab-evidence';
 import { recoveredEnvironmentRuns } from '../lib/testing/runner/group-recovery';
 import { readGroupDiagnoses, recoveredGroupAttempts } from '../lib/testing/evidence/group-diagnosis';
 import {
@@ -111,6 +112,8 @@ const reportSchema = z.object({
     .record(z.string(), z.object({ reason: z.string(), changedFiles: z.array(z.string()) }))
     .default({}),
   measurements: z.record(z.string(), latencyEvidenceSchema).default({}),
+  /** The lab tables of the lab groups (docs/technical/performance.md), as the author and the reviewer read them. */
+  labCounts: z.record(z.string(), labEvidenceSchema).default({}),
 });
 
 function readHistory(): z.infer<typeof reportSchema>[] {
@@ -214,6 +217,27 @@ function commandForGroup(group: TestGroup, target: 'local' | 'cloud'): string[] 
 }
 
 /** The manifest of a run the parent named itself; a missing file means Playwright never started. */
+/**
+ * The lab evidence of a lab group's run; undefined for any other group. A lab
+ * group runs in release mode or on explicit request only, so its ceilings,
+ * budgets and floors always apply; an unratcheted improvement fails in release mode.
+ */
+function labEvidenceOf(
+  timing: { requiredLabSteps?: readonly string[] | undefined },
+  runKey: string,
+  release: boolean,
+): LabEvidenceCheck | undefined {
+  const requiredSteps = timing.requiredLabSteps ?? [];
+  if (!requiredSteps.length) return undefined;
+  return checkLabEvidence({
+    directory: runDirectory(runKey),
+    runKey,
+    requiredSteps,
+    enforceCeilings: true,
+    release,
+  });
+}
+
 function readRunManifestIfPresent(runKey: string): RunManifest | undefined {
   return existsSync(manifestPath(runKey)) ? readRunManifest(runKey) : undefined;
 }
@@ -331,7 +355,8 @@ async function main(): Promise<void> {
             directory: runDirectory(reusable.runKey),
             ...entry.timing,
             enforceDeadlines: entry.enforceDeadlines,
-          }).problems.length)
+          }).problems.length ||
+          labEvidenceOf(entry.timing, reusable.runKey, options.mode === 'release')?.problems.length)
       )
         reusable = undefined;
       return { ...entry, reusable };
@@ -433,11 +458,15 @@ async function main(): Promise<void> {
         runs: lockedRuns,
       });
       const latencyProblems = entry.reusable.runKey
-        ? checkLatencyEvidence({
-            directory: runDirectory(entry.reusable.runKey),
-            ...entry.timing,
-            enforceDeadlines: entry.enforceDeadlines,
-          }).problems
+        ? [
+            ...checkLatencyEvidence({
+              directory: runDirectory(entry.reusable.runKey),
+              ...entry.timing,
+              enforceDeadlines: entry.enforceDeadlines,
+            }).problems,
+            ...(labEvidenceOf(entry.timing, entry.reusable.runKey, options.mode === 'release')?.problems ??
+              []),
+          ]
         : ['Missing browser run identity'];
       if (invalid || latencyProblems.length)
         throw new Error(
@@ -461,6 +490,7 @@ async function main(): Promise<void> {
       selected: planning.map((entry) => entry.group.id),
       results: [],
       measurements: {},
+      labCounts: {},
       selection: Object.fromEntries(
         planning.flatMap((entry) => {
           const selection = automatic ? selections.get(entry.group.id) : undefined;
@@ -542,12 +572,19 @@ async function main(): Promise<void> {
           canOverlap: (entry) => ['audit', 'golden'].includes(entry.group.kind) && !entry.timing.exclusive,
           run: async (entry) => {
             if (entry.reusable) {
-              if (entry.reusable.runKey)
+              if (entry.reusable.runKey) {
                 report.measurements[entry.group.id] = checkLatencyEvidence({
                   directory: runDirectory(entry.reusable.runKey),
                   ...entry.timing,
                   enforceDeadlines: entry.enforceDeadlines,
                 });
+                const reusedLab = labEvidenceOf(
+                  entry.timing,
+                  entry.reusable.runKey,
+                  options.mode === 'release',
+                );
+                if (reusedLab) report.labCounts[entry.group.id] = reusedLab;
+              }
               report.results.push(entry.reusable);
               publish();
               return;
@@ -691,7 +728,15 @@ async function main(): Promise<void> {
               for (const note of latencyEvidence.overTarget)
                 console.log(`[verify] ${entry.group.id}: ${note}`);
             }
-            const latencyProblems = latencyEvidence?.problems ?? [];
+            const labEvidence = run
+              ? labEvidenceOf(entry.timing, run.runKey, options.mode === 'release')
+              : undefined;
+            if (labEvidence) {
+              report.labCounts[entry.group.id] = labEvidence;
+              for (const line of labEvidence.table) console.log(`[verify] ${entry.group.id} ${line}`);
+              for (const note of labEvidence.overTarget) console.log(`[verify] ${entry.group.id}: ${note}`);
+            }
+            const latencyProblems = [...(latencyEvidence?.problems ?? []), ...(labEvidence?.problems ?? [])];
             const browserQualified =
               !browser ||
               (run?.status === 'passed' &&

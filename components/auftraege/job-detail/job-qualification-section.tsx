@@ -1,5 +1,6 @@
 'use client';
 
+import { StaleRegion } from '@/components/shared/stale-region';
 import { useState } from 'react';
 import { Award } from 'lucide-react';
 import { Card } from '@/components/ui/card';
@@ -100,34 +101,36 @@ export function JobQualificationSection({ jobId, canEdit }: { jobId: string; can
         </p>
       </div>
 
-      {canEdit && (
-        <JobQualificationAddForm
+      <StaleRegion stale={view.isStale} onRetry={refresh} className="flex flex-col gap-4">
+        {canEdit && (
+          <JobQualificationAddForm
+            detail={detail}
+            selectedCapabilityId={selectedCapabilityId}
+            setSelectedCapabilityId={setSelectedCapabilityId}
+            requireConfirmation={requireConfirmation}
+            setRequireConfirmation={setRequireConfirmation}
+            anyBusy={anyBusy}
+            saveRequirements={saveRequirements}
+          />
+        )}
+
+        <ErrorText>{saveError}</ErrorText>
+
+        <JobQualificationCoverageList
           detail={detail}
-          selectedCapabilityId={selectedCapabilityId}
-          setSelectedCapabilityId={setSelectedCapabilityId}
-          requireConfirmation={requireConfirmation}
-          setRequireConfirmation={setRequireConfirmation}
+          canEdit={canEdit}
+          isBusy={isBusy}
           anyBusy={anyBusy}
           saveRequirements={saveRequirements}
         />
-      )}
 
-      <ErrorText>{saveError}</ErrorText>
-
-      <JobQualificationCoverageList
-        detail={detail}
-        canEdit={canEdit}
-        isBusy={isBusy}
-        anyBusy={anyBusy}
-        saveRequirements={saveRequirements}
-      />
-
-      {detail.latestAssessment?.overrideReason && (
-        <div className="rounded-md bg-muted/40 px-3 py-2 text-xs">
-          <span className="font-medium">Letzte begründete Ausnahme:</span>{' '}
-          {detail.latestAssessment.overrideReason}
-        </div>
-      )}
+        {detail.latestAssessment?.overrideReason && (
+          <div className="rounded-md bg-muted/40 px-3 py-2 text-xs">
+            <span className="font-medium">Letzte begründete Ausnahme:</span>{' '}
+            {detail.latestAssessment.overrideReason}
+          </div>
+        )}
+      </StaleRegion>
     </Card>
   );
 }

@@ -1,0 +1,1451 @@
+{
+  "version": 1,
+  "steps": [
+    {
+      "stepId": "lab.field.cold-start",
+      "stepVersion": 1,
+      "labMeasurementVersion": 1,
+      "context": {
+        "measurementDigest": "8f7943c1e2874c05337e70aabf9e3b766fd6ef150f326ea52ef95d24faee362e",
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": { "width": 375, "height": 812 },
+        "cpuThrottle": 4,
+        "role": "employee",
+        "backend": "local"
+      },
+      "counts": {
+        "requests": { "reference": 72, "tolerance": 1 },
+        "routeRenders": { "reference": 1, "tolerance": 0 },
+        "echoRenders": { "reference": 1, "tolerance": 0 },
+        "actionRoundTrips": { "reference": 0, "tolerance": 0 },
+        "backgroundReads": { "reference": 0, "tolerance": 0 },
+        "backendRequests": { "reference": 68, "tolerance": 1 }
+      },
+      "payloads": {
+        "api:/api/attention-counts": {
+          "requests": { "reference": 2, "tolerance": 0 },
+          "encodedBytes": { "reference": 2296, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 188, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        },
+        "api:/api/time-tracking-state": {
+          "requests": { "reference": 4, "tolerance": 0 },
+          "encodedBytes": { "reference": 5748, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 1530, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": { "reference": 0, "tolerance": 0 }
+        },
+        "direct:/auth/v1/user": {
+          "requests": { "reference": 3, "tolerance": 0 },
+          "encodedBytes": { "reference": 3088, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 2354, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        },
+        "direct:/rest/v1/organization_members": {
+          "requests": { "reference": 3, "tolerance": 0 },
+          "encodedBytes": { "reference": 1844, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 546, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        },
+        "document:/auftraege": {
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 17675, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 124668, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": { "reference": 1, "tolerance": 0 }
+        },
+        "font": {
+          "requests": { "reference": 2, "tolerance": 0 },
+          "encodedBytes": { "reference": 54514, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": null,
+          "rows": null
+        },
+        "image": {
+          "requests": { "reference": 2, "tolerance": 0 },
+          "encodedBytes": { "reference": 8429, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": null,
+          "rows": null
+        },
+        "prefetch:/auftraege/[jobNumber]": {
+          "requests": { "reference": 3, "tolerance": 0 },
+          "encodedBytes": { "reference": 12194, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 53103, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        },
+        "route:/auftraege": {
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 11618, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 44291, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        },
+        "script": {
+          "requests": { "reference": 49, "tolerance": 1 },
+          "encodedBytes": { "reference": 799618, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": null,
+          "rows": null
+        },
+        "stylesheet": {
+          "requests": { "reference": 2, "tolerance": 0 },
+          "encodedBytes": { "reference": 22216, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 120469, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        }
+      },
+      "source": {
+        "runKeys": [
+          "2026-10-09T041927828Z-cb9a2d",
+          "2026-10-09T042614244Z-31dfb2",
+          "2026-10-09T043219324Z-486fa8",
+          "2026-10-09T043834499Z-378019",
+          "2026-10-09T044333153Z-394b90"
+        ],
+        "buildId": "bf252d4a-a0e1-4387-a088-1b3d56ea08a3"
+      },
+      "history": [
+        {
+          "kind": "initial",
+          "target": "*",
+          "from": null,
+          "to": null,
+          "runKeys": [
+            "2026-10-09T041927828Z-cb9a2d",
+            "2026-10-09T042614244Z-31dfb2",
+            "2026-10-09T043219324Z-486fa8",
+            "2026-10-09T043834499Z-378019",
+            "2026-10-09T044333153Z-394b90"
+          ],
+          "reason": null
+        }
+      ]
+    },
+    {
+      "stepId": "lab.field.job-open",
+      "stepVersion": 1,
+      "labMeasurementVersion": 1,
+      "context": {
+        "measurementDigest": "edcec1c5deb96a35996e29ae2d99bc0e935c7596656b5f9705b05d7963eb39ce",
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": { "width": 375, "height": 812 },
+        "cpuThrottle": 4,
+        "role": "employee",
+        "backend": "local"
+      },
+      "counts": {
+        "requests": { "reference": 2, "tolerance": 0 },
+        "routeRenders": { "reference": 1, "tolerance": 0 },
+        "echoRenders": { "reference": 0, "tolerance": 0 },
+        "actionRoundTrips": { "reference": 0, "tolerance": 0 },
+        "backgroundReads": { "reference": 0, "tolerance": 0 },
+        "backendRequests": { "reference": 46, "tolerance": 1 },
+        "componentRenders": { "reference": 504, "tolerance": 10 }
+      },
+      "payloads": {
+        "prefetch:/auftraege": {
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 4619, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 16473, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        },
+        "route:/auftraege/[jobNumber]": {
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 11852, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 30998, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        }
+      },
+      "source": {
+        "runKeys": [
+          "2026-10-09T041927828Z-cb9a2d",
+          "2026-10-09T042614244Z-31dfb2",
+          "2026-10-09T043219324Z-486fa8",
+          "2026-10-09T043834499Z-378019",
+          "2026-10-09T044333153Z-394b90"
+        ],
+        "buildId": "bf252d4a-a0e1-4387-a088-1b3d56ea08a3"
+      },
+      "history": [
+        {
+          "kind": "initial",
+          "target": "*",
+          "from": null,
+          "to": null,
+          "runKeys": [
+            "2026-10-09T041927828Z-cb9a2d",
+            "2026-10-09T042614244Z-31dfb2",
+            "2026-10-09T043219324Z-486fa8",
+            "2026-10-09T043834499Z-378019",
+            "2026-10-09T044333153Z-394b90"
+          ],
+          "reason": null
+        }
+      ]
+    },
+    {
+      "stepId": "lab.field.checklist-tick",
+      "stepVersion": 1,
+      "labMeasurementVersion": 1,
+      "context": {
+        "measurementDigest": "144bb38db7a68542de590a17d081373b626ea99f855b8c7a7f3af5123ad80ea3",
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": { "width": 375, "height": 812 },
+        "cpuThrottle": 4,
+        "role": "employee",
+        "backend": "local"
+      },
+      "counts": {
+        "requests": { "reference": 5, "tolerance": 1 },
+        "routeRenders": { "reference": 1, "tolerance": 0 },
+        "echoRenders": { "reference": 1, "tolerance": 0 },
+        "actionRoundTrips": { "reference": 1, "tolerance": 0 },
+        "backgroundReads": { "reference": 1, "tolerance": 0 },
+        "backendRequests": { "reference": 116, "tolerance": 2 }
+      },
+      "payloads": {
+        "action:/auftraege/[jobNumber]": {
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 21651, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 74490, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        },
+        "background:work-lifecycle-snapshot": {
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 3083, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 2028, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": { "reference": 8, "tolerance": 0 }
+        },
+        "prefetch:/auftraege": {
+          "requests": { "reference": 2, "tolerance": 1 },
+          "encodedBytes": { "reference": 6125, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 17167, "tolerance": { "relative": 1, "absolute": 512 } },
+          "rows": null
+        },
+        "route:/auftraege/[jobNumber]": {
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 21178, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 73408, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        }
+      },
+      "source": {
+        "runKeys": [
+          "2026-10-09T041927828Z-cb9a2d",
+          "2026-10-09T042614244Z-31dfb2",
+          "2026-10-09T043219324Z-486fa8",
+          "2026-10-09T043834499Z-378019",
+          "2026-10-09T044333153Z-394b90"
+        ],
+        "buildId": "bf252d4a-a0e1-4387-a088-1b3d56ea08a3"
+      },
+      "history": [
+        {
+          "kind": "initial",
+          "target": "*",
+          "from": null,
+          "to": null,
+          "runKeys": [
+            "2026-10-09T041927828Z-cb9a2d",
+            "2026-10-09T042614244Z-31dfb2",
+            "2026-10-09T043219324Z-486fa8",
+            "2026-10-09T043834499Z-378019",
+            "2026-10-09T044333153Z-394b90"
+          ],
+          "reason": null
+        }
+      ]
+    },
+    {
+      "stepId": "lab.field.evidence-add",
+      "stepVersion": 1,
+      "labMeasurementVersion": 1,
+      "context": {
+        "measurementDigest": "93f47c089191fdfa83848e846468e66a9ae130f7d859121f7dee8f655a2557e1",
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": { "width": 375, "height": 812 },
+        "cpuThrottle": 4,
+        "role": "employee",
+        "backend": "local"
+      },
+      "counts": {
+        "requests": { "reference": 3, "tolerance": 0 },
+        "routeRenders": { "reference": 1, "tolerance": 0 },
+        "echoRenders": { "reference": 0, "tolerance": 0 },
+        "actionRoundTrips": { "reference": 1, "tolerance": 0 },
+        "backgroundReads": { "reference": 0, "tolerance": 0 },
+        "backendRequests": { "reference": 68, "tolerance": 1 }
+      },
+      "payloads": {
+        "action:/auftraege/[jobNumber]": {
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 22707, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 77005, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        },
+        "prefetch:/auftraege": {
+          "requests": { "reference": 2, "tolerance": 0 },
+          "encodedBytes": { "reference": 6125, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 17167, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        }
+      },
+      "source": {
+        "runKeys": [
+          "2026-10-09T041927828Z-cb9a2d",
+          "2026-10-09T042614244Z-31dfb2",
+          "2026-10-09T043219324Z-486fa8",
+          "2026-10-09T043834499Z-378019",
+          "2026-10-09T044333153Z-394b90"
+        ],
+        "buildId": "bf252d4a-a0e1-4387-a088-1b3d56ea08a3"
+      },
+      "history": [
+        {
+          "kind": "initial",
+          "target": "*",
+          "from": null,
+          "to": null,
+          "runKeys": [
+            "2026-10-09T041927828Z-cb9a2d",
+            "2026-10-09T042614244Z-31dfb2",
+            "2026-10-09T043219324Z-486fa8",
+            "2026-10-09T043834499Z-378019",
+            "2026-10-09T044333153Z-394b90"
+          ],
+          "reason": null
+        }
+      ]
+    },
+    {
+      "stepId": "lab.field.clock-in",
+      "stepVersion": 1,
+      "labMeasurementVersion": 1,
+      "context": {
+        "measurementDigest": "347d2f78455f32e0d12e6eb56c73373bb8303fa705e3c4120a38eb4002eb6d81",
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": { "width": 375, "height": 812 },
+        "cpuThrottle": 4,
+        "role": "employee",
+        "backend": "local"
+      },
+      "counts": {
+        "routeRenders": { "reference": 1, "tolerance": 0 },
+        "echoRenders": { "reference": 0, "tolerance": 0 },
+        "actionRoundTrips": { "reference": 1, "tolerance": 0 },
+        "backgroundReads": { "reference": 0, "tolerance": 0 }
+      },
+      "payloads": {
+        "action:/dashboard": {
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 10652, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 40122, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        },
+        "api:/api/time-tracking-state": {
+          "requests": { "reference": 3, "tolerance": 1 },
+          "encodedBytes": { "reference": 5108, "tolerance": { "relative": 0.4346, "absolute": 512 } },
+          "decodedBytes": { "reference": 1944, "tolerance": { "relative": 0.0576, "absolute": 512 } },
+          "rows": { "reference": 0, "tolerance": 0 }
+        }
+      },
+      "source": {
+        "runKeys": [
+          "2026-10-09T041927828Z-cb9a2d",
+          "2026-10-09T042614244Z-31dfb2",
+          "2026-10-09T043219324Z-486fa8",
+          "2026-10-09T043834499Z-378019",
+          "2026-10-09T044333153Z-394b90"
+        ],
+        "buildId": "bf252d4a-a0e1-4387-a088-1b3d56ea08a3"
+      },
+      "history": [
+        {
+          "kind": "initial",
+          "target": "*",
+          "from": null,
+          "to": null,
+          "runKeys": [
+            "2026-10-09T041927828Z-cb9a2d",
+            "2026-10-09T042614244Z-31dfb2",
+            "2026-10-09T043219324Z-486fa8",
+            "2026-10-09T043834499Z-378019",
+            "2026-10-09T044333153Z-394b90"
+          ],
+          "reason": null
+        }
+      ]
+    },
+    {
+      "stepId": "lab.field.idle-clocked-in",
+      "stepVersion": 1,
+      "labMeasurementVersion": 1,
+      "context": {
+        "measurementDigest": "01c1f121f16038ab6e70cdb627c8f16aa865148fc285c55e17309524adedd87f",
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": { "width": 375, "height": 812 },
+        "cpuThrottle": 4,
+        "role": "employee",
+        "backend": "local"
+      },
+      "counts": {
+        "requests": { "reference": 0, "tolerance": 0 },
+        "routeRenders": { "reference": 0, "tolerance": 0 },
+        "echoRenders": { "reference": 0, "tolerance": 0 },
+        "actionRoundTrips": { "reference": 0, "tolerance": 0 },
+        "backgroundReads": { "reference": 0, "tolerance": 0 },
+        "backendRequests": { "reference": 0, "tolerance": 0 },
+        "componentRenders": { "reference": 0, "tolerance": 0 }
+      },
+      "payloads": {},
+      "source": {
+        "runKeys": [
+          "2026-10-09T041927828Z-cb9a2d",
+          "2026-10-09T042614244Z-31dfb2",
+          "2026-10-09T043219324Z-486fa8",
+          "2026-10-09T043834499Z-378019",
+          "2026-10-09T044333153Z-394b90"
+        ],
+        "buildId": "bf252d4a-a0e1-4387-a088-1b3d56ea08a3"
+      },
+      "history": [
+        {
+          "kind": "initial",
+          "target": "*",
+          "from": null,
+          "to": null,
+          "runKeys": [
+            "2026-10-09T041927828Z-cb9a2d",
+            "2026-10-09T042614244Z-31dfb2",
+            "2026-10-09T043219324Z-486fa8",
+            "2026-10-09T043834499Z-378019",
+            "2026-10-09T044333153Z-394b90"
+          ],
+          "reason": null
+        }
+      ]
+    },
+    {
+      "stepId": "lab.field.clock-out",
+      "stepVersion": 1,
+      "labMeasurementVersion": 1,
+      "context": {
+        "measurementDigest": "347a2818f9202e2d3857086509a89b1303c3e7892aa0fdfc807736db1417c6c4",
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": { "width": 375, "height": 812 },
+        "cpuThrottle": 4,
+        "role": "employee",
+        "backend": "local"
+      },
+      "counts": {
+        "requests": { "reference": 4, "tolerance": 0 },
+        "routeRenders": { "reference": 1, "tolerance": 0 },
+        "echoRenders": { "reference": 0, "tolerance": 0 },
+        "actionRoundTrips": { "reference": 1, "tolerance": 0 },
+        "backgroundReads": { "reference": 0, "tolerance": 0 },
+        "backendRequests": { "reference": 18, "tolerance": 1 },
+        "componentRenders": { "reference": 663, "tolerance": 13 }
+      },
+      "payloads": {
+        "action:/dashboard": {
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 10649, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 40121, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        },
+        "api:/api/time-tracking-state": {
+          "requests": { "reference": 3, "tolerance": 0 },
+          "encodedBytes": { "reference": 4638, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 1474, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": { "reference": 0, "tolerance": 0 }
+        }
+      },
+      "source": {
+        "runKeys": [
+          "2026-10-09T041927828Z-cb9a2d",
+          "2026-10-09T042614244Z-31dfb2",
+          "2026-10-09T043219324Z-486fa8",
+          "2026-10-09T043834499Z-378019",
+          "2026-10-09T044333153Z-394b90"
+        ],
+        "buildId": "bf252d4a-a0e1-4387-a088-1b3d56ea08a3"
+      },
+      "history": [
+        {
+          "kind": "initial",
+          "target": "*",
+          "from": null,
+          "to": null,
+          "runKeys": [
+            "2026-10-09T041927828Z-cb9a2d",
+            "2026-10-09T042614244Z-31dfb2",
+            "2026-10-09T043219324Z-486fa8",
+            "2026-10-09T043834499Z-378019",
+            "2026-10-09T044333153Z-394b90"
+          ],
+          "reason": null
+        }
+      ]
+    },
+    {
+      "stepId": "lab.office.cold-start",
+      "stepVersion": 1,
+      "labMeasurementVersion": 1,
+      "context": {
+        "measurementDigest": "4794bb34950a99ea19fc12f88274b561ccc4a7c7e1fc1090ddb095a1b3c6b7bf",
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": { "width": 1440, "height": 900 },
+        "cpuThrottle": 1,
+        "role": "buero",
+        "backend": "local"
+      },
+      "counts": {
+        "requests": { "reference": 63, "tolerance": 1 },
+        "routeRenders": { "reference": 1, "tolerance": 0 },
+        "echoRenders": { "reference": 1, "tolerance": 0 },
+        "actionRoundTrips": { "reference": 0, "tolerance": 0 },
+        "backgroundReads": { "reference": 0, "tolerance": 0 },
+        "backendRequests": { "reference": 94, "tolerance": 1 },
+        "componentRenders": { "reference": 22298, "tolerance": 445 }
+      },
+      "payloads": {
+        "api:/api/attention-counts": {
+          "requests": { "reference": 2, "tolerance": 0 },
+          "encodedBytes": { "reference": 2296, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 188, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        },
+        "api:/api/time-tracking-state": {
+          "requests": { "reference": 4, "tolerance": 0 },
+          "encodedBytes": { "reference": 5748, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 1530, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": { "reference": 0, "tolerance": 0 }
+        },
+        "direct:/auth/v1/user": {
+          "requests": { "reference": 3, "tolerance": 0 },
+          "encodedBytes": { "reference": 3072, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 2338, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        },
+        "direct:/rest/v1/organization_members": {
+          "requests": { "reference": 3, "tolerance": 0 },
+          "encodedBytes": { "reference": 1839, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 540, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        },
+        "document:/auftraege": {
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 29146, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 554195, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": { "reference": 50, "tolerance": 1 }
+        },
+        "font": {
+          "requests": { "reference": 2, "tolerance": 0 },
+          "encodedBytes": { "reference": 54514, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": null,
+          "rows": null
+        },
+        "image": {
+          "requests": { "reference": 2, "tolerance": 0 },
+          "encodedBytes": { "reference": 8429, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": null,
+          "rows": null
+        },
+        "route:/auftraege": {
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 16886, "tolerance": { "relative": 0.9455, "absolute": 512 } },
+          "decodedBytes": { "reference": 111238, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        },
+        "script": {
+          "requests": { "reference": 43, "tolerance": 1 },
+          "encodedBytes": { "reference": 692102, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": null,
+          "rows": null
+        },
+        "stylesheet": {
+          "requests": { "reference": 2, "tolerance": 0 },
+          "encodedBytes": { "reference": 22216, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 120469, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        }
+      },
+      "source": {
+        "runKeys": [
+          "2026-10-09T041927828Z-d33901",
+          "2026-10-09T042614244Z-a97056",
+          "2026-10-09T043219324Z-11a835",
+          "2026-10-09T043834499Z-e9e693",
+          "2026-10-09T044333153Z-fb1af9"
+        ],
+        "buildId": "bf252d4a-a0e1-4387-a088-1b3d56ea08a3"
+      },
+      "history": [
+        {
+          "kind": "initial",
+          "target": "*",
+          "from": null,
+          "to": null,
+          "runKeys": [
+            "2026-10-09T041927828Z-d33901",
+            "2026-10-09T042614244Z-a97056",
+            "2026-10-09T043219324Z-11a835",
+            "2026-10-09T043834499Z-e9e693",
+            "2026-10-09T044333153Z-fb1af9"
+          ],
+          "reason": null
+        }
+      ]
+    },
+    {
+      "stepId": "lab.office.job-open",
+      "stepVersion": 1,
+      "labMeasurementVersion": 1,
+      "context": {
+        "measurementDigest": "2fdb347f91b436bcf21cbec0d20a33280610bfe6c2790f2d7bcfde8e136de665",
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": { "width": 1440, "height": 900 },
+        "cpuThrottle": 1,
+        "role": "buero",
+        "backend": "local"
+      },
+      "counts": {
+        "requests": { "reference": 7, "tolerance": 0 },
+        "routeRenders": { "reference": 1, "tolerance": 0 },
+        "echoRenders": { "reference": 0, "tolerance": 0 },
+        "actionRoundTrips": { "reference": 0, "tolerance": 0 },
+        "backgroundReads": { "reference": 3, "tolerance": 0 },
+        "backendRequests": { "reference": 77, "tolerance": 1 },
+        "componentRenders": { "reference": 1523, "tolerance": 31 }
+      },
+      "payloads": {
+        "background:job-dispatch-cards": {
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 1081, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 27, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": { "reference": 0, "tolerance": 0 }
+        },
+        "background:job-qualification-detail": {
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 1546, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 491, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": { "reference": 1, "tolerance": 0 }
+        },
+        "background:time-entries-for-job": {
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 1101, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 47, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": { "reference": 0, "tolerance": 0 }
+        },
+        "prefetch:/auftraege/[jobNumber]/uebergabe": {
+          "requests": { "reference": 2, "tolerance": 0 },
+          "encodedBytes": { "reference": 7210, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 32348, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        },
+        "route:/auftraege/[jobNumber]": {
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 40218, "tolerance": { "relative": 0.4698, "absolute": 512 } },
+          "decodedBytes": { "reference": 378518, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        },
+        "script": {
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 9340, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": null,
+          "rows": null
+        }
+      },
+      "source": {
+        "runKeys": [
+          "2026-10-09T041927828Z-d33901",
+          "2026-10-09T042614244Z-a97056",
+          "2026-10-09T043219324Z-11a835",
+          "2026-10-09T043834499Z-e9e693",
+          "2026-10-09T044333153Z-fb1af9"
+        ],
+        "buildId": "bf252d4a-a0e1-4387-a088-1b3d56ea08a3"
+      },
+      "history": [
+        {
+          "kind": "initial",
+          "target": "*",
+          "from": null,
+          "to": null,
+          "runKeys": [
+            "2026-10-09T041927828Z-d33901",
+            "2026-10-09T042614244Z-a97056",
+            "2026-10-09T043219324Z-11a835",
+            "2026-10-09T043834499Z-e9e693",
+            "2026-10-09T044333153Z-fb1af9"
+          ],
+          "reason": null
+        }
+      ]
+    },
+    {
+      "stepId": "lab.office.job-back",
+      "stepVersion": 1,
+      "labMeasurementVersion": 1,
+      "context": {
+        "measurementDigest": "dc07cd6ffbb876fbd73077e7b563347d31003ffc4b3ef88b37dd2ab0466b216e",
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": { "width": 1440, "height": 900 },
+        "cpuThrottle": 1,
+        "role": "buero",
+        "backend": "local"
+      },
+      "counts": {
+        "requests": { "reference": 0, "tolerance": 0 },
+        "routeRenders": { "reference": 0, "tolerance": 0 },
+        "echoRenders": { "reference": 0, "tolerance": 0 },
+        "actionRoundTrips": { "reference": 0, "tolerance": 0 },
+        "backgroundReads": { "reference": 0, "tolerance": 0 },
+        "backendRequests": { "reference": 0, "tolerance": 0 },
+        "componentRenders": { "reference": 791, "tolerance": 15 }
+      },
+      "payloads": {},
+      "source": {
+        "runKeys": [
+          "2026-10-09T041927828Z-d33901",
+          "2026-10-09T042614244Z-a97056",
+          "2026-10-09T043219324Z-11a835",
+          "2026-10-09T043834499Z-e9e693",
+          "2026-10-09T044333153Z-fb1af9"
+        ],
+        "buildId": "bf252d4a-a0e1-4387-a088-1b3d56ea08a3"
+      },
+      "history": [
+        {
+          "kind": "initial",
+          "target": "*",
+          "from": null,
+          "to": null,
+          "runKeys": [
+            "2026-10-09T041927828Z-d33901",
+            "2026-10-09T042614244Z-a97056",
+            "2026-10-09T043219324Z-11a835",
+            "2026-10-09T043834499Z-e9e693",
+            "2026-10-09T044333153Z-fb1af9"
+          ],
+          "reason": null
+        }
+      ]
+    },
+    {
+      "stepId": "lab.office.customer-find",
+      "stepVersion": 1,
+      "labMeasurementVersion": 1,
+      "context": {
+        "measurementDigest": "47783cf63639087fec06fc46c8a605e8d3027927604ee52e0559406413edd997",
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": { "width": 1440, "height": 900 },
+        "cpuThrottle": 1,
+        "role": "buero",
+        "backend": "local"
+      },
+      "counts": {
+        "requests": { "reference": 1, "tolerance": 0 },
+        "routeRenders": { "reference": 1, "tolerance": 0 },
+        "echoRenders": { "reference": 0, "tolerance": 0 },
+        "actionRoundTrips": { "reference": 0, "tolerance": 0 },
+        "backgroundReads": { "reference": 0, "tolerance": 0 },
+        "backendRequests": { "reference": 3, "tolerance": 0 },
+        "componentRenders": { "reference": 5662, "tolerance": 113 }
+      },
+      "payloads": {
+        "route:/kunden": {
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 3906, "tolerance": { "relative": 0.9519, "absolute": 512 } },
+          "decodedBytes": { "reference": 8832, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        }
+      },
+      "source": {
+        "runKeys": [
+          "2026-10-09T041927828Z-d33901",
+          "2026-10-09T042614244Z-a97056",
+          "2026-10-09T043219324Z-11a835",
+          "2026-10-09T043834499Z-e9e693",
+          "2026-10-09T044333153Z-fb1af9"
+        ],
+        "buildId": "bf252d4a-a0e1-4387-a088-1b3d56ea08a3"
+      },
+      "history": [
+        {
+          "kind": "initial",
+          "target": "*",
+          "from": null,
+          "to": null,
+          "runKeys": [
+            "2026-10-09T041927828Z-d33901",
+            "2026-10-09T042614244Z-a97056",
+            "2026-10-09T043219324Z-11a835",
+            "2026-10-09T043834499Z-e9e693",
+            "2026-10-09T044333153Z-fb1af9"
+          ],
+          "reason": null
+        }
+      ]
+    },
+    {
+      "stepId": "lab.office.job-create",
+      "stepVersion": 1,
+      "labMeasurementVersion": 1,
+      "context": {
+        "measurementDigest": "88b6066a3e5d4c14275922abad37a7a39b5333ac56368b9ba534170457f4a99b",
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": { "width": 1440, "height": 900 },
+        "cpuThrottle": 1,
+        "role": "buero",
+        "backend": "local"
+      },
+      "counts": {
+        "requests": { "reference": 18, "tolerance": 1 },
+        "routeRenders": { "reference": 1, "tolerance": 0 },
+        "echoRenders": { "reference": 2, "tolerance": 0 },
+        "actionRoundTrips": { "reference": 1, "tolerance": 0 },
+        "backgroundReads": { "reference": 0, "tolerance": 0 },
+        "backendRequests": { "reference": 97, "tolerance": 1 }
+      },
+      "payloads": {
+        "action:/auftraege": {
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 18266, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 110803, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        },
+        "api:/api/attention-counts": {
+          "requests": { "reference": 2, "tolerance": 0 },
+          "encodedBytes": { "reference": 2296, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 188, "tolerance": { "relative": 1, "absolute": 512 } },
+          "rows": null
+        },
+        "api:/api/time-tracking-state": {
+          "requests": { "reference": 3, "tolerance": 0 },
+          "encodedBytes": { "reference": 3984, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 821, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": { "reference": 0, "tolerance": 0 }
+        },
+        "direct:/auth/v1/user": {
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 1536, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 1168, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": { "reference": 1, "tolerance": 0 }
+        },
+        "direct:/rest/v1/organization_members": {
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 919, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 270, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": { "reference": 1, "tolerance": 0 }
+        },
+        "prefetch:/auftraege/[jobNumber]": {
+          "requests": { "reference": 2, "tolerance": 0 },
+          "encodedBytes": { "reference": 6860, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 26964, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        },
+        "route:/auftraege": {
+          "requests": { "reference": 2, "tolerance": 0 },
+          "encodedBytes": { "reference": 26557, "tolerance": { "relative": 0.6286, "absolute": 512 } },
+          "decodedBytes": { "reference": 220570, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        },
+        "script": {
+          "requests": { "reference": 6, "tolerance": 0 },
+          "encodedBytes": { "reference": 107516, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": null,
+          "rows": null
+        }
+      },
+      "source": {
+        "runKeys": [
+          "2026-10-09T041927828Z-d33901",
+          "2026-10-09T042614244Z-a97056",
+          "2026-10-09T043219324Z-11a835",
+          "2026-10-09T043834499Z-e9e693",
+          "2026-10-09T044333153Z-fb1af9"
+        ],
+        "buildId": "bf252d4a-a0e1-4387-a088-1b3d56ea08a3"
+      },
+      "history": [
+        {
+          "kind": "initial",
+          "target": "*",
+          "from": null,
+          "to": null,
+          "runKeys": [
+            "2026-10-09T041927828Z-d33901",
+            "2026-10-09T042614244Z-a97056",
+            "2026-10-09T043219324Z-11a835",
+            "2026-10-09T043834499Z-e9e693",
+            "2026-10-09T044333153Z-fb1af9"
+          ],
+          "reason": null
+        },
+        {
+          "kind": "ungate",
+          "target": "componentRenders",
+          "from": 36902,
+          "to": null,
+          "runKeys": ["2026-10-09T065557645Z-4a338c"],
+          "reason": "took two values: 36902-37045 in the five calibration runs, 33121 in this run, 33026-37065 across the baseline runs; the two echo renders of the new row sometimes coalesce into one"
+        }
+      ]
+    },
+    {
+      "stepId": "lab.office.entry-open",
+      "stepVersion": 1,
+      "labMeasurementVersion": 1,
+      "context": {
+        "measurementDigest": "30b8efa910c29ff1c2383208fea5ba386bda65accb9eabfda895c7404ef95787",
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": { "width": 1440, "height": 900 },
+        "cpuThrottle": 1,
+        "role": "buero",
+        "backend": "local"
+      },
+      "counts": {
+        "requests": { "reference": 0, "tolerance": 0 },
+        "routeRenders": { "reference": 0, "tolerance": 0 },
+        "echoRenders": { "reference": 0, "tolerance": 0 },
+        "actionRoundTrips": { "reference": 0, "tolerance": 0 },
+        "backgroundReads": { "reference": 0, "tolerance": 0 },
+        "backendRequests": { "reference": 0, "tolerance": 0 },
+        "componentRenders": { "reference": 2084, "tolerance": 41 }
+      },
+      "payloads": {},
+      "source": {
+        "runKeys": [
+          "2026-10-09T041927828Z-d33901",
+          "2026-10-09T042614244Z-a97056",
+          "2026-10-09T043219324Z-11a835",
+          "2026-10-09T043834499Z-e9e693",
+          "2026-10-09T044333153Z-fb1af9"
+        ],
+        "buildId": "bf252d4a-a0e1-4387-a088-1b3d56ea08a3"
+      },
+      "history": [
+        {
+          "kind": "initial",
+          "target": "*",
+          "from": null,
+          "to": null,
+          "runKeys": [
+            "2026-10-09T041927828Z-d33901",
+            "2026-10-09T042614244Z-a97056",
+            "2026-10-09T043219324Z-11a835",
+            "2026-10-09T043834499Z-e9e693",
+            "2026-10-09T044333153Z-fb1af9"
+          ],
+          "reason": null
+        }
+      ]
+    },
+    {
+      "stepId": "lab.office.visit-move",
+      "stepVersion": 1,
+      "labMeasurementVersion": 1,
+      "context": {
+        "measurementDigest": "2577f64d665174bbf00fd619d0b1f5c2e0787aae0c167badc46ad019ab0af481",
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": { "width": 1440, "height": 900 },
+        "cpuThrottle": 1,
+        "role": "buero",
+        "backend": "local"
+      },
+      "counts": {
+        "routeRenders": { "reference": 0, "tolerance": 0 },
+        "echoRenders": { "reference": 0, "tolerance": 0 },
+        "actionRoundTrips": { "reference": 1, "tolerance": 0 },
+        "backgroundReads": { "reference": 2, "tolerance": 0 }
+      },
+      "payloads": {
+        "action:/kalender": {
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 1321, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 128, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        },
+        "api:/api/attention-counts": {
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 1148, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 94, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        },
+        "api:/api/calendar-board": {
+          "requests": { "reference": 1, "tolerance": 1 },
+          "encodedBytes": { "reference": 42076, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 39964, "tolerance": { "relative": 1, "absolute": 512 } },
+          "rows": { "reference": 90, "tolerance": 1 }
+        },
+        "api:/api/calendar-window": {
+          "requests": { "reference": 1, "tolerance": 1 },
+          "encodedBytes": { "reference": 230218, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 228104, "tolerance": { "relative": 1, "absolute": 512 } },
+          "rows": { "reference": 121, "tolerance": 2 }
+        },
+        "api:/api/time-tracking-state": {
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 1110, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 56, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": { "reference": 0, "tolerance": 0 }
+        },
+        "background:parked-jobs": {
+          "requests": { "reference": 2, "tolerance": 0 },
+          "encodedBytes": { "reference": 2160, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 52, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": { "reference": 0, "tolerance": 0 }
+        }
+      },
+      "source": {
+        "runKeys": [
+          "2026-10-09T041927828Z-d33901",
+          "2026-10-09T042614244Z-a97056",
+          "2026-10-09T043219324Z-11a835",
+          "2026-10-09T043834499Z-e9e693",
+          "2026-10-09T044333153Z-fb1af9"
+        ],
+        "buildId": "bf252d4a-a0e1-4387-a088-1b3d56ea08a3"
+      },
+      "history": [
+        {
+          "kind": "initial",
+          "target": "*",
+          "from": null,
+          "to": null,
+          "runKeys": [
+            "2026-10-09T041927828Z-d33901",
+            "2026-10-09T042614244Z-a97056",
+            "2026-10-09T043219324Z-11a835",
+            "2026-10-09T043834499Z-e9e693",
+            "2026-10-09T044333153Z-fb1af9"
+          ],
+          "reason": null
+        }
+      ]
+    },
+    {
+      "stepId": "lab.office.time-approve",
+      "stepVersion": 1,
+      "labMeasurementVersion": 1,
+      "context": {
+        "measurementDigest": "ecee321564e03198b3dd9cfe0f72a3a1d97df717c22221d9eeee5753e1a91030",
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": { "width": 1440, "height": 900 },
+        "cpuThrottle": 1,
+        "role": "buero",
+        "backend": "local"
+      },
+      "counts": {
+        "requests": { "reference": 6, "tolerance": 0 },
+        "routeRenders": { "reference": 0, "tolerance": 0 },
+        "echoRenders": { "reference": 0, "tolerance": 0 },
+        "actionRoundTrips": { "reference": 1, "tolerance": 0 },
+        "backgroundReads": { "reference": 2, "tolerance": 0 },
+        "backendRequests": { "reference": 72, "tolerance": 1 },
+        "componentRenders": { "reference": 1084, "tolerance": 21 }
+      },
+      "payloads": {
+        "action:/zeiterfassung": {
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 1324, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 127, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        },
+        "api:/api/attention-counts": {
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 1148, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 94, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        },
+        "api:/api/time-tracking-state": {
+          "requests": { "reference": 2, "tolerance": 0 },
+          "encodedBytes": { "reference": 2874, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 765, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": { "reference": 0, "tolerance": 0 }
+        },
+        "background:pending-sessions": {
+          "requests": { "reference": 2, "tolerance": 0 },
+          "encodedBytes": { "reference": 15190, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 13078, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": { "reference": 5, "tolerance": 0 }
+        }
+      },
+      "source": {
+        "runKeys": [
+          "2026-10-09T041927828Z-d33901",
+          "2026-10-09T042614244Z-a97056",
+          "2026-10-09T043219324Z-11a835",
+          "2026-10-09T043834499Z-e9e693",
+          "2026-10-09T044333153Z-fb1af9"
+        ],
+        "buildId": "bf252d4a-a0e1-4387-a088-1b3d56ea08a3"
+      },
+      "history": [
+        {
+          "kind": "initial",
+          "target": "*",
+          "from": null,
+          "to": null,
+          "runKeys": [
+            "2026-10-09T041927828Z-d33901",
+            "2026-10-09T042614244Z-a97056",
+            "2026-10-09T043219324Z-11a835",
+            "2026-10-09T043834499Z-e9e693",
+            "2026-10-09T044333153Z-fb1af9"
+          ],
+          "reason": null
+        }
+      ]
+    },
+    {
+      "stepId": "lab.admin.tasks-open",
+      "stepVersion": 1,
+      "labMeasurementVersion": 1,
+      "context": {
+        "measurementDigest": "094825819483440243beb5a6bfdbb87a091ee18fc9fbd99054ea681065066770",
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": { "width": 1440, "height": 900 },
+        "cpuThrottle": 1,
+        "role": "admin",
+        "backend": "local"
+      },
+      "counts": {
+        "requests": { "reference": 13, "tolerance": 1 },
+        "routeRenders": { "reference": 1, "tolerance": 0 },
+        "echoRenders": { "reference": 0, "tolerance": 0 },
+        "actionRoundTrips": { "reference": 0, "tolerance": 0 },
+        "backgroundReads": { "reference": 3, "tolerance": 0 },
+        "backendRequests": { "reference": 46, "tolerance": 1 }
+      },
+      "payloads": {
+        "background:attention-overview": {
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 2083, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 1028, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": { "reference": 5, "tolerance": 0 }
+        },
+        "background:own-personnel-actions": {
+          "requests": { "reference": 2, "tolerance": 0 },
+          "encodedBytes": { "reference": 2486, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 378, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": { "reference": 0, "tolerance": 0 }
+        },
+        "prefetch:/aufgaben": {
+          "requests": { "reference": 2, "tolerance": 0 },
+          "encodedBytes": { "reference": 5698, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 14644, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        },
+        "prefetch:/zeiterfassung": {
+          "requests": { "reference": 3, "tolerance": 0 },
+          "encodedBytes": { "reference": 7562, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 18093, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        },
+        "route:/aufgaben": {
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 2205, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 5580, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        },
+        "script": {
+          "requests": { "reference": 4, "tolerance": 0 },
+          "encodedBytes": { "reference": 32212, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": null,
+          "rows": null
+        }
+      },
+      "source": {
+        "runKeys": [
+          "2026-10-09T041927828Z-d33901",
+          "2026-10-09T042614244Z-a97056",
+          "2026-10-09T043219324Z-11a835",
+          "2026-10-09T043834499Z-e9e693",
+          "2026-10-09T044333153Z-fb1af9"
+        ],
+        "buildId": "bf252d4a-a0e1-4387-a088-1b3d56ea08a3"
+      },
+      "history": [
+        {
+          "kind": "initial",
+          "target": "*",
+          "from": null,
+          "to": null,
+          "runKeys": [
+            "2026-10-09T041927828Z-d33901",
+            "2026-10-09T042614244Z-a97056",
+            "2026-10-09T043219324Z-11a835",
+            "2026-10-09T043834499Z-e9e693",
+            "2026-10-09T044333153Z-fb1af9"
+          ],
+          "reason": null
+        }
+      ]
+    },
+    {
+      "stepId": "lab.admin.settings-open",
+      "stepVersion": 1,
+      "labMeasurementVersion": 1,
+      "context": {
+        "measurementDigest": "c71715255634579b2f5a9674191cc3370d85e57c2bf00e9e3a5b17147122ed04",
+        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "browser": "chromium",
+        "browserVersion": "151.0.7922.34",
+        "viewport": { "width": 1440, "height": 900 },
+        "cpuThrottle": 1,
+        "role": "admin",
+        "backend": "local"
+      },
+      "counts": {
+        "requests": { "reference": 3, "tolerance": 0 },
+        "routeRenders": { "reference": 1, "tolerance": 0 },
+        "echoRenders": { "reference": 0, "tolerance": 0 },
+        "actionRoundTrips": { "reference": 0, "tolerance": 0 },
+        "backgroundReads": { "reference": 0, "tolerance": 0 },
+        "backendRequests": { "reference": 10, "tolerance": 1 },
+        "componentRenders": { "reference": 488, "tolerance": 9 }
+      },
+      "payloads": {
+        "route:/einstellungen/mitarbeiter": {
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 4504, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 12565, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        },
+        "script": {
+          "requests": { "reference": 2, "tolerance": 0 },
+          "encodedBytes": { "reference": 10783, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": null,
+          "rows": null
+        }
+      },
+      "source": {
+        "runKeys": [
+          "2026-10-09T041927828Z-d33901",
+          "2026-10-09T042614244Z-a97056",
+          "2026-10-09T043219324Z-11a835",
+          "2026-10-09T043834499Z-e9e693",
+          "2026-10-09T044333153Z-fb1af9"
+        ],
+        "buildId": "bf252d4a-a0e1-4387-a088-1b3d56ea08a3"
+      },
+      "history": [
+        {
+          "kind": "initial",
+          "target": "*",
+          "from": null,
+          "to": null,
+          "runKeys": [
+            "2026-10-09T041927828Z-d33901",
+            "2026-10-09T042614244Z-a97056",
+            "2026-10-09T043219324Z-11a835",
+            "2026-10-09T043834499Z-e9e693",
+            "2026-10-09T044333153Z-fb1af9"
+          ],
+          "reason": null
+        }
+      ]
+    }
+  ],
+  "gatedMetrics": [
+    {
+      "metric": "requests",
+      "stability": "zero spread on most steps over five runs of one build; a step where it varied stays ungated there",
+      "relevance": "one added Server Action round trip before the Arbeitsnachweis showed its version raised requests 4 to 5 and the median wall clock 674 to 886 ms",
+      "runKeys": [
+        "2026-10-09T024405639Z-6b9227",
+        "2026-10-09T024854069Z-2d50d8",
+        "2026-10-09T025319878Z-66b69d",
+        "2026-10-09T025758541Z-4cc4c0",
+        "2026-10-09T030226722Z-782b9c"
+      ]
+    },
+    {
+      "metric": "actionRoundTrips",
+      "stability": "zero spread on every step over five runs",
+      "relevance": "one added round trip moved the evidence step's median wall clock 674 to 886 ms",
+      "runKeys": [
+        "2026-10-09T024405639Z-6b9227",
+        "2026-10-09T024854069Z-2d50d8",
+        "2026-10-09T025319878Z-66b69d",
+        "2026-10-09T025758541Z-4cc4c0",
+        "2026-10-09T030226722Z-782b9c"
+      ]
+    },
+    {
+      "metric": "backendRequests",
+      "stability": "zero spread on most steps over five runs of one build; a step where it varied stays ungated there",
+      "relevance": "the added round trip raised backend requests 68 to 81 with the wall-clock rise above; one route render costs 46 to 58 of them",
+      "runKeys": [
+        "2026-10-09T024405639Z-6b9227",
+        "2026-10-09T024854069Z-2d50d8",
+        "2026-10-09T025319878Z-66b69d",
+        "2026-10-09T025758541Z-4cc4c0",
+        "2026-10-09T030226722Z-782b9c"
+      ]
+    },
+    {
+      "metric": "routeRenders",
+      "stability": "zero spread on every step over five runs",
+      "relevance": "removing the click-time route render (a data prefetch on hover) took the office job open from a median 438 to about 215 ms",
+      "runKeys": [
+        "2026-10-09T024405639Z-a63ae8",
+        "2026-10-09T024854069Z-4b0d42",
+        "2026-10-09T025319878Z-8a994d",
+        "2026-10-09T025758542Z-8bdd0b",
+        "2026-10-09T030226722Z-c94954"
+      ]
+    },
+    {
+      "metric": "echoRenders",
+      "stability": "zero spread on every step over five runs",
+      "relevance": "an echo is a whole route render of the saving session, the same cost as routeRenders",
+      "runKeys": [
+        "2026-10-09T024405639Z-a63ae8",
+        "2026-10-09T024854069Z-4b0d42",
+        "2026-10-09T025319878Z-8a994d",
+        "2026-10-09T025758542Z-8bdd0b",
+        "2026-10-09T030226722Z-c94954"
+      ]
+    },
+    {
+      "metric": "backgroundReads",
+      "stability": "zero spread on every step over five runs",
+      "relevance": "each is an authenticated GET with its own backend reads, which backendRequests counts with it",
+      "runKeys": [
+        "2026-10-09T024405639Z-a63ae8",
+        "2026-10-09T024854069Z-4b0d42",
+        "2026-10-09T025319878Z-8a994d",
+        "2026-10-09T025758542Z-8bdd0b",
+        "2026-10-09T030226722Z-c94954"
+      ]
+    },
+    {
+      "metric": "componentRenders",
+      "stability": "zero spread on most steps; steps whose echo timing varies stay ungated",
+      "relevance": "the same experiment raised rendered components 459-825 to 761-1169 with the wall-clock rise above",
+      "runKeys": [
+        "2026-10-09T024405639Z-6b9227",
+        "2026-10-09T024854069Z-2d50d8",
+        "2026-10-09T025319878Z-66b69d",
+        "2026-10-09T025758541Z-4cc4c0",
+        "2026-10-09T030226722Z-782b9c"
+      ]
+    }
+  ],
+  "rejectedMetrics": [
+    {
+      "metric": "prefetches",
+      "job": "relevance",
+      "evidence": "fewer is not better: turning in-view prefetch off made navigations slower (employee settings 422 to 952 ms); a changed prefetch still shows in requests and the payload shapes",
+      "runKeys": [
+        "2026-10-09T024405639Z-a63ae8",
+        "2026-10-09T024854069Z-4b0d42",
+        "2026-10-09T025319878Z-8a994d",
+        "2026-10-09T025758542Z-8bdd0b",
+        "2026-10-09T030226722Z-c94954"
+      ]
+    },
+    {
+      "metric": "domMutations",
+      "job": "relevance",
+      "evidence": "no experiment moved it together with the wall clock: thirty extra renders left it at 50",
+      "runKeys": [
+        "2026-10-09T024405639Z-6b9227",
+        "2026-10-09T024854069Z-2d50d8",
+        "2026-10-09T025319878Z-66b69d",
+        "2026-10-09T025758541Z-4cc4c0",
+        "2026-10-09T030226722Z-782b9c"
+      ]
+    },
+    {
+      "metric": "layoutCount",
+      "job": "relevance",
+      "evidence": "no experiment moved it together with the wall clock",
+      "runKeys": [
+        "2026-10-09T024405639Z-6b9227",
+        "2026-10-09T024854069Z-2d50d8",
+        "2026-10-09T025319878Z-66b69d",
+        "2026-10-09T025758541Z-4cc4c0",
+        "2026-10-09T030226722Z-782b9c"
+      ]
+    },
+    {
+      "metric": "recalcStyleCount",
+      "job": "stability",
+      "evidence": "varied on 16 of 18 steps over five runs, by up to 10 on one step",
+      "runKeys": [
+        "2026-10-09T024405639Z-6b9227",
+        "2026-10-09T024854069Z-2d50d8",
+        "2026-10-09T025319878Z-66b69d",
+        "2026-10-09T025758541Z-4cc4c0",
+        "2026-10-09T030226722Z-782b9c"
+      ]
+    },
+    {
+      "metric": "longTasks",
+      "job": "stability",
+      "evidence": "varied on 8 of 18 steps over five runs (0 to 3 on the throttled field steps)",
+      "runKeys": [
+        "2026-10-09T024405639Z-6b9227",
+        "2026-10-09T024854069Z-2d50d8",
+        "2026-10-09T025319878Z-66b69d",
+        "2026-10-09T025758541Z-4cc4c0",
+        "2026-10-09T030226722Z-782b9c"
+      ]
+    },
+    {
+      "metric": "longAnimationFrames",
+      "job": "stability",
+      "evidence": "varied on 6 of 18 steps over five runs",
+      "runKeys": [
+        "2026-10-09T024405639Z-6b9227",
+        "2026-10-09T024854069Z-2d50d8",
+        "2026-10-09T025319878Z-66b69d",
+        "2026-10-09T025758541Z-4cc4c0",
+        "2026-10-09T030226722Z-782b9c"
+      ]
+    },
+    {
+      "metric": "reactCommits",
+      "job": "stability",
+      "evidence": "five quiet runs showed zero spread on several steps, but a later run on a slower machine state moved lab.office.job-open from 14 to 16: streamed responses commit in timing-dependent batches",
+      "runKeys": [
+        "2026-10-09T041927828Z-d33901",
+        "2026-10-09T042614244Z-a97056",
+        "2026-10-09T043219324Z-11a835",
+        "2026-10-09T043834499Z-e9e693",
+        "2026-10-09T044333153Z-fb1af9"
+      ]
+    }
+  ]
+}

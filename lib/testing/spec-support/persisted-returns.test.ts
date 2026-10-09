@@ -33,6 +33,36 @@ const NON_PERSISTED_RETURNS: readonly { file: string; name: string; reason: stri
     reason: 'returns a measured duration',
   },
   {
+    file: 'tests/audit/support/lab-recorder.ts',
+    name: 'openLabSession',
+    reason: 'opens a measured browser session, not a saved row',
+  },
+  {
+    file: 'tests/audit/support/lab-network.ts',
+    name: 'trackLabNetwork',
+    reason: 'starts a network tracker for a measured session, not a saved row',
+  },
+  {
+    file: 'tests/audit/support/layout-shifts.ts',
+    name: 'shiftsAfterUsable',
+    reason: 'reads the layout shifts of a rendered page, not a saved row',
+  },
+  {
+    file: 'tests/audit/support/lab-journeys.ts',
+    name: 'neighbourBoardRow',
+    reason: 'reads which board rows the page lays out, not a saved row',
+  },
+  {
+    file: 'tests/audit/support/lab-journeys.ts',
+    name: 'boardCardTitle',
+    reason: 'reads the title a board card shows, not a saved row',
+  },
+  {
+    file: 'tests/audit/support/lab-journeys.ts',
+    name: 'checklistPointDone',
+    reason: 'reads one stored completion flag through the admin client for the lab step assertion',
+  },
+  {
     file: 'tests/audit/support/layout-fixtures.ts',
     name: 'prepareLayoutDetails',
     reason: 'a seeder that writes through the admin client',

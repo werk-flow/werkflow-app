@@ -262,7 +262,12 @@ function MemberTableRow({
   const showStatusSkeleton = isStatusLoading && !status;
 
   return (
-    <TableRow interactive onClick={() => router.push(`/mitarbeiter/${member.user_id}`)}>
+    <TableRow
+      interactive
+      onClick={() => router.push(`/mitarbeiter/${member.user_id}`)}
+      onMouseEnter={() => router.prefetch(`/mitarbeiter/${member.user_id}`)}
+      onFocus={() => router.prefetch(`/mitarbeiter/${member.user_id}`)}
+    >
       <TableCell className="font-medium">
         <div className="space-y-1">
           <span className="flex items-center gap-2">

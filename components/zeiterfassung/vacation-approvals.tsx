@@ -1,5 +1,6 @@
 'use client';
 
+import { StaleRegion } from '@/components/shared/stale-region';
 import { useState } from 'react';
 import { Palmtree } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -122,19 +123,21 @@ export function VacationApprovals() {
 
       <ErrorText className="px-1">{actionError}</ErrorText>
 
-      {pending.map((item) => (
-        <VacationApprovalPendingCard
-          key={item.request.id}
-          item={item}
-          busy={busy}
-          setReasonDialog={setReasonDialog}
-          handleApprove={handleApprove}
-        />
-      ))}
+      <StaleRegion stale={view.isStale} onRetry={view.refresh} className="space-y-3">
+        {pending.map((item) => (
+          <VacationApprovalPendingCard
+            key={item.request.id}
+            item={item}
+            busy={busy}
+            setReasonDialog={setReasonDialog}
+            handleApprove={handleApprove}
+          />
+        ))}
 
-      {approved.length > 0 && (
-        <VacationApprovalApprovedList approved={approved} busy={busy} setReasonDialog={setReasonDialog} />
-      )}
+        {approved.length > 0 && (
+          <VacationApprovalApprovedList approved={approved} busy={busy} setReasonDialog={setReasonDialog} />
+        )}
+      </StaleRegion>
 
       {reasonDialog.mode !== 'closed' && (
         <ReasonDialog

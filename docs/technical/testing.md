@@ -100,7 +100,7 @@ A failed browser group may run again as soon as any source file changed (`direct
 
 ### Release mode
 
-`bun run test:verify --mode release` selects every group and rejects `--group`. A browser pass is reused only when every product file is unchanged since it ran. The `audit:performance:*` groups and `audit:visual` run in release mode only, and an explicit `--group` runs them in change mode. A change plan never selects a measured group, but it names each `audit:performance:*` group whose scopes own a changed product file, with the command that runs it. Latency deadlines, budgets, and reference comparisons fail a group in release mode only. In change mode the runner records them in the report's `measurements` and in `overTarget`, and the group passes. Missing, malformed, or incorrect evidence fails in every mode. An explicit `--group audit:performance:<name>` run enforces its deadlines, so you can prove a performance repair.
+`bun run test:verify --mode release` selects every group and rejects `--group`. A browser pass is reused only when every product file is unchanged since it ran. The `audit:performance:*` and `audit:lab:*` groups and `audit:visual` run in release mode only, and an explicit `--group` runs them in change mode. A change plan never selects them, but it names each measured or lab group whose scopes own a changed product file. Latency deadlines, budgets, lab ceilings and reference comparisons fail a group in release mode only. In change mode the runner records them in the report's `measurements` and in `overTarget`, and the group passes. Missing, malformed, or incorrect evidence fails in every mode. An explicit `--group audit:performance:<name>` run enforces its deadlines, so you can prove a performance repair.
 
 After a failed release run, pass every failed group with `--group` before the next release plan. After two consecutive failed release runs, write the diagnosis into the incident log first (`lib/testing/publication/release-breaker.ts`).
 
@@ -162,7 +162,7 @@ Items marked Tier 2 fail `bun run test:unit` (`spec-conventions.test.ts` with `l
 
 The [freshness contract](realtime-and-caching.md) owns the product targets. `expectLiveWithin` measures from submission in the acting session to the exact new fact in the receiving session against the live target and its tolerance in `lib/testing/responsiveness-tolerance.ts`. `expectReadyWithin` measures from opening to usable controls. A slow but correct observation completes its test, and the runner judges the archived timing afterwards (`checkLatencyEvidence`).
 
-Scenario measurements use the ids, budgets, and sample counts in `lib/testing/measured-scenarios.ts` and the reviewed references in `lib/testing/performance-baselines.json`. Each `audit:performance:*` group seeds the typical profile into its own organization and runs alone.
+Scenario measurements use the ids, budgets, and sample counts in `lib/testing/measured-scenarios.ts` and the reviewed references in `lib/testing/performance-baselines.json`. [Performance](performance.md) owns journeys, lab counts and payload budgets.
 
 - **Budget.** A new scenario takes the budget of the registered scenarios with its boundary, and a cross-session scenario takes the live target. A budget never follows what a build happens to do.
 - **Comparison basis.** The sample median is compared with the reference, without the provider's delivery time; the budget judges the whole interval (`comparableMs` in `lib/testing/latency-evidence.ts`).

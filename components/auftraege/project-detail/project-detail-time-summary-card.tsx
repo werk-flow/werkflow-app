@@ -10,13 +10,16 @@ import { formatDuration } from '@/lib/time-tracking/helpers';
 import { cn } from '@/lib/utils';
 import type { useProjectDetailTime } from './use-project-detail-time';
 import { SectionTitle } from '@/components/shared/section-title';
+import { StaleRegion } from '@/components/shared/stale-region';
 
 type ProjectTimeSummary = ReturnType<typeof useProjectDetailTime>['projectTimeSummary'];
 
 type ProjectDetailTimeSummaryCardProps = {
   isLoadingTime: boolean;
   timeLoadError: boolean;
-  onRetry: () => void;
+  /** A refresh failed: the totals are last-known. */
+  timeStale: boolean;
+  onRetry: () => Promise<unknown>;
   retryPending: boolean;
   projectTimeSummary: ProjectTimeSummary;
 };
@@ -24,6 +27,7 @@ type ProjectDetailTimeSummaryCardProps = {
 export function ProjectDetailTimeSummaryCard({
   isLoadingTime,
   timeLoadError,
+  timeStale,
   onRetry,
   retryPending,
   projectTimeSummary,
@@ -42,7 +46,7 @@ export function ProjectDetailTimeSummaryCard({
           <Skeleton className="h-8 w-3/4" />
         </div>
       ) : timeLoadError ? (
-        <SectionError onRetry={onRetry} retryPending={retryPending}>
+        <SectionError onRetry={() => void onRetry()} retryPending={retryPending}>
           Die Arbeitszeiten für dieses Projekt konnten nicht geladen werden.
         </SectionError>
       ) : projectTimeSummary.totalMinutes === 0 ? (
@@ -50,7 +54,7 @@ export function ProjectDetailTimeSummaryCard({
           Noch keine Arbeitszeiten für dieses Projekt erfasst.
         </p>
       ) : (
-        <div className="space-y-4">
+        <StaleRegion stale={timeStale} onRetry={onRetry} className="space-y-4">
           <div className="rounded-md bg-muted/50 p-3">
             <p className="text-xs text-muted-foreground">Gesamtstunden (alle Aufträge)</p>
             <p className="text-lg font-bold tabular-nums">
@@ -80,7 +84,7 @@ export function ProjectDetailTimeSummaryCard({
               )}
             </div>
           )}
-        </div>
+        </StaleRegion>
       )}
     </div>
   );

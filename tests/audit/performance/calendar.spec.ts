@@ -15,7 +15,17 @@ import {
   TYPICAL_PROFILE_BUSINESS_DATE,
   type TypicalProfileCounts,
 } from '../support/performance-profile';
-import { closeBanners, dragHandleBy, trailingResizeHandle } from '../../golden/support/plantafel';
+import {
+  bannerCloseButton,
+  CALENDAR_UNAVAILABLE_TITLE,
+  calendarReadFailureBanner,
+  calendarRefreshButton,
+  calendarViewTab,
+  closeBanners,
+  dragHandleBy,
+  trailingResizeHandle,
+} from '../../golden/support/plantafel';
+import { retryButton } from '../../golden/support/steps/shared';
 import {
   boardCellOf,
   calendarGrid,
@@ -78,6 +88,7 @@ test.describe('Performance profile @AUDIT-PERFORMANCE', () => {
     expect(counts.timeEntries).toBeGreaterThan(0);
   });
 
+  /* eslint-disable playwright-spec/no-copy-in-spec-locator -- measured scenarios calendar.board.cold-open, calendar.board.reassign.visible, calendar.board.reassign.settled, calendar.board-to-day.covered, calendar.day.resize.settled, calendar.day-to-board.covered, calendar.board.six-weeks, calendar.board-to-month.uncovered, calendar.month.move.visible, calendar.month.move.settled, calendar.month-next.uncovered and calendar.month-to-board.covered: its locators change only in the run that recalibrates its references (docs/technical/testing.md#deadlines-and-measured-scenarios) */
   test('PERF-02 calendar entry, drops and view switches report usable content within budget @AUDIT-PERFORMANCE-02', async ({
     browser,
     baseURL,
@@ -252,6 +263,7 @@ test.describe('Performance profile @AUDIT-PERFORMANCE', () => {
       }
     }
   });
+  /* eslint-enable playwright-spec/no-copy-in-spec-locator -- the measured test ends here */
 
   test('PERF-03 retained calendar rows cannot be edited during a held or failed read @AUDIT-PERFORMANCE-03', async ({
     browser,
@@ -274,7 +286,7 @@ test.describe('Performance profile @AUDIT-PERFORMANCE', () => {
       const grid = calendarGrid(page);
       await expect(grid).not.toHaveAttribute('inert');
       // A failed covered refresh keeps the last-known rows visible but inert.
-      const refresh = page.getByRole('button', { name: 'Aktualisieren', exact: true });
+      const refresh = calendarRefreshButton(page);
       const coveredRead = await holdNextCalendarRead(page);
       try {
         await refresh.click();
@@ -285,10 +297,8 @@ test.describe('Performance profile @AUDIT-PERFORMANCE', () => {
       } finally {
         await coveredRead.dispose();
       }
-      const failureBanner = page
-        .getByRole('alert')
-        .filter({ hasText: 'Der Kalender konnte nicht aktualisiert werden' });
-      await failureBanner.getByRole('button', { name: 'Hinweis schließen', exact: true }).click();
+      const failureBanner = calendarReadFailureBanner(page);
+      await bannerCloseButton(failureBanner).click();
       await expect(failureBanner).toHaveCount(0);
       await expect(refresh).toBeEnabled();
       await refresh.click();
@@ -299,18 +309,18 @@ test.describe('Performance profile @AUDIT-PERFORMANCE', () => {
       // replaces the renderer and keeps retry interactive instead.
       const uncoveredRead = await holdNextCalendarRead(page);
       try {
-        await page.getByRole('tab', { name: 'Monat', exact: true }).click();
+        await calendarViewTab(page, 'month').click();
         await expect.poll(uncoveredRead.entered).toBe(true);
         await expect(grid).toHaveAttribute('inert', '');
         uncoveredRead.fail();
-        await expect(grid.getByRole('alert')).toContainText('Kalender konnte nicht geladen werden');
+        await expect(grid.getByRole('alert')).toContainText(CALENDAR_UNAVAILABLE_TITLE);
         await expect(grid).toHaveAttribute('data-calendar-state', 'unavailable');
-        await expect(grid.getByRole('button', { name: 'Erneut laden', exact: true })).toBeEnabled();
+        await expect(retryButton(grid)).toBeEnabled();
         await expect(calendarReady(page, 'month')).toHaveCount(0);
       } finally {
         await uncoveredRead.dispose();
       }
-      await grid.getByRole('button', { name: 'Erneut laden', exact: true }).click();
+      await retryButton(grid).click();
       await expect(calendarReady(page, 'month')).toBeVisible();
       await expect(grid).not.toHaveAttribute('inert');
     } finally {

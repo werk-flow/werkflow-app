@@ -25,6 +25,8 @@ export function useDispatchPanelOverview(): {
   today: string;
   overview: DispatchOverview | null;
   loadError: string | null;
+  /** A refresh failed: the overview is last-known and its row actions are inert. */
+  isStale: boolean;
   refresh: LiveViewState<DispatchOverview>['refresh'];
   openChallenges: DispatchPanelOpenChallenge[];
 } {
@@ -57,12 +59,10 @@ export function useDispatchPanelOverview(): {
   const { refresh } = view;
   const overview = view.data ?? null;
   // A failed initial load must not strand the panel in loading state; later
-  // failures keep the last-known overview (the primitive's keep-last-known)
-  // and are named so a stale panel after an action is never silent.
+  // failures keep the last-known overview (the primitive's keep-last-known),
+  // which the panel marks stale so a failed read after an action is never silent.
   const loadError =
-    !view.isLoading && (view.data === undefined || view.isStale)
-      ? (view.error ?? dispatchErrorMessage('load_failed'))
-      : null;
+    !view.isLoading && view.data === undefined ? (view.error ?? dispatchErrorMessage('load_failed')) : null;
 
   // A challenge is always recorded on an acknowledgement; the narrowed id is
   // the row key for the settle indicator and the resolve dialog.
@@ -77,5 +77,5 @@ export function useDispatchPanelOverview(): {
     );
   }, [overview]);
 
-  return { today, overview, loadError, refresh, openChallenges };
+  return { today, overview, loadError, isStale: view.isStale, refresh, openChallenges };
 }

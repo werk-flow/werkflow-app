@@ -1,5 +1,6 @@
 'use client';
 
+import { StaleRegion } from '@/components/shared/stale-region';
 import { useState } from 'react';
 import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -135,6 +136,7 @@ export function PendingApprovals({
   const changeRequests = changeRequestList.items.map((row) => row.item);
   const isInitialLoading = view.isLoading;
   const error = actionError ?? view.error;
+  const listError = view.isStale ? actionError : error;
 
   // Confirmation appears only after the server accepted the review.
   const review = async (
@@ -200,45 +202,48 @@ export function PendingApprovals({
       data-testid="pending-approvals-panel"
       data-loaded={isInitialLoading ? 'false' : 'true'}
     >
-      <PendingApprovalsHeader
-        isInitialLoading={isInitialLoading}
-        loadFailed={Boolean(error) && allItems.length === 0}
-        itemCount={allItems.length}
-        sessionCount={sessions.length}
-        approveAllSessions={approveAllSessions}
-        onRefresh={view.refresh}
-      />
+      <StaleRegion stale={view.isStale} onRetry={view.refresh} className="space-y-3">
+        <PendingApprovalsHeader
+          isInitialLoading={isInitialLoading}
+          loadFailed={Boolean(error) && allItems.length === 0}
+          itemCount={allItems.length}
+          sessionCount={sessions.length}
+          approveAllSessions={approveAllSessions}
+          onRefresh={view.refresh}
+        />
 
-      {/* Inline error message for operation failures (when items exist) */}
-      {error && allItems.length > 0 && (
-        <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive flex items-center justify-between">
-          <ErrorText>{error}</ErrorText>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setActionError(null)}
-            aria-label="Fehlermeldung ausblenden"
-            className="h-auto p-1 text-destructive hover:text-destructive"
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-      )}
+        {/* Inline error message for operation failures (when items exist); a
+          failed refresh shows as the stale notice instead. */}
+        {listError && allItems.length > 0 && (
+          <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive flex items-center justify-between">
+            <ErrorText>{listError}</ErrorText>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setActionError(null)}
+              aria-label="Fehlermeldung ausblenden"
+              className="h-auto p-1 text-destructive hover:text-destructive"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
 
-      <PendingApprovalsList
-        isInitialLoading={isInitialLoading}
-        error={error}
-        allItems={allItems}
-        onRetry={() => {
-          setActionError(null);
-          void view.refresh();
-        }}
-        onRefresh={() => void view.refresh()}
-        reviewPendingSession={reviewPendingSession}
-        reviewPendingChangeRequest={reviewPendingChangeRequest}
-        currentUserRole={currentUserRole}
-        currentUserId={currentUserId}
-      />
+        <PendingApprovalsList
+          isInitialLoading={isInitialLoading}
+          error={error}
+          allItems={allItems}
+          onRetry={() => {
+            setActionError(null);
+            void view.refresh();
+          }}
+          onRefresh={() => void view.refresh()}
+          reviewPendingSession={reviewPendingSession}
+          reviewPendingChangeRequest={reviewPendingChangeRequest}
+          currentUserRole={currentUserRole}
+          currentUserId={currentUserId}
+        />
+      </StaleRegion>
     </div>
   );
 }

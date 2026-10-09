@@ -29,6 +29,7 @@ import {
   employeeAssignmentSearch,
   escapeRegExp,
   expectGone,
+  listPager,
   metadataField,
   pendingRow,
   selectFromSearchable,
@@ -690,6 +691,7 @@ export function instructionEvidenceFulfilled(item: Locator): Locator {
 
 const WORK_LIST_COPY = {
   section: 'Aktuelle Aufträge und Projekte',
+  pager: 'Aktuelle Aufträge',
   search: 'Suche nach Titel, Nummer, Kunde, Ort…',
   allTypes: 'Alle',
   filter: 'Filter',
@@ -716,6 +718,11 @@ export const WORK_LIST_SORT_COLUMNS = [
 /** The list's „Aktuelle Aufträge und Projekte“ section. */
 export function workListSection(page: Page): Locator {
   return page.getByRole('region', { name: WORK_LIST_COPY.section, exact: true });
+}
+
+/** The pagination navigation of the list's active section. */
+export function workListPager(page: Page): Locator {
+  return listPager(page, WORK_LIST_COPY.pager);
 }
 
 /** The list's search; desktop and mobile render the same search, so this is the visible copy. */
@@ -839,6 +846,8 @@ export async function typeWorkCreatePlannedDate(dialog: Locator, digits: string)
 const PROJECT_COPY = {
   addJobsTitle: 'Aufträge zum Projekt hinzufügen',
   jobPicker: 'Aufträge zuweisen',
+  /** The picker's summary once it holds a selection (job-multi-select.tsx). */
+  selectedJobs: { one: 'Auftrag', many: 'Aufträge' },
   deleteProject: 'Projekt löschen',
   scheduleIndicator: /Im Zeitplan|Leicht verzögert|Stark verzögert/,
 } as const;
@@ -858,6 +867,12 @@ export function projectJobAssignmentDialog(page: Page): Locator {
 
 export function projectJobPicker(dialog: Locator): Locator {
   return dialog.getByRole('combobox').filter({ hasText: PROJECT_COPY.jobPicker });
+}
+
+/** The job picker once its summary names the selection („1 Auftrag“, „2 Aufträge“). */
+export function projectJobPickerWithSelection(dialog: Locator, count: number): Locator {
+  const noun = count === 1 ? PROJECT_COPY.selectedJobs.one : PROJECT_COPY.selectedJobs.many;
+  return dialog.getByRole('combobox').filter({ hasText: `${count} ${noun}` });
 }
 
 /** The visible schedule indicators of a project (on time, slightly or strongly delayed). */

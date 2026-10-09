@@ -80,7 +80,13 @@ function useJobDetailTimeEntries(jobId: string) {
   const timeEntries = useMemo(() => timeView.data?.entries ?? [], [timeView.data]);
   const timeParticipants = useMemo(() => timeView.data?.participants ?? [], [timeView.data]);
 
-  return { timeEntries, timeParticipants, isLoadingTime: timeView.isLoading };
+  return {
+    timeEntries,
+    timeParticipants,
+    isLoadingTime: timeView.isLoading,
+    isTimeStale: timeView.isStale,
+    refreshTime: timeView.refresh,
+  };
 }
 
 /** Realtime route refresh for the page, with the two refs that hold it back. */
@@ -196,7 +202,9 @@ export function JobDetailContent({
     isAdminOrManager,
     applyLiveJobPatch,
   });
-  const { timeEntries, timeParticipants, isLoadingTime } = useJobDetailTimeEntries(liveJob.id);
+  const { timeEntries, timeParticipants, isLoadingTime, isTimeStale, refreshTime } = useJobDetailTimeEntries(
+    liveJob.id,
+  );
   const { isDeletingRef, suppressRefreshRef } = useJobDetailRefreshGate();
   const timeSummary = useJobDetailTimeSummary({
     jobId: liveJob.id,
@@ -262,6 +270,8 @@ export function JobDetailContent({
                 inventoryItems={inventoryItems}
                 inventoryLocations={inventoryLocations}
                 isLoadingTime={isLoadingTime}
+                isTimeStale={isTimeStale}
+                refreshTime={refreshTime}
                 timeSummary={timeSummary}
                 setShowProjectDialog={setShowProjectDialog}
               />

@@ -3,13 +3,11 @@
 import { AufgabenListSkeleton } from '@/components/aufgaben/aufgaben-content';
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
-import { Skeleton } from '@/components/ui/skeleton';
 
 function AufgabenContentSkeleton() {
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-4">
-      {/* The own personnel actions section renders its own placeholder at this height. */}
-      <Skeleton className="h-28 w-full" />
+    <div className="mx-auto w-full max-w-3xl space-y-8">
+      {/* The own personnel actions section stays empty for most people; it reserves no space. */}
       <AufgabenListSkeleton />
     </div>
   );

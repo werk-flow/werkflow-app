@@ -1,5 +1,6 @@
 'use client';
 
+import { StaleRegion } from '@/components/shared/stale-region';
 import { useState } from 'react';
 import { Thermometer } from 'lucide-react';
 
@@ -112,13 +113,15 @@ export function SicknessSection() {
       )}
 
       {overview && (activeReports.length > 0 || pastReports.length > 0) && (
-        <OwnSicknessReportList
-          activeReports={activeReports}
-          pastReports={pastReports}
-          settling={settling}
-          setEndReport={setEndReport}
-          setCancelReport={setCancelReport}
-        />
+        <StaleRegion stale={view.isStale} onRetry={view.refresh}>
+          <OwnSicknessReportList
+            activeReports={activeReports}
+            pastReports={pastReports}
+            settling={settling}
+            setEndReport={setEndReport}
+            setCancelReport={setCancelReport}
+          />
+        </StaleRegion>
       )}
 
       {showReportDialog && (

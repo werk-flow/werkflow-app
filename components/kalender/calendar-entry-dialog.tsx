@@ -71,7 +71,8 @@ export function CalendarEntryDialog({
     },
   });
   const isLoadingData = activeTab !== 'planning' && memberView.isLoading;
-  const hasDataLoadFailed = activeTab !== 'planning' && Boolean(memberView.error);
+  // A thrown read leaves `error` null; `isStale` still names the failed refresh.
+  const hasDataLoadFailed = activeTab !== 'planning' && (Boolean(memberView.error) || memberView.isStale);
 
   useEffect(() => {
     if (open) return;

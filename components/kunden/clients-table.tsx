@@ -245,7 +245,13 @@ export function ClientsTable({ rows, isBusy, onSaved, onDelete, isFiltered }: Cl
                   }}
                 />
               ) : (
-                <TableRow key={client.id} interactive onClick={() => router.push(`/kunden/${client.id}`)}>
+                <TableRow
+                  key={client.id}
+                  interactive
+                  onClick={() => router.push(`/kunden/${client.id}`)}
+                  onMouseEnter={() => router.prefetch(`/kunden/${client.id}`)}
+                  onFocus={() => router.prefetch(`/kunden/${client.id}`)}
+                >
                   <TableCell className="font-medium">
                     <span className="flex items-center gap-2">
                       <Link

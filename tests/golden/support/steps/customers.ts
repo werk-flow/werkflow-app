@@ -14,6 +14,7 @@ import {
   confirmed,
   expectBannerAfter,
   expectVisibleAfterSave,
+  listPager,
   metadataField,
   selectFromSearchable,
   SHARED_COPY,
@@ -36,6 +37,7 @@ const CUSTOMER_COPY = {
   created: 'Kunde erfolgreich erstellt!',
   inlineCreate: 'Neuen Kunden erstellen',
   search: 'Kunden durchsuchen',
+  pager: 'Kunden',
   detailTitle: 'Kundendetails',
   customerNumber: 'Kundennummer',
   deleteCustomer: 'Kunde löschen',
@@ -108,6 +110,11 @@ export function inlineCustomerCreateButton(page: Page): Locator {
 
 export function customerSearchField(page: Page): Locator {
   return page.getByLabel(CUSTOMER_COPY.search);
+}
+
+/** The pagination navigation of the customer list. */
+export function customerListPager(page: Page): Locator {
+  return listPager(page, CUSTOMER_COPY.pager);
 }
 
 /** The customer detail's title that proves the detail opened. */

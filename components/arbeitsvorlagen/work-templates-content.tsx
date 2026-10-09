@@ -1,5 +1,6 @@
 'use client';
 
+import { StaleRegion } from '@/components/shared/stale-region';
 import { PlainButton } from '@/components/ui/plain-button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useMemo, useState, type ReactElement } from 'react';
@@ -171,38 +172,40 @@ export function WorkTemplatesContent({
         onStatusFilterChange={setStatusFilter}
       />
 
-      {list.items.length === 0 ? (
-        <EmptyState
-          icon={ClipboardList}
-          title="Noch keine Arbeitsvorlagen"
-          description="Lege eine Vorlage für einen wiederkehrenden Auftrag oder ein Projekt an. WerkFlow bringt keine fertigen Standardvorlagen mit."
-          action={
-            <Button onClick={() => setCreateOpen(true)}>
-              <Plus className="size-4" />
-              Erste Vorlage erstellen
-            </Button>
-          }
-        />
-      ) : filtered.length === 0 ? (
-        <EmptyState
-          icon={ClipboardList}
-          title="Keine Arbeitsvorlagen gefunden"
-          description="Keine Arbeitsvorlage passt zu Suche und Filtern."
-        />
-      ) : (
-        <div className="space-y-3">
-          {filtered.map(({ item: template, isOptimistic }) => (
-            <WorkTemplateRow
-              key={template.id}
-              template={template}
-              isOptimistic={isOptimistic}
-              pending={isOptimistic || busy.isBusy(template.id)}
-              onOpen={openEditor}
-              onChangeArchive={changeArchive}
-            />
-          ))}
-        </div>
-      )}
+      <StaleRegion stale={view.isStale} onRetry={reload}>
+        {list.items.length === 0 ? (
+          <EmptyState
+            icon={ClipboardList}
+            title="Noch keine Arbeitsvorlagen"
+            description="Lege eine Vorlage für einen wiederkehrenden Auftrag oder ein Projekt an. WerkFlow bringt keine fertigen Standardvorlagen mit."
+            action={
+              <Button onClick={() => setCreateOpen(true)}>
+                <Plus className="size-4" />
+                Erste Vorlage erstellen
+              </Button>
+            }
+          />
+        ) : filtered.length === 0 ? (
+          <EmptyState
+            icon={ClipboardList}
+            title="Keine Arbeitsvorlagen gefunden"
+            description="Keine Arbeitsvorlage passt zu Suche und Filtern."
+          />
+        ) : (
+          <div className="space-y-3">
+            {filtered.map(({ item: template, isOptimistic }) => (
+              <WorkTemplateRow
+                key={template.id}
+                template={template}
+                isOptimistic={isOptimistic}
+                pending={isOptimistic || busy.isBusy(template.id)}
+                onOpen={openEditor}
+                onChangeArchive={changeArchive}
+              />
+            ))}
+          </div>
+        )}
+      </StaleRegion>
 
       <CreateTemplateDialog
         open={createOpen}

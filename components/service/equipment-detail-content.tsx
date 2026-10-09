@@ -4,7 +4,7 @@ import { useState, type ReactElement } from 'react';
 
 import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
 import { Button } from '@/components/ui/button';
-import { SectionError } from '@/components/ui/section-error';
+import { StaleRegion } from '@/components/shared/stale-region';
 import { ErrorText } from '@/components/ui/error-text';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import {
@@ -174,7 +174,7 @@ export function EquipmentDetailContent({
 
   return (
     <>
-      <div className="space-y-6">
+      <StaleRegion stale={live.isStale} onRetry={live.refresh} className="space-y-6">
         <EquipmentDetailHeader
           item={item}
           headerBusy={headerBusy}
@@ -184,11 +184,6 @@ export function EquipmentDetailContent({
           onChangeState={openStatusDialog}
         />
 
-        {live.isStale && (
-          <SectionError onRetry={() => void live.refresh()} retryPending={live.isRefreshing}>
-            Die zuletzt bekannten Daten werden angezeigt. Die Aktualisierung ist fehlgeschlagen.
-          </SectionError>
-        )}
         {item.voidedAt && (
           <p role="status" className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm">
             Dieser Nachfolger wurde durch eine Korrektur als irrtümlich erfasst markiert. Seine Historie
@@ -237,7 +232,7 @@ export function EquipmentDetailContent({
             }}
           />
         </div>
-      </div>
+      </StaleRegion>
 
       {editOpen && (
         <EquipmentFormDialog

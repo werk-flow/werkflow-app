@@ -125,6 +125,15 @@ export type WorkArtifactMutationResult =
   | { success: true; artifactId: string; version: number; status: WorkArtifactStatus; data?: Json }
   | ActionFailure;
 
+/**
+ * A saved Arbeitsnachweis with its detail as read after the write in the same
+ * request, so the editor shows the saved version without a second round trip.
+ * `artifact` is null when that read failed; the editor then reads it itself.
+ */
+export type WorkArtifactSaveResult =
+  | (Extract<WorkArtifactMutationResult, { success: true }> & { artifact: WorkArtifactDetail | null })
+  | ActionFailure;
+
 export type WorkArtifactTimeSourceOption = {
   id: string;
   label: string;

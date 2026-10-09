@@ -3,7 +3,7 @@
 import type { ReactElement } from 'react';
 
 import { ErrorText } from '@/components/ui/error-text';
-import { SectionError } from '@/components/ui/section-error';
+import { StaleRegion } from '@/components/shared/stale-region';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { useOptimisticList } from '@/hooks/use-optimistic-list';
@@ -118,33 +118,41 @@ export function JobMaterialsSection({
         onTake={() => void openDialog('take')}
       />
 
-      {!hasDirectLines ? (
-        <div className="rounded-md border border-dashed bg-muted/20 px-4 py-6 text-center">
-          <p className="text-sm font-medium">
-            {isProjectContext ? 'Noch kein direktes Projektmaterial erfasst.' : 'Noch kein Material erfasst.'}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Planen speichert nur den Bedarf. Entnehmen bucht die tatsächliche Bewegung im Lager.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {lines.items.map(({ item: line, isOptimistic }) => (
-            <MaterialLineRow
-              key={line.id}
-              line={line}
-              isAdminOrManager={isAdminOrManager}
-              isBusy={isOptimistic || busyLines.isBusy(line.id)}
-              locations={pickerLocations}
-              readOnly={readOnly}
-              onTake={() => void busyLines.run(line.id, () => openDialog('take', line))}
-              onReturn={() => void busyLines.run(line.id, () => openDialog('return', line))}
-              onEdit={() => void busyLines.run(line.id, () => openDialog('edit', line))}
-              onDelete={() => handleDelete(line.id)}
-            />
-          ))}
-        </div>
-      )}
+      <StaleRegion
+        stale={fieldView.isStale}
+        onRetry={fieldView.refresh}
+        notice="Der aktuelle Materialstand konnte nicht geladen werden. Die letzten bekannten Angaben bleiben sichtbar."
+      >
+        {!hasDirectLines ? (
+          <div className="rounded-md border border-dashed bg-muted/20 px-4 py-6 text-center">
+            <p className="text-sm font-medium">
+              {isProjectContext
+                ? 'Noch kein direktes Projektmaterial erfasst.'
+                : 'Noch kein Material erfasst.'}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Planen speichert nur den Bedarf. Entnehmen bucht die tatsächliche Bewegung im Lager.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {lines.items.map(({ item: line, isOptimistic }) => (
+              <MaterialLineRow
+                key={line.id}
+                line={line}
+                isAdminOrManager={isAdminOrManager}
+                isBusy={isOptimistic || busyLines.isBusy(line.id)}
+                locations={pickerLocations}
+                readOnly={readOnly}
+                onTake={() => void busyLines.run(line.id, () => openDialog('take', line))}
+                onReturn={() => void busyLines.run(line.id, () => openDialog('return', line))}
+                onEdit={() => void busyLines.run(line.id, () => openDialog('edit', line))}
+                onDelete={() => handleDelete(line.id)}
+              />
+            ))}
+          </div>
+        )}
+      </StaleRegion>
 
       {hasInheritedLines && (
         <InheritedJobMaterialGroups
@@ -159,16 +167,6 @@ export function JobMaterialsSection({
       )}
 
       <ErrorText className="mt-3">{sectionError}</ErrorText>
-      {fieldView.isStale && (
-        <SectionError
-          className="mt-3"
-          onRetry={() => void fieldView.refresh()}
-          retryPending={fieldView.isRefreshing}
-        >
-          Der aktuelle Materialstand konnte nicht geladen werden. Die letzten bekannten Angaben bleiben
-          sichtbar.
-        </SectionError>
-      )}
 
       <MaterialSelectionDialog
         dialog={dialog}

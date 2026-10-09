@@ -162,10 +162,10 @@ export function changedTestTier(
   return executionInputs?.some((file) => file.startsWith('tests/') && changedFiles.includes(file)) ? 0 : 1;
 }
 
-const MEASURED_GROUP_PREFIX = 'audit:performance:';
+const MEASURED_GROUP_PREFIXES = ['audit:performance:', 'audit:lab:'];
 
 /**
- * The measured performance groups whose declared scopes own a changed product
+ * The measured performance and lab groups whose declared scopes own a changed product
  * file. The plan prints them for information only: change mode never selects
  * them, so an agent runs one explicitly while it works on that scope.
  */
@@ -174,7 +174,7 @@ export function measuredGroupsForChange(
   changedFiles: readonly string[],
 ): { id: string; changedFiles: string[] }[] {
   return groups.flatMap((group) => {
-    if (!group.id.startsWith(MEASURED_GROUP_PREFIX)) return [];
+    if (!MEASURED_GROUP_PREFIXES.some((prefix) => group.id.startsWith(prefix))) return [];
     const owned = changedFiles.filter(
       (file) => isProductFile(file) && scopeOwners(file).some((owner) => group.scopes?.includes(owner)),
     );

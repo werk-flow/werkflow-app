@@ -59,6 +59,8 @@ export function useMemberStatus({
 }: UseMemberStatusOptions): {
   statusMap: MemberStatusMap;
   isLoading: boolean;
+  /** A refresh failed: the statuses are last-known. `error` stays null when the read threw. */
+  isStale: boolean;
   error: string | null;
   refetch: () => Promise<void>;
 } {
@@ -163,6 +165,7 @@ export function useMemberStatus({
   return {
     statusMap: view.data ?? EMPTY_STATUS_MAP,
     isLoading: view.isLoading,
+    isStale: view.isStale,
     error: view.error,
     refetch: view.refresh,
   };

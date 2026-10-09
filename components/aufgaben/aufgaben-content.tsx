@@ -3,6 +3,7 @@ import { SectionError } from '@/components/ui/section-error';
 
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { StaleRegion } from '@/components/shared/stale-region';
 import { UsableContent } from '@/components/shared/usable-content';
 import { PersonnelOwnActionsSection } from '@/components/mitarbeiter/personnel-own-actions-section';
 import { AufgabenNotificationsSection } from './aufgaben-notifications-section';
@@ -15,7 +16,7 @@ export function AufgabenContent() {
 
   if (view.isLoading) {
     return (
-      <div className="mx-auto max-w-3xl space-y-4">
+      <div className="mx-auto max-w-3xl space-y-8">
         <PersonnelOwnActionsSection />
         <AufgabenListSkeleton />
       </div>
@@ -25,7 +26,7 @@ export function AufgabenContent() {
   // Settled without any data: the first load failed.
   if (!overview) {
     return (
-      <div className="mx-auto max-w-3xl space-y-4">
+      <div className="mx-auto max-w-3xl space-y-8">
         <PersonnelOwnActionsSection />
         <SectionError onRetry={() => void view.refresh()} retryPending={view.isRefreshing}>
           Die Aufgaben konnten nicht geladen werden. Bitte versuche es erneut.
@@ -38,17 +39,19 @@ export function AufgabenContent() {
     <UsableContent name="aufgaben" count={overview.tasks.length}>
       <div className="mx-auto max-w-3xl space-y-8" data-testid="aufgaben-content" data-loaded="true">
         <PersonnelOwnActionsSection />
-        <AufgabenTaskSection tasks={overview.tasks} />
+        <StaleRegion stale={view.isStale} onRetry={view.refresh} className="space-y-8">
+          <AufgabenTaskSection tasks={overview.tasks} />
 
-        <AufgabenNotificationsSection
-          notifications={overview.notifications}
-          busy={busy}
-          isMarkingAllRead={isMarkingAllRead}
-          handleMarkRead={handleMarkRead}
-          handleMarkAllRead={handleMarkAllRead}
-        />
+          <AufgabenNotificationsSection
+            notifications={overview.notifications}
+            busy={busy}
+            isMarkingAllRead={isMarkingAllRead}
+            handleMarkRead={handleMarkRead}
+            handleMarkAllRead={handleMarkAllRead}
+          />
 
-        <AufgabenOwnRequestsSection ownRequests={overview.ownRequests} />
+          <AufgabenOwnRequestsSection ownRequests={overview.ownRequests} />
+        </StaleRegion>
       </div>
     </UsableContent>
   );

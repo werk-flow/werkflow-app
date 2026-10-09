@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 
+import { StaleRegion } from '@/components/shared/stale-region';
 import { Card, CardContent } from '@/components/ui/card';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { SectionError } from '@/components/ui/section-error';
@@ -68,39 +69,41 @@ export function VacationSection() {
         <InlinePending active={busy.isBusy(NEW_REQUEST_ID)} />
       </h3>
 
-      {/* A failed first read is a failure with retry, never an empty card. */}
-      {loadFailed ? (
-        <SectionError onRetry={() => void view.refresh()} retryPending={view.isRefreshing}>
-          Die Urlaubsdaten konnten nicht geladen werden.
-        </SectionError>
-      ) : (
-        <Card>
-          <CardContent className="p-4">
-            {isLoading ? (
-              <div className="space-y-2">
-                <Skeleton className="h-5 w-40" />
-                <Skeleton className="h-2 w-full" />
-                <Skeleton className="h-4 w-56" />
-              </div>
-            ) : (
-              <OwnVacationBalanceSummary
-                overview={overview}
-                balance={balance}
-                setShowRequestDialog={setShowRequestDialog}
-              />
-            )}
-          </CardContent>
-        </Card>
-      )}
+      <StaleRegion stale={view.isStale} onRetry={view.refresh} className="space-y-3">
+        {/* A failed first read is a failure with retry, never an empty card. */}
+        {loadFailed ? (
+          <SectionError onRetry={() => void view.refresh()} retryPending={view.isRefreshing}>
+            Die Urlaubsdaten konnten nicht geladen werden.
+          </SectionError>
+        ) : (
+          <Card>
+            <CardContent className="p-4">
+              {isLoading ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-5 w-40" />
+                  <Skeleton className="h-2 w-full" />
+                  <Skeleton className="h-4 w-56" />
+                </div>
+              ) : (
+                <OwnVacationBalanceSummary
+                  overview={overview}
+                  balance={balance}
+                  setShowRequestDialog={setShowRequestDialog}
+                />
+              )}
+            </CardContent>
+          </Card>
+        )}
 
-      {overview && overview.requests.length > 0 && (
-        <OwnVacationRequestList
-          requests={overview.requests}
-          busy={busy}
-          handleWithdraw={handleWithdraw}
-          listError={listError}
-        />
-      )}
+        {overview && overview.requests.length > 0 && (
+          <OwnVacationRequestList
+            requests={overview.requests}
+            busy={busy}
+            handleWithdraw={handleWithdraw}
+            listError={listError}
+          />
+        )}
+      </StaleRegion>
 
       {showRequestDialog && (
         <OwnVacationRequestDialog

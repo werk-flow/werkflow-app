@@ -1,7 +1,25 @@
 import { expect, test } from '../support/fixtures';
 import { expectUsableWithin } from '../../golden/support/scenario-measurement';
 import { usableContentTarget } from '../../golden/support/browser-observation';
-import { visibleText } from '../../golden/support/steps/shared';
+import { customerListPager, customerSearchField } from '../../golden/support/steps/customers';
+import { dismissDialog, pressKey } from '../../golden/support/steps/interaction';
+import {
+  jobPickerSearch,
+  pagerButton,
+  pagerCount,
+  pagerRange,
+  pagerRangeStart,
+  visibleText,
+} from '../../golden/support/steps/shared';
+import {
+  projectJobPicker,
+  projectJobPickerWithSelection,
+  visibleJobSearch,
+  workCreateButton,
+  workCreateDialog,
+  workCreateTab,
+  workListPager,
+} from '../../golden/support/steps/work';
 import { ensureTypicalProfile, TYPICAL_PROFILE } from '../support/performance-profile';
 import { createPerformancePage, loadingList, usableListCount } from '../support/performance-steps';
 import { LIST_PAGE_SIZE } from '../../../lib/ui/list-pagination';
@@ -23,6 +41,7 @@ test.describe('Performance profile lists @AUDIT-PERFORMANCE', () => {
     expect(counts.assignments).toBeGreaterThan(0);
   });
 
+  /* eslint-disable playwright-spec/no-copy-in-spec-locator -- measured scenarios customers.list.open, jobs.list.open, jobs.detail.open, equipment.list.open and tasks.list.open: its locators change only in the run that recalibrates its references (docs/technical/testing.md#deadlines-and-measured-scenarios) */
   test('PERF-L2 the office lists and a job open with the typical profile @AUDIT-PERFORMANCE-L2', async ({
     browser,
     baseURL,
@@ -111,6 +130,7 @@ test.describe('Performance profile lists @AUDIT-PERFORMANCE', () => {
       }
     }
   });
+  /* eslint-enable playwright-spec/no-copy-in-spec-locator -- the measured test ends here */
 
   test('PERF-L3 pages and global search retain access to records beyond the initial page @AUDIT-PERFORMANCE-L3', async ({
     adminPage,
@@ -118,62 +138,44 @@ test.describe('Performance profile lists @AUDIT-PERFORMANCE', () => {
   }) => {
     await ensureTypicalProfile(world);
     await adminPage.goto('/kunden');
-    const customerPages = adminPage.getByRole('navigation', { name: 'Kunden', exact: true });
-    await expect(customerPages.getByRole('status', { name: 'Eintragsanzahl', exact: true })).toContainText(
-      `1–50 von ${TYPICAL_PROFILE.customers}`,
-    );
-    await customerPages.getByRole('button', { name: 'Weiter', exact: true }).click();
-    await expect(customerPages.getByRole('status', { name: 'Eintragsanzahl', exact: true })).toContainText(
-      `51–100 von ${TYPICAL_PROFILE.customers}`,
-    );
-    await expect(customerPages.getByRole('button', { name: 'Zurück', exact: true })).toBeEnabled();
+    const customerPages = customerListPager(adminPage);
+    await expect(pagerCount(customerPages)).toContainText(pagerRange(1, 50, TYPICAL_PROFILE.customers));
+    await pagerButton(customerPages, 'next').click();
+    await expect(pagerCount(customerPages)).toContainText(pagerRange(51, 100, TYPICAL_PROFILE.customers));
+    await expect(pagerButton(customerPages, 'previous')).toBeEnabled();
     const lastCustomer = `Kunde 1000 ${world.runId.slice(0, 6)}`;
-    await adminPage.getByPlaceholder('Kunde, Ansprechpartner, Einsatzort…').fill(lastCustomer);
+    await customerSearchField(adminPage).fill(lastCustomer);
     await expect(visibleText(adminPage, lastCustomer)).toBeVisible();
-    await expect(customerPages.getByRole('status', { name: 'Eintragsanzahl', exact: true })).toHaveText(
-      '1–1 von 1',
-    );
+    await expect(pagerCount(customerPages)).toHaveText(pagerRange(1, 1, 1));
 
     await adminPage.goto('/auftraege');
-    const jobPages = adminPage.getByRole('navigation', { name: 'Aktuelle Aufträge', exact: true });
-    await expect(jobPages.getByRole('status', { name: 'Eintragsanzahl', exact: true })).toContainText(
-      '1–50 von',
-    );
-    await jobPages.getByRole('button', { name: 'Weiter', exact: true }).click();
-    await expect(jobPages.getByRole('status', { name: 'Eintragsanzahl', exact: true })).toContainText(
-      '51–100 von',
-    );
+    const jobPages = workListPager(adminPage);
+    await expect(pagerCount(jobPages)).toContainText(pagerRangeStart(1, 50));
+    await pagerButton(jobPages, 'next').click();
+    await expect(pagerCount(jobPages)).toContainText(pagerRangeStart(51, 100));
     // This is the oldest seeded active job, behind more than 1,000 newer active jobs.
     const oldestJob = `PERF-${world.runId.slice(0, 6)}-0001`;
-    await adminPage
-      .getByRole('main')
-      .getByPlaceholder('Suche nach Titel, Nummer, Kunde, Ort…')
-      .filter({ visible: true })
-      .fill(oldestJob);
+    await visibleJobSearch(adminPage).fill(oldestJob);
     await expect(visibleText(adminPage, oldestJob)).toBeVisible();
-    await expect(jobPages.getByRole('status', { name: 'Eintragsanzahl', exact: true })).toHaveText(
-      '1–1 von 1',
-    );
+    await expect(pagerCount(jobPages)).toHaveText(pagerRange(1, 1, 1));
 
-    await adminPage.getByRole('button', { name: 'Erstellen', exact: true }).click();
-    const dialog = adminPage
-      .getByRole('dialog')
-      .filter({ has: adminPage.getByRole('heading', { name: 'Neuen Auftrag oder Projekt erstellen' }) });
-    await dialog.getByRole('tab', { name: 'Projekt erstellen', exact: true }).click();
-    const picker = dialog.getByRole('combobox').filter({ hasText: 'Aufträge zuweisen' });
+    await workCreateButton(adminPage).click();
+    const dialog = workCreateDialog(adminPage);
+    await workCreateTab(dialog, 'project').click();
+    const picker = projectJobPicker(dialog);
     await expect(picker).toBeEnabled();
     await picker.click();
-    await adminPage.getByPlaceholder('Auftrag suchen…').fill(oldestJob);
+    await jobPickerSearch(adminPage).fill(oldestJob);
     const option = adminPage.getByRole('listbox').getByRole('option').filter({ hasText: oldestJob });
     await expect(option).toHaveCount(1);
     await option.click();
-    await adminPage.keyboard.press('Escape');
-    await expect(dialog.getByRole('combobox').filter({ hasText: '1 Auftrag' })).toBeVisible();
+    await pressKey(adminPage, 'Escape', { into: jobPickerSearch(adminPage) });
+    await expect(projectJobPickerWithSelection(dialog, 1)).toBeVisible();
     // Reopening retains the exact selected entity after the query window changes.
-    await dialog.getByRole('combobox').filter({ hasText: '1 Auftrag' }).click();
-    await adminPage.getByPlaceholder('Auftrag suchen…').fill(oldestJob);
+    await projectJobPickerWithSelection(dialog, 1).click();
+    await jobPickerSearch(adminPage).fill(oldestJob);
     await expect(option).toHaveAttribute('aria-selected', 'true');
-    await adminPage.keyboard.press('Escape');
-    await adminPage.keyboard.press('Escape');
+    await pressKey(adminPage, 'Escape', { into: jobPickerSearch(adminPage) });
+    await dismissDialog(dialog);
   });
 });

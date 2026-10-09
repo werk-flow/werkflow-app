@@ -7,7 +7,9 @@ import {
   correctionRequestCard,
   realtimeSubscribed,
 } from '../support/performance-steps';
+import { calendarLayerCheckbox } from '../../golden/support/plantafel';
 import { showPlanningMonth } from '../../golden/support/steps/calendar';
+import { withdrawCorrectionButton } from '../../golden/support/steps/time-tracking';
 import { addClosureDayViaSettings, removeClosureDayViaSettings } from '../../golden/support/steps/personnel';
 import { expectCalendarChangeWithin } from '../support/calendar-live';
 import { ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
@@ -55,8 +57,8 @@ test.describe('Already-open calendar updates @AUDIT-PERFORMANCE-LIVE', () => {
     const reason = `Kalender-Korrektur Aktualisierung ${world.runId}`;
     const personName = world.users.employee.firstName;
     await showPlanningMonth(adminPage, correctionDate);
-    await adminPage.getByRole('checkbox', { name: 'Arbeitszeiten', exact: true }).check();
-    await expect(adminPage.getByRole('checkbox', { name: 'Arbeitszeiten', exact: true })).toBeChecked();
+    await calendarLayerCheckbox(adminPage, 'work').check();
+    await expect(calendarLayerCheckbox(adminPage, 'work')).toBeChecked();
     await expect(calendarReady(adminPage, 'month')).toBeVisible();
     await expect(realtimeSubscribed(adminPage)).toBeAttached();
     const block = calendarCorrectionBlock(adminPage, correctionDate, personName);
@@ -73,10 +75,7 @@ test.describe('Already-open calendar updates @AUDIT-PERFORMANCE-LIVE', () => {
     const request = submitted.requests.find((entry) => entry.id === revision?.request_id);
     expect(request?.status).toBe('submitted');
     if (!request) throw new Error('The measured correction must have its exact persisted request.');
-    const withdraw = correctionRequestCard(employeePage, request.id).getByRole('button', {
-      name: 'Zurückziehen',
-      exact: true,
-    });
+    const withdraw = withdrawCorrectionButton(correctionRequestCard(employeePage, request.id));
     await expect(withdraw).toBeVisible();
     await expect(withdraw).toBeEnabled();
     await expectCalendarChangeWithin(block, {

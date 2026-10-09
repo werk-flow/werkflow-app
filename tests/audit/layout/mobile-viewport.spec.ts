@@ -2,6 +2,7 @@ import type { CDPSession, Page, TestInfo } from '@playwright/test';
 
 import { expect, test } from '../support/fixtures';
 import { expectButtonTextContrast } from '../support/button-contrast';
+import { installShiftRecorder, shiftsAfterUsable } from '../support/layout-shifts';
 import {
   DYNAMIC_PHONE_ROUTES,
   MANAGER_PHONE_ROUTES,
@@ -223,6 +224,7 @@ async function expectPhoneLayout(
   heading?: string,
 ): Promise<void> {
   await page.setViewportSize(PHONE);
+  await installShiftRecorder(page);
   await page.goto(route);
   await expect(page).toHaveURL((url) => decodeURIComponent(url.pathname) === route);
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
@@ -246,6 +248,24 @@ async function expectPhoneLayout(
   expect(await controlsUnderClockAtEnd(page), `${route}: a control stays under the clock button`).toEqual([]);
   await expectCurrentAreaItemInView(page, route);
   await expectMainThreadSettles(page, route);
+  await expectNothingMovesAfterUsable(page, route, testInfo);
+}
+
+// Layout stability (docs/technical/performance.md, "Check layout stability"):
+// once no skeleton is left and the main thread settled, nothing moves without
+// an input. The world is quiet, so no live update can move a row legitimately.
+// The shifts while content streamed in are attached per region: a high score
+// names a skeleton whose box differs from its content.
+async function expectNothingMovesAfterUsable(page: Page, route: string, testInfo: TestInfo): Promise<void> {
+  const shifts = await shiftsAfterUsable(page, route);
+  await testInfo.attach('layout-shifts', {
+    body: JSON.stringify({ route, ...shifts }, null, 2),
+    contentType: 'application/json',
+  });
+  for (const [region, score] of Object.entries(shifts.streaming))
+    if (score > 0.02)
+      testInfo.annotations.push({ type: 'streaming-shift', description: `${route} ${region} ${score}` });
+  expect(shifts.afterUsable, `${route}: content moved after the page was usable`).toEqual([]);
 }
 
 // A navigation strip that scrolls within itself must still show where the user is. The scroll

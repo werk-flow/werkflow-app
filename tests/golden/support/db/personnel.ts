@@ -324,7 +324,10 @@ export async function openRemainingP123Accounts(input: {
       p_operation_id: operationId,
       p_request_hash: requestHash,
     });
-    if (error) throw new Error(`P1-23 account fixture RPC failed: ${error.message}`);
+    // The UI's own opening may commit between the lookup and this call: an account that
+    // exists now is the precondition this helper establishes, not a failure.
+    if (error && !error.message.includes('time_accounts_employee_unique'))
+      throw new Error(`P1-23 account fixture RPC failed: ${error.message}`);
   }
 }
 

@@ -694,6 +694,7 @@ if (agentsWords > AGENTS_WORD_BUDGET) {
 const virtueOwnerDocs = [
   '.claude/skills/werkflow-design/SKILL.md',
   'docs/technical/realtime-and-caching.md',
+  'docs/technical/performance.md',
   'docs/technical/security.md',
   'docs/technical/code-quality.md',
   'docs/technical/testing.md',

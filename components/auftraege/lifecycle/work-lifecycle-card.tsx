@@ -1,5 +1,6 @@
 'use client';
 
+import { StaleRegion } from '@/components/shared/stale-region';
 import { useMemo, useState, type ReactElement } from 'react';
 import { LockKeyhole } from 'lucide-react';
 
@@ -249,49 +250,51 @@ export function WorkLifecycleCard({
           </Button>
         </div>
       )}
-      <WorkLifecycleTransitionActions
-        snapshot={snapshot}
-        isManager={isManager}
-        fieldMode={fieldMode}
-        hasPendingDispatch={hasPendingDispatch}
-        readOnly={readOnly}
-        canStart={canStart}
-        parking={parking}
-        pendingState={pendingState}
-        setDialog={setDialog}
-      />
-      <WorkLifecycleReadinessSection
-        snapshot={snapshot}
-        onRetry={() => void refresh()}
-        retryPending={view.isRefreshing}
-      />
-      <div id="offene-punkte" className="grid scroll-mt-28 gap-4 lg:grid-cols-2">
-        <WorkLifecycleBlockersSection
+      <StaleRegion stale={view.isStale} onRetry={refresh} className="flex flex-col gap-4">
+        <WorkLifecycleTransitionActions
           snapshot={snapshot}
           isManager={isManager}
+          fieldMode={fieldMode}
+          hasPendingDispatch={hasPendingDispatch}
           readOnly={readOnly}
-          ownerNames={ownerNames}
-          ownOwnerId={ownOwnerId}
-          rowBusy={rowBusy}
+          canStart={canStart}
+          parking={parking}
+          pendingState={pendingState}
           setDialog={setDialog}
         />
-        <WorkLifecycleDependenciesSection
+        <WorkLifecycleReadinessSection
           snapshot={snapshot}
-          isManager={isManager}
-          rowBusy={rowBusy}
-          setDialog={setDialog}
+          onRetry={() => void refresh()}
+          retryPending={view.isRefreshing}
         />
-      </div>
-      {isManager && snapshot.resolvedBlockers.length > 0 && (
-        <WorkLifecycleResolvedBlockers snapshot={snapshot} setDialog={setDialog} />
-      )}
-      <WorkLifecycleGatesAndHistory snapshot={snapshot} />
-      {unmetDependencies > 0 && (
-        <p className="flex items-center gap-2 text-sm text-warning-text">
-          <LockKeyhole className="size-4" />
-          {unmetDependencies} offene Voraussetzung(en) beeinflussen die nächste Änderung.
-        </p>
-      )}
+        <div id="offene-punkte" className="grid scroll-mt-28 gap-4 lg:grid-cols-2">
+          <WorkLifecycleBlockersSection
+            snapshot={snapshot}
+            isManager={isManager}
+            readOnly={readOnly}
+            ownerNames={ownerNames}
+            ownOwnerId={ownOwnerId}
+            rowBusy={rowBusy}
+            setDialog={setDialog}
+          />
+          <WorkLifecycleDependenciesSection
+            snapshot={snapshot}
+            isManager={isManager}
+            rowBusy={rowBusy}
+            setDialog={setDialog}
+          />
+        </div>
+        {isManager && snapshot.resolvedBlockers.length > 0 && (
+          <WorkLifecycleResolvedBlockers snapshot={snapshot} setDialog={setDialog} />
+        )}
+        <WorkLifecycleGatesAndHistory snapshot={snapshot} />
+        {unmetDependencies > 0 && (
+          <p className="flex items-center gap-2 text-sm text-warning-text">
+            <LockKeyhole className="size-4" />
+            {unmetDependencies} offene Voraussetzung(en) beeinflussen die nächste Änderung.
+          </p>
+        )}
+      </StaleRegion>
       <WorkLifecycleCardDialogs
         dialog={dialog}
         setDialog={setDialog}
