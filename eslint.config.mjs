@@ -954,13 +954,14 @@ const eslintConfig = defineConfig([
   },
   // Locator ownership (docs/technical/testing.md): a browser spec passes data,
   // and its area module under tests/golden/support/steps/ owns the copy, the
-  // structure hooks and the key presses. The performance specs are exempt:
-  // the tests that record a scenario are measurement-digest inputs
-  // (lib/testing/measured-test-source.ts) and change only with a recalibration
+  // structure hooks and the key presses. The performance specs follow the
+  // rules too. A test that records a measured scenario is a measurement-digest
+  // input (lib/testing/measured-test-source.ts) and keeps its bytes until a
+  // recalibration, so each such test that breaks a rule sits inside an
+  // eslint-disable block that names its scenarios and the rules it breaks
   // (enforcement-ladder backlog, "Locators of the performance specs").
   {
     files: ['tests/golden/*.spec.ts', 'tests/audit/**/*.spec.ts', 'tests/canary/**/*.spec.ts'],
-    ignores: ['tests/audit/performance/**'],
     rules: {
       'playwright-spec/no-copy-in-spec-locator': 'error',
       'playwright-spec/no-locator-function-in-spec': 'error',
