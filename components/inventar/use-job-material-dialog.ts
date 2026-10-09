@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
-import { getInventoryPickerOptionsForJob, getInventoryPickerPage } from '@/lib/inventory/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
 import type { InventoryLocation, InventoryPickerOption, JobMaterialLine } from '@/lib/inventory/types';
 import { normalizeSearchText } from '@/lib/ui/search';
 import {
@@ -81,7 +81,7 @@ export function useJobMaterialDialog({
     setIsPickerLoading(true);
     try {
       loadedFieldSearchesRef.current.clear();
-      const result = await getInventoryPickerOptionsForJob(jobId);
+      const result = await readInBackground('job-inventory-picker-options', { jobId, search: '' });
       if (!result.success) {
         setSectionError('Material und Lagerorte konnten nicht geladen werden. Bitte versuche es erneut.');
         return null;
@@ -90,9 +90,6 @@ export function useJobMaterialDialog({
       setPickerLocations(result.locations);
       loadedFieldSearchesRef.current.add('');
       return result;
-    } catch {
-      setSectionError('Material und Lagerorte konnten nicht geladen werden. Bitte versuche es erneut.');
-      return null;
     } finally {
       setIsPickerLoading(false);
     }
@@ -107,15 +104,19 @@ export function useJobMaterialDialog({
     const searchKey = normalizeSearchText(fieldSearch);
     if (loadedFieldSearchesRef.current.has(searchKey)) return;
 
-    let cancelled = false;
+    const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       setIsPickerLoading(true);
       try {
         const result =
           isAdminOrManager || !jobId
-            ? await getInventoryPickerPage(fieldSearch)
-            : await getInventoryPickerOptionsForJob(jobId, fieldSearch);
-        if (cancelled) return;
+            ? await readInBackground('inventory-picker-page', { search: fieldSearch }, controller.signal)
+            : await readInBackground(
+                'job-inventory-picker-options',
+                { jobId, search: fieldSearch },
+                controller.signal,
+              );
+        if (controller.signal.aborted) return;
         if (!result.success) {
           setFailedSearchKey(searchKey);
           return;
@@ -127,15 +128,13 @@ export function useJobMaterialDialog({
           return Array.from(merged.values());
         });
         setPickerLocations(result.locations);
-      } catch {
-        if (!cancelled) setFailedSearchKey(searchKey);
       } finally {
-        if (!cancelled) setIsPickerLoading(false);
+        if (!controller.signal.aborted) setIsPickerLoading(false);
       }
     }, 300);
 
     return () => {
-      cancelled = true;
+      controller.abort();
       window.clearTimeout(timer);
       setIsPickerLoading(false);
     };
@@ -155,12 +154,15 @@ export function useJobMaterialDialog({
     if (line) {
       let item = picker.items.find((entry) => entry.id === line.itemId);
       if (!item && (jobId || isAdminOrManager)) {
-        const targeted = await (
+        const targeted =
           isAdminOrManager || !jobId
-            ? getInventoryPickerPage('', line.itemId)
-            : getInventoryPickerOptionsForJob(jobId, '', line.itemId)
-        ).catch(() => null);
-        if (targeted?.success) {
+            ? await readInBackground('inventory-picker-page', { search: '', exactItemId: line.itemId })
+            : await readInBackground('job-inventory-picker-options', {
+                jobId,
+                search: '',
+                exactItemId: line.itemId,
+              });
+        if (targeted.success) {
           const targetedItem = targeted.items[0];
           if (targetedItem) {
             item = targetedItem;

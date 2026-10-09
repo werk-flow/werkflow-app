@@ -13,12 +13,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
-import type {
-  MaintenanceClientOption,
-  MaintenanceCoverageOption,
-  MaintenancePlanItem,
-  MaintenanceTemplateOption,
-} from '@/lib/maintenance/types';
+import type { MaintenancePlanItem, MaintenanceTemplateOption } from '@/lib/maintenance/types';
 import {
   MaintenancePlanEquipmentFieldset,
   MaintenancePlanNotesFields,
@@ -35,18 +30,14 @@ export type {
 export function MaintenancePlanDialog({
   open,
   onOpenChange,
-  clients,
   templates,
-  coverages,
   initial,
   onSubmitted,
   onSaved,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  clients: MaintenanceClientOption[];
   templates: MaintenanceTemplateOption[];
-  coverages: MaintenanceCoverageOption[];
   initial?: MaintenancePlanItem;
   /**
    * Create from the workspace (feedback canon): the dialog closes at once and
@@ -58,7 +49,6 @@ export function MaintenancePlanDialog({
 }): ReactElement {
   const controller = useMaintenancePlanForm({
     onOpenChange,
-    clients,
     templates,
     initial,
     onSubmitted,
@@ -88,16 +78,11 @@ export function MaintenancePlanDialog({
         >
           <DialogBody>
             <div className="grid gap-4 py-2 sm:grid-cols-2">
-              <MaintenancePlanScopeFields
-                controller={controller}
-                clients={clients}
-                templates={templates}
-                coverages={coverages}
-                isRevision={isRevision}
-              />
+              <MaintenancePlanScopeFields controller={controller} templates={templates} initial={initial} />
               <MaintenancePlanScheduleFields form={form} setForm={setForm} fieldErrors={fieldErrors} />
               <MaintenancePlanEquipmentFieldset
                 site={controller.site}
+                clientOption={controller.clientOption}
                 form={form}
                 setForm={setForm}
                 fieldErrors={fieldErrors}

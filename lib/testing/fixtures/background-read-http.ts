@@ -109,6 +109,7 @@ mock.module('@/lib/sickness/actions', () => ({
 }));
 mock.module('@/lib/service-cases/actions', () => ({
   getServiceCaseDetailByNumber: seam('service-case-detail'),
+  getServiceClientOption: seam('service-client-option'),
 }));
 mock.module('@/lib/attention/actions', () => ({ getAttentionOverview: seam('attention-overview') }));
 mock.module('@/lib/personnel/lifecycle-actions', () => ({
@@ -119,6 +120,7 @@ mock.module('@/lib/time-corrections/actions', () => ({
   getProvisionalTimeSummary: seam('provisional-time-summary'),
   getTimeCorrectionRequests: seam('time-correction-requests'),
   getTimeCorrectionHistoryPage: seam('time-correction-history'),
+  getTimeCorrectionFormOptions: seam('time-correction-form-options'),
 }));
 mock.module('@/lib/members/actions', () => ({
   getOrgMembersAction: seam('organization-member-options'),
@@ -128,19 +130,35 @@ mock.module('@/lib/members/actions', () => ({
   },
 }));
 mock.module('@/lib/jobs/actions', () => ({ getParkedJobs: seam('parked-jobs') }));
-mock.module('@/lib/parking/actions', () => ({ getJobParkingContexts: seam('job-parking-contexts') }));
+mock.module('@/lib/parking/actions', () => ({
+  getJobParkingContexts: seam('job-parking-contexts'),
+  getParkingResponsibleOptions: seam('parking-responsible-options'),
+}));
 mock.module('@/lib/planning/actions', () => ({ getPlanningOptions: seam('planning-options') }));
+mock.module('@/lib/jobs/option-server', () => ({ readEntityOptions: seam('entity-options') }));
 mock.module('@/lib/dispatch/actions', () => ({
   getJobDispatchCards: seam('job-dispatch-cards'),
   getDispatchOverview: seam('dispatch-overview'),
+  previewDispatchReadiness: seam('dispatch-readiness'),
 }));
 mock.module('@/lib/qualifications/actions', () => ({
   getJobQualificationDetail: seam('job-qualification-detail'),
+  getAssignmentTeamOptions: seam('assignment-team-options'),
 }));
-mock.module('@/lib/inventory/actions', () => ({ getJobMaterialLines: seam('job-material-lines') }));
+mock.module('@/lib/inventory/actions', () => ({
+  getJobMaterialLines: seam('job-material-lines'),
+  getInventoryPickerPage: seam('inventory-picker-page'),
+  getInventoryPickerOptionsForJob: seam('job-inventory-picker-options'),
+}));
+mock.module('@/lib/clients/actions', () => ({ getClientRelations: seam('client-relations') }));
+mock.module('@/lib/documents/actions', () => ({
+  getAttachableDocuments: seam('attachable-documents'),
+  getMaintenanceCoverageDocuments: seam('maintenance-coverage-documents'),
+}));
 mock.module('@/lib/work-artifacts/actions', () => ({ getWorkArtifacts: seam('work-artifacts') }));
 mock.module('@/lib/work-lifecycle/actions', () => ({
   getWorkLifecycleSnapshot: seam('work-lifecycle-snapshot'),
+  getApprovedArtifactActionsForTarget: seam('approved-artifact-actions'),
 }));
 mock.module('@/lib/installed-equipment/list-page-server', () => ({
   getInstalledEquipmentPage: seam('equipment-page'),
@@ -151,11 +169,19 @@ mock.module('@/lib/service-cases/list-page-server', () => ({
 mock.module('@/lib/installed-equipment/actions', () => ({
   getInstalledEquipmentDetailByNumber: seam('equipment-detail'),
 }));
+mock.module('@/lib/installed-equipment/source-options-server', () => ({
+  getEquipmentSourceOptions: seam('equipment-sources'),
+}));
 mock.module('@/lib/time-tracking/picker-actions', () => ({ getJobsForPicker: seam('job-picker-jobs') }));
-mock.module('@/lib/maintenance/actions', () => ({ getMaintenanceWorkspace: seam('maintenance-workspace') }));
+mock.module('@/lib/maintenance/actions', () => ({
+  getMaintenanceWorkspace: seam('maintenance-workspace'),
+  getMaintenanceEvidenceOptions: seam('maintenance-evidence-options'),
+}));
 mock.module('@/lib/work-templates/actions', () => ({
   getWorkTemplates: seam('work-templates'),
   getWorkTemplate: seam('work-template-detail'),
+  getPublishedWorkTemplates: seam('published-work-templates'),
+  getWorkTemplatePreview: seam('work-template-preview'),
 }));
 
 const { GET } = await import('@/app/api/background-read/route');
@@ -196,8 +222,24 @@ await check(
   failure('organization_changed'),
 );
 await check(request('job-picker-jobs', { organizationId: foreignOrg }), 403, failure('organization_changed'));
+// An entity picker of another organization, also with that organization's selected ids.
+await check(
+  request('entity-options', { organizationId: foreignOrg, kind: 'clients', selectedIds: [jobId] }),
+  403,
+  failure('organization_changed'),
+);
 await check(
   request('equipment-detail', { organizationId: foreignOrg, equipmentNumber: 'AN-1' }),
+  403,
+  failure('organization_changed'),
+);
+// The sources of another organization's equipment and work.
+await check(
+  request('equipment-sources', {
+    organizationId: foreignOrg,
+    equipmentId: jobId,
+    work: { type: 'job', id: jobId },
+  }),
   403,
   failure('organization_changed'),
 );
@@ -252,6 +294,9 @@ for (const bad of [
   request('time-entries', '{not json'),
   request('job-dispatch-cards', { jobId: 'not-a-uuid' }),
   request('work-template-detail', { templateId: 'not-a-uuid' }),
+  // The unsearched office page would set up inventory defaults, a write.
+  request('inventory-picker-page', { search: '' }),
+  request('dispatch-readiness', { jobId, occurrenceId: jobId }),
   request('service-case-page', { organizationId, search: '', status: 'archived', page: 1 }),
   new Request(`${request('own-vacation-overview').url}&kind=own-sickness-reports`),
   new Request('http://localhost/api/background-read'),
@@ -271,6 +316,15 @@ const inputs: Record<string, unknown> = {
     defaultUserIds: [],
   },
   'organization-member-options': { organizationId },
+  'entity-options': {
+    organizationId,
+    kind: 'projects',
+    query: 'Bad',
+    offset: 50,
+    selectedIds: [jobId],
+    purpose: 'job-project',
+    clientId: jobId,
+  },
   'time-entries': {
     organizationId,
     from: '2026-09-14T00:00:00.000Z',
@@ -285,6 +339,7 @@ const inputs: Record<string, unknown> = {
   'pending-change-requests': { organizationId },
   'time-correction-requests': { organizationId, scope: 'approvals' },
   'time-correction-history': { organizationId, page: 2 },
+  'time-correction-form-options': { organizationId },
   'time-entries-for-job': { jobId },
   'job-dispatch-cards': { jobId },
   'job-qualification-detail': { jobId },
@@ -294,14 +349,26 @@ const inputs: Record<string, unknown> = {
   'equipment-page': { organizationId, search: 'kessel', category: 'all', includeArchived: true, page: 2 },
   'service-case-page': { organizationId, search: '', status: 'open', page: 1 },
   'service-case-detail': { organizationId, caseNumber: 'SF-1' },
+  'service-client-option': { organizationId, clientId: jobId },
   'personnel-lifecycle': { employeeRecordId: jobId },
   'sickness-reports-for-record': { employeeRecordId: jobId },
-  'job-picker-jobs': { organizationId },
+  'job-picker-jobs': { organizationId, query: 'Heizung', limit: 100, selectedJobId: jobId },
   'dispatch-overview': { from: '2026-10-02', to: '2026-10-16' },
   'work-template-detail': { templateId: jobId },
   'project-job-time-entries': { projectId: jobId },
   'equipment-detail': { organizationId, equipmentNumber: 'AN-1' },
+  'equipment-sources': { organizationId, equipmentId: jobId, work: { type: 'project', id: jobId } },
   'maintenance-workspace': { organizationId, search: 'kessel', duePage: 1, planPage: 2, coveragePage: 3 },
+  'published-work-templates': { targetType: 'project' },
+  'work-template-preview': { versionId: jobId, targetType: 'job', jobId },
+  'approved-artifact-actions': { targetType: 'job', targetId: jobId },
+  'client-relations': { clientId: jobId },
+  'attachable-documents': { targetType: 'job', targetId: jobId, searchQuery: 'Plan', category: 'all' },
+  'inventory-picker-page': { search: '', exactItemId: jobId },
+  'job-inventory-picker-options': { jobId, search: 'Rohr', exactItemId: jobId },
+  'dispatch-readiness': { occurrenceId: jobId },
+  'maintenance-coverage-documents': { maintenanceCoverageId: jobId },
+  'maintenance-evidence-options': { jobId },
 };
 // What each reader receives: some take the bare identifier, the rest the validated object.
 const readerArguments: Record<string, unknown> = {
@@ -311,6 +378,7 @@ const readerArguments: Record<string, unknown> = {
   'pending-change-requests': organizationId,
   'time-correction-requests': [organizationId, 'approvals'],
   'time-correction-history': [organizationId, 2],
+  'time-correction-form-options': organizationId,
   'time-entries-for-job': jobId,
   'job-dispatch-cards': jobId,
   'job-qualification-detail': jobId,
@@ -320,16 +388,24 @@ const readerArguments: Record<string, unknown> = {
   'pending-vacation-for-approver': undefined,
   'decidable-approved-vacation': undefined,
   'service-case-detail': 'SF-1',
+  'service-client-option': jobId,
   'attention-overview': undefined,
   'own-personnel-actions': undefined,
   'personnel-lifecycle': jobId,
   'sickness-reports-for-record': jobId,
-  'job-picker-jobs': organizationId,
   'dispatch-overview': ['2026-10-02', '2026-10-16'],
   'work-templates': undefined,
   'work-template-detail': jobId,
   'project-job-time-entries': jobId,
   'equipment-detail': 'AN-1',
+  'published-work-templates': 'project',
+  'assignment-team-options': undefined,
+  'client-relations': jobId,
+  'inventory-picker-page': ['', jobId],
+  'job-inventory-picker-options': [jobId, 'Rohr', jobId],
+  'parking-responsible-options': undefined,
+  'maintenance-coverage-documents': jobId,
+  'maintenance-evidence-options': jobId,
 };
 for (const kind of Object.keys(BACKGROUND_READS)) {
   reads = [];

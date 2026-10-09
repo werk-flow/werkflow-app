@@ -6,7 +6,7 @@ import {
   reviewChangeRequestContract,
   reviewEntriesContract,
 } from './time-approval-boundaries';
-import { createJobMaterialLineContract, readMaterialPickerContract } from './material-boundaries';
+import { createJobMaterialLineContract } from './material-boundaries';
 import type { InventoryLocation, InventoryLocationType } from '@/lib/inventory/types';
 // Keep framework redirect/error classification real; only navigation and
 // external services are substituted by this fixture.
@@ -132,8 +132,6 @@ export const addManualEntry = unexpectedWrite;
 
 // `@/lib/inventory/actions`: the job material section plans one line.
 export const createJobMaterialLine = createJobMaterialLineContract;
-export const getInventoryPickerOptionsForJob = readMaterialPickerContract;
-export const getInventoryPickerPage = readMaterialPickerContract;
 export const createProjectMaterialLine = unexpectedWrite;
 export const updateJobMaterialLine = unexpectedWrite;
 export const deleteJobMaterialLine = unexpectedWrite;

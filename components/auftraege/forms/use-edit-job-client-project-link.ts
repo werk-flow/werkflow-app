@@ -1,11 +1,11 @@
 'use client';
 
-import type { Client, ProjectWithDetails } from '@/lib/jobs/types';
+import type { JobEntityOption } from '@/lib/jobs/option-types';
 import { useJobProjectOptions } from './job-form-options';
 
 type EditJobClientProjectLinkInput = {
-  clients: Client[];
-  projects: ProjectWithDetails[];
+  /** The job's current project, labelled before the server answers. */
+  knownProject: JobEntityOption | undefined;
   clientId: string;
   projectId: string;
   setClientId: (clientId: string) => void;
@@ -16,8 +16,7 @@ type EditJobClientProjectLinkInput = {
 
 /** Keeps customer and project of the edited job consistent: a project fixes its customer, a customer change drops site and contact. */
 export function useEditJobClientProjectLink({
-  clients,
-  projects,
+  knownProject,
   clientId,
   projectId,
   setClientId,
@@ -25,11 +24,10 @@ export function useEditJobClientProjectLink({
   setSiteId,
   setContactId,
 }: EditJobClientProjectLinkInput) {
-  const { projectSearch, projectOptions, activeProjects, projectClientLabel } = useJobProjectOptions({
-    clients,
-    projects,
+  const { projectSearch, findProject, projectClientLabel } = useJobProjectOptions({
     clientId,
     projectId,
+    knownProject,
   });
   const isClientLocked = Boolean(projectId);
 
@@ -41,13 +39,8 @@ export function useEditJobClientProjectLink({
       setContactId('');
     }
     if (projectId) {
-      const selectedProject = activeProjects.find((p) => p.id === projectId);
-      if (
-        selectedProject &&
-        newClientId &&
-        selectedProject.clientId !== newClientId &&
-        selectedProject.clientId !== null
-      ) {
+      const selectedProject = findProject(projectId);
+      if (selectedProject?.clientId && newClientId && selectedProject.clientId !== newClientId) {
         setProjectId('');
       }
     }
@@ -56,24 +49,20 @@ export function useEditJobClientProjectLink({
   const handleProjectChange = (newProjectId: string) => {
     setProjectId(newProjectId);
     if (newProjectId) {
-      const selected = activeProjects.find((p) => p.id === newProjectId);
+      const selected = findProject(newProjectId);
       if (selected) {
-        if (selected.clientId !== clientId) {
+        const nextClientId = selected.clientId ?? '';
+        if (nextClientId !== clientId) {
           setSiteId('');
           setContactId('');
         }
-        if (selected.clientId) {
-          setClientId(selected.clientId);
-        } else {
-          setClientId('');
-        }
+        setClientId(nextClientId);
       }
     }
   };
 
   return {
     projectSearch,
-    projectOptions,
     isClientLocked,
     lockedClientLabel: projectClientLabel,
     handleClientChange,

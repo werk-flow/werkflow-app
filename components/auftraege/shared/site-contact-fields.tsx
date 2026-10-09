@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 
 import { Field } from '@/components/ui/field';
 import { SearchableSelect } from '@/components/ui/searchable-select';
-import { getClientRelations } from '@/lib/clients/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
 import { formatSiteAddress, type ClientContact, type ClientSite } from '@/lib/clients/types';
 import { OptionsLoadError } from './options-load-error';
 
@@ -42,25 +42,18 @@ export function SiteContactFields({
   useEffect(() => {
     if (!clientId) return;
 
-    let isCurrent = true;
-    getClientRelations(clientId)
-      .then((result) => {
-        if (!isCurrent) return;
-        setLoaded(
-          result.success
-            ? { forClientId: clientId, sites: result.sites, contacts: result.contacts, failed: false }
-            : { forClientId: clientId, sites: [], contacts: [], failed: true },
-        );
-      })
-      .catch(() => {
-        // A rejected fetch must not leave the pickers in a loading state.
-        if (!isCurrent) return;
-        setLoaded({ forClientId: clientId, sites: [], contacts: [], failed: true });
-      });
+    const controller = new AbortController();
+    // A failed read, the transport included, must not leave the pickers in a loading state.
+    void readInBackground('client-relations', { clientId }, controller.signal).then((result) => {
+      if (controller.signal.aborted) return;
+      setLoaded(
+        result.success
+          ? { forClientId: clientId, sites: result.sites, contacts: result.contacts, failed: false }
+          : { forClientId: clientId, sites: [], contacts: [], failed: true },
+      );
+    });
 
-    return () => {
-      isCurrent = false;
-    };
+    return () => controller.abort();
   }, [clientId, reloadKey]);
 
   const hasData = loaded?.forClientId === clientId;

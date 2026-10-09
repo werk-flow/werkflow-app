@@ -1,8 +1,6 @@
 import { redirect } from 'next/navigation';
-import { readOrganizationClients } from '@/lib/clients/server';
 import { cookies } from 'next/headers';
 
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import {
   getCachedMemberships,
@@ -50,14 +48,11 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
     redirect('/dashboard');
   }
 
-  const admin = createSupabaseAdminClient();
-
   const [
     clientResult,
     relationsResult,
     jobsResult,
     clientDocumentsResult,
-    allClients,
     membersResult,
     relationshipResult,
     equipmentResult,
@@ -67,7 +62,6 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
     getClientRelations(clientId, { includeInactive: true }),
     getJobsForClient(clientId),
     getClientDocuments(clientId),
-    readOrganizationClients(admin, activeOrgId),
     getOrgMembersForUser(activeOrgId, user.id),
     getCustomerRelationshipBundle(clientId),
     getInstalledEquipmentForClient(clientId),
@@ -128,7 +122,6 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
             }
           : null
       }
-      clients={allClients}
       members={members}
       isAdminOrManager={isAdminOrManager}
       visibleColumns={visibleColumns}

@@ -20,7 +20,7 @@ import { useBusyIds } from '@/hooks/use-busy-id';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { useOptimisticList } from '@/hooks/use-optimistic-list';
 import { readInBackground } from '@/lib/data/background-read-client';
-import type { InventoryLocation, InventoryPickerOption } from '@/lib/inventory/types';
+import type { InventoryLocation } from '@/lib/inventory/types';
 import type { CapabilityDefinition } from '@/lib/qualifications/types';
 import { cn } from '@/lib/utils';
 import { createWorkTemplate, setWorkTemplateArchived } from '@/lib/work-templates/actions';
@@ -36,7 +36,6 @@ import { ERROR_MESSAGES, getId, newId, type CreateTemplateInput } from './work-t
 
 type Props = {
   initialTemplates: WorkTemplateSummary[];
-  inventoryItems: InventoryPickerOption[];
   inventoryLocations: InventoryLocation[];
   capabilities: CapabilityDefinition[];
 };
@@ -51,7 +50,6 @@ function byUpdatedAtDesc(a: WorkTemplateSummary, b: WorkTemplateSummary): number
 
 export function WorkTemplatesContent({
   initialTemplates,
-  inventoryItems,
   inventoryLocations,
   capabilities,
 }: Props): ReactElement {
@@ -217,7 +215,6 @@ export function WorkTemplatesContent({
         onOpenChange={(open) => {
           if (!open) setEditing(null);
         }}
-        inventoryItems={inventoryItems}
         inventoryLocations={inventoryLocations}
         capabilities={capabilities}
         onChanged={async (message) => {

@@ -11,7 +11,7 @@ import type { PersonnelDetail } from '@/lib/personnel/actions';
 
 import type { OrgRole, MemberDetail } from '@/lib/members/actions';
 import type { OrgBreakMode } from '@/lib/time-tracking/settings';
-import type { Job, ProjectWithDetails, Client } from '@/lib/jobs/types';
+import type { Job, ProjectWithDetails } from '@/lib/jobs/types';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import type { AuftraegeColumnId } from '@/lib/jobs/auftraege-table-columns';
 import type { OrgMemberOption } from '@/components/auftraege/shared/employee-multi-select';
@@ -35,12 +35,9 @@ interface MitarbeiterDetailContentProps {
   /** `null` when the jobs region failed to load. */
   jobs: Job[] | null;
   projects: ProjectWithDetails[];
-  projectGraphProjects: ProjectWithDetails[];
   clientMap: Record<string, string>;
   jobAssignmentMap: Record<string, string[]>;
-  clients: Client[];
   members: OrgMemberOption[];
-  allProjects: ProjectWithDetails[];
   organizationId: string;
   currentUserId: string;
   currentUserRole: OrgRole;
@@ -65,12 +62,9 @@ export function MitarbeiterDetailContent({
   actorNames,
   jobs,
   projects,
-  projectGraphProjects,
   clientMap,
   jobAssignmentMap,
-  clients,
   members,
-  allProjects,
   organizationId,
   currentUserId,
   currentUserRole,
@@ -196,12 +190,9 @@ export function MitarbeiterDetailContent({
               member={member}
               jobs={jobs}
               projects={projects}
-              projectGraphProjects={projectGraphProjects}
               clientMap={clientMap}
               jobAssignmentMap={jobAssignmentMap}
-              clients={clients}
               members={members}
-              allProjects={allProjects}
               isAdminOrManager={isAdminOrManager}
               visibleColumns={visibleColumns}
             />

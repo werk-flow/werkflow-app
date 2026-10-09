@@ -6,7 +6,7 @@ import { ChevronRight } from 'lucide-react';
 import { PlainButton } from '@/components/ui/plain-button';
 import { FilterBar } from '@/components/auftraege/list/filter-bar';
 import { UnifiedAuftraegeTable } from '@/components/auftraege/list/unified-auftraege-table';
-import { UNIFIED_STATUS_LABELS, type Client } from '@/lib/jobs/types';
+import { UNIFIED_STATUS_LABELS } from '@/lib/jobs/types';
 import { resolveAuftraegeSortColumn, type AuftraegeColumnId } from '@/lib/jobs/auftraege-table-columns';
 import type { OrgMemberOption } from '@/components/auftraege/shared/employee-multi-select';
 import { cn } from '@/lib/utils';
@@ -76,7 +76,6 @@ interface EmbeddedAuftraegeListsProps {
   createButton: ReactNode;
   createDialogs: ReactNode;
   clientMap: Record<string, string>;
-  clients: Client[];
   members: OrgMemberOption[];
   isAdminOrManager: boolean;
   lockedEmployeeLabel: string | undefined;
@@ -94,7 +93,6 @@ export function EmbeddedAuftraegeLists({
   createButton,
   createDialogs,
   clientMap,
-  clients,
   members,
   isAdminOrManager,
   lockedEmployeeLabel,
@@ -143,7 +141,6 @@ export function EmbeddedAuftraegeLists({
           onSearchChange={listState.setActiveSearch}
           filters={listState.activeFilters}
           onFiltersChange={listState.setActiveFilters}
-          clients={clients}
           members={members}
           lockedEmployeeLabel={lockedEmployeeLabel}
           lockedClientLabel={lockedClientLabel}
@@ -160,7 +157,6 @@ export function EmbeddedAuftraegeLists({
             jobAssignmentMap={jobAssignmentMap}
             members={members}
             hideClientColumn={hideClientColumn}
-            clients={clients}
             visibleColumns={visibleColumns}
             onJobUpdated={handleJobEdited}
             onJobDeleted={handleJobDelete}
@@ -183,7 +179,6 @@ export function EmbeddedAuftraegeLists({
             onSearchChange={listState.setParkplatzSearch}
             filters={listState.parkplatzFilters}
             onFiltersChange={listState.setParkplatzFilters}
-            clients={clients}
             members={members}
             lockedEmployeeLabel={lockedEmployeeLabel}
             lockedClientLabel={lockedClientLabel}
@@ -198,7 +193,6 @@ export function EmbeddedAuftraegeLists({
             jobAssignmentMap={jobAssignmentMap}
             members={members}
             hideClientColumn={hideClientColumn}
-            clients={clients}
             visibleColumns={visibleColumns}
             onJobUpdated={handleJobEdited}
             onJobDeleted={handleJobDelete}
@@ -221,7 +215,6 @@ export function EmbeddedAuftraegeLists({
             onSearchChange={listState.setArchiveSearch}
             filters={listState.archiveFilters}
             onFiltersChange={listState.setArchiveFilters}
-            clients={clients}
             members={members}
             lockedEmployeeLabel={lockedEmployeeLabel}
             lockedClientLabel={lockedClientLabel}
@@ -237,7 +230,6 @@ export function EmbeddedAuftraegeLists({
             jobAssignmentMap={jobAssignmentMap}
             members={members}
             hideClientColumn={hideClientColumn}
-            clients={clients}
             visibleColumns={visibleColumns}
             onJobUpdated={handleJobEdited}
             onJobDeleted={handleJobDelete}

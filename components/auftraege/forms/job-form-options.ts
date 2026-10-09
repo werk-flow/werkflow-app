@@ -1,14 +1,8 @@
 'use client';
 
-import { useMemo } from 'react';
-
 import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
-import {
-  JOB_PRIORITY_LABELS,
-  type Client,
-  type JobPriority,
-  type ProjectWithDetails,
-} from '@/lib/jobs/types';
+import type { JobEntityOption } from '@/lib/jobs/option-types';
+import { JOB_PRIORITY_LABELS, type JobPriority, type Project } from '@/lib/jobs/types';
 
 /** The priority choices of the create and edit job forms. */
 export const JOB_PRIORITY_OPTIONS: readonly { value: JobPriority; label: string }[] = [
@@ -17,59 +11,58 @@ export const JOB_PRIORITY_OPTIONS: readonly { value: JobPriority; label: string 
   { value: 'hoch', label: JOB_PRIORITY_LABELS.hoch },
 ];
 
-type JobProjectOptionsInput = {
-  clients: Client[];
-  projects: ProjectWithDetails[];
-  clientId: string;
-  projectId: string;
-};
+type KnownProject = Pick<Project, 'id' | 'name' | 'projectNumber' | 'clientId'> &
+  Partial<Pick<Project, 'siteId' | 'contactId'>>;
 
-function isProjectOpen(project: ProjectWithDetails): boolean {
-  return project.statusOverride
-    ? project.statusOverride !== 'abgeschlossen'
-    : !(project.jobCount > 0 && project.completedJobCount === project.jobCount);
+/** A project the page already shows, in the shape the project search returns. */
+export function knownProjectOption(project: KnownProject, clientName: string | null): JobEntityOption {
+  return {
+    value: project.id,
+    label: project.projectNumber ? `${project.projectNumber} – ${project.name}` : project.name,
+    number: project.projectNumber,
+    name: project.name,
+    clientId: project.clientId,
+    clientName,
+    siteId: project.siteId ?? null,
+    contactId: project.contactId ?? null,
+  };
 }
 
+/** The project name of a search option, whose label leads with the project number. */
+export function projectNameOfOption(option: JobEntityOption): string {
+  return option.name ?? option.label;
+}
+
+type JobProjectOptionsInput = {
+  clientId: string;
+  projectId: string;
+  /** The project the form starts with, labelled before the server answers. */
+  knownProject?: JobEntityOption | undefined;
+};
+
 /**
- * The project choices of a job form: open projects of the chosen customer (or
- * without one), plus the currently linked project even when it is closed.
+ * The project choices of a job form, searched on the server: open projects of
+ * the chosen customer (or without one), plus the linked project even when it
+ * is closed. The chosen option carries the customer, site and contact a job
+ * copies.
  */
-export function useJobProjectOptions({ clients, projects, clientId, projectId }: JobProjectOptionsInput) {
+export function useJobProjectOptions({ clientId, projectId, knownProject }: JobProjectOptionsInput) {
   const projectSearch = useJobEntityOptions(
     { kind: 'projects', purpose: 'job-project', clientId: clientId || undefined },
     projectId ? [projectId] : [],
-    projects
-      .filter(
-        (project) =>
-          project.id === projectId ||
-          (isProjectOpen(project) && (!clientId || !project.clientId || project.clientId === clientId)),
-      )
-      .map((project) => ({
-        value: project.id,
-        label: project.projectNumber ? `${project.projectNumber} – ${project.name}` : project.name,
-        clientId: project.clientId,
-      })),
+    knownProject ? [knownProject] : undefined,
   );
-  const projectOptions = projectSearch.options;
-  const activeProjects = useMemo(
-    () =>
-      projectOptions.map((option) => ({
-        id: option.value,
-        clientId: option.clientId ?? null,
-        siteId: projects.find((project) => project.id === option.value)?.siteId ?? null,
-        contactId: projects.find((project) => project.id === option.value)?.contactId ?? null,
-      })),
-    [projectOptions, projects],
-  );
+  const findProject = (id: string): JobEntityOption | undefined =>
+    projectSearch.options.find((option) => option.value === id) ??
+    (knownProject?.value === id ? knownProject : undefined);
 
   // The customer shown read-only while a project fixes it.
-  const projectClientLabel = useMemo(() => {
-    if (!projectId) return undefined;
-    const selected = activeProjects.find((p) => p.id === projectId);
-    if (!selected) return undefined;
-    if (!selected.clientId) return 'Kein Kunde';
-    return clients.find((cl) => cl.id === selected.clientId)?.name;
-  }, [projectId, activeProjects, clients]);
+  const selectedProject = projectId ? findProject(projectId) : undefined;
+  const projectClientLabel = selectedProject
+    ? selectedProject.clientId
+      ? (selectedProject.clientName ?? undefined)
+      : 'Kein Kunde'
+    : undefined;
 
-  return { projectSearch, projectOptions, activeProjects, projectClientLabel };
+  return { projectSearch, findProject, projectClientLabel };
 }

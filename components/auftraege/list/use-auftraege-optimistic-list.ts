@@ -5,13 +5,7 @@ import { useMemo } from 'react';
 import { useBanner } from '@/components/ui/banner';
 import type { useLiveAuftraegeData } from '@/hooks/use-live-auftraege-data';
 import { useOptimisticList } from '@/hooks/use-optimistic-list';
-import {
-  buildUnifiedList,
-  splitEntries,
-  type Client,
-  type Job,
-  type ProjectWithDetails,
-} from '@/lib/jobs/types';
+import { buildUnifiedList, splitEntries, type Job, type ProjectWithDetails } from '@/lib/jobs/types';
 import type { AuftraegeRowFeedback } from './unified-auftraege-entry-list';
 import { useAuftraegeCreateActions } from './use-auftraege-create-actions';
 import { useAuftraegeLocalUpdates } from './use-auftraege-local-updates';
@@ -25,7 +19,6 @@ type AuftraegeOptimisticListOptions = Pick<
 > & {
   initialJobs: Job[];
   initialProjects: ProjectWithDetails[];
-  clients: Client[];
 };
 
 /**
@@ -41,7 +34,6 @@ export function useAuftraegeOptimisticList({
   setJobAssignmentMap,
   initialJobs,
   initialProjects,
-  clients,
 }: AuftraegeOptimisticListOptions) {
   // Own-action feedback (feedback canon): a create shows a pending row until
   // the server confirms, a delete removes the row before the server answers,
@@ -76,7 +68,6 @@ export function useAuftraegeOptimisticList({
     handleJobAssignmentsReplace: localUpdates.handleJobAssignmentsReplace,
   });
   const createActions = useAuftraegeCreateActions({
-    clients,
     showBanner,
     insertJob,
     rollbackJob,
@@ -95,10 +86,6 @@ export function useAuftraegeOptimisticList({
   const dialogJobs = useMemo(
     () => jobOverlay.filter((entry) => entry.tempId === null).map((entry) => entry.item),
     [jobOverlay],
-  );
-  const dialogProjects = useMemo(
-    () => projectOverlay.filter((entry) => entry.tempId === null).map((entry) => entry.item),
-    [projectOverlay],
   );
   const rowFeedback = useMemo<AuftraegeRowFeedback>(
     () => ({
@@ -134,7 +121,6 @@ export function useAuftraegeOptimisticList({
 
   return {
     dialogJobs,
-    dialogProjects,
     rowFeedback,
     rawActive,
     rawParked,

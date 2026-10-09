@@ -5,8 +5,8 @@ import { useRef, useState } from 'react';
 
 import { useServerAction } from '@/hooks/use-server-action';
 import { createMaintenanceCoverage } from '@/lib/maintenance/actions';
-import type { MaintenanceClientOption } from '@/lib/maintenance/types';
 import type { MaintenanceCoverageCreateSubmission } from './maintenance-coverage-dialog';
+import { useClientOption } from './use-client-option';
 
 const GENERIC_ERROR = 'Die operative Abdeckung konnte nicht gespeichert werden.';
 
@@ -21,11 +21,9 @@ function errorMessage(code: string): string {
 /** Form state, validation and both submit paths of the coverage create dialog. */
 export function useMaintenanceCoverageForm({
   onOpenChange,
-  clients,
   onSubmitted,
 }: {
   onOpenChange: (open: boolean) => void;
-  clients: MaintenanceClientOption[];
   onSubmitted: ((submission: MaintenanceCoverageCreateSubmission) => void) | undefined;
 }) {
   const [clientId, setClientId] = useState('');
@@ -44,7 +42,9 @@ export function useMaintenanceCoverageForm({
     coverageId: crypto.randomUUID(),
     idempotencyKey: crypto.randomUUID(),
   });
-  const client = clients.find((item) => item.id === clientId);
+  // The chosen customer's sites, read when the customer is chosen.
+  const clientOption = useClientOption(clientId);
+  const client = clientOption.client;
   function buildInput() {
     return {
       coverageId: mutationIdentity.current.coverageId,
@@ -128,6 +128,7 @@ export function useMaintenanceCoverageForm({
     error,
     isPending,
     client,
+    clientOption,
     clientError,
     siteError,
     submit,

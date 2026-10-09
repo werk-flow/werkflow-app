@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 
-import { getOrgMembersAction } from '@/lib/members/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
 import type { CalendarEntryDialogMember } from '@/lib/jobs/types';
 
 type OrgMember = CalendarEntryDialogMember;
@@ -51,13 +51,17 @@ export function useManualEntryMembers({
   useEffect(() => {
     if (!isActive || !isAdminOrManager || !activeOrgId || prefetchedMembers) return;
     // An answer for an organization the user has switched away from is dropped.
-    let isCurrent = true;
+    const controller = new AbortController();
     const fetchMembers = async () => {
       setIsLoadingMembers(true);
       setLoadError(null);
       try {
-        const result = await getOrgMembersAction(activeOrgId);
-        if (!isCurrent) return;
+        const result = await readInBackground(
+          'organization-member-options',
+          { organizationId: activeOrgId },
+          controller.signal,
+        );
+        if (controller.signal.aborted) return;
         if (result.success) {
           setMembers(
             (result.members || []).map((member) => ({
@@ -71,16 +75,12 @@ export function useManualEntryMembers({
         } else {
           setLoadError('Die Mitarbeiterliste konnte nicht geladen werden.');
         }
-      } catch {
-        if (isCurrent) setLoadError('Die Mitarbeiterliste konnte nicht geladen werden.');
       } finally {
-        if (isCurrent) setIsLoadingMembers(false);
+        if (!controller.signal.aborted) setIsLoadingMembers(false);
       }
     };
-    fetchMembers();
-    return () => {
-      isCurrent = false;
-    };
+    void fetchMembers();
+    return () => controller.abort();
   }, [isActive, isAdminOrManager, activeOrgId, prefetchedMembers, reloadCount]);
 
   const memberOptions = useMemo(

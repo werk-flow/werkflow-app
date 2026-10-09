@@ -121,19 +121,18 @@ export function AuftraegeCollapsibleSection({
   );
 }
 
-type AuftraegeSectionFilterBarProps = Pick<ComponentProps<typeof FilterBar>, 'clients' | 'members'> & {
+type AuftraegeSectionFilterBarProps = Pick<ComponentProps<typeof FilterBar>, 'members'> & {
   query: AuftraegeSectionQuery;
 };
 
 /** The search and filter bar of one section, bound to that section's query. */
-export function AuftraegeSectionFilterBar({ query, clients, members }: AuftraegeSectionFilterBarProps) {
+export function AuftraegeSectionFilterBar({ query, members }: AuftraegeSectionFilterBarProps) {
   return (
     <FilterBar
       searchQuery={query.search}
       onSearchChange={query.changeSearch}
       filters={query.filters}
       onFiltersChange={query.changeFilters}
-      clients={clients}
       members={members}
     />
   );
@@ -143,7 +142,6 @@ type AuftraegeSectionTableProps = Pick<
   ComponentProps<typeof UnifiedAuftraegeTable>,
   | 'clientMap'
   | 'isAdminOrManager'
-  | 'clients'
   | 'members'
   | 'visibleColumns'
   | 'rowFeedback'
@@ -182,7 +180,6 @@ export function AuftraegeSectionTable({
   localPendingIds,
   clientMap,
   isAdminOrManager,
-  clients,
   members,
   visibleColumns,
   rowFeedback,
@@ -251,7 +248,6 @@ export function AuftraegeSectionTable({
         onSort={query.changeSort}
         isArchive={isArchive}
         jobAssignmentMap={jobAssignmentMap}
-        clients={clients}
         members={members}
         visibleColumns={visibleColumns}
         rowFeedback={rowFeedback}

@@ -17,7 +17,8 @@ import {
 import { ErrorText } from '@/components/ui/error-text';
 import { SectionError } from '@/components/ui/section-error';
 import { SearchInput } from '@/components/ui/search-input';
-import { getAttachableDocuments, linkDocumentsToTarget } from '@/lib/documents/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
+import { linkDocumentsToTarget } from '@/lib/documents/actions';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import { cn } from '@/lib/utils';
 import { useServerAction } from '@/hooks/use-server-action';
@@ -79,35 +80,24 @@ export function AttachDocumentDialog({
   useEffect(() => {
     if (!open) return;
 
-    let cancelled = false;
-    void (async () => {
-      try {
-        const result = await getAttachableDocuments({
-          targetType,
-          targetId,
-          searchQuery,
-          category: 'all',
-        });
-        if (cancelled) return;
-
-        if (result.success) {
-          setDocuments(result.documents);
-          setHasMore(result.hasMore ?? false);
-          setLoadError(null);
-          return;
-        }
-        setDocuments([]);
-        setLoadError('Dokumente konnten nicht geladen werden.');
-      } catch {
-        if (cancelled) return;
-        setDocuments([]);
-        setLoadError('Dokumente konnten nicht geladen werden.');
+    const controller = new AbortController();
+    void readInBackground(
+      'attachable-documents',
+      { targetType, targetId, searchQuery, category: 'all' },
+      controller.signal,
+    ).then((result) => {
+      if (controller.signal.aborted) return;
+      if (result.success) {
+        setDocuments(result.documents);
+        setHasMore(result.hasMore ?? false);
+        setLoadError(null);
+        return;
       }
-    })();
+      setDocuments([]);
+      setLoadError('Dokumente konnten nicht geladen werden.');
+    });
 
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, [open, searchQuery, targetId, targetType, reloadCount]);
 
   function toggleDocument(documentId: string) {

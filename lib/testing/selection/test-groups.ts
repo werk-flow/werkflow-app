@@ -314,6 +314,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
       'maintenance_list_pages.sql',
       'time_correction_history_pages.sql',
       'record_number_options.sql',
+      'entity_option_search.sql',
     ],
     ['customers', 'work', 'documents', 'inventory', 'service', 'time'],
   ],

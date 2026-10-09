@@ -6,7 +6,9 @@ import { DialogBody, DialogFooter } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
 import type { OrgMemberOption } from '../shared/employee-multi-select';
 import { QualificationWarningDialog } from '../shared/qualification-warning-dialog';
-import type { Client, Job, ProjectWithDetails } from '@/lib/jobs/types';
+import type { Job } from '@/lib/jobs/types';
+import type { JobEntityOption } from '@/lib/jobs/option-types';
+import type { ClientSelectItem } from '../shared/client-select-with-create';
 import type { CalendarEntryDraft } from '@/components/kalender/calendar-entry-draft';
 import {
   CreateJobAssignmentFields,
@@ -19,12 +21,12 @@ import { useCreateJobForm } from './use-create-job-form';
 export type { CreateJobSubmission };
 
 export interface CreateJobFormContentProps {
-  clients: Client[];
   members: OrgMemberOption[];
-  projects?: ProjectWithDetails[] | undefined;
   initialJobNumber?: string | null | undefined;
-  defaultProjectId?: string | undefined;
-  defaultClientId?: string | undefined;
+  /** The project a new job starts in, as the page shows it. */
+  defaultProject?: JobEntityOption | undefined;
+  /** The customer a new job starts with, as the page shows it. */
+  defaultClient?: ClientSelectItem | undefined;
   defaultEmployeeIds?: string[] | undefined;
   readOnlyClient?: boolean | undefined;
   readOnlyProject?: boolean | undefined;
@@ -47,13 +49,12 @@ export interface CreateJobFormContentProps {
 }
 
 export function CreateJobFormContent({
-  clients,
   members,
   readOnlyProject,
   onPendingChange,
   ...formOptions
 }: CreateJobFormContentProps) {
-  const form = useCreateJobForm({ clients, ...formOptions });
+  const form = useCreateJobForm(formOptions);
   const { isLoading } = form;
 
   useReportPending(isLoading, onPendingChange);
@@ -64,7 +65,11 @@ export function CreateJobFormContent({
         <DialogBody className="grid gap-4 py-2">
           <CreateJobBasicsFields form={form} />
 
-          <CreateJobAssignmentFields form={form} clients={clients} readOnlyProject={readOnlyProject} />
+          <CreateJobAssignmentFields
+            form={form}
+            selectedClient={formOptions.defaultClient}
+            readOnlyProject={readOnlyProject}
+          />
 
           <CreateJobPlanningFields form={form} members={members} />
 

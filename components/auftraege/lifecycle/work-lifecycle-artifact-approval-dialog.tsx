@@ -18,10 +18,8 @@ import { Field } from '@/components/ui/field';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Textarea } from '@/components/ui/textarea';
 import { focusFirstInvalidField, REASON_MIN_3_MESSAGE } from '@/lib/ui/field-validation';
-import {
-  getApprovedArtifactActionsForTarget,
-  linkWorkDependencyArtifactApproval,
-} from '@/lib/work-lifecycle/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
+import { linkWorkDependencyArtifactApproval } from '@/lib/work-lifecycle/actions';
 import type { WorkDependency, WorkEntityOption, WorkLifecycleSnapshot } from '@/lib/work-lifecycle/types';
 import { OptionsLoadError } from '../shared/options-load-error';
 import { APPROVALS_LOAD_FAILED_MESSAGE, workLifecycleErrorMessage } from './work-lifecycle-messages';
@@ -48,20 +46,17 @@ export function ArtifactApprovalDependencyDialog({
   const [loadAttempt, setLoadAttempt] = useState(0);
   const { run: runApprovalTask, isPending: pending } = usePendingTask();
   useEffect(() => {
-    let active = true;
-    void getApprovedArtifactActionsForTarget({ targetType: snapshot.targetType, targetId: snapshot.targetId })
-      .then((result) => {
-        if (!active) return;
-        if (result.success) setOptions(result.options);
-        else setLoadError(APPROVALS_LOAD_FAILED_MESSAGE);
-      })
-      .catch(() => {
-        if (!active) return;
-        setLoadError(APPROVALS_LOAD_FAILED_MESSAGE);
-      });
-    return () => {
-      active = false;
-    };
+    const controller = new AbortController();
+    void readInBackground(
+      'approved-artifact-actions',
+      { targetType: snapshot.targetType, targetId: snapshot.targetId },
+      controller.signal,
+    ).then((result) => {
+      if (controller.signal.aborted) return;
+      if (result.success) setOptions(result.options);
+      else setLoadError(APPROVALS_LOAD_FAILED_MESSAGE);
+    });
+    return () => controller.abort();
   }, [snapshot.targetId, snapshot.targetType, loadAttempt]);
   const [attempted, setAttempted] = useState(false);
   const fieldErrors = {

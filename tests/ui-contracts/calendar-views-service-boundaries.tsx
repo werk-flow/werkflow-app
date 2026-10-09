@@ -46,7 +46,8 @@ export function updateJob(jobId: string, input: Parameters<typeof ServerUpdateJo
 export function createPlanningEntry(input: unknown): Promise<Result> {
   return hold({ kind: 'planning', id: 'create', input });
 }
-export async function getTimeCorrectionFormOptions(): Promise<unknown> {
+/** The `time-correction-form-options` background read of the correction dialog. */
+export function readTimeCorrectionFormOptionsContract(): unknown {
   return {
     success: true,
     options: {
@@ -55,7 +56,6 @@ export async function getTimeCorrectionFormOptions(): Promise<unknown> {
         { userId: 'worker', employeeRecordId: 'r1', name: 'Alex Test' },
         { userId: 'worker-2', employeeRecordId: 'r2', name: 'Bea Zwei' },
       ],
-      jobs: [],
     },
   };
 }

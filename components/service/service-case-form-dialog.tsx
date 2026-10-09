@@ -13,11 +13,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
-import type {
-  ServiceCaseClientOption,
-  ServiceCaseDetail,
-  ServiceCaseJobOption,
-} from '@/lib/service-cases/types';
+import type { ServiceCaseClientOption, ServiceCaseDetail } from '@/lib/service-cases/types';
 import {
   ServiceCaseClosingFields,
   ServiceCaseIntakeFields,
@@ -33,7 +29,6 @@ export function ServiceCaseFormDialog({
   onOpenChange,
   client: preloadedClient,
   initial,
-  jobs = [],
   onSubmitted,
   onSaved,
 }: {
@@ -42,7 +37,6 @@ export function ServiceCaseFormDialog({
   /** The case's customer, already loaded by the detail page. */
   client?: ServiceCaseClientOption | null;
   initial?: ServiceCaseDetail;
-  jobs?: ServiceCaseJobOption[];
   /**
    * Create from a list (feedback canon): the dialog closes at once and the
    * caller renders the pending row until `result` settles. Without it a
@@ -56,7 +50,6 @@ export function ServiceCaseFormDialog({
     onOpenChange,
     preloadedClient,
     initial,
-    jobs,
     onSubmitted,
     onSaved,
   });

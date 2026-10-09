@@ -2,13 +2,12 @@ import 'server-only';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { authenticateAndAuthorize } from './auth';
 import { JOB_LIST_SECTIONS, jobListPagesSchema, type JobListPages, type JobListQueries } from './list-page';
-import { toClient, toJob, toProject, type Client, type Job, type ProjectWithDetails } from './types';
+import { toJob, toProject, type Job, type ProjectWithDetails } from './types';
 import { readInBatches, readCompleteRows, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
 
 export async function loadJobListPage(queries: JobListQueries): Promise<{
   jobs: Job[];
   projects: ProjectWithDetails[];
-  clients: Client[];
   jobAssignmentMap: Record<string, string[]>;
   clientMap: Record<string, string>;
   pagination: { queries: JobListQueries; pages: JobListPages };
@@ -67,20 +66,19 @@ export async function loadJobListPage(queries: JobListQueries): Promise<{
   const clientResult = await readInBatches(clientIds, (ids) =>
     admin
       .from('clients')
-      .select('*')
+      .select('id, name')
       .eq('organization_id', orgId)
       .in('id', [...ids]),
   );
   if (clientResult.error) throw new Error('Kunden konnten nicht geladen werden.');
-  const clients: Client[] = clientResult.data.map(toClient);
-  const clientById = new Map(clients.map((client) => [client.id, client]));
   const jobs: Job[] = jobResult.data.map(toJob);
   const projects: ProjectWithDetails[] = projectResult.data.map((row) => {
     const entry = entries.find((entry) => entry.id === row.id && entry.type === 'project');
     if (!entry) throw new Error('Projekt konnte nicht geladen werden.');
     return {
       ...toProject(row),
-      client: row.client_id ? (clientById.get(row.client_id) ?? null) : null,
+      // The rows print the customer's name from `clientMap`.
+      client: null,
       jobCount: entry.jobCount,
       completedJobCount: entry.completedJobCount,
       inProgressJobCount: entry.inProgressJobCount,
@@ -93,9 +91,8 @@ export async function loadJobListPage(queries: JobListQueries): Promise<{
   return {
     jobs,
     projects,
-    clients,
     jobAssignmentMap,
-    clientMap: Object.fromEntries(clients.map((client) => [client.id, client.name])),
+    clientMap: Object.fromEntries(clientResult.data.map((client) => [client.id, client.name])),
     pagination: { queries, pages },
   };
 }

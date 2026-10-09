@@ -7,7 +7,7 @@ import { RefreshButton } from '@/components/ui/refresh-button';
 
 import { usePageAction } from '@/components/shared/page-action';
 import { UsableContent } from '@/components/shared/usable-content';
-import type { Client, Job, ProjectWithDetails } from '@/lib/jobs/types';
+import type { Job, ProjectWithDetails } from '@/lib/jobs/types';
 import type { AuftraegeColumnId } from '@/lib/jobs/auftraege-table-columns';
 import type { OrgMemberOption } from '../shared/employee-multi-select';
 import { useLiveAuftraegeData } from '@/hooks/use-live-auftraege-data';
@@ -26,7 +26,6 @@ interface AuftraegeContentProps {
   jobs: Job[];
   projects: ProjectWithDetails[];
   clientMap: Record<string, string>;
-  clients: Client[];
   members: OrgMemberOption[];
   jobAssignmentMap: Record<string, string[]>;
   isAdminOrManager: boolean;
@@ -38,7 +37,6 @@ export function AuftraegeContent({
   jobs: initialJobs,
   projects: initialProjects,
   clientMap,
-  clients,
   members,
   jobAssignmentMap: initialJobAssignmentMap,
   isAdminOrManager,
@@ -50,7 +48,6 @@ export function AuftraegeContent({
       initialJobs,
       initialProjects,
       initialJobAssignmentMap,
-      clients,
       preserveProjectCounts: Boolean(pagination),
     });
 
@@ -93,7 +90,6 @@ export function AuftraegeContent({
     setJobAssignmentMap,
     initialJobs,
     initialProjects,
-    clients,
   });
   const { rawActive, rawParked, rawArchived } = list;
 
@@ -105,7 +101,6 @@ export function AuftraegeContent({
     clientMap,
     isAdminOrManager,
     jobAssignmentMap,
-    clients,
     members,
     visibleColumns,
     rowFeedback: list.rowFeedback,
@@ -137,7 +132,7 @@ export function AuftraegeContent({
             pagination={pagination}
           />
 
-          <AuftraegeSectionFilterBar query={activeQuery} clients={clients} members={members} />
+          <AuftraegeSectionFilterBar query={activeQuery} members={members} />
 
           <div className="mt-3">
             <AuftraegeSectionTable
@@ -159,7 +154,7 @@ export function AuftraegeContent({
             expanded={parkplatzExpanded}
             onToggle={() => setParkplatzExpanded((v) => !v)}
           >
-            <AuftraegeSectionFilterBar query={parkedQuery} clients={clients} members={members} />
+            <AuftraegeSectionFilterBar query={parkedQuery} members={members} />
             <AuftraegeSectionTable
               section="parked"
               paginationLabel="Parkplatz"
@@ -181,7 +176,7 @@ export function AuftraegeContent({
               if (pagination) archivedQuery.navigate({ open: archiveExpanded ? null : '1' });
             }}
           >
-            <AuftraegeSectionFilterBar query={archivedQuery} clients={clients} members={members} />
+            <AuftraegeSectionFilterBar query={archivedQuery} members={members} />
             <AuftraegeSectionTable
               section="archived"
               paginationLabel="Archiv"
@@ -195,7 +190,6 @@ export function AuftraegeContent({
 
         {isAdminOrManager && (
           <AuftraegeCreateDialogs
-            clients={clients}
             members={members}
             open={createDialogOpen}
             onOpenChange={setCreateDialogOpen}

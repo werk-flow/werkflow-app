@@ -532,18 +532,44 @@ function toInventoryPickerOptions(
   });
 }
 
+/** The organization's active storage locations in their display order; a company holds a handful. */
+export async function loadActiveInventoryLocations(
+  admin: SupabaseAdminClient,
+  orgId: string,
+): Promise<ActionResult<{ locations: InventoryLocation[] }>> {
+  const { data, error } = await readCompleteRows(
+    (from, to) =>
+      admin
+        .from('inventory_locations')
+        .select('*')
+        .eq('organization_id', orgId)
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true })
+        .order('name', { ascending: true })
+        .order('id')
+        .range(from, to),
+    LIST_ROW_CAP,
+  );
+  if (error) {
+    logReadErrors('loadActiveInventoryLocations: read failed', error);
+    return { success: false, error: 'locations_failed' };
+  }
+  return { success: true, locations: asRows<InventoryLocationRow>(data).map(toInventoryLocation) };
+}
+
+/** One bounded page of the picker catalog: the first `itemLimit` items, the matches of a search, or one item. */
 export async function loadInventoryPickerOptions(
   admin: SupabaseAdminClient,
   orgId: string,
   includeOfficeDetails: boolean,
-  options?: { searchTerm?: string; itemLimit?: number; exactItemId?: string | undefined },
+  options: { searchTerm?: string; itemLimit: number; exactItemId?: string | undefined },
 ): Promise<ActionResult<{ items: InventoryPickerOption[]; locations: InventoryLocation[] }>> {
-  const searchTerm = options?.searchTerm?.trim().slice(0, 80) ?? '';
-  const itemLimit = options?.itemLimit;
-  let itemIds: string[] | null = options?.exactItemId ? [options.exactItemId] : null;
+  const searchTerm = options.searchTerm?.trim().slice(0, 80) ?? '';
+  const itemLimit = options.itemLimit;
+  let itemIds: string[] | null = options.exactItemId ? [options.exactItemId] : null;
   let matchedBarcodeByItem = new Map<string, string>();
 
-  if (!options?.exactItemId && searchTerm) {
+  if (!options.exactItemId && searchTerm) {
     const search = await searchInventoryPickerItemIds(admin, orgId, searchTerm, itemLimit);
     if (!search.success) return search;
     itemIds = search.itemIds;
@@ -558,43 +584,25 @@ export async function loadInventoryPickerOptions(
       .eq('is_active', true)
       .order('name', { ascending: true })
       .order('id');
-  // A search holds at most `itemLimit` ids (one batch, so the name order holds);
-  // the office picker without a limit reads the complete active catalog.
+  // A search holds at most `itemLimit` ids (one batch, so the name order holds).
   const [itemsResult, locationsResult] = await Promise.all([
     itemIds
       ? readInBatches(itemIds, (batch) => activeItems().in('id', [...batch]))
-      : itemLimit
-        ? activeItems().limit(itemLimit)
-        : readCompleteRows((from, to) => activeItems().range(from, to), LIST_ROW_CAP),
-    readCompleteRows(
-      (from, to) =>
-        admin
-          .from('inventory_locations')
-          .select('*')
-          .eq('organization_id', orgId)
-          .eq('is_active', true)
-          .order('sort_order', { ascending: true })
-          .order('name', { ascending: true })
-          .order('id')
-          .range(from, to),
-      LIST_ROW_CAP,
-    ),
+      : activeItems().limit(itemLimit),
+    loadActiveInventoryLocations(admin, orgId),
   ]);
 
   if (itemsResult.error) {
     logReadErrors('loadInventoryPickerOptions: read failed', itemsResult.error);
     return { success: false, error: 'items_failed' };
   }
-  if (locationsResult.error) {
-    logReadErrors('loadInventoryPickerOptions: read failed', locationsResult.error);
-    return { success: false, error: 'locations_failed' };
-  }
+  if (!locationsResult.success) return locationsResult;
 
   const itemRows = asRows<InventoryItemRow>(itemsResult.data);
   const support = await readInventoryPickerSupportRows(admin, orgId, itemRows, includeOfficeDetails);
   if (!support.success) return support;
 
-  const locations = asRows<InventoryLocationRow>(locationsResult.data).map(toInventoryLocation);
+  const { locations } = locationsResult;
   const pickerItems = toInventoryPickerOptions(
     itemRows,
     locations,

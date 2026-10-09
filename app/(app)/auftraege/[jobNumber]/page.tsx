@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation';
-import { readOrganizationClients } from '@/lib/clients/server';
 import { cookies } from 'next/headers';
 import { logError } from '@/lib/logging';
 
@@ -92,7 +91,6 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
   const [
     result,
     membersResult,
-    clients,
     instructionItemsResult,
     documentsResult,
     materialLinesResult,
@@ -105,7 +103,6 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
   ] = await Promise.all([
     jobResultPromise,
     getOrgMembersForUser(activeOrgId, user.id),
-    readOrganizationClients(supabase, activeOrgId),
     instructionItemsResultPromise,
     documentsResultPromise,
     materialLinesResultPromise,
@@ -172,9 +169,7 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
   return (
     <JobDetailContent
       job={job}
-      clients={clients}
       members={members}
-      projects={[]}
       isAdminOrManager={isAdminOrManager}
       canApproveWorkArtifacts={Boolean(approvalHolder)}
       instructionItems={instructionItems}

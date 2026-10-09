@@ -7,17 +7,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
 import { JobMultiSelect } from '../shared/job-multi-select';
 import { OptionsLoadError } from '../shared/options-load-error';
-import { ClientSelectWithCreate } from '../shared/client-select-with-create';
+import { ClientSelectWithCreate, type ClientSelectItem } from '../shared/client-select-with-create';
 import { SiteContactFields } from '../shared/site-contact-fields';
-import type { Client } from '@/lib/jobs/types';
 import type { EditProjectForm } from './use-edit-project-form';
 
 type EditProjectFormFieldsProps = {
   form: EditProjectForm;
-  clients: Client[];
+  selectedClient: ClientSelectItem | null;
 };
 
-export function EditProjectFormFields({ form, clients }: EditProjectFormFieldsProps) {
+export function EditProjectFormFields({ form, selectedClient }: EditProjectFormFieldsProps) {
   const {
     name,
     setName,
@@ -38,7 +37,6 @@ export function EditProjectFormFields({ form, clients }: EditProjectFormFieldsPr
     selectedJobIds,
     setSelectedJobIds,
     jobSearch,
-    availableJobs,
     isLoadingJobs,
     jobsLoadError,
     retryJobs,
@@ -90,7 +88,7 @@ export function EditProjectFormFields({ form, clients }: EditProjectFormFieldsPr
 
       <Field label="Kunde" htmlFor="edit-project-client">
         <ClientSelectWithCreate
-          clients={clients}
+          selectedClient={selectedClient}
           value={clientId}
           onValueChange={handleClientChange}
           disabled={formDisabled}
@@ -138,7 +136,6 @@ export function EditProjectFormFields({ form, clients }: EditProjectFormFieldsPr
           <OptionsLoadError error={jobsLoadError} onRetry={retryJobs} retrying={isLoadingJobs} />
         ) : (
           <JobMultiSelect
-            jobs={availableJobs}
             search={jobSearch}
             selectedIds={selectedJobIds}
             onSelectionChange={setSelectedJobIds}

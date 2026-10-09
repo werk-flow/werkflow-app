@@ -12,10 +12,10 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import { EmployeeMultiSelect, type OrgMemberOption } from '../shared/employee-multi-select';
 import { OptionsLoadError } from '../shared/options-load-error';
 
-import { ClientSelectWithCreate } from '../shared/client-select-with-create';
+import { ClientSelectWithCreate, type ClientSelectItem } from '../shared/client-select-with-create';
 import { SiteContactFields } from '../shared/site-contact-fields';
 import { formatSiteAddress } from '@/lib/clients/types';
-import type { Client, JobPriority } from '@/lib/jobs/types';
+import type { JobPriority } from '@/lib/jobs/types';
 import { toLocalDateString } from '@/lib/utils';
 import { JOB_PRIORITY_OPTIONS } from './job-form-options';
 import type { EditJobForm } from './use-edit-job-form';
@@ -79,16 +79,15 @@ export function EditJobIdentityFields({ form }: { form: EditJobForm }) {
 
 type EditJobAssignmentFieldsProps = {
   form: EditJobForm;
-  clients: Client[];
+  selectedClient: ClientSelectItem | null;
 };
 
-export function EditJobAssignmentFields({ form, clients }: EditJobAssignmentFieldsProps) {
+export function EditJobAssignmentFields({ form, selectedClient }: EditJobAssignmentFieldsProps) {
   const {
     clientId,
     handleClientChange,
     isClientLocked,
     lockedClientLabel,
-    projectOptions,
     projectSearch,
     projectId,
     handleProjectChange,
@@ -104,7 +103,7 @@ export function EditJobAssignmentFields({ form, clients }: EditJobAssignmentFiel
 
       <Field label="Kunde" htmlFor="edit-job-client">
         <ClientSelectWithCreate
-          clients={clients}
+          selectedClient={selectedClient}
           value={clientId}
           onValueChange={handleClientChange}
           disabled={formDisabled}
@@ -115,10 +114,11 @@ export function EditJobAssignmentFields({ form, clients }: EditJobAssignmentFiel
 
       <Field label="Projekt" htmlFor="edit-job-project">
         <SearchableSelect
-          options={projectOptions}
+          options={projectSearch.options}
           onSearchChange={projectSearch.onSearchChange}
           loading={projectSearch.loading}
           loadError={projectSearch.loadError}
+          onRetryLoad={projectSearch.onRetryLoad}
           onLoadMore={projectSearch.onLoadMore}
           value={projectId}
           onChange={handleProjectChange}

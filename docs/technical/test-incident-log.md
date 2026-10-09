@@ -22,6 +22,116 @@ Record each failed acceptance group and any focused failure that changes shared 
 
 `bun run test:runs classify` stores the classification, cause and prevention in the run manifest and, for a failed run of the verification lane, writes the dated entry below with the run, the failure point, the cause and the prevention (`lib/testing/runs/incident-record.ts`). It refuses a prevention without its tier. Add the evidence, the correction and the focused proof under that entry when the repair lands. Write a focused failure that changes shared testing behavior by hand. Do not call an unexplained retry a transient.
 
+## 2026-10-09: audit:performance:field environment failure
+
+<!-- incident-run: 2026-10-09T143334025Z-ca8740 -->
+
+- Run: run `2026-10-09T143334025Z-ca8740`, group `audit:performance:field`, target local, fingerprint `6f75fb3dbc35`, world `40c725465d694e6dac907f06351d9319`.
+- Failure point: Execution evidence: scenario-latencies.ndjson (time.clock-in.settled median): regressed to 471.7001953125ms against the reviewed 209.800048828125ms baseline (limit 460ms).
+- Root cause: A replay of HEAD (git archive of 885468e, same machine and stack, 14:51) regressed the same list scenarios (customers 1,092, jobs 905, equipment 772, tasks 1,178 ms against 822, 638, 496, 778) and time.approval.cross-session (903 against 633 ms); the clock-in settled samples overlap (HEAD 290-460, this tree 297-647 ms). The baselines were recorded on an idle machine at night.
+- Prevention: Tier 3: wall-clock scenarios judge machine state as well as code; the lab counts of the same journeys passed on this build (2026-10-09T140944848Z-c3ca26d8).
+- Evidence: scenario-latencies.ndjson of the run and a replay of HEAD (git archive of 885468e on the same machine and stack), which regressed the same scenarios. Cleanup: the world was cleaned. Correction: none in code; WSL was restarted between the first and the second attempt and the regression stayed. Focused proof: audit:performance:planning passed on this build (2026-10-09T143318522Z-fb67adee); the lab counts of the same journeys passed (2026-10-09T140944848Z-c3ca26d8). Open: lists and field wait for a quiet machine; no baseline was raised.
+
+## 2026-10-09: audit:performance:lists environment failure
+
+<!-- incident-run: 2026-10-09T143334025Z-b6676d -->
+
+- Run: run `2026-10-09T143334025Z-b6676d`, group `audit:performance:lists`, target local, fingerprint `14fa2bfe9272`, world `98685fddb1454fc294d50a7242ccd681`.
+- Failure point: Execution evidence: scenario-latencies.ndjson (customers.list.open median): regressed to 1134.500244140625ms against the reviewed 821.599853515625ms baseline (limit 1072ms).
+- Root cause: A replay of HEAD (git archive of 885468e, same machine and stack, 14:51) regressed the same list scenarios (customers 1,092, jobs 905, equipment 772, tasks 1,178 ms against 822, 638, 496, 778) and time.approval.cross-session (903 against 633 ms); the clock-in settled samples overlap (HEAD 290-460, this tree 297-647 ms). The baselines were recorded on an idle machine at night.
+- Prevention: Tier 3: wall-clock scenarios judge machine state as well as code; the lab counts of the same journeys passed on this build (2026-10-09T140944848Z-c3ca26d8).
+- Evidence: scenario-latencies.ndjson of the run and a replay of HEAD (git archive of 885468e on the same machine and stack), which regressed the same scenarios. Cleanup: the world was cleaned. Correction: none in code; WSL was restarted between the first and the second attempt and the regression stayed. Focused proof: audit:performance:planning passed on this build (2026-10-09T143318522Z-fb67adee); the lab counts of the same journeys passed (2026-10-09T140944848Z-c3ca26d8). Open: lists and field wait for a quiet machine; no baseline was raised.
+
+## 2026-10-09: audit:performance:field environment failure
+
+<!-- incident-run: 2026-10-09T141616399Z-45fc3f -->
+
+- Run: run `2026-10-09T141616399Z-45fc3f`, group `audit:performance:field`, target local, fingerprint `6f75fb3dbc35`, world `a15733d8ef684ea3a9441cbad64fb435`.
+- Failure point: Execution evidence: scenario-latencies.ndjson (time.approval.cross-session median): regressed to 960.2001953125ms against the reviewed 633.10009765625ms baseline (limit 883ms).
+- Root cause: Every list scenario slowed by 45-70 % at once, also on pages this change does not touch (tasks.list.open 778 to 1,120 ms, customers.list.open 822 to 1,349 ms), while the changed job detail stayed within its baseline; the machine had served 3 hours of browser verification in WSL.
+- Prevention: Tier 3: wall-clock scenarios judge machine state as well as code; the lab counts of the same journeys passed on this build (2026-10-09T140944848Z-c3ca26d8).
+- Evidence: scenario-latencies.ndjson of the run and a replay of HEAD (git archive of 885468e on the same machine and stack), which regressed the same scenarios. Cleanup: the world was cleaned. Correction: none in code; WSL was restarted between the first and the second attempt and the regression stayed. Focused proof: audit:performance:planning passed on this build (2026-10-09T143318522Z-fb67adee); the lab counts of the same journeys passed (2026-10-09T140944848Z-c3ca26d8). Open: lists and field wait for a quiet machine; no baseline was raised.
+
+## 2026-10-09: audit:performance:planning environment failure
+
+<!-- incident-run: 2026-10-09T141616399Z-49999f -->
+
+- Run: run `2026-10-09T141616399Z-49999f`, group `audit:performance:planning`, target local, fingerprint `c861f7da39b7`, world `5b8bf632c8844d98b461fd471f84bf38`.
+- Failure point: Execution evidence: scenario-latencies.ndjson:2 (planning.occurrence.cross-session sample 2): over budget, measured 2156.599853515625ms against 2000ms.
+- Root cause: Every list scenario slowed by 45-70 % at once, also on pages this change does not touch (tasks.list.open 778 to 1,120 ms, customers.list.open 822 to 1,349 ms), while the changed job detail stayed within its baseline; the machine had served 3 hours of browser verification in WSL.
+- Prevention: Tier 3: wall-clock scenarios judge machine state as well as code; the lab counts of the same journeys passed on this build (2026-10-09T140944848Z-c3ca26d8).
+- Evidence: scenario-latencies.ndjson of the run and a replay of HEAD (git archive of 885468e on the same machine and stack), which regressed the same scenarios. Cleanup: the world was cleaned. Correction: none in code; WSL was restarted between the first and the second attempt and the regression stayed. Focused proof: audit:performance:planning passed on this build (2026-10-09T143318522Z-fb67adee); the lab counts of the same journeys passed (2026-10-09T140944848Z-c3ca26d8). Open: lists and field wait for a quiet machine; no baseline was raised.
+
+## 2026-10-09: audit:performance:lists environment failure
+
+<!-- incident-run: 2026-10-09T141616399Z-6a69bc -->
+
+- Run: run `2026-10-09T141616399Z-6a69bc`, group `audit:performance:lists`, target local, fingerprint `14fa2bfe9272`, world `169569969a024ed7b26e831deba6ba65`.
+- Failure point: Execution evidence: scenario-latencies.ndjson (customers.list.open median): regressed to 1349.39990234375ms against the reviewed 821.599853515625ms baseline (limit 1072ms).
+- Root cause: Every list scenario slowed by 45-70 % at once, also on pages this change does not touch (tasks.list.open 778 to 1,120 ms, customers.list.open 822 to 1,349 ms), while the changed job detail stayed within its baseline; the machine had served 3 hours of browser verification in WSL.
+- Prevention: Tier 3: wall-clock scenarios judge machine state as well as code; the lab counts of the same journeys passed on this build (2026-10-09T140944848Z-c3ca26d8).
+- Evidence: scenario-latencies.ndjson of the run and a replay of HEAD (git archive of 885468e on the same machine and stack), which regressed the same scenarios. Cleanup: the world was cleaned. Correction: none in code; WSL was restarted between the first and the second attempt and the regression stayed. Focused proof: audit:performance:planning passed on this build (2026-10-09T143318522Z-fb67adee); the lab counts of the same journeys passed (2026-10-09T140944848Z-c3ca26d8). Open: lists and field wait for a quiet machine; no baseline was raised.
+
+## 2026-10-09: audit:wave-2:p1-20 harness failure
+
+<!-- incident-run: 2026-10-09T113505298Z-38bb89 -->
+
+- Run: run `2026-10-09T113505298Z-38bb89`, group `audit:wave-2:p1-20`, target local, fingerprint `3c8021fd9e68`, world `a113db9416d540ef89176841e2c11a87`.
+- Failure point:  >  > wave-2\p1-20.spec.ts > P1-20 exhaustive maintenance audit @AUDIT-W2-P1-20 @AUDIT-W2 > attaches a coverage document and keeps its frame stable while loading: Error: The coverage document read was held
+- Root cause: The coverage documents dialog now reads over the background-read route (GET kind maintenance-coverage-documents) instead of a Server Action POST, so the spec's hold on the page's Server Action never saw the read.
+- Prevention: Tier 2: lib/data/background-read-http.test.ts pins the dialog to the background-read client, and the spec now holds that GET kind.
+- Evidence: error-context.md (the hold never saw a POST) and lib/data/background-read-http.test.ts (`maintenance-coverage-documents` kind). Cleanup: the world was cleaned. Correction: the spec holds the GET `/api/background-read` of that kind. Focused proof: report `2026-10-09T114142420Z-9665c35b` passed audit:wave-2:p1-20.
+
+## 2026-10-09: audit:layout transient failure
+
+<!-- incident-run: 2026-10-09T101325554Z-d7a6dc -->
+
+- Run: run `2026-10-09T101325554Z-d7a6dc`, group `audit:layout`, target local, fingerprint `950f67cdc8e3`, world `c007a9fd6d9e48fd87062301afe56dd5`.
+- Failure point:  >  > layout\mobile-viewport.spec.ts > @AUDIT-LAYOUT phone viewport: no horizontal scroll, shell-owned scroll, no native controls > admin /kalender fits a 375 px viewport: Error: /kalender: a control stays under the clock button
+- Root cause: The /kalender phone check found two board cells of the removable employee under the clock button after scrolling to the end, while the screenshot shows the agenda without them; no calendar code changed in this tree, so the cells belonged to a board render still in flight.
+- Prevention: no prevention claim
+- Evidence: error-context.md and test-failed-1.png (agenda rows without the reported cells). Cleanup: the world was cleaned. Correction: none. Focused proof: report `2026-10-09T114142420Z-9665c35b` passed audit:layout on the same build.
+
+## 2026-10-09: golden:p1-19 product failure
+
+<!-- incident-run: 2026-10-09T101325554Z-1e0de5 -->
+
+- Run: run `2026-10-09T101325554Z-1e0de5`, group `golden:p1-19`, target local, fingerprint `46ddf5e5ab71`, world `f19e146b6d364f3b9f4e9c7a5e71a512`.
+- Failure point:  >  > p1-19.spec.ts > P1-19 reactive service vertical slice @P1-19 @GG-05 > takes a reported fault from intake to a dispatched visit with evidence @P1-19-journey: Error: Searchable option could not be selected: AUF-f19e146b6d364f3b9f4e9c7a5e71a512-P119-SERVICE
+- Root cause: Same cause as golden:p1-18: the service case job picker's option label lost the job number.
+- Prevention: Tier 2: lib/jobs/option-reader-boundaries.test.ts pins the job option label 'number · title'.
+- Evidence: test-failed-1.png (the trigger shows the job title without its number) and a read-only database check (job and case share customer and site). Cleanup: the world was cleaned. Correction: `loadJobOptions` in lib/jobs/option-server.ts labels a job `number · title`. Focused proof: report `2026-10-09T114142420Z-9665c35b` passed golden:p1-19.
+
+## 2026-10-09: golden:p1-18 product failure
+
+<!-- incident-run: 2026-10-09T101325554Z-b34f81 -->
+
+- Run: run `2026-10-09T101325554Z-b34f81`, group `golden:p1-18`, target local, fingerprint `2d067642836f`, world `893dfa9492944097a3e2da16b5d73266`.
+- Failure point:  >  > p1-18.spec.ts > P1-18 installed equipment vertical slice @P1-18 > registers, links, corrects and replaces one site-owned asset @P1-18-journey: Error: Searchable option could not be selected: AUF-893dfa9492944097a3e2da16b5d73266-P118-GOLDEN
+- Root cause: Job options of the equipment-work purpose were labelled with the title only, so the trigger no longer showed the job number.
+- Prevention: Tier 2: lib/jobs/option-reader-boundaries.test.ts pins the job option label 'number · title'.
+- Evidence: error-context.md and the same label check as golden:p1-19. Cleanup: the world was cleaned. Correction: as golden:p1-19. Focused proof: report `2026-10-09T114142420Z-9665c35b` passed golden:p1-18.
+
+## 2026-10-09: audit:wave-2:p1-13 product failure
+
+<!-- incident-run: 2026-10-09T101325554Z-b97afa -->
+
+- Run: run `2026-10-09T101325554Z-b97afa`, group `audit:wave-2:p1-13`, target local, fingerprint `882de3850e11`, world `9e1cb91d05d9428c84b75cb125564f82`.
+- Failure point:  >  > wave-2\p1-13.spec.ts > P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2 > draft content covers tasks, evidence, material, qualifications, dependencies, and publish: Error: The scope settles: no aria-busy, pending dialog, skeleton, spinner, unconfirmed content or route refresh, and every calendar ready
+- Root cause: The work-template editor kept a quick-created article in an optimistic list whose server list no longer carries the catalog, so the unconfirmed marker never cleared.
+- Prevention: Tier 2: the settle step of every spec fails on a held unconfirmed marker (lib/testing/spec-support/busy-signals.ts); created articles are now local state confirmed by the saved row.
+- Evidence: error-context.md (`an optimistic list holds an unconfirmed entry` after a quick-created article). Cleanup: the world was cleaned. Correction: components/arbeitsvorlagen/use-work-template-editor-options.ts keeps created articles as local state replaced by the saved row. Focused proof: report `2026-10-09T114142420Z-9665c35b` passed audit:wave-2:p1-13.
+
+## 2026-10-09: audit:wave-1:a1-organisation harness failure
+
+<!-- incident-run: 2026-10-09T101325554Z-531044 -->
+
+- Run: run `2026-10-09T101325554Z-531044`, group `audit:wave-1:a1-organisation`, target local, fingerprint `8d7520104c61`, world `69941b111efa46d3be74a5cda08e4120`.
+- Failure point:  >  > wave-1\a1-organisation.spec.ts > A1 Organisation, Rollen und Stempeluhr @AUDIT-W1-A1 > A1-02/A1-03/A1-05/A1-26/A1-27/A1-28: Beitritt per Code, Organisationswechsel, Live-Status, Pause, Auftragwechsel und Org-Sperre: Error: expect(locator).toBeVisible() failed
+- Root cause: createJob filled the job number before the suggested number arrived, so the late suggestion was prepended to the typed number.
+- Prevention: Tier 3: the createJob area step waits until the number field holds the suggestion before it fills, as createProject does; no check finds a fill that races a suggestion.
+- Evidence: error-context.md (the project's child row reads `AUF-2026-001A1-Z2-…`). Cleanup: the world was cleaned. Correction: `createJob` in tests/golden/support/steps/work.ts waits for the suggested number before it fills. Focused proof: report `2026-10-09T114142420Z-9665c35b` passed audit:wave-1:a1-organisation.
+
 ## 2026-10-09: golden:p1-23 harness failure
 
 <!-- incident-run: 2026-10-09T054629455Z-e075b0 -->

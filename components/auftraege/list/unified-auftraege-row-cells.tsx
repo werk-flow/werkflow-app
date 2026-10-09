@@ -10,7 +10,6 @@ import {
   JOB_PRIORITY_LABELS,
   getJobDisplayTitle,
   getProjectDisplayTitle,
-  type Client,
   type Job,
   type Project,
   type ProjectStatus,
@@ -33,7 +32,6 @@ import { TrafficLight } from '../project-detail/project-detail-status';
 
 /** What a row hands to its `JobActionsMenu`. */
 export type UnifiedAuftraegeJobMenuProps = {
-  clients: Client[];
   members: OrgMemberOption[];
   projects: ProjectWithDetails[];
   onJobUpdated?:
@@ -45,7 +43,6 @@ export type UnifiedAuftraegeJobMenuProps = {
 
 /** What a row hands to its `ProjectActionsMenu`. */
 export type UnifiedAuftraegeProjectMenuProps = {
-  clients: Client[];
   jobs: Job[];
   onProjectUpdated?:
     | ((payload: { project: Project; selectedJobIds?: string[] }) => void | Promise<void>)
@@ -80,7 +77,6 @@ export function UnifiedAuftraegeJobRowCells({
   memberLookup,
   assignedUserIds,
   visibleColumns,
-  clients,
   members,
   projects,
   onJobUpdated,
@@ -140,7 +136,7 @@ export function UnifiedAuftraegeJobRowCells({
           <JobActionsMenu
             job={job}
             detailHref={detailHref}
-            clients={clients}
+            clientName={clientName}
             members={members}
             projects={projects}
             onJobUpdated={onJobUpdated}
@@ -186,7 +182,6 @@ export function UnifiedAuftraegeProjectRowCells({
   allProjectUserIds,
   memberLookup,
   visibleColumns,
-  clients,
   jobs,
   onProjectUpdated,
   onProjectDeleted,
@@ -267,7 +262,7 @@ export function UnifiedAuftraegeProjectRowCells({
           <ProjectActionsMenu
             project={project}
             detailHref={projectHref}
-            clients={clients}
+            clientName={clientName}
             jobs={jobs}
             onProjectUpdated={onProjectUpdated}
             onProjectDeleted={onProjectDeleted}

@@ -6,7 +6,7 @@ import type { useBanner } from '@/components/ui/banner';
 import type { useOptimisticList } from '@/hooks/use-optimistic-list';
 import { useServerAction } from '@/hooks/use-server-action';
 import { createJob } from '@/lib/jobs/actions';
-import type { Client, Job, ProjectWithDetails } from '@/lib/jobs/types';
+import type { Job, ProjectWithDetails } from '@/lib/jobs/types';
 import { createProject } from '@/lib/projects/actions';
 import type { AssignmentApproval, AssignmentEvaluation } from '@/lib/qualifications/types';
 import {
@@ -35,7 +35,6 @@ type AuftraegeCreateActionsOptions = Pick<
   ReturnType<typeof useAuftraegeLocalUpdates>,
   'handleJobCreated' | 'handleProjectCreated'
 > & {
-  clients: Client[];
   showBanner: ReturnType<typeof useBanner>['showBanner'];
   insertJob: ReturnType<typeof useOptimisticList<Job>>['insert'];
   rollbackJob: ReturnType<typeof useOptimisticList<Job>>['rollback'];
@@ -45,7 +44,6 @@ type AuftraegeCreateActionsOptions = Pick<
 
 /** Deferred creates from the dialog: pending row, server call, qualification confirm, rollback. */
 export function useAuftraegeCreateActions({
-  clients,
   showBanner,
   insertJob,
   rollbackJob,
@@ -121,7 +119,7 @@ export function useAuftraegeCreateActions({
   const handleProjectSubmit = useCallback(
     async (submission: CreateProjectSubmission) => {
       const tempId = `pending-project-${crypto.randomUUID()}`;
-      insertProject(tempId, buildProjectDraft(tempId, submission.input, clients));
+      insertProject(tempId, buildProjectDraft(tempId, submission.input));
       try {
         const result = await createProject(submission.input);
         if (!result.success) {
@@ -151,7 +149,7 @@ export function useAuftraegeCreateActions({
         });
       }
     },
-    [clients, handleProjectCreated, insertProject, rollbackProject, showBanner],
+    [handleProjectCreated, insertProject, rollbackProject, showBanner],
   );
 
   return {

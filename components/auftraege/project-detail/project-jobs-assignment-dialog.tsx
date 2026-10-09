@@ -6,9 +6,8 @@ import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
+import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
 import { JobMultiSelect } from '../shared/job-multi-select';
-import { OptionsLoadError } from '../shared/options-load-error';
-import type { Job } from '@/lib/jobs/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 const JOBS_FIELD_ID = 'project-jobs-assignment-jobs';
@@ -17,41 +16,36 @@ const JOBS_REQUIRED_MESSAGE = 'Bitte wähle mindestens einen Auftrag aus.';
 interface ProjectJobsAssignmentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  jobs: Job[];
   title?: string;
   isSaving?: boolean;
-  isLoading?: boolean;
-  loadError?: string | null;
   saveError?: string | null;
-  onRetry: () => void;
-  onSave: (jobIds: string[]) => Promise<void> | void;
+  /** Resolves with the jobs that were linked; they leave the selection. */
+  onSave: (jobIds: string[]) => Promise<string[]>;
 }
 
+/**
+ * Adds jobs to a project. The choices are searched on the server: every job
+ * without a project that is not finished.
+ */
 export function ProjectJobsAssignmentDialog({
   open,
   onOpenChange,
-  jobs,
   title = 'Aufträge zuweisen',
   isSaving = false,
-  isLoading = false,
-  loadError,
   saveError,
-  onRetry,
   onSave,
 }: ProjectJobsAssignmentDialogProps) {
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
   const [attempted, setAttempted] = useState(false);
+  const jobSearch = useJobEntityOptions({ kind: 'jobs', purpose: 'project-jobs' }, selectedJobIds);
 
-  // Set during render, never in an effect: every opening starts from a clean
-  // selection, and successful partial assignments leave the retry selection.
-  const [adoptedFor, setAdoptedFor] = useState({ open: false, jobs });
-  if (open !== adoptedFor.open || jobs !== adoptedFor.jobs) {
-    setAdoptedFor({ open, jobs });
-    if (open && !adoptedFor.open) {
+  // Set during render, never in an effect: every opening starts from a clean selection.
+  const [adoptedOpen, setAdoptedOpen] = useState(false);
+  if (open !== adoptedOpen) {
+    setAdoptedOpen(open);
+    if (open) {
       setSelectedJobIds([]);
       setAttempted(false);
-    } else if (open) {
-      setSelectedJobIds((current) => current.filter((jobId) => jobs.some((job) => job.id === jobId)));
     }
   }
 
@@ -63,7 +57,9 @@ export function ProjectJobsAssignmentDialog({
       focusFirstInvalidField({ [JOBS_FIELD_ID]: JOBS_REQUIRED_MESSAGE });
       return;
     }
-    await onSave(selectedJobIds);
+    const linkedJobIds = new Set(await onSave(selectedJobIds));
+    // A partial failure keeps only the jobs that still need a retry.
+    setSelectedJobIds((current) => current.filter((jobId) => !linkedJobIds.has(jobId)));
   };
 
   return (
@@ -76,20 +72,12 @@ export function ProjectJobsAssignmentDialog({
         <div className="space-y-4 py-2">
           <Field label="Aufträge" hideLabel htmlFor={JOBS_FIELD_ID} error={jobsError}>
             <JobMultiSelect
-              jobs={jobs}
+              search={jobSearch}
               selectedIds={selectedJobIds}
               onSelectionChange={setSelectedJobIds}
               disabled={isSaving}
             />
           </Field>
-
-          {loadError ? (
-            <OptionsLoadError error={loadError} onRetry={onRetry} retrying={isLoading} />
-          ) : jobs.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Es sind keine verfügbaren Aufträge ohne Projekt vorhanden.
-            </p>
-          ) : null}
 
           <ErrorText>{saveError}</ErrorText>
 
@@ -97,11 +85,7 @@ export function ProjectJobsAssignmentDialog({
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
               Abbrechen
             </Button>
-            <Button
-              pending={isSaving || isLoading}
-              onClick={handleSave}
-              disabled={isSaving || isLoading || Boolean(loadError)}
-            >
+            <Button pending={isSaving} onClick={handleSave} disabled={isSaving}>
               Speichern
             </Button>
           </DialogFooter>

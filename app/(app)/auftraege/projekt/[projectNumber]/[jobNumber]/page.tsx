@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation';
-import { readOrganizationClients } from '@/lib/clients/server';
 import { cookies } from 'next/headers';
 
 import { resolveActiveOrgId } from '@/lib/org/cookies';
@@ -11,7 +10,6 @@ import { getInventoryPickerPage, getJobMaterialLines } from '@/lib/inventory/act
 import { getProjectByNumber } from '@/lib/projects/actions';
 import { type OrgRole } from '@/lib/members/actions';
 import { getOrgMembersForUser } from '@/lib/members/queries';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { JobDetailContent } from '@/components/auftraege/job-detail/job-detail-content';
 import { FieldWorkPackPage } from '@/components/auftraege/work-pack/field-work-pack-page';
 import type { OrgMemberOption } from '@/components/auftraege/shared/employee-multi-select';
@@ -61,7 +59,6 @@ async function NestedJobDetailData({
       />
     );
   }
-  const supabase = await createSupabaseServerClient();
   const jobResultPromise = getJobByNumber(decodeURIComponent(jobNumber));
   const instructionItemsResultPromise = jobResultPromise.then((result) =>
     result.success ? getJobInstructionItems(result.job.id) : null,
@@ -92,7 +89,6 @@ async function NestedJobDetailData({
     projectResult,
     jobResult,
     membersResult,
-    clients,
     instructionItemsResult,
     documentsResult,
     materialLinesResult,
@@ -105,7 +101,6 @@ async function NestedJobDetailData({
     getProjectByNumber(decodeURIComponent(projectNumber)),
     jobResultPromise,
     getOrgMembersForUser(activeOrgId, user.id),
-    readOrganizationClients(supabase, activeOrgId),
     instructionItemsResultPromise,
     documentsResultPromise,
     materialLinesResultPromise,
@@ -189,9 +184,7 @@ async function NestedJobDetailData({
         name: project.name,
         projectNumber: project.projectNumber,
       }}
-      clients={clients}
       members={members}
-      projects={[]}
       isAdminOrManager={isAdminOrManager}
       canApproveWorkArtifacts={Boolean(approvalHolder)}
       instructionItems={instructionItems}

@@ -3,20 +3,14 @@
 import { Fragment } from 'react';
 import { Check } from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
 import { PlainButton } from '@/components/ui/plain-button';
 import { SectionError } from '@/components/ui/section-error';
 import { Skeleton } from '@/components/ui/skeleton';
+import type { PickerJob } from '@/lib/time-tracking/picker-types';
 import { cn } from '@/lib/utils';
 
-export type PickerJob = {
-  id: string;
-  title: string;
-  jobNumber: string | null;
-  status: string;
-  projectName: string | null;
-  clientName: string | null;
-  plannedToday: boolean;
-};
+export type { PickerJob };
 
 export function JobPickerLoadingRows() {
   return (
@@ -33,7 +27,7 @@ export function JobPickerLoadingRows() {
 }
 
 type JobPickerOptionListProps = {
-  /** Already filtered and sorted: today's planned jobs first. */
+  /** The server's matches in its order: today's planned jobs first. */
   filteredJobs: PickerJob[];
   plannedTodayCount: number;
   selectedJobId: string | null;
@@ -42,6 +36,8 @@ type JobPickerOptionListProps = {
   loadFailed: boolean;
   onRetry: () => void;
   searchQuery: string;
+  /** Shows the next page of matches; absent when none follow. */
+  onLoadMore: (() => void) | undefined;
 };
 
 /** The always-visible radio list of the clock flows: "Ohne Auftrag" first, then the jobs. */
@@ -54,6 +50,7 @@ export function JobPickerOptionList({
   loadFailed,
   onRetry,
   searchQuery,
+  onLoadMore,
 }: JobPickerOptionListProps) {
   return (
     <div className="space-y-0.5" role="radiogroup" aria-label="Auftrag">
@@ -131,6 +128,17 @@ export function JobPickerOptionList({
             {searchQuery ? 'Keine Aufträge gefunden' : 'Keine Aufträge verfügbar'}
           </p>
         </div>
+      ) : null}
+      {onLoadMore && !loadFailed ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="mt-2 w-full"
+          pending={isLoading}
+          onClick={onLoadMore}
+        >
+          Weitere Aufträge laden
+        </Button>
       ) : null}
     </div>
   );

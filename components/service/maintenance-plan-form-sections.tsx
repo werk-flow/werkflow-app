@@ -12,14 +12,15 @@ import { QuantityStepper } from '@/components/ui/quantity-stepper';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
 import {
   MAINTENANCE_NEXT_DUE_BASES,
   MAINTENANCE_NEXT_DUE_BASIS_LABELS,
-  type MaintenanceClientOption,
-  type MaintenanceCoverageOption,
   type MaintenanceNextDueBasis,
+  type MaintenancePlanItem,
   type MaintenanceTemplateOption,
 } from '@/lib/maintenance/types';
+import type { ServiceCaseClientOption } from '@/lib/service-cases/types';
 import { formatBerlinLocalDate } from '@/lib/planning/date-time';
 import type { MaintenancePlanFormState } from './maintenance-plan-form-state';
 import type { MaintenancePlanFormController } from './use-maintenance-plan-form';
@@ -29,29 +30,38 @@ type MaintenancePlanFieldsProps = Pick<MaintenancePlanFormController, 'form' | '
 
 type MaintenancePlanScopeFieldsProps = {
   controller: MaintenancePlanFormController;
-  clients: MaintenanceClientOption[];
   templates: MaintenanceTemplateOption[];
-  coverages: MaintenanceCoverageOption[];
-  isRevision: boolean;
+  /** The plan a revision starts from; its customer and site stay fixed. */
+  initial: MaintenancePlanItem | undefined;
 };
 
-/** Customer, site, coverage and template: what the plan applies to. */
+/**
+ * Customer, site, coverage and template: what the plan applies to. The
+ * customer is searched on the server, the chosen customer's sites are read
+ * when it is chosen, and the coverages of the chosen site are searched on the
+ * server; no list of the whole organization reaches the dialog.
+ */
 export function MaintenancePlanScopeFields({
   controller,
-  clients,
   templates,
-  coverages,
-  isRevision,
+  initial,
 }: MaintenancePlanScopeFieldsProps): ReactElement {
-  const { form, setForm, fieldErrors, client, site } = controller;
-  const availableCoverages = coverages.filter(
-    (coverage) => coverage.clientId === form.clientId && coverage.siteId === form.siteId,
+  const { form, setForm, fieldErrors, clientOption, site } = controller;
+  const client = clientOption.client;
+  const isRevision = Boolean(initial);
+  const coverageSearch = useJobEntityOptions(
+    { kind: 'coverages', clientId: form.clientId || undefined, siteId: form.siteId || undefined },
+    form.maintenanceCoverageId ? [form.maintenanceCoverageId] : [],
   );
+  // New plans start at active sites; a revision keeps its site even when it was deactivated since.
+  const siteOptions = (client?.sites ?? [])
+    .filter((item) => item.isActive || item.id === form.siteId)
+    .map((item) => ({ value: item.id, label: item.name, description: item.address }));
   return (
     <>
       <Field label="Kunde" htmlFor="maintenance-client" required error={fieldErrors.clientId}>
         <ClientSelectWithCreate
-          clients={clients}
+          selectedClient={initial ? { id: initial.clientId, name: initial.clientName } : null}
           value={form.clientId}
           onValueChange={(clientId) =>
             setForm((value) => ({
@@ -76,12 +86,11 @@ export function MaintenancePlanScopeFields({
               equipmentIds: [],
             }))
           }
-          options={(client?.sites ?? []).map((item) => ({
-            value: item.id,
-            label: item.name,
-            description: item.address,
-          }))}
-          disabled={!client || isRevision}
+          options={siteOptions}
+          disabled={!form.clientId || isRevision}
+          loading={clientOption.loading}
+          loadError={clientOption.error}
+          onRetryLoad={clientOption.retry}
           placeholder="Einsatzort wählen"
           searchPlaceholder="Einsatzort suchen…"
           emptyMessage="Kein Einsatzort gefunden"
@@ -91,10 +100,15 @@ export function MaintenancePlanScopeFields({
         <SearchableSelect
           value={form.maintenanceCoverageId}
           onChange={(maintenanceCoverageId) => setForm((value) => ({ ...value, maintenanceCoverageId }))}
-          options={availableCoverages.map((coverage) => ({
-            value: coverage.id,
-            label: `${coverage.coverageNumber}${coverage.reference ? ` · ${coverage.reference}` : ''}`,
+          options={coverageSearch.options.map((coverage) => ({
+            value: coverage.value,
+            label: coverage.description ? `${coverage.label} · ${coverage.description}` : coverage.label,
           }))}
+          onSearchChange={coverageSearch.onSearchChange}
+          loading={coverageSearch.loading}
+          loadError={coverageSearch.loadError}
+          onRetryLoad={coverageSearch.onRetryLoad}
+          onLoadMore={coverageSearch.onLoadMore}
           disabled={!site || isRevision}
           placeholder="Keine Abdeckung verknüpfen"
           searchPlaceholder="Abdeckung suchen…"
@@ -228,12 +242,21 @@ export function MaintenancePlanScheduleFields({
 /** The equipment of the chosen site that the plan covers. */
 export function MaintenancePlanEquipmentFieldset({
   site,
+  clientOption,
   form,
   setForm,
   fieldErrors,
 }: MaintenancePlanFieldsProps & {
-  site: MaintenanceClientOption['sites'][number] | undefined;
+  site: ServiceCaseClientOption['sites'][number] | undefined;
+  clientOption: MaintenancePlanFormController['clientOption'];
 }): ReactElement | null {
+  if (form.siteId && clientOption.loading) {
+    return (
+      <p role="status" className="sm:col-span-2 text-sm text-muted-foreground">
+        Anlagen werden geladen…
+      </p>
+    );
+  }
   return site?.equipment.length ? (
     <fieldset className="space-y-2 sm:col-span-2">
       <legend className="text-sm font-medium">Anlagen im Wartungsumfang</legend>

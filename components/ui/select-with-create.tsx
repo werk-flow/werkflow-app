@@ -33,6 +33,8 @@ type SelectWithCreateProps<T> = {
   onSearchChange?: ((search: string) => void) | undefined;
   loading?: boolean | undefined;
   loadError?: string | undefined;
+  /** Reads the failed options again, shown as „Erneut laden“ beside `loadError`. */
+  onRetryLoad?: (() => void) | undefined;
   onLoadMore?: (() => void) | undefined;
   disabled?: boolean | undefined;
   allowNone?: boolean | undefined;
@@ -56,6 +58,7 @@ export function SelectWithCreate<T>({
   onSearchChange,
   loading,
   loadError,
+  onRetryLoad,
   onLoadMore,
   disabled,
   allowNone,
@@ -98,6 +101,7 @@ export function SelectWithCreate<T>({
         onSearchChange={onSearchChange}
         loading={loading}
         loadError={loadError}
+        onRetryLoad={onRetryLoad}
         onLoadMore={onLoadMore}
         disabled={disabled}
         allowNone={allowNone}

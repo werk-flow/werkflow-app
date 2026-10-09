@@ -2,30 +2,29 @@
 
 import { usePendingTask } from '@/hooks/use-server-action';
 import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { getNextProjectNumber } from '@/lib/projects/actions';
-import type { Client, Job } from '@/lib/jobs/types';
+import type { Job } from '@/lib/jobs/types';
+import type { ClientSelectItem } from '../shared/client-select-with-create';
 
 type CreateProjectFormInput = {
-  clients: Client[];
+  defaultClient: ClientSelectItem | undefined;
   jobs: Job[];
-  defaultClientId: string | undefined;
   readOnlyClient: boolean | undefined;
   isActive: boolean;
 };
 
 /** Draft state of the create-project form, with the suggested project number and the job options. */
 export function useCreateProjectForm({
-  clients,
+  defaultClient,
   jobs,
-  defaultClientId,
   readOnlyClient,
   isActive,
 }: CreateProjectFormInput) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [templateVersionId, setTemplateVersionId] = useState('');
-  const [clientId, setClientId] = useState<string>(defaultClientId ?? '');
+  const [clientId, setClientId] = useState<string>(defaultClient?.id ?? '');
   const [siteId, setSiteId] = useState<string>('');
   const [contactId, setContactId] = useState<string>('');
   const [projectNumber, setProjectNumber] = useState('');
@@ -68,12 +67,6 @@ export function useCreateProjectForm({
       })),
   );
 
-  const unlinkedJobs = useMemo(() => {
-    const baseJobs = jobs.filter((j) => !j.projectId && j.status !== 'fertig');
-    if (!clientId) return baseJobs;
-    return baseJobs.filter((j) => j.clientId === clientId || !j.clientId);
-  }, [jobs, clientId]);
-
   const handleClientChange = (newClientId: string) => {
     setClientId(newClientId);
     // Sites and contacts belong to one customer; a change invalidates them.
@@ -91,17 +84,13 @@ export function useCreateProjectForm({
     }
   };
 
-  const readOnlyClientLabel = useMemo(() => {
-    if (!readOnlyClient) return undefined;
-    if (!clientId) return 'Kein Kunde';
-    const client = clients.find((entry) => entry.id === clientId);
-    return client?.name;
-  }, [readOnlyClient, clientId, clients]);
+  // A read-only customer is the default one the page passed in.
+  const readOnlyClientLabel = !readOnlyClient ? undefined : clientId ? defaultClient?.name : 'Kein Kunde';
 
   const resetForm = () => {
     setName('');
     setDescription('');
-    setClientId(defaultClientId ?? '');
+    setClientId(defaultClient?.id ?? '');
     setSiteId('');
     setContactId('');
     setProjectNumber('');
@@ -141,7 +130,6 @@ export function useCreateProjectForm({
     selectedJobIds,
     setSelectedJobIds,
     jobSearch,
-    unlinkedJobs,
     isLoading,
     runSubmit,
     error,

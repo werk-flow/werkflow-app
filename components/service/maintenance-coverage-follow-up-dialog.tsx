@@ -21,7 +21,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useServerAction } from '@/hooks/use-server-action';
 import { createCustomerFollowUp } from '@/lib/customer-relationships/actions';
 import { parseBerlinDateTimeInput, tomorrowMorningInBerlin } from '@/lib/customer-relationships/date-time';
-import type { MaintenanceCoverageItem, MaintenanceWorkspace } from '@/lib/maintenance/types';
+import type { MaintenanceCatalogs, MaintenanceCoverageItem } from '@/lib/maintenance/types';
 
 export function MaintenanceCoverageFollowUpDialog({
   open,
@@ -34,7 +34,7 @@ export function MaintenanceCoverageFollowUpDialog({
   onOpenChange: (open: boolean) => void;
   coverage: MaintenanceCoverageItem;
   currentActorId: string;
-  owners: MaintenanceWorkspace['followUpOwners'];
+  owners: MaintenanceCatalogs['followUpOwners'];
 }): ReactElement {
   const [title, setTitle] = useState(`Abdeckung ${coverage.coverageNumber} prüfen`);
   const [note, setNote] = useState(coverage.operationalNote ?? '');

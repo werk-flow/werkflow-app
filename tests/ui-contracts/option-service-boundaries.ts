@@ -28,7 +28,8 @@ window.optionContract = {
     settle({ success: false, error: 'held_failure' });
   },
 };
-export function searchJobEntityOptions(input: JobOptionRequest): Promise<JobOptionResult> {
-  window.optionContract.requests.push(input);
+/** The `entity-options` background read: held until the spec resolves or fails it. */
+export function readEntityOptionContract(input: unknown): Promise<JobOptionResult> {
+  window.optionContract.requests.push(input as JobOptionRequest);
   return new Promise((resolve) => pending.push(resolve));
 }

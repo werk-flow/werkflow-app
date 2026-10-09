@@ -20,7 +20,6 @@ import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Textarea } from '@/components/ui/textarea';
-import type { MaintenanceClientOption } from '@/lib/maintenance/types';
 import { formatBerlinLocalDate } from '@/lib/planning/date-time';
 import { parseIsoLocalDate } from '@/lib/utils';
 import { useMaintenanceCoverageForm } from './use-maintenance-coverage-form';
@@ -42,12 +41,10 @@ export type MaintenanceCoverageCreateSubmission = {
 export function MaintenanceCoverageDialog({
   open,
   onOpenChange,
-  clients,
   onSubmitted,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  clients: MaintenanceClientOption[];
   /**
    * Create from the workspace (feedback canon): the dialog closes at once and
    * the caller renders the pending row until `result` settles.
@@ -78,10 +75,11 @@ export function MaintenanceCoverageDialog({
     error,
     isPending,
     client,
+    clientOption,
     clientError,
     siteError,
     submit,
-  } = useMaintenanceCoverageForm({ onOpenChange, clients, onSubmitted });
+  } = useMaintenanceCoverageForm({ onOpenChange, onSubmitted });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} pending={isPending}>
@@ -106,7 +104,6 @@ export function MaintenanceCoverageDialog({
             <div className="grid gap-4 py-2 sm:grid-cols-2">
               <Field label="Kunde" htmlFor="coverage-client" required error={clientError}>
                 <ClientSelectWithCreate
-                  clients={clients}
                   value={clientId}
                   onValueChange={(value) => {
                     setClientId(value);
@@ -118,12 +115,13 @@ export function MaintenanceCoverageDialog({
                 <SearchableSelect
                   value={siteId}
                   onChange={setSiteId}
-                  options={(client?.sites ?? []).map((site) => ({
-                    value: site.id,
-                    label: site.name,
-                    description: site.address,
-                  }))}
-                  disabled={!client}
+                  options={(client?.sites ?? [])
+                    .filter((site) => site.isActive)
+                    .map((site) => ({ value: site.id, label: site.name, description: site.address }))}
+                  disabled={!clientId}
+                  loading={clientOption.loading}
+                  loadError={clientOption.error}
+                  onRetryLoad={clientOption.retry}
                   placeholder="Einsatzort wählen"
                   searchPlaceholder="Einsatzort suchen…"
                   emptyMessage="Kein Einsatzort gefunden"

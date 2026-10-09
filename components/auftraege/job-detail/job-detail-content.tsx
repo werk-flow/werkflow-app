@@ -8,6 +8,7 @@ import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { UsableContent } from '@/components/shared/usable-content';
 import { QualificationWarningDialog } from '../shared/qualification-warning-dialog';
 import { EditJobDialog } from '../forms/edit-job-dialog';
+import { knownProjectOption } from '../forms/job-form-options';
 import type { WorkLifecycleSnapshot } from '@/lib/work-lifecycle/types';
 import type { WorkArtifactSummary } from '@/lib/work-artifacts/types';
 
@@ -20,8 +21,6 @@ import {
   type JobWithDetails,
   type JobInstructionItemWithDetails,
   type Project,
-  type ProjectWithDetails,
-  type Client,
 } from '@/lib/jobs/types';
 
 import type { OrgMemberOption } from '../shared/employee-multi-select';
@@ -36,7 +35,6 @@ import { JobDetailOverview } from './job-detail-overview';
 import { JobDetailRelationDialogs } from './job-detail-relation-dialogs';
 import type { JobTimeParticipant } from './job-detail-time-sessions';
 import { useJobDetailAssignments } from './use-job-detail-assignments';
-import { useJobDetailDialogOptions } from './use-job-detail-dialog-options';
 import { useJobDetailMetadataFields } from './use-job-detail-metadata-fields';
 import { useJobDetailTimeSummary } from './use-job-detail-time-summary';
 
@@ -122,9 +120,7 @@ function useJobDetailRefreshGate() {
 interface JobDetailContentProps {
   job: JobWithDetails;
   parentProject?: Pick<Project, 'id' | 'name' | 'projectNumber'>;
-  clients: Client[];
   members: OrgMemberOption[];
-  projects?: ProjectWithDetails[];
   isAdminOrManager: boolean;
   canApproveWorkArtifacts: boolean;
   // Null: the server read failed, and the region shows the failure.
@@ -144,9 +140,7 @@ interface JobDetailContentProps {
 export function JobDetailContent({
   job,
   parentProject,
-  clients,
   members,
-  projects = [],
   isAdminOrManager,
   canApproveWorkArtifacts,
   instructionItems,
@@ -172,29 +166,12 @@ export function JobDetailContent({
   // No refresh on close: updateJob's response renders the route, and a
   // Realtime refresh deferred while the dialog was open runs once it closes.
   const handleEditDialogOpenChange = (open: boolean) => setShowEditDialog(open);
-  const {
-    dialogClients,
-    dialogMembers,
-    dialogProjects,
-    isLoadingDialogOptions,
-    dialogOptionsError,
-    retryDialogOptions,
-  } = useJobDetailDialogOptions({
-    clients,
-    members,
-    projects,
-    isAdminOrManager,
-    showAssignDialog,
-    showClientDialog,
-    showProjectDialog,
-    showEditDialog,
+  const assignment = useJobDetailAssignments({
+    liveJob,
+    setLiveJob,
+    dialogMembers: members,
+    setShowAssignDialog,
   });
-  const editOptionsLoad = {
-    error: dialogOptionsError,
-    retry: retryDialogOptions,
-    isLoading: isLoadingDialogOptions,
-  };
-  const assignment = useJobDetailAssignments({ liveJob, setLiveJob, dialogMembers, setShowAssignDialog });
   const { metadataFields, inlineEditWarningDialog } = useJobDetailMetadataFields({
     job,
     liveJob,
@@ -296,23 +273,13 @@ export function JobDetailContent({
         open={showAssignDialog}
         setShowAssignDialog={setShowAssignDialog}
         assignment={assignment}
-        dialogMembers={dialogMembers}
+        members={members}
         assessedForDate={liveJob.plannedDate}
-        isLoadingDialogOptions={isLoadingDialogOptions}
-        dialogOptionsError={dialogOptionsError}
-        retryDialogOptions={retryDialogOptions}
       />
 
       <JobDetailRelationDialogs
         liveJob={liveJob}
         parentProject={parentProject}
-        clients={clients}
-        projects={projects}
-        dialogClients={dialogClients}
-        dialogProjects={dialogProjects}
-        isLoadingDialogOptions={isLoadingDialogOptions}
-        dialogOptionsError={dialogOptionsError}
-        retryDialogOptions={retryDialogOptions}
         showClientDialog={showClientDialog}
         setShowClientDialog={setShowClientDialog}
         showProjectDialog={showProjectDialog}
@@ -325,10 +292,13 @@ export function JobDetailContent({
         job={liveJob}
         open={showEditDialog}
         onOpenChange={handleEditDialogOpenChange}
-        clients={dialogClients}
-        members={dialogMembers}
-        projects={dialogProjects}
-        optionsLoad={editOptionsLoad}
+        selectedClient={liveJob.client}
+        members={members}
+        knownProject={
+          projectInfo && liveJob.projectId === projectInfo.id
+            ? knownProjectOption({ ...projectInfo, clientId: liveJob.clientId }, liveJob.client?.name ?? null)
+            : undefined
+        }
         onSuccess={assignment.handleJobEdited}
       />
 

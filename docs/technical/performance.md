@@ -42,7 +42,7 @@ A journey is a step that one role repeats many times a day, measured from the us
 
 1. A lower count needs no reason: `ratchet` lowers it.
 2. A higher count, a larger payload or a smaller one needs `accept` with a reason the reviewer can check. The command writes the reason and the run key into the reference's history.
-3. A changed lab test or recorder module orphans its references. Record new ones from five runs with `calibrate`, or add a carry-over entry with its reason to `lib/testing/lab-count-reference-carryover.json` when the change cannot alter what is counted.
+3. A changed lab test or recorder module orphans its references. Record new ones from five runs with `calibrate`, or add a carry-over entry with its reason to `lib/testing/lab-count-reference-carryover.json` when the change cannot alter what is counted. `ratchet` and `accept` match a carried reference and write it under the new digest, which retires its entry.
 4. A metric enters or leaves the gate with `gate` or `reject`, which record the stability and relevance evidence.
 5. A count that later runs show taking two values on one step leaves that step's reference with `ungate`, which records the values and the runs. Never widen its tolerance instead.
 

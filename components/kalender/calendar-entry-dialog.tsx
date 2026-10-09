@@ -204,9 +204,7 @@ export function CalendarEntryDialog({
 
           <TabsContent value="job" className="flex min-h-0 flex-1 flex-col">
             <CreateJobFormContent
-              clients={[]}
               members={jobMembers}
-              projects={[]}
               defaultDate={preselectedDate}
               defaultTime={preselectedClockInTime}
               defaultDurationHours={defaultDurationHours}

@@ -46,7 +46,6 @@ interface KundenDetailContentProps {
     clientMap: Record<string, string>;
     jobAssignmentMap: Record<string, string[]>;
   } | null;
-  clients: Client[];
   members: OrgMemberOption[];
   isAdminOrManager: boolean;
   visibleColumns: AuftraegeColumnId[];
@@ -61,7 +60,6 @@ export function KundenDetailContent({
   relations,
   documents,
   linkedWork,
-  clients,
   members,
   isAdminOrManager,
   visibleColumns,
@@ -212,11 +210,10 @@ export function KundenDetailContent({
                     projects={linkedWork.projects}
                     clientMap={linkedWork.clientMap}
                     jobAssignmentMap={linkedWork.jobAssignmentMap}
-                    clients={clients}
                     members={members}
                     lockedClientLabel={client.name}
                     hideClientColumn
-                    defaultClientId={client.id}
+                    defaultClient={client}
                     readOnlyClient
                     isAdminOrManager={isAdminOrManager}
                     visibleColumns={visibleColumns}

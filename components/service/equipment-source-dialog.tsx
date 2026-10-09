@@ -15,65 +15,120 @@ import {
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { SearchableSelect } from '@/components/ui/searchable-select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  getInstalledEquipmentSourceOptions,
-  linkInstalledEquipmentSource,
-} from '@/lib/installed-equipment/actions';
-import type { EquipmentSourceOption } from '@/lib/installed-equipment/types';
+import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
+import { linkInstalledEquipmentSource } from '@/lib/installed-equipment/actions';
 import type { EquipmentDetailActions } from './use-equipment-detail-actions';
+import { useEquipmentSourceOptions } from './use-equipment-source-options';
 
-export type EquipmentSourceDialogState = {
-  open: boolean;
-  setOpen: (open: boolean) => void;
-  options: EquipmentSourceOption[];
-  value: string;
-  setValue: (value: string) => void;
-  /** Loads the available sources first; the dialog opens only when they arrived. */
-  openDialog: () => void;
+type SourceKind = 'job' | 'project' | 'document';
+
+const KIND_LABELS: Record<SourceKind, string> = {
+  job: 'Auftrag',
+  project: 'Projekt',
+  document: 'Dokument der Anlage',
 };
 
-export function useEquipmentSourceDialog(actions: EquipmentDetailActions): EquipmentSourceDialogState {
-  const { busy, item, setError, clearReason } = actions;
-  const [open, setOpen] = useState(false);
-  const [options, setOptions] = useState<EquipmentSourceOption[]>([]);
-  const [value, setValue] = useState('');
+const MISSING_SOURCE: Record<SourceKind, string> = {
+  job: 'Bitte wähle einen Auftrag.',
+  project: 'Bitte wähle ein Projekt.',
+  document: 'Bitte wähle ein Dokument.',
+};
 
-  function openDialog(): void {
-    setError(null);
-    clearReason();
-    void busy.run('source-options', async () => {
-      const result = await getInstalledEquipmentSourceOptions(item.id).catch(() => ({
-        success: false as const,
-      }));
-      if (!result.success) {
-        setError({
-          scope: 'source-options',
-          message: 'Verfügbare Herkunftsnachweise konnten nicht geladen werden.',
-        });
-        return;
-      }
-      setOptions(result.options);
-      setValue('');
-      setOpen(true);
-    });
-  }
-
-  return { open, setOpen, options, value, setValue, openDialog };
+function SourceKindField({
+  kind,
+  onKindChange,
+}: {
+  kind: SourceKind;
+  onKindChange: (kind: SourceKind) => void;
+}): ReactElement {
+  return (
+    <Field label="Art" htmlFor="equipment-source-type">
+      <Select value={kind} onValueChange={onKindChange}>
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {Object.entries(KIND_LABELS).map(([value, label]) => (
+            <SelectItem key={value} value={value}>
+              {label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Field>
+  );
 }
 
 type EquipmentSourceDialogProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   actions: EquipmentDetailActions;
-  state: EquipmentSourceDialogState;
 };
 
-export function EquipmentSourceDialog({ actions, state }: EquipmentSourceDialogProps): ReactElement {
+/**
+ * Links an exact source to the equipment. A job or project is searched on the
+ * server first; its Arbeitsnachweis revisions and handover releases are read
+ * only once it is chosen. Documents are the equipment's own. Mount it per
+ * opening, so every opening starts empty.
+ */
+export function EquipmentSourceDialog({
+  open,
+  onOpenChange,
+  actions,
+}: EquipmentSourceDialogProps): ReactElement {
   const { busy, item, reason, setReason, reasonError, attempted, errorFor, perform, rejectInvalid } = actions;
-  const { open: sourceOpen, setOpen: setSourceOpen, options: sourceOptions } = state;
-  const { value: sourceValue, setValue: setSourceValue } = state;
-  const sourceError = sourceValue ? undefined : 'Bitte wähle einen Nachweis.';
+  const [kind, setKind] = useState<SourceKind>('job');
+  const [workId, setWorkId] = useState('');
+  const [exactValue, setExactValue] = useState('');
+  const workSearch = useJobEntityOptions(
+    {
+      kind: kind === 'project' ? 'projects' : 'jobs',
+      purpose: 'equipment-work',
+      clientId: item.clientId,
+      siteId: item.siteId,
+    },
+    kind !== 'document' && workId ? [workId] : [],
+  );
+  const work = kind !== 'document' && workId ? { type: kind, id: workId } : null;
+  const exact = useEquipmentSourceOptions(item.id, work, kind === 'document' || work !== null);
+  const exactOption = exact.options.find((option) => option.value === exactValue);
+  const sourceError = (kind === 'document' ? exactOption : workId) ? undefined : MISSING_SOURCE[kind];
+  const ownWorkLabel = kind === 'project' ? 'Das Projekt selbst' : 'Der Auftrag selbst';
+
+  function submitSource(): void {
+    if (busy.isBusy('source')) return;
+    if (rejectInvalid('source', { 'equipment-source': sourceError, 'equipment-source-reason': reasonError }))
+      return;
+    const target = exactOption
+      ? {
+          targetType: exactOption.targetType,
+          targetId: exactOption.targetId,
+          ...(exactOption.documentVersionNumber !== undefined
+            ? { documentVersionNumber: exactOption.documentVersionNumber }
+            : {}),
+        }
+      : work
+        ? { targetType: work.type, targetId: work.id }
+        : null;
+    if (!target) return;
+    perform(
+      'source',
+      () =>
+        linkInstalledEquipmentSource({
+          equipmentId: item.id,
+          expectedVersion: item.version,
+          ...target,
+          reason,
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      () => onOpenChange(false),
+    );
+  }
+
   return (
-    <Dialog open={sourceOpen} onOpenChange={setSourceOpen} pending={busy.isBusy('source')}>
+    <Dialog open={open} onOpenChange={onOpenChange} pending={busy.isBusy('source')}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Herkunftsnachweis verknüpfen</DialogTitle>
@@ -86,57 +141,88 @@ export function EquipmentSourceDialog({ actions, state }: EquipmentSourceDialogP
           onSubmit={(event) => {
             event.preventDefault();
             event.stopPropagation();
-            if (busy.isBusy('source')) return;
-            if (
-              rejectInvalid('source', {
-                'equipment-source': sourceError,
-                'equipment-source-reason': reasonError,
-              })
-            )
-              return;
-            const option = sourceOptions.find((candidate) => candidate.value === sourceValue);
-            if (!option) return;
-            perform(
-              'source',
-              () =>
-                linkInstalledEquipmentSource({
-                  equipmentId: item.id,
-                  expectedVersion: item.version,
-                  targetType: option.targetType,
-                  targetId: option.targetId,
-                  ...(option.documentVersionNumber !== undefined
-                    ? { documentVersionNumber: option.documentVersionNumber }
-                    : {}),
-                  reason,
-                  idempotencyKey: crypto.randomUUID(),
-                }),
-              () => setSourceOpen(false),
-            );
+            submitSource();
           }}
           noValidate
           className="flex min-h-0 flex-1 flex-col gap-4"
         >
           <DialogBody>
             <div className="space-y-4">
-              <Field
-                label="Nachweis"
-                htmlFor="equipment-source"
-                required
-                error={attempted === 'source' ? sourceError : undefined}
-              >
-                <SearchableSelect
-                  value={sourceValue}
-                  onChange={setSourceValue}
-                  options={sourceOptions.map((option) => ({
-                    value: option.value,
-                    label: option.label,
-                    description: option.description,
-                  }))}
-                  placeholder="Nachweis auswählen"
-                  searchPlaceholder="Nachweis suchen…"
-                  emptyMessage="Keine passenden Nachweise verfügbar"
-                />
-              </Field>
+              <SourceKindField
+                kind={kind}
+                onKindChange={(value) => {
+                  setKind(value);
+                  setWorkId('');
+                  setExactValue('');
+                }}
+              />
+              {kind === 'document' ? (
+                <Field
+                  label="Dokument"
+                  htmlFor="equipment-source"
+                  required
+                  error={attempted === 'source' ? sourceError : undefined}
+                >
+                  <SearchableSelect
+                    value={exactValue}
+                    onChange={setExactValue}
+                    options={exact.options}
+                    loading={exact.loading}
+                    loadError={exact.error}
+                    onRetryLoad={exact.error ? exact.retry : undefined}
+                    placeholder="Dokument auswählen"
+                    searchPlaceholder="Dokument suchen…"
+                    emptyMessage="Noch keine Dokumente verknüpft"
+                  />
+                </Field>
+              ) : (
+                <>
+                  <Field
+                    label={KIND_LABELS[kind]}
+                    htmlFor="equipment-source"
+                    required
+                    error={attempted === 'source' ? sourceError : undefined}
+                  >
+                    <SearchableSelect
+                      value={workId}
+                      onChange={(value) => {
+                        setWorkId(value);
+                        setExactValue('');
+                      }}
+                      options={workSearch.options}
+                      onSearchChange={workSearch.onSearchChange}
+                      loading={workSearch.loading}
+                      loadError={workSearch.loadError}
+                      onRetryLoad={workSearch.onRetryLoad}
+                      onLoadMore={workSearch.onLoadMore}
+                      placeholder={kind === 'job' ? 'Auftrag auswählen' : 'Projekt auswählen'}
+                      searchPlaceholder={kind === 'job' ? 'Auftrag suchen…' : 'Projekt suchen…'}
+                      emptyMessage={
+                        kind === 'job'
+                          ? 'Kein Auftrag an diesem Einsatzort gefunden'
+                          : 'Kein Projekt an diesem Einsatzort gefunden'
+                      }
+                    />
+                  </Field>
+                  {work && (
+                    <Field label="Genauer Stand" htmlFor="equipment-source-detail">
+                      <SearchableSelect
+                        value={exactValue}
+                        onChange={setExactValue}
+                        options={exact.options}
+                        loading={exact.loading}
+                        loadError={exact.error}
+                        onRetryLoad={exact.error ? exact.retry : undefined}
+                        allowNone
+                        noneLabel={ownWorkLabel}
+                        placeholder={ownWorkLabel}
+                        searchPlaceholder="Nachweis suchen…"
+                        emptyMessage="Keine Arbeitsnachweise oder Übergaben vorhanden"
+                      />
+                    </Field>
+                  )}
+                </>
+              )}
               <Field
                 label="Bedeutung des Nachweises"
                 htmlFor="equipment-source-reason"
@@ -156,7 +242,7 @@ export function EquipmentSourceDialog({ actions, state }: EquipmentSourceDialogP
             <Button
               type="button"
               variant="outline"
-              onClick={() => setSourceOpen(false)}
+              onClick={() => onOpenChange(false)}
               disabled={busy.isBusy('source')}
             >
               Abbrechen

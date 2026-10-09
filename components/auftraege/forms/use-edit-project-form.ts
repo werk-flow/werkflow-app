@@ -2,7 +2,7 @@
 
 import { usePendingTask } from '@/hooks/use-server-action';
 import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { describeFailure } from '@/lib/action-messages';
 import { getProjectDetails } from '@/lib/projects/actions';
 import type { Job, ProjectWithDetails } from '@/lib/jobs/types';
@@ -62,12 +62,6 @@ export function useEditProjectForm({ project, open, jobs }: EditProjectFormInput
         status: job.status,
       })),
   );
-
-  const availableJobs = useMemo(() => {
-    const base = jobs.filter((j) => !j.projectId || j.projectId === project.id);
-    if (!clientId) return base;
-    return base.filter((j) => j.projectId === project.id || j.clientId === clientId || !j.clientId);
-  }, [jobs, project.id, clientId]);
 
   const handleClientChange = (newClientId: string) => {
     setClientId(newClientId);
@@ -179,7 +173,6 @@ export function useEditProjectForm({ project, open, jobs }: EditProjectFormInput
     setSelectedJobIds,
     originalJobIds,
     jobSearch,
-    availableJobs,
     isLoading,
     runSubmit,
     isLoadingJobs,

@@ -4,21 +4,16 @@ import { useState, type RefObject } from 'react';
 import { useRouter } from 'next/navigation';
 import { usePendingTask } from '@/hooks/use-server-action';
 import { updateJob } from '@/lib/jobs/actions';
+import type { JobEntityOption } from '@/lib/jobs/option-types';
 import { updateProject } from '@/lib/projects/actions';
-import type { Client, JobWithDetails, Project, ProjectWithDetails } from '@/lib/jobs/types';
+import type { JobWithDetails, Project } from '@/lib/jobs/types';
 import { ClientAssignmentDialog } from '../shared/client-assignment-dialog';
+import { projectNameOfOption } from '../forms/job-form-options';
 import { ProjectAssignmentDialog } from './project-assignment-dialog';
 
 type JobDetailRelationDialogsProps = {
   liveJob: JobWithDetails;
   parentProject: Pick<Project, 'id' | 'name' | 'projectNumber'> | undefined;
-  clients: Client[];
-  projects: ProjectWithDetails[];
-  dialogClients: Client[];
-  dialogProjects: ProjectWithDetails[];
-  isLoadingDialogOptions: boolean;
-  dialogOptionsError: string | null;
-  retryDialogOptions: () => void;
   showClientDialog: boolean;
   setShowClientDialog: (open: boolean) => void;
   showProjectDialog: boolean;
@@ -32,13 +27,6 @@ type JobDetailRelationDialogsProps = {
 export function JobDetailRelationDialogs({
   liveJob,
   parentProject,
-  clients,
-  projects,
-  dialogClients,
-  dialogProjects,
-  isLoadingDialogOptions,
-  dialogOptionsError,
-  retryDialogOptions,
   showClientDialog,
   setShowClientDialog,
   showProjectDialog,
@@ -72,13 +60,8 @@ export function JobDetailRelationDialogs({
             return;
           }
           if (result.success) {
-            applyLiveJobPatch({
-              ...result.job,
-              clientId: result.job.clientId,
-              client: result.job.clientId
-                ? (clients.find((client) => client.id === result.job.clientId) ?? null)
-                : null,
-            });
+            // The customer card comes with the rendered route; only a removal is known here.
+            applyLiveJobPatch({ ...result.job, ...(result.job.clientId ? {} : { client: null }) });
           }
         }
       } catch {
@@ -89,13 +72,13 @@ export function JobDetailRelationDialogs({
     });
   };
 
-  const handleProjectSave = async (projectId: string) => {
+  const handleProjectSave = async (chosenProject: JobEntityOption) => {
     setProjectSaveError(null);
     void runProjectUpdateTask(async () => {
       suppressRefreshRef.current = true;
       let result: Awaited<ReturnType<typeof updateJob>>;
       try {
-        result = await updateJob(liveJob.id, { projectId });
+        result = await updateJob(liveJob.id, { projectId: chosenProject.value });
       } catch {
         suppressRefreshRef.current = false;
         setProjectSaveError('Das Projekt konnte nicht gespeichert werden.');
@@ -113,39 +96,26 @@ export function JobDetailRelationDialogs({
         applyLiveJobPatch({
           ...result.job,
           project:
-            result.job.projectId && result.job.projectId !== liveJob.projectId
-              ? (() => {
-                  const nextProject = dialogProjects.find((project) => project.id === result.job.projectId);
-                  return nextProject
-                    ? {
-                        id: nextProject.id,
-                        name: nextProject.name,
-                        projectNumber: nextProject.projectNumber ?? null,
-                      }
-                    : null;
-                })()
-              : result.job.projectId
-                ? liveJob.project
-                : null,
+            result.job.projectId === chosenProject.value
+              ? {
+                  id: chosenProject.value,
+                  name: projectNameOfOption(chosenProject),
+                  projectNumber: chosenProject.number ?? null,
+                }
+              : null,
         });
       }
 
       const nextJobNumber = result.success ? result.job.jobNumber : liveJob.jobNumber;
-      if (!nextJobNumber) {
-        suppressRefreshRef.current = false;
-        return;
-      }
-
       // The dialog only opens for a job without a project and saves a selected one.
-      const nextProject = projects.find((entry) => entry.id === projectId);
-      if (!nextProject?.projectNumber) {
+      if (!nextJobNumber || !chosenProject.number) {
         // updateJob's response already rendered the route.
         suppressRefreshRef.current = false;
         return;
       }
 
       router.replace(
-        `/auftraege/projekt/${encodeURIComponent(nextProject.projectNumber)}/${encodeURIComponent(nextJobNumber)}`,
+        `/auftraege/projekt/${encodeURIComponent(chosenProject.number)}/${encodeURIComponent(nextJobNumber)}`,
       );
     });
   };
@@ -158,16 +128,10 @@ export function JobDetailRelationDialogs({
           setShowClientDialog(open);
           if (!open) setClientSaveError(null);
         }}
-        clients={dialogClients}
-        currentClientId={liveJob.clientId}
+        currentClient={liveJob.client}
         title={parentProject?.id ? 'Kunde zum Projekt hinzufügen' : 'Kunde zum Auftrag hinzufügen'}
         isSaving={isUpdatingClient}
         saveError={clientSaveError}
-        optionsLoad={{
-          error: dialogOptionsError,
-          retry: retryDialogOptions,
-          isLoading: isLoadingDialogOptions,
-        }}
         onSave={handleClientSave}
       />
 
@@ -177,17 +141,11 @@ export function JobDetailRelationDialogs({
           setShowProjectDialog(open);
           if (!open) setProjectSaveError(null);
         }}
-        projects={dialogProjects}
         currentProjectId={liveJob.projectId}
         currentClientId={liveJob.clientId}
         title="Projekt zum Auftrag hinzufügen"
         isSaving={isUpdatingProject}
         saveError={projectSaveError}
-        optionsLoad={{
-          error: dialogOptionsError,
-          retry: retryDialogOptions,
-          isLoading: isLoadingDialogOptions,
-        }}
         onSave={handleProjectSave}
       />
     </>

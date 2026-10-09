@@ -4,13 +4,15 @@ import { PlainButton } from '@/components/ui/plain-button';
 import { X } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
-import type { Client, FilterState } from '@/lib/jobs/types';
+import type { FilterState } from '@/lib/jobs/types';
+import type { JobEntityOption } from '@/lib/jobs/option-types';
 import { formatGermanDate } from '@/lib/utils';
 import type { OrgMemberOption } from '../shared/employee-multi-select';
 
 type FilterBarActiveChipsProps = {
   filters: FilterState;
-  clients: Client[];
+  /** The customer search's options; they keep the selected customers' labels. */
+  customerOptions: JobEntityOption[];
   members: OrgMemberOption[];
   updateFilter: <K extends keyof FilterState>(key: K, value: FilterState[K]) => void;
   /** Clears both ends of the date range in one change; two `updateFilter` calls would race. */
@@ -21,7 +23,7 @@ type FilterBarActiveChipsProps = {
 /** One removable chip per active filter, plus the reset for all of them. */
 export function FilterBarActiveChips({
   filters,
-  clients,
+  customerOptions,
   members,
   updateFilter,
   clearDateRange,
@@ -29,7 +31,7 @@ export function FilterBarActiveChips({
 }: FilterBarActiveChipsProps) {
   const clientChipLabel =
     filters.clientIds.length === 1
-      ? (clients.find((c) => c.id === filters.clientIds[0])?.name ?? '1 Kunde')
+      ? (customerOptions.find((option) => option.value === filters.clientIds[0])?.label ?? '1 Kunde')
       : `${filters.clientIds.length} Kunden`;
 
   const employeeChipLabel =

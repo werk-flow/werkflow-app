@@ -24,6 +24,7 @@ const migratedReaders: Record<string, readonly string[]> = {
   'components/kalender/use-parking-data.ts': ['getParkedJobs', 'getJobParkingContexts'],
   'components/kalender/calendar-entry-dialog.tsx': ['getOrgMembersAction'],
   'hooks/use-planning-options.ts': ['getPlanningOptions'],
+  'hooks/use-job-entity-options.ts': ['searchJobEntityOptions'],
   'hooks/use-weekly-time-data.ts': ['getTimeEntries', 'getWeeklyTargets'],
   'hooks/use-member-status.ts': ['getTimeEntries'],
   'components/zeiterfassung/vacation-section.tsx': ['getOwnVacationOverview'],
@@ -34,6 +35,7 @@ const migratedReaders: Record<string, readonly string[]> = {
   'components/zeiterfassung/sickness-section.tsx': ['getOwnSicknessReports'],
   'components/zeiterfassung/provisional-time-summary.tsx': ['getProvisionalTimeSummary'],
   'components/zeiterfassung/time-correction-requests.tsx': ['getTimeCorrectionRequests'],
+  'components/zeiterfassung/use-time-correction-dialog.ts': ['getTimeCorrectionFormOptions'],
   'components/zeiterfassung/entry-history.tsx': ['getTimeEntries', 'getProfilesByIds'],
   'components/zeiterfassung/pending-approvals.tsx': ['getPendingSessions', 'getPendingChangeRequests'],
   'components/auftraege/job-detail/job-detail-content.tsx': ['getTimeEntriesForJob'],
@@ -55,6 +57,28 @@ const migratedReaders: Record<string, readonly string[]> = {
   'components/kalender/use-dispatch-panel-overview.ts': ['getDispatchOverview'],
   'components/auftraege/project-detail/use-project-detail-time.ts': ['getTimeEntriesForProjectJobs'],
   'components/service/use-equipment-detail-actions.ts': ['getInstalledEquipmentDetailByNumber'],
+  'components/service/use-client-option.ts': ['getServiceClientOption'],
+  'components/service/use-equipment-source-options.ts': ['getInstalledEquipmentSourceOptions'],
+  'components/arbeitsvorlagen/use-apply-work-template.ts': [
+    'getPublishedWorkTemplates',
+    'getWorkTemplatePreview',
+  ],
+  'components/arbeitsvorlagen/work-template-picker.tsx': ['getPublishedWorkTemplates'],
+  'components/auftraege/lifecycle/work-lifecycle-artifact-approval-dialog.tsx': [
+    'getApprovedArtifactActionsForTarget',
+  ],
+  'components/auftraege/shared/employee-multi-select.tsx': ['getAssignmentTeamOptions'],
+  'components/auftraege/shared/site-contact-fields.tsx': ['getClientRelations'],
+  'components/dokumente/attach-document-dialog.tsx': ['getAttachableDocuments'],
+  'components/inventar/use-job-material-dialog.ts': [
+    'getInventoryPickerPage',
+    'getInventoryPickerOptionsForJob',
+  ],
+  'components/kalender/dispatch-issue-dialog.tsx': ['previewDispatchReadiness'],
+  'components/kalender/parking-context-dialog.tsx': ['getParkingResponsibleOptions'],
+  'components/service/maintenance-coverage-documents-dialog.tsx': ['getMaintenanceCoverageDocuments'],
+  'components/service/use-maintenance-due-action.ts': ['getMaintenanceEvidenceOptions'],
+  'components/use-manual-entry-form-members.ts': ['getOrgMembersAction'],
 };
 
 test('migrated background readers use the GET client and no longer queue as Server Actions', () => {

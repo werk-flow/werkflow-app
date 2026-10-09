@@ -760,6 +760,23 @@ export function workListFilter(panel: Locator, filter: 'customer' | 'employee'):
   });
 }
 
+/**
+ * Picks one customer in the panel's customer filter. The choices are searched
+ * on the server one page at a time, so the name is typed before the option is
+ * chosen. The multi-select stays open, as after a click.
+ */
+export async function chooseWorkListCustomer(
+  page: Page,
+  panel: Locator,
+  customerName: string,
+): Promise<void> {
+  await workListFilter(panel, 'customer').click();
+  const listbox = page.getByRole('listbox').filter({ visible: true }).first();
+  await expect(listbox).toBeVisible();
+  await listbox.locator('..').getByRole('textbox').fill(customerName);
+  await listbox.getByRole('option', { name: customerName, exact: true }).click();
+}
+
 /** The type filter's option that shows projects only. */
 export function workListOnlyProjectsOption(page: Page): Locator {
   return page.getByRole('option', { name: WORK_LIST_COPY.onlyProjects, exact: true });
@@ -1015,6 +1032,9 @@ export async function createJob(
   await expect(workCreateHeading(page)).toBeVisible();
   await workCreateTab(page, 'job').click();
 
+  // The suggested number arrives after the dialog opens; a fill before it lands
+  // would keep the typed number only until the suggestion replaces or prefixes it.
+  await expect(jobFormField(page, 'number')).not.toHaveValue('', { timeout: 15_000 });
   await jobFormField(page, 'number').fill(options.jobNumber);
   await jobFormField(page, 'title').fill(options.title);
   if (options.description) await jobFormField(page, 'description').fill(options.description);

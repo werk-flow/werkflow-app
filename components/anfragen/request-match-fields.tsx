@@ -6,10 +6,8 @@ import { Button } from '@/components/ui/button';
 import { DialogFooter } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
-import type { Client } from '@/lib/jobs/types';
 
 interface RequestMatchFieldsProps {
-  clients: Client[];
   matchClientId: string;
   matchSiteId: string;
   matchContactId: string;
@@ -25,7 +23,6 @@ interface RequestMatchFieldsProps {
 
 /** Body and footer of the dialog that matches an existing customer to a request. */
 export function RequestMatchFields({
-  clients,
   matchClientId,
   matchSiteId,
   matchContactId,
@@ -42,12 +39,7 @@ export function RequestMatchFields({
     <>
       <div className="grid gap-4 py-2">
         <Field label="Kunde" htmlFor="match-client" required error={matchClientError}>
-          <ClientSelectWithCreate
-            clients={clients}
-            value={matchClientId}
-            onValueChange={onClientChange}
-            disabled={isPending}
-          />
+          <ClientSelectWithCreate value={matchClientId} onValueChange={onClientChange} disabled={isPending} />
         </Field>
         {matchClientId && (
           <SiteContactFields

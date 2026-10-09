@@ -14,11 +14,9 @@ export type CreateJobForm = ReturnType<typeof useCreateJobForm>;
 
 /** The create-job form's state: its field groups, their defaults and the submit. */
 export function useCreateJobForm({
-  clients,
-  projects = [],
   initialJobNumber,
-  defaultProjectId,
-  defaultClientId,
+  defaultProject,
+  defaultClient,
   defaultEmployeeIds,
   readOnlyClient,
   defaultDate,
@@ -45,13 +43,7 @@ export function useCreateJobForm({
     isActive,
     onDraftChange,
   });
-  const projectLink = useCreateJobProjectLink({
-    clients,
-    projects,
-    defaultClientId,
-    defaultProjectId,
-    readOnlyClient,
-  });
+  const projectLink = useCreateJobProjectLink({ defaultClient, defaultProject, readOnlyClient });
   const { isLoadingProjectDefaults, projectDefaultsLoadFailed } = projectLink;
   const submit = useCreateJobSubmit({
     values: {

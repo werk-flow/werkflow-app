@@ -108,13 +108,7 @@ export function ServiceCaseRelationsSection({
         </div>
         <span className="flex items-center gap-2">
           <InlinePending active={busy} label="Änderungen werden übernommen" />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onLinkClick}
-            disabled={isStale || workspace.relatedCases.length === 0}
-          >
+          <Button type="button" variant="outline" size="sm" onClick={onLinkClick} disabled={isStale}>
             <LinkIcon className="size-4" />
             Verknüpfen
           </Button>

@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useBanner } from '@/components/ui/banner';
-import { expandTeamForAssignment, getAssignmentTeamOptions } from '@/lib/qualifications/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
+import { expandTeamForAssignment } from '@/lib/qualifications/actions';
 
 import { SearchableMultiSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
 
@@ -43,16 +44,12 @@ export function EmployeeMultiSelect({
   const [teams, setTeams] = useState<Array<{ id: string; name: string }>>([]);
   const [pendingTeamId, setPendingTeamId] = useState<string | null>(null);
   useEffect(() => {
-    let active = true;
-    void getAssignmentTeamOptions()
-      .then((result) => {
-        if (active && result.success) setTeams(result.teams);
-      })
-      // eslint-disable-next-line no-restricted-syntax -- team shortcuts are optional and stay hidden when their options cannot be loaded
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
+    const controller = new AbortController();
+    // Team shortcuts are optional and stay hidden when their options cannot be loaded.
+    void readInBackground('assignment-team-options', {}, controller.signal).then((result) => {
+      if (!controller.signal.aborted && result.success) setTeams(result.teams);
+    });
+    return () => controller.abort();
   }, []);
   const options: SearchableSelectOption[] = useMemo(
     () =>

@@ -25,11 +25,8 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Textarea } from '@/components/ui/textarea';
 import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import { calendarRefusalMessage } from '@/lib/calendar/messages';
-import {
-  getParkingResponsibleOptions,
-  setJobParkingContext,
-  type ParkingResponsibleOption,
-} from '@/lib/parking/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
+import { setJobParkingContext, type ParkingResponsibleOption } from '@/lib/parking/actions';
 import {
   PARKING_ERROR_MESSAGES,
   PARKING_REASON_LABELS,
@@ -47,22 +44,14 @@ function useParkingResponsibleOptions() {
   const [isLoadingOptions, setIsLoadingOptions] = useState(true);
 
   useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const result = await getParkingResponsibleOptions();
-        if (cancelled) return;
-        if (result.success) setOptions(result.options);
-        else setOptionsError(true);
-      } catch {
-        if (!cancelled) setOptionsError(true);
-      } finally {
-        if (!cancelled) setIsLoadingOptions(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    const controller = new AbortController();
+    void readInBackground('parking-responsible-options', {}, controller.signal).then((result) => {
+      if (controller.signal.aborted) return;
+      if (result.success) setOptions(result.options);
+      else setOptionsError(true);
+      setIsLoadingOptions(false);
+    });
+    return () => controller.abort();
   }, [optionsReloadCount]);
 
   function retryOptions() {

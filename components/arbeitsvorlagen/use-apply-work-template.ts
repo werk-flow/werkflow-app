@@ -5,12 +5,9 @@ import { useEffect, useState } from 'react';
 import { useBanner } from '@/components/ui/banner';
 import { usePendingTask } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
+import { readInBackground } from '@/lib/data/background-read-client';
 import type { AssignmentApproval, AssignmentEvaluation } from '@/lib/qualifications/types';
-import {
-  applyWorkTemplate,
-  getPublishedWorkTemplates,
-  getWorkTemplatePreview,
-} from '@/lib/work-templates/actions';
+import { applyWorkTemplate } from '@/lib/work-templates/actions';
 import type {
   PublishedWorkTemplateOption,
   WorkTemplateApplicationPreview,
@@ -79,54 +76,38 @@ export function useApplyWorkTemplate({
 
   useEffect(() => {
     if (!open) return;
-    let current = true;
-    getPublishedWorkTemplates(targetType)
-      .then((result) => {
-        if (!current) return;
-        if (!result.success) {
-          setOptions([]);
-          setLoadError({ region: 'options', message: 'Arbeitsvorlagen konnten nicht geladen werden.' });
-          return;
-        }
-        setOptions(result.data);
-      })
-      .catch(() => {
-        if (!current) return;
+    const controller = new AbortController();
+    void readInBackground('published-work-templates', { targetType }, controller.signal).then((result) => {
+      if (controller.signal.aborted) return;
+      if (!result.success) {
         setOptions([]);
         setLoadError({ region: 'options', message: 'Arbeitsvorlagen konnten nicht geladen werden.' });
-      });
-    return () => {
-      current = false;
-    };
+        return;
+      }
+      setOptions(result.data);
+    });
+    return () => controller.abort();
   }, [open, targetType, reloadCount]);
 
   useEffect(() => {
     if (!versionId) return;
-    let current = true;
-    getWorkTemplatePreview({
-      versionId,
-      targetType,
-      ...(targetType === 'job' ? { jobId: targetId } : { projectId: targetId }),
-    })
-      .then((result) => {
-        if (!current) return;
-        if (!result.success) {
-          setPreview(null);
-          setLoadError({ region: 'preview', message: 'Die Vorschau konnte nicht geladen werden.' });
-          return;
-        }
-        setPreview(result.data);
-        setAllowAdditional(false);
-        setError(null);
-      })
-      .catch(() => {
-        if (!current) return;
+    const controller = new AbortController();
+    void readInBackground(
+      'work-template-preview',
+      { versionId, targetType, ...(targetType === 'job' ? { jobId: targetId } : { projectId: targetId }) },
+      controller.signal,
+    ).then((result) => {
+      if (controller.signal.aborted) return;
+      if (!result.success) {
         setPreview(null);
         setLoadError({ region: 'preview', message: 'Die Vorschau konnte nicht geladen werden.' });
-      });
-    return () => {
-      current = false;
-    };
+        return;
+      }
+      setPreview(result.data);
+      setAllowAdditional(false);
+      setError(null);
+    });
+    return () => controller.abort();
   }, [targetId, targetType, versionId, reloadCount]);
 
   function retryLoad(): void {

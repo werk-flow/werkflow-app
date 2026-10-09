@@ -1,5 +1,6 @@
 import { Suspense } from 'react';
-import { readOrganizationClients } from '@/lib/clients/server';
+import { getOrgMembersForUser } from '@/lib/members/queries';
+import type { OrgMemberOption } from '@/components/auftraege/shared/employee-multi-select';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { logError } from '@/lib/logging';
@@ -86,7 +87,7 @@ async function ProjectDetailData({ projectNumber }: { projectNumber: string }) {
 
   const [
     result,
-    clients,
+    membersResult,
     documentsResult,
     materialResult,
     inventoryOptionsResult,
@@ -97,7 +98,8 @@ async function ProjectDetailData({ projectNumber }: { projectNumber: string }) {
     handoverWorkspaceResult,
   ] = await Promise.all([
     projectResultPromise,
-    readOrganizationClients(admin, activeOrgId),
+    // The create-job dialog assigns employees; only managers open it.
+    isAdminOrManager ? getOrgMembersForUser(activeOrgId, user.id) : null,
     documentsResultPromise,
     materialResultPromise,
     inventoryOptionsResultPromise,
@@ -124,6 +126,20 @@ async function ProjectDetailData({ projectNumber }: { projectNumber: string }) {
       </RouteRedirect>
     );
   }
+
+  if (membersResult && !membersResult.success) {
+    return (
+      <RegionLoadError title="Das Projekt konnte nicht geladen werden">
+        Die Mitarbeiterliste ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
+      </RegionLoadError>
+    );
+  }
+  const members: OrgMemberOption[] = (membersResult?.members ?? []).map((member) => ({
+    userId: member.user_id,
+    firstName: member.first_name,
+    lastName: member.last_name,
+    role: member.role,
+  }));
 
   const { project, client, jobs, derivedStatus } = result.details;
 
@@ -170,8 +186,7 @@ async function ProjectDetailData({ projectNumber }: { projectNumber: string }) {
         client={client}
         jobs={jobs}
         derivedStatus={derivedStatus}
-        clients={clients}
-        members={[]}
+        members={members}
         isAdminOrManager={isAdminOrManager}
         canApproveWorkArtifacts={Boolean(approvalHolder)}
         currentUserId={user.id}

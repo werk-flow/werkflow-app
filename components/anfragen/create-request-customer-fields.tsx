@@ -5,16 +5,14 @@ import { SiteContactFields } from '@/components/auftraege/shared/site-contact-fi
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
-import type { Client } from '@/lib/jobs/types';
 import type { CreateRequestForm } from './use-create-request-form';
 
 interface CreateRequestCustomerFieldsProps {
-  clients: Client[];
   form: CreateRequestForm;
 }
 
 /** The customer with site and contact, or the caller data while no customer is chosen. */
-export function CreateRequestCustomerFields({ clients, form }: CreateRequestCustomerFieldsProps) {
+export function CreateRequestCustomerFields({ form }: CreateRequestCustomerFieldsProps) {
   const {
     clientId,
     handleClientChange,
@@ -47,12 +45,7 @@ export function CreateRequestCustomerFields({ clients, form }: CreateRequestCust
             : undefined
         }
       >
-        <ClientSelectWithCreate
-          clients={clients}
-          value={clientId}
-          onValueChange={handleClientChange}
-          disabled={isLoading}
-        />
+        <ClientSelectWithCreate value={clientId} onValueChange={handleClientChange} disabled={isLoading} />
       </Field>
 
       {clientId ? (

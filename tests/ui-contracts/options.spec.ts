@@ -70,3 +70,22 @@ test('obsolete search and old organization responses cannot replace current choi
   await page.clock.runFor(1);
   await expect(page.getByRole('option', { name: 'Neuer Kunde' })).toHaveCount(0);
 });
+
+test('opening the picker reads the first page at once and a failed page offers a retry', async ({ page }) => {
+  await page.getByRole('combobox', { name: 'Kunden' }).click();
+  // Feedback in the first frame, before any answer.
+  await expect(page.getByRole('listbox').locator('..').getByRole('status')).toHaveText(
+    'Auswahl wird geladen…',
+  );
+  await page.clock.runFor(1);
+  await expect.poll(() => page.evaluate(() => window.optionContract.requests.length)).toBe(1);
+  expect(await page.evaluate(() => window.optionContract.requests[0]?.query)).toBe('');
+  await page.evaluate(() => window.optionContract.fail(0));
+  await expect(page.getByRole('alert')).toHaveText('Die Auswahl konnte nicht geladen werden.');
+  await page.getByRole('button', { name: 'Erneut laden' }).click();
+  await page.clock.runFor(1);
+  await expect.poll(() => page.evaluate(() => window.optionContract.requests.length)).toBe(2);
+  await page.evaluate(() => window.optionContract.resolve(1, [{ value: 'first', label: 'Erster Kunde' }]));
+  await expect(page.getByRole('option', { name: 'Erster Kunde' })).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});

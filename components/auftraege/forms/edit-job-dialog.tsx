@@ -12,11 +12,12 @@ import {
 } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
 import type { OrgMemberOption } from '../shared/employee-multi-select';
-import { OptionsLoadError } from '../shared/options-load-error';
 
 import { ParkConfirmationDialog } from './park-confirmation-dialog';
 import { QualificationWarningDialog } from '../shared/qualification-warning-dialog';
-import { getJobDisplayTitle, type Client, type Job, type ProjectWithDetails } from '@/lib/jobs/types';
+import { getJobDisplayTitle, type Job } from '@/lib/jobs/types';
+import type { JobEntityOption } from '@/lib/jobs/option-types';
+import type { ClientSelectItem } from '../shared/client-select-with-create';
 import {
   EditJobAssignmentFields,
   EditJobIdentityFields,
@@ -29,11 +30,11 @@ interface EditJobDialogProps {
   job: Job;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  clients: Client[];
+  /** The job's customer as the page shows it, labelled before the server answers. */
+  selectedClient: ClientSelectItem | null;
   members: OrgMemberOption[];
-  projects?: ProjectWithDetails[];
-  /** The on-demand option load: a failure shows with a retry instead of empty lists. */
-  optionsLoad?: { error: string | null; retry: () => void; isLoading: boolean } | undefined;
+  /** The job's project as the page shows it. */
+  knownProject: JobEntityOption | undefined;
   onSuccess?: ((payload: { job: Job; selectedEmployeeIds?: string[] }) => void | Promise<void>) | undefined;
 }
 
@@ -41,13 +42,12 @@ export function EditJobDialog({
   job,
   open,
   onOpenChange,
-  clients,
+  selectedClient,
   members,
-  projects = [],
-  optionsLoad,
+  knownProject,
   onSuccess,
 }: EditJobDialogProps) {
-  const form = useEditJobForm({ job, open, clients, projects });
+  const form = useEditJobForm({ job, open, knownProject });
   const { submitChanges, handleSubmit } = useEditJobSubmit({
     job,
     form,
@@ -81,17 +81,10 @@ export function EditJobDialog({
             <DialogBody className="grid gap-4 py-2">
               <EditJobIdentityFields form={form} />
 
-              <EditJobAssignmentFields form={form} clients={clients} />
+              <EditJobAssignmentFields form={form} selectedClient={selectedClient} />
 
               <EditJobPlanningFields form={form} members={members} />
 
-              {optionsLoad && (
-                <OptionsLoadError
-                  error={optionsLoad.error}
-                  onRetry={optionsLoad.retry}
-                  retrying={optionsLoad.isLoading}
-                />
-              )}
               <ErrorText>{error}</ErrorText>
             </DialogBody>
             <DialogFooter>

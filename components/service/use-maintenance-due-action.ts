@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 
 import { useServerAction } from '@/hooks/use-server-action';
-import { getMaintenanceEvidenceOptions } from '@/lib/maintenance/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
 import type {
   MaintenanceDueItem,
   MaintenanceEvidenceOption,
@@ -79,10 +79,10 @@ export function useMaintenanceDueAction({
   const idempotencyKey = useRef(crypto.randomUUID());
   useEffect(() => {
     if (!open || !due.jobId) return;
-    let current = true;
-    void getMaintenanceEvidenceOptions(due.jobId)
-      .then((result) => {
-        if (!current) return;
+    const controller = new AbortController();
+    void readInBackground('maintenance-evidence-options', { jobId: due.jobId }, controller.signal).then(
+      (result) => {
+        if (controller.signal.aborted) return;
         if (result.success) {
           setEvidence(result.options);
         } else {
@@ -90,16 +90,9 @@ export function useMaintenanceDueAction({
           setEvidenceLoadFailed(true);
         }
         setIsEvidenceLoading(false);
-      })
-      .catch(() => {
-        if (!current) return;
-        setEvidence([]);
-        setEvidenceLoadFailed(true);
-        setIsEvidenceLoading(false);
-      });
-    return () => {
-      current = false;
-    };
+      },
+    );
+    return () => controller.abort();
   }, [due.jobId, open, evidenceReloadCount]);
 
   function retryEvidence(): void {

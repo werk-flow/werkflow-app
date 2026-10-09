@@ -11,7 +11,6 @@ import { ContextualDocumentsSection } from '@/components/dokumente/contextual-do
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import { REQUEST_CATEGORY_LABELS, REQUEST_SOURCE_LABELS, type ClientRequest } from '@/lib/requests/types';
-import type { Client } from '@/lib/jobs/types';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import { RequestStatusBadge, RequestUrgencyBadge } from './request-badges';
 import { CloseRequestDialog } from './close-request-dialog';
@@ -44,7 +43,6 @@ export type RequestDetailData = {
   documents: OrganizationDocument[] | null;
   /** Null when the read failed, so the region shows the failure instead of "none". */
   events: RequestEventEntry[] | null;
-  clients: Client[];
   assignees: Array<{ userId: string; name: string }>;
 };
 
@@ -140,7 +138,9 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
 
       <ConvertRequestDialog
         request={request}
-        clients={data.clients}
+        requestClient={
+          request.clientId && data.clientName ? { id: request.clientId, name: data.clientName } : null
+        }
         open={convertOpen}
         onOpenChange={setConvertOpen}
         onSaved={markSettling}
@@ -171,7 +171,6 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
             </DialogDescription>
           </DialogHeader>
           <RequestMatchFields
-            clients={data.clients}
             matchClientId={actions.matchClientId}
             matchSiteId={actions.matchSiteId}
             matchContactId={actions.matchContactId}

@@ -6,7 +6,8 @@ import { Briefcase, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CreateJobDialog } from '@/components/auftraege/forms/create-job-dialog';
 import { CreateAuftragProjectDialog } from '@/components/auftraege/forms/create-auftrag-project-dialog';
-import type { Job, Client, ProjectWithDetails } from '@/lib/jobs/types';
+import type { Job, ProjectWithDetails } from '@/lib/jobs/types';
+import type { ClientSelectItem } from '@/components/auftraege/shared/client-select-with-create';
 import type { AuftraegeColumnId } from '@/lib/jobs/auftraege-table-columns';
 import type { OrgMemberOption } from '@/components/auftraege/shared/employee-multi-select';
 import { EmbeddedAuftraegeLists } from '@/components/shared/embedded-auftraege-lists';
@@ -20,10 +21,8 @@ import {
 interface EmbeddedAuftraegeSectionProps {
   jobs: Job[];
   projects: ProjectWithDetails[];
-  supportProjects?: ProjectWithDetails[];
   clientMap: Record<string, string>;
   jobAssignmentMap?: Record<string, string[]>;
-  clients: Client[];
   members: OrgMemberOption[];
   isAdminOrManager: boolean;
   /** When set, the employee filter shows a locked, read-only field with this label. */
@@ -31,15 +30,14 @@ interface EmbeddedAuftraegeSectionProps {
   /** When set, the client filter shows a locked, read-only field with this label. */
   lockedClientLabel?: string;
   hideClientColumn?: boolean;
-  defaultClientId?: string;
+  /** The customer new work starts with, as the page shows it. */
+  defaultClient?: ClientSelectItem;
   defaultEmployeeIds?: string[];
   /** Makes the client field in create dialogs read-only. */
   readOnlyClient?: boolean;
   /** When true, project creation is hidden from the create dropdown. */
   hideProjectCreation?: boolean;
-  /** Override projects list for create-job dialog (e.g. all active projects). */
-  allProjectsForJobCreation?: ProjectWithDetails[];
-  /** Hide empty project rows while still keeping support project metadata in the live graph. */
+  /** Hide project rows without a listed job. */
   hideEmptyProjects?: boolean;
   emptyTitle?: string;
   emptyDescription?: string;
@@ -49,20 +47,17 @@ interface EmbeddedAuftraegeSectionProps {
 export function EmbeddedAuftraegeSection({
   jobs: initialJobs,
   projects: initialProjects,
-  supportProjects,
   clientMap,
   jobAssignmentMap: initialJobAssignmentMap = {},
-  clients,
   members,
   isAdminOrManager,
   lockedEmployeeLabel,
   lockedClientLabel,
   hideClientColumn,
-  defaultClientId,
+  defaultClient,
   defaultEmployeeIds,
   readOnlyClient,
   hideProjectCreation,
-  allProjectsForJobCreation,
   hideEmptyProjects = false,
   emptyTitle = 'Keine Aufträge',
   emptyDescription = 'Es sind keine Aufträge vorhanden.',
@@ -72,15 +67,12 @@ export function EmbeddedAuftraegeSection({
   const entries = useEmbeddedAuftraegeEntries(listState, {
     initialJobs,
     initialProjects,
-    supportProjects,
     clientMap,
     initialJobAssignmentMap,
-    clients,
-    allProjectsForJobCreation,
     hideEmptyProjects,
     visibleColumns,
   });
-  const { createDialogOpen, setCreateDialogOpen, dialogProjectOptions, jobs } = entries;
+  const { createDialogOpen, setCreateDialogOpen, jobs } = entries;
   const mutations = useEmbeddedAuftraegeMutations(
     entries.setJobs,
     entries.setRawProjects,
@@ -107,10 +99,8 @@ export function EmbeddedAuftraegeSection({
     <>
       {hideProjectCreation ? (
         <CreateJobDialog
-          clients={clients}
           members={members}
-          projects={dialogProjectOptions}
-          defaultClientId={defaultClientId}
+          defaultClient={defaultClient}
           defaultEmployeeIds={defaultEmployeeIds}
           readOnlyClient={readOnlyClient}
           open={createDialogOpen}
@@ -119,11 +109,9 @@ export function EmbeddedAuftraegeSection({
         />
       ) : (
         <CreateAuftragProjectDialog
-          clients={clients}
           members={members}
-          projects={dialogProjectOptions}
           jobs={jobs}
-          defaultClientId={defaultClientId}
+          defaultClient={defaultClient}
           defaultEmployeeIds={defaultEmployeeIds}
           readOnlyClient={readOnlyClient}
           open={createDialogOpen}
@@ -159,7 +147,6 @@ export function EmbeddedAuftraegeSection({
       createButton={createButton}
       createDialogs={createDialogs}
       clientMap={clientMap}
-      clients={clients}
       members={members}
       isAdminOrManager={isAdminOrManager}
       lockedEmployeeLabel={lockedEmployeeLabel}

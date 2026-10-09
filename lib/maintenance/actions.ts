@@ -21,6 +21,7 @@ import type {
   MaintenanceEvidenceOption,
   MaintenancePlanInput,
   MaintenanceWorkspaceResult,
+  MaintenanceCatalogsResult,
 } from './types';
 import {
   maintenanceArchiveSchema,
@@ -37,7 +38,7 @@ import { logError } from '@/lib/logging';
 import { requireServiceManager } from '@/lib/service-cases/manager-context';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { maintenanceWorkspaceQuerySchema, type MaintenanceWorkspaceQuery } from './workspace-page';
-import { readMaintenanceWorkspace } from './workspace-reads';
+import { loadMaintenanceCatalogs, readMaintenanceWorkspace } from './workspace-reads';
 
 function mutationError(error: { message?: string } | null, fallback: string): string {
   const known = [
@@ -94,6 +95,14 @@ export async function getMaintenanceWorkspace(
   const context = await requireServiceManager();
   if ('success' in context) return context;
   return readMaintenanceWorkspace(context, parsedQuery.data);
+}
+
+/** The published job templates and follow-up owners the workspace dialogs offer; read once per page. */
+export async function getMaintenanceCatalogs(): Promise<MaintenanceCatalogsResult> {
+  const context = await requireServiceManager();
+  if ('success' in context) return context;
+  const catalogs = await loadMaintenanceCatalogs(context.admin, context.organizationId);
+  return catalogs ? { success: true, catalogs } : { success: false, error: 'maintenance_load_failed' };
 }
 
 export async function createMaintenanceCoverage(

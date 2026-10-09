@@ -5,13 +5,7 @@ import { useState, useMemo } from 'react';
 import { Table, TableBody, TableHeader } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SkeletonList, SkeletonRows } from '@/components/ui/skeleton-table';
-import {
-  type Client,
-  type Job,
-  type Project,
-  type UnifiedListEntry,
-  type SortColumn,
-} from '@/lib/jobs/types';
+import { type Job, type Project, type UnifiedListEntry, type SortColumn } from '@/lib/jobs/types';
 import {
   DEFAULT_VISIBLE_AUFTRAEGE_COLUMNS,
   resolveVisibleAuftraegeColumns,
@@ -92,7 +86,6 @@ interface UnifiedAuftraegeTableProps {
   onSort: (column: SortColumn) => void;
   isArchive?: boolean | undefined;
   jobAssignmentMap?: Record<string, string[]> | undefined;
-  clients?: Client[] | undefined;
   members?: OrgMemberOption[] | undefined;
   hideClientColumn?: boolean | undefined;
   visibleColumns: AuftraegeColumnId[];
@@ -124,7 +117,6 @@ export function UnifiedAuftraegeTable({
   isArchive = false,
   jobAssignmentMap = {},
   members = [],
-  clients = [],
   hideClientColumn = false,
   visibleColumns,
   rowFeedback = NO_ROW_FEEDBACK,
@@ -193,7 +185,6 @@ export function UnifiedAuftraegeTable({
     memberLookup,
     jobAssignmentMap,
     jobMenuProps: {
-      clients,
       members,
       projects: allProjects,
       onJobUpdated,

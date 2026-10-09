@@ -15,6 +15,7 @@ import {
 } from '../../golden/support/steps/shared';
 import {
   addJobInstruction,
+  chooseWorkListCustomer,
   clearPlannedDateOnJobPage,
   createJob,
   createProject,
@@ -302,8 +303,7 @@ test.describe('A1 Aufträge, Lebenszyklus und Auftragsliste @AUDIT-W1-A1', () =>
     const activeSection = workListSection(adminPage);
     await workListFilterToggle(activeSection).click();
     const filterPanel = workListFilterPanel(activeSection);
-    await workListFilter(filterPanel, 'customer').click();
-    await adminPage.getByRole('option', { name: listCustomer, exact: true }).click();
+    await chooseWorkListCustomer(adminPage, filterPanel, listCustomer);
     await expect(visibleText(adminPage, listJobNumber)).toBeVisible();
     await expect(textInDom(adminPage, otherJobNumber)).toHaveCount(0);
     await workListFilter(filterPanel, 'employee').click();

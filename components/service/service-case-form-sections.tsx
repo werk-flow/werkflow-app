@@ -21,9 +21,6 @@ import {
 import type { ServiceCaseFormState } from './service-case-form-state';
 import type { ServiceCaseFormController } from './use-service-case-form';
 
-// The customer select searches the server; no page preloads its choices.
-const NO_PRELOADED_CLIENTS: never[] = [];
-
 type ServiceCaseFieldsProps = {
   controller: ServiceCaseFormController;
   isUpdate: boolean;
@@ -40,7 +37,7 @@ export function ServiceCaseIntakeFields({
     <>
       <Field label="Kunde" htmlFor="service-client" required error={fieldErrors.clientId}>
         <ClientSelectWithCreate
-          clients={NO_PRELOADED_CLIENTS}
+          selectedClient={client}
           value={form.clientId}
           onValueChange={(clientId) =>
             setForm((value) => ({
@@ -65,7 +62,7 @@ export function ServiceCaseIntakeFields({
           disabled={!form.clientId}
           loading={clientOption.loading}
           loadError={clientOption.error}
-          onSearchChange={clientOption.error ? clientOption.retry : undefined}
+          onRetryLoad={clientOption.retry}
           placeholder="Einsatzort wählen"
           searchPlaceholder="Einsatzort suchen…"
           emptyMessage="Kein Einsatzort gefunden"
@@ -81,6 +78,8 @@ export function ServiceCaseIntakeFields({
           }))}
           disabled={!form.clientId}
           loading={clientOption.loading}
+          loadError={clientOption.error}
+          onRetryLoad={clientOption.retry}
           placeholder="Kein Ansprechpartner"
           searchPlaceholder="Ansprechpartner suchen…"
           emptyMessage="Kein Ansprechpartner gefunden"
@@ -112,7 +111,7 @@ export function ServiceCaseIntakeFields({
 
 /** Summary, urgency, status, charge context and the linked job. */
 export function ServiceCaseTriageFields({ controller, isUpdate }: ServiceCaseFieldsProps): ReactElement {
-  const { form, setForm, fieldErrors, availableJobs } = controller;
+  const { form, setForm, fieldErrors, jobSearch } = controller;
   return (
     <>
       <Field
@@ -200,10 +199,12 @@ export function ServiceCaseTriageFields({ controller, isUpdate }: ServiceCaseFie
           <SearchableSelect
             value={form.jobId}
             onChange={(jobId) => setForm((value) => ({ ...value, jobId }))}
-            options={availableJobs.map((job) => ({
-              value: job.id,
-              label: `${job.jobNumber ? `${job.jobNumber} · ` : ''}${job.title}`,
-            }))}
+            options={jobSearch.options}
+            onSearchChange={jobSearch.onSearchChange}
+            loading={jobSearch.loading}
+            loadError={jobSearch.loadError}
+            onRetryLoad={jobSearch.onRetryLoad}
+            onLoadMore={jobSearch.onLoadMore}
             placeholder="Noch kein Auftrag"
             searchPlaceholder="Auftrag suchen…"
             emptyMessage="Kein passender Auftrag gefunden"

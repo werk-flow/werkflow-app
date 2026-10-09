@@ -27,8 +27,8 @@ import {
   MAINTENANCE_SCOPE_OUTCOME_LABELS,
   type MaintenanceDueItem,
   type MaintenanceScopeOutcome,
-  type MaintenanceWorkspace,
 } from '@/lib/maintenance/types';
+import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
 import { formatBerlinLocalDate } from '@/lib/planning/date-time';
 import type { MaintenanceDueActionKind } from './maintenance-due-action-state';
 import { useMaintenanceDueAction, type MaintenanceDueActionController } from './use-maintenance-due-action';
@@ -42,10 +42,8 @@ type DueActionFieldsProps = { controller: MaintenanceDueActionController };
 function DueActionSelect({
   controller,
   due,
-  hasServiceCases,
 }: DueActionFieldsProps & {
   due: MaintenanceDueItem;
-  hasServiceCases: boolean;
 }): ReactElement {
   const canSchedule = due.status === 'visit_created' && !due.planningOccurrenceId;
   const canComplete = due.status === 'visit_created';
@@ -62,9 +60,7 @@ function DueActionSelect({
           {due.status === 'open' && <SelectItem value="create_visit">Wartungsauftrag anlegen</SelectItem>}
           {canSchedule && <SelectItem value="schedule">Termin im Kalender planen</SelectItem>}
           {canComplete && <SelectItem value="complete">Wartung abschließen</SelectItem>}
-          {hasServiceCases && (
-            <SelectItem value="link_service_case">Reaktiven Servicefall verknüpfen</SelectItem>
-          )}
+          <SelectItem value="link_service_case">Reaktiven Servicefall verknüpfen</SelectItem>
           <SelectItem value="skipped">Fälligkeit überspringen</SelectItem>
           <SelectItem value="cancelled">Fälligkeit absagen</SelectItem>
           <SelectItem value="superseded">Durch andere Fälligkeit ersetzen</SelectItem>
@@ -179,7 +175,6 @@ export function MaintenanceDueActionDialog({
   due,
   defaultAction,
   plannedDurationMinutes,
-  serviceCases,
   onSaved,
 }: {
   open: boolean;
@@ -187,7 +182,6 @@ export function MaintenanceDueActionDialog({
   due: MaintenanceDueItem;
   defaultAction: MaintenanceDueActionKind;
   plannedDurationMinutes: number;
-  serviceCases: MaintenanceWorkspace['serviceCases'];
   /** Settled by the caller (a live-view refresh) instead of a route refresh. */
   onSaved?: () => void;
 }): ReactElement {
@@ -200,6 +194,11 @@ export function MaintenanceDueActionDialog({
     onSaved,
   });
   const { action, fieldErrors, isPending, showReason, reasonRequired } = controller;
+  // The service cases of the due item's customer and site, searched on the server.
+  const caseSearch = useJobEntityOptions(
+    { kind: 'service-cases', clientId: due.clientId, siteId: due.siteId },
+    controller.serviceCaseId ? [controller.serviceCaseId] : [],
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} pending={isPending}>
@@ -212,7 +211,7 @@ export function MaintenanceDueActionDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
-          <DueActionSelect controller={controller} due={due} hasServiceCases={serviceCases.length > 0} />
+          <DueActionSelect controller={controller} due={due} />
           {action === 'schedule' && <DueScheduleFields controller={controller} />}
           {action === 'complete' && <DueCompletionFields controller={controller} />}
           {action === 'link_service_case' && (
@@ -225,10 +224,12 @@ export function MaintenanceDueActionDialog({
               <SearchableSelect
                 value={controller.serviceCaseId}
                 onChange={controller.setServiceCaseId}
-                options={serviceCases.map((serviceCase) => ({
-                  value: serviceCase.id,
-                  label: `${serviceCase.caseNumber} · ${serviceCase.summary}`,
-                }))}
+                options={caseSearch.options}
+                onSearchChange={caseSearch.onSearchChange}
+                loading={caseSearch.loading}
+                loadError={caseSearch.loadError}
+                onRetryLoad={caseSearch.onRetryLoad}
+                onLoadMore={caseSearch.onLoadMore}
                 placeholder="Servicefall suchen"
                 emptyMessage="Kein passender Servicefall gefunden"
               />

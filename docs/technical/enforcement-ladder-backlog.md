@@ -1,6 +1,6 @@
 # Enforcement-ladder backlog
 
-Status: living — last reviewed 2026-10-05
+Status: living — last reviewed 2026-10-09
 
 This list holds the open candidates for moving a prose rule or a known gap up the ladder in [decision 0005](../decisions/0005-enforcement-ladder.md), grouped by the virtue in `AGENTS.md` that owns the rule. Each row names the rule, the gap, and the mechanism with its tier: Tier 1 makes the mistake unwritable, Tier 2 makes a check catch it. A row leaves the list in the same change that lands its mechanism, and that change adds the mechanism to the virtue's checklist. Delete a declined candidate and record the reason in the commit message. Check a row against the code before you implement it.
 
@@ -13,14 +13,8 @@ This list holds the open candidates for moving a prose rule or a known gap up th
 | Raw `Button` in `AlertDialogFooter` | The `werkflow-design` skill forbids it. No check rejects it. | Tier 2: a selector in `eslint-rules/ui-rules.mjs`. |
 | Accessibility lint and axe sweep | ESLint runs only the accessibility rules that Next ships. No browser pass checks rendered pages. | Tier 2: enable `jsx-a11y/recommended` and add one `@axe-core/playwright` pass per role. |
 | Actions the server will refuse | A view can offer an action that the server rejects. The calendar asks `isStartedOccurrence` first, but no check pairs a client action with its server rule. | Tier 2: a table of pre-checks per action kind that a unit test reads against the views. |
-| Client read failure without a retry | A client hook that loads options or a section can render its failure as `ErrorText`, or as a stale notice, without a retry, so the user must reload the page or reopen the dialog. The searchable select has an `onRetryLoad` slot and the shared option hooks fill it, but no check stops a new failure without one. | Tier 1: one client-read hook that returns the data, the failure and a retry, rendered through `SectionError` with `onRetry`. Tier 2: a convention test that flags a load-failure state rendered through `ErrorText`. |
+| Client read failure without a retry | A client hook that loads options or a section can render its failure as `ErrorText`, or as a stale notice, without a retry, so the user must reload the page or reopen the dialog. A registry picker that shows a load failure passes `onRetryLoad` (`lib/conventions/entity-pickers.test.ts`); no check covers sections and other client hooks. | Tier 1: one client-read hook that returns the data, the failure and a retry, rendered through `SectionError` with `onRetry`. Tier 2: a convention test that flags a load-failure state rendered through `ErrorText`. |
 | Day view rows for personnel records without a login | The day view builds its rows from members with a login. A visit for a personnel record without a login lists under „Ohne Zuweisung“. | Tier 1: key the day rows by employee record like the board. Tier 2: an audit step that plans a visit for such a record and finds it in that person's row. |
-
-## Performance and immediate feedback
-
-| Candidate | Gap today | Target tier and mechanism |
-| --- | --- | --- |
-| Unpaged organization reads | PostgREST stops at its row cap without an error. A reader without `.range`, `.limit`, `.single`, or `.maybeSingle` truncates silently. | Tier 2: a unit scan over `lib/` and `app/` with a reviewed allowlist for reads bounded by a small parent set. |
 
 ## Security
 

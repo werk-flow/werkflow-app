@@ -441,16 +441,15 @@ test.describe('P1-20 exhaustive maintenance audit @AUDIT-W2-P1-20 @AUDIT-W2', ()
     });
     let interceptedRead = false;
     const heldReads: Promise<void>[] = [];
-    const readUrl = adminPage.url();
+    const readUrl = '**/api/background-read?*';
     const holdCoverageRead = async (route: Route): Promise<void> => {
       const request = route.request();
-      if (request.method() !== 'POST' || !request.headers()['next-action']) {
+      if (new URL(request.url()).searchParams.get('kind') !== 'maintenance-coverage-documents') {
         await route.continue();
         return;
       }
-      // The route is installed only around opening the documents dialog, whose
-      // opening effect is the page's one Server Action: the document read of
-      // this coverage. Keep its real response.
+      // The dialog reads this coverage's documents over the background-read
+      // route when it opens. Keep its real response.
       interceptedRead = true;
       const continued = readReleased.then(() => route.continue());
       heldReads.push(continued);

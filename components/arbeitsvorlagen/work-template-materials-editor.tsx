@@ -22,19 +22,35 @@ import { Input } from '@/components/ui/input';
 import { QuantityStepper } from '@/components/ui/quantity-stepper';
 import { SelectWithCreate } from '@/components/ui/select-with-create';
 import { Textarea } from '@/components/ui/textarea';
-import type { InventoryLocation, InventoryPickerOption } from '@/lib/inventory/types';
+import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
+import type { InventoryLocation } from '@/lib/inventory/types';
+import type { JobEntityOption } from '@/lib/jobs/option-types';
 import { formatDecimalDe, parseDecimalInput } from '@/lib/ui/decimal';
 import { cn } from '@/lib/utils';
 import type { WorkTemplateDraft } from '@/lib/work-templates/types';
 
-import { newId, type CreateInventoryItemInput } from './work-template-editor-shared';
+import {
+  newId,
+  type CreateInventoryItemInput,
+  type CreatedInventoryItem,
+} from './work-template-editor-shared';
+
+function createdOption(item: CreatedInventoryItem): JobEntityOption {
+  return {
+    value: item.id,
+    label: item.name,
+    description: item.internalSku ?? undefined,
+    unit: item.unit,
+    isBillable: item.isBillable,
+  };
+}
 
 export function MaterialsEditor({
   draft,
   editable,
   onChange,
   onPatch,
-  inventoryItems,
+  createdItems,
   inventoryLocations,
   onCreateItem,
   isItemPending,
@@ -43,7 +59,7 @@ export function MaterialsEditor({
   editable: boolean;
   onChange: (draft: WorkTemplateDraft) => void;
   onPatch: (patch: (current: WorkTemplateDraft) => WorkTemplateDraft) => void;
-  inventoryItems: InventoryPickerOption[];
+  createdItems: CreatedInventoryItem[];
   inventoryLocations: InventoryLocation[];
   onCreateItem: (lineId: string, input: CreateInventoryItemInput) => void;
   isItemPending: (itemId: string) => boolean;
@@ -90,7 +106,7 @@ export function MaterialsEditor({
           editable={editable}
           onChange={onChange}
           onPatch={onPatch}
-          inventoryItems={inventoryItems}
+          createdItems={createdItems}
           inventoryLocations={inventoryLocations}
           onCreateItem={onCreateItem}
         />
@@ -106,7 +122,7 @@ function WorkTemplateMaterialLine({
   editable,
   onChange,
   onPatch,
-  inventoryItems,
+  createdItems,
   inventoryLocations,
   onCreateItem,
 }: {
@@ -116,10 +132,22 @@ function WorkTemplateMaterialLine({
   editable: boolean;
   onChange: (draft: WorkTemplateDraft) => void;
   onPatch: (patch: (current: WorkTemplateDraft) => WorkTemplateDraft) => void;
-  inventoryItems: InventoryPickerOption[];
+  createdItems: CreatedInventoryItem[];
   inventoryLocations: InventoryLocation[];
   onCreateItem: (lineId: string, input: CreateInventoryItemInput) => void;
 }) {
+  // The catalog is searched on the server one page at a time; an article
+  // created here is known locally until the server confirms it.
+  const created = createdItems.map(createdOption);
+  const search = useJobEntityOptions(
+    { kind: 'inventory-items' },
+    line.itemId && !createdItems.some((item) => item.id === line.itemId) ? [line.itemId] : [],
+  );
+  const items = [
+    ...search.options,
+    ...created.filter((option) => !search.options.some((known) => known.value === option.value)),
+  ];
+  const chosen = items.find((option) => option.value === line.itemId);
   return (
     <Card
       className={cn('gap-3 py-4', pending && 'opacity-70')}
@@ -139,12 +167,13 @@ function WorkTemplateMaterialLine({
         >
           <SelectWithCreate
             id={`material-item-${line.id}`}
-            items={inventoryItems}
-            getOption={(item) => ({
-              value: item.id,
-              label: item.name,
-              description: item.internalSku ?? undefined,
-            })}
+            items={items}
+            getOption={(item) => item}
+            onSearchChange={search.onSearchChange}
+            loading={search.loading}
+            loadError={search.loadError}
+            onRetryLoad={search.onRetryLoad}
+            onLoadMore={search.onLoadMore}
             value={line.itemId}
             onValueChange={(value) =>
               onChange({
@@ -155,7 +184,7 @@ function WorkTemplateMaterialLine({
                         ...item,
                         itemId: value,
                         isBillable:
-                          inventoryItems.find((option) => option.id === value)?.isBillable ?? item.isBillable,
+                          items.find((option) => option.value === value)?.isBillable ?? item.isBillable,
                       }
                     : item,
                 ),
@@ -202,7 +231,7 @@ function WorkTemplateMaterialLine({
                 ),
               })
             }
-            unitLabel={inventoryItems.find((item) => item.id === line.itemId)?.unit}
+            unitLabel={chosen?.unit}
           />
         </Field>
         <div className="flex items-end justify-between gap-3">

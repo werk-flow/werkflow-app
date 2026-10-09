@@ -13,7 +13,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ContextualDocumentsSkeleton } from '@/components/dokumente/contextual-documents-layout';
-import { getMaintenanceCoverageDocuments } from '@/lib/documents/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import type { MaintenanceCoverageItem } from '@/lib/maintenance/types';
 
@@ -35,19 +35,16 @@ export function MaintenanceCoverageDocumentsDialog({
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (!open) return;
-    let current = true;
-    getMaintenanceCoverageDocuments(coverage.id).then(
-      (result) => {
-        if (!current) return;
-        setState(result.success ? { status: 'ready', documents: result.documents } : { status: 'failed' });
-      },
-      () => {
-        if (current) setState({ status: 'failed' });
-      },
-    );
-    return () => {
-      current = false;
-    };
+    const controller = new AbortController();
+    void readInBackground(
+      'maintenance-coverage-documents',
+      { maintenanceCoverageId: coverage.id },
+      controller.signal,
+    ).then((result) => {
+      if (controller.signal.aborted) return;
+      setState(result.success ? { status: 'ready', documents: result.documents } : { status: 'failed' });
+    });
+    return () => controller.abort();
   }, [coverage.id, open, attempt]);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

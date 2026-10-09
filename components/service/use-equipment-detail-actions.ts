@@ -16,7 +16,6 @@ type EquipmentActionScope =
   | 'state'
   | 'work-link'
   | 'source'
-  | 'source-options'
   | 'correction'
   | 'archive'
   | `unlink:${string}`;
@@ -80,8 +79,7 @@ export function useEquipmentDetailActions(initial: EquipmentDetail): EquipmentDe
     error?.scope === scope ? error.message : null;
   // Row and button actions outside a dialog report here; dialog actions
   // report inside their dialog.
-  const pageError =
-    error && (error.scope === 'source-options' || error.scope.startsWith('unlink:')) ? error.message : null;
+  const pageError = error?.scope.startsWith('unlink:') ? error.message : null;
 
   function rejectInvalid(
     scope: EquipmentActionScope,

@@ -7,7 +7,7 @@ import { OptionsLoadError } from '@/components/auftraege/shared/options-load-err
 import { Field } from '@/components/ui/field';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getPublishedWorkTemplates } from '@/lib/work-templates/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
 import type { PublishedWorkTemplateOption, WorkTemplateTargetType } from '@/lib/work-templates/types';
 
 export function WorkTemplatePicker({
@@ -26,26 +26,18 @@ export function WorkTemplatePicker({
   // Bumped by the retry so the load effect runs again.
   const [reloadCount, setReloadCount] = useState(0);
   useEffect(() => {
-    let current = true;
-    getPublishedWorkTemplates(targetType)
-      .then((result) => {
-        if (!current) return;
-        if (!result.success) {
-          setFailed(true);
-          setOptions([]);
-          return;
-        }
-        setFailed(false);
-        setOptions(result.data);
-      })
-      .catch(() => {
-        if (!current) return;
-        setOptions([]);
+    const controller = new AbortController();
+    void readInBackground('published-work-templates', { targetType }, controller.signal).then((result) => {
+      if (controller.signal.aborted) return;
+      if (!result.success) {
         setFailed(true);
-      });
-    return () => {
-      current = false;
-    };
+        setOptions([]);
+        return;
+      }
+      setFailed(false);
+      setOptions(result.data);
+    });
+    return () => controller.abort();
   }, [targetType, reloadCount]);
   function retry(): void {
     setFailed(false);

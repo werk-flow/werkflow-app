@@ -2,9 +2,7 @@ import 'server-only';
 
 import { z } from '@/lib/zod';
 
-import { formatSiteRowAddress } from '@/lib/clients/types';
 import { logReadErrors, logReadFailure } from '@/lib/data/read-request-cache';
-import { compareRecordNumbers } from '@/lib/format/record-number';
 import { logError } from '@/lib/logging';
 import { addLocalDays, addLocalMonthsClamped, formatBerlinLocalDate } from '@/lib/planning/date-time';
 import type {
@@ -16,14 +14,13 @@ import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/qu
 import { LIST_PAGE_SIZE } from '@/lib/ui/list-pagination';
 import { uuidSchema } from '@/lib/validation/uuid';
 import type {
-  MaintenanceClientOption,
+  MaintenanceCatalogs,
   MaintenanceCoverageItem,
   MaintenanceDueItem,
   MaintenanceEquipmentOption,
   MaintenancePlanItem,
   MaintenanceRenewalSignal,
   MaintenanceTemplateOption,
-  MaintenanceWorkspace,
   MaintenanceWorkspaceResult,
 } from './types';
 import type { MaintenanceWorkspaceQuery } from './workspace-page';
@@ -36,105 +33,48 @@ function renewalSignal(reviewDueDate: string | null, today: string): Maintenance
   return reviewDueDate <= addLocalDays(today, 30) ? 'due_soon' : 'scheduled';
 }
 
-type MaintenanceOptions = Pick<
-  MaintenanceWorkspace,
-  'clients' | 'templates' | 'followUpOwners' | 'serviceCases' | 'coverageOptions'
->;
-
-/** The editors' option catalogs. Throws after logging a failed read, so no catalog is ever shortened. */
-async function loadMaintenanceOptions(
+/**
+ * The published job templates and the follow-up owners: small, complete
+ * catalogs the page reads once, outside the live refresh of the lists. Null
+ * after logging a failed read, so a catalog is never shortened.
+ */
+export async function loadMaintenanceCatalogs(
   admin: AdminClient,
   organizationId: string,
-): Promise<MaintenanceOptions> {
-  const [clientsResult, sitesResult, equipmentResult, versionsResult, membershipsResult, serviceCasesResult] =
-    await Promise.all([
-      readCompleteRows(
-        (from, to) =>
-          admin
-            .from('clients')
-            .select('id, name')
-            .eq('organization_id', organizationId)
-            .order('name')
-            .order('id')
-            .range(from, to),
-        LIST_ROW_CAP,
-      ),
-      readCompleteRows(
-        (from, to) =>
-          admin
-            .from('client_sites')
-            .select('id, client_id, name, street, postal_code, city, is_active')
-            .eq('organization_id', organizationId)
-            .eq('is_active', true)
-            .order('name')
-            .order('id')
-            .range(from, to),
-        LIST_ROW_CAP,
-      ),
-      readCompleteRows(
-        (from, to) =>
-          admin
-            .from('installed_equipment')
-            .select('id, site_id, equipment_number, name')
-            .eq('organization_id', organizationId)
-            .is('archived_at', null)
-            .is('voided_at', null)
-            .order('id')
-            .range(from, to),
-        LIST_ROW_CAP,
-      ),
-      readCompleteRows(
-        (from, to) =>
-          admin
-            .from('work_template_versions')
-            .select('id, template_id, name, version_number')
-            .eq('organization_id', organizationId)
-            .eq('status', 'published')
-            .order('name')
-            .order('id')
-            .range(from, to),
-        LIST_ROW_CAP,
-      ),
-      readCompleteRows(
-        (from, to) =>
-          admin
-            .from('organization_members')
-            .select('user_id, role')
-            .eq('organization_id', organizationId)
-            .in('role', ['admin', 'buero'])
-            .order('user_id')
-            .range(from, to),
-        LIST_ROW_CAP,
-      ),
-      // The due dialog filters these by customer and site, so every case of
-      // the organization has to be here, not the newest 200.
-      readCompleteRows(
-        (from, to) =>
-          admin
-            .from('service_cases')
-            .select('id, case_number, summary, client_id, site_id')
-            .eq('organization_id', organizationId)
-            .order('updated_at', { ascending: false })
-            .order('id')
-            .range(from, to),
-        LIST_ROW_CAP,
-      ),
-    ]);
-  const optionsError =
-    clientsResult.error ??
-    sitesResult.error ??
-    equipmentResult.error ??
-    versionsResult.error ??
-    membershipsResult.error ??
-    serviceCasesResult.error;
-  if (optionsError) {
-    logReadFailure('loadMaintenanceOptions: option read failed', {
-      code: optionsError.code,
-      message: optionsError.message,
+): Promise<MaintenanceCatalogs | null> {
+  const [versionsResult, membershipsResult] = await Promise.all([
+    readCompleteRows(
+      (from, to) =>
+        admin
+          .from('work_template_versions')
+          .select('id, template_id, name, version_number')
+          .eq('organization_id', organizationId)
+          .eq('status', 'published')
+          .order('name')
+          .order('id')
+          .range(from, to),
+      LIST_ROW_CAP,
+    ),
+    readCompleteRows(
+      (from, to) =>
+        admin
+          .from('organization_members')
+          .select('user_id, role')
+          .eq('organization_id', organizationId)
+          .in('role', ['admin', 'buero'])
+          .order('user_id')
+          .range(from, to),
+      LIST_ROW_CAP,
+    ),
+  ]);
+  const catalogError = versionsResult.error ?? membershipsResult.error;
+  if (catalogError) {
+    logReadFailure('loadMaintenanceCatalogs: catalog read failed', {
+      code: catalogError.code,
+      message: catalogError.message,
     });
-    throw new Error('maintenance_options_failed');
+    return null;
   }
-
   const [templatesResult, profilesResult] = await Promise.all([
     readInBatches(
       versionsResult.data.map((row) => row.template_id),
@@ -156,11 +96,11 @@ async function loadMaintenanceOptions(
   ]);
   const relatedError = templatesResult.error ?? profilesResult.error;
   if (relatedError) {
-    logReadFailure('loadMaintenanceOptions: template or profile read failed', {
+    logReadFailure('loadMaintenanceCatalogs: template or profile read failed', {
       code: relatedError.code,
       message: relatedError.message,
     });
-    throw new Error('maintenance_options_failed');
+    return null;
   }
   const profiles = new Map(profilesResult.data.map((profile) => [profile.id, profile]));
   const availableTemplateIds = new Set(
@@ -168,36 +108,7 @@ async function loadMaintenanceOptions(
       .filter((template) => template.target_type === 'job' && !template.archived_at)
       .map((template) => template.id),
   );
-
-  const equipmentBySite = new Map<string, MaintenanceEquipmentOption[]>();
-  for (const equipment of equipmentResult.data.toSorted((left, right) =>
-    compareRecordNumbers(left.equipment_number, right.equipment_number),
-  )) {
-    const items = equipmentBySite.get(equipment.site_id) ?? [];
-    items.push({
-      id: equipment.id,
-      equipmentNumber: equipment.equipment_number,
-      name: equipment.name,
-    });
-    equipmentBySite.set(equipment.site_id, items);
-  }
-  const sitesByClient = new Map<string, MaintenanceClientOption['sites']>();
-  for (const site of sitesResult.data) {
-    const sites = sitesByClient.get(site.client_id) ?? [];
-    sites.push({
-      id: site.id,
-      name: site.name,
-      address: formatSiteRowAddress(site),
-      equipment: equipmentBySite.get(site.id) ?? [],
-    });
-    sitesByClient.set(site.client_id, sites);
-  }
   return {
-    clients: clientsResult.data.map((client) => ({
-      id: client.id,
-      name: client.name,
-      sites: sitesByClient.get(client.id) ?? [],
-    })),
     templates: versionsResult.data
       .filter((version) => availableTemplateIds.has(version.template_id))
       .map((version) => ({
@@ -218,51 +129,7 @@ async function loadMaintenanceOptions(
         };
       })
       .sort((left, right) => left.name.localeCompare(right.name, 'de')),
-    serviceCases: serviceCasesResult.data.map((serviceCase) => ({
-      id: serviceCase.id,
-      caseNumber: serviceCase.case_number,
-      summary: serviceCase.summary,
-      clientId: serviceCase.client_id,
-      siteId: serviceCase.site_id,
-    })),
-    coverageOptions: await loadCoverageOptions(admin, organizationId),
   };
-}
-
-/**
- * Every coverage of the organization for the plan editor, which filters them
- * by customer and site; the coverage list itself is paged. Throws after
- * logging a failed read.
- */
-async function loadCoverageOptions(
-  admin: AdminClient,
-  organizationId: string,
-): Promise<MaintenanceOptions['coverageOptions']> {
-  const { data, error } = await readCompleteRows(
-    (from, to) =>
-      admin
-        .from('maintenance_coverages')
-        .select('id, coverage_number, reference, client_id, site_id')
-        .eq('organization_id', organizationId)
-        .order('updated_at', { ascending: false })
-        .order('id')
-        .range(from, to),
-    LIST_ROW_CAP,
-  );
-  if (error) {
-    logReadFailure('loadMaintenanceOptions: coverage read failed', {
-      code: error.code,
-      message: error.message,
-    });
-    throw new Error('maintenance_options_failed');
-  }
-  return data.map((coverage) => ({
-    id: coverage.id,
-    coverageNumber: coverage.coverage_number,
-    reference: coverage.reference,
-    clientId: coverage.client_id,
-    siteId: coverage.site_id,
-  }));
 }
 
 type MaintenanceLookups = {
@@ -275,46 +142,92 @@ type MaintenanceLookups = {
   coverageNumbers: Map<string, string>;
 };
 
+type LookupIds = {
+  clientIds: string[];
+  siteIds: string[];
+  equipmentIds: string[];
+  templateVersionIds: string[];
+  coverageIds: string[];
+};
+
+const unique = (ids: string[]): string[] => [...new Set(ids)];
+
 /**
- * Names for every site that listed plans and coverages reference. The option
- * catalog holds active sites only; the rest is read by id, so a deactivated
- * site never drops a plan and its due work from the workspace. Null after
- * logging a failed read.
+ * Names and numbers of the records the listed rows reference, read by id: a
+ * page never carries the customers, sites or equipment of the whole
+ * organization. Null after logging a failed read.
  */
 async function readMaintenanceLookups(
   context: ManagerContext,
-  options: MaintenanceOptions,
-  referencedSiteIds: string[],
+  ids: LookupIds,
 ): Promise<MaintenanceLookups | null> {
-  const siteNames = new Map(
-    options.clients.flatMap((client) => client.sites.map((site) => [site.id, site.name] as const)),
-  );
-  const { data: sites, error } = await readInBatches(
-    [...new Set(referencedSiteIds.filter((id) => !siteNames.has(id)))],
-    (batch) =>
-      context.admin
+  const { admin, organizationId } = context;
+  const [clients, sites, equipment, versions, coverages] = await Promise.all([
+    readInBatches(unique(ids.clientIds), (batch) =>
+      admin
+        .from('clients')
+        .select('id, name')
+        .eq('organization_id', organizationId)
+        .in('id', [...batch]),
+    ),
+    readInBatches(unique(ids.siteIds), (batch) =>
+      admin
         .from('client_sites')
         .select('id, name')
-        .eq('organization_id', context.organizationId)
+        .eq('organization_id', organizationId)
         .in('id', [...batch]),
-  );
-  if (error) {
-    logReadErrors('getMaintenanceWorkspace: site lookup failed', error);
+    ),
+    readInBatches(unique(ids.equipmentIds), (batch) =>
+      admin
+        .from('installed_equipment')
+        .select('id, equipment_number, name')
+        .eq('organization_id', organizationId)
+        .is('archived_at', null)
+        .is('voided_at', null)
+        .in('id', [...batch]),
+    ),
+    readInBatches(unique(ids.templateVersionIds), (batch) =>
+      admin
+        .from('work_template_versions')
+        .select('id, name, version_number')
+        .eq('organization_id', organizationId)
+        .in('id', [...batch]),
+    ),
+    readInBatches(unique(ids.coverageIds), (batch) =>
+      admin
+        .from('maintenance_coverages')
+        .select('id, coverage_number')
+        .eq('organization_id', organizationId)
+        .in('id', [...batch]),
+    ),
+  ]);
+  if (clients.error || sites.error || equipment.error || versions.error || coverages.error) {
+    logReadErrors(
+      'getMaintenanceWorkspace: lookup read failed',
+      clients.error,
+      sites.error,
+      equipment.error,
+      versions.error,
+      coverages.error,
+    );
     return null;
   }
-  for (const site of sites) siteNames.set(site.id, site.name);
   return {
-    clientNames: new Map(options.clients.map((client) => [client.id, client.name])),
-    siteNames,
+    clientNames: new Map(clients.data.map((client) => [client.id, client.name])),
+    siteNames: new Map(sites.data.map((site) => [site.id, site.name])),
     equipment: new Map(
-      options.clients.flatMap((client) =>
-        client.sites.flatMap((site) => site.equipment.map((item) => [item.id, item] as const)),
-      ),
+      equipment.data.map((item) => [
+        item.id,
+        { id: item.id, equipmentNumber: item.equipment_number, name: item.name },
+      ]),
     ),
-    templates: new Map(options.templates.map((template) => [template.versionId, template])),
-    coverageNumbers: new Map(
-      options.coverageOptions.map((coverage) => [coverage.id, coverage.coverageNumber]),
+    templates: new Map(
+      versions.data.map((version) => [
+        version.id,
+        { versionId: version.id, name: version.name, versionNumber: version.version_number },
+      ]),
     ),
+    coverageNumbers: new Map(coverages.data.map((coverage) => [coverage.id, coverage.coverage_number])),
   };
 }
 
@@ -414,15 +327,16 @@ function inSelectionOrder<Row extends { id: string }>(ids: string[], rows: Row[]
 
 /**
  * The plan items of the given plans with their current revision, active
- * equipment and open due work inside the horizon. Null after logging a
- * failed read.
+ * equipment and open due work inside the horizon, plus the lookups of every
+ * record the page references (the caller's ids and the plans' own). Null
+ * after logging a failed read.
  */
 async function readPlanItems(
   context: ManagerContext,
   planRows: Tables<'maintenance_plans'>[],
   throughDate: string,
-  lookups: MaintenanceLookups,
-): Promise<Map<string, MaintenancePlanItem> | null> {
+  pageIds: Pick<LookupIds, 'clientIds' | 'siteIds'>,
+): Promise<{ items: Map<string, MaintenancePlanItem>; lookups: MaintenanceLookups } | null> {
   const { admin, organizationId } = context;
   const planIds = planRows.map((plan) => plan.id);
   const revisionIds = planRows.flatMap((plan) =>
@@ -483,6 +397,16 @@ async function readPlanItems(
     (link) => link.maintenance_plan_revision_id,
   );
   const openDueByPlan = groupBy(openDueResult.data, (due) => due.maintenance_plan_id);
+  const lookups = await readMaintenanceLookups(context, {
+    clientIds: [...pageIds.clientIds, ...planRows.map((plan) => plan.client_id)],
+    siteIds: [...pageIds.siteIds, ...planRows.map((plan) => plan.site_id)],
+    equipmentIds: equipmentLinksResult.data.map((link) => link.equipment_id),
+    templateVersionIds: revisionsResult.data.map((revision) => revision.template_version_id),
+    coverageIds: planRows.flatMap((plan) =>
+      plan.maintenance_coverage_id ? [plan.maintenance_coverage_id] : [],
+    ),
+  });
+  if (!lookups) return null;
   const items = new Map<string, MaintenancePlanItem>();
   for (const plan of planRows) {
     const revision = plan.current_revision_id ? revisions.get(plan.current_revision_id) : undefined;
@@ -501,7 +425,7 @@ async function readPlanItems(
       ),
     );
   }
-  return items;
+  return { items, lookups };
 }
 
 const listSelectionSchema = z.object({
@@ -518,7 +442,7 @@ const workspaceSelectionSchema = z.object({
 /**
  * One page of each workspace list. The database applies the search, the
  * horizon and the counts before the page boundary; this reader hydrates the
- * page rows and the editors' catalogs. The caller has established the
+ * page rows and the names they reference. The caller has established the
  * manager context.
  */
 export async function readMaintenanceWorkspace(
@@ -528,21 +452,15 @@ export async function readMaintenanceWorkspace(
   const { admin, organizationId } = context;
   const today = formatBerlinLocalDate(new Date());
   const throughDate = addLocalMonthsClamped(today, 18);
-  const [selected, options] = await Promise.all([
-    admin.rpc('list_maintenance_workspace_page', {
-      p_organization_id: organizationId,
-      p_due_through: throughDate,
-      p_search: query.search,
-      p_due_page: query.duePage,
-      p_plan_page: query.planPage,
-      p_coverage_page: query.coveragePage,
-      p_page_size: LIST_PAGE_SIZE,
-    }),
-    loadMaintenanceOptions(admin, organizationId).catch((error: unknown) => {
-      logError('Failed to load maintenance workspace options:', error);
-      return null;
-    }),
-  ]);
+  const selected = await admin.rpc('list_maintenance_workspace_page', {
+    p_organization_id: organizationId,
+    p_due_through: throughDate,
+    p_search: query.search,
+    p_due_page: query.duePage,
+    p_plan_page: query.planPage,
+    p_coverage_page: query.coveragePage,
+    p_page_size: LIST_PAGE_SIZE,
+  });
   const selection = workspaceSelectionSchema.safeParse(selected.data);
   if (selected.error || !selection.success) {
     logReadFailure('getMaintenanceWorkspace: page selection failed', {
@@ -550,7 +468,6 @@ export async function readMaintenanceWorkspace(
     });
     return LOAD_FAILED;
   }
-  if (!options) return LOAD_FAILED;
   const { due, plans, coverages } = selection.data;
 
   const [dueResult, coverageResult] = await Promise.all([
@@ -599,14 +516,12 @@ export async function readMaintenanceWorkspace(
     logReadErrors('getMaintenanceWorkspace: plan or job read failed', planResult.error, jobResult.error);
     return LOAD_FAILED;
   }
-  const lookups = await readMaintenanceLookups(
-    context,
-    options,
-    [...planResult.data, ...coverageRows].map((row) => row.site_id),
-  );
-  if (!lookups) return LOAD_FAILED;
-  const planItems = await readPlanItems(context, planResult.data, throughDate, lookups);
-  if (!planItems) return LOAD_FAILED;
+  const planData = await readPlanItems(context, planResult.data, throughDate, {
+    clientIds: coverageRows.map((row) => row.client_id),
+    siteIds: coverageRows.map((row) => row.site_id),
+  });
+  if (!planData) return LOAD_FAILED;
+  const { items: planItems, lookups } = planData;
   const jobNumbers = new Map(
     jobResult.data.flatMap((job) => (job.job_number ? [[job.id, job.job_number] as const] : [])),
   );
@@ -648,7 +563,6 @@ export async function readMaintenanceWorkspace(
         coverages: { total: coverages.total, hasAny: coverages.hasAny },
       },
       currentActorId: context.actorId,
-      ...options,
     },
   };
 }

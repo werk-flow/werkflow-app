@@ -14,7 +14,7 @@ import { useBusyIds } from '@/hooks/use-busy-id';
 import { useListNavigation } from '@/hooks/use-list-navigation';
 import { useLiveView } from '@/hooks/use-live-view';
 import { readInBackground } from '@/lib/data/background-read-client';
-import type { MaintenancePlanItem, MaintenanceWorkspace } from '@/lib/maintenance/types';
+import type { MaintenanceCatalogs, MaintenancePlanItem, MaintenanceWorkspace } from '@/lib/maintenance/types';
 import { MAINTENANCE_PAGE_PARAMS, type MaintenanceWorkspaceQuery } from '@/lib/maintenance/workspace-page';
 import { MaintenanceCoverageDialog } from './maintenance-coverage-dialog';
 import { MaintenanceCoverageDocumentsDialog } from './maintenance-coverage-documents-dialog';
@@ -36,9 +36,11 @@ type MaintenanceList = keyof typeof MAINTENANCE_PAGE_PARAMS;
  */
 export function MaintenanceContent({
   initial,
+  catalogs,
   query,
 }: {
   initial: MaintenanceWorkspace;
+  catalogs: MaintenanceCatalogs;
   query: MaintenanceWorkspaceQuery;
 }): ReactElement {
   const navigation = useListNavigation();
@@ -70,6 +72,7 @@ export function MaintenanceContent({
       <MaintenanceWorkspaceView
         key={`${query.search}|${query.duePage}|${query.planPage}|${query.coveragePage}`}
         initial={initial}
+        catalogs={catalogs}
         query={query}
         tab={tab}
         onTabChange={setTab}
@@ -87,6 +90,7 @@ function isMaintenanceList(value: string): value is MaintenanceList {
 /** One committed query: its live read, the three lists with their page controls, and the dialogs. */
 function MaintenanceWorkspaceView({
   initial,
+  catalogs,
   query,
   tab,
   onTabChange,
@@ -94,6 +98,7 @@ function MaintenanceWorkspaceView({
   onPageChange,
 }: {
   initial: MaintenanceWorkspace;
+  catalogs: MaintenanceCatalogs;
   query: MaintenanceWorkspaceQuery;
   tab: MaintenanceList;
   onTabChange: (tab: MaintenanceList) => void;
@@ -232,7 +237,7 @@ function MaintenanceWorkspaceView({
           }}
           coverage={coverageFollowUp}
           currentActorId={workspace.currentActorId}
-          owners={workspace.followUpOwners}
+          owners={catalogs.followUpOwners}
         />
       )}
       {editPlan && (
@@ -241,9 +246,7 @@ function MaintenanceWorkspaceView({
           onOpenChange={(open) => {
             if (!open) setEditPlan(null);
           }}
-          clients={workspace.clients}
-          templates={workspace.templates}
-          coverages={workspace.coverageOptions}
+          templates={catalogs.templates}
           initial={editPlan}
           onSaved={settleOn(editPlan.id)}
         />
@@ -267,10 +270,6 @@ function MaintenanceWorkspaceView({
           due={dueAction.due}
           defaultAction={dueAction.defaultAction}
           plannedDurationMinutes={dueAction.due.plannedDurationMinutes}
-          serviceCases={workspace.serviceCases.filter(
-            (serviceCase) =>
-              serviceCase.clientId === dueAction.due.clientId && serviceCase.siteId === dueAction.due.siteId,
-          )}
           onSaved={settleOn(dueAction.due.id)}
         />
       )}
@@ -280,10 +279,8 @@ function MaintenanceWorkspaceView({
 
 /** The toolbar actions; the page renders them beside the h2, ahead of the workspace. */
 export function MaintenanceCreateButtons({
-  clients,
   templates,
-  coverageOptions,
-}: Pick<MaintenanceWorkspace, 'clients' | 'templates' | 'coverageOptions'>): ReactElement {
+}: Pick<MaintenanceCatalogs, 'templates'>): ReactElement {
   const [planDialogOpen, setPlanDialogOpen] = useState(false);
   const [coverageDialogOpen, setCoverageDialogOpen] = useState(false);
   return (
@@ -300,9 +297,7 @@ export function MaintenanceCreateButtons({
         <MaintenancePlanDialog
           open
           onOpenChange={setPlanDialogOpen}
-          clients={clients}
           templates={templates}
-          coverages={coverageOptions}
           onSubmitted={announceSubmission}
         />
       )}
@@ -310,7 +305,6 @@ export function MaintenanceCreateButtons({
         <MaintenanceCoverageDialog
           open
           onOpenChange={setCoverageDialogOpen}
-          clients={clients}
           onSubmitted={announceSubmission}
         />
       )}

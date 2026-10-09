@@ -8,7 +8,8 @@ import { useBanner } from '@/components/ui/banner';
 import { describeFailure } from '@/lib/action-messages';
 import { createProject, type CreateProjectInput } from '@/lib/projects/actions';
 import { updateJob } from '@/lib/jobs/actions';
-import { type Client, type Job, type Project } from '@/lib/jobs/types';
+import { type Job, type Project } from '@/lib/jobs/types';
+import type { ClientSelectItem } from '../shared/client-select-with-create';
 import { toLocalDateString } from '@/lib/utils';
 import { CreateProjectFormFields } from './create-project-form-fields';
 import { useCreateProjectForm, type CreateProjectForm } from './use-create-project-form';
@@ -59,9 +60,9 @@ export function projectCreatedBanner(failedLinkCount: number): {
 }
 
 export interface CreateProjectFormContentProps {
-  clients: Client[];
+  /** The customer a new project starts with, as the page shows it. */
+  defaultClient?: ClientSelectItem | undefined;
   jobs: Job[];
-  defaultClientId?: string | undefined;
   readOnlyClient?: boolean | undefined;
   onSuccess?: (payload: { project: Project; linkedJobIds: string[] }) => void | Promise<void>;
   /**
@@ -173,9 +174,8 @@ function useCreateProjectSubmit(
 }
 
 export function CreateProjectFormContent({
-  clients,
+  defaultClient,
   jobs,
-  defaultClientId,
   readOnlyClient,
   onSuccess,
   onSubmitDeferred,
@@ -183,9 +183,8 @@ export function CreateProjectFormContent({
   onPendingChange,
 }: CreateProjectFormContentProps) {
   const form = useCreateProjectForm({
-    clients,
+    defaultClient,
     jobs,
-    defaultClientId,
     readOnlyClient,
     isActive,
   });
@@ -197,7 +196,7 @@ export function CreateProjectFormContent({
   return (
     <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
       <DialogBody className="grid gap-4 py-2">
-        <CreateProjectFormFields form={form} clients={clients} readOnlyClient={readOnlyClient} />
+        <CreateProjectFormFields form={form} defaultClient={defaultClient} readOnlyClient={readOnlyClient} />
 
         <ErrorText>{error}</ErrorText>
       </DialogBody>

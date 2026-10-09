@@ -15965,9 +15965,41 @@ export type Database = {
         };
         Returns: string;
       };
+      search_clock_job_options: {
+        Args: {
+          p_day_end: string;
+          p_day_start: string;
+          p_is_manager: boolean;
+          p_limit?: number;
+          p_organization_id: string;
+          p_search?: string;
+          p_selected_id?: string;
+          p_today: string;
+          p_user_id: string;
+        };
+        Returns: Json;
+      };
+      search_coverage_options: {
+        Args: {
+          p_client_id?: string;
+          p_offset?: number;
+          p_organization_id: string;
+          p_search?: string;
+          p_site_id?: string;
+        };
+        Returns: Json;
+      };
       search_equipment_options: {
         Args: {
           p_client_id?: string;
+          p_offset?: number;
+          p_organization_id: string;
+          p_search?: string;
+        };
+        Returns: Json;
+      };
+      search_inventory_item_options: {
+        Args: {
           p_offset?: number;
           p_organization_id: string;
           p_search?: string;
@@ -15982,6 +16014,28 @@ export type Database = {
           p_organization_id: string;
           p_query?: string;
           p_selected_ids?: string[];
+        };
+        Returns: Json;
+      };
+      search_project_options: {
+        Args: {
+          p_client_id?: string;
+          p_offset?: number;
+          p_open_only?: boolean;
+          p_organization_id: string;
+          p_search?: string;
+          p_site_id?: string;
+        };
+        Returns: Json;
+      };
+      search_service_case_options: {
+        Args: {
+          p_client_id?: string;
+          p_offset?: number;
+          p_open_only?: boolean;
+          p_organization_id: string;
+          p_search?: string;
+          p_site_id?: string;
         };
         Returns: Json;
       };

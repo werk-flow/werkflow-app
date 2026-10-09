@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { EditProjectDialog } from '../forms/edit-project-dialog';
 import { deleteProject } from '@/lib/projects/actions';
-import { type Client, type Job, type Project, type ProjectWithDetails } from '@/lib/jobs/types';
+import { type Job, type Project, type ProjectWithDetails } from '@/lib/jobs/types';
 import { Spinner } from '@/components/ui/spinner';
 
 export const PROJECT_DELETE_FAILED_MESSAGE = 'Das Projekt konnte nicht gelöscht werden.';
@@ -27,7 +27,8 @@ export const PROJECT_DELETE_FAILED_MESSAGE = 'Das Projekt konnte nicht gelöscht
 interface ProjectActionsMenuProps {
   project: ProjectWithDetails;
   detailHref: string;
-  clients: Client[];
+  /** The customer name the row shows. */
+  clientName: string;
   jobs: Job[];
   onProjectUpdated?:
     | ((payload: { project: Project; selectedJobIds?: string[] }) => void | Promise<void>)
@@ -44,7 +45,7 @@ interface ProjectActionsMenuProps {
 export function ProjectActionsMenu({
   project,
   detailHref,
-  clients,
+  clientName,
   jobs,
   onProjectUpdated,
   onProjectDeleted,
@@ -164,7 +165,7 @@ export function ProjectActionsMenu({
         project={project}
         open={showEditDialog}
         onOpenChange={setShowEditDialog}
-        clients={clients}
+        selectedClient={project.clientId ? { id: project.clientId, name: clientName } : null}
         jobs={jobs}
         onSuccess={onProjectUpdated}
       />

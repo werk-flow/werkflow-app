@@ -7,7 +7,6 @@ import { SlidersHorizontal } from 'lucide-react';
 import { SearchInput } from '@/components/ui/search-input';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
-import type { Client } from '@/lib/jobs/types';
 import { EMPTY_FILTER_STATE, countActiveFilters, type FilterState } from '@/lib/jobs/types';
 import type { OrgMemberOption } from '../shared/employee-multi-select';
 import { FilterBarActiveChips } from './filter-bar-active-chips';
@@ -18,7 +17,6 @@ interface FilterBarProps {
   onSearchChange: (query: string) => void;
   filters: FilterState;
   onFiltersChange: (filters: FilterState) => void;
-  clients: Client[];
   members: OrgMemberOption[];
   /** When set, the employee filter shows a locked, read-only field with this label instead of a selectable popover. */
   lockedEmployeeLabel?: string | undefined;
@@ -31,7 +29,6 @@ export function FilterBar({
   onSearchChange,
   filters,
   onFiltersChange,
-  clients,
   members,
   lockedEmployeeLabel,
   lockedClientLabel,
@@ -82,11 +79,7 @@ export function FilterBar({
     onFiltersChange({ ...filters, [key]: value });
   };
 
-  const customerSearch = useJobEntityOptions(
-    { kind: 'clients', purpose: 'filter' },
-    filters.clientIds,
-    clients.map((client) => ({ value: client.id, label: client.name })),
-  );
+  const customerSearch = useJobEntityOptions({ kind: 'clients', purpose: 'filter' }, filters.clientIds);
 
   const filterFields = (
     <FilterBarFields
@@ -154,7 +147,7 @@ export function FilterBar({
       {activeCount > 0 && (
         <FilterBarActiveChips
           filters={filters}
-          clients={clients}
+          customerOptions={customerSearch.options}
           members={members}
           updateFilter={updateFilter}
           clearDateRange={() => onFiltersChange({ ...filters, dateFrom: '', dateTo: '' })}

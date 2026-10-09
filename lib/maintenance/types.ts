@@ -71,17 +71,6 @@ export type MaintenanceEquipmentOption = {
   name: string;
 };
 
-export type MaintenanceClientOption = {
-  id: string;
-  name: string;
-  sites: Array<{
-    id: string;
-    name: string;
-    address: string;
-    equipment: MaintenanceEquipmentOption[];
-  }>;
-};
-
 export type MaintenanceTemplateOption = {
   versionId: string;
   name: string;
@@ -109,11 +98,6 @@ export type MaintenanceCoverageItem = {
 };
 
 /** A coverage the plan editor can reference; the catalog lists every coverage of the organization. */
-export type MaintenanceCoverageOption = Pick<
-  MaintenanceCoverageItem,
-  'id' | 'coverageNumber' | 'reference' | 'clientId' | 'siteId'
->;
-
 export type MaintenancePlanItem = {
   id: string;
   planNumber: string;
@@ -184,21 +168,21 @@ export type MaintenanceWorkspace = {
   dueWork: MaintenanceDueItem[];
   coverages: MaintenanceCoverageItem[];
   totals: Record<'due' | 'plans' | 'coverages', MaintenanceListTotal>;
-  coverageOptions: MaintenanceCoverageOption[];
-  clients: MaintenanceClientOption[];
-  templates: MaintenanceTemplateOption[];
   currentActorId: string;
+};
+
+/**
+ * The workspace's small, complete catalogs: published job templates and the
+ * people who may own a follow-up. The page reads them once, outside the live
+ * refresh of the lists. Customers, sites, equipment, coverages and service
+ * cases are searched or read per chosen customer instead.
+ */
+export type MaintenanceCatalogs = {
+  templates: MaintenanceTemplateOption[];
   followUpOwners: Array<{
     userId: string;
     name: string;
     role: 'admin' | 'buero';
-  }>;
-  serviceCases: Array<{
-    id: string;
-    caseNumber: string;
-    summary: string;
-    clientId: string;
-    siteId: string;
   }>;
 };
 
@@ -254,3 +238,5 @@ export type FieldMaintenanceContext = {
 export type MaintenanceActionResult = ActionResult;
 
 export type MaintenanceWorkspaceResult = ActionResult<{ workspace: MaintenanceWorkspace }>;
+
+export type MaintenanceCatalogsResult = ActionResult<{ catalogs: MaintenanceCatalogs }>;

@@ -6,7 +6,6 @@ import { useBanner } from '@/components/ui/banner';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useOptimisticList } from '@/hooks/use-optimistic-list';
 import { upsertInventoryItem } from '@/lib/inventory/actions';
-import type { InventoryPickerOption } from '@/lib/inventory/types';
 import { createCapability } from '@/lib/qualifications/actions';
 import type { CapabilityDefinition } from '@/lib/qualifications/types';
 import type { WorkTemplateDetail, WorkTemplateDraft } from '@/lib/work-templates/types';
@@ -16,19 +15,20 @@ import {
   newId,
   type CreateCapabilityInput,
   type CreateInventoryItemInput,
+  type CreatedInventoryItem,
 } from './work-template-editor-shared';
 
 type WorkTemplateEditorOptionsInput = {
   detail: WorkTemplateDetail | null;
   draft: WorkTemplateDraft | null;
   setDraft: Dispatch<SetStateAction<WorkTemplateDraft | null>>;
-  inventoryItems: InventoryPickerOption[];
   capabilities: CapabilityDefinition[];
 };
 
 type WorkTemplateEditorOptions = {
   activeDraft: WorkTemplateDraft | null;
-  inventoryItemOptions: InventoryPickerOption[];
+  /** Articles quick-created in this editor; the line pickers search the catalog on the server. */
+  createdInventoryItems: CreatedInventoryItem[];
   capabilityItemOptions: CapabilityDefinition[];
   optionBusy: ReturnType<typeof useBusyIds>;
   patchDraft: (patch: (current: WorkTemplateDraft) => WorkTemplateDraft) => void;
@@ -45,19 +45,15 @@ export function useWorkTemplateEditorOptions({
   detail,
   draft,
   setDraft,
-  inventoryItems,
   capabilities,
 }: WorkTemplateEditorOptionsInput): WorkTemplateEditorOptions {
   const { showBanner } = useBanner();
-  // Quick-created options overlay the server-provided catalogs; `optionBusy` is keyed by the temporary id
-  // the line holds until the server confirms, so the line's own indicator clears with the id swap.
-  const inventoryOptions = useOptimisticList({ items: inventoryItems, getId });
+  // A quick-created article joins the line's server search locally; the row its save returns
+  // confirms it. Capabilities overlay the server-provided catalog. `optionBusy` is keyed by the
+  // temporary id the line holds until the server confirms, so the line's indicator clears with the id swap.
+  const [createdInventoryItems, setCreatedInventoryItems] = useState<CreatedInventoryItem[]>([]);
   const capabilityOptions = useOptimisticList({ items: capabilities, getId });
   const optionBusy = useBusyIds();
-  const inventoryItemOptions = useMemo(
-    () => inventoryOptions.items.map((entry) => entry.item),
-    [inventoryOptions.items],
-  );
   const capabilityItemOptions = useMemo(
     () => capabilityOptions.items.map((entry) => entry.item),
     [capabilityOptions.items],
@@ -99,22 +95,14 @@ export function useWorkTemplateEditorOptions({
   }
   function createInventoryItem(lineId: string, input: CreateInventoryItemInput) {
     const tempId = newId();
-    const pendingItem: InventoryPickerOption = {
+    const pendingItem: CreatedInventoryItem = {
       id: tempId,
-      itemType: 'material',
       name: input.name.trim(),
       unit: input.unit.trim(),
       internalSku: null,
-      manufacturer: null,
-      supplierName: null,
-      supplierArticleNumber: null,
-      primaryBarcode: null,
-      categoryName: null,
       isBillable: true,
-      availableQuantity: 0,
-      stockByLocation: [],
     };
-    inventoryOptions.insert(tempId, pendingItem);
+    setCreatedInventoryItems((current) => [...current, pendingItem]);
     patchDraft((current) => ({
       ...current,
       materials: current.materials.map((line) =>
@@ -131,7 +119,7 @@ export function useWorkTemplateEditorOptions({
         initialQuantity: 0,
       }).catch(() => null);
       if (!result?.success) {
-        inventoryOptions.rollback(tempId);
+        setCreatedInventoryItems((current) => current.filter((created) => created.id !== tempId));
         resolveOptionId(tempId, '');
         showBanner({
           variant: 'error',
@@ -140,16 +128,16 @@ export function useWorkTemplateEditorOptions({
         return;
       }
       const item = result.item;
-      inventoryOptions.commit(tempId, {
-        ...pendingItem,
+      const confirmed: CreatedInventoryItem = {
         id: item.id,
         name: item.name,
         unit: item.unit,
         internalSku: item.internalSku,
-        manufacturer: item.manufacturer,
-        supplierArticleNumber: item.supplierArticleNumber,
         isBillable: item.isBillable,
-      });
+      };
+      setCreatedInventoryItems((current) =>
+        current.map((created) => (created.id === tempId ? confirmed : created)),
+      );
       resolveOptionId(tempId, item.id);
     });
   }
@@ -192,7 +180,7 @@ export function useWorkTemplateEditorOptions({
 
   return {
     activeDraft,
-    inventoryItemOptions,
+    createdInventoryItems,
     capabilityItemOptions,
     optionBusy,
     patchDraft,

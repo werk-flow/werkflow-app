@@ -32,6 +32,7 @@ type WorkLifecycleDependencyForm = {
   setDescription: (description: string) => void;
   remoteOptions: WorkEntityOption[] | null;
   setRemoteOptions: (options: WorkEntityOption[] | null) => void;
+  search: string;
   setSearch: (search: string) => void;
   error: string | null;
   pending: boolean;
@@ -125,6 +126,7 @@ export function useWorkLifecycleDependencyForm({
     setDescription,
     remoteOptions,
     setRemoteOptions,
+    search,
     setSearch,
     error,
     pending,

@@ -1,5 +1,4 @@
 import { RegionLoadError } from '@/components/shared/region-load-error';
-import { readOrganizationClients } from '@/lib/clients/server';
 import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
@@ -42,15 +41,12 @@ async function AnfragenData({
 async function CreateRequestDialogData({ activeOrgId }: { activeOrgId: string }) {
   const admin = createSupabaseAdminClient();
 
-  const [clients, assignees] = await Promise.all([
-    readOrganizationClients(admin, activeOrgId),
-    getManagerAssigneeOptions(admin, activeOrgId),
-  ]);
+  const assignees = await getManagerAssigneeOptions(admin, activeOrgId);
 
   if (!assignees.success) {
     return <RegionLoadError>Die Zuständigen für neue Anfragen konnten nicht geladen werden.</RegionLoadError>;
   }
-  return <CreateRequestDialog clients={clients} assignees={assignees.options} />;
+  return <CreateRequestDialog assignees={assignees.options} />;
 }
 
 export default async function AnfragenPage({

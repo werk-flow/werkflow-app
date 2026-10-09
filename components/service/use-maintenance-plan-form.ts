@@ -7,11 +7,12 @@ import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { useServerAction } from '@/hooks/use-server-action';
 import { createMaintenancePlan, reviseMaintenancePlan } from '@/lib/maintenance/actions';
 import type {
-  MaintenanceClientOption,
   MaintenancePlanInput,
   MaintenancePlanItem,
   MaintenanceTemplateOption,
 } from '@/lib/maintenance/types';
+import type { ServiceCaseClientOption } from '@/lib/service-cases/types';
+import { useClientOption } from './use-client-option';
 import {
   EMPTY_MAINTENANCE_PLAN_FORM,
   GENERIC_MAINTENANCE_PLAN_ERROR,
@@ -43,7 +44,6 @@ export type MaintenancePlanCreateSubmission = {
 
 type UseMaintenancePlanFormOptions = {
   onOpenChange: (open: boolean) => void;
-  clients: MaintenanceClientOption[];
   templates: MaintenanceTemplateOption[];
   initial: MaintenancePlanItem | undefined;
   onSubmitted: ((submission: MaintenancePlanCreateSubmission) => void) | undefined;
@@ -56,15 +56,15 @@ export type MaintenancePlanFormController = {
   error: string | null;
   fieldErrors: Partial<Record<MaintenancePlanRequiredField, string>>;
   isPending: boolean;
-  client: MaintenanceClientOption | undefined;
-  site: MaintenanceClientOption['sites'][number] | undefined;
+  /** The chosen customer's sites and equipment, read when the customer is chosen. */
+  clientOption: ReturnType<typeof useClientOption>;
+  site: ServiceCaseClientOption['sites'][number] | undefined;
   submit: () => void;
 };
 
 /** Form state and the create/revise submit of the maintenance plan dialog. */
 export function useMaintenancePlanForm({
   onOpenChange,
-  clients,
   templates,
   initial,
   onSubmitted,
@@ -80,7 +80,8 @@ export function useMaintenancePlanForm({
     revisionId: crypto.randomUUID(),
     idempotencyKey: crypto.randomUUID(),
   });
-  const client = clients.find((item) => item.id === form.clientId);
+  const clientOption = useClientOption(form.clientId);
+  const client = clientOption.client;
   const site = client?.sites.find((item) => item.id === form.siteId);
   function buildInput(): MaintenancePlanInput {
     return toMaintenancePlanInput(form, mutationIdentity.current);
@@ -161,5 +162,5 @@ export function useMaintenancePlanForm({
     void run();
   }
 
-  return { form, setForm, error, fieldErrors, isPending, client, site, submit };
+  return { form, setForm, error, fieldErrors, isPending, clientOption, site, submit };
 }

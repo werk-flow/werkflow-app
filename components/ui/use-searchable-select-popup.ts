@@ -39,7 +39,13 @@ export function useSearchableSelectPopup(
     return () => cancelAnimationFrame(frame);
   }, [open]);
 
-  const filtered = React.useMemo(() => filterOptions(options, search), [options, search]);
+  // A server-searched picker receives the matches of the whole scope, also those
+  // matched on a field the label does not show; filtering them again here would hide them.
+  const searchesOnServer = onSearchChange !== undefined;
+  const filtered = React.useMemo(
+    () => (searchesOnServer ? options : filterOptions(options, search)),
+    [options, search, searchesOnServer],
+  );
 
   return { open, setOpen, search, setSearch, changeOpen, listboxId, listRef, inputRef, triggerRef, filtered };
 }

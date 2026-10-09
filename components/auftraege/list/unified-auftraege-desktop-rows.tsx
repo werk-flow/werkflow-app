@@ -94,7 +94,6 @@ function ProjectRow({
   memberLookup,
   jobAssignmentMap: initialAssignmentMap,
   visibleColumns,
-  clients,
   jobs,
   members,
   projects,
@@ -144,7 +143,6 @@ function ProjectRow({
           allProjectUserIds={entry.allProjectUserIds}
           memberLookup={memberLookup}
           visibleColumns={visibleColumns}
-          clients={clients}
           jobs={jobs}
           onProjectUpdated={onProjectUpdated}
           onProjectDeleted={onProjectDeleted}
@@ -195,7 +193,6 @@ function ProjectRow({
                 memberLookup={memberLookup}
                 assignedUserIds={childAssigned}
                 visibleColumns={visibleColumns}
-                clients={clients}
                 members={members}
                 projects={projects}
                 onJobUpdated={onJobUpdated}

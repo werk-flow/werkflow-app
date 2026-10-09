@@ -22,6 +22,7 @@ import { Input } from '@/components/ui/input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
 import { useServerAction } from '@/hooks/use-server-action';
 import { createCustomerFollowUp } from '@/lib/customer-relationships/actions';
 import { parseBerlinDateTimeInput, tomorrowMorningInBerlin } from '@/lib/customer-relationships/date-time';
@@ -57,6 +58,12 @@ export function RelationDialog({
   const [relationType, setRelationType] = useState<ServiceCaseRelationType>('related');
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // Other cases of the same customer, searched on the server; the case itself is no choice.
+  const caseSearch = useJobEntityOptions(
+    { kind: 'service-cases', clientId: workspace.serviceCase.clientId },
+    relatedId ? [relatedId] : [],
+  );
+  const caseOptions = caseSearch.options.filter((option) => option.value !== workspace.serviceCase.id);
   const { run, isPending } = useServerAction(async () => {
     const result = await linkServiceCaseRelation({
       serviceCaseId: workspace.serviceCase.id,
@@ -112,11 +119,15 @@ export function RelationDialog({
                 <SearchableSelect
                   value={relatedId}
                   onChange={setRelatedId}
-                  options={workspace.relatedCases.map((item) => ({
-                    value: item.id,
-                    label: `${item.caseNumber} · ${item.summary}`,
-                  }))}
+                  options={caseOptions}
+                  onSearchChange={caseSearch.onSearchChange}
+                  loading={caseSearch.loading}
+                  loadError={caseSearch.loadError}
+                  onRetryLoad={caseSearch.onRetryLoad}
+                  onLoadMore={caseSearch.onLoadMore}
                   placeholder="Servicefall suchen"
+                  searchPlaceholder="Fallnummer oder Kurzbeschreibung…"
+                  emptyMessage="Kein weiterer Servicefall dieses Kunden gefunden"
                 />
               </Field>
               <Field label="Beziehung" htmlFor="relation-type">

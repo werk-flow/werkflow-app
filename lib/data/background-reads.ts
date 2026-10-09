@@ -3,27 +3,39 @@ import 'server-only';
 import { z } from '@/lib/zod';
 
 import { getAttentionOverview } from '@/lib/attention/actions';
-import { getDispatchOverview, getJobDispatchCards } from '@/lib/dispatch/actions';
-import { getJobMaterialLines } from '@/lib/inventory/actions';
+import { getClientRelations } from '@/lib/clients/actions';
+import { getDispatchOverview, getJobDispatchCards, previewDispatchReadiness } from '@/lib/dispatch/actions';
+import { attachableDocumentsInputSchema } from '@/lib/documents/action-schemas';
+import { getAttachableDocuments, getMaintenanceCoverageDocuments } from '@/lib/documents/actions';
+import { pickerSearchSchema } from '@/lib/inventory/action-schemas';
+import {
+  getInventoryPickerOptionsForJob,
+  getInventoryPickerPage,
+  getJobMaterialLines,
+} from '@/lib/inventory/actions';
 import { equipmentListQuerySchema } from '@/lib/installed-equipment/list-page';
 import { getInstalledEquipmentDetailByNumber } from '@/lib/installed-equipment/actions';
 import { getInstalledEquipmentPage } from '@/lib/installed-equipment/list-page-server';
+import { getEquipmentSourceOptions } from '@/lib/installed-equipment/source-options-server';
 import { getOrgMembersAction, getProfilesByIds } from '@/lib/members/actions';
 import { getParkedJobs } from '@/lib/jobs/actions';
-import { getJobParkingContexts } from '@/lib/parking/actions';
+import { readEntityOptions } from '@/lib/jobs/option-server';
+import { jobOptionRequestSchema } from '@/lib/jobs/option-types';
+import { getJobParkingContexts, getParkingResponsibleOptions } from '@/lib/parking/actions';
 import { getPlanningOptions } from '@/lib/planning/actions';
 import { planningOptionRequestSchema } from '@/lib/planning/option-types';
 import { getOwnPersonnelActions, getPersonnelLifecycle } from '@/lib/personnel/lifecycle-actions';
 import { getWeeklyTargets } from '@/lib/personnel/target-actions';
-import { getServiceCaseDetailByNumber } from '@/lib/service-cases/actions';
+import { getServiceCaseDetailByNumber, getServiceClientOption } from '@/lib/service-cases/actions';
 import { serviceCaseListQuerySchema } from '@/lib/service-cases/list-page';
 import { getServiceCasePage } from '@/lib/service-cases/list-page-server';
 import { getOwnSicknessReports, getSicknessReportsForRecord } from '@/lib/sickness/actions';
-import { getMaintenanceWorkspace } from '@/lib/maintenance/actions';
+import { getMaintenanceEvidenceOptions, getMaintenanceWorkspace } from '@/lib/maintenance/actions';
 import { maintenanceWorkspaceQuerySchema } from '@/lib/maintenance/workspace-page';
-import { getJobQualificationDetail } from '@/lib/qualifications/actions';
+import { getAssignmentTeamOptions, getJobQualificationDetail } from '@/lib/qualifications/actions';
 import {
   getProvisionalTimeSummary,
+  getTimeCorrectionFormOptions,
   getTimeCorrectionHistoryPage,
   getTimeCorrectionRequests,
 } from '@/lib/time-corrections/actions';
@@ -35,6 +47,7 @@ import {
   getTimeEntriesForProjectJobs,
 } from '@/lib/time-tracking/actions';
 import { getJobsForPicker } from '@/lib/time-tracking/picker-actions';
+import { jobPickerRequestSchema } from '@/lib/time-tracking/picker-types';
 import {
   getDecidableApprovedVacationRequests,
   getOwnVacationOverview,
@@ -42,8 +55,14 @@ import {
 } from '@/lib/vacation/actions';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { getWorkArtifacts } from '@/lib/work-artifacts/actions';
-import { getWorkLifecycleSnapshot } from '@/lib/work-lifecycle/actions';
-import { getWorkTemplate, getWorkTemplates } from '@/lib/work-templates/actions';
+import { getApprovedArtifactActionsForTarget, getWorkLifecycleSnapshot } from '@/lib/work-lifecycle/actions';
+import {
+  getPublishedWorkTemplates,
+  getWorkTemplate,
+  getWorkTemplatePreview,
+  getWorkTemplates,
+} from '@/lib/work-templates/actions';
+import { workTemplatePreviewInputSchema, workTemplateTargetTypeSchema } from '@/lib/work-templates/schemas';
 
 /**
  * The closed set of read-only readers a page may run in the background over
@@ -73,6 +92,10 @@ function defineRead<Input, Result>(
 
 export const BACKGROUND_READS = {
   'planning-options': defineRead(planningOptionRequestSchema, (input) => getPlanningOptions(input)),
+  // Every entity picker (customers, projects, jobs, equipment, service cases,
+  // inventory items, coverages): one page of a server search plus the labels
+  // of the selected ids.
+  'entity-options': defineRead(jobOptionRequestSchema, (input) => readEntityOptions(input)),
   'parked-jobs': defineRead(noInput, () => getParkedJobs()),
   'job-parking-contexts': defineRead(noInput, () => getJobParkingContexts()),
   'organization-member-options': defineRead(organizationInput, (input) =>
@@ -113,6 +136,10 @@ export const BACKGROUND_READS = {
     z.object({ organizationId: uuidSchema, scope: z.literal('approvals') }),
     (input) => getTimeCorrectionRequests(input.organizationId, input.scope),
   ),
+  // The people of the correction dialog, read when it opens; its job picker is an entity search.
+  'time-correction-form-options': defineRead(organizationInput, (input) =>
+    getTimeCorrectionFormOptions(input.organizationId),
+  ),
   'time-correction-history': defineRead(
     z.object({ organizationId: uuidSchema, page: z.number().int().min(1).max(1_000_000) }),
     (input) => getTimeCorrectionHistoryPage(input.organizationId, input.page),
@@ -142,6 +169,11 @@ export const BACKGROUND_READS = {
   ),
   // Case and equipment numbers repeat across organizations, so a detail read
   // names its organization and an organization switch refuses it.
+  // The sites, contacts and equipment of the one customer a service form chose.
+  'service-client-option': defineRead(
+    z.object({ organizationId: uuidSchema, clientId: uuidSchema }),
+    (input) => getServiceClientOption(input.clientId),
+  ),
   'service-case-detail': defineRead(
     z.object({ organizationId: uuidSchema, caseNumber: z.string().trim().min(1).max(100) }),
     (input) => getServiceCaseDetailByNumber(input.caseNumber),
@@ -149,6 +181,16 @@ export const BACKGROUND_READS = {
   'equipment-detail': defineRead(
     z.object({ organizationId: uuidSchema, equipmentNumber: z.string().trim().min(1).max(100) }),
     (input) => getInstalledEquipmentDetailByNumber(input.equipmentNumber),
+  ),
+  // The exact sources of one equipment: the revisions and releases of the one
+  // job or project its source dialog chose, or without one its own documents.
+  'equipment-sources': defineRead(
+    z.object({
+      organizationId: uuidSchema,
+      equipmentId: uuidSchema,
+      work: z.object({ type: z.enum(['job', 'project']), id: uuidSchema }).nullable(),
+    }),
+    (input) => getEquipmentSourceOptions(input),
   ),
   'attention-overview': defineRead(noInput, () => getAttentionOverview()),
   'own-personnel-actions': defineRead(noInput, () => getOwnPersonnelActions()),
@@ -158,7 +200,7 @@ export const BACKGROUND_READS = {
   'sickness-reports-for-record': defineRead(employeeRecordInput, (input) =>
     getSicknessReportsForRecord(input.employeeRecordId),
   ),
-  'job-picker-jobs': defineRead(organizationInput, (input) => getJobsForPicker(input.organizationId)),
+  'job-picker-jobs': defineRead(jobPickerRequestSchema, (input) => getJobsForPicker(input)),
   'maintenance-workspace': defineRead(
     maintenanceWorkspaceQuerySchema.extend({ organizationId: uuidSchema }),
     (input) => getMaintenanceWorkspace(input),
@@ -167,6 +209,43 @@ export const BACKGROUND_READS = {
   'work-template-detail': defineRead(z.object({ templateId: uuidSchema }), (input) =>
     getWorkTemplate(input.templateId),
   ),
+  // Option, entity and preview reads a dialog or picker starts when it opens.
+  'published-work-templates': defineRead(z.object({ targetType: workTemplateTargetTypeSchema }), (input) =>
+    getPublishedWorkTemplates(input.targetType),
+  ),
+  'work-template-preview': defineRead(workTemplatePreviewInputSchema, (input) =>
+    getWorkTemplatePreview(input),
+  ),
+  'approved-artifact-actions': defineRead(targetInput, (input) => getApprovedArtifactActionsForTarget(input)),
+  'assignment-team-options': defineRead(noInput, () => getAssignmentTeamOptions()),
+  'client-relations': defineRead(z.object({ clientId: uuidSchema }), (input) =>
+    getClientRelations(input.clientId),
+  ),
+  'attachable-documents': defineRead(attachableDocumentsInputSchema, (input) =>
+    getAttachableDocuments(input),
+  ),
+  // The first unsearched office page sets up the inventory defaults, a write
+  // that stays with the page render; the background read only searches or
+  // resolves one item.
+  'inventory-picker-page': defineRead(
+    z
+      .object({ search: pickerSearchSchema, exactItemId: uuidSchema.optional() })
+      .refine((input) => input.search !== '' || input.exactItemId !== undefined),
+    (input) => getInventoryPickerPage(input.search, input.exactItemId),
+  ),
+  'job-inventory-picker-options': defineRead(
+    z.object({ jobId: uuidSchema, search: pickerSearchSchema, exactItemId: uuidSchema.optional() }),
+    (input) => getInventoryPickerOptionsForJob(input.jobId, input.search, input.exactItemId),
+  ),
+  'dispatch-readiness': defineRead(
+    z.union([z.strictObject({ jobId: uuidSchema }), z.strictObject({ occurrenceId: uuidSchema })]),
+    (input) => previewDispatchReadiness(input),
+  ),
+  'parking-responsible-options': defineRead(noInput, () => getParkingResponsibleOptions()),
+  'maintenance-coverage-documents': defineRead(z.object({ maintenanceCoverageId: uuidSchema }), (input) =>
+    getMaintenanceCoverageDocuments(input.maintenanceCoverageId),
+  ),
+  'maintenance-evidence-options': defineRead(jobInput, (input) => getMaintenanceEvidenceOptions(input.jobId)),
 } as const;
 
 export type BackgroundReadKind = keyof typeof BACKGROUND_READS;

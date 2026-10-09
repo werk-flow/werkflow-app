@@ -24,7 +24,8 @@ import { SectionError } from '@/components/ui/section-error';
 import { Field } from '@/components/ui/field';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
-import { issueDispatch, previewDispatchReadiness } from '@/lib/dispatch/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
+import { issueDispatch } from '@/lib/dispatch/actions';
 import { dispatchErrorMessage, type ReadinessResult } from '@/lib/dispatch/types';
 
 export function DispatchIssueDialog({
@@ -60,25 +61,24 @@ export function DispatchIssueDialog({
   const [requestId] = useState(() => crypto.randomUUID());
 
   useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const readinessResult = await previewDispatchReadiness(
-          'jobId' in target ? { jobId: target.jobId } : { occurrenceId: target.occurrenceId },
+    const controller = new AbortController();
+    void readInBackground(
+      'dispatch-readiness',
+      'jobId' in target ? { jobId: target.jobId } : { occurrenceId: target.occurrenceId },
+      controller.signal,
+    ).then((readinessResult) => {
+      if (controller.signal.aborted) return;
+      if (!readinessResult.success) {
+        setLoadError(
+          dispatchErrorMessage(
+            readinessResult.error === 'background_read_failed' ? 'load_failed' : readinessResult.error,
+          ),
         );
-        if (cancelled) return;
-        if (!readinessResult.success) {
-          setLoadError(dispatchErrorMessage(readinessResult.error));
-          return;
-        }
-        setReadiness(readinessResult.readiness);
-      } catch {
-        if (!cancelled) setLoadError(dispatchErrorMessage('load_failed'));
+        return;
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
+      setReadiness(readinessResult.readiness);
+    });
+    return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one readiness load when the dialog mounts and one per retry; later changes go through its own actions
   }, [readinessReloadCount]);
 

@@ -59,7 +59,6 @@ function JobCard({
   isSettling = false,
   memberLookup,
   assignedUserIds,
-  clients,
   members,
   projects,
   onJobUpdated,
@@ -116,7 +115,7 @@ function JobCard({
           <JobActionsMenu
             job={job}
             detailHref={detailHref}
-            clients={clients}
+            clientName={clientName}
             members={members}
             projects={projects}
             onJobUpdated={onJobUpdated}
@@ -156,7 +155,6 @@ function ProjectCard({
   rowFeedback,
   memberLookup,
   jobAssignmentMap: initialAssignmentMap,
-  clients,
   jobs,
   members,
   projects,
@@ -252,7 +250,7 @@ function ProjectCard({
             <ProjectActionsMenu
               project={project}
               detailHref={projectHref}
-              clients={clients}
+              clientName={clientName}
               jobs={jobs}
               onProjectUpdated={onProjectUpdated}
               onProjectDeleted={onProjectDeleted}
@@ -278,7 +276,6 @@ function ProjectCard({
               isSettling={rowFeedback.settlingIds.has(job.id)}
               memberLookup={memberLookup}
               assignedUserIds={jobAssignmentMap[job.id] ?? []}
-              clients={clients}
               members={members}
               projects={projects}
               onJobUpdated={onJobUpdated}

@@ -11,9 +11,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { TimeInput } from '@/components/ui/time-input';
 import { WorkTemplatePicker } from '@/components/arbeitsvorlagen/work-template-picker';
 import { formatSiteAddress } from '@/lib/clients/types';
-import type { Client, JobPriority } from '@/lib/jobs/types';
+import type { JobPriority } from '@/lib/jobs/types';
 import { toLocalDateString } from '@/lib/utils';
-import { ClientSelectWithCreate } from '../shared/client-select-with-create';
+import { ClientSelectWithCreate, type ClientSelectItem } from '../shared/client-select-with-create';
 import { EmployeeMultiSelect, type OrgMemberOption } from '../shared/employee-multi-select';
 import { OptionsLoadError } from '../shared/options-load-error';
 import { SiteContactFields } from '../shared/site-contact-fields';
@@ -96,14 +96,14 @@ export function CreateJobBasicsFields({ form }: { form: CreateJobForm }) {
 
 type CreateJobAssignmentFieldsProps = {
   form: CreateJobForm;
-  clients: Client[];
+  selectedClient: ClientSelectItem | undefined;
   readOnlyProject: boolean | undefined;
 };
 
 /** The "Zuordnung" group: customer, project and priority. */
 export function CreateJobAssignmentFields({
   form,
-  clients,
+  selectedClient,
   readOnlyProject,
 }: CreateJobAssignmentFieldsProps) {
   const {
@@ -111,7 +111,6 @@ export function CreateJobAssignmentFields({
     handleClientChange,
     isClientLocked,
     lockedClientLabel,
-    projectOptions,
     projectSearch,
     projectId,
     handleProjectChange,
@@ -131,7 +130,7 @@ export function CreateJobAssignmentFields({
 
       <Field label="Kunde" htmlFor="job-client">
         <ClientSelectWithCreate
-          clients={clients}
+          selectedClient={selectedClient}
           value={clientId}
           onValueChange={handleClientChange}
           disabled={projectSelectionDisabled}
@@ -142,10 +141,11 @@ export function CreateJobAssignmentFields({
 
       <Field label="Projekt" htmlFor="job-project">
         <SearchableSelect
-          options={projectOptions}
+          options={projectSearch.options}
           onSearchChange={projectSearch.onSearchChange}
           loading={projectSearch.loading}
           loadError={projectSearch.loadError}
+          onRetryLoad={projectSearch.onRetryLoad}
           onLoadMore={projectSearch.onLoadMore}
           value={projectId}
           onChange={handleProjectChange}

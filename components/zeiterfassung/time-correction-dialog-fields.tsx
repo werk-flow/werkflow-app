@@ -3,6 +3,7 @@
 import { DateTimeField } from '@/components/ui/date-time-field';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
+import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -144,10 +145,12 @@ export function TimeCorrectionDialogFields({ entry, form }: TimeCorrectionDialog
     setJobId,
     submitError,
   } = form;
-  const jobOptions = [
-    { value: 'none', label: 'Ohne Auftrag' },
-    ...(options?.jobs.map((job) => ({ value: job.id, label: job.label })) ?? []),
-  ];
+  // Open jobs of the whole organization, searched on the server; „Ohne Auftrag“ stays first.
+  const jobSearch = useJobEntityOptions(
+    { kind: 'jobs', purpose: 'time-correction' },
+    jobId && jobId !== 'none' ? [jobId] : [],
+  );
+  const jobOptions = [{ value: 'none', label: 'Ohne Auftrag' }, ...jobSearch.options];
   const sourceKinds = entry ? SOURCE_KINDS : (['add', 'missed_clock'] as TimeCorrectionKind[]);
 
   return (
@@ -210,6 +213,11 @@ export function TimeCorrectionDialogFields({ entry, form }: TimeCorrectionDialog
                 options={jobOptions}
                 value={jobId}
                 onChange={setJobId}
+                onSearchChange={jobSearch.onSearchChange}
+                loading={jobSearch.loading}
+                loadError={jobSearch.loadError}
+                onRetryLoad={jobSearch.onRetryLoad}
+                onLoadMore={jobSearch.onLoadMore}
                 searchPlaceholder="Auftrag suchen …"
                 emptyMessage="Kein Auftrag gefunden"
               />

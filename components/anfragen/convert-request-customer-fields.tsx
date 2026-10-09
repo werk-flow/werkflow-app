@@ -3,18 +3,23 @@
 import { ClientSelectWithCreate } from '@/components/auftraege/shared/client-select-with-create';
 import { SiteContactFields } from '@/components/auftraege/shared/site-contact-fields';
 import { Field } from '@/components/ui/field';
-import type { Client } from '@/lib/jobs/types';
+import type { ClientSelectItem } from '@/components/auftraege/shared/client-select-with-create';
 import type { ClientRequest } from '@/lib/requests/types';
 import type { ConvertRequestForm } from './use-convert-request-form';
 
 interface ConvertRequestCustomerFieldsProps {
   request: ClientRequest;
-  clients: Client[];
+  /** The request's customer as the page shows it, labelled before the server answers. */
+  requestClient: ClientSelectItem | null;
   form: ConvertRequestForm;
 }
 
 /** Customer, work site and contact of the conversion target. */
-export function ConvertRequestCustomerFields({ request, clients, form }: ConvertRequestCustomerFieldsProps) {
+export function ConvertRequestCustomerFields({
+  request,
+  requestClient,
+  form,
+}: ConvertRequestCustomerFieldsProps) {
   const {
     target,
     clientId,
@@ -42,7 +47,7 @@ export function ConvertRequestCustomerFields({ request, clients, form }: Convert
         }
       >
         <ClientSelectWithCreate
-          clients={clients}
+          selectedClient={requestClient}
           value={clientId}
           onValueChange={(nextClientId) => {
             setClientId(nextClientId);

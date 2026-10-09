@@ -175,21 +175,11 @@ export type ServiceCaseClientOption = {
   contacts: Array<{ id: string; name: string }>;
 };
 
-export type ServiceCaseJobOption = {
-  id: string;
-  jobNumber: string | null;
-  title: string;
-  clientId: string | null;
-  siteId: string | null;
-};
-
 export type ServiceCaseDetailWorkspace = {
   serviceCase: ServiceCaseDetail;
   currentActorId: string;
   /** The case's own customer with its sites, contacts and equipment. */
   client: ServiceCaseClientOption | null;
-  jobs: ServiceCaseJobOption[];
-  relatedCases: Array<{ id: string; caseNumber: string; summary: string }>;
   evidenceOptions: ServiceCaseEvidenceOption[];
   followUpOwners: Array<{
     userId: string;

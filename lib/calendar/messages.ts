@@ -26,7 +26,6 @@ type CalendarActionErrorCode =
   | 'calendar_scope_changed'
   | 'calendar_transport_failed'
   | 'client_not_found'
-  | 'clients_failed'
   | 'clock_out_incomplete'
   | 'create_failed'
   | 'delete_failed'
@@ -49,7 +48,6 @@ type CalendarActionErrorCode =
   | 'jobs_failed'
   | 'load_failed'
   | 'member_not_found'
-  | 'members_failed'
   | 'no_active_org'
   | 'no_changes'
   | 'no_mutable_occurrences'
@@ -62,7 +60,6 @@ type CalendarActionErrorCode =
   | 'planning_history_exists'
   | 'planning_warning'
   | 'project_not_found'
-  | 'projects_failed'
   | 'qualification_declined'
   | 'qualification_warning'
   | 'request_already_reviewed'
@@ -263,9 +260,6 @@ const CALENDAR_MESSAGES = {
   load_failed: READ_FAILED,
   fetch_failed: READ_FAILED,
   jobs_failed: READ_FAILED,
-  clients_failed: READ_FAILED,
-  projects_failed: READ_FAILED,
-  members_failed: READ_FAILED,
   team_load_failed: READ_FAILED,
   work_options_load_failed: READ_FAILED,
   responsibility_load_failed: SHARED_FAILURE_MESSAGES.responsibility_load_failed,

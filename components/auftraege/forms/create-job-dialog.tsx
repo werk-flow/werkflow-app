@@ -13,39 +13,33 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import type { OrgMemberOption } from '../shared/employee-multi-select';
-import { OptionsLoadError } from '../shared/options-load-error';
 import { CreateJobFormContent } from './create-job-form-content';
-import type { Client, Job, ProjectWithDetails } from '@/lib/jobs/types';
+import type { Job } from '@/lib/jobs/types';
+import type { JobEntityOption } from '@/lib/jobs/option-types';
+import type { ClientSelectItem } from '../shared/client-select-with-create';
 
 interface CreateJobDialogProps {
-  clients: Client[];
   members: OrgMemberOption[];
-  projects?: ProjectWithDetails[] | undefined;
-  defaultProjectId?: string | undefined;
-  defaultClientId?: string | undefined;
+  defaultProject?: JobEntityOption | undefined;
+  defaultClient?: ClientSelectItem | undefined;
   defaultEmployeeIds?: string[] | undefined;
   readOnlyClient?: boolean | undefined;
   readOnlyProject?: boolean | undefined;
   open?: boolean | undefined;
   onOpenChange?: ((open: boolean) => void) | undefined;
   onJobCreated?: (payload: { job: Job; assignedUserIds: string[] }) => void | Promise<void>;
-  /** The client and member options load after open; a failed load shows here with a retry. */
-  optionsLoad?: { error: string | null; retry: () => void; isLoading: boolean } | undefined;
 }
 
 export function CreateJobDialog({
-  clients,
   members,
-  projects = [],
-  defaultProjectId,
-  defaultClientId,
+  defaultProject,
+  defaultClient,
   defaultEmployeeIds,
   readOnlyClient,
   readOnlyProject,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
   onJobCreated,
-  optionsLoad,
 }: CreateJobDialogProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = controlledOpen !== undefined;
@@ -71,19 +65,10 @@ export function CreateJobDialog({
           <DialogTitle>Neuen Auftrag erstellen</DialogTitle>
           <DialogDescription>Erstelle einen neuen Auftrag für deine Organisation.</DialogDescription>
         </DialogHeader>
-        {optionsLoad && (
-          <OptionsLoadError
-            error={optionsLoad.error}
-            onRetry={optionsLoad.retry}
-            retrying={optionsLoad.isLoading}
-          />
-        )}
         <CreateJobFormContent
-          clients={clients}
           members={members}
-          projects={projects}
-          defaultProjectId={defaultProjectId}
-          defaultClientId={defaultClientId}
+          defaultProject={defaultProject}
+          defaultClient={defaultClient}
           defaultEmployeeIds={defaultEmployeeIds}
           readOnlyClient={readOnlyClient}
           readOnlyProject={readOnlyProject}

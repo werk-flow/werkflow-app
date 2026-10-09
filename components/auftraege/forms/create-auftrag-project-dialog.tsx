@@ -16,14 +16,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CreateJobFormContent, type CreateJobSubmission } from './create-job-form-content';
 import { CreateProjectFormContent, type CreateProjectSubmission } from './create-project-form-content';
 import type { OrgMemberOption } from '../shared/employee-multi-select';
-import type { Client, Job, Project, ProjectWithDetails } from '@/lib/jobs/types';
+import type { Job, Project } from '@/lib/jobs/types';
+import type { ClientSelectItem } from '../shared/client-select-with-create';
 
 interface CreateAuftragProjectDialogProps {
-  clients: Client[];
   members: OrgMemberOption[];
-  projects?: ProjectWithDetails[];
   jobs: Job[];
-  defaultClientId?: string | undefined;
+  defaultClient?: ClientSelectItem | undefined;
   defaultEmployeeIds?: string[] | undefined;
   readOnlyClient?: boolean | undefined;
   open?: boolean;
@@ -41,11 +40,9 @@ interface CreateAuftragProjectDialogProps {
 }
 
 export function CreateAuftragProjectDialog({
-  clients,
   members,
-  projects = [],
   jobs,
-  defaultClientId,
+  defaultClient,
   defaultEmployeeIds,
   readOnlyClient,
   open: controlledOpen,
@@ -110,10 +107,8 @@ export function CreateAuftragProjectDialog({
 
           <TabsContent value="job" className="flex min-h-0 flex-1 flex-col">
             <CreateJobFormContent
-              clients={clients}
               members={members}
-              projects={projects}
-              defaultClientId={defaultClientId}
+              defaultClient={defaultClient}
               defaultEmployeeIds={defaultEmployeeIds}
               readOnlyClient={readOnlyClient}
               isActive={activeTab === 'job'}
@@ -136,9 +131,8 @@ export function CreateAuftragProjectDialog({
 
           <TabsContent value="project" className="flex min-h-0 flex-1 flex-col">
             <CreateProjectFormContent
-              clients={clients}
               jobs={jobs}
-              defaultClientId={defaultClientId}
+              defaultClient={defaultClient}
               readOnlyClient={readOnlyClient}
               isActive={activeTab === 'project'}
               onPendingChange={setIsCreatingProject}

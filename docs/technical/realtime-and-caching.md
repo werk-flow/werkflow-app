@@ -1,8 +1,8 @@
 # Realtime and caching
 
-Status: living — last reviewed 2026-10-08
+Status: living — last reviewed 2026-10-09
 
-This doc owns virtue 2 in `AGENTS.md`: immediate feedback, complete reads, caching and freshness. [Performance](performance.md) owns the measurement: journeys, lab counts, payload budgets and layout stability. The app renders on the server, caches a few identity-keyed reads behind tags, and treats Realtime events as signals to read again.
+This doc owns virtue 2 in `AGENTS.md`: immediate feedback, complete reads, caching and freshness. [Performance](performance.md) owns the measurement: journeys, lab counts, payload budgets and layout stability.
 
 ## How to work
 
@@ -32,13 +32,14 @@ Wrong turn: publishing a ledger or a link table. Publish the mutable owning root
 1. A list a person pages through is server-paginated. Copy `lib/requests/list-page.ts` and `lib/requests/list-page-server.ts`: the URL state, then a service-only paging function (`list_request_page`) that applies search, filters, counts and order before the page boundary.
 2. A reader that needs every row reads through `readAllRows` or `readCompleteRows` and shows the overflow as a failure.
 3. Send every organization-sized id list through `readInBatches`.
-4. Run `bun run test:unit lib/conventions/id-list-batches.test.ts lib/ui/list-pagination.test.ts`. For a paging function, run `bun run test:verify --group sql:list-pagination`.
+4. A picker of an organization-sized kind passes the whole `useJobEntityOptions` result to the registry select; a new need adds a kind or purpose in `lib/jobs/option-types.ts`, never a preloaded array.
+5. Run `bun run test:unit lib/conventions/id-list-batches.test.ts lib/conventions/unpaged-reads.test.ts lib/conventions/entity-pickers.test.ts lib/ui/list-pagination.test.ts`. For a paging or search function, run `bun run test:verify --group sql:list-pagination`.
 
 Wrong turn: one `.select()` without pages. PostgREST cuts the response at its cap without an error, and rows vanish.
 
 ### Add a reader
 
-1. Read per request. Wrap repeated work of one render in `react.cache()`.
+1. Read per request. Wrap repeated work of one render in `react.cache()`; a GET handler uses `withReadRequest` ([security](security.md#read-request-authorization-reuse)).
 2. Cache across requests only when every condition under [cross-request caching](#cross-request-caching) holds. Tag the reader with a `CACHE_TAGS` entry, and throw through `failCachedRead` on a failed read.
 3. A read that starts on mount, on channel join or beside a save is a kind in `lib/data/background-reads.ts`. Read [read-request authorization reuse](security.md#read-request-authorization-reuse) first.
 4. Run `bun run test:unit lib/data lib/conventions/live-view-reads.test.ts`.
@@ -75,18 +76,18 @@ A `[judgment]` item is a Tier 3 default: diverge only with the note that `AGENTS
 - A live surface consumes Realtime through `useLiveView` or `useRealtimeRouterRefresh`, never a channel, an auth listener or a focus listener of its own. [lint `realtimeSelectors`, lint `channelSelector`, lint `authListenerSelector`, lint `visibilitySelector`, lint `focusSelector`, lint `importRestrictions`]
 - A failed refresh keeps the data, marks it stale and makes its dependent actions inert until a retry succeeds. [code `components/shared/stale-region.tsx`, test `lib/conventions/live-view-stale.test.ts`]
 - A new published table is registered in the migration and in `REALTIME_TABLES`, with its deletion trigger. [script `realtime:check`, group `sql:security`]
-- A reader that needs a whole collection reads it in ordered pages through `readAllRows` or `readCompleteRows` and reports an overflow as a failure. [code `lib/supabase/query-batches.ts`, group `sql:list-pagination`]
+- A reader that needs a whole collection reads it in ordered pages through `readAllRows` or `readCompleteRows` and reports an overflow as a failure. Any other read of an organization-sized table has a page boundary or a reviewed parent bound. [code `lib/supabase/query-batches.ts`, test `lib/conventions/unpaged-reads.test.ts`, group `sql:list-pagination`]
 - An organization-sized id list goes through `readInBatches`. [test `lib/conventions/id-list-batches.test.ts`]
 - An id list written into a PostgREST filter string (`.not`, `.filter`, `.or`) is a literal or a reviewed bounded site. [test `lib/conventions/id-list-string-filters.test.ts`]
 - A server-paginated list applies search, filters, counts and order before the page boundary. [group `sql:list-pagination`, test `lib/ui/list-pagination.test.ts`, group `audit:list-pagination`]
-- A picker that offers records by number selects its window in natural number order in the database. [group `sql:list-pagination`]
+- A picker of customers, jobs, projects, equipment, service cases, inventory items or coverages searches on the server one page at a time, keeps the selected records, offers „Erneut laden“ after a failed read, and selects by number in natural order in the database. [test `lib/conventions/entity-pickers.test.ts`, group `sql:list-pagination`, group `ui:contracts`]
 - A reader cached across requests meets every condition under [cross-request caching](#cross-request-caching). A failed read, in any product module, goes through `failCachedRead` and throws `CachedReadError`, so it is never stored. [judgment, test `lib/data/membership-freshness.test.ts`, test `lib/data/cached-read-failures.test.ts`]
 - An invalidation names a `CACHE_TAGS` entry that a cached reader carries. [test `lib/conventions/cache-tags.test.ts`]
 - A read that starts on mount, in an effect or beside a save goes through the background-read registry or comes with the server props, never the Server Action queue. [test `lib/data/background-read-http.test.ts`, test `lib/conventions/live-view-reads.test.ts`]
-- Client state adopts new server props during render, never in an effect. Inside a hydrated Suspense boundary a mount effect runs at idle priority; its update starves behind a pending route transition, React rebases every later functional update into a new value on each render, and an effect keyed on that value commits forever. After a page settles, its main thread goes idle. [lint `ui/no-derived-state-effect`, test `tests/ui-contracts/hydration-settle.spec.ts`, group `audit:layout`, judgment]
+- Client state adopts new server props during render, never in an effect: inside a hydrated Suspense boundary such an effect can starve behind a route transition and then commit forever. After a page settles, its main thread goes idle. [lint `ui/no-derived-state-effect`, test `tests/ui-contracts/hydration-settle.spec.ts`, group `audit:layout`, judgment]
 - The authenticated layout waits for identity, organization, profile and subscription only. Optional shell reads load in their own providers. [test `lib/ui/app-layout-runtime.test.ts`]
 - A reader that runs on every event of every session pins its queries per role, and a page runs one derivation. [test `lib/attention/count-reads.test.ts`]
-- Sidebar links prefetch on intent only. [test `lib/ui/sidebar-prefetch.test.ts`, group `ui:contracts`]
+- Sidebar links prefetch on intent only ([performance](performance.md#prefetch)). [test `lib/ui/sidebar-prefetch.test.ts`, group `ui:contracts`]
 - A step that people repeat many times a day is a journey with a lab step ([performance](performance.md#checklist)); a view switch over a large window or a change another session waits for gets a measured scenario. [test `lib/testing/journeys.test.ts`, judgment]
 
 ## Never
@@ -115,10 +116,6 @@ These steps run once, on the final code. The in-work checks, including the measu
 
 ## Caching layers
 
-### Request-level deduplication
-
-Use `react.cache()` for repeated work within one Server Component render pass. GET handlers, where render caching does not apply, use the `withReadRequest` scope that [security](security.md#read-request-authorization-reuse) owns.
-
 ### Cross-request caching
 
 Use `unstable_cache()` with tags, or the `'use cache'` directive with `cacheTag()` when a whole function result is the cache unit. A reader may be cached across requests only when all of these hold:
@@ -136,17 +133,13 @@ The caller establishes identity and current permission before it uses the data. 
 
 `loadMembershipCandidates` shares membership facts only within one GET request or one React render. Every later request reloads membership, role, lifecycle and access blockers. Responsibility facts follow the same rule: every approval action reloads the stored configuration and uses the current server timestamp and the Berlin business date. A stale render around midnight can affect display freshness. It can never extend an expired substitute's authority.
 
-### Sidebar prefetch
-
-Sidebar and logo links prefetch only the destination under hover or keyboard focus. Viewport prefetch would re-read every visible sidebar route on each cache invalidation, competing with live updates. A link inside a page keeps the framework's prefetch in view: it carries the route's static shell and loading state, never its data, and a measured switch to intent-only prefetch made navigations slower ([performance](performance.md#prefetch)).
-
 ### Backend request capacity
 
 One scheduler per server process (`lib/supabase/request-scheduler.ts`) caps concurrent Supabase fetches and reserves part of that capacity for foreground work. Page rendering, Server Actions and calendar window reads run at foreground priority. A GET handler that serves optional shell or section data passes `{ priority: 'background' }` to `withReadRequest`. The fetch timeout includes time in the queue. The scheduler limits one process. It is not a connection pool, a rate limit or a provider capacity guarantee.
 
 ## Complete reads and id lists
 
-PostgREST caps every response and truncates without an error. The gateway rejects a long `.in()` query string. A reader that needs a whole collection therefore reads ordered pages that end with an `id` tiebreaker, and above its declared cap it returns an overflow that the caller shows as a failure. An organization-sized id list goes through `readInBatches` and is never a reviewed bounded site.
+PostgREST caps every response and truncates without an error. The gateway rejects a long `.in()` query string. A reader that needs a whole collection therefore reads ordered pages that end with an `id` tiebreaker, and above its declared cap it returns an overflow that the caller shows as a failure.
 
 ## Server-paginated lists
 
@@ -158,6 +151,10 @@ A server-paginated list selects and counts the matching identities in the databa
 - Document link predicates use database existence checks. Never send a whole organization's link ids as a URL filter.
 
 A list page is not the option catalog. Entity selectors search the whole permitted scope on the server and return one page of choices with an explicit continuation. Selected identities are loaded separately and stay selected across searches.
+
+## Complete lists
+
+A picker receives its whole list only when the list is bounded by nature. The complete lists: the members and employees of one company, teams, capability definitions, inventory categories and locations, document folders, published work templates, follow-up and responsibility owners, the sites, contacts and equipment of one customer, and the documents of one job. Inventory suppliers come whole up to 1,000 and fail visibly above. Every other picker searches through the `'entity-options'` background read when it opens.
 
 ## Realtime model
 

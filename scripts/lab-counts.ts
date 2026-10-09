@@ -6,10 +6,12 @@ import { captureInputSnapshot } from '../lib/testing/evidence/group-evidence';
 import { createGroupQualification } from '../lib/testing/evidence/group-qualification';
 import {
   acceptLabChange,
+  carryOverLabReferences,
   compareLabStep,
   findLabReference,
   formatLabTable,
   initialLabReference,
+  labCarryoverSchema,
   labReferenceProblems,
   labReferencesSchema,
   ratchetLabReference,
@@ -39,6 +41,7 @@ import { readRunManifest, runDirectory } from '../tests/golden/support/run-state
 
 const root = resolve(import.meta.dir, '..');
 const REFERENCE_PATH = resolve(root, 'lib/testing/lab-count-references.json');
+const CARRYOVER_PATH = resolve(root, 'lib/testing/lab-count-reference-carryover.json');
 const [command = '', ...rest] = process.argv.slice(2);
 const values = new Map<string, string>();
 while (rest.length) {
@@ -98,6 +101,38 @@ function oneBuild(runs: readonly QualifiedRun[]): string {
 /** Read from disk inside the workspace lock, so two commands never write over each other's update. */
 function readReferences(): LabReferences {
   return labReferencesSchema.parse(JSON.parse(readFileSync(REFERENCE_PATH, 'utf8')));
+}
+
+/**
+ * The references with the reviewed carry-over entries applied, as the runner
+ * judges them: a step whose measured code changed without changing what it
+ * counts is matched under its current digest.
+ */
+function carriedReferences(references: LabReferences): LabReferences {
+  return carryOverLabReferences(
+    references,
+    labCarryoverSchema.parse(JSON.parse(readFileSync(CARRYOVER_PATH, 'utf8'))),
+  );
+}
+
+/** Drops the carry-over entries that no written reference still needs: their step now carries the new digest. */
+async function pruneCarryover(written: LabReferences): Promise<void> {
+  const carryover = labCarryoverSchema.parse(JSON.parse(readFileSync(CARRYOVER_PATH, 'utf8')));
+  const entries = carryover.entries.filter((entry) =>
+    written.steps.some(
+      (step) => step.stepId === entry.stepId && step.context.measurementDigest === entry.fromDigest,
+    ),
+  );
+  if (entries.length === carryover.entries.length) return;
+  const options = (await resolveConfig(CARRYOVER_PATH)) ?? {};
+  const text = await format(JSON.stringify({ ...carryover, entries }), {
+    ...options,
+    filepath: CARRYOVER_PATH,
+  });
+  const temporary = `${CARRYOVER_PATH}.${process.pid}.tmp`;
+  writeFileSync(temporary, text);
+  renameSync(temporary, CARRYOVER_PATH);
+  console.log(`Wrote ${CARRYOVER_PATH}: the re-keyed references no longer need their carry-over.`);
 }
 
 /** Writes the references in the repository's Prettier format, through a temporary file. */
@@ -249,15 +284,18 @@ await withWorkspaceTestLock({ operation: `lab counts: ${command}` }, async () =>
     case 'ratchet': {
       const [run] = qualifiedRuns(runKeys('--run'));
       if (!run) return;
-      await writeReferences({
-        ...references,
-        steps: references.steps.map((reference) => {
+      const carried = carriedReferences(references);
+      const written: LabReferences = {
+        ...carried,
+        steps: carried.steps.map((reference) => {
           const observation = run.observations.find((entry) =>
-            findLabReference({ ...references, steps: [reference] }, entry),
+            findLabReference({ ...carried, steps: [reference] }, entry),
           );
           return observation ? ratchetLabReference(reference, observation, run.runKey) : reference;
         }),
-      });
+      };
+      await writeReferences(written);
+      await pruneCarryover(written);
       return;
     }
     case 'accept': {
@@ -265,11 +303,12 @@ await withWorkspaceTestLock({ operation: `lab counts: ${command}` }, async () =>
       const stepId = required('--step');
       const observation = run?.observations.find((entry) => entry.stepId === stepId);
       if (!run || !observation) throw new Error(`The run recorded no ${stepId}.`);
-      const reference = findLabReference(references, observation);
+      const carried = carriedReferences(references);
+      const reference = findLabReference(carried, observation);
       if (!reference) throw new Error(`${stepId} has no reference in this context; calibrate it first.`);
-      await writeReferences({
-        ...references,
-        steps: references.steps.map((candidate) =>
+      const written: LabReferences = {
+        ...carried,
+        steps: carried.steps.map((candidate) =>
           candidate === reference
             ? acceptLabChange({
                 reference,
@@ -280,7 +319,9 @@ await withWorkspaceTestLock({ operation: `lab counts: ${command}` }, async () =>
               })
             : candidate,
         ),
-      });
+      };
+      await writeReferences(written);
+      await pruneCarryover(written);
       return;
     }
     default:

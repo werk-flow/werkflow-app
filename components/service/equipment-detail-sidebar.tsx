@@ -11,7 +11,6 @@ import { setInstalledEquipmentWorkLink } from '@/lib/installed-equipment/actions
 import { EQUIPMENT_IDENTIFIER_TYPE_LABELS, type EquipmentDetail } from '@/lib/installed-equipment/types';
 import { Fact } from './equipment-detail-sections';
 import type { EquipmentDetailActions } from './use-equipment-detail-actions';
-import { Spinner } from '@/components/ui/spinner';
 
 function EquipmentClientSection({ item }: { item: EquipmentDetail }): ReactElement {
   return (
@@ -182,7 +181,7 @@ export function EquipmentDetailSidebar({
   onOpenCorrection,
   onOpenArchive,
 }: EquipmentDetailSidebarProps): ReactElement {
-  const { busy, item } = actions;
+  const { item } = actions;
   return (
     <aside className="space-y-6">
       <EquipmentClientSection item={item} />
@@ -191,14 +190,8 @@ export function EquipmentDetailSidebar({
         <EquipmentRelationsSection item={item} />
       )}
       <EquipmentWorkLinksSection actions={actions} onOpenWorkLink={onOpenWorkLink} />
-      <Button
-        type="button"
-        variant="outline"
-        className="w-full"
-        onClick={onOpenSource}
-        disabled={busy.isBusy('source-options')}
-      >
-        {busy.isBusy('source-options') ? <Spinner /> : <LinkIcon className="size-4" />}
+      <Button type="button" variant="outline" className="w-full" onClick={onOpenSource}>
+        <LinkIcon className="size-4" />
         Herkunftsnachweis verknüpfen
       </Button>
       {canCorrectTerminalAction && (

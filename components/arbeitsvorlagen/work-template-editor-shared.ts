@@ -13,6 +13,14 @@ export const ERROR_MESSAGES = {
 
 export type CreateTemplateInput = { name: string; description: string; targetType: WorkTemplateTargetType };
 export type CreateInventoryItemInput = { name: string; unit: string };
+/** An article created from the editor, held optimistically until the server confirms it. */
+export type CreatedInventoryItem = {
+  id: string;
+  name: string;
+  unit: string;
+  internalSku: string | null;
+  isBillable: boolean;
+};
 export type CreateCapabilityInput = { name: string; kind: CapabilityKind };
 
 export function newId(): string {

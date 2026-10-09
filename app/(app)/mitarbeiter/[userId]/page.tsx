@@ -1,8 +1,6 @@
 import { redirect } from 'next/navigation';
-import { readOrganizationClients } from '@/lib/clients/server';
 import { cookies } from 'next/headers';
 
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getEmployeeDocuments } from '@/lib/documents/actions';
 import {
@@ -15,7 +13,6 @@ import { getMemberDetail, getProfilesByIds, type OrgRole } from '@/lib/members/a
 import { getOrgMembersForUser } from '@/lib/members/queries';
 import { getPersonnelDetail, type PersonnelDetail } from '@/lib/personnel/actions';
 import { getJobsForMember } from '@/lib/jobs/actions';
-import { toProject, type ProjectWithDetails } from '@/lib/jobs/types';
 import type { OrgMemberOption } from '@/components/auftraege/shared/employee-multi-select';
 import { MitarbeiterDetailContent } from '@/components/mitarbeiter/mitarbeiter-detail-content';
 import { PersonnelRecordDetailContent } from '@/components/mitarbeiter/personnel-record-detail-content';
@@ -71,16 +68,11 @@ async function MitarbeiterDetailData({ targetUserId }: { targetUserId: string })
     redirect('/dashboard');
   }
 
-  const admin = createSupabaseAdminClient();
-
   const [
     memberResult,
     personnelResult,
     jobsResult,
-    clients,
     membersResult,
-    allProjectsResult,
-    allJobsResult,
     documentsResult,
     organizationSettings,
     organizationUserPreferences,
@@ -90,14 +82,7 @@ async function MitarbeiterDetailData({ targetUserId }: { targetUserId: string })
     getMemberDetail(targetUserId),
     getPersonnelDetail(targetUserId),
     getJobsForMember(targetUserId),
-    readOrganizationClients(admin, activeOrgId),
     getOrgMembersForUser(activeOrgId, user.id),
-    admin
-      .from('projects')
-      .select('*')
-      .eq('organization_id', activeOrgId)
-      .order('created_at', { ascending: false }),
-    admin.from('jobs').select('id, project_id, status').eq('organization_id', activeOrgId),
     getEmployeeDocuments(targetUserId),
     getCachedOrganizationSettings(activeOrgId),
     getOrganizationUserPreferencesForView(activeOrgId, user.id),
@@ -173,24 +158,14 @@ async function MitarbeiterDetailData({ targetUserId }: { targetUserId: string })
 
   const { member } = memberResult;
 
-  // The project choices and counts feed the jobs region, so any of the three
-  // reads failing shows that region as failed instead of an empty one.
-  if (allProjectsResult.error) {
-    logError('Mitarbeiter detail: project read failed', allProjectsResult.error);
-  }
-  if (allJobsResult.error) {
-    logError('Mitarbeiter detail: job count read failed', allJobsResult.error);
-  }
-  const projectGraphFailed = Boolean(allProjectsResult.error || allJobsResult.error);
-  const jobsData =
-    jobsResult.success && !projectGraphFailed
-      ? {
-          jobs: jobsResult.jobs,
-          projects: jobsResult.projects,
-          clientMap: jobsResult.clientMap,
-          jobAssignmentMap: jobsResult.jobAssignmentMap,
-        }
-      : null;
+  const jobsData = jobsResult.success
+    ? {
+        jobs: jobsResult.jobs,
+        projects: jobsResult.projects,
+        clientMap: jobsResult.clientMap,
+        jobAssignmentMap: jobsResult.jobAssignmentMap,
+      }
+    : null;
 
   const members: OrgMemberOption[] = membersResult.members.map((m) => ({
     userId: m.user_id,
@@ -199,40 +174,6 @@ async function MitarbeiterDetailData({ targetUserId }: { targetUserId: string })
     role: m.role,
   }));
 
-  const clientLookup = new Map(clients.map((c) => [c.id, c]));
-  const projectJobCounts = new Map<
-    string,
-    { total: number; completed: number; inProgress: number; parked: number }
-  >();
-  for (const j of projectGraphFailed ? [] : (allJobsResult.data ?? [])) {
-    if (!j.project_id) continue;
-    const counts = projectJobCounts.get(j.project_id) ?? { total: 0, completed: 0, inProgress: 0, parked: 0 };
-    counts.total++;
-    if (j.status === 'fertig') counts.completed++;
-    if (j.status === 'in_bearbeitung') counts.inProgress++;
-    if (j.status === 'geparkt') counts.parked++;
-    projectJobCounts.set(j.project_id, counts);
-  }
-
-  // Without both reads the jobs region shows its failure, so the graph stays empty.
-  const allProjects: ProjectWithDetails[] = (projectGraphFailed ? [] : (allProjectsResult.data ?? [])).map(
-    (row) => {
-      const project = toProject(row);
-      const counts = projectJobCounts.get(project.id) ?? { total: 0, completed: 0, inProgress: 0, parked: 0 };
-      return {
-        ...project,
-        client: project.clientId ? (clientLookup.get(project.clientId) ?? null) : null,
-        jobCount: counts.total,
-        completedJobCount: counts.completed,
-        inProgressJobCount: counts.inProgress,
-        parkedJobCount: counts.parked,
-      };
-    },
-  );
-
-  const employeeProjectGraph = Array.from(
-    new Map([...allProjects, ...(jobsData?.projects ?? [])].map((project) => [project.id, project])).values(),
-  );
   const { visibleColumns } = organizationUserPreferences;
   if (!documentsResult.success) {
     logError('Mitarbeiter detail: document read failed', documentsResult.error);
@@ -246,12 +187,9 @@ async function MitarbeiterDetailData({ targetUserId }: { targetUserId: string })
       actorNames={actorNames}
       jobs={jobsData?.jobs ?? null}
       projects={jobsData?.projects ?? []}
-      projectGraphProjects={employeeProjectGraph}
       clientMap={jobsData?.clientMap ?? {}}
       jobAssignmentMap={jobsData?.jobAssignmentMap ?? {}}
-      clients={clients}
       members={members}
-      allProjects={allProjects}
       organizationId={activeOrgId}
       currentUserId={user.id}
       currentUserRole={currentUserRole}

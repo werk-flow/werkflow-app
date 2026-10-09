@@ -3,6 +3,16 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import ts from 'typescript';
 import { listProductSources, repositoryRoot } from './product-sources';
+import {
+  bindingInitializer,
+  chainCalls,
+  continuationCalls,
+  enclosingFunction,
+  organizationTables,
+  stringValue,
+  unwrap,
+  type ChainCall,
+} from './query-chains';
 
 // Tier 2 for tenant scoping of service-role queries (AGENTS.md "3. Security").
 // The admin client bypasses RLS, so a query on a table with an
@@ -39,64 +49,7 @@ const RLS_CLIENT_FACTORIES = new Set([
 
 const ORGANIZATION_FILTERS = new Set(['eq', 'in', 'match', 'filter']);
 
-/** Tables and views of the public schema whose rows carry `organization_id`. */
-function organizationTables(): Set<string> {
-  const file = 'lib/supabase/database.types.ts';
-  const source = ts.createSourceFile(
-    file,
-    readFileSync(resolve(repositoryRoot, file), 'utf8'),
-    ts.ScriptTarget.Latest,
-    true,
-  );
-  const tables = new Set<string>();
-  const memberType = (
-    members: ts.NodeArray<ts.TypeElement>,
-    name: string,
-  ): ts.TypeLiteralNode | undefined => {
-    for (const member of members) {
-      if (
-        ts.isPropertySignature(member) &&
-        member.name.getText(source).replace(/['"]/g, '') === name &&
-        member.type &&
-        ts.isTypeLiteralNode(member.type)
-      ) {
-        return member.type;
-      }
-    }
-    return undefined;
-  };
-  ts.forEachChild(source, function visit(node) {
-    if (ts.isTypeAliasDeclaration(node) && node.name.text === 'Database' && ts.isTypeLiteralNode(node.type)) {
-      const publicSchema = memberType(node.type.members, 'public');
-      if (!publicSchema) return;
-      for (const group of ['Tables', 'Views']) {
-        const relations = memberType(publicSchema.members, group);
-        for (const relation of relations?.members ?? []) {
-          if (!ts.isPropertySignature(relation) || !relation.type || !ts.isTypeLiteralNode(relation.type))
-            continue;
-          const row = memberType(relation.type.members, 'Row');
-          if (row && hasMember(row, 'organization_id')) {
-            tables.add(relation.name.getText(source).replace(/['"]/g, ''));
-          }
-        }
-      }
-    }
-    ts.forEachChild(node, visit);
-  });
-  return tables;
-}
-
-function hasMember(literal: ts.TypeLiteralNode, name: string): boolean {
-  return literal.members.some(
-    (member) => ts.isPropertySignature(member) && member.name.getText().replace(/['"]/g, '') === name,
-  );
-}
-
 type TenantFinding = { file: string; line: number; table: string; problem: string };
-
-function stringValue(node: ts.Node | undefined): string | undefined {
-  return node && ts.isStringLiteralLike(node) ? node.text : undefined;
-}
 
 function propertyNames(node: ts.Expression): string[] {
   if (!ts.isObjectLiteralExpression(node)) return [];
@@ -108,40 +61,6 @@ function propertyNames(node: ts.Expression): string[] {
     }
     return [];
   });
-}
-
-/** Unwraps `(x)`, `x as T`, `x satisfies T` and `await x`. */
-function unwrap(node: ts.Expression): ts.Expression {
-  let current = node;
-  while (
-    ts.isParenthesizedExpression(current) ||
-    ts.isAsExpression(current) ||
-    ts.isSatisfiesExpression(current) ||
-    ts.isAwaitExpression(current) ||
-    ts.isNonNullExpression(current)
-  ) {
-    current = current.expression;
-  }
-  return current;
-}
-
-/** The variable initializer that `name` refers to inside `scope`, when it is a const or let binding. */
-function bindingInitializer(scope: ts.Node, name: string): ts.Expression | undefined {
-  let found: ts.Expression | undefined;
-  ts.forEachChild(scope, function visit(node) {
-    if (found) return;
-    if (
-      ts.isVariableDeclaration(node) &&
-      ts.isIdentifier(node.name) &&
-      node.name.text === name &&
-      node.initializer
-    ) {
-      found = node.initializer;
-      return;
-    }
-    ts.forEachChild(node, visit);
-  });
-  return found;
 }
 
 /** True when every row of an insert payload names `organization_id`. */
@@ -205,81 +124,6 @@ function returnedExpressions(callback: ts.ArrowFunction | ts.FunctionExpression)
     ts.forEachChild(node, visit);
   });
   return returned.length ? returned : [];
-}
-
-function enclosingFunction(node: ts.Node): ts.Node | undefined {
-  for (let current = node.parent; current; current = current.parent) {
-    if (ts.isFunctionLike(current)) return current;
-  }
-  return undefined;
-}
-
-type ChainCall = { method: string; call: ts.CallExpression };
-
-/** Calls applied to the builder that `fromCall` starts, outermost last. */
-function chainCalls(fromCall: ts.CallExpression): { calls: ChainCall[]; top: ts.Expression } {
-  const calls: ChainCall[] = [];
-  let current: ts.Expression = fromCall;
-  for (;;) {
-    const parent = current.parent;
-    if (parent && ts.isPropertyAccessExpression(parent) && parent.expression === current) {
-      const call = parent.parent;
-      if (call && ts.isCallExpression(call) && call.expression === parent) {
-        calls.push({ method: parent.name.text, call });
-        current = call;
-        continue;
-      }
-    }
-    if (
-      parent &&
-      (ts.isParenthesizedExpression(parent) || ts.isAsExpression(parent) || ts.isNonNullExpression(parent))
-    ) {
-      current = parent;
-      continue;
-    }
-    return { calls, top: current };
-  }
-}
-
-/** Builder variables continued after the chain: `let query = admin.from(…)…; query = query.eq(…)`. */
-function continuationCalls(top: ts.Expression): ChainCall[] {
-  const parent = top.parent;
-  let name: string | undefined;
-  if (
-    parent &&
-    ts.isVariableDeclaration(parent) &&
-    parent.initializer === top &&
-    ts.isIdentifier(parent.name)
-  ) {
-    name = parent.name.text;
-  } else if (
-    parent &&
-    ts.isBinaryExpression(parent) &&
-    parent.right === top &&
-    parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-    ts.isIdentifier(parent.left)
-  ) {
-    name = parent.left.text;
-  }
-  if (!name) return [];
-  const scope = enclosingFunction(top) ?? top.getSourceFile();
-  const calls: ChainCall[] = [];
-  const builderName = name;
-  ts.forEachChild(scope, function visit(node) {
-    if (
-      ts.isPropertyAccessExpression(node) &&
-      ts.isIdentifier(node.expression) &&
-      node.expression.text === builderName &&
-      node.parent &&
-      ts.isCallExpression(node.parent) &&
-      node.parent.expression === node
-    ) {
-      calls.push({ method: node.name.text, call: node.parent });
-      calls.push(...chainCalls(node.parent).calls);
-    }
-    ts.forEachChild(node, visit);
-  });
-  return calls;
 }
 
 function filtersOrganization({ method, call }: ChainCall): boolean {

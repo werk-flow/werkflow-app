@@ -18,7 +18,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ErrorText } from '@/components/ui/error-text';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { ClientRequest } from '@/lib/requests/types';
-import type { Client } from '@/lib/jobs/types';
+import type { ClientSelectItem } from '@/components/auftraege/shared/client-select-with-create';
 import { WorkTemplatePicker } from '@/components/arbeitsvorlagen/work-template-picker';
 import { QualificationWarningDialog } from '@/components/auftraege/shared/qualification-warning-dialog';
 import { ConvertRequestCustomerFields } from './convert-request-customer-fields';
@@ -28,7 +28,8 @@ import { Spinner } from '@/components/ui/spinner';
 
 interface ConvertRequestDialogProps {
   request: ClientRequest;
-  clients: Client[];
+  /** The request's customer as the page shows it. */
+  requestClient: ClientSelectItem | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Fires after the server confirmed; the page marks itself until refreshed props land. */
@@ -39,7 +40,7 @@ interface ConvertRequestDialogProps {
 // prefilled and stays editable; nothing is scheduled or assigned implicitly.
 export function ConvertRequestDialog({
   request,
-  clients,
+  requestClient,
   open,
   onOpenChange,
   onSaved,
@@ -115,7 +116,7 @@ export function ConvertRequestDialog({
                 <Input value={number} onChange={(e) => setNumber(e.target.value)} disabled={isLoading} />
               </Field>
 
-              <ConvertRequestCustomerFields request={request} clients={clients} form={form} />
+              <ConvertRequestCustomerFields request={request} requestClient={requestClient} form={form} />
 
               {target === 'job' && <ConvertRequestJobFields form={form} />}
 

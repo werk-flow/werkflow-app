@@ -2,16 +2,16 @@
 
 import type { ActionFailure } from '@/lib/action-result';
 import { describeFailure } from '@/lib/action-messages';
-import { useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { useState, type Dispatch, type SetStateAction } from 'react';
 import { useRouter } from 'next/navigation';
 
+import { useJobEntityOptions, type JobEntityOptionsState } from '@/hooks/use-job-entity-options';
 import { useServerAction } from '@/hooks/use-server-action';
 import { createServiceCase, updateServiceCase } from '@/lib/service-cases/actions';
 import type {
   ServiceCaseClientOption,
   ServiceCaseCreateInput,
   ServiceCaseDetail,
-  ServiceCaseJobOption,
   ServiceCaseListItem,
 } from '@/lib/service-cases/types';
 import {
@@ -42,7 +42,6 @@ type UseServiceCaseFormOptions = {
   onOpenChange: (open: boolean) => void;
   preloadedClient: ServiceCaseClientOption | null | undefined;
   initial: ServiceCaseDetail | undefined;
-  jobs: ServiceCaseJobOption[];
   onSubmitted: ((submission: ServiceCaseCreateSubmission) => void) | undefined;
   onSaved: (() => void) | undefined;
 };
@@ -56,7 +55,8 @@ export type ServiceCaseFormController = {
   clientOption: ReturnType<typeof useClientOption>;
   client: ServiceCaseClientOption | null;
   site: ServiceCaseClientOption['sites'][number] | undefined;
-  availableJobs: ServiceCaseJobOption[];
+  /** The server search of the customer's jobs at the case's site. */
+  jobSearch: JobEntityOptionsState;
   /** The chosen status closes the case, so a resolution note is required. */
   terminal: boolean;
   submit: () => void;
@@ -67,7 +67,6 @@ export function useServiceCaseForm({
   onOpenChange,
   preloadedClient,
   initial,
-  jobs,
   onSubmitted,
   onSaved,
 }: UseServiceCaseFormOptions): ServiceCaseFormController {
@@ -128,9 +127,23 @@ export function useServiceCaseForm({
   const clientOption = useClientOption(form.clientId, preloadedClient);
   const client = clientOption.client;
   const site = client?.sites.find((item) => item.id === form.siteId);
-  const availableJobs = useMemo(
-    () => jobs.filter((job) => job.clientId === form.clientId && job.siteId === form.siteId),
-    [form.clientId, form.siteId, jobs],
+  const jobSearch = useJobEntityOptions(
+    {
+      kind: 'jobs',
+      purpose: 'equipment-work',
+      ...(form.clientId ? { clientId: form.clientId } : {}),
+      ...(form.siteId ? { siteId: form.siteId } : {}),
+    },
+    form.jobId ? [form.jobId] : [],
+    initial?.jobId
+      ? [
+          {
+            value: initial.jobId,
+            label: initial.jobTitle ?? 'Auftrag',
+            description: initial.jobNumber ?? undefined,
+          },
+        ]
+      : undefined,
   );
   const terminal = ['resolved', 'closed_without_visit', 'duplicate'].includes(form.status);
   const fieldErrors = attempted ? missingFields(form, Boolean(initial), terminal) : {};
@@ -182,7 +195,7 @@ export function useServiceCaseForm({
     clientOption,
     client,
     site,
-    availableJobs,
+    jobSearch,
     terminal,
     submit,
   };

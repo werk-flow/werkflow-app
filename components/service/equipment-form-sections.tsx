@@ -45,6 +45,7 @@ export function EquipmentAssignmentFields({
           onSearchChange={clientSearch.onSearchChange}
           loading={clientSearch.loading}
           loadError={clientSearch.loadError}
+          onRetryLoad={clientSearch.onRetryLoad}
           onLoadMore={clientSearch.onLoadMore}
           placeholder="Kunde auswählen"
           searchPlaceholder="Kunde suchen…"
@@ -64,7 +65,7 @@ export function EquipmentAssignmentFields({
           options={controller.siteOptions}
           loading={clientOption.loading}
           loadError={clientOption.error}
-          onSearchChange={clientOption.error ? clientOption.retry : undefined}
+          onRetryLoad={clientOption.retry}
           placeholder="Einsatzort auswählen"
           searchPlaceholder="Einsatzort suchen…"
         />

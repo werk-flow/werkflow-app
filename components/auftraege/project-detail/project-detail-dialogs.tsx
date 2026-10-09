@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { useState, type Dispatch, type SetStateAction } from 'react';
 
 import {
   AlertDialog,
@@ -19,8 +19,10 @@ import type { Client, Job, Project } from '@/lib/jobs/types';
 import { updateProject, deleteProject } from '@/lib/projects/actions';
 import { loadDocument } from '@/lib/navigation/document-load';
 import { ClientAssignmentDialog } from '../shared/client-assignment-dialog';
+import type { OrgMemberOption } from '../shared/employee-multi-select';
 import { CreateJobDialog } from '../forms/create-job-dialog';
 import { EditProjectDialog } from '../forms/edit-project-dialog';
+import { knownProjectOption } from '../forms/job-form-options';
 import { ProjectJobsAssignmentDialog } from './project-jobs-assignment-dialog';
 import type { ProjectDetailDialogState } from './use-project-detail-dialog-state';
 import { Spinner } from '@/components/ui/spinner';
@@ -36,6 +38,7 @@ type ProjectDetailDialogsProps = {
   setLiveProject: Dispatch<SetStateAction<Project>>;
   setLiveJobs: Dispatch<SetStateAction<Job[]>>;
   dialogState: ProjectDetailDialogState;
+  members: OrgMemberOption[];
 };
 
 export function ProjectDetailDialogs({
@@ -49,44 +52,18 @@ export function ProjectDetailDialogs({
   setLiveProject,
   setLiveJobs,
   dialogState,
+  members,
 }: ProjectDetailDialogsProps) {
-  const {
-    showCreateJob,
-    setShowCreateJob,
-    showEditDialog,
-    setShowEditDialog,
-    dialogClients,
-    dialogMembers,
-    isLoadingDialogOptions,
-    dialogOptionsError,
-    setDialogOptionsRefreshKey,
-  } = dialogState;
+  const { showCreateJob, setShowCreateJob, showEditDialog, setShowEditDialog } = dialogState;
 
   return (
     <>
       <CreateJobDialog
-        clients={dialogClients}
-        members={dialogMembers}
-        projects={[
-          {
-            ...liveProject,
-            client: liveClient,
-            jobCount: liveJobs.length,
-            completedJobCount: completedCount,
-            inProgressJobCount: inProgressCount,
-            parkedJobCount: parkedCount,
-          },
-        ]}
-        defaultProjectId={liveProject.id}
-        defaultClientId={liveProject.clientId ?? undefined}
+        members={members}
+        defaultProject={knownProjectOption(liveProject, liveClient?.name ?? null)}
+        defaultClient={liveClient ?? undefined}
         readOnlyProject
         readOnlyClient
-        optionsLoad={{
-          // The error is shared by every project dialog; it applies here only while this list is missing.
-          error: dialogClients.length === 0 || dialogMembers.length === 0 ? dialogOptionsError : null,
-          retry: () => setDialogOptionsRefreshKey((value) => value + 1),
-          isLoading: isLoadingDialogOptions,
-        }}
         open={showCreateJob}
         onOpenChange={setShowCreateJob}
         onJobCreated={({ job }) => {
@@ -110,7 +87,7 @@ export function ProjectDetailDialogs({
         }}
         open={showEditDialog}
         onOpenChange={setShowEditDialog}
-        clients={dialogClients}
+        selectedClient={liveClient}
         jobs={liveJobs}
         onSuccess={({ project: nextProject, selectedJobIds }) => {
           setShowEditDialog(false);
@@ -131,7 +108,7 @@ export function ProjectDetailDialogs({
 
       <ProjectDetailClientDialog
         project={project}
-        liveProject={liveProject}
+        liveClient={liveClient}
         setLiveProject={setLiveProject}
         dialogState={dialogState}
       />
@@ -149,18 +126,11 @@ export function ProjectDetailDialogs({
 
 function ProjectDetailClientDialog({
   project,
-  liveProject,
+  liveClient,
   setLiveProject,
   dialogState,
-}: Pick<ProjectDetailDialogsProps, 'project' | 'liveProject' | 'setLiveProject' | 'dialogState'>) {
-  const {
-    showClientDialog,
-    setShowClientDialog,
-    dialogClients,
-    isLoadingDialogOptions,
-    dialogOptionsError,
-    setDialogOptionsRefreshKey,
-  } = dialogState;
+}: Pick<ProjectDetailDialogsProps, 'project' | 'liveClient' | 'setLiveProject' | 'dialogState'>) {
+  const { showClientDialog, setShowClientDialog } = dialogState;
   const [clientSaveError, setClientSaveError] = useState<string | null>(null);
   const { run: runClientUpdateTask, isPending: isUpdatingClient } = usePendingTask();
 
@@ -187,16 +157,10 @@ function ProjectDetailClientDialog({
         setShowClientDialog(open);
         if (!open) setClientSaveError(null);
       }}
-      clients={dialogClients}
-      currentClientId={liveProject.clientId}
+      currentClient={liveClient}
       title="Kunde zum Projekt hinzufügen"
       isSaving={isUpdatingClient}
       saveError={clientSaveError}
-      optionsLoad={{
-        error: dialogClients.length === 0 ? dialogOptionsError : null,
-        retry: () => setDialogOptionsRefreshKey((value) => value + 1),
-        isLoading: isLoadingDialogOptions,
-      }}
       onSave={handleClientSave}
     />
   );
@@ -207,54 +171,34 @@ function ProjectDetailAssignJobsDialog({
   setLiveJobs,
   dialogState,
 }: Pick<ProjectDetailDialogsProps, 'project' | 'setLiveJobs' | 'dialogState'>) {
-  const {
-    showAssignJobsDialog,
-    setShowAssignJobsDialog,
-    dialogAvailableJobs,
-    setDialogAvailableJobs,
-    isLoadingDialogOptions,
-    dialogOptionsError,
-    setDialogOptionsRefreshKey,
-  } = dialogState;
+  const { showAssignJobsDialog, setShowAssignJobsDialog } = dialogState;
   const { run: runAssignJobsTask, isPending: isAssigningJobs } = usePendingTask();
   const [assignJobsError, setAssignJobsError] = useState<string | null>(null);
 
-  const assignableJobs = useMemo(
-    () => dialogAvailableJobs.filter((job) => !job.projectId && job.status !== 'fertig'),
-    [dialogAvailableJobs],
-  );
-
-  const handleAssignJobsSave = async (jobIds: string[]) => {
-    void runAssignJobsTask(async () => {
+  const handleAssignJobsSave = async (jobIds: string[]): Promise<string[]> => {
+    let assignedJobIds: string[] = [];
+    await runAssignJobsTask(async () => {
       setAssignJobsError(null);
       const results = await Promise.allSettled(
         jobIds.map((jobId) => updateJob(jobId, { projectId: project.id })),
       );
-      const assignedJobIds = jobIds.filter((_, index) => {
-        const result = results[index];
-        return result?.status === 'fulfilled' && result.value.success;
-      });
+      // Each saved link returns its job; those rows join the project's list.
+      const assignedJobs = results.flatMap((result) =>
+        result.status === 'fulfilled' && result.value.success ? [result.value.job] : [],
+      );
+      assignedJobIds = assignedJobs.map((job) => job.id);
       setLiveJobs((prev) => {
-        const knownIds = new Set(prev.map((job) => job.id));
-        const promotedJobs = dialogAvailableJobs
-          .filter((job) => assignedJobIds.includes(job.id) && !knownIds.has(job.id))
-          .map((job) => ({
-            ...job,
-            projectId: project.id,
-            clientId: project.clientId ?? job.clientId,
-          }));
-
-        return [...prev, ...promotedJobs];
+        const assignedIds = new Set(assignedJobIds);
+        return [...prev.filter((job) => !assignedIds.has(job.id)), ...assignedJobs];
       });
-      if (assignedJobIds.length !== jobIds.length) {
-        setDialogAvailableJobs((previous) => previous.filter((job) => !assignedJobIds.includes(job.id)));
+      if (assignedJobs.length !== jobIds.length) {
         setAssignJobsError('Einige Aufträge konnten nicht hinzugefügt werden. Bitte versuche es erneut.');
         return;
       }
 
       setShowAssignJobsDialog(false);
-      setDialogAvailableJobs([]);
     });
+    return assignedJobIds;
   };
 
   return (
@@ -264,13 +208,9 @@ function ProjectDetailAssignJobsDialog({
         setShowAssignJobsDialog(open);
         if (!open) setAssignJobsError(null);
       }}
-      jobs={assignableJobs}
       title="Aufträge zum Projekt hinzufügen"
       isSaving={isAssigningJobs}
-      isLoading={isLoadingDialogOptions}
-      loadError={dialogOptionsError}
       saveError={assignJobsError}
-      onRetry={() => setDialogOptionsRefreshKey((value) => value + 1)}
       onSave={handleAssignJobsSave}
     />
   );

@@ -15,6 +15,7 @@ import { Field } from '@/components/ui/field';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { filterByQuery } from '@/lib/ui/search';
 import { WORK_DEPENDENCY_EFFECT_LABELS, type WorkDependencyEffect } from '@/lib/work-lifecycle/types';
 import {
   useWorkLifecycleDependencyForm,
@@ -34,6 +35,7 @@ export function WorkDependencyDialog(props: WorkDependencyDialogProps) {
     setDescription,
     remoteOptions,
     setRemoteOptions,
+    search,
     setSearch,
     error,
     pending,
@@ -87,7 +89,13 @@ export function WorkDependencyDialog(props: WorkDependencyDialogProps) {
               error={attempted ? fieldErrors['dependency-target'] : undefined}
             >
               <SearchableSelect
-                options={remoteOptions ?? snapshot.predecessorOptions[type]}
+                // Below two characters the snapshot's first choices are filtered here; above, the server searches.
+                options={
+                  remoteOptions ??
+                  filterByQuery(snapshot.predecessorOptions[type], search, (option) =>
+                    option.description ? `${option.label} ${option.description}` : option.label,
+                  )
+                }
                 value={predecessor}
                 onChange={setPredecessor}
                 onSearchChange={(value) => {

@@ -46,7 +46,6 @@ interface ProjectDetailContentProps {
   client: Client | null;
   jobs: Job[];
   derivedStatus: DerivedProjectStatus;
-  clients: Client[];
   members: OrgMemberOption[];
   isAdminOrManager: boolean;
   canApproveWorkArtifacts: boolean;
@@ -67,7 +66,7 @@ interface ProjectDetailContentProps {
 
 type ProjectDetailStateOptions = Pick<
   ProjectDetailContentProps,
-  'project' | 'jobs' | 'clients' | 'members' | 'isAdminOrManager' | 'instructionItems'
+  'project' | 'client' | 'jobs' | 'isAdminOrManager' | 'instructionItems'
 >;
 
 // Live state and Realtime wiring of the page. It stays in this file:
@@ -75,8 +74,7 @@ type ProjectDetailStateOptions = Pick<
 function useProjectDetailState({
   project,
   jobs,
-  clients,
-  members,
+  client,
   isAdminOrManager,
   instructionItems,
 }: ProjectDetailStateOptions) {
@@ -91,16 +89,10 @@ function useProjectDetailState({
     if (jobs !== adoptedProps.jobs) setLiveJobs(jobs);
   }
 
-  const dialogState = useProjectDetailDialogState({
-    clients,
-    members,
-    isAdminOrManager,
-  });
+  const dialogState = useProjectDetailDialogState();
 
-  const liveClient = useMemo(
-    () => clients.find((entry) => entry.id === liveProject.clientId) ?? null,
-    [clients, liveProject.clientId],
-  );
+  // The server's customer row; a changed link shows once the save renders the route.
+  const liveClient = client && client.id === liveProject.clientId ? client : null;
 
   const { timeView, projectTimeEntries, projectTimeSummary, isLoadingTime, timeLoadError } =
     useProjectDetailTime(liveProject.id, liveJobs);
@@ -199,7 +191,7 @@ function useProjectDetailState({
 export function ProjectDetailContent({
   project,
   jobs,
-  clients,
+  client,
   members,
   isAdminOrManager,
   canApproveWorkArtifacts,
@@ -236,8 +228,7 @@ export function ProjectDetailContent({
   } = useProjectDetailState({
     project,
     jobs,
-    clients,
-    members,
+    client,
     isAdminOrManager,
     instructionItems,
   });
@@ -365,6 +356,7 @@ export function ProjectDetailContent({
         setLiveProject={setLiveProject}
         setLiveJobs={setLiveJobs}
         dialogState={dialogState}
+        members={members}
       />
     </PageShell>
   );

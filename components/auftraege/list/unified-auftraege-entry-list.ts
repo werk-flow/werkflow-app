@@ -28,5 +28,5 @@ export type UnifiedAuftraegeEntryListProps = {
   memberLookup: Map<string, OrgMemberOption>;
   jobAssignmentMap: Record<string, string[]>;
   jobMenuProps: UnifiedAuftraegeJobMenuProps;
-  projectMenuProps: Omit<UnifiedAuftraegeProjectMenuProps, 'clients'>;
+  projectMenuProps: UnifiedAuftraegeProjectMenuProps;
 };

@@ -1,22 +1,22 @@
 'use client';
 
+import { useRef } from 'react';
+
 import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
 import { SelectWithCreate } from '@/components/ui/select-with-create';
 import type { SearchableSelectOption } from '@/components/ui/searchable-select';
 import { CreateClientDialog } from '@/components/kunden/create-client-dialog';
 import type { Client } from '@/lib/jobs/types';
 
-/**
- * The select only needs identity and display fields, so callers that hold a
- * projected client option (service, maintenance) can use it without
- * fabricating a full `Client`. A created `Client` satisfies it as well.
- */
-type ClientSelectItem = Pick<Client, 'id' | 'name'> & Partial<Pick<Client, 'email'>>;
+/** A customer the page already knows: identity and display fields only. */
+export type ClientSelectItem = Pick<Client, 'id' | 'name'> & Partial<Pick<Client, 'email'>>;
 
 interface ClientSelectWithCreateProps {
-  clients: ClientSelectItem[];
+  /** The selected customer's name the page already holds, shown until the server answers. */
+  selectedClient?: ClientSelectItem | null | undefined;
   value: string;
-  onValueChange: (value: string) => void;
+  /** Hands back the chosen customer's label with its id; `null` for „Kein Kunde“. */
+  onValueChange: (value: string, client: ClientSelectItem | null) => void;
   disabled?: boolean;
   id?: string | undefined;
   readOnly?: boolean | undefined;
@@ -31,8 +31,12 @@ function clientOption(client: ClientSelectItem): SearchableSelectOption {
   };
 }
 
+/**
+ * The customer picker. It searches every customer of the organization on the
+ * server one page at a time and never takes a preloaded list.
+ */
 export function ClientSelectWithCreate({
-  clients,
+  selectedClient,
   value,
   onValueChange,
   disabled,
@@ -40,7 +44,21 @@ export function ClientSelectWithCreate({
   readOnly,
   readOnlyLabel,
 }: ClientSelectWithCreateProps) {
-  const search = useJobEntityOptions({ kind: 'clients' }, value ? [value] : [], clients.map(clientOption));
+  const search = useJobEntityOptions(
+    { kind: 'clients' },
+    value ? [value] : [],
+    selectedClient && selectedClient.id === value ? [clientOption(selectedClient)] : undefined,
+  );
+  // A customer created in the dialog is chosen before any search returns it.
+  const createdRef = useRef<SearchableSelectOption | null>(null);
+
+  const handleValueChange = (nextValue: string) => {
+    const option =
+      search.options.find((entry) => entry.value === nextValue) ??
+      (createdRef.current?.value === nextValue ? createdRef.current : undefined);
+    onValueChange(nextValue, option ? { id: option.value, name: option.label } : null);
+  };
+
   return (
     <SelectWithCreate
       id={id}
@@ -49,9 +67,10 @@ export function ClientSelectWithCreate({
       onSearchChange={search.onSearchChange}
       loading={search.loading}
       loadError={search.loadError}
+      onRetryLoad={search.onRetryLoad}
       onLoadMore={search.onLoadMore}
       value={value}
-      onValueChange={onValueChange}
+      onValueChange={handleValueChange}
       placeholder="Kein Kunde"
       searchPlaceholder="Kunde suchen…"
       emptyMessage="Kein Kunde gefunden"
@@ -65,7 +84,10 @@ export function ClientSelectWithCreate({
         <CreateClientDialog
           open={open}
           onOpenChange={onOpenChange}
-          onClientCreated={(client) => onCreated(clientOption(client))}
+          onClientCreated={(client) => {
+            createdRef.current = clientOption(client);
+            onCreated(createdRef.current);
+          }}
         />
       )}
     />

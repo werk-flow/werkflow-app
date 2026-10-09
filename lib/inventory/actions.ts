@@ -33,7 +33,12 @@ import {
   toInventoryLocation,
   toNumber,
 } from './types';
-import { asRows, loadInventoryOverviewLists, loadInventoryPickerOptions } from './catalog-reads';
+import {
+  asRows,
+  loadActiveInventoryLocations,
+  loadInventoryOverviewLists,
+  loadInventoryPickerOptions,
+} from './catalog-reads';
 import type { SupabaseAdminClient } from './catalog-reads';
 import { logError } from '@/lib/logging';
 import { uuidSchema } from '@/lib/validation/uuid';
@@ -542,15 +547,20 @@ export async function getInventoryOverview(
   };
 }
 
-export async function getInventoryPickerOptions(): Promise<
-  ActionResult<{ items: InventoryPickerOption[]; locations: InventoryLocation[] }>
+/**
+ * The active storage locations for the work-template editor. A company holds
+ * a handful of locations, so they come complete; the material picker searches
+ * the catalog on the server (`'entity-options'`, kind `inventory-items`).
+ */
+export async function getInventoryLocationOptions(): Promise<
+  ActionResult<{ locations: InventoryLocation[] }>
 > {
   const auth = await requireInventoryManager();
   if (!auth.success) return auth;
 
   const admin = createSupabaseAdminClient();
   await ensureInventoryDefaults(admin, auth.context);
-  return loadInventoryPickerOptions(admin, auth.context.orgId, true);
+  return loadActiveInventoryLocations(admin, auth.context.orgId);
 }
 
 /**

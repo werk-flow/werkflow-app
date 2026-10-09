@@ -6,7 +6,7 @@ import { JobInstructionItemsCard } from '@/components/auftraege/instructions/job
 import { BannerProvider } from '@/components/ui/banner';
 import { useLiveAuftraegeData } from '@/hooks/use-live-auftraege-data';
 import { useOptimisticList } from '@/hooks/use-optimistic-list';
-import type { Client, Job, JobInstructionItemWithDetails, ProjectWithDetails } from '@/lib/jobs/types';
+import type { Job, JobInstructionItemWithDetails, ProjectWithDetails } from '@/lib/jobs/types';
 
 export type HydrationFixtureName = 'instruction-hydration' | 'auftraege-hydration';
 
@@ -100,7 +100,6 @@ function InstructionPage(): React.JSX.Element {
 const serverJobs: Job[] = [];
 const serverProjects: ProjectWithDetails[] = [];
 const serverAssignments: Record<string, string[]> = {};
-const serverClients: Client[] = [];
 
 // The Aufträge list's data owner and optimistic overlay, as `AuftraegeContent` composes them.
 function AuftraegeList(): React.JSX.Element {
@@ -108,7 +107,6 @@ function AuftraegeList(): React.JSX.Element {
     initialJobs: serverJobs,
     initialProjects: serverProjects,
     initialJobAssignmentMap: serverAssignments,
-    clients: serverClients,
   });
   const overlay = useOptimisticList({ items: projects, getId: (project) => project.id });
   const [echoed, setEchoed] = useState(false);

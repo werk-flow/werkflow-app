@@ -9,7 +9,7 @@ import { PageActionButton, PageActionProvider } from '@/components/shared/page-a
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { getCachedMemberships, getCachedUser } from '@/lib/data/cached';
-import { getInventoryPickerOptions } from '@/lib/inventory/actions';
+import { getInventoryLocationOptions } from '@/lib/inventory/actions';
 import type { OrgRole } from '@/lib/members/actions';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getQualificationWorkspace } from '@/lib/qualifications/actions';
@@ -20,7 +20,7 @@ async function WorkTemplatesData(): Promise<ReactElement> {
   // Keep them sequential so Partial Prerendering cannot finish one cookie
   // scope while a sibling lookup is still suspended.
   const templatesResult = await getWorkTemplates();
-  const inventoryResult = await getInventoryPickerOptions();
+  const inventoryResult = await getInventoryLocationOptions();
   const qualificationsResult = await getQualificationWorkspace();
   if (!templatesResult.success) {
     if (templatesResult.error === 'not_authorized') redirect('/dashboard');
@@ -28,14 +28,14 @@ async function WorkTemplatesData(): Promise<ReactElement> {
       redirect('/login');
     throw new Error(`Failed to load work templates: ${templatesResult.error}`);
   }
-  if (!inventoryResult.success) throw new Error(`Failed to load inventory options: ${inventoryResult.error}`);
+  if (!inventoryResult.success)
+    throw new Error(`Failed to load inventory locations: ${inventoryResult.error}`);
   if (!qualificationsResult.success)
     throw new Error(`Failed to load qualifications: ${qualificationsResult.error}`);
 
   return (
     <WorkTemplatesContent
       initialTemplates={templatesResult.data}
-      inventoryItems={inventoryResult.items}
       inventoryLocations={inventoryResult.locations}
       capabilities={qualificationsResult.data.capabilities.filter((capability) => !capability.retiredAt)}
     />

@@ -18,7 +18,7 @@ import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { usePendingTask } from '@/hooks/use-server-action';
-import type { InventoryLocation, InventoryPickerOption } from '@/lib/inventory/types';
+import type { InventoryLocation } from '@/lib/inventory/types';
 import type { CapabilityDefinition } from '@/lib/qualifications/types';
 import { formatBerlinDateTime } from '@/lib/utils';
 import {
@@ -39,14 +39,12 @@ import { MaterialsEditor } from './work-template-materials-editor';
 export function TemplateEditorDialog({
   detail,
   onOpenChange,
-  inventoryItems,
   inventoryLocations,
   capabilities,
   onChanged,
 }: {
   detail: WorkTemplateDetail | null;
   onOpenChange: (open: boolean) => void;
-  inventoryItems: InventoryPickerOption[];
   inventoryLocations: InventoryLocation[];
   capabilities: CapabilityDefinition[];
   onChanged: (message: string) => Promise<void>;
@@ -61,14 +59,14 @@ export function TemplateEditorDialog({
   const isPending = isSaving || isPublishing || isCreatingNextDraft;
   const {
     activeDraft,
-    inventoryItemOptions,
+    createdInventoryItems,
     capabilityItemOptions,
     optionBusy,
     patchDraft,
     resetResolvedOptionIds,
     createInventoryItem,
     createCapabilityOption,
-  } = useWorkTemplateEditorOptions({ detail, draft, setDraft, inventoryItems, capabilities });
+  } = useWorkTemplateEditorOptions({ detail, draft, setDraft, capabilities });
   const editable = Boolean(detail?.draftVersionId);
 
   function update(next: WorkTemplateDraft) {
@@ -201,7 +199,7 @@ export function TemplateEditorDialog({
               editable={editable}
               onChange={update}
               onPatch={patchDraft}
-              inventoryItems={inventoryItemOptions}
+              createdItems={createdInventoryItems}
               inventoryLocations={inventoryLocations}
               onCreateItem={createInventoryItem}
               isItemPending={optionBusy.isBusy}

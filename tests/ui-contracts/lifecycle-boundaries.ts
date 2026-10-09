@@ -142,7 +142,6 @@ async function unexpectedLifecycleAction(): Promise<never> {
 }
 
 export const clearProjectWorkExecutionOverride = unexpectedLifecycleAction;
-export const getApprovedArtifactActionsForTarget = unexpectedLifecycleAction;
 export const linkWorkDependencyArtifactApproval = unexpectedLifecycleAction;
 export const parkWorkTarget = unexpectedLifecycleAction;
 export const removeWorkDependency = unexpectedLifecycleAction;

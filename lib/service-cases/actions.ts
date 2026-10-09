@@ -31,7 +31,6 @@ import type {
   ServiceCaseEvidenceInput,
   ServiceCaseEvidenceOption,
   ServiceCaseEvent,
-  ServiceCaseJobOption,
   ServiceCaseMutationResult,
   ServiceCaseRelation,
   ServiceCaseRelationInput,
@@ -439,77 +438,39 @@ export async function getServiceCaseDetailByNumber(rawCaseNumber: string): Promi
   if (!row) return { success: false, error: 'service_case_not_found' };
 
   try {
-    const [
-      listItems,
-      client,
-      eventsResult,
-      relations,
-      evidence,
-      documents,
-      jobsResult,
-      casesResult,
-      contactResult,
-      followUpOwners,
-    ] = await Promise.all([
-      hydrateListItems(context.admin, context.organizationId, [row]),
-      loadClientOption(context.admin, context.organizationId, row.client_id),
-      readCompleteRows(
-        (from, to) =>
-          context.admin
-            .from('service_case_events')
-            .select('*')
-            .eq('organization_id', context.organizationId)
-            .eq('service_case_id', row.id)
-            .order('recorded_at', { ascending: false })
-            .order('id')
-            .range(from, to),
-        LIST_ROW_CAP,
-      ),
-      loadDetailRelations(context.admin, context.organizationId, row.id),
-      loadDetailEvidence(context.admin, context.organizationId, row.id),
-      loadDetailDocuments(context.admin, context.organizationId, row.id),
-      readCompleteRows(
-        (from, to) =>
-          context.admin
-            .from('jobs')
-            .select('id, job_number, title, client_id, site_id')
-            .eq('organization_id', context.organizationId)
-            .eq('client_id', row.client_id)
-            .eq('site_id', row.site_id)
-            .order('created_at', { ascending: false })
-            .order('id')
-            .range(from, to),
-        LIST_ROW_CAP,
-      ),
-      readCompleteRows(
-        (from, to) =>
-          context.admin
-            .from('service_cases')
-            .select('id, case_number, summary')
-            .eq('organization_id', context.organizationId)
-            .eq('client_id', row.client_id)
-            .neq('id', row.id)
-            .order('updated_at', { ascending: false })
-            .order('id')
-            .range(from, to),
-        LIST_ROW_CAP,
-      ),
-      row.contact_id
-        ? context.admin
-            .from('client_contacts')
-            .select('name')
-            .eq('id', row.contact_id)
-            .eq('organization_id', context.organizationId)
-            .maybeSingle()
-        : Promise.resolve({ data: null, error: null }),
-      loadFollowUpOwnerOptions(context.admin, context.organizationId),
-    ]);
-    if (!listItems[0] || eventsResult.error || jobsResult.error || casesResult.error || contactResult.error) {
+    const [listItems, client, eventsResult, relations, evidence, documents, contactResult, followUpOwners] =
+      await Promise.all([
+        hydrateListItems(context.admin, context.organizationId, [row]),
+        loadClientOption(context.admin, context.organizationId, row.client_id),
+        readCompleteRows(
+          (from, to) =>
+            context.admin
+              .from('service_case_events')
+              .select('*')
+              .eq('organization_id', context.organizationId)
+              .eq('service_case_id', row.id)
+              .order('recorded_at', { ascending: false })
+              .order('id')
+              .range(from, to),
+          LIST_ROW_CAP,
+        ),
+        loadDetailRelations(context.admin, context.organizationId, row.id),
+        loadDetailEvidence(context.admin, context.organizationId, row.id),
+        loadDetailDocuments(context.admin, context.organizationId, row.id),
+        row.contact_id
+          ? context.admin
+              .from('client_contacts')
+              .select('name')
+              .eq('id', row.contact_id)
+              .eq('organization_id', context.organizationId)
+              .maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+        loadFollowUpOwnerOptions(context.admin, context.organizationId),
+      ]);
+    if (!listItems[0] || eventsResult.error || contactResult.error) {
       logReadFailure('getServiceCaseDetailByNumber: detail read failed', {
         hydrated: Boolean(listItems[0]),
         events: eventsResult.error?.code,
-        jobs: jobsResult.error?.code,
-        cases: casesResult.error?.code,
         contact: contactResult.error?.code,
       });
       return { success: false, error: 'service_case_load_failed' };
@@ -553,13 +514,6 @@ export async function getServiceCaseDetailByNumber(rawCaseNumber: string): Promi
       evidence,
       documents,
     };
-    const jobs: ServiceCaseJobOption[] = jobsResult.data.map((job) => ({
-      id: job.id,
-      jobNumber: job.job_number,
-      title: job.title,
-      clientId: job.client_id,
-      siteId: job.site_id,
-    }));
     const evidenceOptions = await loadEvidenceOptions(
       context.admin,
       context.organizationId,
@@ -572,12 +526,6 @@ export async function getServiceCaseDetailByNumber(rawCaseNumber: string): Promi
         serviceCase,
         currentActorId: context.actorId,
         client,
-        jobs,
-        relatedCases: casesResult.data.map((relatedCase) => ({
-          id: relatedCase.id,
-          caseNumber: relatedCase.case_number,
-          summary: relatedCase.summary,
-        })),
         evidenceOptions,
         followUpOwners,
       },

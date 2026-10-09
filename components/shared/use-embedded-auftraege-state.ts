@@ -10,7 +10,6 @@ import {
   getEntryUnifiedStatus,
   EMPTY_FILTER_STATE,
   type Job,
-  type Client,
   type ProjectWithDetails,
   type FilterState,
   type SortColumn,
@@ -24,11 +23,8 @@ export type ActiveStatusFilter = 'alle' | 'not_started' | 'in_progress' | 'inter
 interface EmbeddedAuftraegeEntriesInput {
   initialJobs: Job[];
   initialProjects: ProjectWithDetails[];
-  supportProjects: ProjectWithDetails[] | undefined;
   clientMap: Record<string, string>;
   initialJobAssignmentMap: Record<string, string[]>;
-  clients: Client[];
-  allProjectsForJobCreation: ProjectWithDetails[] | undefined;
   hideEmptyProjects: boolean;
   visibleColumns: AuftraegeColumnId[];
 }
@@ -89,17 +85,14 @@ export function useEmbeddedAuftraegeListState() {
 
 export type EmbeddedAuftraegeListState = ReturnType<typeof useEmbeddedAuftraegeListState>;
 
-/** Live entries filtered and sorted per section, plus the project options of the create dialogs. */
+/** Live entries filtered and sorted per section. */
 export function useEmbeddedAuftraegeEntries(
   listState: EmbeddedAuftraegeListState,
   {
     initialJobs,
     initialProjects,
-    supportProjects,
     clientMap,
     initialJobAssignmentMap,
-    clients,
-    allProjectsForJobCreation,
     hideEmptyProjects,
     visibleColumns,
   }: EmbeddedAuftraegeEntriesInput,
@@ -124,12 +117,8 @@ export function useEmbeddedAuftraegeEntries(
     useLiveAuftraegeData({
       initialJobs,
       initialProjects,
-      supportProjects,
       initialJobAssignmentMap,
-      clients,
     });
-
-  const dialogProjectOptions = allProjectsForJobCreation ?? projects;
 
   const unifiedEntries = useMemo(() => {
     const entries = buildUnifiedList(jobs, projects);
@@ -217,7 +206,6 @@ export function useEmbeddedAuftraegeEntries(
   return {
     createDialogOpen,
     setCreateDialogOpen,
-    dialogProjectOptions,
     jobs,
     setJobs,
     setRawProjects,

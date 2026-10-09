@@ -26,7 +26,6 @@ import {
   type RequestCategory,
   type RequestUrgency,
 } from '@/lib/requests/types';
-import type { Client } from '@/lib/jobs/types';
 import { CreateRequestCustomerFields } from './create-request-customer-fields';
 import { CreateRequestFurtherFields } from './create-request-further-fields';
 import { useCreateRequestForm } from './use-create-request-form';
@@ -37,11 +36,10 @@ type RequestAssigneeOption = {
 };
 
 interface CreateRequestDialogProps {
-  clients: Client[];
   assignees: RequestAssigneeOption[];
 }
 
-export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogProps) {
+export function CreateRequestDialog({ assignees }: CreateRequestDialogProps) {
   const form = useCreateRequestForm();
   const {
     open,
@@ -159,7 +157,7 @@ export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogP
               />
             </Field>
 
-            <CreateRequestCustomerFields clients={clients} form={form} />
+            <CreateRequestCustomerFields form={form} />
 
             <CreateRequestFurtherFields assignees={assignees} form={form} />
 

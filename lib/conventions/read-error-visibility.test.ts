@@ -44,10 +44,6 @@ const ALLOWED_BEST_EFFORT: Readonly<Record<string, string>> = {
     'Best effort: the suffix only avoids a duplicate folder name; a duplicate is legal and visible.',
   'lib/time-tracking/open-session-orgs.ts::getOpenSessionOrgsForUserOnDay::orgs':
     'The open sessions themselves are read strictly; only their organization names fall back to „Unbekannte Organisation“.',
-  'lib/time-tracking/picker-actions.ts::getJobIdsPlannedTodayForUser::record':
-    'Ordering hint only: a failure yields no "planned today" highlight rather than a failed picker (documented on the function).',
-  'lib/time-tracking/picker-actions.ts::getJobIdsPlannedTodayForUser::data':
-    'Ordering hint only: a failure yields no "planned today" highlight rather than a failed picker (documented on the function).',
   'lib/time-tracking/actions.ts::getClockJobInfo::projectData':
     'Label of the running clock card: the job row fails closed; a failed project name shows the job without it.',
   'lib/time-tracking/actions.ts::getClockJobInfo::clientData':

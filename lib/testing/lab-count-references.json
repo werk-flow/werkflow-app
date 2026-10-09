@@ -6,7 +6,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "8f7943c1e2874c05337e70aabf9e3b766fd6ef150f326ea52ef95d24faee362e",
+        "measurementDigest": "2fbb4f1e817fa4ca4b15ef76c1ff2e93d72f4ece1e7720617d1da7954f793186",
         "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -123,7 +123,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "edcec1c5deb96a35996e29ae2d99bc0e935c7596656b5f9705b05d7963eb39ce",
+        "measurementDigest": "835c02b82e983531e6c1ceeb1f4093212311ffa798dfef3974fd6c4f0057371d",
         "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -187,7 +187,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "144bb38db7a68542de590a17d081373b626ea99f855b8c7a7f3af5123ad80ea3",
+        "measurementDigest": "cf85df5725df9d68ea0406c86646b5906383388ecd7b398f3cb8a08c7437cffc",
         "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -262,7 +262,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "93f47c089191fdfa83848e846468e66a9ae130f7d859121f7dee8f655a2557e1",
+        "measurementDigest": "91f1fe032a1289d0d33a946bc6392879edb84c9c8d0ee76fe6e933d90d785694",
         "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -325,7 +325,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "347d2f78455f32e0d12e6eb56c73373bb8303fa705e3c4120a38eb4002eb6d81",
+        "measurementDigest": "210d2690647679f657ce1c43ae2718955d89b77e3c7cb723f4a3677ad8a8e64d",
         "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -386,7 +386,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "01c1f121f16038ab6e70cdb627c8f16aa865148fc285c55e17309524adedd87f",
+        "measurementDigest": "e8743deb39f1cce253993ec6704c1124a6fff1932b73851afc98fe02482cf17c",
         "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -437,7 +437,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "347a2818f9202e2d3857086509a89b1303c3e7892aa0fdfc807736db1417c6c4",
+        "measurementDigest": "59d23c068e791f846b8f5d70cbde15493f1aed61ae4f6468439e6c9ff3963765",
         "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -501,7 +501,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "4794bb34950a99ea19fc12f88274b561ccc4a7c7e1fc1090ddb095a1b3c6b7bf",
+        "measurementDigest": "c347dd1973dbe86bc60bbee9a87558da74b6a34a9c3a82ecf70ce8d40bab7bff",
         "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -546,8 +546,8 @@
         },
         "document:/auftraege": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 29146, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 554195, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 27643, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 534131, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": { "reference": 50, "tolerance": 1 }
         },
         "font": {
@@ -564,8 +564,8 @@
         },
         "route:/auftraege": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 16886, "tolerance": { "relative": 0.9455, "absolute": 512 } },
-          "decodedBytes": { "reference": 111238, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 15510, "tolerance": { "relative": 0.9455, "absolute": 512 } },
+          "decodedBytes": { "reference": 93034, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "script": {
@@ -605,6 +605,22 @@
             "2026-10-09T044333153Z-fb1af9"
           ],
           "reason": null
+        },
+        {
+          "kind": "floor-accept",
+          "target": "document:/auftraege",
+          "from": 554195,
+          "to": 534131,
+          "runKeys": ["2026-10-09T115522582Z-43cc06"],
+          "reason": "server search replaced the serialized customer list: the Aufträge list sends only the names of the listed rows' customers"
+        },
+        {
+          "kind": "floor-accept",
+          "target": "route:/auftraege",
+          "from": 111238,
+          "to": 93034,
+          "runKeys": ["2026-10-09T115522582Z-43cc06"],
+          "reason": "server search replaced the serialized customer list: the Aufträge list sends only the names of the listed rows' customers"
         }
       ]
     },
@@ -613,7 +629,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "2fdb347f91b436bcf21cbec0d20a33280610bfe6c2790f2d7bcfde8e136de665",
+        "measurementDigest": "56e6d9808b3fd8ce969d76e397f04bc721da4463d3eac57332ed117b3d55dac5",
         "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -628,7 +644,7 @@
         "echoRenders": { "reference": 0, "tolerance": 0 },
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 3, "tolerance": 0 },
-        "backendRequests": { "reference": 77, "tolerance": 1 },
+        "backendRequests": { "reference": 75, "tolerance": 1 },
         "componentRenders": { "reference": 1523, "tolerance": 31 }
       },
       "payloads": {
@@ -658,8 +674,8 @@
         },
         "route:/auftraege/[jobNumber]": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 40218, "tolerance": { "relative": 0.4698, "absolute": 512 } },
-          "decodedBytes": { "reference": 378518, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 5944, "tolerance": { "relative": 0.4698, "absolute": 512 } },
+          "decodedBytes": { "reference": 14086, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "script": {
@@ -693,6 +709,22 @@
             "2026-10-09T044333153Z-fb1af9"
           ],
           "reason": null
+        },
+        {
+          "kind": "floor-accept",
+          "target": "route:/auftraege/[jobNumber]",
+          "from": 378518,
+          "to": 14086,
+          "runKeys": ["2026-10-09T115522582Z-43cc06"],
+          "reason": "server search replaced the serialized customer list: the job detail no longer serializes every customer of the organization"
+        },
+        {
+          "kind": "ratchet",
+          "target": "backendRequests",
+          "from": 77,
+          "to": 75,
+          "runKeys": ["2026-10-09T115522582Z-43cc06"],
+          "reason": null
         }
       ]
     },
@@ -701,7 +733,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "dc07cd6ffbb876fbd73077e7b563347d31003ffc4b3ef88b37dd2ab0466b216e",
+        "measurementDigest": "5c92562aa0a1fd4ce4e373192a3c1282881d33a4afff5fd75aad9bdd77751526",
         "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -752,7 +784,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "47783cf63639087fec06fc46c8a605e8d3027927604ee52e0559406413edd997",
+        "measurementDigest": "d2f614aeca8d56fe1bb85d5194a91efa22a62477ed37685c35f3c5aba80964c8",
         "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -810,7 +842,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "88b6066a3e5d4c14275922abad37a7a39b5333ac56368b9ba534170457f4a99b",
+        "measurementDigest": "7232aff153f1abf110bf36a737ce8c9480ddd5431691e4fa2912a9977fcbf8af",
         "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -830,8 +862,8 @@
       "payloads": {
         "action:/auftraege": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 18266, "tolerance": { "relative": 1, "absolute": 512 } },
-          "decodedBytes": { "reference": 110803, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 16927, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 92968, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "api:/api/attention-counts": {
@@ -866,13 +898,13 @@
         },
         "route:/auftraege": {
           "requests": { "reference": 2, "tolerance": 0 },
-          "encodedBytes": { "reference": 26557, "tolerance": { "relative": 0.6286, "absolute": 512 } },
-          "decodedBytes": { "reference": 220570, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 25132, "tolerance": { "relative": 0.6286, "absolute": 512 } },
+          "decodedBytes": { "reference": 184900, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "script": {
           "requests": { "reference": 6, "tolerance": 0 },
-          "encodedBytes": { "reference": 107516, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 106378, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         }
@@ -909,6 +941,30 @@
           "to": null,
           "runKeys": ["2026-10-09T065557645Z-4a338c"],
           "reason": "took two values: 36902-37045 in the five calibration runs, 33121 in this run, 33026-37065 across the baseline runs; the two echo renders of the new row sometimes coalesce into one"
+        },
+        {
+          "kind": "floor-accept",
+          "target": "action:/auftraege",
+          "from": 110803,
+          "to": 92968,
+          "runKeys": ["2026-10-09T115522582Z-43cc06"],
+          "reason": "server search replaced the serialized customer list: the list render in the create response carries only the listed rows' customer names"
+        },
+        {
+          "kind": "floor-accept",
+          "target": "route:/auftraege",
+          "from": 220570,
+          "to": 184900,
+          "runKeys": ["2026-10-09T115522582Z-43cc06"],
+          "reason": "server search replaced the serialized customer list: the list render carries only the listed rows' customer names"
+        },
+        {
+          "kind": "floor-accept",
+          "target": "script",
+          "from": 107516,
+          "to": 106378,
+          "runKeys": ["2026-10-09T115522582Z-43cc06"],
+          "reason": "the create dialog and the list lost the props and lookups that carried the customer array"
         }
       ]
     },
@@ -917,7 +973,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "30b8efa910c29ff1c2383208fea5ba386bda65accb9eabfda895c7404ef95787",
+        "measurementDigest": "5f79d527bf5ea4c604e5a9b4e608c8ae48fbd15f7c0b4f8fdb92ac8cb277056d",
         "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -968,7 +1024,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "2577f64d665174bbf00fd619d0b1f5c2e0787aae0c167badc46ad019ab0af481",
+        "measurementDigest": "8dfd9e6d8ca38020b167991ad7035fcf1b48bccae3b762164116ed9f050e5824",
         "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -1053,7 +1109,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "ecee321564e03198b3dd9cfe0f72a3a1d97df717c22221d9eeee5753e1a91030",
+        "measurementDigest": "1565ad50d1ad24e4d3d212ac9a897523106a1f3c902379055c06f4372388dc6e",
         "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -1129,7 +1185,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "094825819483440243beb5a6bfdbb87a091ee18fc9fbd99054ea681065066770",
+        "measurementDigest": "308e23ec12b99abc494fee7a14f187e65db722fc8739fd361d61134381b9a0de",
         "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -1216,7 +1272,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "c71715255634579b2f5a9674191cc3370d85e57c2bf00e9e3a5b17147122ed04",
+        "measurementDigest": "5b8ac564f17010dfdbdaec0ca86f31e30fb1998e51de0cd9a4daaadcde8c0089",
         "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",

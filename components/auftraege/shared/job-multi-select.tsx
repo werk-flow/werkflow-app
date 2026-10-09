@@ -1,40 +1,30 @@
 'use client';
 
-import type { useJobEntityOptions } from '@/hooks/use-job-entity-options';
-import { useMemo } from 'react';
-
-import { SearchableMultiSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
-import { getJobDisplayTitle, type Job } from '@/lib/jobs/types';
+import type { JobEntityOptionsState } from '@/hooks/use-job-entity-options';
+import { SearchableMultiSelect } from '@/components/ui/searchable-select';
 
 interface JobMultiSelectProps {
-  jobs: Job[];
   selectedIds: string[];
   onSelectionChange: (ids: string[]) => void;
   disabled?: boolean;
-  search?: ReturnType<typeof useJobEntityOptions>;
+  /** The server search over the permitted jobs; a preloaded job list is never the option source. */
+  search: JobEntityOptionsState;
 }
 
 export function JobMultiSelect({
-  jobs,
   selectedIds,
   onSelectionChange,
   disabled = false,
   search,
 }: JobMultiSelectProps) {
-  const options: SearchableSelectOption[] = useMemo(
-    () =>
-      jobs.map((j) => ({
-        value: j.id,
-        label: getJobDisplayTitle(j),
-        description: j.jobNumber || undefined,
-      })),
-    [jobs],
-  );
-
   return (
     <SearchableMultiSelect
-      {...search}
-      options={search?.options ?? options}
+      options={search.options}
+      onSearchChange={search.onSearchChange}
+      loading={search.loading}
+      loadError={search.loadError}
+      onRetryLoad={search.onRetryLoad}
+      onLoadMore={search.onLoadMore}
       selectedIds={selectedIds}
       onSelectionChange={onSelectionChange}
       placeholder="Aufträge zuweisen"

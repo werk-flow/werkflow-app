@@ -6,11 +6,8 @@ import { useBanner } from '@/components/ui/banner';
 import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
-import {
-  getTimeCorrectionFormOptions,
-  submitTimeCorrection,
-  type TimeCorrectionFormOptions,
-} from '@/lib/time-corrections/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
+import { submitTimeCorrection, type TimeCorrectionFormOptions } from '@/lib/time-corrections/actions';
 import { TIME_CORRECTION_FAILURE_MESSAGES } from '@/lib/time-corrections/messages';
 import type { TimeCorrectionKind } from '@/lib/time-corrections/types';
 import type { TimeEntry, TimeSegmentKind } from '@/lib/time-tracking/types';
@@ -123,7 +120,8 @@ function useTimeCorrectionDialogSession({
 
   useEffect(() => {
     if (!open) return;
-    let cancelled = false;
+    // Over GET: opening the dialog never queues behind a save.
+    const controller = new AbortController();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- every opening starts from a clean selection while the form options load
     setLoadingOptions(true);
     operationIdRef.current = crypto.randomUUID();
@@ -133,9 +131,9 @@ function useTimeCorrectionDialogSession({
     setTargetEmployeeRecordId('');
     setJobId(entry?.jobId ?? 'none');
 
-    void getTimeCorrectionFormOptions(organizationId)
+    void readInBackground('time-correction-form-options', { organizationId }, controller.signal)
       .then((result) => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         if (!result.success) {
           showBanner({
             variant: 'error',
@@ -153,7 +151,7 @@ function useTimeCorrectionDialogSession({
         setTargetEmployeeRecordId(subjectId);
       })
       .catch(() => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         showBanner({
           variant: 'error',
           message: 'Die Korrekturmaske konnte nicht geladen werden.',
@@ -161,12 +159,10 @@ function useTimeCorrectionDialogSession({
         setOpen(false);
       })
       .finally(() => {
-        if (!cancelled) setLoadingOptions(false);
+        if (!controller.signal.aborted) setLoadingOptions(false);
       });
 
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, [entry, open, organizationId, setOpen, showBanner]);
 
   return {

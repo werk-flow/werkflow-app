@@ -157,7 +157,6 @@ export function ServiceCaseDetailContent({
           onOpenChange={setEditOpen}
           client={workspace.client}
           initial={item}
-          jobs={workspace.jobs}
           onSaved={settleOn('case')}
         />
       )}

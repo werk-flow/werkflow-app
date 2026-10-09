@@ -35,8 +35,8 @@ import {
 import { EquipmentDetailSidebar } from './equipment-detail-sidebar';
 import { EquipmentFormDialog } from './equipment-form-dialog';
 import { EquipmentArchiveDialog, EquipmentCorrectionDialog } from './equipment-reason-confirm-dialogs';
-import { EquipmentSourceDialog, useEquipmentSourceDialog } from './equipment-source-dialog';
-import { EquipmentWorkLinkDialog, type EquipmentWorkTargets } from './equipment-work-link-dialog';
+import { EquipmentSourceDialog } from './equipment-source-dialog';
+import { EquipmentWorkLinkDialog } from './equipment-work-link-dialog';
 import { useEquipmentDetailActions, type EquipmentDetailActions } from './use-equipment-detail-actions';
 
 type EquipmentStateFormProps = {
@@ -138,15 +138,12 @@ type EquipmentDetailContentProps = {
   initial: EquipmentDetail;
   documents: OrganizationDocument[];
   documentsLoadFailed: boolean;
-  /** The customer's jobs and projects; null when that read failed. */
-  work: EquipmentWorkTargets | null;
 };
 
 export function EquipmentDetailContent({
   initial,
   documents,
   documentsLoadFailed,
-  work,
 }: EquipmentDetailContentProps): ReactElement {
   const actions = useEquipmentDetailActions(initial);
   const { busy, live, item, clearReason } = actions;
@@ -156,7 +153,7 @@ export function EquipmentDetailContent({
   const [correctionOpen, setCorrectionOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [workLinkOpen, setWorkLinkOpen] = useState(false);
-  const source = useEquipmentSourceDialog(actions);
+  const [sourceOpen, setSourceOpen] = useState(false);
   const [targetState, setTargetState] = useState<EquipmentState>('inactive');
   const terminalEvent = item.events.find(
     (event) => event.eventType === 'replaced' || event.eventType === 'decommissioned',
@@ -221,7 +218,12 @@ export function EquipmentDetailContent({
               actions.setAttempted(null);
               setWorkLinkOpen(true);
             }}
-            onOpenSource={source.openDialog}
+            onOpenSource={() => {
+              actions.setError(null);
+              actions.setAttempted(null);
+              clearReason();
+              setSourceOpen(true);
+            }}
             onOpenCorrection={() => {
               clearReason();
               setCorrectionOpen(true);
@@ -259,14 +261,9 @@ export function EquipmentDetailContent({
         </DialogContent>
       </Dialog>
 
-      <EquipmentWorkLinkDialog
-        open={workLinkOpen}
-        onOpenChange={setWorkLinkOpen}
-        actions={actions}
-        work={work}
-      />
+      <EquipmentWorkLinkDialog open={workLinkOpen} onOpenChange={setWorkLinkOpen} actions={actions} />
 
-      <EquipmentSourceDialog actions={actions} state={source} />
+      {sourceOpen && <EquipmentSourceDialog open onOpenChange={setSourceOpen} actions={actions} />}
 
       <EquipmentCorrectionDialog
         open={correctionOpen}

@@ -166,7 +166,6 @@ test('no live view reads through a Server Action', () => {
 // change: a read goes through the background-read registry or comes with the
 // server props. The sites below predate the rule; each names its reason, the
 // list only shrinks, and a new site fails.
-const DIALOG_OPTIONS = 'reads the choices of a dialog or picker when the user opens it, beside no save';
 const NEXT_NUMBER = 'suggests the next free record number when the create dialog opens';
 const EFFECT_STARTED_ACTIONS: Readonly<Record<string, string>> = {
   'components/anfragen/use-convert-request-form.ts getNextJobNumber': NEXT_NUMBER,
@@ -175,33 +174,10 @@ const EFFECT_STARTED_ACTIONS: Readonly<Record<string, string>> = {
   'components/auftraege/forms/use-create-job-number.ts getNextJobNumber': NEXT_NUMBER,
   'components/auftraege/forms/use-create-project-form.ts getNextProjectNumber': NEXT_NUMBER,
   'components/mitarbeiter/use-create-personnel-dialog-form.ts suggestPersonnelNumber': NEXT_NUMBER,
-  'components/arbeitsvorlagen/use-apply-work-template.ts getPublishedWorkTemplates': DIALOG_OPTIONS,
-  'components/arbeitsvorlagen/use-apply-work-template.ts getWorkTemplatePreview': DIALOG_OPTIONS,
-  'components/arbeitsvorlagen/work-template-picker.tsx getPublishedWorkTemplates': DIALOG_OPTIONS,
-  'components/auftraege/job-detail/use-job-detail-dialog-options.ts getAuftraegeDialogOptions':
-    DIALOG_OPTIONS,
-  'components/auftraege/lifecycle/work-lifecycle-artifact-approval-dialog.tsx getApprovedArtifactActionsForTarget':
-    DIALOG_OPTIONS,
-  'components/auftraege/project-detail/use-project-detail-dialog-state.ts getAuftraegeDialogOptions':
-    DIALOG_OPTIONS,
-  'components/auftraege/shared/employee-multi-select.tsx getAssignmentTeamOptions': DIALOG_OPTIONS,
-  'components/auftraege/shared/site-contact-fields.tsx getClientRelations': DIALOG_OPTIONS,
-  'components/dokumente/attach-document-dialog.tsx getAttachableDocuments': DIALOG_OPTIONS,
   'components/dokumente/document-viewer-dialog.tsx getDocumentViewSignedUrl':
     'signs the download address of the document the user opened',
-  'components/inventar/use-job-material-dialog.ts getInventoryPickerPage': DIALOG_OPTIONS,
-  'components/inventar/use-job-material-dialog.ts getInventoryPickerOptionsForJob': DIALOG_OPTIONS,
-  'components/kalender/dispatch-issue-dialog.tsx previewDispatchReadiness': DIALOG_OPTIONS,
-  'components/kalender/parking-context-dialog.tsx getParkingResponsibleOptions': DIALOG_OPTIONS,
-  'components/service/maintenance-coverage-documents-dialog.tsx getMaintenanceCoverageDocuments':
-    DIALOG_OPTIONS,
-  'components/service/use-client-option.ts getServiceClientOption': DIALOG_OPTIONS,
-  'components/service/use-maintenance-due-action.ts getMaintenanceEvidenceOptions': DIALOG_OPTIONS,
-  'components/use-manual-entry-form-members.ts getOrgMembersAction': `${DIALOG_OPTIONS}; skipped when the calendar passes its members`,
-  'components/zeiterfassung/use-time-correction-dialog.ts getTimeCorrectionFormOptions': DIALOG_OPTIONS,
   'components/zeiterfassung/use-vacation-section-days-preview.ts previewVacationRequest':
     'previews the vacation days of the dates the user just picked',
-  'hooks/use-job-entity-options.ts searchJobEntityOptions': 'searches as the user types into a picker',
   'components/auftraege/list/use-project-job-page.ts getProjectJobPage':
     'reads the page of a project the user expanded or paged',
   'components/auftraege/artifacts/use-work-artifact-editor.ts getWorkArtifactDetail':

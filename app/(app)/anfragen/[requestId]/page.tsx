@@ -1,5 +1,4 @@
 import { cookies } from 'next/headers';
-import { readOrganizationClients } from '@/lib/clients/server';
 import { notFound, redirect } from 'next/navigation';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -65,7 +64,6 @@ export default async function AnfrageDetailPage({ params }: { params: Promise<{ 
   const [
     { data: requestRow, error: requestError },
     eventsResult,
-    clients,
     assignees,
     documentsResult,
     convertedServiceCaseResult,
@@ -82,7 +80,6 @@ export default async function AnfrageDetailPage({ params }: { params: Promise<{ 
       .eq('request_id', requestId)
       .eq('organization_id', activeOrgId)
       .order('created_at', { ascending: false }),
-    readOrganizationClients(admin, activeOrgId),
     getManagerAssigneeOptions(admin, activeOrgId),
     getRequestDocuments(requestId),
     admin
@@ -241,7 +238,6 @@ export default async function AnfrageDetailPage({ params }: { params: Promise<{ 
           : null,
     documents: documentsResult.success ? documentsResult.documents : null,
     events: eventsResult.error || actorsResult.error ? null : eventEntries,
-    clients,
     assignees: assignees.options,
   };
 

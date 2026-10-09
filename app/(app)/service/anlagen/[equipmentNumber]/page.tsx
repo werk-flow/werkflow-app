@@ -4,7 +4,6 @@ import { EquipmentDetailContent } from '@/components/service/equipment-detail-co
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { getEquipmentDocuments } from '@/lib/documents/actions';
 import { getInstalledEquipmentDetailByNumber } from '@/lib/installed-equipment/actions';
-import { getJobsForClient } from '@/lib/jobs/actions';
 
 type InstalledEquipmentDetailPageProps = {
   params: Promise<{ equipmentNumber: string }>;
@@ -29,16 +28,12 @@ export default async function InstalledEquipmentDetailPage({ params }: Installed
       </RegionLoadError>
     );
   }
-  const [documentsResult, workResult] = await Promise.all([
-    getEquipmentDocuments(detailResult.equipment.id),
-    getJobsForClient(detailResult.equipment.clientId),
-  ]);
+  const documentsResult = await getEquipmentDocuments(detailResult.equipment.id);
   return (
     <EquipmentDetailContent
       initial={detailResult.equipment}
       documents={documentsResult.success ? documentsResult.documents : []}
       documentsLoadFailed={!documentsResult.success}
-      work={workResult.success ? { jobs: workResult.jobs, projects: workResult.projects } : null}
     />
   );
 }

@@ -21,7 +21,8 @@ import { EditJobDialog } from '../forms/edit-job-dialog';
 import { describeFailure } from '@/lib/action-messages';
 import { deleteJob } from '@/lib/jobs/actions';
 import { JOB_DELETE_FAILED_MESSAGE, JOB_DELETE_HISTORY_MESSAGE } from '@/lib/jobs/messages';
-import { getJobDisplayTitle, type Client, type Job, type ProjectWithDetails } from '@/lib/jobs/types';
+import { getJobDisplayTitle, type Job, type ProjectWithDetails } from '@/lib/jobs/types';
+import { knownProjectOption } from '../forms/job-form-options';
 import type { OrgMemberOption } from '../shared/employee-multi-select';
 import { Spinner } from '@/components/ui/spinner';
 
@@ -36,7 +37,8 @@ export function describeJobDeleteError(error: string): string {
 interface JobActionsMenuProps {
   job: Job;
   detailHref: string;
-  clients: Client[];
+  /** The customer name the row shows. */
+  clientName: string;
   members: OrgMemberOption[];
   projects: ProjectWithDetails[];
   onJobUpdated?:
@@ -54,7 +56,7 @@ interface JobActionsMenuProps {
 export function JobActionsMenu({
   job,
   detailHref,
-  clients,
+  clientName,
   members,
   projects,
   onJobUpdated,
@@ -63,6 +65,7 @@ export function JobActionsMenu({
 }: JobActionsMenuProps) {
   const router = useRouter();
   const displayTitle = getJobDisplayTitle(job);
+  const knownProject = projects.find((project) => project.id === job.projectId);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const { run: runDelete, isPending: isDeleting } = usePendingTask();
@@ -175,9 +178,11 @@ export function JobActionsMenu({
         job={job}
         open={showEditDialog}
         onOpenChange={setShowEditDialog}
-        clients={clients}
+        selectedClient={job.clientId ? { id: job.clientId, name: clientName } : null}
         members={members}
-        projects={projects}
+        knownProject={
+          knownProject ? knownProjectOption(knownProject, job.clientId ? clientName : null) : undefined
+        }
         onSuccess={onJobUpdated}
       />
     </>

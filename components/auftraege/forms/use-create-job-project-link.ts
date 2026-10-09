@@ -2,15 +2,14 @@
 
 import { useRef, useState } from 'react';
 
-import type { Client, ProjectWithDetails } from '@/lib/jobs/types';
+import type { JobEntityOption } from '@/lib/jobs/option-types';
 import { getProjectDetails } from '@/lib/projects/actions';
+import type { ClientSelectItem } from '../shared/client-select-with-create';
 import { useJobProjectOptions } from './job-form-options';
 
 type CreateJobProjectLinkOptions = {
-  clients: Client[];
-  projects: ProjectWithDetails[];
-  defaultClientId: string | undefined;
-  defaultProjectId: string | undefined;
+  defaultClient: ClientSelectItem | undefined;
+  defaultProject: JobEntityOption | undefined;
   readOnlyClient: boolean | undefined;
 };
 
@@ -20,37 +19,29 @@ type CreateJobProjectLinkOptions = {
  * what belonged to the previous one.
  */
 export function useCreateJobProjectLink({
-  clients,
-  projects,
-  defaultClientId,
-  defaultProjectId,
+  defaultClient,
+  defaultProject,
   readOnlyClient,
 }: CreateJobProjectLinkOptions) {
-  const [clientId, setClientId] = useState<string>(defaultClientId ?? '');
-  const [projectId, setProjectId] = useState<string>(defaultProjectId ?? '');
-  const selectedProjectRef = useRef(defaultProjectId ?? '');
+  const [clientId, setClientId] = useState<string>(defaultClient?.id ?? '');
+  const [projectId, setProjectId] = useState<string>(defaultProject?.value ?? '');
+  const selectedProjectRef = useRef(defaultProject?.value ?? '');
   const [isLoadingProjectDefaults, setIsLoadingProjectDefaults] = useState(false);
   const [projectDefaultsLoadFailed, setProjectDefaultsLoadFailed] = useState(false);
   // Prefill from the project's default site/contact when creating inside one.
-  const defaultProject = projects.find((project) => project.id === defaultProjectId);
   const [siteId, setSiteId] = useState<string>(defaultProject?.siteId ?? '');
   const [contactId, setContactId] = useState<string>(defaultProject?.contactId ?? '');
 
-  const { projectSearch, projectOptions, activeProjects, projectClientLabel } = useJobProjectOptions({
-    clients,
-    projects,
+  const { projectSearch, findProject, projectClientLabel } = useJobProjectOptions({
     clientId,
     projectId,
+    knownProject: defaultProject,
   });
 
   const isClientLocked = Boolean(readOnlyClient || projectId);
   // A fixed customer without a project shows that customer; a project shows its own.
   const lockedClientLabel =
-    readOnlyClient && !projectId
-      ? clientId
-        ? clients.find((client) => client.id === clientId)?.name
-        : 'Kein Kunde'
-      : projectClientLabel;
+    readOnlyClient && !projectId ? (clientId ? defaultClient?.name : 'Kein Kunde') : projectClientLabel;
 
   const handleClientChange = (newClientId: string) => {
     setProjectDefaultsLoadFailed(false);
@@ -59,13 +50,8 @@ export function useCreateJobProjectLink({
     setSiteId('');
     setContactId('');
     if (projectId) {
-      const selectedProject = activeProjects.find((p) => p.id === projectId);
-      if (
-        selectedProject &&
-        newClientId &&
-        selectedProject.clientId !== newClientId &&
-        selectedProject.clientId !== null
-      ) {
+      const selectedProject = findProject(projectId);
+      if (selectedProject?.clientId && newClientId && selectedProject.clientId !== newClientId) {
         selectedProjectRef.current = '';
         setProjectId('');
       }
@@ -78,7 +64,7 @@ export function useCreateJobProjectLink({
     setProjectId(newProjectId);
     if (newProjectId) {
       setIsLoadingProjectDefaults(true);
-      const selected = activeProjects.find((p) => p.id === newProjectId);
+      const selected = findProject(newProjectId);
       if (selected) {
         if (!readOnlyClient) {
           setClientId(selected.clientId ?? '');
@@ -131,7 +117,6 @@ export function useCreateJobProjectLink({
     isLoadingProjectDefaults,
     projectDefaultsLoadFailed,
     projectSearch,
-    projectOptions,
     isClientLocked,
     lockedClientLabel,
     handleClientChange,

@@ -1,6 +1,6 @@
 import { describeFailure } from '@/lib/action-messages';
 import type { CreateJobInput } from '@/lib/jobs/actions';
-import type { Client, Job, ProjectWithDetails } from '@/lib/jobs/types';
+import type { Job, ProjectWithDetails } from '@/lib/jobs/types';
 import type { CreateProjectInput } from '@/lib/projects/actions';
 
 // Drafts fill the pending row until the server confirms (feedback canon);
@@ -33,11 +33,7 @@ export function buildJobDraft(tempId: string, input: CreateJobInput): Job {
   };
 }
 
-export function buildProjectDraft(
-  tempId: string,
-  input: CreateProjectInput,
-  clients: Client[],
-): ProjectWithDetails {
+export function buildProjectDraft(tempId: string, input: CreateProjectInput): ProjectWithDetails {
   const now = new Date().toISOString();
   return {
     id: tempId,
@@ -57,7 +53,8 @@ export function buildProjectDraft(
     createdBy: '',
     createdAt: now,
     updatedAt: now,
-    client: clients.find((client) => client.id === input.clientId) ?? null,
+    // The row prints the customer from the client map, never from this object.
+    client: null,
     jobCount: 0,
     completedJobCount: 0,
     inProgressJobCount: 0,

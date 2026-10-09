@@ -1153,7 +1153,6 @@ export type TimeCorrectionFormOptions = {
     name: string;
     role: OrgRole;
   }>;
-  jobs: Array<{ id: string; label: string }>;
   currentEmployeeRecordId: string;
 };
 
@@ -1168,46 +1167,31 @@ export async function getTimeCorrectionFormOptions(
   const caller = await getMembershipRole(organizationId);
   if (!caller.success) return caller;
   const admin = createSupabaseAdminClient();
-  // Every open job is selectable: a newest-300 window made older open jobs unreachable.
-  const [
-    { data: employees, error: employeeError },
-    { data: memberships, error: membershipError },
-    { data: jobs, error: jobError },
-  ] = await Promise.all([
-    readCompleteRows(
-      (from, to) =>
-        admin
-          .from('employee_records')
-          .select('id, user_id')
-          .eq('organization_id', organizationId)
-          .not('user_id', 'is', null)
-          .order('id')
-          .range(from, to),
-      LIST_ROW_CAP,
-    ),
-    readCompleteRows(
-      (from, to) =>
-        admin
-          .from('organization_members')
-          .select('user_id, role')
-          .eq('organization_id', organizationId)
-          .order('id')
-          .range(from, to),
-      LIST_ROW_CAP,
-    ),
-    readCompleteRows(
-      (from, to) =>
-        admin
-          .from('jobs')
-          .select('id, title, job_number')
-          .eq('organization_id', organizationId)
-          .neq('status', 'fertig')
-          .order('created_at', { ascending: false })
-          .order('id')
-          .range(from, to),
-      LIST_ROW_CAP,
-    ),
-  ]);
+  // The job picker searches open jobs on the server (`'entity-options'`, purpose `time-correction`).
+  const [{ data: employees, error: employeeError }, { data: memberships, error: membershipError }] =
+    await Promise.all([
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('employee_records')
+            .select('id, user_id')
+            .eq('organization_id', organizationId)
+            .not('user_id', 'is', null)
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('organization_members')
+            .select('user_id, role')
+            .eq('organization_id', organizationId)
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+    ]);
   const userIds = employees.map((employee) => employee.user_id as string);
   const { data: profiles, error: profileError } = await readInBatches(userIds, (batch) =>
     admin
@@ -1215,7 +1199,7 @@ export async function getTimeCorrectionFormOptions(
       .select('id, first_name, last_name, email')
       .in('id', [...batch]),
   );
-  const optionsError = employeeError ?? membershipError ?? jobError ?? profileError;
+  const optionsError = employeeError ?? membershipError ?? profileError;
   if (optionsError) {
     logReadFailure('getTimeCorrectionFormOptions: options failed', optionsError);
     return { success: false, error: 'fetch_failed' };
@@ -1245,10 +1229,6 @@ export async function getTimeCorrectionFormOptions(
     success: true,
     options: {
       people,
-      jobs: jobs.map((job) => ({
-        id: job.id,
-        label: [job.job_number, job.title].filter(Boolean).join(' · '),
-      })),
       currentEmployeeRecordId: current.employeeRecordId,
     },
   };

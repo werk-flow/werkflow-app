@@ -6,19 +6,22 @@ import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
 import { JobMultiSelect } from '../shared/job-multi-select';
-import { ClientSelectWithCreate } from '../shared/client-select-with-create';
+import { ClientSelectWithCreate, type ClientSelectItem } from '../shared/client-select-with-create';
 import { SiteContactFields } from '../shared/site-contact-fields';
-import type { Client } from '@/lib/jobs/types';
 import { WorkTemplatePicker } from '@/components/arbeitsvorlagen/work-template-picker';
 import type { CreateProjectForm } from './use-create-project-form';
 
 type CreateProjectFormFieldsProps = {
   form: CreateProjectForm;
-  clients: Client[];
+  defaultClient: ClientSelectItem | undefined;
   readOnlyClient: boolean | undefined;
 };
 
-export function CreateProjectFormFields({ form, clients, readOnlyClient }: CreateProjectFormFieldsProps) {
+export function CreateProjectFormFields({
+  form,
+  defaultClient,
+  readOnlyClient,
+}: CreateProjectFormFieldsProps) {
   const {
     name,
     setName,
@@ -42,7 +45,6 @@ export function CreateProjectFormFields({ form, clients, readOnlyClient }: Creat
     selectedJobIds,
     setSelectedJobIds,
     jobSearch,
-    unlinkedJobs,
     contentError,
     setContentError,
     showContentError,
@@ -109,7 +111,7 @@ export function CreateProjectFormFields({ form, clients, readOnlyClient }: Creat
 
       <Field label="Kunde" htmlFor="create-project-client">
         <ClientSelectWithCreate
-          clients={clients}
+          selectedClient={defaultClient}
           value={clientId}
           onValueChange={handleClientChange}
           disabled={formDisabled}
@@ -149,15 +151,8 @@ export function CreateProjectFormFields({ form, clients, readOnlyClient }: Creat
         />
       </Field>
 
-      <Field
-        label="Aufträge zuweisen"
-        htmlFor="create-project-jobs"
-        description={
-          unlinkedJobs.length === 0 ? 'Alle Aufträge sind bereits einem Projekt zugeordnet.' : undefined
-        }
-      >
+      <Field label="Aufträge zuweisen" htmlFor="create-project-jobs">
         <JobMultiSelect
-          jobs={unlinkedJobs}
           search={jobSearch}
           selectedIds={selectedJobIds}
           onSelectionChange={setSelectedJobIds}

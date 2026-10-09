@@ -3,31 +3,16 @@
 import { useMemo, useState } from 'react';
 
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
-import { type Client, type Job, type Project, type ProjectWithDetails } from '@/lib/jobs/types';
+import { type Job, type Project, type ProjectWithDetails } from '@/lib/jobs/types';
 
 type JobAssignmentMap = Record<string, string[]>;
 
 type UseLiveAuftraegeDataArgs = {
   initialJobs: Job[];
   initialProjects: ProjectWithDetails[];
-  supportProjects?: ProjectWithDetails[] | undefined;
   initialJobAssignmentMap: JobAssignmentMap;
-  clients: Client[];
   preserveProjectCounts?: boolean;
 };
-
-function mergeProjects(
-  primaryProjects: ProjectWithDetails[],
-  supportProjects: ProjectWithDetails[] = [],
-): Project[] {
-  const merged = new Map<string, Project>();
-
-  for (const project of [...supportProjects, ...primaryProjects]) {
-    merged.set(project.id, stripProjectDetails(project));
-  }
-
-  return Array.from(merged.values());
-}
 
 function stripProjectDetails(project: ProjectWithDetails): Project {
   return {
@@ -51,8 +36,7 @@ function stripProjectDetails(project: ProjectWithDetails): Project {
   };
 }
 
-function deriveProjects(rawProjects: Project[], jobs: Job[], clients: Client[]): ProjectWithDetails[] {
-  const clientLookup = new Map(clients.map((client) => [client.id, client]));
+function deriveProjects(rawProjects: Project[], jobs: Job[]): ProjectWithDetails[] {
   const countsByProject = new Map<
     string,
     {
@@ -90,7 +74,8 @@ function deriveProjects(rawProjects: Project[], jobs: Job[], clients: Client[]):
 
     return {
       ...project,
-      client: project.clientId ? (clientLookup.get(project.clientId) ?? null) : null,
+      // No list view prints this object; the customer name comes from the client map.
+      client: null,
       jobCount: counts.total,
       completedJobCount: counts.completed,
       inProgressJobCount: counts.inProgress,
@@ -102,13 +87,11 @@ function deriveProjects(rawProjects: Project[], jobs: Job[], clients: Client[]):
 export function useLiveAuftraegeData({
   initialJobs,
   initialProjects,
-  supportProjects,
   initialJobAssignmentMap,
-  clients,
   preserveProjectCounts = false,
 }: UseLiveAuftraegeDataArgs) {
   const [jobs, setJobs] = useState<Job[]>(initialJobs);
-  const [rawProjects, setRawProjects] = useState<Project[]>(mergeProjects(initialProjects, supportProjects));
+  const [rawProjects, setRawProjects] = useState<Project[]>(() => initialProjects.map(stripProjectDetails));
   const [jobAssignmentMap, setJobAssignmentMap] = useState<JobAssignmentMap>(initialJobAssignmentMap);
 
   // Server props are the authority for this list: every Realtime change
@@ -127,17 +110,15 @@ export function useLiveAuftraegeData({
   const [adoptedProps, setAdoptedProps] = useState({
     initialJobs,
     initialProjects,
-    supportProjects,
     initialJobAssignmentMap,
   });
   const jobsChanged = initialJobs !== adoptedProps.initialJobs;
-  const projectsChanged =
-    initialProjects !== adoptedProps.initialProjects || supportProjects !== adoptedProps.supportProjects;
+  const projectsChanged = initialProjects !== adoptedProps.initialProjects;
   const assignmentsChanged = initialJobAssignmentMap !== adoptedProps.initialJobAssignmentMap;
   if (jobsChanged || projectsChanged || assignmentsChanged) {
-    setAdoptedProps({ initialJobs, initialProjects, supportProjects, initialJobAssignmentMap });
+    setAdoptedProps({ initialJobs, initialProjects, initialJobAssignmentMap });
     if (jobsChanged) setJobs(initialJobs);
-    if (projectsChanged) setRawProjects(mergeProjects(initialProjects, supportProjects));
+    if (projectsChanged) setRawProjects(initialProjects.map(stripProjectDetails));
     if (assignmentsChanged) setJobAssignmentMap(initialJobAssignmentMap);
   }
 
@@ -155,8 +136,8 @@ export function useLiveAuftraegeData({
             }),
             ...project,
           }))
-        : deriveProjects(rawProjects, jobs, clients),
-    [rawProjects, jobs, clients, preserveProjectCounts, initialProjects],
+        : deriveProjects(rawProjects, jobs),
+    [rawProjects, jobs, preserveProjectCounts, initialProjects],
   );
 
   return {

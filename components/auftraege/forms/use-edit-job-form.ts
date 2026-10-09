@@ -4,7 +4,8 @@ import { usePendingTask } from '@/hooks/use-server-action';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { getJobDetails } from '@/lib/jobs/actions';
 import type { AssignmentEvaluation } from '@/lib/qualifications/types';
-import type { Client, Job, JobPriority, ProjectWithDetails } from '@/lib/jobs/types';
+import type { Job, JobPriority } from '@/lib/jobs/types';
+import type { JobEntityOption } from '@/lib/jobs/option-types';
 import {
   calculatePlannedWorkingMinutes,
   formatMinutesAsHoursInput,
@@ -15,12 +16,11 @@ import { useEditJobClientProjectLink } from './use-edit-job-client-project-link'
 type EditJobFormInput = {
   job: Job;
   open: boolean;
-  clients: Client[];
-  projects: ProjectWithDetails[];
+  knownProject: JobEntityOption | undefined;
 };
 
 /** Draft state of the edit-job dialog: filled from the job each time the dialog opens. */
-export function useEditJobForm({ job, open, clients, projects }: EditJobFormInput) {
+export function useEditJobForm({ job, open, knownProject }: EditJobFormInput) {
   const [jobNumber, setJobNumber] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -111,8 +111,7 @@ export function useEditJobForm({ job, open, clients, projects }: EditJobFormInpu
   const submitDisabled = formDisabled || isLoadingAssignments || assignmentsLoadFailed;
 
   const clientProjectLink = useEditJobClientProjectLink({
-    clients,
-    projects,
+    knownProject,
     clientId,
     projectId,
     setClientId,

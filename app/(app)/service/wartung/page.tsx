@@ -5,7 +5,7 @@ import { MaintenanceContentSkeleton } from '@/components/loading-states/maintena
 import { MaintenanceContent, MaintenanceCreateButtons } from '@/components/service/maintenance-content';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getMaintenanceWorkspace } from '@/lib/maintenance/actions';
+import { getMaintenanceCatalogs, getMaintenanceWorkspace } from '@/lib/maintenance/actions';
 import { parseMaintenanceWorkspaceQuery } from '@/lib/maintenance/workspace-page';
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -17,6 +17,10 @@ const loadMaintenanceWorkspace = cache(
   (search: string, duePage: number, planPage: number, coveragePage: number) =>
     getMaintenanceWorkspace({ search, duePage, planPage, coveragePage }),
 );
+
+// The dialogs' small catalogs (published templates, follow-up owners), read
+// once per request and never by the live refresh of the lists.
+const loadMaintenanceCatalogs = cache(() => getMaintenanceCatalogs());
 
 async function readWorkspace(searchParams: SearchParams) {
   const query = parseMaintenanceWorkspaceQuery(await searchParams);
@@ -63,19 +67,16 @@ export default function MaintenancePage({
 }
 
 async function MaintenanceActions({ searchParams }: { searchParams: SearchParams }) {
-  const { result } = await readWorkspace(searchParams);
-  if (!result.success) return null;
-  return (
-    <MaintenanceCreateButtons
-      clients={result.workspace.clients}
-      templates={result.workspace.templates}
-      coverageOptions={result.workspace.coverageOptions}
-    />
-  );
+  const [{ result }, catalogs] = await Promise.all([readWorkspace(searchParams), loadMaintenanceCatalogs()]);
+  if (!result.success || !catalogs.success) return null;
+  return <MaintenanceCreateButtons templates={catalogs.catalogs.templates} />;
 }
 
 async function MaintenanceWorkspace({ searchParams }: { searchParams: SearchParams }) {
-  const { query, result } = await readWorkspace(searchParams);
+  const [{ query, result }, catalogs] = await Promise.all([
+    readWorkspace(searchParams),
+    loadMaintenanceCatalogs(),
+  ]);
   if (!result.success) {
     if (result.error === 'not_authorized') redirect('/auftraege');
     if (result.error === 'not_authenticated') redirect('/login');
@@ -89,5 +90,8 @@ async function MaintenanceWorkspace({ searchParams }: { searchParams: SearchPara
       </RegionLoadError>
     );
   }
-  return <MaintenanceContent initial={result.workspace} query={query} />;
+  if (!catalogs.success) {
+    return <RegionLoadError>Die Wartungsübersicht konnte nicht geladen werden.</RegionLoadError>;
+  }
+  return <MaintenanceContent initial={result.workspace} catalogs={catalogs.catalogs} query={query} />;
 }
