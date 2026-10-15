@@ -64,10 +64,10 @@ A change is done when its Verify commands pass and its Tier 3 points have a reco
 
 ### 3. Security
 
-- **Good.** The server establishes identity, organization, role and object permission before every protected operation, and a test drives the real action with a foreign id. The migration that creates a table enables RLS, adds policies and grants explicitly. An identity check that cannot complete is a failure, never a sign-out and never access.
+- **Good.** The server establishes identity, organization, role and object permission before every protected operation, and a test drives the real action with a foreign id. A table's migration enables RLS, adds policies and grants explicitly. An identity check that cannot complete is a failure, never a sign-out and never access.
 - **Never.** Restrict only in the UI. Trust an id, an organization or a role that the client sent. Grant to `anon`. Export a helper from a `'use server'` module. Log personal data, codes or provider bodies. Send file bytes through a Server Action. Write to PROD outside a release the owner requested.
-- **Enforced by.** Tier 1: RLS, revoked default grants, `server-only` modules, `lib/org/action-context.ts`, `lib/storage/r2.ts`, `lib/logging.ts`. Tier 2: the tests under `lib/security/`, `lib/conventions/tenant-scope.test.ts`, `lib/conventions/server-action-input.test.ts`, `lib/conventions/zod-entry.test.ts`, the auth-scope, production-ref, `htmlSinkSelectors` and `console` rules in `eslint.config.mjs`, `sql:security`, `sql:closed-period-writes`, `canary:security`, `static:dependencies`, `auth:check`, `advisors:check`.
-- **Defaults (Tier 3).** Whether the permission check is the right one for the operation, and every accepted residual exposure.
+- **Enforced by.** Tier 1: RLS, revoked default grants, `server-only` modules, `lib/org/action-context.ts`, `lib/storage/r2.ts` (storage keys), `lib/logging.ts`. Tier 2: tests under `lib/security/` (`boundary-coverage`, `auth-callback-http`, `rate-limit-inventory` among them), `lib/conventions/tenant-scope.test.ts`, `lib/conventions/server-action-input.test.ts`, `lib/conventions/zod-entry.test.ts`, the auth-scope, production-ref, `htmlSinkSelectors` and `console` rules in `eslint.config.mjs`, `sql:security` (`supabase/tests/client_read_boundaries.sql`), `sql:closed-period-writes`, `canary:security`, `static:dependencies`, `auth:check`, `advisors:check`.
+- **Defaults (Tier 3).** Whether a permission check fits its operation, and every accepted residual exposure.
 - **Verify.** `bun run test:unit`, `bun run test:verify --group sql:security`.
 - **Owner doc.** [Security](docs/technical/security.md). Start from its [How to work](docs/technical/security.md#how-to-work).
 

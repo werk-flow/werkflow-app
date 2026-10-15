@@ -83,7 +83,7 @@ export async function proxy(req: NextRequest) {
   // refresh cannot complete (a thrown failure, or an error that is not one of
   // Auth's rejections), the visitor is not signed out: the request passes, and
   // the layout's identity check shows the failure page instead of a login
-  // redirect (security.md, rule 8). `isRejectedIdentity` is the same
+  // redirect (security.md#trust-boundaries, "Page routing"). `isRejectedIdentity` is the same
   // classification getAuthenticatedUser applies.
   let hasSession = false;
   let authUnavailable = false;

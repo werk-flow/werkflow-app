@@ -82,7 +82,7 @@ const channelSelector = {
 const authListenerSelector = {
   selector: 'CallExpression[callee.property.name="onAuthStateChange"]',
   message:
-    'Auth-state listeners are owned by the Realtime provider. Ad-hoc listeners create duplicate catch-up races (client freshness contract rule 2).',
+    'Auth-state listeners are owned by the Realtime provider. Ad-hoc listeners create duplicate catch-up races (client freshness contract rule 1).',
 };
 const visibilitySelector = {
   selector: 'CallExpression[callee.property.name="addEventListener"][arguments.0.value="visibilitychange"]',
@@ -95,28 +95,28 @@ const focusSelector = {
     'Window-focus catch-up is a Realtime-provider concern (client freshness contract rule 2); for element focus use the React onFocus prop.',
 };
 // Pending state binds to the awaited server call, never a router transition
-// (client freshness contract rule 6).
+// (docs/technical/realtime-and-caching.md#add-a-mutation).
 // useServerAction (hooks/use-server-action.ts) is the sanctioned submit path.
 const asyncTransitionSelectors = [
   {
     selector: 'CallExpression[callee.name="startTransition"] > ArrowFunctionExpression[async=true]',
     message:
-      'Async startTransition callbacks entangle pending state with router transitions. Use useServerAction (hooks/use-server-action.ts) for the server call and keep router.refresh() fire-and-forget (client freshness contract rule 6).',
+      'Async startTransition callbacks entangle pending state with router transitions. Use useServerAction (hooks/use-server-action.ts) for the server call and keep router.refresh() fire-and-forget (docs/technical/realtime-and-caching.md#add-a-mutation).',
   },
   {
     selector: 'CallExpression[callee.name="startTransition"] > FunctionExpression[async=true]',
     message:
-      'Async startTransition callbacks entangle pending state with router transitions. Use useServerAction (hooks/use-server-action.ts) for the server call and keep router.refresh() fire-and-forget (client freshness contract rule 6).',
+      'Async startTransition callbacks entangle pending state with router transitions. Use useServerAction (hooks/use-server-action.ts) for the server call and keep router.refresh() fire-and-forget (docs/technical/realtime-and-caching.md#add-a-mutation).',
   },
   {
     selector: 'CallExpression[callee.property.name="startTransition"] > ArrowFunctionExpression[async=true]',
     message:
-      'Async startTransition callbacks entangle pending state with router transitions. Use useServerAction (hooks/use-server-action.ts) for the server call and keep router.refresh() fire-and-forget (client freshness contract rule 6).',
+      'Async startTransition callbacks entangle pending state with router transitions. Use useServerAction (hooks/use-server-action.ts) for the server call and keep router.refresh() fire-and-forget (docs/technical/realtime-and-caching.md#add-a-mutation).',
   },
   {
     selector: 'CallExpression[callee.property.name="startTransition"] > FunctionExpression[async=true]',
     message:
-      'Async startTransition callbacks entangle pending state with router transitions. Use useServerAction (hooks/use-server-action.ts) for the server call and keep router.refresh() fire-and-forget (client freshness contract rule 6).',
+      'Async startTransition callbacks entangle pending state with router transitions. Use useServerAction (hooks/use-server-action.ts) for the server call and keep router.refresh() fire-and-forget (docs/technical/realtime-and-caching.md#add-a-mutation).',
   },
 ];
 
