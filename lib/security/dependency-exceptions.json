@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "dependencyDigest": "ecb56bf837e6be46b688d557273ccca91f1295c22db603e2829667a375e87977",
+  "dependencyDigest": "e6ecb4ab072f9242aa9d8411a0335598a67e5a5c5275dfe815228b70c58a4bae",
   "exceptions": [
     {
       "package": "braces",
@@ -16,7 +16,8 @@
         "bun audit: eslint-config-next > @next/eslint-plugin-next > fast-glob > micromatch > braces",
         "bun audit: @typescript-eslint/parser > @typescript-eslint/typescript-estree > fast-glob > micromatch > braces",
         "npm registry: 3.0.3 is the latest published version of braces",
-        "Re-reviewed 2026-10-08 after next 16.3.8, sharp 0.35.5, smol-toml 1.9.0 and source-map-js 1.2.2: bun audit shows the same two lint-toolchain paths to braces, and braces 3.0.3 is still the latest published version."
+        "Re-reviewed 2026-10-08 after next 16.3.8, sharp 0.35.5, smol-toml 1.9.0 and source-map-js 1.2.2: bun audit shows the same two lint-toolchain paths to braces, and braces 3.0.3 is still the latest published version.",
+        "Re-reviewed 2026-10-09 after adding @axe-core/playwright 4.11.0 and eslint-plugin-jsx-a11y 6.10.2 as dev dependencies: bun audit shows the same two lint-toolchain paths to braces (neither new package depends on braces), and braces 3.0.3 is still the latest published version."
       ]
     }
   ]

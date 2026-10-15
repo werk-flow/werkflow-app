@@ -22,7 +22,7 @@ export function StatusBadge({
   // Show "Nicht verfügbar" for members the current user can't view
   if (!canViewStatus) {
     return (
-      <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-muted/50 px-2 py-0.5 text-xs font-medium text-muted-foreground/70">
+      <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-muted/50 px-2 py-0.5 text-xs font-medium text-muted-foreground">
         <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
         Nicht verfügbar
       </span>

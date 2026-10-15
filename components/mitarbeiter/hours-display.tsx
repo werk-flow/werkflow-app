@@ -126,11 +126,11 @@ export function HoursDisplay({
       <div className="flex items-center gap-2 min-w-[100px]">
         <Progress
           value={0}
-          aria-label="Tagesfortschritt nicht verfügbar"
+          label="Tagesfortschritt nicht verfügbar"
           className="h-2 flex-1 bg-muted/30"
           indicatorClassName="bg-muted-foreground/30"
         />
-        <span className="text-xs font-medium text-muted-foreground/50 w-8 text-right">—</span>
+        <span className="text-xs font-medium text-muted-foreground w-8 text-right">—</span>
       </div>
     );
   }
@@ -140,7 +140,7 @@ export function HoursDisplay({
       <div className="flex items-center gap-2 min-w-[100px]" title={zeroTargetReason}>
         <Progress
           value={0}
-          aria-label={`Tagesfortschritt: ${zeroTargetReason}`}
+          label={`Tagesfortschritt: ${zeroTargetReason}`}
           className="h-2 flex-1 bg-muted/30"
           indicatorClassName="bg-muted-foreground/30"
         />
@@ -153,7 +153,7 @@ export function HoursDisplay({
     <div className="flex items-center gap-2 min-w-[100px]" title={goalHint}>
       <Progress
         value={percentage}
-        aria-label={`Tagesfortschritt: ${formatPercentage(percentage)}`}
+        label={`Tagesfortschritt: ${formatPercentage(percentage)}`}
         className={cn('h-2 flex-1 bg-muted/50')}
         indicatorClassName={cn(getIndicatorColor(), effectiveStatus === 'working' && 'opacity-80')}
       />
@@ -167,6 +167,7 @@ export function HoursDisplay({
       </span>
       {target?.source === 'default' && (
         <span
+          role="img"
           aria-label="Kein Arbeitszeitmodell hinterlegt"
           className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
         />

@@ -16,6 +16,7 @@ import { TimeBlock } from '@/components/kalender/day-view/time-block';
 import { calculateCalendarWorkBlocks } from '@/lib/time-tracking/calendar-blocks';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import { PageHeader } from '@/components/shared/page-header';
+import { PageBody } from '@/components/shared/page-shell';
 import { LocationsView, type PendingLocationDraft } from '@/components/inventar/inventory-locations-view';
 import type { InventoryLocation } from '@/lib/inventory/types';
 
@@ -54,6 +55,7 @@ function PresentationControls(): React.JSX.Element {
   const [openedBlock, setOpenedBlock] = useState(false);
   const [pendingLocation, setPendingLocation] = useState<PendingLocationDraft | null>(null);
   const [locations, setLocations] = useState<InventoryLocation[]>([]);
+  const [soleControlDisabled, setSoleControlDisabled] = useState(false);
   return (
     <main className="space-y-4 p-6" style={{ paddingTop: 96 }}>
       <section aria-label="Seitenkopf">
@@ -109,6 +111,18 @@ function PresentationControls(): React.JSX.Element {
         <Input />
       </Field>
       <Button onClick={() => setOpen(true)}>Formular öffnen</Button>
+      <section aria-label="Seitenkörper">
+        <Button onClick={() => setSoleControlDisabled((current) => !current)}>Knopf umschalten</Button>
+        <div style={{ height: 160, display: 'flex', flexDirection: 'column' }}>
+          <PageBody>
+            <div hidden>
+              <Button>Versteckter Knopf</Button>
+            </div>
+            <Button disabled={soleControlDisabled}>Einziger Knopf</Button>
+            <div style={{ height: 600 }} />
+          </PageBody>
+        </div>
+      </section>
       <section aria-label="Kurze Fahrt" className="relative" style={{ height: 64 }}>
         {shortBlock && (
           <TimeBlock

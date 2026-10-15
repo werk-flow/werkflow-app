@@ -107,7 +107,7 @@ export function ParkConfirmationDialog({
           <AlertDialogDescription asChild>
             <div className="space-y-2">
               <p>{description}</p>
-              <p className="text-destructive/80 font-medium">{warningText}</p>
+              <p className="font-medium text-destructive">{warningText}</p>
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>

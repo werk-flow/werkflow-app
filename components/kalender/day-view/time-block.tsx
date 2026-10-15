@@ -9,14 +9,8 @@ import { formatDuration } from '@/lib/time-tracking/helpers';
 import type { EntryChangeRequestMap } from '@/lib/time-tracking/types';
 import { TIME_ACTIVITY_LABELS } from '@/lib/time-tracking/types';
 import { DAY_MIN_ITEM_WIDTH } from '@/lib/calendar/day-layout';
+import type { TimeBlockSegment } from '@/lib/calendar/day-rows';
 import { formatMinutesOfDay } from '@/lib/calendar/drag-math';
-
-export type TimeBlockSegment = {
-  id: string;
-  type: 'work' | 'break';
-  startMinutes: number;
-  endMinutes: number;
-};
 
 export type TimeBlockProps = {
   block: CalendarWorkBlock;

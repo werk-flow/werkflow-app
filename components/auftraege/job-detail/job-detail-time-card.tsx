@@ -71,7 +71,7 @@ function JobDetailTimeProgress({ totalMinutes, progressTargetMinutes }: JobDetai
           {Math.round((totalMinutes / progressTargetMinutes) * 100)}%
         </p>
       </div>
-      <Progress value={progressPercentage} />
+      <Progress value={progressPercentage} label="Erfasste Zeit gegenüber dem geplanten Aufwand" />
       {overrunMinutes > 0 && (
         <p className="mt-2 text-xs text-warning-text">
           {formatDurationOrDash(overrunMinutes)} über dem geplanten Arbeitsaufwand
@@ -139,7 +139,7 @@ function JobDetailSessionTimeline({
       </PlainButton>
 
       {showAllSessions && (
-        <div className="mt-2 max-h-64 divide-y overflow-auto rounded-md border">
+        <div className="mt-2 max-h-64 divide-y overflow-y-auto rounded-md border">
           {allSessions.map((session) => {
             if (!session.clockIn) return null;
 

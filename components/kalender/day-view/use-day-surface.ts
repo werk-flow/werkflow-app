@@ -4,7 +4,8 @@ import { useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import { indexAtOffset } from '@/lib/calendar/drag-math';
 import { dayMinutesAtPoint, edgeResizedSpan } from '@/lib/calendar/day-drag-geometry';
 import { DAY_NAME_COLUMN_PX, MIN_ITEM_MINUTES } from '@/lib/calendar/day-layout';
-import type { CalendarBoardDay, CalendarBoardRow } from '@/lib/calendar/board';
+import type { CalendarBoardDay } from '@/lib/calendar/board';
+import { dayRowFor, dayRowKey, type DayRowModel } from '@/lib/calendar/day-rows';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { JobParkingContext } from '@/lib/parking/types';
 import type { DragSurface } from '../drag-engine/drag-engine';
@@ -15,17 +16,8 @@ import type {
   DragVerdict,
 } from '../drag-engine/payload';
 import type { CalendarMutations } from '../mutations/use-calendar-mutations';
-import { UNASSIGNED_USER } from '../board/types';
 import { applyDayDrop } from './day-surface-drop';
-import { dayTargetVerdict, jobSpanMinutes, payloadDuration, rowFor } from './day-surface-rules';
-
-export type DayRowModel = {
-  userId: string;
-  name: string;
-  row: CalendarBoardRow | null;
-  /** Recorded blocks of the person, as instants, for the overlap check. */
-  blocks: Array<{ id: string; startMs: number; endMs: number }>;
-};
+import { dayTargetVerdict, jobSpanMinutes, payloadDuration } from './day-surface-rules';
 
 type SlotMap = {
   rowStarts: number[];
@@ -110,8 +102,6 @@ export function useDaySurface(input: DaySurfaceInput): DragSurface {
       if (!row) return null;
       // The origin is the real time edge for a resize, or the card's start for a move.
       // A minimum visual width must never add minutes to a short block's resize.
-      const isEdge =
-        payload.kind === 'resizeJob' || payload.kind === 'resizeBlock' || payload.kind === 'barEdge';
       const minutes = dayMinutesAtPoint({
         x: payload.kind === 'barEdge' ? point.x : origin.x,
         scrollDelta: dx,
@@ -121,11 +111,13 @@ export function useDaySurface(input: DaySurfaceInput): DragSurface {
       });
       // An edge drag stays on its own row, the unassigned one included.
       const targetRow =
-        isEdge && payload.kind !== 'barEdge' ? (rowFor(map.rows, payload.sourceUserId) ?? row) : row;
+        payload.kind === 'resizeJob' || payload.kind === 'resizeBlock'
+          ? (dayRowFor(map.rows, payload.sourceRowKey) ?? row)
+          : row;
       return {
         kind: 'cell',
         employeeRecordId: targetRow.row?.employeeRecordId ?? null,
-        userId: targetRow.userId === UNASSIGNED_USER ? null : targetRow.userId,
+        userId: targetRow.userId,
         date: dateIso,
         minutes,
       };
@@ -149,8 +141,8 @@ export function useDaySurface(input: DaySurfaceInput): DragSurface {
         highlight.hidden = true;
         return;
       }
-      const targetRowKey = target.userId ?? UNASSIGNED_USER;
-      const rowIndex = map.rows.findIndex((row) => row.userId === targetRowKey);
+      const targetRowKey = dayRowKey(target);
+      const rowIndex = map.rows.findIndex((row) => row.key === targetRowKey);
       if (rowIndex < 0) {
         highlight.hidden = true;
         return;

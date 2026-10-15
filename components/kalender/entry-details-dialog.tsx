@@ -14,6 +14,8 @@ import {
 } from '@/components/ui/dialog';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
+import { useClosedTimePeriods } from '@/components/zeiterfassung/use-closed-time-periods';
+import { SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import type { WorkSession } from '@/lib/time-tracking/types';
 import type { OrgRole } from '@/lib/members/actions';
 import {
@@ -67,15 +69,19 @@ export function EntryDetailsDialog({
     jobName,
   });
   const editFormId = useId();
-  const draft = useEntryDetailsDraft({ open, startInEditMode, snapshot });
+  const closedPeriods = useClosedTimePeriods(snapshot.entryOrganizationId, open);
+  const { canEdit, canApprove, pendingEntries, hasPendingEntry, inClosedPeriod } = getEntryDetailsPermissions(
+    {
+      snapshot,
+      currentUserRole,
+      currentUserId,
+      entryUserRole,
+      closedPeriods,
+    },
+  );
+  const draft = useEntryDetailsDraft({ open, startInEditMode: startInEditMode && canEdit, snapshot });
   const { isEditing, handleStartEdit, handleCancelEdit } = draft;
   const breaks = useEntryDetailsDisplayedBreaks(snapshot, draft);
-  const { canEdit, canApprove, pendingEntries, hasPendingEntry } = getEntryDetailsPermissions({
-    snapshot,
-    currentUserRole,
-    currentUserId,
-    entryUserRole,
-  });
 
   const commandContext: EntryDetailsCommandContext = {
     runAction,
@@ -91,6 +97,7 @@ export function EntryDetailsDialog({
       snapshot,
       draft,
       displayedBreaks: breaks.displayedBreaks,
+      closedPeriods,
     });
   const handleDelete = () => deleteEntryDetailsBlock(commandContext, snapshot);
   const handleReview = (decision: 'approved' | 'rejected') =>
@@ -121,6 +128,9 @@ export function EntryDetailsDialog({
         </DialogHeader>
 
         <DialogBody className="space-y-4">
+          {inClosedPeriod && (
+            <p className="text-sm text-muted-foreground">{SHARED_FAILURE_MESSAGES.period_closed}</p>
+          )}
           {isEditing ? (
             <form
               id={editFormId}

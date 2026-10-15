@@ -104,7 +104,7 @@ export function testData(parts: TemplateStringsArray, ...values: Array<string | 
 }
 
 /** The job's employee assignment dialog, named by its heading. */
-function employeeAssignmentDialog(page: Page): Locator {
+export function employeeAssignmentDialog(page: Page): Locator {
   return page.getByRole('dialog').filter({
     has: employeeAssignmentHeading(page),
   });
@@ -115,9 +115,19 @@ export function employeeAssignmentHeading(scope: Page | Locator): Locator {
   return scope.getByRole('heading', { name: SHARED_COPY.assignment.assignEmployee });
 }
 
+/** The job detail's „Zuweisen“ action that opens the assignment dialog. */
+export function employeeAssignmentButton(page: Page): Locator {
+  return page.getByRole('button', { name: SHARED_COPY.assignment.assign, exact: true });
+}
+
+/** The assignment dialog's save, which raises the qualification warning before anything is written. */
+export function employeeAssignmentSave(dialog: Locator): Locator {
+  return dialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true });
+}
+
 /** Opens the assignment dialog from the job detail's „Zuweisen“ action. */
 export async function openEmployeeAssignmentDialog(page: Page): Promise<Locator> {
-  await page.getByRole('button', { name: SHARED_COPY.assignment.assign, exact: true }).click();
+  await employeeAssignmentButton(page).click();
   return employeeAssignmentDialog(page);
 }
 
@@ -187,6 +197,11 @@ export function jobPickerSearch(page: Page): Locator {
 }
 
 /** The page header of the open page (title, breadcrumb, actions, area navigation). */
+/** An in-page tab (the registry `Tabs`) by its stable value, as the tab inventory names it. */
+export function inPageTab(scope: Page | Locator, value: string): Locator {
+  return scope.locator(`[data-slot="tabs-trigger"][data-value="${value}"]`);
+}
+
 export function pageHeader(page: Page): Locator {
   return page.getByRole('main').locator('[data-page-header]');
 }
@@ -248,6 +263,19 @@ export function detailsRegion(scope: Page | Locator): Locator {
  */
 export function metadataField(section: Locator, label: string): Locator {
   return section.getByRole('group', { name: label, exact: true });
+}
+
+/** Copy of the shared MetadataSection (components/shared/metadata-section.tsx). */
+const METADATA_COPY = { discardTitle: 'Ungespeicherte Änderungen verwerfen?' } as const;
+
+/** The pencil that opens the editor of one MetadataSection row („Name bearbeiten“). */
+export function metadataEditButton(section: Locator, label: string): Locator {
+  return metadataField(section, label).getByRole('button', { name: `${label} bearbeiten`, exact: true });
+}
+
+/** The confirmation a MetadataSection asks before another row's editor replaces unsaved changes. */
+export function metadataDiscardConfirmation(page: Page): Locator {
+  return page.getByRole('alertdialog', { name: METADATA_COPY.discardTitle, exact: true });
 }
 
 /** The pagination navigation of one list; each list names its pager. */

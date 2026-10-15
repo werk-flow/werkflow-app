@@ -31,15 +31,10 @@ export function StarterTimePolicyForm({ today }: { today: string }) {
         : 'Die Standardversion ist gespeichert.',
   });
   return (
-    <form
-      onSubmit={handleSubmit}
-      onKeyDown={handleKeyDown}
-      className="space-y-2"
-      aria-label="Zeitregel anlegen"
-    >
+    <form onSubmit={handleSubmit} className="space-y-2" aria-label="Zeitregel anlegen">
       <div className="flex flex-wrap items-end gap-3">
         <Field label="Name" htmlFor="time-policy-name" required>
-          <Input name="name" defaultValue="Standard-Arbeitszeit" required />
+          <Input name="name" defaultValue="Standard-Arbeitszeit" onKeyDown={handleKeyDown} required />
         </Field>
         <Field label="Gültig ab" htmlFor="time-policy-effective-from" required>
           <TimeAccountDateField name="effectiveFrom" initialValue={today} ariaLabel="Gültig ab" />

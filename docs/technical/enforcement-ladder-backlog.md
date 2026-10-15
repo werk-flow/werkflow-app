@@ -8,13 +8,14 @@ This list holds the open candidates for moving a prose rule or a known gap up th
 
 | Candidate | Gap today | Target tier and mechanism |
 | --- | --- | --- |
-| Dialog imports outside the wrapper | A product file can import `@radix-ui/react-dialog` or `@radix-ui/react-alert-dialog` directly and skip the refresh suspension that the `components/ui` wrappers own. | Tier 2: an import ban outside `components/ui/**` in `eslint.config.mjs`. |
-| Width audit beyond the default view | `audit:layout` measures 375, 768, 1024, 1280 and 1680 px on the default view of each manager route and detail page and on the warehouse cards. Other tabs and open dialogs are not measured at any width, and any region that scrolls sideways counts as its own region, whether or not the design canon names it. | Tier 2: a registered list of tabs per route that the audit opens before it measures, and a named set of approved scroll regions, in `tests/audit/layout/mobile-viewport.spec.ts`. |
-| Raw `Button` in `AlertDialogFooter` | The `werkflow-design` skill forbids it. No check rejects it. | Tier 2: a selector in `eslint-rules/ui-rules.mjs`. |
-| Accessibility lint and axe sweep | ESLint runs only the accessibility rules that Next ships. No browser pass checks rendered pages. | Tier 2: enable `jsx-a11y/recommended` and add one `@axe-core/playwright` pass per role. |
-| Actions the server will refuse | A view can offer an action that the server rejects. The calendar asks `isStartedOccurrence` first, but no check pairs a client action with its server rule. | Tier 2: a table of pre-checks per action kind that a unit test reads against the views. |
-| Client read failure without a retry | A client hook that loads options or a section can render its failure as `ErrorText`, or as a stale notice, without a retry, so the user must reload the page or reopen the dialog. A registry picker that shows a load failure passes `onRetryLoad` (`lib/conventions/entity-pickers.test.ts`); no check covers sections and other client hooks. | Tier 1: one client-read hook that returns the data, the failure and a retry, rendered through `SectionError` with `onRetry`. Tier 2: a convention test that flags a load-failure state rendered through `ErrorText`. |
-| Day view rows for personnel records without a login | The day view builds its rows from members with a login. A visit for a personnel record without a login lists under „Ohne Zuweisung“. | Tier 1: key the day rows by employee record like the board. Tier 2: an audit step that plans a visit for such a record and finds it in that person's row. |
+| Calendar approvals by the responsibility holder | The calendar's entry details offer approval and block moves by role (`canManageBlock`, `canApproveEntries`), while the server asks the `time_approval` holder. `lib/ui/action-prechecks.ts` marks these rows reviewed, so a manager who is not the holder can start an approval the server refuses. | Tier 2: the calendar reads the holder through the approval read model and the pre-check table pairs the views with `canHolderApproveTarget`. |
+| Phone paths of desktop-only dialog openers | Some dialogs of `lib/testing/selection/dialog-inventory.ts` open from a table row menu, the board or the day timeline (`opensOn: 'desktop'` in `tests/audit/support/dialog-openers/`). At 375 px the audit opens them on the desktop and narrows the window, so the phone's own path (a card menu, the day list) is not driven. | Tier 2: an opener per phone path in the area modules, audited at 375 px. |
+
+## Performance and immediate feedback
+
+| Candidate | Gap today | Target tier and mechanism |
+| --- | --- | --- |
+| Effect-started reads behind `useClientRead` | `lib/conventions/live-view-reads.test.ts` lists Server Action reads that start from an effect (`useClientRead` counts as an effect start): they wait in the Server Action queue behind saves. | Tier 2: move each to a kind in `lib/data/background-reads.ts` until the list is empty. |
 
 ## Security
 
@@ -31,7 +32,6 @@ This list holds the open candidates for moving a prose rule or a known gap up th
 
 | Candidate | Gap today | Target tier and mechanism |
 | --- | --- | --- |
-| Visual acceptance evidence | A slice record can cite a capture that shows a connection or readiness error. | Tier 2: validate the capture metadata and success before a record cites it. The design judgment stays Tier 3. |
 | Locators of the performance specs | The locator-ownership rules cover `tests/audit/performance/**`. The measured tests still keep copy in their locators: PERF-02 in `calendar.spec.ts`, PERF-L2 in `lists.spec.ts`, PERF-F2 in `field.spec.ts` and the test in `planning-benchmark.spec.ts`. Their code is a measurement-digest input, so each sits inside an `eslint-disable` block that names its scenarios and gives the reason. Each changes only in the run that recalibrates its references. | Tier 2: in that run, move the test's copy into its area module and remove its disable block. |
 | Classification of a repaired group | `bun run test:runs classify` refuses a group whose latest attempt passed, and a `ui:contracts` attempt inside a verification run has no run manifest, so a failure that was repaired before it was classified leaves no incident row and no classification. | Tier 2: `classify` accepts the report id and group of a past failed attempt, reads its log, and records the row. |
 

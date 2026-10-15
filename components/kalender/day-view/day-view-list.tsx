@@ -15,7 +15,7 @@ import {
 import type { CalendarSurfaceActions } from '../board/types';
 import { CalendarCard } from '../surface/calendar-card';
 import { useClock } from '../surface/use-now-tick';
-import type { DayRow } from './use-day-rows';
+import type { DayRow } from '@/lib/calendar/day-rows';
 
 /** The day on a phone: one section per person with the untimed visits first, then the day in time order. */
 export function DayViewList({
@@ -47,7 +47,7 @@ export function DayViewList({
     >
       {headerLabel && <p className="text-sm text-muted-foreground">{headerLabel}</p>}
       {rows.map(({ model, boardDay, items, untimed }) => (
-        <section key={model.userId} aria-label={model.name} className="space-y-2">
+        <section key={model.key} aria-label={model.name} className="space-y-2">
           {actions.isManager && <h3 className="break-words text-sm font-medium">{model.name}</h3>}
           {dayRowLabel(boardDay) && <p className="text-sm text-muted-foreground">{dayRowLabel(boardDay)}</p>}
           {untimed.map((job) => (

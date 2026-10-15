@@ -121,8 +121,7 @@ export function EquipmentWorkLinkDialog({
                   options={workSearch.options}
                   onSearchChange={workSearch.onSearchChange}
                   loading={workSearch.loading}
-                  loadError={workSearch.loadError}
-                  onRetryLoad={workSearch.onRetryLoad}
+                  loadFailure={workSearch.loadFailure}
                   onLoadMore={workSearch.onLoadMore}
                   placeholder="Auswählen"
                   searchPlaceholder={workTargetType === 'job' ? 'Auftrag suchen…' : 'Projekt suchen…'}

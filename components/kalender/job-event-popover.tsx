@@ -132,6 +132,8 @@ function CardPopover({
         collisionPadding={16}
         className="w-80 max-w-[calc(100vw-1.5rem)] p-4 shadow-xl"
         data-job-popover=""
+        // A dialog opened from inside (the planning warning after a move) returns focus to the card.
+        data-focus-return={card.anchor.dataset.focusKey}
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           (event.currentTarget as HTMLElement).querySelector<HTMLElement>('button, a')?.focus();

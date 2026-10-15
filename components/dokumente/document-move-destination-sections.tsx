@@ -167,7 +167,8 @@ export function MoveDestinationDocumentRow({
     <div
       className={cn(
         'grid grid-cols-[minmax(0,1fr)] items-center px-4 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_140px_160px]',
-        isSelected ? 'bg-muted/70 text-muted-foreground opacity-60' : 'text-muted-foreground',
+        // The documents being moved keep full contrast; the row tint marks them.
+        isSelected ? 'bg-muted/70 text-muted-foreground' : 'text-muted-foreground',
       )}
       onDoubleClick={() => onOpenDocument(document)}
     >

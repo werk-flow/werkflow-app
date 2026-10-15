@@ -154,6 +154,68 @@ export function organizationSwitcher(page: Page, organizationName: string): Loca
   return page.getByRole('combobox').filter({ hasText: organizationName });
 }
 
+/** Organization and profile dialogs as the rendered audit opens them, by trigger and title. */
+const ORGANIZATION_DIALOG_COPY = {
+  createTitle: 'Neue Organisation erstellen',
+  deleteOrganization: 'Organisation löschen',
+  avatarUpload: /^Profilbild (hochladen|ändern)$/,
+  avatarTitle: 'Profilbild anpassen',
+} as const;
+
+/** A one-pixel PNG, the smallest image the avatar crop dialog accepts. */
+const AVATAR_PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+/** The switcher action of an admin: „Organisation erstellen“. */
+export function createOrganizationButton(page: Page): Locator {
+  return page.getByRole('button', { name: ORGANIZATION_COPY.createOrganization, exact: true });
+}
+
+export function createOrganizationDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: ORGANIZATION_DIALOG_COPY.createTitle, exact: true });
+}
+
+/** The switcher action of a member without an admin membership: „Organisation beitreten“. */
+export function joinOrganizationButton(page: Page): Locator {
+  return page.getByRole('button', { name: ORGANIZATION_COPY.joinOrganization, exact: true });
+}
+
+export function joinOrganizationDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: ORGANIZATION_COPY.joinOrganization, exact: true });
+}
+
+/** The admin's delete action on the organization settings; its confirmation shares the name. */
+export function deleteOrganizationButton(page: Page): Locator {
+  return page.getByRole('button', { name: ORGANIZATION_DIALOG_COPY.deleteOrganization, exact: true });
+}
+
+export function deleteOrganizationConfirmation(page: Page): Locator {
+  return page.getByRole('alertdialog', { name: ORGANIZATION_DIALOG_COPY.deleteOrganization, exact: true });
+}
+
+/** The profile settings action that opens the file chooser for a new avatar. */
+export function profileAvatarUploadButton(page: Page): Locator {
+  return page.getByRole('button', { name: ORGANIZATION_DIALOG_COPY.avatarUpload });
+}
+
+export function profileAvatarDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: ORGANIZATION_DIALOG_COPY.avatarTitle, exact: true });
+}
+
+/**
+ * Answers the next file chooser of the page with a small PNG, so activating
+ * the avatar upload button opens the crop dialog as a chosen file does.
+ */
+export function answerNextFileChooserWithAvatar(page: Page): void {
+  page.once('filechooser', (chooser) => {
+    void chooser.setFiles({
+      name: 'profilbild.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(AVATAR_PNG_BASE64, 'base64'),
+    });
+  });
+}
+
 /** Opens the join dialog from the dashboard and returns it. */
 export async function openJoinOrganizationDialog(page: Page): Promise<Locator> {
   const dialog = page.getByRole('dialog');

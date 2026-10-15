@@ -122,7 +122,7 @@ export function ParkplatzPanel({
                 {job.jobNumber && (
                   <Link
                     href={`/auftraege/${job.jobNumber}`}
-                    className="absolute right-2 top-2 rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+                    className="absolute right-2 top-2 rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
                     title="Auftragsdetails öffnen"
                     aria-label={`Auftragsdetails für ${job.title} öffnen`}
                   >

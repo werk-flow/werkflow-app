@@ -154,7 +154,6 @@ export function useCommunicationContactGuard({ clientId }: { clientId: string })
               }}
               placeholder="Warum ist dieser Kontakt im konkreten Fall erforderlich?"
               maxLength={1000}
-              autoFocus
             />
           </Field>
         </div>

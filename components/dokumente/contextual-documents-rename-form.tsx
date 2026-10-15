@@ -42,7 +42,6 @@ export function ContextualDocumentsRenameForm({
             value={value}
             onChange={(event) => onValueChange(event.target.value)}
             placeholder="Dateiname"
-            autoFocus
           />
         </Field>
       </DialogBody>

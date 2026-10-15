@@ -185,10 +185,10 @@ export function DayView(props: DayViewProps): React.JSX.Element {
       <div role="rowgroup" className="relative flex flex-1 flex-col">
         {rows.map((row) => (
           <DayTimelineRow
-            key={row.model.userId}
+            key={row.model.key}
             {...timeline}
             row={row}
-            highlighted={highlightMemberId === row.model.userId}
+            highlighted={highlightMemberId !== null && highlightMemberId === row.model.userId}
           />
         ))}
         {rows.length === 0 && (

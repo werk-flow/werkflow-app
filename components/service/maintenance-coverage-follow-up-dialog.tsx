@@ -106,12 +106,7 @@ export function MaintenanceCoverageFollowUpDialog({
         >
           <p className="rounded-md bg-muted px-3 py-2 text-sm">Quelle: {coverage.coverageNumber}</p>
           <Field label="Titel" htmlFor="coverage-follow-up-title" required error={titleError}>
-            <Input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              maxLength={160}
-              autoFocus
-            />
+            <Input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={160} />
           </Field>
           <Field label="Zuständig" htmlFor="coverage-follow-up-owner" required error={ownerError}>
             <SearchableSelect

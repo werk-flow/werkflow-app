@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -74,81 +75,83 @@ export function StockAdjustmentDialog({
             onSave();
           }}
           noValidate
-          className="space-y-4"
+          className="flex min-h-0 flex-1 flex-col gap-4"
         >
-          {state && (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label id="inventory-stock-action-label">Aktion</Label>
-                <div
-                  className="grid grid-cols-2 gap-2"
-                  role="group"
-                  aria-labelledby="inventory-stock-action-label"
-                >
-                  <Button
-                    type="button"
-                    variant={state.direction === 'add' ? 'default' : 'outline'}
-                    onClick={() => setState({ ...state, direction: 'add' })}
+          <DialogBody className="space-y-4">
+            {state && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label id="inventory-stock-action-label">Aktion</Label>
+                  <div
+                    className="grid grid-cols-2 gap-2"
+                    role="group"
+                    aria-labelledby="inventory-stock-action-label"
                   >
-                    Hinzufügen
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={state.direction === 'remove' ? 'default' : 'outline'}
-                    onClick={() => setState({ ...state, direction: 'remove' })}
-                  >
-                    Entnehmen
-                  </Button>
+                    <Button
+                      type="button"
+                      variant={state.direction === 'add' ? 'default' : 'outline'}
+                      onClick={() => setState({ ...state, direction: 'add' })}
+                    >
+                      Hinzufügen
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={state.direction === 'remove' ? 'default' : 'outline'}
+                      onClick={() => setState({ ...state, direction: 'remove' })}
+                    >
+                      Entnehmen
+                    </Button>
+                  </div>
                 </div>
+                <Field label="Lager" htmlFor="inventory-stock-location" required error={locationError}>
+                  <LocationSelectWithCreate
+                    locations={locations}
+                    value={state.locationId}
+                    onValueChange={(value) => setState({ ...state, locationId: value })}
+                    placeholder="Lager wählen oder erstellen"
+                  />
+                </Field>
+                <Field
+                  label={`Menge (${getInventoryUnitLabel(state.item.unit)})`}
+                  htmlFor="inventory-stock-quantity"
+                  required
+                  error={quantityError}
+                >
+                  <QuantityStepper
+                    value={state.quantity}
+                    onChange={(value) => setState({ ...state, quantity: value })}
+                    unitLabel={getInventoryUnitLabel(state.item.unit)}
+                    min={0}
+                  />
+                </Field>
+                <Field label="Grund" htmlFor="inventory-stock-reason">
+                  <Textarea
+                    value={state.reason}
+                    onChange={(event) => setState({ ...state, reason: event.target.value })}
+                  />
+                </Field>
+                <p
+                  className={cn(
+                    'rounded-md px-3 py-2 text-sm',
+                    state.direction === 'add'
+                      ? 'bg-success-soft text-success-soft-foreground'
+                      : 'bg-destructive-soft text-destructive-soft-foreground',
+                  )}
+                >
+                  {state.direction === 'add'
+                    ? `Diese Aktion fügt ${formatInventoryQuantity(
+                        quantity,
+                        state.item.unit,
+                      )} ${selectedLocation ? `zu ${selectedLocation.name}` : 'zum Inventar'} hinzu.`
+                    : `Diese Aktion zieht ${formatInventoryQuantity(
+                        quantity,
+                        state.item.unit,
+                      )} ${selectedLocation ? `aus ${selectedLocation.name}` : 'aus dem Inventar'} ab.`}
+                </p>
               </div>
-              <Field label="Lager" htmlFor="inventory-stock-location" required error={locationError}>
-                <LocationSelectWithCreate
-                  locations={locations}
-                  value={state.locationId}
-                  onValueChange={(value) => setState({ ...state, locationId: value })}
-                  placeholder="Lager wählen oder erstellen"
-                />
-              </Field>
-              <Field
-                label={`Menge (${getInventoryUnitLabel(state.item.unit)})`}
-                htmlFor="inventory-stock-quantity"
-                required
-                error={quantityError}
-              >
-                <QuantityStepper
-                  value={state.quantity}
-                  onChange={(value) => setState({ ...state, quantity: value })}
-                  unitLabel={getInventoryUnitLabel(state.item.unit)}
-                  min={0}
-                />
-              </Field>
-              <Field label="Grund" htmlFor="inventory-stock-reason">
-                <Textarea
-                  value={state.reason}
-                  onChange={(event) => setState({ ...state, reason: event.target.value })}
-                />
-              </Field>
-              <p
-                className={cn(
-                  'rounded-md px-3 py-2 text-sm',
-                  state.direction === 'add'
-                    ? 'bg-success-soft text-success-soft-foreground'
-                    : 'bg-destructive-soft text-destructive-soft-foreground',
-                )}
-              >
-                {state.direction === 'add'
-                  ? `Diese Aktion fügt ${formatInventoryQuantity(
-                      quantity,
-                      state.item.unit,
-                    )} ${selectedLocation ? `zu ${selectedLocation.name}` : 'zum Inventar'} hinzu.`
-                  : `Diese Aktion zieht ${formatInventoryQuantity(
-                      quantity,
-                      state.item.unit,
-                    )} ${selectedLocation ? `aus ${selectedLocation.name}` : 'aus dem Inventar'} ab.`}
-              </p>
-            </div>
-          )}
-          <ErrorText>{error}</ErrorText>
+            )}
+            <ErrorText>{error}</ErrorText>
+          </DialogBody>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setState(null)} disabled={isSaving}>
               Abbrechen

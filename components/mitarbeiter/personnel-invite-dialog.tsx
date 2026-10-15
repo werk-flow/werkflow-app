@@ -108,7 +108,7 @@ export function PersonnelInviteDialog({ recordId, personName }: PersonnelInviteD
           Zugang einladen
         </Button>
       </DialogTrigger>
-      <DialogContent size="md" onOpenAutoFocus={(e) => e.preventDefault()}>
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Zugang für {personName} einladen</DialogTitle>
           <DialogDescription>

@@ -11,6 +11,7 @@ import { calendarRefusalMessage, formatRefusalDate } from '@/lib/calendar/messag
 import { shiftedBlockUpdates } from '@/lib/calendar/day-layout';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { JobParkingContext } from '@/lib/parking/types';
+import { isDateInClosedPeriod, type ClosedTimePeriod } from '@/lib/time-tracking/closed-period-dates';
 import type { DragSurface } from '../drag-engine/drag-engine';
 import type { CalendarDragPayload, CalendarDragTarget, DragVerdict } from '../drag-engine/payload';
 import type { CalendarMutations } from '../mutations/use-calendar-mutations';
@@ -36,6 +37,8 @@ export type MonthSurfaceInput = {
   onPark: (job: CalendarJob) => void;
   /** Recorded blocks per user and date, as instants, for the overlap check. */
   blocksByUserDate: ReadonlyMap<string, Array<{ id: string; startMs: number; endMs: number }>>;
+  /** A recorded block cannot move onto a day of a closed period. */
+  closedPeriods: readonly ClosedTimePeriod[];
   nowMs: () => number;
 };
 
@@ -110,7 +113,7 @@ export function useMonthSurface(input: MonthSurfaceInput): DragSurface {
   );
 
   const checkTarget = useCallback((target: CalendarDragTarget, payload: CalendarDragPayload): DragVerdict => {
-    const { blocksByUserDate, nowMs, parkingContexts } = inputRef.current;
+    const { blocksByUserDate, closedPeriods, nowMs, parkingContexts } = inputRef.current;
     if (payload.kind === 'parked' && target.kind !== 'zone') {
       const parked = checkParkedContext(parkingContexts, payload.job);
       if (!parked.ok) return { ok: false, message: parked.message };
@@ -133,6 +136,8 @@ export function useMonthSurface(input: MonthSurfaceInput): DragSurface {
         const { session } = payload;
         if (!session.clockIn || !session.clockOut)
           return { ok: false, message: 'Offene Arbeitszeit lässt sich nicht verschieben.' };
+        if (isDateInClosedPeriod(target.date, closedPeriods))
+          return { ok: false, message: calendarRefusalMessage('period_closed') ?? '' };
         const delta = dayDelta(payload.sourceDate, target.date) * 86_400_000;
         const startMs = new Date(session.clockIn.timestamp).getTime() + delta;
         const endMs = new Date(session.clockOut.timestamp).getTime() + delta;

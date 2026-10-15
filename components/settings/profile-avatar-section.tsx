@@ -133,7 +133,8 @@ export function ProfileAvatarSection() {
         }}
         pending={isUploading}
       >
-        <DialogContent size="2xl">
+        {/* The crop area becomes focusable only once the image has loaded. */}
+        <DialogContent size="2xl" initialFocus="dialog">
           <DialogHeader>
             <DialogTitle>Profilbild anpassen</DialogTitle>
             <DialogDescription>

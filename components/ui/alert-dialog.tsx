@@ -7,6 +7,7 @@ import * as AlertDialogPrimitive from '@radix-ui/react-alert-dialog';
 import { cn } from '@/lib/utils';
 import { buttonVariants } from '@/components/ui/button';
 import { RegisterOpenDialog } from '@/components/ui/open-dialog-context';
+import { useReturnFocus } from '@/components/ui/return-focus';
 
 /** True while the confirmation's request runs; see `AlertDialog`'s `pending`. */
 const AlertDialogPendingContext = React.createContext(false);
@@ -64,9 +65,12 @@ function AlertDialogContent({
   className,
   children,
   onEscapeKeyDown,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Content>) {
   const pending = React.useContext(AlertDialogPendingContext);
+  const returnFocus = useReturnFocus({ onOpenAutoFocus, onCloseAutoFocus });
   return (
     <AlertDialogPortal>
       <AlertDialogOverlay />
@@ -77,6 +81,7 @@ function AlertDialogContent({
           className,
         )}
         {...props}
+        {...returnFocus}
         // The refused dismissal is observable: assistive technology and the
         // browser tests' settle step wait on it instead of on time.
         aria-busy={pending || undefined}
@@ -119,7 +124,8 @@ function AlertDialogTitle({ className, ...props }: React.ComponentProps<typeof A
   return (
     <AlertDialogPrimitive.Title
       data-slot="alert-dialog-title"
-      className={cn('text-lg font-semibold', className)}
+      // An e-mail address or a record number is one long word; it wraps instead of widening the layer.
+      className={cn('text-lg font-semibold wrap-anywhere', className)}
       {...props}
     />
   );
@@ -132,7 +138,7 @@ function AlertDialogDescription({
   return (
     <AlertDialogPrimitive.Description
       data-slot="alert-dialog-description"
-      className={cn('text-muted-foreground text-sm', className)}
+      className={cn('text-muted-foreground text-sm wrap-anywhere', className)}
       {...props}
     />
   );
@@ -144,7 +150,13 @@ function AlertDialogAction({
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Action> &
   Pick<VariantProps<typeof buttonVariants>, 'variant'>) {
-  return <AlertDialogPrimitive.Action className={cn(buttonVariants({ variant }), className)} {...props} />;
+  return (
+    <AlertDialogPrimitive.Action
+      data-slot="alert-dialog-action"
+      className={cn(buttonVariants({ variant }), className)}
+      {...props}
+    />
+  );
 }
 
 function AlertDialogCancel({
@@ -155,6 +167,7 @@ function AlertDialogCancel({
   const pending = React.useContext(AlertDialogPendingContext);
   return (
     <AlertDialogPrimitive.Cancel
+      data-slot="alert-dialog-cancel"
       className={cn(buttonVariants({ variant: 'outline' }), className)}
       disabled={pending || disabled}
       {...props}

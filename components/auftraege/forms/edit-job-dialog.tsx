@@ -72,7 +72,7 @@ export function EditJobDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange} pending={isLoading}>
-        <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Auftrag bearbeiten</DialogTitle>
             <DialogDescription>Ändere die Daten des Auftrags.</DialogDescription>

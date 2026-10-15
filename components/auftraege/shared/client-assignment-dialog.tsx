@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
+import { Field } from '@/components/ui/field';
 import { ClientSelectWithCreate, type ClientSelectItem } from './client-select-with-create';
 
 interface ClientAssignmentDialogProps {
@@ -50,12 +51,14 @@ export function ClientAssignmentDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          <ClientSelectWithCreate
-            selectedClient={currentClient}
-            value={selectedClientId}
-            onValueChange={setSelectedClientId}
-            disabled={isSaving}
-          />
+          <Field label="Kunde">
+            <ClientSelectWithCreate
+              selectedClient={currentClient}
+              value={selectedClientId}
+              onValueChange={setSelectedClientId}
+              disabled={isSaving}
+            />
+          </Field>
 
           <ErrorText>{saveError}</ErrorText>
 

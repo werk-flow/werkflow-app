@@ -10,13 +10,13 @@ import type { OrgRole } from '@/lib/members/actions';
 import type { OrganizationTimeTrackingSettings } from '@/lib/time-tracking/settings';
 import type { EntryChangeRequestMap, InteractiveCalendarSession } from '@/lib/time-tracking/types';
 import { cn } from '@/lib/utils';
-import { UNASSIGNED_USER, type CalendarSurfaceActions } from '../board/types';
+import type { DayRow } from '@/lib/calendar/day-rows';
+import type { CalendarSurfaceActions } from '../board/types';
 import type { useCalendarDrag } from '../drag-engine/drag-engine';
 import { CalendarCard } from '../surface/calendar-card';
 import { CALENDAR_LAYER_CLASS } from '../surface/layers';
 import { DayLaneItem } from './day-lane-item';
 import type { useDayCreateDrag } from './use-day-create-drag';
-import type { DayRow } from './use-day-rows';
 
 /** What every row of the day timeline shares: the axis, the caller's rights and the gesture entry points. */
 export type DayTimelineProps = {
@@ -54,7 +54,8 @@ export function DayTimelineRow(
   return (
     <div
       role="row"
-      data-day-row={model.userId}
+      data-day-row={model.key}
+      data-day-row-user={model.userId ?? undefined}
       aria-label={model.name}
       className={cn('group/row flex flex-1', highlighted && 'animate-row-highlight')}
       style={{ minHeight: height, maxHeight: Math.max(height, DAY_LANE_HEIGHT * 3) }}
@@ -69,12 +70,13 @@ export function DayTimelineRow(
       >
         <span className="flex min-w-0 items-center gap-1">
           <span className="min-w-0 truncate text-sm font-medium">{model.name}</span>
-          {canCreate && model.userId !== UNASSIGNED_USER && (
+          {/* The button presets its person, which the entry dialog takes as a login. */}
+          {canCreate && model.userId !== null && (
             <PlainButton
               type="button"
               className="ml-auto rounded-md p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/row:opacity-100"
               aria-label={`Termin am ${formatRefusalDate(dateIso)} für ${model.name} planen`}
-              onClick={() => actions.onAddEntry({ date: dateIso, userId: model.userId })}
+              onClick={() => actions.onAddEntry({ date: dateIso, userId: model.userId ?? undefined })}
             >
               <Plus className="size-3.5" aria-hidden="true" />
             </PlainButton>

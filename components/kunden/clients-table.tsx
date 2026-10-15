@@ -7,7 +7,7 @@ import { Building2 } from 'lucide-react';
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { InlinePending } from '@/components/ui/inline-pending';
-import { ListRow } from '@/components/ui/list-row';
+import { ListRow, ListRowActions } from '@/components/ui/list-row';
 import { PendingRow } from '@/components/ui/pending-row';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SkeletonList, SkeletonRows, type SkeletonColumn } from '@/components/ui/skeleton-table';
@@ -117,7 +117,7 @@ function ClientContactLine({ client }: { client: Client }) {
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
       {client.email && <span className="truncate">{client.email}</span>}
-      {client.email && client.phone && <span className="text-muted-foreground/60">&middot;</span>}
+      {client.email && client.phone && <span className="text-muted-foreground">&middot;</span>}
       {client.phone && <span>{client.phone}</span>}
       {!client.email && !client.phone && <span>&mdash;</span>}
     </div>
@@ -176,9 +176,9 @@ function ClientCard({
         </div>
         <ClientContactLine client={client} />
       </div>
-      <div onClick={(e) => e.stopPropagation()}>
+      <ListRowActions>
         <ClientActionsMenu client={client} isBusy={isBusy} onSaved={onSaved} onDelete={onDelete} />
-      </div>
+      </ListRowActions>
     </ListRow>
   );
 }

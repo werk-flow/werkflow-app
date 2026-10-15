@@ -17,17 +17,8 @@ import type {
   DragModifiers,
   DragVerdict,
 } from '../drag-engine/payload';
-import { UNASSIGNED_USER } from '../board/types';
+import { dayRowFor, dayRowKey } from '@/lib/calendar/day-rows';
 import type { DaySurfaceInput } from './use-day-surface';
-
-/** The row of a target user id; null addresses the „Ohne Zuweisung" row. */
-export function rowFor<Row extends { userId: string }>(
-  rows: readonly Row[],
-  userId: string | null,
-): Row | null {
-  const key = userId ?? UNASSIGNED_USER;
-  return rows.find((candidate) => candidate.userId === key) ?? null;
-}
 
 export function payloadDuration(payload: CalendarDragPayload): number {
   switch (payload.kind) {
@@ -70,7 +61,7 @@ export function dayTargetVerdict(
     return { ok: false, message: calendarRefusalMessage('only_occurrences_park') ?? '' };
   }
   const minutes = target.minutes ?? 0;
-  const row = rowFor(rows, target.userId);
+  const row = dayRowFor(rows, dayRowKey(target));
   const name = row?.name ?? 'Ohne Zuweisung';
   const day = dayFor(days, target.employeeRecordId, target.date);
   const timeLabel = (start: number, end: number) =>

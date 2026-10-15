@@ -235,7 +235,11 @@ export function UnifiedAuftraegeProjectRowCells({
               {getProjectStatusLabel(project)}
             </Badge>
             <div className="flex items-center gap-1.5">
-              <Progress value={progress} className="h-1.5 w-12" />
+              <Progress
+                value={progress}
+                label={`Erledigte Aufträge des Projekts: ${project.completedJobCount} von ${project.jobCount}`}
+                className="h-1.5 w-12"
+              />
               <span className="text-[10px] tabular-nums text-muted-foreground">
                 {project.completedJobCount}/{project.jobCount}
               </span>

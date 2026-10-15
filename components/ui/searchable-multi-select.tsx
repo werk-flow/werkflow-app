@@ -42,8 +42,7 @@ export function SearchableMultiSelect({
   renderOption,
   onSearchChange,
   loading = false,
-  loadError,
-  onRetryLoad,
+  loadFailure,
   onLoadMore,
   allowNone = false,
   noneLabel = 'Auswahl leeren',
@@ -104,8 +103,7 @@ export function SearchableMultiSelect({
         field={field}
         action={action}
         loading={loading}
-        loadError={loadError}
-        onRetryLoad={onRetryLoad}
+        loadFailure={loadFailure}
         onLoadMore={onLoadMore}
         multiselectable
         beforeList={

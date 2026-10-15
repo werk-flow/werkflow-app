@@ -105,6 +105,8 @@ export const TIME_ENTRY_COPY = {
   to: SHARED_COPY.field.rangeEnd,
   refreshEntries: 'Einträge aktualisieren',
   approveEntry: 'Genehmigen - Eintrag bleibt erhalten',
+  approveAll: 'Alle genehmigen',
+  approveAllConfirmation: 'Alle Zeiteinträge genehmigen?',
   entryApproved: 'Der Zeiteintrag wurde genehmigt.',
   correctionReviewHeading: 'Zeitkorrekturen prüfen',
   responsibilityExpired:
@@ -429,6 +431,31 @@ export function clockInConfirmationButton(page: Page): Locator {
   return clockSheet(page, false).getByRole('button', { name: CLOCK_COPY.startWork, exact: true });
 }
 
+/** The sheet of next actions that the stopped clock opens („Zeiterfassung starten“). */
+export function clockStartSheet(page: Page): Locator {
+  return page.getByRole('dialog', { name: CLOCK_COPY.start, exact: true });
+}
+
+/** The stopped clock sheet's action that opens the job picker („Arbeit an Auftrag …“). */
+export function clockSheetJobAction(sheet: Locator): Locator {
+  return sheet.getByRole('button', { name: CLOCK_COPY.workOnJob, exact: true });
+}
+
+/** The sheet's action that opens the full activity dialog („Weitere Aktivitäten …“). */
+export function clockSheetMoreActivities(sheet: Locator): Locator {
+  return sheet.getByRole('button', { name: CLOCK_COPY.moreActivities, exact: true });
+}
+
+/** The job picker in its clock-in mode („Einstempeln“). */
+export function clockInJobPicker(page: Page): Locator {
+  return page.getByRole('dialog', { name: CLOCK_COPY.clockIn, exact: true });
+}
+
+/** The full activity dialog of a stopped clock („Aktivität wählen“). */
+export function chooseActivityDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: CLOCK_COPY.chooseActivity, exact: true });
+}
+
 // ---------------------------------------------------------------------------
 // Manual entries
 
@@ -442,6 +469,11 @@ export function manualEntryHeaderButton(page: Page): Locator {
 /** The manual entry action wherever /zeiterfassung renders it. */
 export function manualEntryButton(page: Page): Locator {
   return page.getByRole('button', { name: TIME_ENTRY_COPY.manualEntry });
+}
+
+/** The open manual entry dialog, named by its title. */
+export function manualEntryDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: TIME_ENTRY_COPY.manualEntry, exact: true });
 }
 
 /** Types the date, the clock-in and the clock-out time of an open manual entry dialog. */
@@ -562,6 +594,16 @@ export async function openTimeApprovals(page: Page): Promise<void> {
   await expect(pendingApprovalsPanel(page)).toHaveAttribute('data-loaded', 'true', {
     timeout: 30_000,
   });
+}
+
+/** The approvals panel's „Alle genehmigen“ action; it shows with more than one pending submission. */
+export function approveAllTimeEntriesButton(page: Page): Locator {
+  return pendingApprovalsPanel(page).getByRole('button', { name: TIME_ENTRY_COPY.approveAll, exact: true });
+}
+
+/** The confirmation that „Alle genehmigen“ opens. */
+export function approveAllTimeEntriesConfirmation(page: Page): Locator {
+  return page.getByRole('alertdialog', { name: TIME_ENTRY_COPY.approveAllConfirmation, exact: true });
 }
 
 export async function expectTimeApprovalsUnavailable(page: Page): Promise<void> {

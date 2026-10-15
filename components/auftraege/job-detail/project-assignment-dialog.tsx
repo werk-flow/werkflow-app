@@ -83,8 +83,7 @@ export function ProjectAssignmentDialog({
               options={projectSearch.options}
               onSearchChange={projectSearch.onSearchChange}
               loading={projectSearch.loading}
-              loadError={projectSearch.loadError}
-              onRetryLoad={projectSearch.onRetryLoad}
+              loadFailure={projectSearch.loadFailure}
               onLoadMore={projectSearch.onLoadMore}
               value={selectedProjectId}
               onChange={setSelectedProjectId}

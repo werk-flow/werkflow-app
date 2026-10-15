@@ -5,8 +5,8 @@ import { FileDown, UserRoundCheck } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
-import { ErrorText } from '@/components/ui/error-text';
 import { InlinePending } from '@/components/ui/inline-pending';
+import { SectionError } from '@/components/ui/section-error';
 import { ACCESS_STATE_LABELS, EMPLOYMENT_LIFECYCLE_LABELS } from '@/lib/personnel/lifecycle';
 
 import { formatLifecycleDate } from './personnel-lifecycle-dates';
@@ -43,20 +43,10 @@ export function PersonnelLifecycleHeader({ lifecycle, canAdministerAccess }: Per
 
       <InlinePending active={view.isRefreshing} label="Personalprozess wird aktualisiert" />
       {view.isStale ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <ErrorText>
-            Der Personalprozess konnte nicht aktualisiert werden. Der zuletzt geladene Stand bleibt sichtbar.
-            Bitte lade die Ansicht erneut.
-          </ErrorText>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => void view.refresh()}
-            disabled={view.isRefreshing}
-          >
-            Erneut laden
-          </Button>
-        </div>
+        <SectionError onRetry={() => void view.refresh()} retryPending={view.isRefreshing}>
+          Der Personalprozess konnte nicht aktualisiert werden. Der zuletzt geladene Stand bleibt sichtbar.
+          Bitte lade die Ansicht erneut.
+        </SectionError>
       ) : null}
     </>
   );

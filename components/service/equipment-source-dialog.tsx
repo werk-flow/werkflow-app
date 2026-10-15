@@ -168,8 +168,7 @@ export function EquipmentSourceDialog({
                     onChange={setExactValue}
                     options={exact.options}
                     loading={exact.loading}
-                    loadError={exact.error}
-                    onRetryLoad={exact.error ? exact.retry : undefined}
+                    loadFailure={exact.loadFailure}
                     placeholder="Dokument auswählen"
                     searchPlaceholder="Dokument suchen…"
                     emptyMessage="Noch keine Dokumente verknüpft"
@@ -192,8 +191,7 @@ export function EquipmentSourceDialog({
                       options={workSearch.options}
                       onSearchChange={workSearch.onSearchChange}
                       loading={workSearch.loading}
-                      loadError={workSearch.loadError}
-                      onRetryLoad={workSearch.onRetryLoad}
+                      loadFailure={workSearch.loadFailure}
                       onLoadMore={workSearch.onLoadMore}
                       placeholder={kind === 'job' ? 'Auftrag auswählen' : 'Projekt auswählen'}
                       searchPlaceholder={kind === 'job' ? 'Auftrag suchen…' : 'Projekt suchen…'}
@@ -211,8 +209,7 @@ export function EquipmentSourceDialog({
                         onChange={setExactValue}
                         options={exact.options}
                         loading={exact.loading}
-                        loadError={exact.error}
-                        onRetryLoad={exact.error ? exact.retry : undefined}
+                        loadFailure={exact.loadFailure}
                         allowNone
                         noneLabel={ownWorkLabel}
                         placeholder={ownWorkLabel}

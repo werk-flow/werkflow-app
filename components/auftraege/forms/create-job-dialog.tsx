@@ -60,7 +60,7 @@ export function CreateJobDialog({
           </Button>
         </DialogTrigger>
       )}
-      <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Neuen Auftrag erstellen</DialogTitle>
           <DialogDescription>Erstelle einen neuen Auftrag für deine Organisation.</DialogDescription>

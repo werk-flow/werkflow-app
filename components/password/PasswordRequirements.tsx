@@ -20,11 +20,12 @@ type PasswordRequirementsProps = {
 
 export function PasswordRequirements({ requirements, className }: PasswordRequirementsProps) {
   return (
+    // eslint-disable-next-line jsx-a11y/no-redundant-roles -- Safari drops the list role of a list styled with list-style: none (Tailwind's base), so the role is stated
     <ul aria-live="polite" className={cn('space-y-1 text-sm', className)} role="list">
       {REQUIREMENT_ITEMS.map((item) => {
         const met = requirements[item.key];
         return (
-          <li key={item.key} className="flex items-center gap-2" role="listitem">
+          <li key={item.key} className="flex items-center gap-2">
             <span
               className={cn(
                 'flex h-5 w-5 items-center justify-center rounded-full border text-[11px] font-semibold transition-colors',

@@ -24,7 +24,10 @@ interface EditProjectDialogProps {
   /** The project's customer as the page shows it, labelled before the server answers. */
   selectedClient: ClientSelectItem | null;
   jobs: Job[];
-  onSuccess?: ((payload: { project: Project; selectedJobIds: string[] }) => void | Promise<void>) | undefined;
+  /** `selectedJobIds` is absent when the project's jobs never loaded, so the save left every link as it was. */
+  onSuccess?:
+    | ((payload: { project: Project; selectedJobIds?: string[] }) => void | Promise<void>)
+    | undefined;
 }
 
 export function EditProjectDialog({
@@ -42,11 +45,11 @@ export function EditProjectDialog({
     onOpenChange,
     onSuccess,
   });
-  const { isLoading, error, formDisabled } = form;
+  const { isLoading, isLoadingJobs, error, formDisabled } = form;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} pending={isLoading}>
-      <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Projekt bearbeiten</DialogTitle>
           <DialogDescription>Ändere die Daten des Projekts.</DialogDescription>
@@ -58,7 +61,7 @@ export function EditProjectDialog({
             <ErrorText>{error}</ErrorText>
           </DialogBody>
           <DialogFooter>
-            <Button pending={isLoading} type="submit" disabled={formDisabled}>
+            <Button pending={isLoading} type="submit" disabled={formDisabled || isLoadingJobs}>
               {isLoading ? 'Wird gespeichert…' : 'Speichern'}
             </Button>
           </DialogFooter>

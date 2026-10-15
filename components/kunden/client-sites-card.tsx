@@ -190,9 +190,7 @@ export function ClientSitesCard({
 
       {inactiveSites.length > 0 && (
         <div className="mt-3 border-t pt-3">
-          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
-            Archiviert
-          </p>
+          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Archiviert</p>
           <ul className="space-y-1.5">
             {inactiveSites.map((site) => (
               <li

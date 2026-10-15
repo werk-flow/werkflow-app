@@ -88,32 +88,35 @@ export function DispatchPanelBatchPreviewDetails({
 }) {
   return (
     <>
-      <ul
-        className="max-h-44 space-y-1 overflow-y-auto text-xs"
-        role="group"
+      <div
+        className="max-h-44 overflow-y-auto"
+        role="region"
         aria-label="Alte und neue Zeitpunkte je Besuch"
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- axe requires a keyboard-focusable scroll region (scrollable-region-focusable), and a named region is the role for it
         tabIndex={0}
       >
-        {batchPreview.items.map((item) => (
-          <li
-            key={item.occurrenceId}
-            className="tabular-nums text-muted-foreground"
-            data-batch-preview-item={item.occurrenceId}
-          >
-            <span className="font-medium text-foreground">{item.title}</span>
-            {': '}
-            {formatOccurrenceSchedule({
-              startAt: item.oldStartAt,
-              startDate: item.oldStartDate,
-            })}
-            {' → '}
-            {formatOccurrenceSchedule({
-              startAt: item.newStartAt,
-              startDate: item.newStartDate,
-            })}
-          </li>
-        ))}
-      </ul>
+        <ul className="space-y-1 text-xs">
+          {batchPreview.items.map((item) => (
+            <li
+              key={item.occurrenceId}
+              className="tabular-nums text-muted-foreground"
+              data-batch-preview-item={item.occurrenceId}
+            >
+              <span className="font-medium text-foreground">{item.title}</span>
+              {': '}
+              {formatOccurrenceSchedule({
+                startAt: item.oldStartAt,
+                startDate: item.oldStartDate,
+              })}
+              {' → '}
+              {formatOccurrenceSchedule({
+                startAt: item.newStartAt,
+                startDate: item.newStartDate,
+              })}
+            </li>
+          ))}
+        </ul>
+      </div>
       <ul className="space-y-1.5 text-sm">
         {batchPreview.conflictCount > 0 && (
           <li className="text-warning-text">

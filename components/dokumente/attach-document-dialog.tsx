@@ -2,7 +2,7 @@
 
 import { PlainButton } from '@/components/ui/plain-button';
 import { formatFileSize } from '@/lib/documents/format';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Check, FileText, LinkIcon } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,7 @@ import { readInBackground } from '@/lib/data/background-read-client';
 import { linkDocumentsToTarget } from '@/lib/documents/actions';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import { cn } from '@/lib/utils';
+import { useClientRead } from '@/hooks/use-client-read';
 import { useServerAction } from '@/hooks/use-server-action';
 
 type AttachDocumentDialogProps = {
@@ -59,14 +60,26 @@ export function AttachDocumentDialog({
 }: AttachDocumentDialogProps) {
   const { run: runLinkDocuments, isPending } = useServerAction(linkDocumentsToTarget);
   const [searchQuery, setSearchQuery] = useState('');
-  const [documents, setDocuments] = useState<OrganizationDocument[]>([]);
-  const [hasMore, setHasMore] = useState(false);
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<Set<string>>(new Set());
   // Both failures render inside the dialog (feedback canon: the error sits at
   // the point of action and the dialog never closes on failure).
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
-  const [reloadCount, setReloadCount] = useState(0);
+  // The previous results stay listed while the next search runs.
+  const attachable = useClientRead({
+    read: (signal) =>
+      readInBackground(
+        'attachable-documents',
+        { targetType, targetId, searchQuery, category: 'all' },
+        signal,
+      ),
+    deps: [searchQuery, targetId, targetType],
+    enabled: open,
+    failureMessage: 'Dokumente konnten nicht geladen werden.',
+    keepPreviousData: true,
+  });
+  const documents: OrganizationDocument[] = attachable.data?.documents ?? [];
+  const hasMore = attachable.data?.hasMore ?? false;
+  const listFailure = attachable.failure;
 
   function handleDialogOpenChange(nextOpen: boolean) {
     if (!nextOpen) {
@@ -76,29 +89,6 @@ export function AttachDocumentDialog({
     }
     onOpenChange(nextOpen);
   }
-
-  useEffect(() => {
-    if (!open) return;
-
-    const controller = new AbortController();
-    void readInBackground(
-      'attachable-documents',
-      { targetType, targetId, searchQuery, category: 'all' },
-      controller.signal,
-    ).then((result) => {
-      if (controller.signal.aborted) return;
-      if (result.success) {
-        setDocuments(result.documents);
-        setHasMore(result.hasMore ?? false);
-        setLoadError(null);
-        return;
-      }
-      setDocuments([]);
-      setLoadError('Dokumente konnten nicht geladen werden.');
-    });
-
-    return () => controller.abort();
-  }, [open, searchQuery, targetId, targetType, reloadCount]);
 
   function toggleDocument(documentId: string) {
     setAttachError(null);
@@ -179,11 +169,9 @@ export function AttachDocumentDialog({
             aria-label="Dokument suchen"
           />
 
-          <div className="max-h-80 overflow-auto rounded-md border">
-            {loadError ? (
-              <SectionError className="m-3" onRetry={() => setReloadCount((count) => count + 1)}>
-                {loadError}
-              </SectionError>
+          <div className="max-h-80 overflow-y-auto rounded-md border">
+            {listFailure ? (
+              <SectionError className="m-3" failure={listFailure} />
             ) : documents.length === 0 ? (
               <div className="px-4 py-10 text-center text-sm text-muted-foreground">
                 Keine verknüpfbaren Dokumente gefunden.
@@ -223,7 +211,7 @@ export function AttachDocumentDialog({
             )}
           </div>
           {/* Below the scroll box, like the material picker's hint, so it is visible without scrolling. */}
-          {hasMore && !loadError && documents.length > 0 && (
+          {hasMore && !listFailure && documents.length > 0 && (
             <p className="text-xs text-muted-foreground" role="status">
               Es werden die 50 neuesten Dokumente angezeigt. Suche nach dem Namen, um weitere zu finden.
             </p>

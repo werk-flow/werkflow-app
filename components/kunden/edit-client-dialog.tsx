@@ -118,7 +118,7 @@ export function EditClientDialog({ client, open, onOpenChange, onSaved }: EditCl
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} pending={isLoading}>
-      <DialogContent size="md" onOpenAutoFocus={(e) => e.preventDefault()}>
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Kunde bearbeiten</DialogTitle>
           <DialogDescription>Ändere die Daten des Kunden.</DialogDescription>

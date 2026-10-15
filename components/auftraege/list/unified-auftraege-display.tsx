@@ -29,7 +29,7 @@ export function AvatarStack({
   memberLookup: Map<string, OrgMemberOption>;
   max?: number | undefined;
 }) {
-  if (userIds.length === 0) return <span className="text-muted-foreground/50">—</span>;
+  if (userIds.length === 0) return <span className="text-muted-foreground">—</span>;
 
   const visible = userIds.slice(0, max);
   const overflow = userIds.length - max;

@@ -5,6 +5,7 @@ import { DurationHoursInput } from '@/components/ui/duration-hours-input';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
+import { SectionError } from '@/components/ui/section-error';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
@@ -15,7 +16,6 @@ import type { JobPriority } from '@/lib/jobs/types';
 import { toLocalDateString } from '@/lib/utils';
 import { ClientSelectWithCreate, type ClientSelectItem } from '../shared/client-select-with-create';
 import { EmployeeMultiSelect, type OrgMemberOption } from '../shared/employee-multi-select';
-import { OptionsLoadError } from '../shared/options-load-error';
 import { SiteContactFields } from '../shared/site-contact-fields';
 import { JOB_PRIORITY_OPTIONS } from './job-form-options';
 import type { CreateJobForm } from './use-create-job-form';
@@ -114,9 +114,7 @@ export function CreateJobAssignmentFields({
     projectSearch,
     projectId,
     handleProjectChange,
-    isLoadingProjectDefaults,
-    projectDefaultsLoadFailed,
-    retryProjectDefaults,
+    projectDefaultsFailure,
     priority,
     setPriority,
     formDisabled,
@@ -144,8 +142,7 @@ export function CreateJobAssignmentFields({
           options={projectSearch.options}
           onSearchChange={projectSearch.onSearchChange}
           loading={projectSearch.loading}
-          loadError={projectSearch.loadError}
-          onRetryLoad={projectSearch.onRetryLoad}
+          loadFailure={projectSearch.loadFailure}
           onLoadMore={projectSearch.onLoadMore}
           value={projectId}
           onChange={handleProjectChange}
@@ -157,11 +154,7 @@ export function CreateJobAssignmentFields({
           noneLabel="Kein Projekt"
           readOnly={readOnlyProject}
         />
-        <OptionsLoadError
-          error={projectDefaultsLoadFailed ? 'Die Projektvorgaben konnten nicht geladen werden.' : null}
-          onRetry={retryProjectDefaults}
-          retrying={isLoadingProjectDefaults}
-        />
+        {projectDefaultsFailure && <SectionError failure={projectDefaultsFailure} />}
       </Field>
 
       <Field label="Priorität" htmlFor="job-priority">

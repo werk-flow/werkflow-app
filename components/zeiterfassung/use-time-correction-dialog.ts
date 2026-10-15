@@ -4,12 +4,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
 import { useServerAction } from '@/hooks/use-server-action';
-import { describeFailure } from '@/lib/action-messages';
+import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { submitTimeCorrection, type TimeCorrectionFormOptions } from '@/lib/time-corrections/actions';
 import { TIME_CORRECTION_FAILURE_MESSAGES } from '@/lib/time-corrections/messages';
 import type { TimeCorrectionKind } from '@/lib/time-corrections/types';
+import {
+  isDateInClosedPeriod,
+  isEntryInClosedPeriod,
+  type ClosedTimePeriod,
+} from '@/lib/time-tracking/closed-period-dates';
 import type { TimeEntry, TimeSegmentKind } from '@/lib/time-tracking/types';
 import { buildTimeCorrectionProposedFacts } from './time-correction-dialog-facts';
 
@@ -70,6 +75,30 @@ function validateTimeCorrectionTimes({
   }
   if (startAt >= endAt) return { endAt: 'Das Ende muss nach dem Beginn liegen.' };
   return {};
+}
+
+// A time on a day of a closed period is refused with `period_closed`; the
+// field says so before the request.
+function closedPeriodTimeErrors(
+  {
+    kind,
+    startAt,
+    splitAt,
+    endAt,
+  }: { kind: TimeCorrectionKind; startAt: string; splitAt: string; endAt: string },
+  closedPeriods: readonly ClosedTimePeriod[],
+): Pick<TimeCorrectionFieldErrors, 'startAt' | 'splitAt' | 'endAt'> {
+  if (kind === 'delete') return {};
+  const closed = (value: string): string | undefined =>
+    isDateInClosedPeriod(value.slice(0, 10), closedPeriods)
+      ? SHARED_FAILURE_MESSAGES.period_closed
+      : undefined;
+  const hasEnd = kind === 'add' || kind === 'missed_clock' || kind === 'split';
+  return {
+    startAt: closed(startAt),
+    splitAt: kind === 'split' ? closed(splitAt) : undefined,
+    endAt: hasEnd ? closed(endAt) : undefined,
+  };
 }
 
 type TimeCorrectionDialogSessionInput = {
@@ -188,6 +217,7 @@ type TimeCorrectionDialogFormInput = {
   onSubmitted: (() => void) | undefined;
   controlledOpen: boolean | undefined;
   onOpenChange: ((open: boolean) => void) | undefined;
+  closedPeriods: readonly ClosedTimePeriod[];
 };
 
 export type TimeCorrectionDialogForm = {
@@ -225,6 +255,7 @@ export function useTimeCorrectionDialogForm({
   onSubmitted,
   controlledOpen,
   onOpenChange,
+  closedPeriods,
 }: TimeCorrectionDialogFormInput): TimeCorrectionDialogForm {
   const { showBanner } = useBanner();
   const session = useTimeCorrectionDialogSession({
@@ -258,9 +289,13 @@ export function useTimeCorrectionDialogForm({
   }, [entry]);
 
   const submit = async () => {
+    const timeErrors = validateTimeCorrectionTimes({ kind, startAt, splitAt, endAt });
+    const closedErrors = closedPeriodTimeErrors({ kind, startAt, splitAt, endAt }, closedPeriods);
     const nextFieldErrors = {
       person: subjectEmployeeRecordId ? undefined : 'Bitte wähle eine Person aus.',
-      ...validateTimeCorrectionTimes({ kind, startAt, splitAt, endAt }),
+      startAt: timeErrors.startAt ?? closedErrors.startAt,
+      splitAt: timeErrors.splitAt ?? closedErrors.splitAt,
+      endAt: timeErrors.endAt ?? closedErrors.endAt,
       reason: reason.trim() ? undefined : 'Bitte gib einen Grund an.',
     };
     setFieldErrors(nextFieldErrors);
@@ -273,6 +308,10 @@ export function useTimeCorrectionDialogForm({
         'time-correction-reason': nextFieldErrors.reason,
       })
     ) {
+      return;
+    }
+    if (entry && isEntryInClosedPeriod(entry, closedPeriods)) {
+      setSubmitError(SHARED_FAILURE_MESSAGES.period_closed);
       return;
     }
     const baseEmployeeRecordId = kind === 'reassign' ? targetEmployeeRecordId : subjectEmployeeRecordId;

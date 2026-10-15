@@ -11,7 +11,15 @@ interface TimeInputProps extends Omit<React.ComponentProps<'div'>, 'onChange' | 
   id?: string;
 }
 
-type Segment = 'hours' | 'minutes';
+const TIME_SEGMENTS = ['hours', 'minutes'] as const;
+type Segment = (typeof TIME_SEGMENTS)[number];
+
+/** The segment under a click inside the field, read from its `data-segment`. */
+function clickedTimeSegment(target: EventTarget): Segment | undefined {
+  const name =
+    target instanceof Element ? target.closest<HTMLElement>('[data-segment]')?.dataset.segment : undefined;
+  return TIME_SEGMENTS.find((segment) => segment === name);
+}
 
 function EmptySegmentLine() {
   return <span aria-hidden className="inline-block h-px w-4 rounded-full bg-muted-foreground align-middle" />;
@@ -35,6 +43,7 @@ const TimeInput = React.forwardRef<HTMLDivElement, TimeInputProps>(
       onBlur,
       onFocus,
       onKeyDown,
+      onClick,
       'aria-label': ariaLabel,
       'aria-labelledby': ariaLabelledBy,
       'aria-describedby': ariaDescribedBy,
@@ -200,6 +209,7 @@ const TimeInput = React.forwardRef<HTMLDivElement, TimeInputProps>(
     const segmentInactiveClass = 'hover:bg-accent';
 
     return (
+      // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- one tab stop like a native time field: the group owns the arrow and digit keys of its segments, and a click picks the segment the arrow keys reach
       <div
         ref={containerRef}
         role="group"
@@ -222,6 +232,11 @@ const TimeInput = React.forwardRef<HTMLDivElement, TimeInputProps>(
           onBlur?.(e);
         }}
         onKeyDown={handleKeyDown}
+        onClick={(event) => {
+          const segment = clickedTimeSegment(event.target);
+          if (segment) handleSegmentClick(segment);
+          onClick?.(event);
+        }}
         className={cn(
           'inline-flex h-9 w-full items-center gap-0.5 rounded-md border bg-transparent px-3 py-1 text-base transition-[color,box-shadow] outline-none md:text-sm',
           'border-input dark:bg-input/30',
@@ -233,7 +248,7 @@ const TimeInput = React.forwardRef<HTMLDivElement, TimeInputProps>(
       >
         {/* Hours segment */}
         <span
-          onClick={() => handleSegmentClick('hours')}
+          data-segment="hours"
           className={cn(
             segmentBaseClass,
             activeSegment === 'hours' ? segmentActiveClass : segmentInactiveClass,
@@ -247,7 +262,7 @@ const TimeInput = React.forwardRef<HTMLDivElement, TimeInputProps>(
 
         {/* Minutes segment */}
         <span
-          onClick={() => handleSegmentClick('minutes')}
+          data-segment="minutes"
           className={cn(
             segmentBaseClass,
             activeSegment === 'minutes' ? segmentActiveClass : segmentInactiveClass,

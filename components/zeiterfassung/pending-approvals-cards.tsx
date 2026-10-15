@@ -138,7 +138,7 @@ export function SessionRequestCard({
             {session.clockIn && session.clockOut ? (
               <p className="text-xs text-muted-foreground">
                 {formatBerlinTime(session.clockIn.timestamp)} – {formatBerlinTime(session.clockOut.timestamp)}
-                <span className="ml-2 text-foreground/70">
+                <span className="ml-2 text-muted-foreground">
                   ({formatDuration(clockedMinutes(session.clockIn.timestamp, session.clockOut.timestamp))})
                 </span>
               </p>
@@ -253,7 +253,7 @@ export function ChangeRequestCard({
               <p className="mt-1 text-sm text-muted-foreground">{entryTypeLabel} ändern</p>
               <div className="text-xs text-muted-foreground space-y-0.5 mt-1">
                 <p>
-                  <span className="text-foreground/70">Aktuell:</span>{' '}
+                  <span className="text-muted-foreground">Aktuell:</span>{' '}
                   {formatWeekdayDateTime(request.entry.timestamp)}
                 </p>
                 {request.proposedTimestamp && (
@@ -270,7 +270,7 @@ export function ChangeRequestCard({
               <p className="mt-1 text-sm text-muted-foreground">{formatWeekdayDate(dateStr)}</p>
               <p className="text-xs text-muted-foreground">
                 {formatBerlinTime(clockInEntry.timestamp)} – {formatBerlinTime(clockOutEntry.timestamp)}
-                <span className="ml-2 text-foreground/70">
+                <span className="ml-2 text-muted-foreground">
                   ({formatDuration(clockedMinutes(clockInEntry.timestamp, clockOutEntry.timestamp))})
                 </span>
               </p>

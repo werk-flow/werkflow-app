@@ -345,7 +345,6 @@ function PendingTimeAccountAdjustment({
       </div>
       <form
         onSubmit={handleSubmit}
-        onKeyDown={handleKeyDown}
         className="space-y-2"
         aria-label={`Entscheidung für ${request.employeeName}`}
       >
@@ -356,6 +355,7 @@ function PendingTimeAccountAdjustment({
             name="reason"
             aria-label={`Entscheidungsgrund für ${request.employeeName}`}
             placeholder="Entscheidungsgrund"
+            onKeyDown={handleKeyDown}
             required
           />
           <TimeAccountSubmitButton

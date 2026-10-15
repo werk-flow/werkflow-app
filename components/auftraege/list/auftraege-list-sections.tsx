@@ -71,7 +71,7 @@ export function AuftraegeStatusFilterPills({
           <span
             className={cn(
               'tabular-nums',
-              activeStatusFilter === opt.value ? 'text-primary-text' : 'text-muted-foreground/70',
+              activeStatusFilter === opt.value ? 'text-primary-text' : 'text-muted-foreground',
             )}
           >
             {activeStatusCounts[opt.value] || 0}
@@ -112,7 +112,7 @@ export function AuftraegeCollapsibleSection({
           <span className="text-base font-semibold sm:text-lg text-muted-foreground group-hover:text-foreground transition-colors">
             {title}
           </span>
-          <span className="text-xs tabular-nums text-muted-foreground/70">({count})</span>
+          <span className="text-xs tabular-nums text-muted-foreground">({count})</span>
         </PlainButton>
       </h2>
 

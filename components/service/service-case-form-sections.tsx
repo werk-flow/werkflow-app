@@ -61,8 +61,7 @@ export function ServiceCaseIntakeFields({
           }))}
           disabled={!form.clientId}
           loading={clientOption.loading}
-          loadError={clientOption.error}
-          onRetryLoad={clientOption.retry}
+          loadFailure={clientOption.loadFailure}
           placeholder="Einsatzort wählen"
           searchPlaceholder="Einsatzort suchen…"
           emptyMessage="Kein Einsatzort gefunden"
@@ -78,8 +77,7 @@ export function ServiceCaseIntakeFields({
           }))}
           disabled={!form.clientId}
           loading={clientOption.loading}
-          loadError={clientOption.error}
-          onRetryLoad={clientOption.retry}
+          loadFailure={clientOption.loadFailure}
           placeholder="Kein Ansprechpartner"
           searchPlaceholder="Ansprechpartner suchen…"
           emptyMessage="Kein Ansprechpartner gefunden"
@@ -202,8 +200,7 @@ export function ServiceCaseTriageFields({ controller, isUpdate }: ServiceCaseFie
             options={jobSearch.options}
             onSearchChange={jobSearch.onSearchChange}
             loading={jobSearch.loading}
-            loadError={jobSearch.loadError}
-            onRetryLoad={jobSearch.onRetryLoad}
+            loadFailure={jobSearch.loadFailure}
             onLoadMore={jobSearch.onLoadMore}
             placeholder="Noch kein Auftrag"
             searchPlaceholder="Auftrag suchen…"
@@ -261,9 +258,11 @@ export function ServiceCaseSiteFields({
                     }))
                   }
                 />
-                <span>
-                  <span className="block font-medium">{equipment.name}</span>
-                  <span className="text-xs text-muted-foreground">{equipment.equipmentNumber}</span>
+                <span className="font-medium">
+                  {equipment.name}
+                  <span className="block text-xs font-normal text-muted-foreground">
+                    {equipment.equipmentNumber}
+                  </span>
                 </span>
               </label>
             ))}

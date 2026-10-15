@@ -95,7 +95,7 @@ function DueScheduleFields({ controller }: DueActionFieldsProps): ReactElement {
 // evidence classes to the loading and the loaded list here.
 function DueCompletionFields({ controller }: DueActionFieldsProps): ReactElement {
   const { scopeOutcome, setScopeOutcome, completedOn, setCompletedOn, fieldErrors } = controller;
-  const { evidence, evidenceIds, setEvidenceIds, isEvidenceLoading, evidenceLoadFailed } = controller;
+  const { evidence, evidenceIds, setEvidenceIds, isEvidenceLoading, evidenceFailure } = controller;
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -126,7 +126,9 @@ function DueCompletionFields({ controller }: DueActionFieldsProps): ReactElement
       </div>
       <fieldset className="space-y-2">
         <legend className="text-sm font-medium">Versionierte Arbeitsnachweise</legend>
-        {isEvidenceLoading ? (
+        {evidenceFailure ? (
+          <SectionError failure={evidenceFailure} />
+        ) : isEvidenceLoading ? (
           <div className={EVIDENCE_LIST_CLASS} role="status" aria-busy="true">
             <span className="sr-only">Arbeitsnachweise werden geladen.</span>
             {[0, 1].map((index) => (
@@ -136,10 +138,6 @@ function DueCompletionFields({ controller }: DueActionFieldsProps): ReactElement
               </div>
             ))}
           </div>
-        ) : evidenceLoadFailed ? (
-          <SectionError onRetry={controller.retryEvidence}>
-            Die Arbeitsnachweise konnten nicht geladen werden.
-          </SectionError>
         ) : evidence.length ? (
           <div id="due-evidence" tabIndex={-1} className={EVIDENCE_LIST_CLASS}>
             {evidence.map((option) => (
@@ -227,8 +225,7 @@ export function MaintenanceDueActionDialog({
                 options={caseSearch.options}
                 onSearchChange={caseSearch.onSearchChange}
                 loading={caseSearch.loading}
-                loadError={caseSearch.loadError}
-                onRetryLoad={caseSearch.onRetryLoad}
+                loadFailure={caseSearch.loadFailure}
                 onLoadMore={caseSearch.onLoadMore}
                 placeholder="Servicefall suchen"
                 emptyMessage="Kein passender Servicefall gefunden"
@@ -260,7 +257,7 @@ export function MaintenanceDueActionDialog({
             onClick={controller.submit}
             disabled={
               isPending ||
-              (action === 'complete' && (controller.isEvidenceLoading || controller.evidenceLoadFailed))
+              (action === 'complete' && (controller.isEvidenceLoading || controller.evidenceFailure !== null))
             }
           >
             Aktion ausführen

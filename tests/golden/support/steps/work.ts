@@ -492,6 +492,34 @@ export function lifecyclePendingFormalApprovals(page: Page): Locator {
   return workLifecycleCard(page).getByText(/formale Freigaben offen/);
 }
 
+/** The titles of the card's dialogs other than a transition, by the action that opens them. */
+const LIFECYCLE_DIALOG_TITLES = {
+  addBlocker: 'Blocker erfassen',
+  addDependency: 'Voraussetzung hinzufügen',
+  fulfilDependency: 'Voraussetzung als erfüllt markieren',
+  linkApproval: DEPENDENCY_APPROVAL_COPY.open,
+} as const;
+
+/** A dialog of the lifecycle card, named by its title. */
+export function workLifecycleDialogNamed(page: Page, dialog: keyof typeof LIFECYCLE_DIALOG_TITLES): Locator {
+  return page.getByRole('dialog', { name: LIFECYCLE_DIALOG_TITLES[dialog], exact: true });
+}
+
+/** The transition dialog of one step, named by the step's own label. */
+export function workTransitionDialog(page: Page, from: WorkExecutionState, to: WorkExecutionState): Locator {
+  return page.getByRole('dialog', { name: workTransitionActionLabel(from, to), exact: true });
+}
+
+/** A reason action of a dependency row (mark fulfilled, reopen, remove). */
+export function workDependencyRowAction(row: Locator, action: keyof typeof DEPENDENCY_ROW_ACTIONS): Locator {
+  return row.getByRole('button', { name: DEPENDENCY_ROW_ACTIONS[action] });
+}
+
+/** The row's action that links an Arbeitsnachweis approval to a declared approval prerequisite. */
+export function workDependencyApprovalAction(row: Locator): Locator {
+  return row.getByRole('button', { name: DEPENDENCY_APPROVAL_COPY.open });
+}
+
 /** Later-slice modules that the work page of this phase never names. */
 export const WORK_PAGE_LATER_SLICE_TERMS = ['Arbeitspack', 'Geräteakte', 'Rechnung erstellen'] as const;
 
@@ -506,10 +534,26 @@ const JOB_DETAIL_COPY = {
     edit: 'Geplantes Datum bearbeiten',
     clear: 'Leeren',
     confirmRemoval: 'Datum entfernen',
+    removalTitle: 'Datum entfernen?',
     date: SHARED_COPY.field.date,
   },
-  field: { completionDate: 'Abschlussdatum' },
+  field: { completionDate: 'Abschlussdatum', plannedDate: 'Geplantes Datum' },
 } as const;
+
+/** A control of the planned-date row in the „Details“ card: its pencil, or the editor's clear and save buttons. */
+export function plannedDateControl(page: Page, control: 'edit' | 'clear' | 'save'): Locator {
+  const names = {
+    edit: JOB_DETAIL_COPY.plannedDate.edit,
+    clear: JOB_DETAIL_COPY.plannedDate.clear,
+    save: SHARED_COPY.action.save,
+  } as const;
+  return jobDetailField(page, 'plannedDate').getByRole('button', { name: names[control], exact: true });
+}
+
+/** The confirmation that saving an emptied planned date asks before it removes the date. */
+export function plannedDateRemovalConfirmation(page: Page): Locator {
+  return page.getByRole('alertdialog', { name: JOB_DETAIL_COPY.plannedDate.removalTitle, exact: true });
+}
 
 /** An item of the detail header's actions menu. */
 export function jobDetailMenuItem(page: Page, item: keyof typeof JOB_DETAIL_COPY.menu): Locator {
@@ -533,6 +577,53 @@ export async function openJobEditDialog(page: Page): Promise<Locator> {
   await page.getByRole('button', { name: SHARED_COPY.action.openActions, exact: true }).click();
   await page.getByRole('menuitem', { name: SHARED_COPY.action.edit, exact: true }).click();
   return jobEditDialog(page);
+}
+
+/** Job detail copy of the edit dialog's date picker, the delete confirmation and the relation cards. */
+const JOB_DIALOG_COPY = {
+  deleteTitle: 'Auftrag löschen?',
+  noCustomer: 'Kein Kunde zugewiesen',
+  relationDialog: { customer: 'Kunde zum Auftrag hinzufügen', project: 'Projekt zum Auftrag hinzufügen' },
+} as const;
+
+type JobRelation = keyof typeof JOB_DIALOG_COPY.relationDialog;
+
+/** The edit dialog's submit. */
+export function jobEditSave(dialog: Locator): Locator {
+  return dialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true });
+}
+
+/**
+ * Empties the edit dialog's planned date: the segmented picker has no keyboard
+ * path to an empty value, so the chosen day is deselected in its calendar.
+ */
+export async function clearPlannedDateInJobEditDialog(dialog: Locator): Promise<void> {
+  const picker = dialog.getByRole('group', { name: JOB_DETAIL_COPY.field.plannedDate, exact: true });
+  await picker.getByRole('button').click();
+  await dialog.page().getByRole('gridcell', { selected: true }).getByRole('button').click();
+  // An empty segmented date shows its placeholders („––.––.––––“), no digit.
+  await expect(picker).not.toContainText(/\d/);
+}
+
+/** The job detail's header title. */
+export function jobPageHeading(page: Page, title: string): Locator {
+  return page.getByRole('heading', { level: 1, name: title, exact: true });
+}
+
+/** The delete confirmation of a job, opened from the detail header or the list's row menu. */
+export function jobDeleteConfirmation(page: Page): Locator {
+  return page.getByRole('alertdialog', { name: JOB_DIALOG_COPY.deleteTitle, exact: true });
+}
+
+/** The empty customer or project card of a job, which opens the dialog that links one. */
+export function jobRelationEmptyCard(page: Page, relation: JobRelation): Locator {
+  const name = relation === 'customer' ? JOB_DIALOG_COPY.noCustomer : WORK_DETAIL_TEXT.noProject;
+  return confirmed(page.getByRole('main').getByRole('button', { name, exact: true }));
+}
+
+/** The dialog that links a customer or a project to the job. */
+export function jobRelationDialog(page: Page, relation: JobRelation): Locator {
+  return page.getByRole('dialog', { name: JOB_DIALOG_COPY.relationDialog[relation], exact: true });
 }
 
 /** One field row of the job's „Details“ card, named by its label. */
@@ -786,6 +877,25 @@ export function workListResetFilters(section: Locator): Locator {
   return section.getByRole('button', { name: WORK_LIST_COPY.resetFilters });
 }
 
+/** The phone layout's filter sheet, which the section's filter button opens below 768 px. */
+export function workListFilterSheet(page: Page): Locator {
+  return page.getByRole('dialog', { name: WORK_LIST_COPY.filter, exact: true });
+}
+
+/** The actions menu button of the list row that shows this job or project number. */
+export function workListRowActionsButton(page: Page, number: string): Locator {
+  return confirmed(
+    workListSection(page)
+      .getByRole('row')
+      .filter({ has: page.getByText(number, { exact: true }) }),
+  ).getByRole('button', { name: SHARED_COPY.action.openActions, exact: true });
+}
+
+/** The delete item of an open list row menu. */
+export function workListRowDeleteItem(page: Page): Locator {
+  return page.getByRole('menuitem', { name: SHARED_COPY.action.delete, exact: true });
+}
+
 /** The expand button of a project row. */
 export function expandProjectButton(row: Locator): Locator {
   return row.getByRole('button', { name: WORK_LIST_COPY.expandProject });
@@ -899,6 +1009,41 @@ export function projectScheduleIndicators(page: Page): Locator {
 
 export function projectDeleteMenuItem(page: Page): Locator {
   return page.getByRole('menuitem', { name: PROJECT_COPY.deleteProject });
+}
+
+/** Project detail copy of its header actions and the dialogs they open. */
+const PROJECT_DIALOG_COPY = {
+  addJob: 'Auftrag hinzufügen',
+  createJobTitle: 'Neuen Auftrag erstellen',
+  editTitle: 'Projekt bearbeiten',
+  deleteTitle: 'Projekt löschen?',
+} as const;
+
+/** The project header's button that creates a job inside the project. */
+export function projectAddJobButton(page: Page): Locator {
+  return page.getByRole('main').getByRole('button', { name: PROJECT_DIALOG_COPY.addJob, exact: true });
+}
+
+export function projectCreateJobDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: PROJECT_DIALOG_COPY.createJobTitle, exact: true });
+}
+
+export function projectEditMenuItem(page: Page): Locator {
+  return page.getByRole('menuitem', { name: SHARED_COPY.action.edit, exact: true });
+}
+
+export function projectEditDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: PROJECT_DIALOG_COPY.editTitle, exact: true });
+}
+
+/** The delete confirmation of a project, opened from the detail header or the list's row menu. */
+export function projectDeleteConfirmation(page: Page): Locator {
+  return page.getByRole('alertdialog', { name: PROJECT_DIALOG_COPY.deleteTitle, exact: true });
+}
+
+/** The „Zuweisen“ action of the project's job card, which adds existing jobs to the project. */
+export function projectAssignJobsButton(page: Page): Locator {
+  return page.getByRole('main').getByRole('button', { name: SHARED_COPY.assignment.assign, exact: true });
 }
 
 /** The optional work template picker of a creation form. */
@@ -1276,6 +1421,8 @@ const TEMPLATE_COPY = {
   open: 'Öffnen',
   create: 'Vorlage erstellen',
   createDialog: 'Arbeitsvorlage erstellen',
+  /** The create dialog's required field. */
+  createName: 'Name',
   projectTarget: 'Projekte',
   editorAction: {
     newVersion: 'Neue Version',
@@ -1314,6 +1461,16 @@ export function workTemplateCreateDialog(page: Page): Locator {
   return page.getByRole('dialog').filter({
     has: page.getByRole('heading', { name: TEMPLATE_COPY.createDialog }),
   });
+}
+
+/** The create dialog's required name field. */
+export function workTemplateCreateNameField(dialog: Locator): Locator {
+  return dialog.getByRole('textbox', { name: TEMPLATE_COPY.createName, exact: true });
+}
+
+/** The create dialog's submit. */
+export function workTemplateCreateSubmit(dialog: Locator): Locator {
+  return dialog.getByRole('button', { name: SHARED_COPY.action.create, exact: true });
 }
 
 /** The target option „Projekte“ of the create dialog. */

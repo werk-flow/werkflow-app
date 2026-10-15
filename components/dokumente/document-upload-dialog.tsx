@@ -130,7 +130,7 @@ function DocumentUploadProgress({
 }
 function DocumentUploadRowList({ rows }: { rows: UploadRow[] }): ReactElement {
   return (
-    <div className="max-h-80 overflow-auto rounded-md border">
+    <div className="max-h-80 overflow-y-auto rounded-md border">
       {rows.length === 0 ? (
         <div className="px-4 py-8 text-center text-sm text-muted-foreground">Keine Dateien ausgewählt.</div>
       ) : (

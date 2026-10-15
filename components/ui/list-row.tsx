@@ -63,3 +63,33 @@ export const ListRow = React.forwardRef<HTMLDivElement, ListRowProps>(
   },
 );
 ListRow.displayName = 'ListRow';
+
+function stopRowEvent(event: React.SyntheticEvent): void {
+  event.stopPropagation();
+}
+
+/**
+ * The controls of an interactive row (its action menu, its selection
+ * checkbox): a click or key inside them, its menu's portaled items included,
+ * never also opens the row. The wrapper only catches bubbling events, so it is
+ * presentational; the controls inside keep their own roles.
+ */
+export function ListRowActions({
+  className,
+  children,
+}: {
+  className?: string | undefined;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <div
+      role="presentation"
+      data-slot="list-row-actions"
+      className={className}
+      onClick={stopRowEvent}
+      onKeyDown={stopRowEvent}
+    >
+      {children}
+    </div>
+  );
+}

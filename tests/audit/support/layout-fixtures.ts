@@ -55,10 +55,14 @@ export function layoutNames(
   };
 }
 
+/** The layout audits and the acceptance captures own their worlds; no other group seeds these rows. */
+export function isSurfaceAuditWorld(world: TestWorld): boolean {
+  return Boolean(world.auditGroup?.startsWith('layout/') || world.auditGroup === 'visual/acceptance.spec.ts');
+}
+
 /** Creates page inputs only. These cases prove rendered layout, not creation workflows. */
 export async function prepareLayoutDetails(world: TestWorld): Promise<LayoutDetails> {
-  if (world.auditGroup !== 'layout/mobile-viewport.spec.ts')
-    throw new Error('Layout fixtures require their owning audit world.');
+  if (!isSurfaceAuditWorld(world)) throw new Error('Layout fixtures require their owning audit world.');
   const server = createClient<Database>(
     requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
     requireEnv('SUPABASE_SECRET_KEY'),

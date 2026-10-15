@@ -23,7 +23,7 @@ export default async function EmployeesSettingsPage(): Promise<ReactElement> {
   }
 
   return (
-    <div className="flex h-full flex-col overflow-auto">
+    <div className="flex flex-col">
       <PersonnelOnboardingTemplateSettings
         templates={templatesResult.success ? templatesResult.data : null}
       />

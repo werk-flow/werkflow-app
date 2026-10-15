@@ -1,12 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-
 import { Field } from '@/components/ui/field';
 import { SearchableSelect } from '@/components/ui/searchable-select';
+import { SectionError } from '@/components/ui/section-error';
+import { useClientRead } from '@/hooks/use-client-read';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { formatSiteAddress, type ClientContact, type ClientSite } from '@/lib/clients/types';
-import { OptionsLoadError } from './options-load-error';
 
 interface SiteContactFieldsProps {
   clientId: string;
@@ -29,51 +28,19 @@ export function SiteContactFields({
   disabled = false,
   idPrefix = 'job',
 }: SiteContactFieldsProps) {
-  // Relations are keyed by the customer they were loaded for; loading state
-  // is derived so the effect never calls setState synchronously.
-  const [loaded, setLoaded] = useState<{
-    forClientId: string;
-    sites: ClientSite[];
-    contacts: ClientContact[];
-    failed: boolean;
-  } | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    if (!clientId) return;
-
-    const controller = new AbortController();
-    // A failed read, the transport included, must not leave the pickers in a loading state.
-    void readInBackground('client-relations', { clientId }, controller.signal).then((result) => {
-      if (controller.signal.aborted) return;
-      setLoaded(
-        result.success
-          ? { forClientId: clientId, sites: result.sites, contacts: result.contacts, failed: false }
-          : { forClientId: clientId, sites: [], contacts: [], failed: true },
-      );
-    });
-
-    return () => controller.abort();
-  }, [clientId, reloadKey]);
-
-  const hasData = loaded?.forClientId === clientId;
-  const sites = hasData ? loaded.sites : [];
-  const contacts = hasData ? loaded.contacts : [];
-  const isLoading = !!clientId && !hasData;
+  // Relations belong to the customer they were read for; a change reads fresh.
+  const relations = useClientRead({
+    read: (signal) => readInBackground('client-relations', { clientId }, signal),
+    deps: [clientId],
+    enabled: clientId !== '',
+    failureMessage: 'Einsatzorte und Ansprechpartner konnten nicht geladen werden.',
+  });
+  const sites: ClientSite[] = relations.data?.sites ?? [];
+  const contacts: ClientContact[] = relations.data?.contacts ?? [];
+  const isLoading = relations.loading;
 
   if (!clientId) return null;
-  if (hasData && loaded.failed) {
-    return (
-      <OptionsLoadError
-        error="Einsatzorte und Ansprechpartner konnten nicht geladen werden."
-        onRetry={() => {
-          setLoaded(null);
-          setReloadKey((key) => key + 1);
-        }}
-        retrying={false}
-      />
-    );
-  }
+  if (relations.failure) return <SectionError failure={relations.failure} />;
   if (!isLoading && sites.length === 0 && contacts.length === 0) return null;
 
   return (

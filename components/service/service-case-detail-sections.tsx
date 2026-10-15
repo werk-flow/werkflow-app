@@ -26,9 +26,18 @@ const EVENT_LABELS: Record<string, string> = {
   document_unlinked: 'Dokumentverknüpfung entfernt',
 };
 
-function Fact({ label, value }: { label: string; value: string | null | undefined }): ReactElement {
+function Fact({
+  label,
+  value,
+  className,
+}: {
+  label: string;
+  value: string | null | undefined;
+  className?: string | undefined;
+}): ReactElement {
+  // A description list allows one div around each dt/dd pair, never a second wrapper (axe definition-list).
   return (
-    <div>
+    <div className={className}>
       <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</dt>
       <dd className="mt-1 whitespace-pre-wrap text-sm">{value || 'Nicht erfasst'}</dd>
     </div>
@@ -68,13 +77,9 @@ export function ServiceCaseTriageSection({ item }: { item: ServiceCaseDetail }):
           value={SERVICE_CASE_CHARGE_CONTEXT_LABELS[item.chargeContext]}
         />
         <Fact label="Zugang und Hinweise vor Ort" value={item.accessInstructions} />
-        <div className="sm:col-span-2">
-          <Fact label="Interne Einschätzung" value={item.triageNote} />
-        </div>
+        <Fact label="Interne Einschätzung" value={item.triageNote} className="sm:col-span-2" />
         {item.resolutionNote && (
-          <div className="sm:col-span-2">
-            <Fact label="Abschlussbegründung" value={item.resolutionNote} />
-          </div>
+          <Fact label="Abschlussbegründung" value={item.resolutionNote} className="sm:col-span-2" />
         )}
       </dl>
       <p className="mt-4 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">

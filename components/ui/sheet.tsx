@@ -7,6 +7,7 @@ import { cva, type VariantProps } from 'class-variance-authority';
 
 import { cn } from '@/lib/utils';
 import { RegisterOpenDialog } from '@/components/ui/open-dialog-context';
+import { useReturnFocus } from '@/components/ui/return-focus';
 
 const Sheet = SheetPrimitive.Root;
 const SheetTrigger = SheetPrimitive.Trigger;
@@ -54,11 +55,18 @@ interface SheetContentProps
     VariantProps<typeof sheetVariants> {}
 
 const SheetContent = React.forwardRef<React.ComponentRef<typeof SheetPrimitive.Content>, SheetContentProps>(
-  ({ side = 'right', className, children, ...props }, ref) => {
+  ({ side = 'right', className, children, onOpenAutoFocus, onCloseAutoFocus, ...props }, ref) => {
+    const returnFocus = useReturnFocus({ onOpenAutoFocus, onCloseAutoFocus });
     return (
       <SheetPortal>
         <SheetOverlay />
-        <SheetPrimitive.Content ref={ref} className={cn(sheetVariants({ side }), className)} {...props}>
+        <SheetPrimitive.Content
+          ref={ref}
+          data-slot="sheet-content"
+          className={cn(sheetVariants({ side }), className)}
+          {...props}
+          {...returnFocus}
+        >
           {/* Suspends Realtime router refreshes while open; must sit inside the
           presence-gated primitive content (see open-dialog-context.tsx). */}
           <RegisterOpenDialog />
@@ -80,7 +88,11 @@ const SheetHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElemen
 SheetHeader.displayName = 'SheetHeader';
 
 const SheetFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn('flex flex-col-reverse gap-2 sm:flex-row sm:justify-end', className)} {...props} />
+  <div
+    data-slot="sheet-footer"
+    className={cn('flex flex-col-reverse gap-2 sm:flex-row sm:justify-end', className)}
+    {...props}
+  />
 );
 SheetFooter.displayName = 'SheetFooter';
 
@@ -90,7 +102,7 @@ const SheetTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SheetPrimitive.Title
     ref={ref}
-    className={cn('text-lg font-semibold text-foreground', className)}
+    className={cn('text-lg font-semibold text-foreground wrap-anywhere', className)}
     {...props}
   />
 ));
@@ -102,7 +114,7 @@ const SheetDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SheetPrimitive.Description
     ref={ref}
-    className={cn('text-sm text-muted-foreground', className)}
+    className={cn('text-sm text-muted-foreground wrap-anywhere', className)}
     {...props}
   />
 ));

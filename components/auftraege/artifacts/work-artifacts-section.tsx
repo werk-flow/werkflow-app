@@ -30,7 +30,7 @@ import {
   type WorkArtifactTimeSourceOption,
 } from '@/lib/work-artifacts/types';
 import { useWorkArtifactCustomerActions } from './use-work-artifact-customer-actions';
-import { useWorkArtifactEditor, type WorkArtifactEditor } from './use-work-artifact-editor';
+import { useWorkArtifactEditor } from './use-work-artifact-editor';
 import { useWorkArtifactLinks } from './use-work-artifact-links';
 import { useWorkArtifactReviewActions } from './use-work-artifact-review-actions';
 import { useWorkArtifactSave } from './use-work-artifact-save';
@@ -191,27 +191,6 @@ export function WorkArtifactsSection({
   );
 }
 
-// A failed read of the artifact offers its retry in place; the last-known detail stays visible.
-function ArtifactLoadError({
-  editor,
-  artifactId,
-}: {
-  editor: WorkArtifactEditor;
-  artifactId: string | null;
-}) {
-  const { loadFailed, loading, detail, load, runArtifactTask, isBusy } = editor;
-  const loadTargetId = detail?.id ?? artifactId;
-  if (!loadFailed || loading || !loadTargetId) return null;
-  return (
-    <SectionError
-      onRetry={() => void runArtifactTask('reload', () => load(loadTargetId))}
-      retryPending={isBusy('reload')}
-    >
-      Der Arbeitsnachweis konnte nicht geladen werden.
-    </SectionError>
-  );
-}
-
 function WorkArtifactDialog({
   targetType,
   targetId,
@@ -268,7 +247,6 @@ function WorkArtifactDialog({
     setCorrectionReason,
     correctionReasonError,
     error,
-    runArtifactTask,
     isBusy,
     anyBusy,
     load,
@@ -305,16 +283,14 @@ function WorkArtifactDialog({
             <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/30 p-3 text-sm">
               <p>Dieser Arbeitsnachweis wurde zwischenzeitlich geändert.</p>
               <Button
-                pending={isBusy('reload')}
                 type="button"
                 size="sm"
                 variant="outline"
                 disabled={anyBusy}
                 onClick={() => {
-                  void runArtifactTask('reload', async () => {
-                    await load(detail.id);
-                    onRemoteUpdateHandled();
-                  });
+                  // The editor shows the reload until the current version arrives.
+                  void load(detail.id);
+                  onRemoteUpdateHandled();
                 }}
               >
                 Aktualisieren
@@ -388,7 +364,8 @@ function WorkArtifactDialog({
               evidenceRequirements={evidenceRequirements}
             />
           )}
-          <ArtifactLoadError editor={editor} artifactId={artifactId} />
+          {/* A failed read offers its retry in place; the last-known detail stays visible. */}
+          {editor.loadFailure && <SectionError failure={editor.loadFailure} />}
           <ErrorText>{error}</ErrorText>
         </DialogBody>
         <DialogFooter>

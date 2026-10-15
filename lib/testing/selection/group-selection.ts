@@ -1,4 +1,5 @@
 import { DEPENDENCY_GATE_INPUTS } from '../publication/dependency-audit';
+import { SURFACE_GROUPS } from './surface-groups';
 import { scopeEntryOwns, TEST_SCOPE_PREFIXES } from './test-groups';
 
 type SelectableGroup = {
@@ -28,7 +29,20 @@ export const CORE_SELECTION: readonly { name: string; pattern: RegExp; groups: r
   {
     name: 'Shared controls and tokens',
     pattern: /^(components\/ui\/|app\/globals\.css$)/,
-    groups: [CORE_JOURNEY, 'audit:layout'],
+    groups: [CORE_JOURNEY, 'audit:layout', 'audit:layout:viewports'],
+  },
+  {
+    // Every dialog, tab and wide table of the app renders through these, so the
+    // surface groups that open them all run (lib/testing/selection/surface-groups.ts).
+    name: 'Layer, tab, table and scroll-region primitives',
+    pattern:
+      /^(components\/ui\/(dialog|alert-dialog|sheet|tabs|table|scroll-region|return-focus)\.tsx?|components\/shared\/area-nav\.tsx)$/,
+    groups: [
+      CORE_JOURNEY,
+      'audit:layout',
+      'audit:layout:viewports',
+      ...SURFACE_GROUPS.map((group) => `audit:layout:${group}`),
+    ],
   },
   {
     name: 'Authentication and session boundary',
@@ -39,7 +53,7 @@ export const CORE_SELECTION: readonly { name: string; pattern: RegExp; groups: r
   {
     name: 'Dependencies or backend environment',
     pattern: /^(package\.json|bun\.lock|<environment>)$/,
-    groups: [CORE_JOURNEY, 'audit:layout', 'audit:security:account'],
+    groups: [CORE_JOURNEY, 'audit:layout', 'audit:layout:viewports', 'audit:security:account'],
   },
 ];
 

@@ -6,6 +6,7 @@ import { XIcon } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { RegisterOpenDialog } from '@/components/ui/open-dialog-context';
+import { useReturnFocus } from '@/components/ui/return-focus';
 
 /** True while the dialog's request runs; see `Dialog`'s `pending`. */
 const DialogPendingContext = React.createContext(false);
@@ -59,6 +60,32 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
 type DialogPlacement = 'center' | 'anchored';
 
+type DialogInitialFocus = 'first-control' | 'dialog';
+
+const TABBABLE =
+  'a[href], button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Where focus lands when the dialog opens. Radix focuses the first control
+ * that exists and is enabled at that moment; while the fields still load (a
+ * `Skeleton` stands in for them) or stay disabled until a read ends, that is
+ * the footer's „Abbrechen“ or the close button, and focus stayed there once
+ * the fields arrived (rendered dialog audit). Such a dialog, and one that asks
+ * for it with `initialFocus="dialog"`, focuses itself instead: the first Tab
+ * then reaches its first control.
+ */
+function focusDialogInstead(event: Event, initialFocus: DialogInitialFocus): void {
+  if (event.defaultPrevented) return;
+  const content = event.currentTarget;
+  if (!(content instanceof HTMLElement)) return;
+  const fieldsPending =
+    content.querySelector('[data-slot="skeleton"]') !== null ||
+    content.querySelector(TABBABLE)?.getAttribute('data-slot') === 'dialog-close';
+  if (initialFocus === 'first-control' && !fieldsPending) return;
+  event.preventDefault();
+  content.focus();
+}
+
 // The allowed desktop widths of a centered dialog. Call sites pick one through
 // `size`; a `max-w-*` class on DialogContent is a lint error, because 111
 // dialogs had drifted into 14 widths, six of them arbitrary pixel values
@@ -87,6 +114,12 @@ const DialogContent = React.forwardRef<
     workspace?: boolean;
     /** Desktop width of a centered dialog. */
     size?: keyof typeof DIALOG_SIZE_CLASS;
+    /**
+     * `first-control` (default) focuses the first control, or the dialog while
+     * its fields load. `dialog` focuses the dialog itself, for content whose
+     * first control appears late (the avatar crop area).
+     */
+    initialFocus?: DialogInitialFocus;
   }
 >(
   (
@@ -96,18 +129,29 @@ const DialogContent = React.forwardRef<
       placement = 'center',
       workspace = false,
       size = 'lg',
+      initialFocus = 'first-control',
       onEscapeKeyDown,
       onInteractOutside,
+      onOpenAutoFocus,
+      onCloseAutoFocus,
       ...props
     },
     ref,
   ) => {
     const pending = React.useContext(DialogPendingContext);
+    const returnFocus = useReturnFocus({
+      onOpenAutoFocus: (event) => {
+        onOpenAutoFocus?.(event);
+        focusDialogInstead(event, initialFocus);
+      },
+      onCloseAutoFocus,
+    });
     return (
       <DialogPortal>
         <DialogOverlay className={placement === 'anchored' ? 'sm:bg-black/30' : undefined} />
         <DialogPrimitive.Content
           ref={ref}
+          data-slot="dialog-content"
           className={cn(
             // Mobile: full width at bottom like a sheet
             'fixed inset-x-0 bottom-0 z-50 flex w-full flex-col gap-4 border-t bg-background p-4 shadow-lg duration-200',
@@ -137,6 +181,7 @@ const DialogContent = React.forwardRef<
             className,
           )}
           {...props}
+          {...returnFocus}
           // The refused dismissal is observable: assistive technology and the
           // browser tests' settle step wait on it instead of on time.
           aria-busy={pending || undefined}
@@ -158,6 +203,7 @@ const DialogContent = React.forwardRef<
           <div className="mx-auto h-1.5 w-12 shrink-0 rounded-full bg-muted sm:hidden" />
           {children}
           <DialogPrimitive.Close
+            data-slot="dialog-close"
             disabled={pending}
             className="absolute right-1.5 top-1.5 inline-flex size-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none sm:right-3 sm:top-3 sm:size-8"
           >
@@ -198,6 +244,7 @@ DialogHeader.displayName = 'DialogHeader';
 
 const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
+    data-slot="dialog-footer"
     className={cn(
       'flex flex-col-reverse gap-2 [&_[data-slot=button]]:min-h-11 sm:flex-row sm:justify-end sm:[&_[data-slot=button]]:min-h-0',
       className,
@@ -213,7 +260,8 @@ const DialogTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
-    className={cn('text-lg font-semibold leading-none tracking-tight', className)}
+    // An e-mail address or a record number is one long word; it wraps instead of widening the layer.
+    className={cn('text-lg font-semibold leading-none tracking-tight wrap-anywhere', className)}
     {...props}
   />
 ));
@@ -225,7 +273,7 @@ const DialogDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Description
     ref={ref}
-    className={cn('text-sm text-muted-foreground', className)}
+    className={cn('text-sm text-muted-foreground wrap-anywhere', className)}
     {...props}
   />
 ));

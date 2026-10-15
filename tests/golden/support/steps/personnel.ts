@@ -12,7 +12,10 @@ import type {
   PersonnelRequirementType,
 } from '../../../../lib/personnel/lifecycle';
 import { EMPLOYMENT_TYPE_LABELS, type EmploymentType } from '../../../../lib/personnel/types';
-import type { OrganizationResponsibility } from '../../../../lib/responsibilities/types';
+import {
+  RESPONSIBILITY_LABELS,
+  type OrganizationResponsibility,
+} from '../../../../lib/responsibilities/types';
 import { ROLE_LABELS } from '../../../../lib/roles';
 import {
   confirmed,
@@ -234,6 +237,72 @@ export function submitPersonnelRecordButton(dialog: Locator): Locator {
 /** The detail action that opens the „Kondition hinzufügen“ dialog. */
 export function addConditionButton(page: Page): Locator {
   return page.getByRole('button', { name: 'Kondition hinzufügen' });
+}
+
+/** The /mitarbeiter page action that opens the invitation dialog. */
+export function memberInviteButton(page: Page): Locator {
+  return page.getByRole('button', { name: 'Mitarbeiter hinzufügen', exact: true });
+}
+
+/** The detail action of a personnel record without a login that opens its invitation dialog. */
+export function personnelInviteButton(page: Page): Locator {
+  return page.getByRole('button', { name: 'Zugang einladen', exact: true });
+}
+
+/** The detail action that opens the „Wochenplan hinzufügen“ dialog. */
+export function addWorkScheduleButton(page: Page): Locator {
+  return page.getByRole('button', { name: 'Wochenplan hinzufügen', exact: true });
+}
+
+/** The titles of the people dialogs on /mitarbeiter and the member detail. */
+const PEOPLE_DIALOG_TITLES = {
+  createRecord: PERSONNEL_COPY.createRecord,
+  invite: 'Mitarbeiter einladen',
+  personnelInvite: /^Zugang für .+ einladen$/,
+  addCondition: 'Kondition hinzufügen',
+  addSchedule: 'Wochenplan hinzufügen',
+} as const;
+
+/** The titles of the people confirmations; a member that holds a responsibility gets the blocked variant. */
+const PEOPLE_CONFIRMATION_TITLES = {
+  inviteCancel: 'Einladung stornieren?',
+  inviteDelete: 'Einladung löschen?',
+  memberRemove: /^Mitglied (entfernen\?|kann noch nicht entfernt werden)$/,
+  conditionDelete: 'Kondition löschen?',
+  scheduleDelete: 'Wochenplan löschen?',
+} as const;
+
+/** One open people dialog by its title. */
+export function peopleDialog(page: Page, dialog: keyof typeof PEOPLE_DIALOG_TITLES): Locator {
+  return page.getByRole('dialog', { name: PEOPLE_DIALOG_TITLES[dialog], exact: true });
+}
+
+/** One open people confirmation by its title. */
+export function peopleConfirmation(page: Page, dialog: keyof typeof PEOPLE_CONFIRMATION_TITLES): Locator {
+  return page.getByRole('alertdialog', { name: PEOPLE_CONFIRMATION_TITLES[dialog], exact: true });
+}
+
+/** The versioned lists of the member detail whose rows carry an actions menu. */
+const VERSION_ACTIONS_PREFIXES = {
+  condition: 'Aktionen für Kondition vom',
+  schedule: 'Aktionen für Wochenplan ab',
+} as const;
+
+/** The actions menu trigger of the condition or schedule version valid from an ISO date. */
+export function versionActionsButton(
+  page: Page,
+  list: keyof typeof VERSION_ACTIONS_PREFIXES,
+  validFromIso: string,
+): Locator {
+  return page.getByRole('button', {
+    name: `${VERSION_ACTIONS_PREFIXES[list]} ${isoToGermanDate(validFromIso)}`,
+    exact: true,
+  });
+}
+
+/** An item of an open version or invitation actions menu. */
+export function versionMenuItem(page: Page, item: 'edit' | 'delete'): Locator {
+  return page.getByRole('menuitem', { name: SHARED_COPY.action[item], exact: true });
 }
 
 /** One visible condition version by its valid-from date (dd.mm.yyyy). */
@@ -623,6 +692,22 @@ export function addDelegationButton(scope: Page | Locator): Locator {
   return scope.getByRole('button', { name: 'Vertretung eintragen' });
 }
 
+/** The open change dialog of one responsibility: „<Verantwortung> ändern“. */
+export function responsibilityChangeDialog(page: Page, responsibility: OrganizationResponsibility): Locator {
+  return page.getByRole('dialog', { name: `${RESPONSIBILITY_LABELS[responsibility]} ändern`, exact: true });
+}
+
+/** The open delegation dialog of one responsibility: „Vertretung für <Verantwortung>“. */
+export function responsibilityDelegationDialog(
+  page: Page,
+  responsibility: OrganizationResponsibility,
+): Locator {
+  return page.getByRole('dialog', {
+    name: `Vertretung für ${RESPONSIBILITY_LABELS[responsibility]}`,
+    exact: true,
+  });
+}
+
 /** The member detail's responsibility summary region. */
 export function responsibilitySummary(page: Page): Locator {
   return page.getByRole('region', { name: 'Verantwortlichkeiten & Vertretung' });
@@ -771,6 +856,8 @@ const LIFECYCLE_CONTROLS = {
   publish: 'Veröffentlichen',
   createPlan: 'Plan anlegen',
   planDialog: 'Onboardingplan anlegen',
+  addRequirement: 'Anforderung',
+  requirementDialog: 'Anforderung ergänzen',
   noTemplateOption: 'Ohne Vorlage',
   file: 'Datei',
   uploadDialog: 'Geschützte Personalunterlage',
@@ -804,6 +891,55 @@ export function templateVersionLabel(templateName: string, version: number): str
 /** The lifecycle section of a member detail. */
 export function personnelLifecycle(page: Page): Locator {
   return page.getByRole('main').getByTestId('personnel-lifecycle');
+}
+
+/** The settings action that opens the onboarding template dialog; enabled once the templates loaded. */
+export function onboardingTemplateButton(page: Page): Locator {
+  return page.getByRole('button', { name: LIFECYCLE_CONTROLS.template, exact: true });
+}
+
+export function onboardingTemplateDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: LIFECYCLE_CONTROLS.templateDialog, exact: true });
+}
+
+/** The person's own evidence upload: the section action on /aufgaben and the dialog's title. */
+const OWN_EVIDENCE_COPY = {
+  upload: 'Nachweis hochladen',
+  dialog: 'Gesundheitsnachweis hochladen',
+} as const;
+
+/** „Nachweis hochladen“ in the own personnel tasks, which show while a requirement is open. */
+export function ownEvidenceUploadButton(page: Page): Locator {
+  return page
+    .getByRole('main')
+    .getByTestId('personnel-own-actions')
+    .getByRole('button', { name: OWN_EVIDENCE_COPY.upload, exact: true });
+}
+
+export function ownEvidenceUploadDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: OWN_EVIDENCE_COPY.dialog, exact: true });
+}
+
+/** The lifecycle section's dialogs: the action that opens each and its title. */
+const LIFECYCLE_DIALOGS = {
+  access: { trigger: LIFECYCLE_CONTROLS.controlAccess, title: LIFECYCLE_CONTROLS.accessDialog },
+  transition: { trigger: LIFECYCLE_CONTROLS.recordTransition, title: LIFECYCLE_CONTROLS.transitionDialog },
+  document: { trigger: LIFECYCLE_CONTROLS.file, title: LIFECYCLE_CONTROLS.uploadDialog },
+  plan: { trigger: LIFECYCLE_CONTROLS.createPlan, title: LIFECYCLE_CONTROLS.planDialog },
+  requirement: { trigger: LIFECYCLE_CONTROLS.addRequirement, title: LIFECYCLE_CONTROLS.requirementDialog },
+} as const;
+
+/** The lifecycle section's action that opens one of its dialogs. */
+export function lifecycleDialogTrigger(page: Page, dialog: keyof typeof LIFECYCLE_DIALOGS): Locator {
+  return personnelLifecycle(page).getByRole('button', {
+    name: LIFECYCLE_DIALOGS[dialog].trigger,
+    exact: true,
+  });
+}
+
+/** One open dialog of the lifecycle section by its title. */
+export function lifecycleDialog(page: Page, dialog: keyof typeof LIFECYCLE_DIALOGS): Locator {
+  return page.getByRole('dialog', { name: LIFECYCLE_DIALOGS[dialog].title, exact: true });
 }
 
 /** Publishes an onboarding template with one access-blocking item from the settings. */

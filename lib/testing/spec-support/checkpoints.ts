@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { writeJsonAtomically } from '../runner/file-lock';
 import { uuidSchema } from '../../validation/uuid';
 
-// World-scoped seed-or-reuse values: the layout fixture.
+// World-scoped seed-or-reuse values: the layout and surface fixtures.
 // Tests never hand values to each other through this file (testing.md, "Spec checklist").
 const valuesSchema = z
   .object({
@@ -22,6 +22,9 @@ const valuesSchema = z
       })
       .strict()
       .optional(),
+    // The rows the tab and dialog audits seed once per world, by a name of the
+    // form `<area>.<record>` (tests/audit/support/surface-fixtures.ts).
+    'surface.fixtures': z.record(z.string().min(1), z.string().min(1)).optional(),
   })
   .strict();
 

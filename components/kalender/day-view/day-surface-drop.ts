@@ -10,7 +10,8 @@ import { reassignmentChanges } from '@/lib/calendar/board-model';
 import { formatRefusalDate } from '@/lib/calendar/messages';
 import type { CalendarDragPayload, CalendarDragTarget } from '../drag-engine/payload';
 import { moveSuccessMessage } from '../board/use-board-surface';
-import { jobSpanMinutes, rowFor } from './day-surface-rules';
+import { dayRowFor, dayRowKey, dayRowOwnsJob, UNASSIGNED_DAY_ROW_KEY } from '@/lib/calendar/day-rows';
+import { jobSpanMinutes } from './day-surface-rules';
 import type { DaySurfaceInput } from './use-day-surface';
 
 /**
@@ -30,7 +31,7 @@ export function applyDayDrop(
     return;
   }
   const minutes = target.minutes ?? 0;
-  const row = rowFor(rows, target.userId);
+  const row = dayRowFor(rows, dayRowKey(target));
   const name = row?.name ?? 'Ohne Zuweisung';
   const time = formatMinutesOfDay(minutes);
   const dateLabel = formatRefusalDate(dateIso);
@@ -38,16 +39,15 @@ export function applyDayDrop(
     case 'occurrence':
     case 'untimed': {
       const { job } = payload;
+      // An untimed card leaves the first row that owns it, by record as on the board.
+      const trayRow =
+        rows.find((candidate) => candidate.key !== UNASSIGNED_DAY_ROW_KEY && dayRowOwnsJob(candidate, job)) ??
+        null;
       const sourceRecordId =
         payload.kind === 'occurrence'
           ? payload.sourceEmployeeRecordId
-          : (rows.find((candidate) => job.assignedUserIds.includes(candidate.userId))?.row
-              ?.employeeRecordId ?? null);
-      const sourceUserId =
-        payload.kind === 'occurrence'
-          ? payload.sourceUserId
-          : (job.assignedUserIds.find((userId) => rows.some((candidate) => candidate.userId === userId)) ??
-            null);
+          : (trayRow?.row?.employeeRecordId ?? null);
+      const sourceUserId = payload.kind === 'occurrence' ? payload.sourceUserId : (trayRow?.userId ?? null);
       const reassign =
         reassignmentChanges({
           job,

@@ -19,6 +19,7 @@ export const VACATION_COPY = {
   rangeEnd: SHARED_COPY.field.rangeEnd,
   submitRequest: 'Antrag einreichen',
   noEntitlement: 'Kein Urlaubsanspruch hinterlegt',
+  rejectTitle: 'Urlaubsantrag ablehnen',
   approverNoLongerResponsible:
     'Du bist für diese Urlaubsfreigabe nicht mehr verantwortlich. Die Ansicht wurde aktualisiert.',
 } as const;
@@ -63,9 +64,27 @@ export function approveVacationButton(page: Page, personName: string): Locator {
   return page.getByRole('button', { name: `Urlaubsantrag von ${personName} genehmigen` });
 }
 
+/** The approval card's reject action for one person's request; it opens the reason dialog. */
+export function rejectVacationButton(page: Page, personName: string): Locator {
+  // The approvals render a card list and a table; only the layout of the current width is visible.
+  return page
+    .getByRole('button', { name: `Urlaubsantrag von ${personName} ablehnen` })
+    .filter({ visible: true });
+}
+
+/** The reason dialog of a rejection. */
+export function vacationRejectDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: VACATION_COPY.rejectTitle, exact: true });
+}
+
 /** The own vacation section's action that opens the request dialog. */
 export function requestVacationButton(page: Page): Locator {
   return page.getByRole('button', { name: VACATION_COPY.requestVacation });
+}
+
+/** The open request dialog, named by its title. */
+export function vacationRequestDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: VACATION_COPY.requestVacation, exact: true });
 }
 
 /** The submit button inside the request dialog. */

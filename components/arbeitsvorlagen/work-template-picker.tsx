@@ -1,14 +1,14 @@
 'use client';
 
-import { useEffect, useState, type ReactElement } from 'react';
-import Link from 'next/link';
-
-import { OptionsLoadError } from '@/components/auftraege/shared/options-load-error';
+import { type ReactElement } from 'react';
 import { Field } from '@/components/ui/field';
 import { SearchableSelect } from '@/components/ui/searchable-select';
+import { SectionError } from '@/components/ui/section-error';
 import { Skeleton } from '@/components/ui/skeleton';
+import { TextLink } from '@/components/ui/text-link';
+import { useClientRead } from '@/hooks/use-client-read';
 import { readInBackground } from '@/lib/data/background-read-client';
-import type { PublishedWorkTemplateOption, WorkTemplateTargetType } from '@/lib/work-templates/types';
+import type { WorkTemplateTargetType } from '@/lib/work-templates/types';
 
 export function WorkTemplatePicker({
   targetType,
@@ -21,53 +21,30 @@ export function WorkTemplatePicker({
   onChange: (value: string) => void;
   disabled?: boolean;
 }): ReactElement {
-  const [options, setOptions] = useState<PublishedWorkTemplateOption[] | null>(null);
-  const [failed, setFailed] = useState(false);
-  // Bumped by the retry so the load effect runs again.
-  const [reloadCount, setReloadCount] = useState(0);
-  useEffect(() => {
-    const controller = new AbortController();
-    void readInBackground('published-work-templates', { targetType }, controller.signal).then((result) => {
-      if (controller.signal.aborted) return;
-      if (!result.success) {
-        setFailed(true);
-        setOptions([]);
-        return;
-      }
-      setFailed(false);
-      setOptions(result.data);
-    });
-    return () => controller.abort();
-  }, [targetType, reloadCount]);
-  function retry(): void {
-    setFailed(false);
-    setOptions(null);
-    setReloadCount((count) => count + 1);
-  }
+  const templates = useClientRead({
+    read: (signal) => readInBackground('published-work-templates', { targetType }, signal),
+    deps: [targetType],
+    failureMessage: 'Arbeitsvorlagen konnten nicht geladen werden.',
+  });
+  const options = templates.data?.data;
   return (
     <Field
       label="Arbeitsvorlage (optional)"
       htmlFor={`work-template-${targetType}`}
       description={
-        failed ? undefined : options?.length === 0 ? (
+        templates.failure ? undefined : options?.length === 0 ? (
           <>
             Noch keine passende Vorlage veröffentlicht.{' '}
-            <Link href="/arbeitsvorlagen" className="text-primary-text underline-offset-2 hover:underline">
-              Arbeitsvorlagen verwalten
-            </Link>
+            <TextLink href="/arbeitsvorlagen">Arbeitsvorlagen verwalten</TextLink>
           </>
         ) : (
           'Die Inhalte werden als bearbeitbare Planung übernommen. Bestand und Kalender bleiben unverändert.'
         )
       }
     >
-      {failed ? (
-        <OptionsLoadError
-          error="Arbeitsvorlagen konnten nicht geladen werden."
-          onRetry={retry}
-          retrying={false}
-        />
-      ) : options === null ? (
+      {templates.failure ? (
+        <SectionError failure={templates.failure} />
+      ) : options === undefined ? (
         <Skeleton className="h-9 w-full" />
       ) : (
         <SearchableSelect

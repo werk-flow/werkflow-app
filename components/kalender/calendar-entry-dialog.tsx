@@ -5,7 +5,7 @@ import { Briefcase, CalendarPlus, Clock } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { CreateJobFormContent } from '@/components/auftraege/forms/create-job-form-content';
-import { OptionsLoadError } from '@/components/auftraege/shared/options-load-error';
+import { SectionError } from '@/components/ui/section-error';
 import { ManualEntryFormContent } from '@/components/manual-entry-form-content';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { useOrganization } from '@/components/organization/organization-context';
@@ -141,7 +141,7 @@ export function CalendarEntryDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} pending={isFormPending}>
-      <DialogContent workspace onOpenAutoFocus={(e) => e.preventDefault()}>
+      <DialogContent workspace>
         <DialogHeader>
           <DialogTitle>Kalendereintrag erstellen</DialogTitle>
           <DialogDescription>
@@ -195,11 +195,9 @@ export function CalendarEntryDialog({
             </div>
           )}
           {hasDataLoadFailed && (
-            <OptionsLoadError
-              error="Die Mitarbeiter konnten nicht geladen werden."
-              onRetry={() => void memberView.refresh()}
-              retrying={memberView.isRefreshing}
-            />
+            <SectionError onRetry={() => void memberView.refresh()} retryPending={memberView.isRefreshing}>
+              Die Mitarbeiter konnten nicht geladen werden.
+            </SectionError>
           )}
 
           <TabsContent value="job" className="flex min-h-0 flex-1 flex-col">

@@ -118,6 +118,22 @@ test('focus remains visible without adding an orange border or shifting the fiel
   expect(after.shadow).not.toBe('none');
 });
 
+test('a scrolling page body becomes a tab stop while its only reachable control is disabled', async ({
+  page,
+}) => {
+  const section = page.getByRole('region', { name: 'Seitenkörper' });
+  const bodyRegion = section.getByRole('region', { name: 'Seiteninhalt' });
+  await expect(section.getByRole('button', { name: 'Einziger Knopf' })).toBeEnabled();
+  // The enabled button is the keyboard's way in, so the body adds no tab stop of its own.
+  await expect(bodyRegion).toHaveCount(0);
+  await section.getByRole('button', { name: 'Knopf umschalten' }).click();
+  await expect(section.getByRole('button', { name: 'Einziger Knopf' })).toBeDisabled();
+  // The button inside the hidden subtree cannot take focus either, so the body must.
+  await expect(bodyRegion).toHaveAttribute('tabindex', '0');
+  await section.getByRole('button', { name: 'Knopf umschalten' }).click();
+  await expect(bodyRegion).toHaveCount(0);
+});
+
 test('a two-minute activity has a readable label and opens from its center', async ({ page }) => {
   const block = page.getByRole('region', { name: 'Kurze Fahrt' }).getByRole('button');
   const box = await block.boundingBox();

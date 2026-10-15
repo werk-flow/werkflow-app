@@ -70,7 +70,7 @@ export function ConvertRequestDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange} pending={isLoading}>
-        <DialogContent workspace onOpenAutoFocus={(e) => e.preventDefault()}>
+        <DialogContent workspace>
           <DialogHeader>
             <DialogTitle>Anfrage umwandeln</DialogTitle>
             <DialogDescription>
@@ -80,7 +80,11 @@ export function ConvertRequestDialog({
           </DialogHeader>
           <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
             <DialogBody className="grid gap-4 py-2">
-              <Tabs value={target} onValueChange={(value) => setTarget(value as ConversionTarget)}>
+              <Tabs
+                panels={false}
+                value={target}
+                onValueChange={(value) => setTarget(value as ConversionTarget)}
+              >
                 <TabsList className="h-9 w-full">
                   <TabsTrigger value="job" className="flex-1">
                     Auftrag

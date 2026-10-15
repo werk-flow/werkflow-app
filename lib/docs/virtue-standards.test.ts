@@ -7,6 +7,7 @@ import {
   findStandardProblems,
   findUnreferencedMechanisms,
   isRuleTest,
+  jsxA11yNameExists,
   parseMechanismTag,
   readStandardSections,
   TEST_FILE_PATTERN,
@@ -158,6 +159,39 @@ describe('Enforced by lines', () => {
       'sql:gone',
       'bun run gone',
     ]);
+  });
+
+  test('reads a jsx-a11y name as a lint rule, not as a path', () => {
+    const asked: string[] = [];
+    const recording: MechanismResolver = {
+      ...resolver,
+      lintNameExists: (name) => {
+        asked.push(name);
+        return name === 'jsx-a11y/recommended';
+      },
+      pathExists: () => true,
+    };
+    const markdown = '- **Enforced by.** Tier 2: `jsx-a11y/recommended`, `jsx-a11y/no-such-rule`.';
+    expect(findEnforcedByProblems(markdown, recording).map((problem) => problem.token)).toEqual([
+      'jsx-a11y/no-such-rule',
+    ]);
+    expect(asked).toEqual(['jsx-a11y/recommended', 'jsx-a11y/no-such-rule']);
+  });
+});
+
+describe('jsx-a11y lint names', () => {
+  const corpus = 'rules: { ...jsxA11y.flatConfigs.recommended.rules }';
+  const ruleNames = ['no-autofocus', 'click-events-have-key-events'];
+
+  test('resolve the recommended set and its rules when the configuration spreads it', () => {
+    expect(jsxA11yNameExists('jsx-a11y/recommended', corpus, ruleNames)).toBe(true);
+    expect(jsxA11yNameExists('jsx-a11y/no-autofocus', corpus, ruleNames)).toBe(true);
+  });
+
+  test('refuse an unknown rule, another plugin and a configuration without the set', () => {
+    expect(jsxA11yNameExists('jsx-a11y/no-such-rule', corpus, ruleNames)).toBe(false);
+    expect(jsxA11yNameExists('ui/no-autofocus', corpus, ruleNames)).toBe(false);
+    expect(jsxA11yNameExists('jsx-a11y/recommended', 'rules: {}', ruleNames)).toBe(false);
   });
 });
 

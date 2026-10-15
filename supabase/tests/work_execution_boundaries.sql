@@ -87,6 +87,28 @@ begin
   if v_transition.execution_state <> 'in_progress' or v_transition.execution_version <> 1
   then raise exception 'the manual start did not move the job to version 1 in progress'; end if;
 
+  -- The client offers only getAllowedWorkTransitions (lib/ui/action-prechecks.ts):
+  -- a step outside the matrix and a manager-only step for an employee are refused.
+  begin
+    perform public.transition_work_execution(
+      p_organization_id => v_org, p_target_type => 'job', p_target_id => v_job,
+      p_to_state => 'not_started', p_expected_version => 1, p_actor_id => v_admin
+    );
+    raise exception 'a step outside the transition matrix was accepted';
+  exception when others then
+    if sqlerrm not like '%work_transition_not_allowed%' then raise; end if;
+  end;
+  begin
+    perform public.transition_work_execution(
+      p_organization_id => v_org, p_target_type => 'job', p_target_id => v_job,
+      p_to_state => 'cancelled', p_expected_version => 1, p_actor_id => v_employee,
+      p_reason => 'Kunde hat abgesagt.'
+    );
+    raise exception 'an employee cancelled the job';
+  exception when others then
+    if sqlerrm not like '%work_transition_not_authorized%' then raise; end if;
+  end;
+
   select * into v_blocker from public.upsert_work_blocker(
     p_organization_id => v_org, p_blocker_id => null, p_expected_version => null,
     p_job_id => v_job, p_project_id => null, p_instruction_item_id => null,

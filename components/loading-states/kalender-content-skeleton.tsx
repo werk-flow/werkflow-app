@@ -18,7 +18,7 @@ export function KalenderContentSkeleton({
         </div>
       )}
 
-      <div className="flex-1 overflow-auto" aria-hidden="true">
+      <div className="flex-1 overflow-hidden" aria-hidden="true">
         {view !== 'month' && (
           <div className="space-y-4 px-4 py-3 sm:hidden">
             {Array.from({ length: 3 }, (_, index) => (

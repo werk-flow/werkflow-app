@@ -43,6 +43,7 @@ import {
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { RowActionsMenu } from '@/components/ui/row-actions-menu';
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
 import { SearchableMultiSelect, SearchableSelect } from '@/components/ui/searchable-select';
 import { TimeInput } from '@/components/ui/time-input';
 import { useSettleOnChange } from '@/hooks/use-settle-on-change';
@@ -158,12 +159,57 @@ function usePendingDialogRequest(onSuccess: () => void) {
   return { pending, error, start, answerControls };
 }
 
+// A save whose request disables its button and answers with a warning that
+// opens a second, conditionally rendered dialog (the qualification and
+// planning warnings): Escape on the warning returns focus to the save button.
+function WarningAfterSaveFixture(): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [warning, setWarning] = useState(false);
+  const save = (): void => {
+    setSaving(true);
+    window.setTimeout(() => {
+      setSaving(false);
+      setWarning(true);
+    }, 300);
+  };
+  return (
+    <>
+      <Button onClick={() => setOpen(true)}>Zuweisung öffnen</Button>
+      <Dialog open={open} onOpenChange={setOpen} pending={saving}>
+        <DialogContent>
+          <DialogTitle>Zuweisung</DialogTitle>
+          <DialogDescription>Speichern antwortet mit einem Hinweis.</DialogDescription>
+          <Field label="Notiz">
+            <Input />
+          </Field>
+          <Button pending={saving} disabled={saving} onClick={save}>
+            Speichern
+          </Button>
+        </DialogContent>
+      </Dialog>
+      {warning ? (
+        <Dialog open onOpenChange={(next) => !next && setWarning(false)}>
+          <DialogContent>
+            <DialogTitle>Zuweisung prüfen</DialogTitle>
+            <DialogDescription>Die Auswahl deckt nicht alle Hinweise ab.</DialogDescription>
+            <Field label="Kurze Begründung">
+              <Input />
+            </Field>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+    </>
+  );
+}
+
 // A dialog whose request runs refuses the user's dismissal until it settles;
 // `pending` on the registry roots owns this for every caller. The owner's own
 // close after the answer always works.
 function PendingDialogFixture(): React.JSX.Element {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [saved, setSaved] = useState(0);
   const form = usePendingDialogRequest(() => {
     setDialogOpen(false);
@@ -177,6 +223,7 @@ function PendingDialogFixture(): React.JSX.Element {
     <section aria-label="Laufende Anfrage">
       <Button onClick={() => setDialogOpen(true)}>Formular öffnen</Button>
       <Button onClick={() => setConfirmOpen(true)}>Bestätigung öffnen</Button>
+      <Button onClick={() => setSheetOpen(true)}>Filter öffnen</Button>
       <output aria-label="Gespeicherte Anfragen">{saved}</output>
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen} pending={form.pending}>
         <DialogContent>
@@ -209,6 +256,16 @@ function PendingDialogFixture(): React.JSX.Element {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <WarningAfterSaveFixture />
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <SheetContent>
+          <SheetTitle>Filter</SheetTitle>
+          <SheetDescription>Ein Bereich ohne Auslöser des Primitivs.</SheetDescription>
+          <Field label="Suchbegriff">
+            <Input />
+          </Field>
+        </SheetContent>
+      </Sheet>
     </section>
   );
 }

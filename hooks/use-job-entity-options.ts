@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useOrganization } from '@/components/organization/organization-context';
 import { useUserProfile } from '@/components/user/user-profile-context';
+import type { ReadFailure } from '@/hooks/use-client-read';
 import { readInBackground } from '@/lib/data/background-read-client';
 import type { JobEntityOption, JobOptionRequest } from '@/lib/jobs/option-types';
 
@@ -11,9 +12,8 @@ export type JobEntityOptionsState = {
   options: JobEntityOption[];
   onSearchChange: (query: string) => void;
   loading: boolean;
-  loadError: string | undefined;
-  /** Reads the failed page again with the same text. */
-  onRetryLoad: (() => void) | undefined;
+  /** The failed page read; its retry reads the page again with the same text. */
+  loadFailure: ReadFailure | null;
   onLoadMore: (() => void) | undefined;
 };
 
@@ -139,13 +139,16 @@ export function useJobEntityOptions(
     options,
     onSearchChange: search,
     loading: pendingScope === scope,
-    loadError: failed ? LOAD_ERROR : undefined,
-    onRetryLoad: failed
-      ? () => {
-          setPendingScope(scope);
-          setCursor((previous) => ({ scope, query, offset, revision: previous.revision + 1 }));
+    loadFailure: failed
+      ? {
+          message: LOAD_ERROR,
+          retry: () => {
+            setPendingScope(scope);
+            setCursor((previous) => ({ scope, query, offset, revision: previous.revision + 1 }));
+          },
+          retrying: pendingScope === scope,
         }
-      : undefined,
+      : null,
     onLoadMore:
       current?.hasMore && current.query === currentQuery && pendingScope !== scope
         ? () => {

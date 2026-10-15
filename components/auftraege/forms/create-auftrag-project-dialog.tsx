@@ -78,7 +78,7 @@ export function CreateAuftragProjectDialog({
           </Button>
         </DialogTrigger>
       )}
-      <DialogContent workspace onOpenAutoFocus={(e) => e.preventDefault()}>
+      <DialogContent workspace>
         <DialogHeader>
           <DialogTitle>Neuen Auftrag oder Projekt erstellen</DialogTitle>
           <DialogDescription>

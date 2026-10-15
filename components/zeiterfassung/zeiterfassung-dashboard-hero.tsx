@@ -54,7 +54,7 @@ function ZeiterfassungTodayTargetNote({
         </p>
       )}
       {todayTargetHint && (
-        <p className="mt-1 max-w-sm text-center text-xs text-muted-foreground/80">{todayTargetHint}</p>
+        <p className="mt-1 max-w-sm text-center text-xs text-muted-foreground">{todayTargetHint}</p>
       )}
     </>
   );

@@ -194,7 +194,7 @@ export function CreateClientDialog({
           </Button>
         </DialogTrigger>
       )}
-      <DialogContent size="md" onOpenAutoFocus={(e) => e.preventDefault()}>
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Neuen Kunden anlegen</DialogTitle>
           <DialogDescription>Erstelle einen neuen Kunden für deine Organisation.</DialogDescription>

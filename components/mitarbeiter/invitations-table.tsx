@@ -171,7 +171,7 @@ function InviteCard({
         </div>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
           <RoleBadge role={invite.invited_role} compact />
-          <span className="text-muted-foreground/60">·</span>
+          <span className="text-muted-foreground">·</span>
           <span>
             Eingeladen:{' '}
             {new Date(invite.created_at).toLocaleDateString('de-DE', {
@@ -180,7 +180,7 @@ function InviteCard({
               year: '2-digit',
             })}
           </span>
-          <span className="text-muted-foreground/60">·</span>
+          <span className="text-muted-foreground">·</span>
           <span>
             Läuft ab:{' '}
             {new Date(invite.expires_at).toLocaleDateString('de-DE', {

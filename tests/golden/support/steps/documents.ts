@@ -44,7 +44,9 @@ const LINK_FILTER_LABELS: Record<DocumentLibraryLinkFilter, string> = {
 };
 
 const FILE_ACTION_LABELS = {
+  open: 'Öffnen',
   details: 'Details',
+  rename: 'Umbenennen',
   manageLinks: 'Verknüpfungen verwalten',
   copy: 'Kopieren',
   move: 'Verschieben',
@@ -62,9 +64,25 @@ const DIALOG_TITLES = {
   copy: 'Kopieren nach',
   move: 'Verschieben nach',
   details: 'Dateidetails',
+  rename: 'Datei umbenennen',
+  attach: 'Vorhandenes Dokument verknüpfen',
 } as const;
 
 type DocumentDialog = keyof typeof DIALOG_TITLES;
+
+/** The alert dialogs of the library and the contextual frame, by title. */
+const ALERT_TITLES = {
+  trash: 'Datei löschen?',
+  contextualTrash: 'Datei in Papierkorb verschieben?',
+} as const;
+
+/** The contextual frame's attach button and row menu (contextual-documents-toolbar.tsx, -row-menu.tsx). */
+const CONTEXTUAL_ACTIONS = {
+  attach: 'Verknüpfen',
+  rowMenu: 'Dateiaktionen öffnen',
+  rename: 'Umbenennen',
+  trash: 'In Papierkorb verschieben',
+} as const;
 
 const CONFIRM_LABELS = {
   delete: 'Datei löschen',
@@ -218,8 +236,46 @@ export async function chooseDocumentCategoryFilter(page: Page, category: Documen
   await page.getByRole('option', { name: DOCUMENT_CATEGORY_LABELS[category], exact: true }).click();
 }
 
-function documentFileActionsButton(page: Page, fileName: string): Locator {
+export function documentFileActionsButton(page: Page, fileName: string): Locator {
   return page.getByRole('button', { name: `Dateiaktionen für ${fileName} öffnen` });
+}
+
+/** One item of the open file action menu. */
+export function documentFileActionItem(page: Page, action: DocumentFileAction): Locator {
+  return page.getByRole('menuitem', { name: FILE_ACTION_LABELS[action], exact: true });
+}
+
+/** A document dialog as an open layer, named by its title. */
+export function documentDialogLayer(page: Page, dialog: DocumentDialog): Locator {
+  return page.getByRole('dialog', { name: DIALOG_TITLES[dialog], exact: true });
+}
+
+/** A document confirmation as an open layer, named by its title. */
+export function documentAlertLayer(page: Page, alert: keyof typeof ALERT_TITLES): Locator {
+  return page.getByRole('alertdialog', { name: ALERT_TITLES[alert], exact: true });
+}
+
+/** The viewer dialog of one file as an open layer; its title is the file name. */
+export function documentViewerLayer(page: Page, fileName: string): Locator {
+  return page.getByRole('dialog', { name: fileName, exact: true });
+}
+
+/** The contextual frame's „Verknüpfen“ button. */
+export function documentsRegionAttachButton(region: Locator): Locator {
+  return region.getByRole('button', { name: CONTEXTUAL_ACTIONS.attach, exact: true });
+}
+
+/** The action menu button of the document row that shows this file in the contextual frame. */
+export function contextualDocumentActionsButton(region: Locator, fileName: string): Locator {
+  return confirmed(region.locator('[data-row-id]').filter({ hasText: fileName })).getByRole('button', {
+    name: CONTEXTUAL_ACTIONS.rowMenu,
+    exact: true,
+  });
+}
+
+/** One item of the open contextual row menu. */
+export function contextualDocumentActionItem(page: Page, action: 'rename' | 'trash'): Locator {
+  return page.getByRole('menuitem', { name: CONTEXTUAL_ACTIONS[action], exact: true });
 }
 
 /** Opens the file's action menu and chooses the action. */

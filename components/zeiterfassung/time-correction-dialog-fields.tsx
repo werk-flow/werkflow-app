@@ -215,8 +215,7 @@ export function TimeCorrectionDialogFields({ entry, form }: TimeCorrectionDialog
                 onChange={setJobId}
                 onSearchChange={jobSearch.onSearchChange}
                 loading={jobSearch.loading}
-                loadError={jobSearch.loadError}
-                onRetryLoad={jobSearch.onRetryLoad}
+                loadFailure={jobSearch.loadFailure}
                 onLoadMore={jobSearch.onLoadMore}
                 searchPlaceholder="Auftrag suchen …"
                 emptyMessage="Kein Auftrag gefunden"

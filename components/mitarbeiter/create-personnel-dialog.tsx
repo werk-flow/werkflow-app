@@ -52,7 +52,7 @@ export function CreatePersonnelDialog() {
           </span>
         </Button>
       </DialogTrigger>
-      <DialogContent size="md" onOpenAutoFocus={(e) => e.preventDefault()}>
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Personalakte anlegen</DialogTitle>
           <DialogDescription>

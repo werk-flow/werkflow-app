@@ -247,9 +247,33 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['wave-2:p1-23', 'wave-2/p1-23.spec.ts', ['time', 'personnel', 'documents']],
   ['wave-2:p1-24', 'wave-2/p1-24.spec.ts', ['personnel', 'documents', 'time', 'work', 'attention']],
   ['wave-3:p1-24a', 'wave-3/p1-24a.spec.ts', ['planning', 'time', 'personnel', 'work', 'attention']],
+  // Every list page at 375 px; the detail pages, aliases and wide widths in layout:viewports (about four minutes each).
   ['layout', 'layout/mobile-viewport.spec.ts', ['*']],
+  ['layout:viewports', 'layout/viewport-details.spec.ts', ['*']],
+  // Every page with its tabs and dialogs by area (lib/testing/selection/surface-groups.ts): widths, axe, keyboard path.
+  ['layout:work', 'layout/surfaces-work.spec.ts', ['work', 'customers']],
+  ['layout:job', 'layout/surfaces-job.spec.ts', ['work', 'documents', 'inventory']],
+  ['layout:job-actions', 'layout/surfaces-job-actions.spec.ts', ['work', 'personnel', 'planning']],
+  ['layout:job-lifecycle', 'layout/surfaces-job-lifecycle.spec.ts', ['work']],
+  ['layout:requests', 'layout/surfaces-requests.spec.ts', ['customers', 'work']],
+  ['layout:templates', 'layout/surfaces-templates.spec.ts', ['work']],
+  ['layout:customers', 'layout/surfaces-customers.spec.ts', ['customers']],
+  ['layout:planning', 'layout/surfaces-planning.spec.ts', ['planning', 'time']],
+  ['layout:planning-board', 'layout/surfaces-planning-board.spec.ts', ['planning']],
+  ['layout:time', 'layout/surfaces-time.spec.ts', ['time']],
+  ['layout:people', 'layout/surfaces-people.spec.ts', ['personnel']],
+  ['layout:personnel', 'layout/surfaces-personnel.spec.ts', ['personnel', 'documents']],
+  ['layout:personnel-absence', 'layout/surfaces-personnel-absence.spec.ts', ['personnel', 'time']],
+  ['layout:settings', 'layout/surfaces-settings.spec.ts', ['attention', 'personnel']],
+  ['layout:documents', 'layout/surfaces-documents.spec.ts', ['documents']],
+  ['layout:inventory', 'layout/surfaces-inventory.spec.ts', ['inventory']],
+  ['layout:service', 'layout/surfaces-service.spec.ts', ['service']],
+  ['layout:field', 'layout/surfaces-field.spec.ts', ['time', 'work', 'personnel', 'planning', 'attention']],
+  ['layout:field-time', 'layout/surfaces-field-time.spec.ts', ['time', 'personnel']],
   // Reference screenshots of every page family; release mode and explicit request only.
   ['visual', 'visual/references.spec.ts', ['*']],
+  // Rendered acceptance captures of the open sets (tests/audit/support/acceptance-sets.ts); release mode and explicit request only.
+  ['visual:acceptance', 'visual/acceptance.spec.ts', ['*']],
   ['security:account', 'security/account.spec.ts', ['*']],
   ['list-pagination', 'pagination/list-pagination.spec.ts', ['inventory', 'documents', 'work']],
   // Measured navigation and view switches against the typical data profile (Step 2).

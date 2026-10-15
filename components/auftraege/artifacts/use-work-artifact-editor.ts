@@ -1,8 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useBusyIds } from '@/hooks/use-busy-id';
+import { useClientRead } from '@/hooks/use-client-read';
 import { describeFailure } from '@/lib/action-messages';
 import { getWorkArtifactDetail } from '@/lib/work-artifacts/actions';
 import type {
@@ -33,7 +34,6 @@ export function useWorkArtifactEditor({
   readOnly,
 }: WorkArtifactEditorOptions) {
   const [detail, setDetail] = useState<WorkArtifactDetail | null>(null);
-  const [loading, setLoading] = useState(Boolean(artifactId));
   const [editing, setEditing] = useState(!artifactId && !readOnly);
   const [kind, setKind] = useState<WorkArtifactKind>(initialSummary?.kind ?? 'work_report');
   const [visibility, setVisibility] = useState<WorkArtifactVisibility>(
@@ -50,8 +50,16 @@ export function useWorkArtifactEditor({
   const [correctionReason, setCorrectionReason] = useState('');
   const [correctionReasonError, setCorrectionReasonError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // The last read of the artifact failed; the dialog offers a retry in place.
-  const [loadFailed, setLoadFailed] = useState(false);
+  // The artifact to read: the opened one, or the one a save created. Every
+  // `load` reads again; the last detail stays visible while it runs.
+  const [readTarget, setReadTarget] = useState({ id: artifactId, revision: 0 });
+  // A newly opened artifact is read at once, unless a save already reads it.
+  const [openedArtifactId, setOpenedArtifactId] = useState(artifactId);
+  if (artifactId !== openedArtifactId) {
+    setOpenedArtifactId(artifactId);
+    if (artifactId !== null && artifactId !== readTarget.id)
+      setReadTarget((current) => ({ id: artifactId, revision: current.revision }));
+  }
   // Keyed by the button that was clicked (or `evidence:<requirementId>` per
   // evidence row) so only that control spins; `anyBusy` still gates the rest
   // of the dialog because most flows reload the shared detail afterwards.
@@ -69,40 +77,46 @@ export function useWorkArtifactEditor({
     setContent(contentFromDetail(artifact));
   }, []);
 
-  async function load(id: string) {
-    setLoading(true);
-    setLoadFailed(false);
-    const result = await getWorkArtifactDetail(id).catch(() => null);
-    setLoading(false);
-    if (!result?.success) {
-      setLoadFailed(true);
-      return;
-    }
-    applyDetail(result.artifact);
+  const targetId = readTarget.id;
+  const artifactRead = useClientRead({
+    read: () => getWorkArtifactDetail(targetId ?? ''),
+    deps: [targetId, readTarget.revision],
+    enabled: targetId !== null,
+    failureMessage: 'Der Arbeitsnachweis konnte nicht geladen werden.',
+  });
+  // Each answer fills the draft once, during render.
+  const [adoptedRead, setAdoptedRead] = useState(artifactRead.data);
+  if (artifactRead.data !== adoptedRead) {
+    setAdoptedRead(artifactRead.data);
+    if (artifactRead.data) applyDetail(artifactRead.data.artifact);
   }
+  const loading = artifactRead.loading;
+  // A mutation awaits its reload inside its busy task, so no action of the
+  // dialog runs against the version the mutation just replaced.
+  // Each waiter names the read it waits for; an effect of an earlier render
+  // (an earlier revision) cannot settle it. A failed read settles it too: the
+  // editor then shows the failure with its retry.
+  const lastRevision = useRef(0);
+  const readWaiters = useRef<Array<{ revision: number; resolve: () => void }>>([]);
+  const settledRevision = loading ? null : readTarget.revision;
   useEffect(() => {
-    if (!artifactId) return;
-    let active = true;
-    void getWorkArtifactDetail(artifactId)
-      .then((result) => {
-        if (!active) return;
-        setLoading(false);
-        if (!result.success) {
-          setLoadFailed(true);
-          return;
-        }
-        applyDetail(result.artifact);
-      })
-      .catch(() => {
-        // A thrown read (network, aborted action) must not leave the skeleton up forever.
-        if (!active) return;
-        setLoading(false);
-        setLoadFailed(true);
-      });
-    return () => {
-      active = false;
-    };
-  }, [artifactId, applyDetail]);
+    if (settledRevision === null) return;
+    readWaiters.current = readWaiters.current.filter((waiter) => {
+      if (waiter.revision > settledRevision) return true;
+      waiter.resolve();
+      return false;
+    });
+  }, [settledRevision]);
+
+  /** Reads the artifact again; the editor shows the reload, adopts its answer and then settles the promise. */
+  function load(id: string): Promise<void> {
+    lastRevision.current += 1;
+    const revision = lastRevision.current;
+    return new Promise((resolve) => {
+      readWaiters.current.push({ revision, resolve });
+      setReadTarget({ id, revision });
+    });
+  }
 
   const currentRevision = detail?.revisions.find((entry) => entry.id === detail.current_revision_id) ?? null;
   const requiresCorrectionReason = Boolean(
@@ -137,7 +151,7 @@ export function useWorkArtifactEditor({
   return {
     detail,
     loading,
-    loadFailed,
+    loadFailure: artifactRead.failure,
     editing,
     setEditing,
     kind,

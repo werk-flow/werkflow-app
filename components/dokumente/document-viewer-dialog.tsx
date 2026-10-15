@@ -202,7 +202,7 @@ export function DocumentViewerDialog({ document, open, onOpenChange }: DocumentV
                 <Skeleton className="h-full max-h-[70vh] w-full max-w-3xl bg-white/10" />
               </div>
             ) : canPreviewImage(document) ? (
-              <div className="flex h-full items-center justify-center overflow-auto p-6">
+              <div className="flex h-full items-center justify-center overflow-y-auto p-6">
                 {/* Signed private Storage URLs are short-lived, so next/image optimization is not useful here. */}
                 {/* eslint-disable-next-line @next/next/no-img-element -- short-lived signed private URL; next/image optimization cannot cache it */}
                 <img

@@ -9,8 +9,8 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { TimeInput } from '@/components/ui/time-input';
 import { DurationHoursInput } from '@/components/ui/duration-hours-input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
+import { SectionError } from '@/components/ui/section-error';
 import { EmployeeMultiSelect, type OrgMemberOption } from '../shared/employee-multi-select';
-import { OptionsLoadError } from '../shared/options-load-error';
 
 import { ClientSelectWithCreate, type ClientSelectItem } from '../shared/client-select-with-create';
 import { SiteContactFields } from '../shared/site-contact-fields';
@@ -117,8 +117,7 @@ export function EditJobAssignmentFields({ form, selectedClient }: EditJobAssignm
           options={projectSearch.options}
           onSearchChange={projectSearch.onSearchChange}
           loading={projectSearch.loading}
-          loadError={projectSearch.loadError}
-          onRetryLoad={projectSearch.onRetryLoad}
+          loadFailure={projectSearch.loadFailure}
           onLoadMore={projectSearch.onLoadMore}
           value={projectId}
           onChange={handleProjectChange}
@@ -170,8 +169,7 @@ export function EditJobPlanningFields({ form, members }: EditJobPlanningFieldsPr
     location,
     setLocation,
     isLoadingAssignments,
-    assignmentsLoadFailed,
-    retryAssignments,
+    assignmentsFailure,
     selectedEmployees,
     handleSelectedEmployeesChange,
     setAssignmentTeamSourceId,
@@ -246,11 +244,7 @@ export function EditJobPlanningFields({ form, members }: EditJobPlanningFieldsPr
           onTeamApplied={setAssignmentTeamSourceId}
           disabled={formDisabled || isLoadingAssignments}
         />
-        <OptionsLoadError
-          error={assignmentsLoadFailed ? 'Die aktuellen Zuweisungen konnten nicht geladen werden.' : null}
-          onRetry={retryAssignments}
-          retrying={isLoadingAssignments}
-        />
+        {assignmentsFailure && <SectionError failure={assignmentsFailure} />}
       </Field>
 
       <Field

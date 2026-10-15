@@ -3,6 +3,8 @@
 import { useMemo, useRef, useState } from 'react';
 import { cn, toLocalDateString } from '@/lib/utils';
 import { WEEKDAY_SHORT } from '@/lib/calendar/board-layout';
+import { canManageBlock } from '@/lib/calendar/day-row-status';
+import type { OrgRole } from '@/lib/members/actions';
 import { monthCellItemsByDate, type MonthCellItem } from '@/lib/calendar/month-cell-items';
 import { monthGridRange, monthWeeks } from '@/lib/calendar/month-layout';
 import type { CalendarJob } from '@/lib/jobs/types';
@@ -34,6 +36,7 @@ export type MonthViewProps = {
   holidays: OrganizationHolidayCalendar;
   organizationSettings: OrganizationTimeTrackingSettings;
   currentUserId: string;
+  currentUserRole: OrgRole;
   isAdminOrManager: boolean;
   mutations: CalendarMutations;
   actions: CalendarSurfaceActions;
@@ -61,6 +64,8 @@ export function MonthView(props: MonthViewProps): React.JSX.Element {
     sickness,
     holidays,
     organizationSettings,
+    currentUserId,
+    currentUserRole,
     isAdminOrManager,
     mutations,
     actions,
@@ -125,17 +130,32 @@ export function MonthView(props: MonthViewProps): React.JSX.Element {
     onParkedContextMissing,
     onPark: actions.onPark,
     blocksByUserDate,
+    closedPeriods: actions.closedPeriods,
     nowMs: clock,
   });
   useDragSurface(surface);
 
   const draggable = isAdminOrManager;
+  const roleByUser = useMemo(
+    () => new Map(members.map((member) => [member.user_id, member.role])),
+    [members],
+  );
   const itemFor = (item: MonthCellItem, full: boolean): React.JSX.Element => (
     <MonthCellEntry
       key={item.key}
       item={item}
       full={full}
       draggable={draggable}
+      canManage={
+        item.kind === 'block' &&
+        canManageBlock(
+          item.block,
+          currentUserRole,
+          currentUserId,
+          roleByUser.get(item.block.userId),
+          actions.closedPeriods,
+        )
+      }
       isAdminOrManager={isAdminOrManager}
       nowTick={nowTick}
       organizationSettings={organizationSettings}

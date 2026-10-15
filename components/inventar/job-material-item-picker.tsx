@@ -50,7 +50,7 @@ export function MaterialItemPicker({
           Die Artikelsuche ist fehlgeschlagen. Angezeigt werden nur die bereits geladenen Artikel.
         </SectionError>
       )}
-      <div className="max-h-[420px] overflow-auto rounded-md border">
+      <div className="max-h-[420px] overflow-y-auto rounded-md border">
         {isSearching && filteredItems.length === 0 ? (
           <p className="px-3 py-6 text-center text-sm text-muted-foreground" role="status">
             Material wird gesucht…
@@ -72,7 +72,7 @@ export function MaterialItemPicker({
                   onClick={() => onAdd(item)}
                   disabled={!hasStockForTake}
                 >
-                  <span className="min-w-0">
+                  <span className="min-w-0 wrap-anywhere">
                     <span className="block truncate text-sm font-medium">{item.name}</span>
                     <span className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
                       {item.internalSku && <span>SKU {item.internalSku}</span>}

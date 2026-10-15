@@ -14,6 +14,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import type { ClosedTimePeriod } from '@/lib/time-tracking/closed-period-dates';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import { TimeCorrectionDialogFields } from './time-correction-dialog-fields';
 import { useTimeCorrectionDialogForm } from './use-time-correction-dialog';
@@ -25,6 +26,8 @@ type CorrectionDialogProps = {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   hideTrigger?: boolean;
+  /** The organization's closed periods: a time in one is marked before the request. */
+  closedPeriods: readonly ClosedTimePeriod[];
 };
 
 export function TimeCorrectionDialog({
@@ -34,6 +37,7 @@ export function TimeCorrectionDialog({
   open: controlledOpen,
   onOpenChange,
   hideTrigger = false,
+  closedPeriods,
 }: CorrectionDialogProps) {
   const correctionFormId = useId();
   const form = useTimeCorrectionDialogForm({
@@ -42,6 +46,7 @@ export function TimeCorrectionDialog({
     onSubmitted,
     controlledOpen,
     onOpenChange,
+    closedPeriods,
   });
   const { open, setOpen, options, loadingOptions, submitting, kind, submit } = form;
 

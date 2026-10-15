@@ -20,6 +20,8 @@ type MonthCellEntryProps = {
   /** The popover's full list uses taller rows than the cell. */
   full: boolean;
   draggable: boolean;
+  /** A recorded block the caller may move (`canManageBlock`); false for a visit. */
+  canManage: boolean;
   isAdminOrManager: boolean;
   nowTick: number;
   organizationSettings: OrganizationTimeTrackingSettings;
@@ -34,6 +36,7 @@ export function MonthCellEntry(props: MonthCellEntryProps): React.JSX.Element {
     item,
     full,
     draggable,
+    canManage,
     isAdminOrManager,
     nowTick,
     organizationSettings,
@@ -88,14 +91,14 @@ export function MonthCellEntry(props: MonthCellEntryProps): React.JSX.Element {
         pending
           ? 'border-warning/60 bg-warning-soft text-warning-soft-foreground'
           : 'border-calendar-actual-border bg-calendar-actual text-calendar-actual-foreground',
-        draggable && !item.block.isOpen && 'cursor-grab active:cursor-grabbing',
+        draggable && canManage && !item.block.isOpen && 'cursor-grab active:cursor-grabbing',
       )}
       aria-label={`${label}, ${formatDuration(item.endMinutes - item.startMinutes)}`}
       onClick={() =>
         onSessionClick(createSessionFromCalendarBlock(item.block, new Date(clock()), organizationSettings))
       }
       onPointerDown={(event) => {
-        if (!draggable || item.block.isOpen) return;
+        if (!draggable || !canManage || item.block.isOpen) return;
         const rect = event.currentTarget.getBoundingClientRect();
         startDrag(event, {
           payload: {

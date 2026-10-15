@@ -3,14 +3,13 @@
 import { isStartedOccurrence } from '@/lib/calendar/board';
 import { DAY_MIN_ITEM_WIDTH } from '@/lib/calendar/day-layout';
 import { canManageBlock } from '@/lib/calendar/day-row-status';
+import type { DayRow, DayRowItem } from '@/lib/calendar/day-rows';
 import { formatMinutesOfDay } from '@/lib/calendar/drag-math';
 import { createSessionFromCalendarBlock } from '@/lib/time-tracking/calendar-blocks';
-import { UNASSIGNED_USER } from '../board/types';
 import { CalendarCard } from '../surface/calendar-card';
 import { useClock } from '../surface/use-now-tick';
 import { TimeBlock } from './time-block';
 import type { DayTimelineProps } from './day-timeline-row';
-import type { DayRow, DayRowItem } from './use-day-rows';
 
 type DayLaneItemProps = DayTimelineProps & {
   row: DayRow;
@@ -56,7 +55,7 @@ function DayLaneBlock({
   organizationSettings,
 }: DayLaneItemProps & { item: Extract<DayRowItem, { kind: 'block' }> }): React.JSX.Element {
   const { model, role } = row;
-  const manage = canManageBlock(item.block, currentUserRole, currentUserId, role);
+  const manage = canManageBlock(item.block, currentUserRole, currentUserId, role, actions.closedPeriods);
   const clock = useClock();
   return (
     <TimeBlock
@@ -81,7 +80,7 @@ function DayLaneBlock({
           payload: {
             kind: 'timeBlock',
             session,
-            sourceUserId: model.userId,
+            sourceUserId: item.block.startEntry.userId,
             sourceDate: dateIso,
             durationMinutes: item.endMinutes - item.startMinutes,
           },
@@ -99,7 +98,13 @@ function DayLaneBlock({
       onPointerDownEdge={(event, block, edge) => {
         const session = createSessionFromCalendarBlock(block, new Date(clock()), organizationSettings);
         startDrag(event, {
-          payload: { kind: 'resizeBlock', session, edge, sourceUserId: model.userId },
+          payload: {
+            kind: 'resizeBlock',
+            session,
+            edge,
+            sourceUserId: item.block.startEntry.userId,
+            sourceRowKey: model.key,
+          },
           ghost: {
             label: edge === 'start' ? 'Beginn ändern' : 'Ende ändern',
             width: 120,
@@ -158,7 +163,7 @@ function DayLaneJob({
               kind: 'occurrence',
               job,
               sourceEmployeeRecordId: model.row?.employeeRecordId ?? null,
-              sourceUserId: model.userId === UNASSIGNED_USER ? null : model.userId,
+              sourceUserId: model.userId,
               sourceDate: dateIso,
             },
             ghost: {
@@ -186,7 +191,7 @@ function DayLaneJob({
                     kind: 'resizeJob',
                     job,
                     edge: 'start',
-                    sourceUserId: model.userId === UNASSIGNED_USER ? null : model.userId,
+                    sourceRowKey: model.key,
                   },
                   ghost: { label: 'Beginn ändern', width: 120, height: 24 },
                   pointerOffset: resizePointerOffset(event, item.startMinutes, hourWidth),
@@ -205,7 +210,7 @@ function DayLaneJob({
                     kind: 'resizeJob',
                     job,
                     edge: 'end',
-                    sourceUserId: model.userId === UNASSIGNED_USER ? null : model.userId,
+                    sourceRowKey: model.key,
                   },
                   ghost: { label: 'Ende ändern', width: 120, height: 24 },
                   pointerOffset: resizePointerOffset(event, item.endMinutes, hourWidth),

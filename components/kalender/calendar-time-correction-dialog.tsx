@@ -13,7 +13,9 @@ import {
 } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
-import { describeFailure } from '@/lib/action-messages';
+import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
+import { isEntryInClosedPeriod } from '@/lib/time-tracking/closed-period-dates';
+import { useClosedTimePeriods } from '@/components/zeiterfassung/use-closed-time-periods';
 import type { CalendarBoardRow } from '@/lib/calendar/board';
 import { ErrorText } from '@/components/ui/error-text';
 import { useBanner } from '@/components/ui/banner';
@@ -58,6 +60,7 @@ export function CalendarTimeCorrectionDialog({
   onSubmitted: () => void;
 }) {
   const { showBanner } = useBanner();
+  const closedPeriods = useClosedTimePeriods(organizationId);
   const people = rows.flatMap((row) =>
     row.userId ? [{ employeeRecordId: row.employeeRecordId, userId: row.userId, name: row.displayName }] : [],
   );
@@ -84,6 +87,21 @@ export function CalendarTimeCorrectionDialog({
       setError(
         'Dieser Block kann gerade nicht korrigiert werden. Bitte prüfe offene Korrekturen in der Zeiterfassung.',
       );
+      return;
+    }
+    const touchesClosedPeriod = boundaries.some(
+      (boundary) =>
+        isEntryInClosedPeriod(
+          { timestamp: boundary.originalTimestamp, entryType: boundary.entryType },
+          closedPeriods,
+        ) ||
+        isEntryInClosedPeriod(
+          { timestamp: boundary.timestamp, entryType: boundary.entryType },
+          closedPeriods,
+        ),
+    );
+    if (touchesClosedPeriod) {
+      setError(SHARED_FAILURE_MESSAGES.period_closed);
       return;
     }
     setError(null);

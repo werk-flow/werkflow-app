@@ -22,6 +22,156 @@ Record each failed acceptance group and any focused failure that changes shared 
 
 `bun run test:runs classify` stores the classification, cause and prevention in the run manifest and, for a failed run of the verification lane, writes the dated entry below with the run, the failure point, the cause and the prevention (`lib/testing/runs/incident-record.ts`). It refuses a prevention without its tier. Add the evidence, the correction and the focused proof under that entry when the repair lands. Write a focused failure that changes shared testing behavior by hand. Do not call an unexplained retry a transient.
 
+## 2026-10-15: audit:wave-2:p1-15 product failure
+
+<!-- incident-run: 2026-10-15T131542126Z-7ac336 -->
+
+- Run: run `2026-10-15T131542126Z-7ac336`, group `audit:wave-2:p1-15`, target local, fingerprint `17de3419bb17`, world `6ad3dd2795e84a3eb0b96b7aa2c5f661`.
+- Failure point:  >  > wave-2\p1-15.spec.ts > P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @AUDIT-W2 > customer outcomes, signature, document/source/evidence links, and deterministic export: Error: expect(received).toBe(expected) // Object.is equality
+- Root cause: The work-artifact editor's load() became fire-and-forget when the detail read moved to useClientRead, so a customer action ended its busy state before the reload of the detail settled; the next decision was sent against the previous version and refused as work_artifact_stale_version (customer_reserved never recorded)
+- Prevention: Tier 1: load() returns a promise that settles with the read, and every mutation awaits it inside its busy task, so the dialog's actions stay pending until the current version is shown
+- Evidence: error-context.md (the dialog shows „Der Arbeitsnachweis wurde zwischenzeitlich geändert“ after „Vorbehalt erfassen“) and the trace, where the reservation request left before the acknowledgement's request had ended. The spec passed in every change plan from 2026-10-08 to 2026-10-09, before the editor moved to useClientRead. Cleanup: the world was cleaned. Correction: `load` in components/auftraege/artifacts/use-work-artifact-editor.ts settles when its read settles, and the save, review, link, customer and conflict paths await it again; each waiter settles only with the read it started. Focused proof: report `2026-10-15T165451975Z-1c474064` passed audit:wave-2:p1-15 and golden:p1-15.
+
+## 2026-10-15: audit:layout:job environment failure
+
+<!-- incident-run: 2026-10-15T131542126Z-be81a7 -->
+
+- Run: run `2026-10-15T131542126Z-be81a7`, group `audit:layout:job`, target local, fingerprint `551711194ebc`, world `c477ae3890aa4e6db40b06c525871c99`.
+- Failure point:  >  > layout\surfaces-job.spec.ts > @AUDIT-LAYOUT-SURFACES job: tabs and dialogs fit, pass axe and keep their keyboard path > admin /auftraege/[jobNumber] part 1 of 3: Error: page.goto: net::ERR_NETWORK_CHANGED at http://localhost:3000/auftraege/AUF-c477ae3890aa4e6db40b06c525871c99-LAYOUT
+- Root cause: page.goto failed with net::ERR_NETWORK_CHANGED: Windows changed its network configuration during the run, before any assertion of the surface audit
+- Prevention: Tier 3: a host network change is outside the repository; the group reruns on the same build
+- Evidence: error-context.md (the navigation itself failed; no surface was measured). Cleanup: the world was cleaned. Correction: none. Focused proof: report `2026-10-15T163755636Z-e7fdfaec` passed audit:layout:job.
+
+## 2026-10-10: audit:layout:planning-board product failure
+
+<!-- incident-run: 2026-10-10T100238917Z-34154b -->
+
+- Run: run `2026-10-10T100238917Z-34154b`, group `audit:layout:planning-board`, target local, fingerprint `e24f7cdb0724`, world `f00cfd9f4a6242d58f552e28a48d6532`.
+- Failure point:  >  > layout\surfaces-planning-board.spec.ts > @AUDIT-LAYOUT-SURFACES planning-board: tabs and dialogs fit, pass axe and keep their keyboard path > admin /kalender part 2 of 2: Error: admin /kalender dialog calendar.planning-warning: Escape returns focus to the trigger
+- Root cause: The card popover sits on a virtual anchor without aria-controls, so the planning warning opened from its move button had no path back to the card
+- Prevention: Tier 1: the popover names its card's data-focus-key in data-focus-return, which useReturnFocus follows; Tier 2: audit:layout:planning-board keyboard path
+- Evidence: error-context.md (card not focused after Escape). Cleanup: the world was cleaned. Correction: data-focus-return on the card popover. Focused proof: report `2026-10-10T110458586Z-a7acca2d` passed audit:layout:planning-board.
+
+## 2026-10-10: audit:layout:job-lifecycle product failure
+
+<!-- incident-run: 2026-10-10T100238917Z-8f5067 -->
+
+- Run: run `2026-10-10T100238917Z-8f5067`, group `audit:layout:job-lifecycle`, target local, fingerprint `bb5985b89bca`, world `295c8c5d3f6d46b8b3e7ed906e54ec12`.
+- Failure point:  >  > layout\surfaces-job-lifecycle.spec.ts > @AUDIT-LAYOUT-SURFACES job-lifecycle: tabs and dialogs fit, pass axe and keep their keyboard path > admin /auftraege/[jobNumber] part 3 of 3: Error: admin /auftraege/[jobNumber] dialog work.qualification-warning: Escape returns focus to the trigger
+- Root cause: While Save was disabled for its request, Radix's focus trap moved focus to the assignment dialog's container, so the warning remembered the container as its opener and Escape returned focus there
+- Prevention: Tier 1: useReturnFocus never takes a layer container as opener and falls back to the last focused control; Tier 2: ui:contracts case 'a warning that opens after a save returns focus to the save button on Escape' (failed on the old code, run 2026-10-10T10-55-27-302Z-37d9a4e3)
+- Evidence: error-context.md, then the ui:contracts reproduction (focus on the assignment dialog container after Escape). Cleanup: the world was cleaned. Correction: useReturnFocus never takes a layer container as opener. Focused proof: report `2026-10-10T110458586Z-a7acca2d` passed audit:layout:job-lifecycle and ui:contracts with the new case.
+
+## 2026-10-10: audit:layout:people product failure
+
+<!-- incident-run: 2026-10-10T083642857Z-376a46 -->
+
+- Run: run `2026-10-10T083642857Z-376a46`, group `audit:layout:people`, target local, fingerprint `4f0e99a452df`, world `0a4500be2f09432e873ac9bec1391275`.
+- Failure point:  >  > layout\surfaces-people.spec.ts > @AUDIT-LAYOUT-SURFACES people: tabs and dialogs fit, pass axe and keep their keyboard path > admin /mitarbeiter: Error: admin /mitarbeiter dialog people.invite-cancel at 375 px
+- Root cause: Invitation confirmations at 375 px overflowed sideways: the invited email address is one unbreakable word
+- Prevention: Tier 1: dialog and confirmation titles and descriptions wrap anywhere
+- Evidence: error-context.md (the alert dialog wider than 375 px). Cleanup: the world was cleaned. Correction: wrap-anywhere on dialog, confirmation and sheet titles and descriptions. Focused proof: report `2026-10-10T095630216Z-61ae48c9` passed audit:layout:people.
+
+## 2026-10-10: audit:layout:time product failure
+
+<!-- incident-run: 2026-10-10T083642857Z-46aca7 -->
+
+- Run: run `2026-10-10T083642857Z-46aca7`, group `audit:layout:time`, target local, fingerprint `f53765af3742`, world `04d0c85e294541c091e0e48022356709`.
+- Failure point:  >  > layout\surfaces-time.spec.ts > @AUDIT-LAYOUT-SURFACES time: tabs and dialogs fit, pass axe and keep their keyboard path > admin /zeiterfassung/perioden/[periodId]: Error: admin /zeiterfassung/perioden/32f33aa3-27ef-4d27-820e-9b9919a0c5a0 at 1280 px, light
+- Root cause: A closed period's detail page scrolls but holds no focusable control, so a keyboard user cannot scroll it (axe scrollable-region-focusable)
+- Prevention: Tier 1: PageBody makes itself a focusable named region while it scrolls without a focusable control
+- Evidence: error-context.md (scrollable-region-focusable on the page body). Cleanup: the world was cleaned. Correction: PageBodyKeyboardScroll. Focused proof: report `2026-10-10T095630216Z-61ae48c9` passed audit:layout:time.
+
+## 2026-10-10: audit:layout:planning-board product failure
+
+<!-- incident-run: 2026-10-10T083642857Z-7e9106 -->
+
+- Run: run `2026-10-10T083642857Z-7e9106`, group `audit:layout:planning-board`, target local, fingerprint `3855e7a20678`, world `6b02811c93634f919c88bb5f43bd22b7`.
+- Failure point:  >  > layout\surfaces-planning-board.spec.ts > @AUDIT-LAYOUT-SURFACES planning-board: tabs and dialogs fit, pass axe and keep their keyboard path > admin /kalender part 2 of 2: Error: admin /kalender dialog calendar.planning-warning: Escape returns focus to the trigger
+- Root cause: The card popover's move button unmounts with the popover before the planning warning opens, so the warning found no opener and the re-rendered card never got focus back
+- Prevention: Tier 1: the focusin record keeps the popover trigger and its data-focus-key, so the closing warning finds the card again
+- Evidence: error-context.md (card not focused after Escape). Cleanup: the world was cleaned. Correction: first round: the focusin record; the remaining cause is entry 2026-10-10T100238917Z-34154b.
+
+## 2026-10-10: audit:layout:job-lifecycle product failure
+
+<!-- incident-run: 2026-10-10T083642857Z-3b81cb -->
+
+- Run: run `2026-10-10T083642857Z-3b81cb`, group `audit:layout:job-lifecycle`, target local, fingerprint `1bf873a96f9a`, world `aaa0bf36139d489fb3e547453017e354`.
+- Failure point:  >  > layout\surfaces-job-lifecycle.spec.ts > @AUDIT-LAYOUT-SURFACES job-lifecycle: tabs and dialogs fit, pass axe and keep their keyboard path > admin /auftraege/[jobNumber] part 3 of 3: Error: admin /auftraege/[jobNumber] dialog work.qualification-warning: Escape returns focus to the trigger
+- Root cause: The assignment Save button loses focus when it is disabled for the request, and Chrome fires no focusout for that, so the qualification warning opened with nothing to return to
+- Prevention: Tier 1: useReturnFocus records the opening chain on every focusin and uses it when focus sits on the body at open
+- Evidence: error-context.md (Save not focused after Escape). Cleanup: the world was cleaned. Correction: first round: the focusin record; the remaining cause is entry 2026-10-10T100238917Z-8f5067.
+
+## 2026-10-10: audit:layout:field product failure
+
+<!-- incident-run: 2026-10-10T080526635Z-e976e0 -->
+
+- Run: run `2026-10-10T080526635Z-e976e0`, group `audit:layout:field`, target local, fingerprint `19ca366d762f`, world `eb1f1803268549a78e70168923b92562`.
+- Failure point:  >  > layout\surfaces-field.spec.ts > @AUDIT-LAYOUT-SURFACES field: tabs and dialogs fit, pass axe and keep their keyboard path > employee /kalender: Error: employee /kalender tab month at 375 px, light
+- Root cause: The time hero hint used text-muted-foreground/80 (4.05:1) and the month grid rows held non-cell children
+- Prevention: Tier 2: textOpacitySelectors lint; Tier 1: month parts are grid cells
+- Evidence: error-context.md (4.05:1 hint, month rows). Cleanup: the world was cleaned. Correction: the hint at full token contrast; month parts are grid cells. Focused proof: report `2026-10-10T095630216Z-61ae48c9` passed audit:layout:field and audit:layout:field-time.
+
+## 2026-10-10: audit:layout:documents product failure
+
+<!-- incident-run: 2026-10-10T075415648Z-a49f38 -->
+
+- Run: run `2026-10-10T075415648Z-a49f38`, group `audit:layout:documents`, target local, fingerprint `c45123e22d02`, world `b32bb483b1fe403c970b5b2f3ae721f5`.
+- Failure point:  >  > layout\surfaces-documents.spec.ts > @AUDIT-LAYOUT-SURFACES documents: tabs and dialogs fit, pass axe and keep their keyboard path > admin /dokumente: Error: admin /dokumente at 1280 px, dark
+- Root cause: Moved documents were dimmed with opacity-60 (2.6:1), view links were read mid theme fade, and inline create dialogs lost the select trigger as return target
+- Prevention: Tier 1: the select popup focuses its trigger before its action opens a dialog; Tier 2: textOpacitySelectors and animation-settled measures
+- Evidence: error-context.md (opacity-60 rows, fade colors, focus not on the select). Cleanup: the world was cleaned. Correction: full-contrast moved rows, animation-settled measures, the select popup focuses its trigger before its action. Focused proof: report `2026-10-10T095630216Z-61ae48c9` passed audit:layout:documents and audit:layout:inventory.
+
+## 2026-10-10: audit:layout:people product failure
+
+<!-- incident-run: 2026-10-10T074311836Z-093cdf -->
+
+- Run: run `2026-10-10T074311836Z-093cdf`, group `audit:layout:people`, target local, fingerprint `0f167542511e`, world `e36459757dce47daaad55f60be245c13`.
+- Failure point:  >  > layout\surfaces-people.spec.ts > @AUDIT-LAYOUT-SURFACES people: tabs and dialogs fit, pass axe and keep their keyboard path > admin /mitarbeiter: Error: admin /mitarbeiter tab qualifications at 375 px: the active tab stays in its strip's view
+- Root cause: The tab strip did not scroll its active tab back into view after the window narrowed
+- Prevention: Tier 1: TabsTrigger observes its strip's size and reveals the active tab
+- Evidence: error-context.md (qualifications tab outside the strip at 375 px). Cleanup: the world was cleaned. Correction: TabsTrigger reveals the active tab when its strip resizes. Focused proof: report `2026-10-10T095630216Z-61ae48c9` passed audit:layout:people.
+
+## 2026-10-10: audit:layout:planning product failure
+
+<!-- incident-run: 2026-10-10T073339917Z-5d54d0 -->
+
+- Run: run `2026-10-10T073339917Z-5d54d0`, group `audit:layout:planning`, target local, fingerprint `42f5a5d5ef87`, world `9951c31695324d3d9ad7a6fb93c97c1a`.
+- Failure point:  >  > layout\surfaces-planning.spec.ts > @AUDIT-LAYOUT-SURFACES planning: tabs and dialogs fit, pass axe and keep their keyboard path > admin /kalender part 1 of 2: Error: admin /kalender tab month at 375 px, light
+- Root cause: Month grid rows held day headers and items outside grid cells, focus did not return to a re-rendered calendar card or a re-enabled dispatch button, and the entry dialog's tab strip counted as a separate tab stop in the check
+- Prevention: Tier 1: month parts are grid cells, data-focus-key and dropped-focus memory in useReturnFocus; Tier 2: keyboard path skips roving-focus containers
+- Evidence: error-context.md (aria-required-children on month rows, focus return, the tab strip counted as a tab stop). Cleanup: the world was cleaned. Correction: month parts are grid cells; useReturnFocus with data-focus-key; the keyboard path skips roving containers. Focused proof: report `2026-10-10T095630216Z-61ae48c9` passed audit:layout:planning; report `2026-10-10T110458586Z-a7acca2d` passed audit:layout:planning-board.
+
+## 2026-10-10: audit:layout:customers product failure
+
+<!-- incident-run: 2026-10-10T072950100Z-d12205 -->
+
+- Run: run `2026-10-10T072950100Z-d12205`, group `audit:layout:customers`, target local, fingerprint `95b000b97aa5`, world `d66432d23da8437bad284846beff9428`.
+- Failure point:  >  > layout\surfaces-customers.spec.ts > @AUDIT-LAYOUT-SURFACES customers: tabs and dialogs fit, pass axe and keep their keyboard path > admin /kunden: Error: admin /kunden dialog customers.edit at 375 px
+- Root cause: Customer finance placeholder labels used text-muted-foreground/70 (3.27:1); the edit dialog's 375 px box was read mid slide animation
+- Prevention: Tier 2: textOpacitySelectors lint bans faded token text; nextFrames waits for finite animations
+- Evidence: error-context.md (3.27:1 on the finance placeholder, the dialog box mid slide). Cleanup: the world was cleaned. Correction: textOpacitySelectors and the token at full opacity; animation-settled measures. Focused proof: report `2026-10-10T095630216Z-61ae48c9` passed audit:layout:customers.
+
+## 2026-10-10: audit:layout:job product failure
+
+<!-- incident-run: 2026-10-10T071726290Z-afbe88 -->
+
+- Run: run `2026-10-10T071726290Z-afbe88`, group `audit:layout:job`, target local, fingerprint `60789f22954b`, world `0224ad7126664c929f5549cee2ff6547`.
+- Failure point:  >  > layout\surfaces-job.spec.ts > @AUDIT-LAYOUT-SURFACES job: tabs and dialogs fit, pass axe and keep their keyboard path > admin /auftraege/[jobNumber] part 2 of 3: Error: admin /auftraege/[jobNumber] dialog work.assign-employees at 1280 px, light
+- Root cause: Assignment pickers had no accessible name (no Field), the approval dialog showed text instead of a skeleton while loading so focus landed on the reason, and the qualification warning lost its return target while Save was disabled
+- Prevention: Tier 1: Field labels on the two pickers, skeleton placeholder, useReturnFocus remembers the control that dropped focus and waits for it to be enabled; Tier 2: surface audit axe and keyboard path
+- Evidence: error-context.md (unnamed comboboxes, focus on the reason field). Cleanup: the world was cleaned. Correction: Field labels on the two pickers, a skeleton in the approval dialog, focus return through useReturnFocus. Focused proof: report `2026-10-10T095630216Z-61ae48c9` passed audit:layout:job and audit:layout:job-actions; report `2026-10-10T110458586Z-a7acca2d` passed audit:layout:job-lifecycle.
+
+## 2026-10-10: audit:layout:work product failure
+
+<!-- incident-run: 2026-10-10T071328652Z-581e59 -->
+
+- Run: run `2026-10-10T071328652Z-581e59`, group `audit:layout:work`, target local, fingerprint `fa7dec72cd77`, world `e045e45183e94b6cb522b873b9832f79`.
+- Failure point:  >  > layout\surfaces-work.spec.ts > @AUDIT-LAYOUT-SURFACES work: tabs and dialogs fit, pass axe and keep their keyboard path > admin /auftraege: Error: admin /auftraege dialog work.filter-sheet at 1280 px, dark
+- Root cause: Edit project dialog disabled every field while its jobs loaded, so Radix focused the close button; the filter sheet's axe colors were read mid theme fade
+- Prevention: Tier 1: DialogContent focuses itself when its first tab stop is the close button, project fields stay editable while jobs load; Tier 2: the audit's nextFrames waits for finite animations before measuring
+- Evidence: error-context.md (axe colors between the light and dark tokens; focus on „Schließen“). Cleanup: the world was cleaned. Correction: DialogContent focuses itself when its first tab stop is the close button; project fields stay editable while jobs load; nextFrames waits for finite animations. Focused proof: report `2026-10-10T095630216Z-61ae48c9` passed audit:layout:work.
+
 ## 2026-10-09: audit:performance:field environment failure
 
 <!-- incident-run: 2026-10-09T143334025Z-ca8740 -->

@@ -25,10 +25,16 @@ export type CalendarDragPayload =
       durationMinutes: number;
     }
   | { kind: 'barEdge'; job: CalendarJob; edge: 'start' | 'end'; sourceEmployeeRecordId: string | null }
-  /** The hour axis: a visit's start or end handle. */
-  | { kind: 'resizeJob'; job: CalendarJob; edge: 'start' | 'end'; sourceUserId: string | null }
-  /** The hour axis: a recorded block's start or end handle. */
-  | { kind: 'resizeBlock'; session: InteractiveCalendarSession; edge: 'start' | 'end'; sourceUserId: string };
+  /** The hour axis: a visit's start or end handle; the drag stays on its day row. */
+  | { kind: 'resizeJob'; job: CalendarJob; edge: 'start' | 'end'; sourceRowKey: string }
+  /** The hour axis: a recorded block's start or end handle; the drag stays on its day row. */
+  | {
+      kind: 'resizeBlock';
+      session: InteractiveCalendarSession;
+      edge: 'start' | 'end';
+      sourceUserId: string;
+      sourceRowKey: string;
+    };
 
 /** Where a drag can land. Surfaces resolve pointers into these; zones are panels. */
 export type CalendarDragTarget =

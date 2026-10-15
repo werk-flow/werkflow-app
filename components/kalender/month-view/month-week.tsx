@@ -117,8 +117,11 @@ export function MonthWeek(props: MonthWeekProps): React.JSX.Element {
         />
       ))}
       {bars.lanes.map(({ item, lane, column, span }) => (
+        // A multi-day bar spans its days: a row of the grid holds cells only, so the bar is a cell too.
         <div
           key={item.key}
+          role="gridcell"
+          aria-colspan={span}
           className="relative z-[1] min-w-0 px-0.5"
           style={{ gridColumn: `${column + 1} / span ${span}`, gridRow: lane + 2 }}
         >

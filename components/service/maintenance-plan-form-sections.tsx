@@ -89,8 +89,7 @@ export function MaintenancePlanScopeFields({
           options={siteOptions}
           disabled={!form.clientId || isRevision}
           loading={clientOption.loading}
-          loadError={clientOption.error}
-          onRetryLoad={clientOption.retry}
+          loadFailure={clientOption.loadFailure}
           placeholder="Einsatzort wählen"
           searchPlaceholder="Einsatzort suchen…"
           emptyMessage="Kein Einsatzort gefunden"
@@ -106,8 +105,7 @@ export function MaintenancePlanScopeFields({
           }))}
           onSearchChange={coverageSearch.onSearchChange}
           loading={coverageSearch.loading}
-          loadError={coverageSearch.loadError}
-          onRetryLoad={coverageSearch.onRetryLoad}
+          loadFailure={coverageSearch.loadFailure}
           onLoadMore={coverageSearch.onLoadMore}
           disabled={!site || isRevision}
           placeholder="Keine Abdeckung verknüpfen"
@@ -278,9 +276,11 @@ export function MaintenancePlanEquipmentFieldset({
                 }))
               }
             />
-            <span>
-              <span className="block font-medium">{equipment.name}</span>
-              <span className="text-xs text-muted-foreground">{equipment.equipmentNumber}</span>
+            <span className="font-medium">
+              {equipment.name}
+              <span className="block text-xs font-normal text-muted-foreground">
+                {equipment.equipmentNumber}
+              </span>
             </span>
           </label>
         ))}

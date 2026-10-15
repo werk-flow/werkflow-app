@@ -149,6 +149,8 @@ export function RowActionsMenu({ actions, disabled = false }: RowActionsMenuProp
             id={menuId}
             role="menu"
             aria-label="Aktionen"
+            // Focusable but not a tab stop, as in the APG menu pattern: focus rests on its items.
+            tabIndex={-1}
             style={position}
             className="fixed z-50 min-w-40 rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
             onKeyDown={handleMenuKeyDown}

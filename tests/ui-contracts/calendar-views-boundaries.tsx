@@ -178,6 +178,7 @@ function ViewHarness({
       const flow = mutations.beginPark(job);
       flow.saved(async () => {});
     },
+    closedPeriods: [],
   };
   return (
     <section aria-label="Kalenderansicht">
@@ -481,6 +482,7 @@ export function CalendarMonthContractFixture(): React.JSX.Element {
             holidays={holidays}
             organizationSettings={settings}
             currentUserId="manager"
+            currentUserRole="admin"
             isAdminOrManager
             mutations={mutations}
             actions={actions}

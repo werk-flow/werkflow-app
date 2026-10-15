@@ -3,7 +3,7 @@
 import { StaleRegion } from '@/components/shared/stale-region';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useRef, useState } from 'react';
-import { Clock, Pencil } from 'lucide-react';
+import { Clock, Lock, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { ListRow } from '@/components/ui/list-row';
@@ -14,11 +14,13 @@ import { SkeletonList, SkeletonRows, type SkeletonColumn } from '@/components/ui
 import { cn, formatGermanDateTime, parseIsoLocalDate } from '@/lib/utils';
 import { getBusinessTodayIso, shiftIsoDateByDays } from '@/lib/personnel/types';
 import { readInBackground } from '@/lib/data/background-read-client';
+import { isEntryInClosedPeriod, type ClosedTimePeriod } from '@/lib/time-tracking/closed-period-dates';
 import type { TimeEntry, TimeEntryStatus } from '@/lib/time-tracking/types';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useHydrated } from '@/hooks/use-hydrated';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { TimeCorrectionDialog } from './time-correction-dialog';
+import { useClosedTimePeriods } from './use-closed-time-periods';
 import { EntryHistoryFilters, type EntryHistoryMemberInfo } from './entry-history-filters';
 
 // Settle key for a correction that adds time (no row yet); entry ids are UUIDs.
@@ -213,10 +215,26 @@ type EntryHistoryRowsProps = {
   settling: { isBusy: (id: string) => boolean };
   hydrated: boolean;
   setCorrectionEntry: (entry: TimeEntry) => void;
+  closedPeriods: readonly ClosedTimePeriod[];
 };
 
+/** In place of „Korrigieren“ on an entry of a closed month: the server would refuse the correction. */
+function ClosedMonthLabel({ className }: { className?: string }) {
+  return (
+    <span className={cn('inline-flex items-center gap-1.5 text-sm text-muted-foreground', className)}>
+      <Lock className="size-4" aria-hidden="true" /> Monat abgeschlossen
+    </span>
+  );
+}
+
 /* Mobile cards */
-function EntryHistoryCards({ entries, settling, hydrated, setCorrectionEntry }: EntryHistoryRowsProps) {
+function EntryHistoryCards({
+  entries,
+  settling,
+  hydrated,
+  setCorrectionEntry,
+  closedPeriods,
+}: EntryHistoryRowsProps) {
   return (
     <div className="space-y-2 md:hidden">
       {entries.map((entry) => (
@@ -248,6 +266,8 @@ function EntryHistoryCards({ entries, settling, hydrated, setCorrectionEntry }: 
             <Button variant="ghost" size="sm" disabled>
               <Clock className="mr-1.5 size-4" /> Korrektur in Prüfung
             </Button>
+          ) : entry.status === 'approved' && isEntryInClosedPeriod(entry, closedPeriods) ? (
+            <ClosedMonthLabel />
           ) : entry.status === 'approved' ? (
             <Button variant="ghost" size="sm" disabled={!hydrated} onClick={() => setCorrectionEntry(entry)}>
               <Pencil className="mr-1.5 size-4" /> Korrigieren
@@ -260,7 +280,13 @@ function EntryHistoryCards({ entries, settling, hydrated, setCorrectionEntry }: 
 }
 
 /* Desktop table */
-function EntryHistoryTable({ entries, settling, hydrated, setCorrectionEntry }: EntryHistoryRowsProps) {
+function EntryHistoryTable({
+  entries,
+  settling,
+  hydrated,
+  setCorrectionEntry,
+  closedPeriods,
+}: EntryHistoryRowsProps) {
   return (
     <div className="hidden md:block">
       <Table>
@@ -294,6 +320,8 @@ function EntryHistoryTable({ entries, settling, hydrated, setCorrectionEntry }: 
                   <Button variant="ghost" size="sm" disabled>
                     <Clock className="mr-1.5 size-4" /> Korrektur in Prüfung
                   </Button>
+                ) : entry.status === 'approved' && isEntryInClosedPeriod(entry, closedPeriods) ? (
+                  <ClosedMonthLabel className="justify-end" />
                 ) : entry.status === 'approved' ? (
                   <Button
                     variant="ghost"
@@ -332,6 +360,7 @@ export function EntryHistory({ organizationId, members = [] }: EntryHistoryProps
   // The corrected row (or the toolbar for an added time) shows the settle
   // spinner from the dialog's close until the live read carries the change.
   const settling = useBusyIds();
+  const closedPeriods = useClosedTimePeriods(organizationId);
 
   const knownNames = useRef<ProfileNames>(new Map());
   const view = useLiveView<EntryWithProfile[]>({
@@ -406,12 +435,19 @@ export function EntryHistory({ organizationId, members = [] }: EntryHistoryProps
               <p className="text-sm text-muted-foreground">
                 {entries.length} {entries.length === 1 ? 'Eintrag' : 'Einträge'} gefunden
               </p>
+              {entries.some((entry) => isEntryInClosedPeriod(entry, closedPeriods)) && (
+                <p className="text-sm text-muted-foreground">
+                  Einträge in abgeschlossenen Monaten lassen sich nicht korrigieren. Ein Admin muss die
+                  Periode zuerst wieder öffnen.
+                </p>
+              )}
 
               <EntryHistoryCards
                 entries={entries}
                 settling={settling}
                 hydrated={hydrated}
                 setCorrectionEntry={setCorrectionEntry}
+                closedPeriods={closedPeriods}
               />
 
               <EntryHistoryTable
@@ -419,6 +455,7 @@ export function EntryHistory({ organizationId, members = [] }: EntryHistoryProps
                 settling={settling}
                 hydrated={hydrated}
                 setCorrectionEntry={setCorrectionEntry}
+                closedPeriods={closedPeriods}
               />
             </>
           )}
@@ -431,6 +468,7 @@ export function EntryHistory({ organizationId, members = [] }: EntryHistoryProps
           entry={correctionEntry ?? undefined}
           open
           hideTrigger
+          closedPeriods={closedPeriods}
           onOpenChange={(nextOpen) => {
             if (!nextOpen) setCorrectionEntry(undefined);
           }}

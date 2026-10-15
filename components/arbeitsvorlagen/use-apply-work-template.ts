@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
+import { useClientRead, type ReadFailure } from '@/hooks/use-client-read';
 import { usePendingTask } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { readInBackground } from '@/lib/data/background-read-client';
@@ -30,20 +31,18 @@ type ApplyWorkTemplateInput = {
   onApplied?: (() => void) | undefined;
 };
 
-/** A failed read of the dialog: which region failed decides what the retry clears. */
-type ApplyWorkTemplateLoadError = { region: 'options' | 'preview'; message: string };
-
 type ApplyWorkTemplateState = {
   open: boolean;
   setOpen: (open: boolean) => void;
+  /** Null until the published templates are read. */
   options: PublishedWorkTemplateOption[] | null;
+  optionsFailure: ReadFailure | null;
   versionId: string;
   preview: WorkTemplateApplicationPreview | null;
+  previewFailure: ReadFailure | null;
   allowAdditional: boolean;
   setAllowAdditional: (allowAdditional: boolean) => void;
   error: string | null;
-  loadError: string | null;
-  retryLoad: () => void;
   qualificationWarning: AssignmentEvaluation | null;
   setQualificationWarning: (evaluation: AssignmentEvaluation | null) => void;
   isPending: boolean;
@@ -60,61 +59,35 @@ export function useApplyWorkTemplate({
   onApplied,
 }: ApplyWorkTemplateInput): ApplyWorkTemplateState {
   const [open, setOpen] = useState(false);
-  const [options, setOptions] = useState<PublishedWorkTemplateOption[] | null>(null);
   const [versionId, setVersionId] = useState('');
-  const [preview, setPreview] = useState<WorkTemplateApplicationPreview | null>(null);
   const [allowAdditional, setAllowAdditional] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [loadError, setLoadError] = useState<ApplyWorkTemplateLoadError | null>(null);
-  // Incremented by the retry so the failed read runs again with the same selection.
-  const [reloadCount, setReloadCount] = useState(0);
   const [qualificationWarning, setQualificationWarning] = useState<AssignmentEvaluation | null>(null);
   const { run: runPendingTask, isPending } = usePendingTask();
   const { showBanner } = useBanner();
+  // Each opening reads the published templates fresh; a closed dialog drops them.
+  const templates = useClientRead({
+    read: (signal) => readInBackground('published-work-templates', { targetType }, signal),
+    deps: [targetType],
+    enabled: open,
+    failureMessage: 'Arbeitsvorlagen konnten nicht geladen werden.',
+  });
+  const previewRead = useClientRead({
+    read: (signal) =>
+      readInBackground(
+        'work-template-preview',
+        { versionId, targetType, ...(targetType === 'job' ? { jobId: targetId } : { projectId: targetId }) },
+        signal,
+      ),
+    deps: [targetId, targetType, versionId],
+    enabled: versionId !== '',
+    failureMessage: 'Die Vorschau konnte nicht geladen werden.',
+  });
+  const options = templates.data?.data ?? null;
+  const preview = previewRead.data?.data ?? null;
   // Selecting a version clears preview and error; the window until either lands must not look idle.
-  const previewPending = Boolean(versionId) && preview === null && error === null && loadError === null;
-
-  useEffect(() => {
-    if (!open) return;
-    const controller = new AbortController();
-    void readInBackground('published-work-templates', { targetType }, controller.signal).then((result) => {
-      if (controller.signal.aborted) return;
-      if (!result.success) {
-        setOptions([]);
-        setLoadError({ region: 'options', message: 'Arbeitsvorlagen konnten nicht geladen werden.' });
-        return;
-      }
-      setOptions(result.data);
-    });
-    return () => controller.abort();
-  }, [open, targetType, reloadCount]);
-
-  useEffect(() => {
-    if (!versionId) return;
-    const controller = new AbortController();
-    void readInBackground(
-      'work-template-preview',
-      { versionId, targetType, ...(targetType === 'job' ? { jobId: targetId } : { projectId: targetId }) },
-      controller.signal,
-    ).then((result) => {
-      if (controller.signal.aborted) return;
-      if (!result.success) {
-        setPreview(null);
-        setLoadError({ region: 'preview', message: 'Die Vorschau konnte nicht geladen werden.' });
-        return;
-      }
-      setPreview(result.data);
-      setAllowAdditional(false);
-      setError(null);
-    });
-    return () => controller.abort();
-  }, [targetId, targetType, versionId, reloadCount]);
-
-  function retryLoad(): void {
-    if (loadError?.region === 'options') setOptions(null);
-    setLoadError(null);
-    setReloadCount((count) => count + 1);
-  }
+  const previewPending =
+    Boolean(versionId) && preview === null && error === null && previewRead.failure === null;
 
   function submit(approval?: AssignmentApproval) {
     if (!versionId) {
@@ -172,7 +145,6 @@ export function useApplyWorkTemplate({
       }
       setOpen(false);
       setVersionId('');
-      setPreview(null);
       // applyWorkTemplate's response renders the route with the new planning.
       onApplied?.();
       showBanner({
@@ -183,33 +155,30 @@ export function useApplyWorkTemplate({
   }
 
   function openDialog(): void {
-    setOptions(null);
     setVersionId('');
-    setPreview(null);
     setAllowAdditional(false);
     setError(null);
-    setLoadError(null);
     setOpen(true);
   }
 
   function selectVersion(value: string): void {
     setVersionId(value);
-    setPreview(null);
+    // A new preview asks again whether to add a further template.
+    setAllowAdditional(false);
     setError(null);
-    setLoadError(null);
   }
 
   return {
     open,
     setOpen,
     options,
+    optionsFailure: templates.failure,
     versionId,
     preview,
+    previewFailure: previewRead.failure,
     allowAdditional,
     setAllowAdditional,
     error,
-    loadError: loadError?.message ?? null,
-    retryLoad,
     qualificationWarning,
     setQualificationWarning,
     isPending,

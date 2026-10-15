@@ -135,5 +135,5 @@ export function OrgSwitchOverlay() {
 
   if (!isSwitchingOrg || !currentSkeleton) return null;
 
-  return <div className="absolute inset-0 z-50 overflow-auto bg-background">{currentSkeleton}</div>;
+  return <div className="absolute inset-0 z-50 overflow-y-auto bg-background">{currentSkeleton}</div>;
 }

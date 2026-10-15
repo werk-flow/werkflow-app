@@ -60,7 +60,6 @@ export function CreateTemplateDialog({
           <div className="space-y-4">
             <Field label="Name" htmlFor="new-template-name" required error={error}>
               <Input
-                autoFocus
                 value={name}
                 onChange={(event) => {
                   setName(event.target.value);

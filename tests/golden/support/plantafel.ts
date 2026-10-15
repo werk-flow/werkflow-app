@@ -401,7 +401,7 @@ export function scheduleParkedSubmit(dialog: Locator): Locator {
 }
 
 export function dayRow(page: Page, userId: string): Locator {
-  return confirmed(page.getByRole('main').locator(`[data-day-view] [data-day-row="${userId}"]`));
+  return confirmed(page.getByRole('main').locator(`[data-day-view] [data-day-row-user="${userId}"]`));
 }
 
 export function dayTimeline(row: Locator): Locator {

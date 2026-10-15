@@ -8,7 +8,7 @@ import {
 import type { EquipmentCategory } from '../../../../lib/installed-equipment/types';
 import { maintenanceCoverageSchema, maintenancePlanSchema } from '../../../../lib/maintenance/validation';
 import { addLocalMonthsClamped } from '../../../../lib/planning/date-time';
-import { serviceCaseCreateSchema } from '../../../../lib/service-cases/validation';
+import { serviceCaseCreateSchema, serviceCaseUpdateSchema } from '../../../../lib/service-cases/validation';
 import { toJson } from '../../../../lib/supabase/json';
 import type { ServiceCaseChargeContext } from '../../../../lib/service-cases/types';
 import { createAdminClient, persisted, type Persisted } from './shared';
@@ -172,6 +172,56 @@ export async function seedServiceCase(
     .throwOnError();
   if (!data) throw new Error(`Service case seed returned no record for ${input.summary}.`);
   return { id: data.id, caseNumber: data.case_number };
+}
+
+/** Assigns a job of the same customer site to a seeded service case, keeping its other facts. */
+export async function seedServiceCaseJobLink(
+  input: SeedActor & { serviceCaseId: string; jobId: string },
+): Promise<void> {
+  const admin = createAdminClient();
+  const { data: current } = await admin
+    .from('service_cases')
+    .select('summary, urgency, status, charge_context, access_instructions, triage_note, version')
+    .eq('organization_id', input.orgId)
+    .eq('id', input.serviceCaseId)
+    .single()
+    .throwOnError();
+  const update = serviceCaseUpdateSchema.parse({
+    serviceCaseId: input.serviceCaseId,
+    expectedVersion: current.version,
+    summary: current.summary,
+    urgency: current.urgency,
+    status: current.status,
+    chargeContext: current.charge_context,
+    accessInstructions: current.access_instructions,
+    triageNote: current.triage_note,
+    resolutionNote: null,
+    jobId: input.jobId,
+    equipmentIds: [],
+    reason: 'Auftrag zugeordnet',
+    idempotencyKey: randomUUID(),
+  });
+  await admin
+    .rpc('update_service_case', {
+      p_organization_id: input.orgId,
+      p_service_case_id: update.serviceCaseId,
+      p_expected_version: update.expectedVersion,
+      p_payload: toJson({
+        summary: update.summary,
+        urgency: update.urgency,
+        status: update.status,
+        chargeContext: update.chargeContext,
+        accessInstructions: update.accessInstructions ?? null,
+        triageNote: update.triageNote ?? null,
+        resolutionNote: null,
+        jobId: update.jobId ?? null,
+        equipmentIds: update.equipmentIds,
+      }),
+      p_reason: update.reason,
+      p_actor_id: input.actorId,
+      p_idempotency_key: update.idempotencyKey,
+    })
+    .throwOnError();
 }
 
 /** Records an active operational coverage for a customer's site. */

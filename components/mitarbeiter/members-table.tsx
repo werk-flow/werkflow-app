@@ -7,7 +7,7 @@ import { Users } from 'lucide-react';
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { InlinePending } from '@/components/ui/inline-pending';
-import { ListRow } from '@/components/ui/list-row';
+import { ListRow, ListRowActions } from '@/components/ui/list-row';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SkeletonList, SkeletonRows, type SkeletonColumn } from '@/components/ui/skeleton-table';
 import { MemberActionsMenu } from './member-actions-menu';
@@ -223,7 +223,7 @@ function MemberCard({
         </div>
       </div>
       {canManageMembers && (
-        <div onClick={(e) => e.stopPropagation()}>
+        <ListRowActions>
           <MemberActionsMenu
             memberId={member.user_id}
             memberName={memberName}
@@ -236,7 +236,7 @@ function MemberCard({
             isBusy={isBusy}
             onRoleChange={onRoleChange}
           />
-        </div>
+        </ListRowActions>
       )}
     </ListRow>
   );

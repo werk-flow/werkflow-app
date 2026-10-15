@@ -5,8 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
+import { SectionError } from '@/components/ui/section-error';
 import { JobMultiSelect } from '../shared/job-multi-select';
-import { OptionsLoadError } from '../shared/options-load-error';
 import { ClientSelectWithCreate, type ClientSelectItem } from '../shared/client-select-with-create';
 import { SiteContactFields } from '../shared/site-contact-fields';
 import type { EditProjectForm } from './use-edit-project-form';
@@ -38,8 +38,7 @@ export function EditProjectFormFields({ form, selectedClient }: EditProjectFormF
     setSelectedJobIds,
     jobSearch,
     isLoadingJobs,
-    jobsLoadError,
-    retryJobs,
+    jobsFailure,
     contentError,
     setContentError,
     showContentError,
@@ -131,9 +130,9 @@ export function EditProjectFormFields({ form, selectedClient }: EditProjectFormF
         htmlFor="edit-project-jobs"
         description={isLoadingJobs ? 'Aufträge werden geladen…' : undefined}
       >
-        {jobsLoadError ? (
+        {jobsFailure ? (
           // A failed load must not read as a project without jobs.
-          <OptionsLoadError error={jobsLoadError} onRetry={retryJobs} retrying={isLoadingJobs} />
+          <SectionError failure={jobsFailure} />
         ) : (
           <JobMultiSelect
             search={jobSearch}

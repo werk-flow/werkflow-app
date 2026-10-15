@@ -168,7 +168,25 @@ export type EnforcedByReference = { line: number; token: string; problem: string
 
 const GROUP_ID_PATTERN = /^(?:static|sql|ui|unit|canary|audit|golden):[a-z0-9:<>*-]+$/;
 const LINT_NAME_PATTERN =
-  /^(?:ui|quality|playwright-spec|@typescript-eslint|@eslint-community\/eslint-comments)\/[a-z-]+$/;
+  /^(?:ui|quality|playwright-spec|jsx-a11y|@typescript-eslint|@eslint-community\/eslint-comments)\/[a-z-]+$/;
+
+const JSX_A11Y_PREFIX = 'jsx-a11y/';
+
+/**
+ * Whether a `jsx-a11y/<rule>` name is in force: the ESLint configuration
+ * spreads the plugin's recommended set, and the plugin declares the rule.
+ * `jsx-a11y/recommended` names that set itself.
+ */
+export function jsxA11yNameExists(
+  name: string,
+  lintCorpus: string,
+  pluginRuleNames: readonly string[],
+): boolean {
+  if (!name.startsWith(JSX_A11Y_PREFIX)) return false;
+  if (!lintCorpus.includes('jsxA11y.flatConfigs.recommended.rules')) return false;
+  const rule = name.slice(JSX_A11Y_PREFIX.length);
+  return rule === 'recommended' || pluginRuleNames.includes(rule);
+}
 const PATH_PATTERN =
   /^\.?[A-Za-z0-9_()[\].-]+(?:\/[A-Za-z0-9_()[\].*-]*)+$|^[\w.-]+\.(?:ts|tsx|mjs|json|css|sql|toml|jsonc)$/;
 

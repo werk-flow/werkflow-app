@@ -4,6 +4,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { Plus } from 'lucide-react';
 
 import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
+import type { ReadFailure } from '@/hooks/use-client-read';
 
 /**
  * Entity select with an inline „Neu erstellen" action (component registry in
@@ -32,9 +33,8 @@ type SelectWithCreateProps<T> = {
   emptyMessage?: string | undefined;
   onSearchChange?: ((search: string) => void) | undefined;
   loading?: boolean | undefined;
-  loadError?: string | undefined;
-  /** Reads the failed options again, shown as „Erneut laden“ beside `loadError`. */
-  onRetryLoad?: (() => void) | undefined;
+  /** The failed option read; the popup shows its message with „Erneut laden“. */
+  loadFailure?: ReadFailure | null | undefined;
   onLoadMore?: (() => void) | undefined;
   disabled?: boolean | undefined;
   allowNone?: boolean | undefined;
@@ -57,8 +57,7 @@ export function SelectWithCreate<T>({
   emptyMessage,
   onSearchChange,
   loading,
-  loadError,
-  onRetryLoad,
+  loadFailure,
   onLoadMore,
   disabled,
   allowNone,
@@ -100,8 +99,7 @@ export function SelectWithCreate<T>({
         emptyMessage={emptyMessage}
         onSearchChange={onSearchChange}
         loading={loading}
-        loadError={loadError}
-        onRetryLoad={onRetryLoad}
+        loadFailure={loadFailure}
         onLoadMore={onLoadMore}
         disabled={disabled}
         allowNone={allowNone}

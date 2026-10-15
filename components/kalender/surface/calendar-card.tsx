@@ -140,6 +140,8 @@ export const CalendarCard = forwardRef<HTMLButtonElement, CalendarCardProps>(fun
       data-calendar-card={size}
       data-occurrence-id={rest['data-occurrence-id'] ?? job.occurrenceId ?? job.id}
       data-employee-record-id={rest['data-employee-record-id']}
+      // A move that is taken back renders the card anew; a closing dialog finds it again by this key.
+      data-focus-key={`calendar-card:${size}:${rest['data-occurrence-id'] ?? job.occurrenceId ?? job.id}:${rest['data-employee-record-id'] ?? ''}`}
       data-locked={locked ? '' : undefined}
       aria-label={`${rest['aria-label'] ?? `${job.title}, ${cardTime(job)}${subtitle ? `, ${subtitle}` : ''}`}${locked ? ', begonnen oder vergangen' : ''}`}
       className={cn(

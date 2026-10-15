@@ -6,7 +6,6 @@ import { type CompletionState } from '@/components/settings/email-change-wizard-
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { type EmailChangeWizardState } from '@/lib/settings/email-change.types';
-import { Spinner } from '@/components/ui/spinner';
 
 export function EmailChangeCompletionPendingNotice({ wizardState }: { wizardState: EmailChangeWizardState }) {
   return (
@@ -90,15 +89,8 @@ export function CurrentEmailPanel({
           </div>
         </div>
         {step === 'idle' ? (
-          <Button type="button" onClick={onStart} disabled={isStarting || !currentEmail}>
-            {isStarting ? (
-              <>
-                <Spinner className="mr-2" />
-                Startet…
-              </>
-            ) : (
-              'E-Mail-Adresse ändern'
-            )}
+          <Button type="button" onClick={onStart} pending={isStarting} disabled={!currentEmail}>
+            {isStarting ? 'Startet…' : 'E-Mail-Adresse ändern'}
           </Button>
         ) : null}
       </div>

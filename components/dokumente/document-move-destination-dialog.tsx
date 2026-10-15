@@ -200,7 +200,7 @@ export function MoveDestinationDialog({
             />
 
             <div
-              className="min-h-0 flex-1 overflow-auto p-4"
+              className="min-h-0 flex-1 overflow-y-auto p-4"
               onContextMenu={(event) => event.preventDefault()}
             >
               <div className="overflow-hidden rounded-md border bg-background">

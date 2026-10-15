@@ -254,7 +254,7 @@ function DocumentDetailsHistory({ details, isLoading }: DocumentDetailsHistoryPr
           ))}
         </div>
       ) : details?.auditEvents.length ? (
-        <div className="mt-2 max-h-48 space-y-2 overflow-auto rounded-md border p-2">
+        <div className="mt-2 max-h-48 space-y-2 overflow-y-auto rounded-md border p-2">
           {details.auditEvents.map((event) => (
             <div key={event.id} className="text-sm">
               <p className="font-medium">{getAuditEventLabel(event.eventType)}</p>

@@ -81,9 +81,9 @@ Product code (`app/`, `components/`, `hooks/`, `lib/` outside `lib/testing/`), m
 | Changed file | Browser groups selected in change mode |
 | --- | --- |
 | Product file under a `TEST_SCOPE_PREFIXES` folder, or a file the registry names (a feature hook, skeleton, or API route) | The groups that declare that scope |
-| `components/ui/`, `app/globals.css` | `golden:gg-00`, `audit:layout` |
+| `components/ui/`, `app/globals.css` | `golden:gg-00`, `audit:layout`, `audit:layout:viewports`; layer and tab primitives add `audit:layout:*` |
 | `proxy.ts`, `lib/auth/`, `app/auth/`, `app/(auth)/`, `components/auth/`, `lib/data/cached.ts`, `hooks/use-sign-out.ts` | `golden:gg-00`, `audit:security:account` |
-| `package.json`, `bun.lock`, changed environment | `golden:gg-00`, `audit:layout`, `audit:security:account` |
+| `package.json`, `bun.lock`, changed environment | `golden:gg-00`, `audit:layout`, `audit:layout:viewports`, `audit:security:account` |
 | Any other product file without an owner, including new, deleted, and generated files | `golden:gg-00` |
 | Spec or test support | The groups whose spec imports it |
 | Runner file (`scripts/verify.ts`, `lib/testing/selection/group-selection.ts`, and the other registered orchestration files) | The two runner pilots |
@@ -117,9 +117,9 @@ The digests leave out documentation (`isDocumentationInput` in `lib/testing/evid
 
 ```bash
 bun run env:local                              # route .env.local at the local stack
-bun run test:plan                              # what would run and why (change mode, local target)
+bun run test:plan                              # what would run, in change mode
 bun run test:plan --mode release               # the complete release selection
-bun run test:server local                      # build and serve the recorded production build (own terminal)
+bun run test:server local                      # build and serve the recorded production build
 bun run test:verify                            # run the plan
 bun run test:verify --group golden:p1-06,audit:wave-2:p1-16   # an explicit subset
 bun run test:verify --group <ids> --fresh      # run even when a proof exists; --jobs 2 adds a second browser worker
@@ -129,6 +129,7 @@ bun run test:verify --target cloud             # the canary groups against DEV (
 bun run test:golden:focused --grep "<titles>"  # a focused fresh-world run; test:audit:focused and test:canary:focused likewise
 bun run test:diagnostic --grep "<title>" --reuse-run <run-key>   # replay on a retained world
 WERKFLOW_UPDATE_VISUAL_REFERENCES=1 bun run test:audit:focused --grep @AUDIT-VISUAL   # rewrite changed visual references
+bun run test:audit:focused --grep "@ACCEPT <set>"   # acceptance captures
 ```
 
 | Work | Required evidence |
@@ -176,7 +177,7 @@ Scenario measurements use the ids, budgets, and sample counts in `lib/testing/me
 
 1. Open the failed browser group's `error-context.md`, screenshot, and trace under `.agent-logs/playwright-runs/<run-key>/`; the verification log names the run key, and `.agent-logs/test-server/` holds the server output. Any other group's log is under `.agent-logs/verification/<report-id>/`.
 2. Find the cause and fix it. Add prevention at the highest reachable tier of the [enforcement ladder](../decisions/0005-enforcement-ladder.md).
-3. Record the cause with `bun run test:runs classify <run-key> <class> "<cause>" "<prevention>"`. For a verification run it also writes the [incident log](test-incident-log.md) entry, so the prevention names its tier. A static, unit, SQL, or component group has no run key: give its group id instead, for example `classify sql:security environment ...`, and the diagnosis of its latest failed attempt is stored beside its report. The campaign line counts failures by this classification.
+3. Record the cause with `bun run test:runs classify <run-key> <class> "<cause>" "<prevention>"`. For a verification run it writes the [incident log](test-incident-log.md) entry, so the prevention names its tier. A static, unit, SQL, or component group has no run key: give its group id, for example `classify sql:security environment ...`, and the diagnosis of its latest failed attempt is stored beside its report. The campaign line counts failures by this classification.
 4. Clean the retained world with `bun run test:runs cleanup <run-key>`.
 5. Run `bun run test:verify`. Repair mode selects the failed groups. Their pass closes the repair.
 

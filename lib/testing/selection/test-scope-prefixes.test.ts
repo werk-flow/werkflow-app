@@ -42,6 +42,7 @@ test('every hook is either registered under one feature scope or listed as share
     'use-batch-progress.ts',
     'use-business-day-refresh.ts',
     'use-busy-id.ts',
+    'use-client-read.ts',
     'use-hydrated.ts',
     'use-list-navigation.ts',
     'use-live-view.ts',

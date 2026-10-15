@@ -41,6 +41,9 @@ const CUSTOMER_COPY = {
   detailTitle: 'Kundendetails',
   customerNumber: 'Kundennummer',
   deleteCustomer: 'Kunde löschen',
+  openActions: 'Aktionen öffnen',
+  rowDelete: 'Löschen',
+  deleteConfirmTitle: 'Kunde löschen?',
   addContact: 'Ansprechpartner hinzufügen',
   addPreference: 'Präferenz',
   communicationPreferences: 'Kontaktvorgaben',
@@ -48,7 +51,18 @@ const CUSTOMER_COPY = {
   followUpSourcePrefix: 'Quelle: ',
   continueWithReason: 'Begründet fortfahren',
   contactWarningLegalNote: /WerkFlow entscheidet nicht über die rechtliche Zulässigkeit/,
+  contactWarningTitle: 'Kontaktvorgabe prüfen',
+  rowEdit: 'Bearbeiten',
+  editTitle: 'Kunde bearbeiten',
+  addSite: 'Einsatzort hinzufügen',
+  editCommunicationSettings: 'Allgemein bearbeiten',
+  communicationSettingsTitle: 'Allgemeine Kontaktvorgaben',
+  preferenceTitle: 'Kontaktpräferenz festhalten',
+  createFollowUp: 'Nachfassaktion anlegen',
 } as const;
+
+/** Rows of the „Kundendetails“ card, by their labels. */
+const CUSTOMER_DETAIL_FIELDS = { name: 'Name', phone: 'Telefon' } as const;
 
 /** The fields of the customer creation dialog, by their labels. */
 const CUSTOMER_FORM_FIELDS = {
@@ -140,6 +154,23 @@ export function customerCountLabel(page: Page): Locator {
     .first();
 }
 
+/** The actions menu button of a customer's row in the desktop list. */
+export function customerRowActionsButton(page: Page, customerName: string): Locator {
+  return confirmed(
+    page.getByRole('row').filter({ has: page.getByRole('link', { name: customerName, exact: true }) }),
+  ).getByRole('button', { name: CUSTOMER_COPY.openActions });
+}
+
+/** The delete item of an open customer row menu. */
+export function customerRowDeleteItem(page: Page): Locator {
+  return page.getByRole('menuitem', { name: CUSTOMER_COPY.rowDelete, exact: true });
+}
+
+/** The delete confirmation of a customer, opened from the list's row menu or the detail. */
+export function customerDeleteConfirmation(page: Page): Locator {
+  return page.getByRole('alertdialog', { name: CUSTOMER_COPY.deleteConfirmTitle });
+}
+
 export function customerDeleteMenuItem(page: Page): Locator {
   return page.getByRole('menuitem', { name: CUSTOMER_COPY.deleteCustomer });
 }
@@ -189,6 +220,72 @@ export function editableFollowUpRow(page: Page, title: string): Locator {
   return confirmed(
     page.locator('[data-follow-up-id]').filter({ has: followUpActionButton(page, title, 'edit') }),
   );
+}
+
+/** The edit item of an open customer row menu. */
+export function customerRowEditItem(page: Page): Locator {
+  return page.getByRole('menuitem', { name: CUSTOMER_COPY.rowEdit, exact: true });
+}
+
+/** The customer edit dialog, opened from the list's row menu. */
+export function customerEditDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: CUSTOMER_COPY.editTitle, exact: true });
+}
+
+/** The „Kundendetails“ card of the customer detail. */
+export function customerDetailsRegion(page: Page): Locator {
+  return page.getByRole('region', { name: CUSTOMER_COPY.detailTitle, exact: true });
+}
+
+/** The label of a „Kundendetails“ row, for the shared MetadataSection locators. */
+export function customerDetailFieldLabel(field: keyof typeof CUSTOMER_DETAIL_FIELDS): string {
+  return CUSTOMER_DETAIL_FIELDS[field];
+}
+
+/** The dialog that adds a contact to the customer. */
+export function customerContactDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: CUSTOMER_COPY.addContact, exact: true });
+}
+
+export function addSiteButton(page: Page): Locator {
+  return page.getByRole('button', { name: CUSTOMER_COPY.addSite, exact: true });
+}
+
+/** The dialog that adds a work site to the customer. */
+export function customerSiteDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: CUSTOMER_COPY.addSite, exact: true });
+}
+
+/** Opens the dialog of the customer's general communication settings. */
+export function communicationSettingsButton(page: Page): Locator {
+  return page.getByRole('button', { name: CUSTOMER_COPY.editCommunicationSettings, exact: true });
+}
+
+export function communicationSettingsDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: CUSTOMER_COPY.communicationSettingsTitle, exact: true });
+}
+
+export function communicationPreferenceDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: CUSTOMER_COPY.preferenceTitle, exact: true });
+}
+
+/** The follow-up section's button that creates a follow-up. */
+export function createFollowUpButton(page: Page): Locator {
+  return page.getByRole('button', { name: CUSTOMER_COPY.createFollowUp, exact: true });
+}
+
+export function followUpDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: CUSTOMER_COPY.createFollowUp, exact: true });
+}
+
+/** A contact's phone or e-mail link on the customer detail, named by the number or address it shows. */
+export function customerContactLink(page: Page, text: string): Locator {
+  return page.getByRole('link', { name: text, exact: true });
+}
+
+/** The warning a contact link raises when it conflicts with the customer's contact policy. */
+export function contactWarningDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: CUSTOMER_COPY.contactWarningTitle, exact: true });
 }
 
 /** The contact warning's button that continues with a reason. */

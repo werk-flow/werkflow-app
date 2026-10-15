@@ -46,6 +46,7 @@ export function CalendarViewTabs({
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <Tabs
+          panels={false}
           value={view}
           onValueChange={(value) => onViewChange(value as CalendarView)}
           className="shrink-0"

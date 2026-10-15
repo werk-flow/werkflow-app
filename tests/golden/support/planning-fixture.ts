@@ -12,7 +12,7 @@ function addDays(dateIso: string, days: number): string {
 /**
  * Prepare owned prerequisites only; the test must exercise the mutation through the app.
  * A visit is timed for one hour from `hour`, or all-day over `allDayDays` days. It is assigned
- * to the employee unless `assignee` names the Büro member or `assigned` is false.
+ * to the employee unless `assignee` names the Büro member or a personnel record, or `assigned` is false.
  */
 export async function seedPlanningVisit(
   world: TestWorld,
@@ -21,7 +21,7 @@ export async function seedPlanningVisit(
     hour?: number;
     allDayDays?: number;
     assigned?: boolean;
-    assignee?: 'employee' | 'buero';
+    assignee?: 'employee' | 'buero' | { employeeRecordId: string };
   },
 ): Promise<{ jobNumber: string; title: string }> {
   const admin = createAdminClient();
@@ -77,14 +77,15 @@ export async function seedPlanningVisit(
   });
   if (occurrenceError) throw new Error(`Planning fixture occurrence failed: ${occurrenceError.message}`);
   if (input.assigned !== false) {
-    const assignee = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users[input.assignee ?? 'employee'].id,
-    );
+    const assignee = input.assignee ?? 'employee';
+    const employeeRecordId =
+      typeof assignee === 'string'
+        ? (await getEmployeeRecordStateByUser(world.orgId, world.users[assignee].id)).id
+        : assignee.employeeRecordId;
     const { error } = await admin.from('planning_occurrence_assignments').insert({
       organization_id: world.orgId,
       occurrence_id: occurrenceId,
-      employee_record_id: assignee.id,
+      employee_record_id: employeeRecordId,
       assigned_by: world.users.admin.id,
     });
     if (error) throw new Error(`Planning fixture assignment failed: ${error.message}`);

@@ -25,6 +25,23 @@ export async function retireOrganizationCapability(orgId: string, capabilityId: 
   if (error) throw new Error(`Capability retirement failed: ${error.message}`);
 }
 
+/** A current team without members, created through the product's own function. Setup only. */
+export async function seedTeam(input: {
+  organizationId: string;
+  actorUserId: string;
+  name: string;
+  description: string;
+}): Promise<string> {
+  const { data, error } = await createAdminClient().rpc('create_team', {
+    p_actor_id: input.actorUserId,
+    p_organization_id: input.organizationId,
+    p_name: input.name,
+    p_description: input.description,
+  });
+  if (error || !data) throw new Error(`Team seed failed for ${input.name}: ${error?.message}`);
+  return data;
+}
+
 export async function getCapabilityHistoryState(
   orgId: string,
   employeeRecordId: string,

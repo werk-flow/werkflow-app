@@ -2,6 +2,7 @@
 
 import { KalenderContentSkeleton } from '@/components/loading-states/kalender-content-skeleton';
 import { PageBody } from '@/components/shared/page-shell';
+import { ScrollRegion } from '@/components/ui/scroll-region';
 import { SectionError } from '@/components/ui/section-error';
 import type { OrgRole } from '@/lib/members/actions';
 import type { OrganizationTimeTrackingSettings } from '@/lib/time-tracking/settings';
@@ -72,11 +73,11 @@ export function CalendarBody({
       {/* The Parkplatz sits beside the calendar on a desktop, so the board keeps every column reachable. */}
       <div className="flex min-h-0 flex-1" {...unconfirmedMarker(unconfirmed)}>
         <PageBody className="flex min-w-0 flex-col overflow-hidden p-0 pb-0 sm:p-0 sm:pb-0">
-          <div
-            className={cn(
-              'flex-1 overflow-auto overscroll-none transition-opacity',
-              isReloading && 'opacity-60',
-            )}
+          <ScrollRegion
+            name="calendar"
+            axes="both"
+            focusable={{ label: 'Kalenderansicht' }}
+            className={cn('flex-1 overscroll-none transition-opacity', isReloading && 'opacity-60')}
             data-calendar-scroll-container=""
             aria-busy={isReloading || undefined}
             inert={isReloading || calendarStale || undefined}
@@ -97,7 +98,7 @@ export function CalendarBody({
             ) : (
               <CalendarSurface {...surface} />
             )}
-          </div>
+          </ScrollRegion>
         </PageBody>
         {surface.isAdminOrManager && overlays.parkplatzOpen && (
           <ParkplatzPanel
@@ -205,6 +206,7 @@ function CalendarSurface({
       holidays={holidays}
       organizationSettings={organizationSettings}
       currentUserId={currentUserId}
+      currentUserRole={currentUserRole}
       isAdminOrManager={isAdminOrManager}
       mutations={mutations}
       actions={surfaceActions}

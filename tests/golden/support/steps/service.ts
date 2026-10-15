@@ -1036,3 +1036,123 @@ export async function expandServiceFormSections(dialog: Locator, form: ServiceDi
   for (const section of form.collapsedSections)
     await dialog.getByRole('button', { name: section, exact: true }).click();
 }
+
+// ---------------------------------------------------------------------------
+// The service dialogs as the rendered audit opens them: each trigger on screen
+// and each open layer by its title, its accessible name.
+
+const SERVICE_DIALOG_TITLES = {
+  equipmentCreate: EQUIPMENT_COPY.create,
+  equipmentState: EQUIPMENT_COPY.changeState,
+  equipmentWorkLink: EQUIPMENT_COPY.workLinkDialog,
+  equipmentSource: EQUIPMENT_COPY.linkSource,
+  caseCreate: SERVICE_CASE_COPY.create,
+  caseRelation: 'Servicefälle verknüpfen',
+  caseEvidence: 'Arbeitsnachweis verknüpfen',
+  followUp: SERVICE_CASE_COPY.createFollowUp,
+  coverageCreate: 'Operative Abdeckung erfassen',
+  planCreate: MAINTENANCE_COPY.createPlan,
+} as const;
+
+/** The equipment confirmations, alert dialogs by their title. */
+const EQUIPMENT_CONFIRMATION_TITLES = {
+  correction: 'Abschlussaktion korrigieren?',
+  archive: 'Anlage archivieren?',
+} as const;
+
+const EQUIPMENT_ARCHIVE_ACTION = 'Archivieren';
+
+/** An open service dialog by its title. */
+export function serviceDialog(page: Page, dialog: keyof typeof SERVICE_DIALOG_TITLES): Locator {
+  return page.getByRole('dialog', { name: SERVICE_DIALOG_TITLES[dialog], exact: true });
+}
+
+/** An open equipment confirmation by its title. */
+export function equipmentConfirmation(
+  page: Page,
+  confirmation: keyof typeof EQUIPMENT_CONFIRMATION_TITLES,
+): Locator {
+  return page.getByRole('alertdialog', { name: EQUIPMENT_CONFIRMATION_TITLES[confirmation], exact: true });
+}
+
+/** The „Anlage erfassen“ action of the equipment list. */
+export function equipmentCreateButton(page: Page): Locator {
+  return page.getByRole('button', { name: EQUIPMENT_COPY.create, exact: true });
+}
+
+/** The „Zustand ändern“ action of the equipment detail header. */
+export function equipmentStateButton(page: Page): Locator {
+  return page.getByRole('button', { name: EQUIPMENT_COPY.changeState, exact: true });
+}
+
+/** The „Verknüpfen“ action of the equipment's linked work section. */
+export function equipmentWorkLinkButton(page: Page): Locator {
+  return equipmentWorkLinkSection(page).getByRole('button', { name: SERVICE_COPY.link, exact: true });
+}
+
+export function equipmentSourceButton(page: Page): Locator {
+  return page.getByRole('button', { name: EQUIPMENT_COPY.linkSource, exact: true });
+}
+
+/** The sidebar action of an equipment with a terminal action (replaced or decommissioned). */
+export function equipmentCorrectionButton(page: Page): Locator {
+  return page.getByRole('button', { name: EQUIPMENT_COPY.correctTerminalAction, exact: true });
+}
+
+/** The sidebar action that archives a removed, replaced or decommissioned equipment. */
+export function equipmentArchiveButton(page: Page): Locator {
+  return page.getByRole('button', { name: EQUIPMENT_ARCHIVE_ACTION, exact: true });
+}
+
+/** The „Verknüpfen“ action of the case detail's relations section. */
+export function serviceCaseRelationButton(page: Page): Locator {
+  return page
+    .getByRole('main')
+    .getByTestId('service-case-relations')
+    .getByRole('button', { name: SERVICE_COPY.link, exact: true });
+}
+
+/** The „Verknüpfen“ action of the case detail's evidence section; it needs a job with evidence. */
+export function serviceCaseEvidenceButton(page: Page): Locator {
+  return serviceCaseEvidenceSection(page).getByRole('button', { name: SERVICE_COPY.link, exact: true });
+}
+
+export function serviceCaseFollowUpButton(page: Page): Locator {
+  return page
+    .getByRole('main')
+    .getByTestId('service-case-follow-up')
+    .getByRole('button', { name: SERVICE_CASE_COPY.createFollowUp, exact: true });
+}
+
+export function maintenanceCoverageCreateButton(page: Page): Locator {
+  return page.getByRole('button', { name: MAINTENANCE_COPY.createCoverage, exact: true });
+}
+
+export function maintenancePlanCreateButton(page: Page): Locator {
+  return page.getByRole('button', { name: MAINTENANCE_COPY.createPlan, exact: true });
+}
+
+/** The first confirmed due row that names this text, such as a customer name. */
+export function maintenanceDueRowNaming(page: Page, text: string): Locator {
+  return confirmed(
+    page.getByRole('main').getByTestId('maintenance-due-row').filter({ hasText: text }),
+  ).first();
+}
+
+/** A status action of the first confirmed plan card that names this text, such as a customer name. */
+export function maintenancePlanCardAction(page: Page, text: string, action: MaintenancePlanAction): Locator {
+  return confirmed(page.getByRole('main').getByTestId('maintenance-plan-card'))
+    .filter({ hasText: text })
+    .first()
+    .getByRole('button', { name: MAINTENANCE_PLAN_ACTIONS[action].open, exact: true });
+}
+
+/** The open documents dialog of whichever coverage: „Dokumente zu <Abdeckungsnummer>“. */
+export function maintenanceCoverageDocumentsLayer(page: Page): Locator {
+  return page.getByRole('dialog', { name: new RegExp(`^${MAINTENANCE_COPY.documentsDialogPrefix} `) });
+}
+
+/** The open plan status dialog; its title repeats its submit label. */
+export function maintenancePlanActionDialog(page: Page, action: MaintenancePlanAction): Locator {
+  return page.getByRole('dialog', { name: MAINTENANCE_PLAN_ACTIONS[action].submit, exact: true });
+}

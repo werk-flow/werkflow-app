@@ -153,9 +153,9 @@ export function EquipmentDataSection({
         />
       </dl>
       {item.technicalNotes && (
-        <div className="mt-5 border-t pt-4">
+        <dl className="mt-5 border-t pt-4">
           <Fact label="Technische Hinweise" value={item.technicalNotes} />
-        </div>
+        </dl>
       )}
     </section>
   );

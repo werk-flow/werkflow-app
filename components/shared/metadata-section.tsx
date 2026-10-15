@@ -24,6 +24,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { toLocalDateString } from '@/lib/utils';
+import { focusOnMount } from '@/lib/ui/focus-on-mount';
 import { SectionTitle } from '@/components/shared/section-title';
 
 export class MetadataSaveError extends Error {
@@ -291,10 +292,10 @@ function MetadataFieldRow({
           <div className="min-w-0 flex-1">
             {config.type === 'text' && (
               <Input
+                ref={focusOnMount}
                 value={editValue}
                 onChange={(e) => onEditValueChange(e.target.value)}
                 placeholder={config.placeholder}
-                autoFocus
                 disabled={isPending}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && hasChanges) onSave();
@@ -304,10 +305,10 @@ function MetadataFieldRow({
             )}
             {config.type === 'duration' && (
               <DurationHoursInput
+                ref={focusOnMount}
                 value={editValue}
                 onChange={onEditValueChange}
                 placeholder={config.placeholder}
-                autoFocus
                 disabled={isPending}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && hasChanges) onSave();
@@ -317,10 +318,10 @@ function MetadataFieldRow({
             )}
             {config.type === 'textarea' && (
               <Textarea
+                ref={focusOnMount}
                 value={editValue}
                 onChange={(e) => onEditValueChange(e.target.value)}
                 placeholder={config.placeholder}
-                autoFocus
                 disabled={isPending}
               />
             )}

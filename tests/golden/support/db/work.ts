@@ -1,6 +1,13 @@
 import { randomUUID } from 'node:crypto';
 
-import { parseWorkLifecycleSnapshot } from '../../../../lib/work-lifecycle/types';
+import { toJson } from '../../../../lib/supabase/json';
+import { rpcArgs } from '../../../../lib/supabase/rpc-args';
+import { saveWorkArtifactSchema } from '../../../../lib/work-artifacts/validation';
+import {
+  parseWorkLifecycleSnapshot,
+  type WorkDeclaredDependencyKind,
+  type WorkDependencyEffect,
+} from '../../../../lib/work-lifecycle/types';
 import { createAdminClient } from './shared';
 
 export type SeedWorkTemplateItem = {
@@ -826,7 +833,7 @@ export async function seedProject(input: {
   return data.id;
 }
 
-/** Inserts an unplanned, unassigned job as the actor. */
+/** Inserts an unassigned job as the actor, unplanned unless a planned date is given. */
 export async function seedJob(input: {
   orgId: string;
   actorId: string;
@@ -836,6 +843,8 @@ export async function seedJob(input: {
   siteId?: string;
   contactId?: string;
   projectId?: string;
+  /** An ISO date; the legacy planning bridge turns it into a scheduled visit. */
+  plannedDate?: string;
 }): Promise<string> {
   const { data } = await createAdminClient()
     .from('jobs')
@@ -848,6 +857,7 @@ export async function seedJob(input: {
       site_id: input.siteId ?? null,
       contact_id: input.contactId ?? null,
       project_id: input.projectId ?? null,
+      planned_date: input.plannedDate ?? null,
     })
     .select('id')
     .single()
@@ -870,5 +880,142 @@ export async function seedJobAssignment(input: {
       assigned_by: input.actorId,
       user_id: input.userId,
     })
+    .throwOnError();
+}
+
+/** Records a draft work report on a seeded job through the artifact RPC the field action calls. */
+export async function seedWorkReportDraft(input: {
+  orgId: string;
+  actorId: string;
+  jobId: string;
+  title: string;
+  performedWork: string;
+}): Promise<void> {
+  const draft = saveWorkArtifactSchema.parse({
+    artifactId: randomUUID(),
+    revisionId: randomUUID(),
+    expectedVersion: 0,
+    targetType: 'job',
+    targetId: input.jobId,
+    kind: 'work_report',
+    visibility: 'internal_only',
+    capturedAt: new Date().toISOString(),
+    title: input.title,
+    content: { performedWork: input.performedWork },
+    submit: false,
+  });
+  await createAdminClient()
+    .rpc(
+      'create_work_artifact_revision',
+      rpcArgs('create_work_artifact_revision', {
+        p_organization_id: input.orgId,
+        p_actor_id: input.actorId,
+        p_artifact_id: draft.artifactId,
+        p_revision_id: draft.revisionId,
+        p_expected_version: 0,
+        p_job_id: draft.targetId,
+        p_project_id: null,
+        p_kind: draft.kind,
+        p_visibility: draft.visibility,
+        p_captured_at: draft.capturedAt,
+        p_title: draft.title,
+        p_content: toJson(draft.content),
+        p_corrects_revision_id: null,
+        p_correction_reason: null,
+        p_submit: false,
+        p_submit_action_id: null,
+      }),
+    )
+    .throwOnError();
+}
+
+/** Inserts a checklist point on a seeded job as the actor, as the manager's draft row saves it. */
+export async function seedJobInstructionItem(input: {
+  orgId: string;
+  actorId: string;
+  jobId: string;
+  content: string;
+}): Promise<void> {
+  await createAdminClient()
+    .from('job_instruction_items')
+    .insert({
+      organization_id: input.orgId,
+      job_id: input.jobId,
+      content: input.content,
+      created_by: input.actorId,
+    })
+    .throwOnError();
+}
+
+/** Declares a prerequisite of a seeded job through the RPC the lifecycle card's dependency save calls. */
+export async function seedDeclaredWorkDependency(input: {
+  orgId: string;
+  actorId: string;
+  jobId: string;
+  kind: WorkDeclaredDependencyKind;
+  description: string;
+  effect: WorkDependencyEffect;
+}): Promise<void> {
+  await createAdminClient()
+    .rpc(
+      'upsert_work_dependency',
+      rpcArgs('upsert_work_dependency', {
+        p_organization_id: input.orgId,
+        p_actor_id: input.actorId,
+        p_dependency_id: null,
+        p_expected_version: null,
+        p_dependent_job_id: input.jobId,
+        p_dependent_project_id: null,
+        p_predecessor_job_id: null,
+        p_predecessor_project_id: null,
+        p_predecessor_instruction_item_id: null,
+        p_declared_kind: input.kind,
+        p_description: input.description,
+        p_effect: input.effect,
+      }),
+    )
+    .throwOnError();
+}
+
+/** Requires an organization capability on a seeded job through the RPC the qualification section calls. */
+export async function seedJobCapabilityRequirement(input: {
+  orgId: string;
+  actorId: string;
+  jobId: string;
+  capabilityId: string;
+}): Promise<void> {
+  await createAdminClient()
+    .rpc('replace_job_capability_requirements', {
+      p_organization_id: input.orgId,
+      p_actor_id: input.actorId,
+      p_job_id: input.jobId,
+      p_capability_ids: [input.capabilityId],
+      p_require_confirmations: [false],
+    })
+    .throwOnError();
+}
+
+/** Issues a dispatch of a seeded, unscheduled job to these personnel records through the issue RPC. */
+export async function seedJobDispatch(input: {
+  orgId: string;
+  actorId: string;
+  jobId: string;
+  recipientEmployeeRecordIds: string[];
+}): Promise<void> {
+  await createAdminClient()
+    .rpc(
+      'issue_planning_dispatch',
+      rpcArgs('issue_planning_dispatch', {
+        p_organization_id: input.orgId,
+        p_actor_id: input.actorId,
+        p_occurrence_id: null,
+        p_job_id: input.jobId,
+        p_recipient_employee_record_ids: input.recipientEmployeeRecordIds,
+        p_note: null,
+        p_readiness_snapshot: null,
+        p_readiness_fingerprint: null,
+        p_request_id: randomUUID(),
+      }),
+    )
     .throwOnError();
 }

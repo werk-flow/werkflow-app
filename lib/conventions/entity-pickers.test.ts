@@ -13,12 +13,13 @@ import { listProductSources, parseProductSource, repositoryRoot } from './produc
 // labels or placeholders name one of them passes `onSearchChange`, directly or
 // by spreading an option hook's result, unless it is a reviewed bounded list.
 // Every other picker offers a list bounded by nature (people of one company,
-// a customer's sites, a small catalog, a fixed set). A call site that shows a
-// load failure passes the retry with it.
+// a customer's sites, a small catalog, a fixed set). A searched picker shows
+// a failed page through `loadFailure` (hooks/use-client-read.ts `ReadFailure`),
+// which carries the retry, so the old `loadError` and `onRetryLoad` pair fails.
 
 const PICKERS = new Set(['SearchableSelect', 'SearchableMultiSelect', 'SelectWithCreate', 'JobMultiSelect']);
 
-/** Option hooks whose results carry `onSearchChange`, `loadError` and `onRetryLoad`. */
+/** Option hooks whose results carry `onSearchChange` and `loadFailure`. */
 const SEARCH_HOOKS = new Set(['useJobEntityOptions', 'usePlanningOptions']);
 
 /** The organization-sized kinds, as code and German copy name them. */
@@ -55,8 +56,10 @@ type PickerSite = {
   /** The kinds its options, labels and placeholders name. */
   kinds: string[];
   searches: boolean;
-  loadError: boolean;
-  retries: boolean;
+  /** Passes the retired `loadError` or `onRetryLoad` prop. */
+  retiredFailureProps: boolean;
+  /** Passes `loadFailure`, directly or by spreading an option hook's result. */
+  showsFailure: boolean;
 };
 
 function attributeText(attribute: ts.JsxAttribute, source: ts.SourceFile): string | undefined {
@@ -144,8 +147,11 @@ export function pickerSites(file: string, text: string): PickerSite[] {
         spreadsSearch ||
         attributes.has('onSearchChange') ||
         (name === 'JobMultiSelect' && attributes.has('search')),
-      loadError: attributes.has('loadError'),
-      retries: spreadsSearch || attributes.has('onRetryLoad'),
+      retiredFailureProps: attributes.has('loadError') || attributes.has('onRetryLoad'),
+      showsFailure:
+        spreadsSearch ||
+        attributes.has('loadFailure') ||
+        (name === 'JobMultiSelect' && attributes.has('search')),
     });
   });
   return sites;
@@ -167,7 +173,7 @@ test('every picker of an unbounded kind searches on the server', () => {
         (site) =>
           `${site.key.split('::')[0]}:${site.line} ${site.key.split('::')[1]} (${site.kinds.join(', ')})`,
       ),
-    'Pass the option hook to the picker (useJobEntityOptions or usePlanningOptions: onSearchChange, loading, loadError, onRetryLoad, onLoadMore). A list bounded by nature goes into BOUNDED_PICKER_SITES with its bound.',
+    'Pass the option hook to the picker (useJobEntityOptions or usePlanningOptions: onSearchChange, loading, loadFailure, onLoadMore). A list bounded by nature goes into BOUNDED_PICKER_SITES with its bound.',
   ).toEqual([]);
   expect(
     Object.keys(BOUNDED_PICKER_SITES).filter((key) => !keys.has(key)),
@@ -175,12 +181,17 @@ test('every picker of an unbounded kind searches on the server', () => {
   ).toEqual([]);
 });
 
-test('a picker that shows a load failure offers the retry', () => {
+/** A searched picker that could hide a failed page, or still passes the retired pair. */
+function missesFailure(site: PickerSite): boolean {
+  return site.retiredFailureProps || (site.searches && !site.showsFailure);
+}
+
+test('a searched picker shows a failed page with its retry', () => {
   expect(
     productSites()
-      .filter((site) => site.loadError && !site.retries)
+      .filter(missesFailure)
       .map((site) => `${site.key.split('::')[0]}:${site.line}`),
-    'Pass onRetryLoad beside loadError, so the failure shows „Erneut laden“.',
+    'Pass loadFailure (the option hook’s ReadFailure), never loadError or onRetryLoad, so a failed page shows „Erneut laden“.',
   ).toEqual([]);
 });
 
@@ -195,10 +206,12 @@ test('the scan reports a picker handed a whole catalog and accepts the searched 
   ]);
   const searched = pickerSites(
     'components/planted.tsx',
-    `function Line() { const search = useJobEntityOptions({ kind: 'inventory-items' }, []); return <><SearchableSelect {...search} value="" onChange={() => {}} /><SearchableSelect options={search.options} onSearchChange={search.onSearchChange} loadError={search.loadError} /></>; }`,
+    `function Line() { const search = useJobEntityOptions({ kind: 'inventory-items' }, []); return <><SearchableSelect {...search} value="" onChange={() => {}} /><SearchableSelect options={search.options} onSearchChange={search.onSearchChange} loadFailure={search.loadFailure} /><SearchableSelect options={search.options} onSearchChange={search.onSearchChange} loadError={search.loadError} onRetryLoad={search.onRetryLoad} /><SearchableSelect options={search.options} onSearchChange={search.onSearchChange} /></>; }`,
   );
-  expect(searched.map((site) => [site.searches, site.loadError && !site.retries])).toEqual([
+  expect(searched.map((site) => [site.searches, missesFailure(site)])).toEqual([
     [true, false],
+    [true, false],
+    [true, true],
     [true, true],
   ]);
 });

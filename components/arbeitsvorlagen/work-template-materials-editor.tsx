@@ -171,8 +171,7 @@ function WorkTemplateMaterialLine({
             getOption={(item) => item}
             onSearchChange={search.onSearchChange}
             loading={search.loading}
-            loadError={search.loadError}
-            onRetryLoad={search.onRetryLoad}
+            loadFailure={search.loadFailure}
             onLoadMore={search.onLoadMore}
             value={line.itemId}
             onValueChange={(value) =>

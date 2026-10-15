@@ -26,7 +26,7 @@ type MonthDayCellProps = {
 /**
  * One day of the month grid: the background grid cell, the date header
  * with its holiday label and „+", and the items with „+n mehr" in a popover.
- * The three parts are grid children of the week row, placed per column.
+ * The three parts are grid cells of the week row, placed per column.
  */
 export function MonthDayCell(props: MonthDayCellProps): React.JSX.Element {
   const { cell, index, label, items, itemFor, openMore, onOpenMore, onOpenDay, canAdd, onAdd } = props;
@@ -47,9 +47,14 @@ export function MonthDayCell(props: MonthDayCellProps): React.JSX.Element {
           cell.isPast && 'opacity-80',
         )}
         style={{ gridColumn: index + 1, gridRow: '1 / -1' }}
+        // Focusable for assistive tech, but no tab stop: the keyboard opens
+        // the day through the day number button above the cell.
+        tabIndex={-1}
         onDoubleClick={() => onOpenDay(cellDate)}
       />
+      {/* A row of the grid holds cells only: the date header and the items are cells of the day too. */}
       <div
+        role="gridcell"
         className={cn(
           'group/cell relative z-[1] flex min-w-0 items-start gap-1 px-1.5 pt-1',
           !cell.inMonth && 'text-muted-foreground',
@@ -90,6 +95,7 @@ export function MonthDayCell(props: MonthDayCellProps): React.JSX.Element {
         )}
       </div>
       <div
+        role="gridcell"
         data-month-day={cell.date}
         className="relative z-[1] flex min-w-0 flex-col gap-0.5 px-1 pb-1"
         style={{ gridColumn: index + 1, gridRow: -2 }}

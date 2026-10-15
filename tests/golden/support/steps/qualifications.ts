@@ -35,6 +35,7 @@ const QUALIFICATION_COPY = {
   noCoveringPerson: 'Keine passende Person zugewiesen',
   dissolve: 'Auflösen',
   confirmDissolve: 'Team auflösen',
+  dissolveTitle: 'Team auflösen?',
   dissolveKeepsHistory: 'bleibt mit seiner Historie erhalten',
   dissolvedTeams: 'Aufgelöste Teams',
   renew: 'Erneuern',
@@ -182,6 +183,18 @@ export async function dissolveTeamViaManagement(page: Page, teamName: string): P
   await expect(page.getByRole('heading', { name: QUALIFICATION_COPY.dissolvedTeams })).toBeVisible({
     timeout: 15_000,
   });
+}
+
+/** The dissolve action of a current team's card on the Teams tab. */
+export function teamDissolveButton(page: Page, teamName: string): Locator {
+  return teamCard(page.getByRole('main'), teamName).getByRole('button', {
+    name: QUALIFICATION_COPY.dissolve,
+  });
+}
+
+/** The open confirmation that dissolves a team. */
+export function teamDissolveConfirmation(page: Page): Locator {
+  return page.getByRole('alertdialog', { name: QUALIFICATION_COPY.dissolveTitle, exact: true });
 }
 
 /** The team shortcut button inside an assignment form. */

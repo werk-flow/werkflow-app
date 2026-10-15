@@ -7,7 +7,7 @@ import { ChevronRight } from 'lucide-react';
 
 import { PlainButton } from '@/components/ui/plain-button';
 import { InlinePending } from '@/components/ui/inline-pending';
-import { ListRow } from '@/components/ui/list-row';
+import { ListRow, ListRowActions } from '@/components/ui/list-row';
 import { jobDetailHref, projectDetailHref } from '@/lib/jobs/routes';
 import {
   getJobDisplayTitle,
@@ -111,7 +111,7 @@ function JobCard({
         />
       </div>
       {isAdminOrManager && !isPending && (
-        <div onClick={(e) => e.stopPropagation()}>
+        <ListRowActions>
           <JobActionsMenu
             job={job}
             detailHref={detailHref}
@@ -122,7 +122,7 @@ function JobCard({
             onJobDeleted={onJobDeleted}
             onDeleteRequested={onJobDeleteRequested}
           />
-        </div>
+        </ListRowActions>
       )}
     </ListRow>
   );
@@ -246,7 +246,7 @@ function ProjectCard({
           />
         </div>
         {isAdminOrManager && !isPending && (
-          <div onClick={(e) => e.stopPropagation()}>
+          <ListRowActions>
             <ProjectActionsMenu
               project={project}
               detailHref={projectHref}
@@ -256,7 +256,7 @@ function ProjectCard({
               onProjectDeleted={onProjectDeleted}
               onDeleteRequested={onProjectDeleteRequested}
             />
-          </div>
+          </ListRowActions>
         )}
       </ListRow>
 

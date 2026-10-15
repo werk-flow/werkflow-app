@@ -1,11 +1,13 @@
 import * as React from 'react';
 
+import { scrollRegion } from '@/components/ui/scroll-region';
 import { unconfirmedMarker } from '@/lib/ui/unconfirmed';
 import { cn } from '@/lib/utils';
 
 const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(
   ({ className, ...props }, ref) => (
-    <div className="relative w-full overflow-auto">
+    // A table scrolls sideways inside its own region from the tablet breakpoint; phones render ListRow cards.
+    <div {...scrollRegion('table')} className="relative w-full overflow-x-auto">
       <table ref={ref} className={cn('w-full caption-bottom text-sm', className)} {...props} />
     </div>
   ),

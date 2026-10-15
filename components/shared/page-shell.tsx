@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 
+import { PageBodyKeyboardScroll } from '@/components/shared/page-body-keyboard-scroll';
 import { cn } from '@/lib/utils';
 
 // The app shell's <main> carries no padding and no scroll region, so every
@@ -24,7 +25,8 @@ export function PageShell({ className, children }: { className?: string; childre
  * on every viewport (design canon), so the region hides horizontal overflow
  * and the mobile viewport audit fails on any content that would need it.
  * The bottom padding keeps the last row clear of the clock button, which is
- * fixed at the bottom right on every authenticated page.
+ * fixed at the bottom right on every authenticated page. A body that scrolls
+ * without a focusable control becomes a focusable region for the keyboard.
  */
 export function PageBody({
   className,
@@ -38,8 +40,14 @@ export function PageBody({
   return (
     <div
       data-page-body=""
-      className={cn('min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-28', className)}
+      className={cn(
+        'min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-28',
+        // Shown only while the body is its own focusable region (PageBodyKeyboardScroll).
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50',
+        className,
+      )}
     >
+      <PageBodyKeyboardScroll />
       {maxWidth ? (
         <div className={cn('mx-auto w-full', MAX_WIDTH_CLASS[maxWidth])}>{children}</div>
       ) : (

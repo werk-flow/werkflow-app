@@ -42,7 +42,9 @@ export function QualificationManagementDefinitionForm({
   }>({});
 
   return (
-    <Card className="grid gap-3 p-4 md:grid-cols-[180px_1fr_180px_auto]">
+    // The four columns follow the section's width, not the screen's: beside the
+    // sidebar a tablet screen leaves too little room for them.
+    <Card className="grid grid-cols-1 gap-3 p-4 @xl/qualifications:grid-cols-[180px_minmax(0,1fr)_180px_auto]">
       <Field label="Art" htmlFor="capability-kind" className="min-w-0 gap-1.5">
         <Select value={kind} onValueChange={(value) => setKind(value as CapabilityKind)}>
           <SelectTrigger>
@@ -133,7 +135,7 @@ export function QualificationManagementDefinitionForm({
         <Plus className="size-4" />
         Anlegen
       </Button>
-      <div className="md:col-span-4">
+      <div className="@xl/qualifications:col-span-4">
         <ErrorText>{definitionError}</ErrorText>
       </div>
     </Card>
@@ -167,7 +169,7 @@ export function QualificationManagementDefinitionList({
             data-capability-name={capability.name}
           >
             <div className="min-w-0">
-              <p className="font-medium">{capability.name}</p>
+              <p className="font-medium break-words">{capability.name}</p>
               <p className="text-xs text-muted-foreground">
                 {getCapabilityKindLabel(capability.kind)}
                 {capability.kind === 'certification'

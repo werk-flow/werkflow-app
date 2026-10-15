@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { TextLink } from '@/components/ui/text-link';
 import { getSupabaseServerSession } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { RegionLoadError } from '@/components/shared/region-load-error';
@@ -116,12 +116,9 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
       <CardFooter className="flex justify-center">
         <p className="text-sm text-muted-foreground">
           Bereits ein Konto?{' '}
-          <Link
-            href={inviteCode ? `/login?invite_code=${encodeURIComponent(inviteCode)}` : '/login'}
-            className="text-primary-text underline-offset-4 hover:underline"
-          >
+          <TextLink href={inviteCode ? `/login?invite_code=${encodeURIComponent(inviteCode)}` : '/login'}>
             Anmelden
-          </Link>
+          </TextLink>
         </p>
       </CardFooter>
     </Card>

@@ -102,6 +102,47 @@ export async function seedCustomer(input: {
   return { clientId, contactIds, siteIds };
 }
 
+/**
+ * Adds a contact to an existing customer and records a do-not-contact
+ * instruction for that customer, so contacting the person raises the contact
+ * warning before anything is written. Returns the contact id.
+ */
+export async function seedDoNotContactPolicy(input: {
+  orgId: string;
+  actorId: string;
+  clientId: string;
+  contact: SeedCustomerContact;
+  instruction: string;
+}): Promise<string> {
+  const admin = createAdminClient();
+  const contactId = randomUUID();
+  await admin
+    .from('client_contacts')
+    .insert({
+      id: contactId,
+      organization_id: input.orgId,
+      client_id: input.clientId,
+      created_by: input.actorId,
+      name: input.contact.name,
+      role: input.contact.role ?? null,
+      phone: input.contact.phone ?? null,
+      email: input.contact.email ?? null,
+      is_primary: input.contact.isPrimary ?? false,
+    })
+    .throwOnError();
+  await admin
+    .from('client_communication_settings')
+    .insert({
+      organization_id: input.orgId,
+      client_id: input.clientId,
+      created_by: input.actorId,
+      updated_by: input.actorId,
+      do_not_contact_instruction: input.instruction,
+    })
+    .throwOnError();
+  return contactId;
+}
+
 // P1-10: authoritative relationship records and their append-only histories.
 // The browser proves visible behavior; these observations prove actor/history
 // facts. supabase/tests/customer_relationships.sql owns the manager-only RLS boundary.

@@ -1,5 +1,9 @@
 import { expect, type Locator, type Page } from '@playwright/test';
-import { SICKNESS_EVIDENCE_LABELS, SICKNESS_TYPE_LABELS } from '../../../../lib/sickness/types';
+import {
+  formatSicknessRange,
+  SICKNESS_EVIDENCE_LABELS,
+  SICKNESS_TYPE_LABELS,
+} from '../../../../lib/sickness/types';
 import type { SicknessAbsenceType, SicknessEvidenceStatus } from '../../../../lib/sickness/types';
 import { VACATION_PORTION_LABELS } from '../../../../lib/vacation/types';
 import { confirmed, SHARED_COPY, typeIntoDatePicker, visibleText } from './shared';
@@ -67,13 +71,34 @@ export function reportSicknessButton(page: Page): Locator {
   return page.getByRole('button', { name: SICKNESS_COPY.reportSickness });
 }
 
+/** The own dialogs: the self-report, the end date and the cancellation, named by their titles. */
+const OWN_SICKNESS_DIALOGS = {
+  report: SICKNESS_COPY.reportSickness,
+  end: 'Enddatum setzen',
+  cancel: 'Krankmeldung stornieren',
+} as const;
+
+export function ownSicknessDialog(page: Page, dialog: keyof typeof OWN_SICKNESS_DIALOGS): Locator {
+  return page.getByRole('dialog', { name: OWN_SICKNESS_DIALOGS[dialog], exact: true });
+}
+
+/** The own report row's end date action; `rangeText` is the row's range (formatSicknessRange). */
+export function ownSicknessEndButton(page: Page, rangeText: string): Locator {
+  return page.getByRole('button', { name: `Enddatum für die Krankmeldung vom ${rangeText} setzen` });
+}
+
+/** The own report row's cancel action; `rangeText` is the row's range (formatSicknessRange). */
+export function ownSicknessCancelButton(page: Page, rangeText: string): Locator {
+  return page.getByRole('button', { name: `Krankmeldung vom ${rangeText} stornieren` });
+}
+
 /** The member detail's action that opens the office entry dialog. */
 export function recordSicknessButton(page: Page): Locator {
   return page.getByRole('button', { name: SICKNESS_COPY.recordSickness });
 }
 
 /** The actions menu trigger of one report row on the member detail. */
-function sicknessReportActionsButton(page: Page, rangeText: string): Locator {
+export function sicknessReportActionsButton(page: Page, rangeText: string): Locator {
   return page.getByRole('button', { name: `Aktionen für die Krankmeldung vom ${rangeText}` });
 }
 
@@ -260,7 +285,32 @@ const SICKNESS_REPORT_MENU_ITEMS = {
   correct: 'Korrigieren',
   evidence: 'Nachweis verwalten',
   cancel: SHARED_COPY.action.cancelRecord,
+  changeEnd: 'Enddatum ändern',
 } as const;
+
+/** The range text a report row and its actions menu carry: „09.03.2029 – 11.03.2029“. */
+export function sicknessReportRangeText(startDate: string, endDate: string | null): string {
+  return formatSicknessRange({ startDate, endDate });
+}
+
+/** One item of the open actions menu of a report row. */
+export function sicknessReportMenuItem(page: Page, item: keyof typeof SICKNESS_REPORT_MENU_ITEMS): Locator {
+  return page.getByRole('menuitem', { name: SICKNESS_REPORT_MENU_ITEMS[item], exact: true });
+}
+
+/** The titles of the office's sickness dialogs on the member detail. */
+const SICKNESS_DIALOG_TITLES = {
+  record: SICKNESS_COPY.recordSickness,
+  end: 'Enddatum setzen',
+  correct: 'Krankmeldung korrigieren',
+  evidence: SICKNESS_REPORT_MENU_ITEMS.evidence,
+  cancel: 'Krankmeldung stornieren',
+} as const;
+
+/** One open sickness dialog of the member detail, by its title. */
+export function sicknessManagerDialog(page: Page, dialog: keyof typeof SICKNESS_DIALOG_TITLES): Locator {
+  return page.getByRole('dialog', { name: SICKNESS_DIALOG_TITLES[dialog], exact: true });
+}
 
 // Manager actions on one report row of the member-detail section, addressed
 // by the report's range text (the per-item aria-label disambiguates).

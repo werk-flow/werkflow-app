@@ -41,13 +41,13 @@ export function ApplyWorkTemplateCard({
     open,
     setOpen,
     options,
+    optionsFailure,
     versionId,
     preview,
+    previewFailure,
     allowAdditional,
     setAllowAdditional,
     error,
-    loadError,
-    retryLoad,
     qualificationWarning,
     setQualificationWarning,
     isPending,
@@ -84,7 +84,10 @@ export function ApplyWorkTemplateCard({
           </DialogHeader>
           <DialogBody className="space-y-4 py-1">
             <Field label="Arbeitsvorlage" htmlFor="apply-work-template-version" required>
-              {options === null ? (
+              {optionsFailure ? (
+                // A failed read must not read as „no template published“.
+                <SectionError failure={optionsFailure} />
+              ) : options === null ? (
                 <Skeleton className="h-9" />
               ) : (
                 <SearchableSelect
@@ -131,7 +134,7 @@ export function ApplyWorkTemplateCard({
                 )}
               </div>
             )}
-            {loadError && <SectionError onRetry={retryLoad}>{loadError}</SectionError>}
+            {previewFailure && <SectionError failure={previewFailure} />}
             <ErrorText>{error}</ErrorText>
           </DialogBody>
           <DialogFooter>

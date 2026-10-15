@@ -10,7 +10,6 @@ import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 import { PlainButton } from '@/components/ui/plain-button';
-import { Spinner } from '@/components/ui/spinner';
 
 function OtpCodeInput({
   id,
@@ -100,26 +99,13 @@ export function VerifyCurrentEmailStep({ wizard }: { wizard: EmailChangeWizard }
           type="button"
           variant="outline"
           onClick={handleResetFlow}
-          disabled={isResetting || isCurrentOtpSubmitting || isCurrentOtpResending}
+          pending={isResetting}
+          disabled={isCurrentOtpSubmitting || isCurrentOtpResending}
         >
-          {isResetting ? (
-            <>
-              <Spinner className="mr-2" />
-              Wird abgebrochen…
-            </>
-          ) : (
-            'E-Mail-Änderung abbrechen'
-          )}
+          {isResetting ? 'Wird abgebrochen…' : 'E-Mail-Änderung abbrechen'}
         </Button>
-        <Button type="submit" disabled={isCurrentOtpSubmitting || isResetting}>
-          {isCurrentOtpSubmitting ? (
-            <>
-              <Spinner className="mr-2" />
-              Code wird geprüft…
-            </>
-          ) : (
-            'Code bestätigen'
-          )}
+        <Button type="submit" pending={isCurrentOtpSubmitting} disabled={isResetting}>
+          {isCurrentOtpSubmitting ? 'Code wird geprüft…' : 'Code bestätigen'}
         </Button>
       </div>
     </form>
@@ -153,15 +139,8 @@ export function EnterNewEmailStep({ wizard }: { wizard: EmailChangeWizard }) {
             Das Zeitfenster für diesen Schritt ist abgelaufen. Bitte brich die E-Mail-Änderung ab und starte
             sie erneut.
           </ErrorText>
-          <Button type="button" variant="outline" onClick={handleResetFlow} disabled={isResetting}>
-            {isResetting ? (
-              <>
-                <Spinner className="mr-2" />
-                Wird abgebrochen…
-              </>
-            ) : (
-              'E-Mail-Änderung abbrechen'
-            )}
+          <Button type="button" variant="outline" onClick={handleResetFlow} pending={isResetting}>
+            {isResetting ? 'Wird abgebrochen…' : 'E-Mail-Änderung abbrechen'}
           </Button>
         </div>
       ) : (
@@ -182,23 +161,14 @@ export function EnterNewEmailStep({ wizard }: { wizard: EmailChangeWizard }) {
                 type="button"
                 variant="outline"
                 onClick={handleResetFlow}
-                disabled={isResetting || isSavingNewEmail}
+                pending={isResetting}
+                disabled={isSavingNewEmail}
               >
-                {isResetting ? (
-                  <>
-                    <Spinner className="mr-2" />
-                    Wird abgebrochen…
-                  </>
-                ) : (
-                  'E-Mail-Änderung abbrechen'
-                )}
+                {isResetting ? 'Wird abgebrochen…' : 'E-Mail-Änderung abbrechen'}
               </Button>
-              <Button type="submit" disabled={isSavingNewEmail || isResetting}>
+              <Button type="submit" pending={isSavingNewEmail} disabled={isResetting}>
                 {isSavingNewEmail ? (
-                  <>
-                    <Spinner className="mr-2" />
-                    Neue Adresse wird vorbereitet…
-                  </>
+                  'Neue Adresse wird vorbereitet…'
                 ) : (
                   <>
                     Weiter zur Bestätigung
@@ -282,26 +252,13 @@ export function VerifyNewEmailStep({ wizard }: { wizard: EmailChangeWizard }) {
           type="button"
           variant="outline"
           onClick={handleResetFlow}
-          disabled={isResetting || isNewEmailOtpSubmitting || isNewEmailOtpResending}
+          pending={isResetting}
+          disabled={isNewEmailOtpSubmitting || isNewEmailOtpResending}
         >
-          {isResetting ? (
-            <>
-              <Spinner className="mr-2" />
-              Wird abgebrochen…
-            </>
-          ) : (
-            'E-Mail-Änderung abbrechen'
-          )}
+          {isResetting ? 'Wird abgebrochen…' : 'E-Mail-Änderung abbrechen'}
         </Button>
-        <Button type="submit" disabled={isNewEmailOtpSubmitting || isResetting}>
-          {isNewEmailOtpSubmitting ? (
-            <>
-              <Spinner className="mr-2" />
-              Neue Adresse wird bestätigt…
-            </>
-          ) : (
-            'Neue E-Mail-Adresse bestätigen'
-          )}
+        <Button type="submit" pending={isNewEmailOtpSubmitting} disabled={isResetting}>
+          {isNewEmailOtpSubmitting ? 'Neue Adresse wird bestätigt…' : 'Neue E-Mail-Adresse bestätigen'}
         </Button>
       </div>
     </form>

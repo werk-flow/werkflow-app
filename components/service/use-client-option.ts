@@ -1,16 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-
 import { useOrganization } from '@/components/organization/organization-context';
+import { useClientRead, type ReadFailure } from '@/hooks/use-client-read';
 import { readInBackground } from '@/lib/data/background-read-client';
 import type { ServiceCaseClientOption } from '@/lib/service-cases/types';
-
-type Loaded = {
-  clientId: string;
-  client: ServiceCaseClientOption | null;
-  failed: boolean;
-};
 
 /**
  * The sites, contacts and equipment of the one customer a service form has
@@ -25,41 +18,21 @@ export function useClientOption(
 ): {
   client: ServiceCaseClientOption | null;
   loading: boolean;
-  /** Set when the read failed; the dependent select offers „Erneut laden“ through `retry`. */
-  error: string | undefined;
-  retry: () => void;
+  /** The failed read with its retry; the dependent select offers „Erneut laden“. */
+  loadFailure: ReadFailure | null;
 } {
   const { activeOrgId } = useOrganization();
-  const [loaded, setLoaded] = useState<Loaded | null>(null);
   const isPreloaded = preloaded?.id === clientId;
-  const needsRead = clientId !== '' && !isPreloaded && loaded?.clientId !== clientId;
-
-  useEffect(() => {
-    if (!needsRead || !activeOrgId) return;
-    const controller = new AbortController();
-    void readInBackground(
-      'service-client-option',
-      { organizationId: activeOrgId, clientId },
-      controller.signal,
-    ).then((result) => {
-      if (controller.signal.aborted) return;
-      setLoaded({ clientId, client: result.success ? result.client : null, failed: !result.success });
-    });
-    return () => controller.abort();
-  }, [activeOrgId, clientId, needsRead]);
-
-  const retry = useCallback(() => setLoaded(null), []);
-  const current = isPreloaded
-    ? { client: preloaded, failed: false }
-    : loaded?.clientId === clientId
-      ? loaded
-      : null;
+  const option = useClientRead({
+    read: (signal) =>
+      readInBackground('service-client-option', { organizationId: activeOrgId ?? '', clientId }, signal),
+    deps: [activeOrgId, clientId],
+    enabled: clientId !== '' && !isPreloaded && Boolean(activeOrgId),
+    failureMessage: 'Einsatzorte und Anlagen dieses Kunden konnten nicht geladen werden.',
+  });
   return {
-    client: current?.client ?? null,
-    loading: needsRead,
-    error: current?.failed
-      ? 'Einsatzorte und Anlagen dieses Kunden konnten nicht geladen werden.'
-      : undefined,
-    retry,
+    client: (isPreloaded ? preloaded : option.data?.client) ?? null,
+    loading: option.loading,
+    loadFailure: option.failure,
   };
 }

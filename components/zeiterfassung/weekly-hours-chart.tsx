@@ -221,7 +221,7 @@ export function WeeklyHoursChart({
         {gridLines.map((h) => (
           <span
             key={`label-${h}`}
-            className="absolute left-0 z-20 translate-y-1/2 text-[10px] leading-none tabular-nums text-muted-foreground/60"
+            className="absolute left-0 z-20 translate-y-1/2 text-[10px] leading-none tabular-nums text-muted-foreground"
             style={{ bottom: LABEL_AREA + minutesToPx(h * 60) }}
           >
             {h}h

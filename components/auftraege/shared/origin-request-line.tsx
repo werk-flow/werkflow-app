@@ -1,6 +1,5 @@
-import Link from 'next/link';
-
 import { RegionLoadError } from '@/components/shared/region-load-error';
+import { TextLink } from '@/components/ui/text-link';
 
 /** The Anfrage a job or project came from; 'failed' when its read failed, null when there is none. */
 export type OriginRequestLink = { label: string; href: string } | 'failed' | null;
@@ -18,12 +17,9 @@ export function OriginRequestLine({ originRequest }: { originRequest: OriginRequ
   return (
     <p className="mb-4 text-sm text-muted-foreground">
       Entstanden aus{' '}
-      <Link
-        href={originRequest.href}
-        className="font-medium text-primary-text underline-offset-4 hover:underline"
-      >
+      <TextLink href={originRequest.href} className="font-medium">
         {originRequest.label}
-      </Link>
+      </TextLink>
     </p>
   );
 }

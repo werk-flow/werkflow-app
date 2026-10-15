@@ -12,7 +12,7 @@ type EditProjectSubmitInput = {
   project: ProjectWithDetails;
   form: EditProjectForm;
   onOpenChange: (open: boolean) => void;
-  onSuccess: ((payload: { project: Project; selectedJobIds: string[] }) => void | Promise<void>) | undefined;
+  onSuccess: ((payload: { project: Project; selectedJobIds?: string[] }) => void | Promise<void>) | undefined;
 };
 
 /** Saves the edit-project draft, then links and unlinks the jobs whose selection changed. */
@@ -29,6 +29,8 @@ export function useEditProjectSubmit({ project, form, onOpenChange, onSuccess }:
     plannedEndDate,
     selectedJobIds,
     originalJobIds,
+    jobsFailure,
+    isLoadingJobs,
     runSubmit,
     setError,
     setContentError,
@@ -85,8 +87,10 @@ export function useEditProjectSubmit({ project, form, onOpenChange, onSuccess }:
           return;
         }
 
-        const toLink = selectedJobIds.filter((id) => !originalJobIds.includes(id));
-        const toUnlink = originalJobIds.filter((id) => !selectedJobIds.includes(id));
+        // Without the loaded jobs the selection is unknown, not empty: the save keeps every link as it is.
+        const jobsKnown = !isLoadingJobs && jobsFailure === null;
+        const toLink = jobsKnown ? selectedJobIds.filter((id) => !originalJobIds.includes(id)) : [];
+        const toUnlink = jobsKnown ? originalJobIds.filter((id) => !selectedJobIds.includes(id)) : [];
 
         let failedAssignmentCount = 0;
         if (toLink.length > 0 || toUnlink.length > 0) {
@@ -114,10 +118,8 @@ export function useEditProjectSubmit({ project, form, onOpenChange, onSuccess }:
             : { variant: 'success', message: 'Projekt gespeichert.' },
         );
         // updateProject's and updateJob's responses render the route; 'no_changes' changed nothing.
-        await onSuccess?.({
-          project: result.success ? result.project : project,
-          selectedJobIds,
-        });
+        const savedProject = result.success ? result.project : project;
+        await onSuccess?.(jobsKnown ? { project: savedProject, selectedJobIds } : { project: savedProject });
       } catch {
         setError('Ein unerwarteter Fehler ist aufgetreten.');
       }

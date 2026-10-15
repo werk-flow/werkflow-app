@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useOrganization } from '@/components/organization/organization-context';
 import { useUserProfile } from '@/components/user/user-profile-context';
+import type { ReadFailure } from '@/hooks/use-client-read';
 import { readInBackground } from '@/lib/data/background-read-client';
 import type { PlanningOption, PlanningOptionRequest } from '@/lib/planning/option-types';
 
@@ -22,9 +23,8 @@ type PlanningOptionsState = {
     onSearchChange: (query: string) => void;
     onLoadMore: (() => void) | undefined;
     loading: boolean;
-    loadError: string | undefined;
-    /** Reads the failed page again with the same text. */
-    onRetryLoad: (() => void) | undefined;
+    /** The failed page read; its retry reads the page again with the same text. */
+    loadFailure: ReadFailure | null;
   };
   /** The caller's own selection, or the records resolved from `defaultUserIds` while it is null. */
   selectedIds: string[];
@@ -177,13 +177,16 @@ export function usePlanningOptions(
             }
           : undefined,
       loading: pendingScope === scope,
-      loadError: failed ? LOAD_ERROR : undefined,
-      onRetryLoad: failed
-        ? () => {
-            setPendingScope(scope);
-            setCursor((previous) => ({ scope, query, offset, revision: previous.revision + 1 }));
+      loadFailure: failed
+        ? {
+            message: LOAD_ERROR,
+            retry: () => {
+              setPendingScope(scope);
+              setCursor((previous) => ({ scope, query, offset, revision: previous.revision + 1 }));
+            },
+            retrying: pendingScope === scope,
           }
-        : undefined,
+        : null,
     },
     selectedIds: effectiveSelectedIds,
     // A failed read reports itself in the picker; it must not leave a submit silently disabled.

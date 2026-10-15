@@ -66,7 +66,7 @@ export function EditRequestDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} pending={isLoading}>
-      <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Anfrage bearbeiten</DialogTitle>
           <DialogDescription>Änderungen werden im Verlauf der Anfrage festgehalten.</DialogDescription>

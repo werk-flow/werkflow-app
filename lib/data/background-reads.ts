@@ -46,6 +46,7 @@ import {
   getTimeEntriesForJob,
   getTimeEntriesForProjectJobs,
 } from '@/lib/time-tracking/actions';
+import { getClosedTimePeriods } from '@/lib/time-tracking/closed-period-reads';
 import { getJobsForPicker } from '@/lib/time-tracking/picker-actions';
 import { jobPickerRequestSchema } from '@/lib/time-tracking/picker-types';
 import {
@@ -140,6 +141,8 @@ export const BACKGROUND_READS = {
   'time-correction-form-options': defineRead(organizationInput, (input) =>
     getTimeCorrectionFormOptions(input.organizationId),
   ),
+  // The closed periods every surface that edits recorded time asks before it offers an edit.
+  'closed-time-periods': defineRead(organizationInput, (input) => getClosedTimePeriods(input.organizationId)),
   'time-correction-history': defineRead(
     z.object({ organizationId: uuidSchema, page: z.number().int().min(1).max(1_000_000) }),
     (input) => getTimeCorrectionHistoryPage(input.organizationId, input.page),

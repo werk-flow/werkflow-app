@@ -1,7 +1,8 @@
 'use client';
 
+import { useClientRead } from '@/hooks/use-client-read';
 import { usePendingTask } from '@/hooks/use-server-action';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getJobDetails } from '@/lib/jobs/actions';
 import type { AssignmentEvaluation } from '@/lib/qualifications/types';
 import type { Job, JobPriority } from '@/lib/jobs/types';
@@ -41,8 +42,6 @@ export function useEditJobForm({ job, open, knownProject }: EditJobFormInput) {
   const [qualificationWarning, setQualificationWarning] = useState<AssignmentEvaluation | null>(null);
   const [confirmedDateRemovalForWarning, setConfirmedDateRemovalForWarning] = useState(false);
   const [assignmentTeamSourceId, setAssignmentTeamSourceId] = useState<string | null>(null);
-  const [isLoadingAssignments, setIsLoadingAssignments] = useState(false);
-  const [assignmentsLoadFailed, setAssignmentsLoadFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [contentError, setContentError] = useState<string | null>(null);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
@@ -50,24 +49,19 @@ export function useEditJobForm({ job, open, knownProject }: EditJobFormInput) {
   const initializedJobIdRef = useRef<string | null>(null);
   const wasOpenRef = useRef(false);
 
-  const loadAssignments = useCallback((jobId: string) => {
-    setIsLoadingAssignments(true);
-    setAssignmentsLoadFailed(false);
-    getJobDetails(jobId)
-      .then((result) => {
-        if (result.success) {
-          const ids = result.job.assignments.map((a) => a.userId);
-          setSelectedEmployees(ids);
-        } else {
-          setAssignmentsLoadFailed(true);
-        }
-        setIsLoadingAssignments(false);
-      })
-      .catch(() => {
-        setAssignmentsLoadFailed(true);
-        setIsLoadingAssignments(false);
-      });
-  }, []);
+  // The current crew is read each time the dialog opens and adopted during render.
+  const assignments = useClientRead({
+    read: () => getJobDetails(job.id),
+    deps: [job.id],
+    enabled: open,
+    failureMessage: 'Die aktuellen Zuweisungen konnten nicht geladen werden.',
+  });
+  const [adoptedAssignments, setAdoptedAssignments] = useState(assignments.data);
+  if (assignments.data !== adoptedAssignments) {
+    setAdoptedAssignments(assignments.data);
+    if (assignments.data) setSelectedEmployees(assignments.data.job.assignments.map((a) => a.userId));
+  }
+  const isLoadingAssignments = assignments.loading;
 
   useEffect(() => {
     if (!open) {
@@ -100,15 +94,13 @@ export function useEditJobForm({ job, open, knownProject }: EditJobFormInput) {
     setAssignmentTeamSourceId(null);
     setConfirmedDateRemovalForWarning(false);
     setQualificationWarning(null);
-
-    loadAssignments(job.id);
-  }, [open, job, loadAssignments]);
+  }, [open, job]);
 
   const showContentError = hasAttemptedSubmit && contentError;
   const formDisabled = isLoading;
   // Submitting before the current assignments finished loading (or after the
   // load failed) would save an empty assignment list and wipe the job's crew.
-  const submitDisabled = formDisabled || isLoadingAssignments || assignmentsLoadFailed;
+  const submitDisabled = formDisabled || isLoadingAssignments || assignments.failure !== null;
 
   const clientProjectLink = useEditJobClientProjectLink({
     knownProject,
@@ -180,8 +172,7 @@ export function useEditJobForm({ job, open, knownProject }: EditJobFormInput) {
     assignmentTeamSourceId,
     setAssignmentTeamSourceId,
     isLoadingAssignments,
-    assignmentsLoadFailed,
-    retryAssignments: () => loadAssignments(job.id),
+    assignmentsFailure: assignments.failure,
     isLoading,
     runSubmit,
     error,

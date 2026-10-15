@@ -22,8 +22,7 @@ export function JobMultiSelect({
       options={search.options}
       onSearchChange={search.onSearchChange}
       loading={search.loading}
-      loadError={search.loadError}
-      onRetryLoad={search.onRetryLoad}
+      loadFailure={search.loadFailure}
       onLoadMore={search.onLoadMore}
       selectedIds={selectedIds}
       onSelectionChange={onSelectionChange}

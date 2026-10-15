@@ -44,7 +44,8 @@ export function useCreateJobForm({
     onDraftChange,
   });
   const projectLink = useCreateJobProjectLink({ defaultClient, defaultProject, readOnlyClient });
-  const { isLoadingProjectDefaults, projectDefaultsLoadFailed } = projectLink;
+  const { isLoadingProjectDefaults } = projectLink;
+  const projectDefaultsLoadFailed = projectLink.projectDefaultsFailure !== null;
   const submit = useCreateJobSubmit({
     values: {
       title,

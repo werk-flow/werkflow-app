@@ -2,7 +2,14 @@
 // updates, new breaks and removed breaks are applied one Server Action at a
 // time, and every applied step is rolled back when a later one is refused.
 
+import { SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import { addManualEntry, deleteEntry, updateEntry } from '@/lib/time-tracking/actions';
+import {
+  isDateInClosedPeriod,
+  isEntryInClosedPeriod,
+  type ClosedTimePeriod,
+} from '@/lib/time-tracking/closed-period-dates';
+import { getLocalDayKey } from '@/lib/time-tracking/day-utils';
 import type { TimeEntry, WorkSession } from '@/lib/time-tracking/types';
 import { closeEntryDetailsWithRequest, type EntryDetailsCommandContext } from './entry-details-commands';
 import { formatActionError } from './entry-details-labels';
@@ -121,6 +128,32 @@ function collectEntryTimestampUpdates(
     .sort((a, b) => new Date(a.originalTimestamp).getTime() - new Date(b.originalTimestamp).getTime());
 
   return [...laterUpdates, ...earlierUpdates];
+}
+
+/**
+ * True when the block or a time the draft moves it to lies in a closed
+ * period: the server refuses the save with `period_closed`, so the dialog
+ * says so before the first request.
+ */
+function touchesClosedPeriod(
+  snapshot: EntryDetailsSnapshot,
+  draft: EntryDetailsDraft,
+  closedPeriods: readonly ClosedTimePeriod[],
+): boolean {
+  const movedTo = collectEntryTimestampUpdates(snapshot, draft).map(
+    (update) => new Date(update.nextTimestamp),
+  );
+  const newBreakTimes = draft.editedBreaks
+    .filter((workBreak) => workBreak.isNew)
+    .flatMap((workBreak) =>
+      workBreak.breakEnd ? [workBreak.breakStart, workBreak.breakEnd] : [workBreak.breakStart],
+    );
+  return (
+    snapshot.sessionEntriesForReview.some((entry) => isEntryInClosedPeriod(entry, closedPeriods)) ||
+    [...movedTo, ...newBreakTimes].some((instant) =>
+      isDateInClosedPeriod(getLocalDayKey(instant), closedPeriods),
+    )
+  );
 }
 
 /** Each step below reports its own refusal and returns false; the caller rolls back. */
@@ -260,12 +293,14 @@ export function saveEntryDetailsEdit({
   snapshot,
   draft,
   displayedBreaks,
+  closedPeriods,
 }: {
   context: EntryDetailsCommandContext;
   session: WorkSession;
   snapshot: EntryDetailsSnapshot;
   draft: EntryDetailsDraft;
   displayedBreaks: EditableBreak[];
+  closedPeriods: readonly ClosedTimePeriod[];
 }): void {
   const { runAction, showBanner, setError, onRefresh } = context;
   const { hasCanonicalSegment, isAutomaticBreakMode } = snapshot;
@@ -287,6 +322,10 @@ export function saveEntryDetailsEdit({
   });
   if (validationError) {
     setError(validationError);
+    return;
+  }
+  if (touchesClosedPeriod(snapshot, draft, closedPeriods)) {
+    setError(SHARED_FAILURE_MESSAGES.period_closed);
     return;
   }
 

@@ -52,7 +52,7 @@ export function boardHighlight(page: Page): Locator {
 }
 
 export function dayTimeline(page: Page, userId: string): Locator {
-  return view(page).locator(`[data-day-row="${userId}"] [data-day-timeline]`);
+  return view(page).locator(`[data-day-row-user="${userId}"] [data-day-timeline]`);
 }
 
 export function monthDay(page: Page, dateIso: string): Locator {

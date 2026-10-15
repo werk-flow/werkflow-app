@@ -5,6 +5,7 @@ import * as PopoverPrimitive from '@radix-ui/react-popover';
 import { Search, ChevronsUpDown, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { useFieldContext } from '@/components/ui/field';
+import type { ReadFailure } from '@/hooks/use-client-read';
 
 export interface SearchableSelectOption {
   value: string;
@@ -16,9 +17,8 @@ export interface SearchableSelectBaseProps {
   options: SearchableSelectOption[];
   onSearchChange?: ((search: string) => void) | undefined;
   loading?: boolean | undefined;
-  loadError?: string | undefined;
-  /** Reads the failed options again, shown as „Erneut laden“ beside `loadError`. */
-  onRetryLoad?: (() => void) | undefined;
+  /** The failed option read; the popup shows its message with „Erneut laden“. */
+  loadFailure?: ReadFailure | null | undefined;
   onLoadMore?: (() => void) | undefined;
   searchPlaceholder?: string | undefined;
   emptyMessage?: string | undefined;
@@ -173,8 +173,12 @@ export function SearchableSelectReadOnly({
       aria-label={ariaLabel}
       aria-labelledby={ariaLabel ? undefined : field?.labelId}
       aria-describedby={field?.describedBy}
+      // Inline-size containment keeps the one-line label out of the box's
+      // minimum width, so a long name truncates instead of widening the field's
+      // grid track and the dialog body around it (a trigger button gets this
+      // from the browser, a div does not).
       className={cn(
-        'flex h-9 w-full items-center rounded-md border border-input bg-muted px-3 py-1 text-base md:text-sm',
+        'flex h-9 w-full min-w-0 items-center rounded-md border border-input bg-muted px-3 py-1 text-base contain-inline-size md:text-sm',
         'cursor-default select-none text-muted-foreground',
       )}
     >
@@ -268,16 +272,12 @@ export function SearchableSelectPopup({
   field,
   action,
   loading,
-  loadError,
-  onRetryLoad,
+  loadFailure,
   onLoadMore,
   multiselectable = false,
   beforeList,
   children,
-}: Pick<
-  SearchableSelectBaseProps,
-  'onSearchChange' | 'action' | 'loadError' | 'onRetryLoad' | 'onLoadMore'
-> & {
+}: Pick<SearchableSelectBaseProps, 'onSearchChange' | 'action' | 'loadFailure' | 'onLoadMore'> & {
   state: SearchableSelectPopupState;
   searchPlaceholder: string;
   emptyMessage: string;
@@ -332,7 +332,7 @@ export function SearchableSelectPopup({
                 setSearch(e.target.value);
                 onSearchChange?.(e.target.value);
               }}
-              className="h-8 w-full rounded-md border bg-muted/50 pl-8 pr-3 text-sm placeholder:text-muted-foreground/70 focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors"
+              className="h-8 w-full rounded-md border bg-muted/50 pl-8 pr-3 text-sm placeholder:text-muted-foreground focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors"
             />
             {search && (
               <button
@@ -355,6 +355,9 @@ export function SearchableSelectPopup({
           <button
             type="button"
             onClick={() => {
+              // The action opens a dialog while this popup closes: focus sits on
+              // the select's trigger first, so the dialog returns it there.
+              triggerRef.current?.focus();
               action.onClick();
               setOpen(false);
             }}
@@ -379,7 +382,7 @@ export function SearchableSelectPopup({
         >
           {children}
 
-          {!loading && !loadError && filtered.length === 0 && (
+          {!loading && !loadFailure && filtered.length === 0 && (
             <div className="py-6 text-center text-sm text-muted-foreground">{emptyMessage}</div>
           )}
         </div>
@@ -389,21 +392,19 @@ export function SearchableSelectPopup({
             Auswahl wird geladen…
           </p>
         )}
-        {loadError && (
+        {loadFailure && (
           <div className="flex items-center justify-between gap-2 px-3 py-2">
             <p role="alert" className="min-w-0 text-sm text-destructive">
-              {loadError}
+              {loadFailure.message}
             </p>
-            {onRetryLoad && (
-              <button
-                type="button"
-                disabled={loading}
-                onClick={onRetryLoad}
-                className="shrink-0 rounded-md px-2 py-1 text-sm font-medium text-primary-text outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50"
-              >
-                Erneut laden
-              </button>
-            )}
+            <button
+              type="button"
+              disabled={loading}
+              onClick={loadFailure.retry}
+              className="shrink-0 rounded-md px-2 py-1 text-sm font-medium text-primary-text outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50"
+            >
+              Erneut laden
+            </button>
           </div>
         )}
         {onLoadMore && (

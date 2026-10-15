@@ -3,6 +3,7 @@
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
+import { Field } from '@/components/ui/field';
 import { EmployeeMultiSelect, type OrgMemberOption } from '../shared/employee-multi-select';
 import type { JobDetailAssignments } from './use-job-detail-assignments';
 
@@ -23,14 +24,16 @@ function JobDetailAssignDialogBody({ assignment, members, assessedForDate }: Job
 
   return (
     <div className="py-4">
-      <EmployeeMultiSelect
-        members={members}
-        selectedIds={assignSelectedIds}
-        onSelectionChange={setAssignSelectedIds}
-        assessedForDate={assessedForDate}
-        onTeamApplied={setAssignmentTeamSourceId}
-        onTeamExpansionPendingChange={setIsExpandingAssignmentTeam}
-      />
+      <Field label="Mitarbeiter">
+        <EmployeeMultiSelect
+          members={members}
+          selectedIds={assignSelectedIds}
+          onSelectionChange={setAssignSelectedIds}
+          assessedForDate={assessedForDate}
+          onTeamApplied={setAssignmentTeamSourceId}
+          onTeamExpansionPendingChange={setIsExpandingAssignmentTeam}
+        />
+      </Field>
       <ErrorText className="mt-3">{assignError}</ErrorText>
     </div>
   );

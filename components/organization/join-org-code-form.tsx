@@ -72,7 +72,6 @@ export function JoinOrgCodeForm({
           value={code}
           onChange={(event) => setCode(event.target.value.toUpperCase())}
           disabled={join.isPending}
-          autoFocus
           autoComplete="off"
           className="uppercase"
         />

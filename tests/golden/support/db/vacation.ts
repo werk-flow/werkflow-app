@@ -115,6 +115,31 @@ export async function getLatestVacationRequestState(
   };
 }
 
+/** A pending full-day vacation request of a record, as its own request stores it. Setup only. */
+export async function seedPendingVacationRequest(input: {
+  organizationId: string;
+  employeeRecordId: string;
+  requestedBy: string;
+  startDate: string;
+  endDate: string;
+}): Promise<string> {
+  const { data, error } = await createAdminClient()
+    .from('vacation_requests')
+    .insert({
+      organization_id: input.organizationId,
+      employee_record_id: input.employeeRecordId,
+      start_date: input.startDate,
+      end_date: input.endDate,
+      day_portion: 'full',
+      status: 'pending',
+      requested_by: input.requestedBy,
+    })
+    .select('id')
+    .single();
+  if (error || !data) throw new Error(`Vacation request setup failed: ${error?.message}`);
+  return data.id;
+}
+
 // P1-07: all vacation requests of one record keyed by start date, so specs can
 // address a specific request's id (the attention item identity) even when the
 // person has several.

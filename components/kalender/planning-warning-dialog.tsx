@@ -72,7 +72,7 @@ export function usePlanningWarningConfirmation(): {
               Begründung.
             </DialogDescription>
           </DialogHeader>
-          <ul className="max-h-64 space-y-2 overflow-y-auto text-sm">
+          <ul className="space-y-2 text-sm">
             {request.conflicts.map((conflict, index) => (
               <li
                 key={`${conflict.kind}-${conflict.employeeRecordId}-${conflict.localDate}-${index}`}

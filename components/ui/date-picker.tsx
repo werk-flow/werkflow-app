@@ -9,6 +9,15 @@ import { useFieldContext } from '@/components/ui/field';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useDatePickerSegments } from '@/components/ui/use-date-picker-segments';
 
+const DATE_SEGMENTS = ['day', 'month', 'year'] as const;
+
+/** The segment under a click inside the field, read from its `data-segment`. */
+function clickedDateSegment(target: EventTarget): (typeof DATE_SEGMENTS)[number] | undefined {
+  const name =
+    target instanceof Element ? target.closest<HTMLElement>('[data-segment]')?.dataset.segment : undefined;
+  return DATE_SEGMENTS.find((segment) => segment === name);
+}
+
 interface DatePickerProps {
   value: Date | undefined;
   onChange: (date: Date | undefined) => void;
@@ -60,6 +69,7 @@ export function DatePicker({
     activeSegment === 'year' && inputBuffer ? inputBuffer.padEnd(4, '–') : hasValue ? pad(year, 4) : '––––';
 
   return (
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- one tab stop like a native date field: the group owns the arrow and digit keys of its segments, and a click picks the segment the arrow keys reach
     <div
       ref={containerRef}
       id={id ?? field?.controlId}
@@ -75,6 +85,10 @@ export function DatePicker({
       onFocus={handleFocus}
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}
+      onClick={(event) => {
+        const segment = clickedDateSegment(event.target);
+        if (segment) handleSegmentClick(segment);
+      }}
       className={cn(
         'inline-flex h-9 w-full items-center gap-0.5 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm',
         'border-input dark:bg-input/30',
@@ -108,7 +122,7 @@ export function DatePicker({
       ) : (
         <>
           <span
-            onClick={() => handleSegmentClick('day')}
+            data-segment="day"
             className={cn(
               segmentBaseClass,
               activeSegment === 'day' ? segmentActiveClass : segmentInactiveClass,
@@ -118,7 +132,7 @@ export function DatePicker({
           </span>
           <span className="text-muted-foreground select-none">.</span>
           <span
-            onClick={() => handleSegmentClick('month')}
+            data-segment="month"
             className={cn(
               segmentBaseClass,
               activeSegment === 'month' ? segmentActiveClass : segmentInactiveClass,
@@ -128,7 +142,7 @@ export function DatePicker({
           </span>
           <span className="text-muted-foreground select-none">.</span>
           <span
-            onClick={() => handleSegmentClick('year')}
+            data-segment="year"
             className={cn(
               segmentBaseClass,
               activeSegment === 'year' ? segmentActiveClass : segmentInactiveClass,

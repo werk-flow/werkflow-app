@@ -40,8 +40,7 @@ export function SearchableSelect({
   renderOption,
   onSearchChange,
   loading = false,
-  loadError,
-  onRetryLoad,
+  loadFailure,
   onLoadMore,
   readOnly = false,
   readOnlyLabel,
@@ -84,8 +83,7 @@ export function SearchableSelect({
         field={field}
         action={action}
         loading={loading}
-        loadError={loadError}
-        onRetryLoad={onRetryLoad}
+        loadFailure={loadFailure}
         onLoadMore={onLoadMore}
       >
         {allowNone && (

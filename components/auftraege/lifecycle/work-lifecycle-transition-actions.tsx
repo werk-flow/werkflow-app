@@ -4,7 +4,6 @@ import { ParkingCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
-  getAllowedWorkTransitions,
   isTerminalWorkExecutionState,
   workTransitionActionLabel,
   type WorkBlocker,
@@ -15,6 +14,8 @@ import type { WorkLifecycleDialogState } from './work-lifecycle-dialog-state';
 
 type WorkLifecycleTransitionActionsProps = {
   snapshot: WorkLifecycleSnapshot;
+  /** The steps the server accepts from this state for this role (`getAllowedWorkTransitions`). */
+  transitions: readonly WorkExecutionState[];
   isManager: boolean;
   fieldMode: boolean;
   hasPendingDispatch: boolean;
@@ -32,6 +33,7 @@ type WorkLifecycleTransitionActionsProps = {
  */
 export function WorkLifecycleTransitionActions({
   snapshot,
+  transitions,
   isManager,
   fieldMode,
   hasPendingDispatch,
@@ -41,7 +43,6 @@ export function WorkLifecycleTransitionActions({
   pendingState,
   setDialog,
 }: WorkLifecycleTransitionActionsProps) {
-  const transitions = getAllowedWorkTransitions(snapshot.executionState, isManager);
   const primaryFieldTransition =
     snapshot.executionState === 'not_started' || snapshot.executionState === 'interrupted'
       ? 'in_progress'

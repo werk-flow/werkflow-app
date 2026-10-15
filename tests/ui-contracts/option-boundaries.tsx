@@ -5,12 +5,11 @@ import { CalendarOrganizationContext } from './calendar-service-boundaries';
 
 function OptionReader(): React.JSX.Element {
   const [selected, setSelected] = useState<string[]>([]);
-  const { loadError, onLoadMore, ...search } = useJobEntityOptions({ kind: 'clients' }, selected);
+  const { onLoadMore, ...search } = useJobEntityOptions({ kind: 'clients' }, selected);
   return (
     <>
       <SearchableMultiSelect
         {...search}
-        {...(loadError !== undefined ? { loadError } : {})}
         {...(onLoadMore ? { onLoadMore } : {})}
         ariaLabel="Kunden"
         selectedIds={selected}

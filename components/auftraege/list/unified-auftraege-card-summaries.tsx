@@ -33,7 +33,7 @@ export function UnifiedAuftraegeJobCardSummary({
         <span className="truncate">{clientName}</span>
         {job.plannedDate && (
           <>
-            <span className="text-muted-foreground/60">&middot;</span>
+            <span className="text-muted-foreground">&middot;</span>
             <span>{formatGermanDate(job.plannedDate, { empty: '—' })}</span>
           </>
         )}
@@ -83,7 +83,7 @@ export function UnifiedAuftraegeProjectCardSummary({
         <span className="truncate">{clientName}</span>
         {(project.plannedStartDate || project.plannedEndDate) && (
           <>
-            <span className="text-muted-foreground/60">&middot;</span>
+            <span className="text-muted-foreground">&middot;</span>
             <span>
               {formatGermanDate(project.plannedStartDate, { empty: '—' })} –{' '}
               {formatGermanDate(project.plannedEndDate, { empty: '—' })}
@@ -100,7 +100,11 @@ export function UnifiedAuftraegeProjectCardSummary({
             {getProjectStatusLabel(project)}
           </Badge>
           <div className="flex items-center gap-1.5">
-            <Progress value={progress} className="h-1.5 w-12" />
+            <Progress
+              value={progress}
+              label={`Erledigte Aufträge des Projekts: ${project.completedJobCount} von ${project.jobCount}`}
+              className="h-1.5 w-12"
+            />
             <span className="text-[10px] tabular-nums text-muted-foreground">
               {project.completedJobCount}/{project.jobCount}
             </span>

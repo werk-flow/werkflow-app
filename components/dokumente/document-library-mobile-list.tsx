@@ -7,7 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { EmptyState } from '@/components/ui/empty-state';
 import { InlinePending } from '@/components/ui/inline-pending';
-import { ListRow } from '@/components/ui/list-row';
+import { ListRow, ListRowActions } from '@/components/ui/list-row';
 import { formatFileSize } from '@/lib/documents/format';
 import {
   DOCUMENT_CATEGORY_LABELS,
@@ -68,13 +68,13 @@ function DocumentLibraryFolderCard({
     <ContextMenu modal={false}>
       <ContextMenuTrigger asChild>
         <ListRow interactive onClick={() => rowActions.onOpenFolder(folder)}>
-          <div className="shrink-0" onClick={(event) => event.stopPropagation()}>
+          <ListRowActions className="shrink-0">
             <Checkbox
               checked={isSelected}
               onCheckedChange={() => onToggleSelection(folder.id)}
               aria-label={`Ordner ${folder.name} auswählen`}
             />
-          </div>
+          </ListRowActions>
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <Folder className="size-4 shrink-0 text-muted-foreground" />
             <div className="min-w-0">
@@ -85,9 +85,9 @@ function DocumentLibraryFolderCard({
               <p className="text-xs text-muted-foreground">Ordner · {formatDate(folder.createdAt)}</p>
             </div>
           </div>
-          <div onClick={(event) => event.stopPropagation()}>
+          <ListRowActions>
             <FolderActionsMenu folder={folder} disabled={isBusy} handlers={handlers} />
-          </div>
+          </ListRowActions>
         </ListRow>
       </ContextMenuTrigger>
       <FolderContextMenuContent folder={folder} handlers={handlers} />
@@ -129,13 +129,13 @@ function DocumentLibraryDocumentCard({
     <ContextMenu modal={false}>
       <ContextMenuTrigger asChild>
         <ListRow interactive onClick={() => rowActions.onOpenDocument(document)}>
-          <div className="shrink-0" onClick={(event) => event.stopPropagation()}>
+          <ListRowActions className="shrink-0">
             <Checkbox
               checked={isSelected}
               onCheckedChange={() => onToggleSelection(document.id)}
               aria-label={`Datei ${document.displayName} auswählen`}
             />
-          </div>
+          </ListRowActions>
           <div className="flex min-w-0 flex-1 items-center gap-2">
             {createElement(getFileIcon(document), {
               className: 'size-4 shrink-0 text-muted-foreground',
@@ -157,14 +157,14 @@ function DocumentLibraryDocumentCard({
               )}
             </div>
           </div>
-          <div onClick={(event) => event.stopPropagation()}>
+          <ListRowActions>
             <DocumentActionsMenu
               document={document}
               isTrashView={isTrashView}
               disabled={isBusy}
               handlers={handlers}
             />
-          </div>
+          </ListRowActions>
         </ListRow>
       </ContextMenuTrigger>
       <DocumentContextMenuContent document={document} isTrashView={isTrashView} handlers={handlers} />

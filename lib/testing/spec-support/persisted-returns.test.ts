@@ -43,6 +43,21 @@ const NON_PERSISTED_RETURNS: readonly { file: string; name: string; reason: stri
     reason: 'starts a network tracker for a measured session, not a saved row',
   },
   {
+    file: 'tests/audit/support/surface-fixtures.ts',
+    name: 'surfaceFixture',
+    reason: 'returns the id of a row seeded once per audit world, read from the world checkpoint',
+  },
+  {
+    file: 'tests/audit/support/surface-routes.ts',
+    name: 'surfaceDestination',
+    reason: 'resolves an inventoried route to the page the audit opens, not a saved row',
+  },
+  {
+    file: 'tests/audit/support/surface-routes.ts',
+    name: 'detailDestination',
+    reason: 'resolves a detail pattern to the page the audit opens, not a saved row',
+  },
+  {
     file: 'tests/audit/support/layout-shifts.ts',
     name: 'shiftsAfterUsable',
     reason: 'reads the layout shifts of a rendered page, not a saved row',

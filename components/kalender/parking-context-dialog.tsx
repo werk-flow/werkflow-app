@@ -5,9 +5,9 @@
 // visible "Kontext fehlt" state — nothing is fabricated. The success banner
 // belongs to the calendar container (`onSaved`), which also owns the undo.
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
-import { OptionsLoadError } from '@/components/auftraege/shared/options-load-error';
+import { useClientRead } from '@/hooks/use-client-read';
 import { usePendingTask } from '@/hooks/use-server-action';
 import { Button } from '@/components/ui/button';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -22,6 +22,7 @@ import {
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { SearchableSelect } from '@/components/ui/searchable-select';
+import { SectionError } from '@/components/ui/section-error';
 import { Textarea } from '@/components/ui/textarea';
 import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import { calendarRefusalMessage } from '@/lib/calendar/messages';
@@ -36,32 +37,7 @@ import {
 import { parseIsoLocalDate, toLocalDateString } from '@/lib/utils';
 import { parkWorkTarget } from '@/lib/work-lifecycle/actions';
 
-/** The responsible-person options, with the retry of a failed load. */
-function useParkingResponsibleOptions() {
-  const [options, setOptions] = useState<ParkingResponsibleOption[]>([]);
-  const [optionsError, setOptionsError] = useState(false);
-  const [optionsReloadCount, setOptionsReloadCount] = useState(0);
-  const [isLoadingOptions, setIsLoadingOptions] = useState(true);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void readInBackground('parking-responsible-options', {}, controller.signal).then((result) => {
-      if (controller.signal.aborted) return;
-      if (result.success) setOptions(result.options);
-      else setOptionsError(true);
-      setIsLoadingOptions(false);
-    });
-    return () => controller.abort();
-  }, [optionsReloadCount]);
-
-  function retryOptions() {
-    setOptionsError(false);
-    setIsLoadingOptions(true);
-    setOptionsReloadCount((count) => count + 1);
-  }
-
-  return { options, optionsError, isLoadingOptions, retryOptions };
-}
+const NO_RESPONSIBLE_OPTIONS: ParkingResponsibleOption[] = [];
 
 export function ParkingContextDialog({
   jobId,
@@ -92,7 +68,12 @@ export function ParkingContextDialog({
   const [reviewDate, setReviewDate] = useState<Date | undefined>(() =>
     existingContext?.nextReviewDate ? parseIsoLocalDate(existingContext.nextReviewDate) : undefined,
   );
-  const { options, optionsError, isLoadingOptions, retryOptions } = useParkingResponsibleOptions();
+  const responsibleOptions = useClientRead({
+    read: (signal) => readInBackground('parking-responsible-options', {}, signal),
+    deps: [],
+    failureMessage: 'Die Personenliste konnte nicht geladen werden.',
+  });
+  const options = responsibleOptions.data?.options ?? NO_RESPONSIBLE_OPTIONS;
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{
     responsible?: string;
@@ -232,11 +213,7 @@ export function ParkingContextDialog({
               emptyMessage="Keine Person gefunden"
             />
           </Field>
-          <OptionsLoadError
-            error={optionsError ? 'Die Personenliste konnte nicht geladen werden.' : null}
-            onRetry={retryOptions}
-            retrying={isLoadingOptions}
-          />
+          {responsibleOptions.failure && <SectionError failure={responsibleOptions.failure} />}
 
           <Field label="Wiedervorlage" htmlFor="parking-review-date" required error={fieldErrors.reviewDate}>
             <DatePicker

@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
+import { useClientRead } from '@/hooks/use-client-read';
 import { usePendingTask } from '@/hooks/use-server-action';
 import { Button } from '@/components/ui/button';
 import {
@@ -16,12 +17,13 @@ import {
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { SearchableSelect } from '@/components/ui/searchable-select';
+import { SectionError } from '@/components/ui/section-error';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { focusFirstInvalidField, REASON_MIN_3_MESSAGE } from '@/lib/ui/field-validation';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { linkWorkDependencyArtifactApproval } from '@/lib/work-lifecycle/actions';
-import type { WorkDependency, WorkEntityOption, WorkLifecycleSnapshot } from '@/lib/work-lifecycle/types';
-import { OptionsLoadError } from '../shared/options-load-error';
+import type { WorkDependency, WorkLifecycleSnapshot } from '@/lib/work-lifecycle/types';
 import { APPROVALS_LOAD_FAILED_MESSAGE, workLifecycleErrorMessage } from './work-lifecycle-messages';
 
 type ArtifactApprovalDependencyDialogProps = {
@@ -37,27 +39,22 @@ export function ArtifactApprovalDependencyDialog({
   onClose,
   onChanged,
 }: ArtifactApprovalDependencyDialogProps) {
-  const [options, setOptions] = useState<WorkEntityOption[] | null>(null);
   const [actionId, setActionId] = useState('');
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
-  // A failed load keeps `options` null: an empty list would read as „no approval exists“.
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [loadAttempt, setLoadAttempt] = useState(0);
   const { run: runApprovalTask, isPending: pending } = usePendingTask();
-  useEffect(() => {
-    const controller = new AbortController();
-    void readInBackground(
-      'approved-artifact-actions',
-      { targetType: snapshot.targetType, targetId: snapshot.targetId },
-      controller.signal,
-    ).then((result) => {
-      if (controller.signal.aborted) return;
-      if (result.success) setOptions(result.options);
-      else setLoadError(APPROVALS_LOAD_FAILED_MESSAGE);
-    });
-    return () => controller.abort();
-  }, [snapshot.targetId, snapshot.targetType, loadAttempt]);
+  // A failed load leaves no options: an empty list would read as „no approval exists“.
+  const approvals = useClientRead({
+    read: (signal) =>
+      readInBackground(
+        'approved-artifact-actions',
+        { targetType: snapshot.targetType, targetId: snapshot.targetId },
+        signal,
+      ),
+    deps: [snapshot.targetType, snapshot.targetId],
+    failureMessage: APPROVALS_LOAD_FAILED_MESSAGE,
+  });
+  const options = approvals.data?.options;
   const [attempted, setAttempted] = useState(false);
   const fieldErrors = {
     'dependency-artifact-approval': actionId ? undefined : 'Bitte wähle eine Freigabe.',
@@ -100,17 +97,14 @@ export function ArtifactApprovalDependencyDialog({
               required
               error={attempted ? fieldErrors['dependency-artifact-approval'] : undefined}
             >
-              {loadError ? (
-                <OptionsLoadError
-                  error={loadError}
-                  onRetry={() => {
-                    setLoadError(null);
-                    setLoadAttempt((attempt) => attempt + 1);
-                  }}
-                  retrying={false}
-                />
-              ) : options === null ? (
-                <p className="text-sm text-muted-foreground">Freigaben werden geladen…</p>
+              {approvals.failure ? (
+                <SectionError failure={approvals.failure} />
+              ) : options === undefined ? (
+                // A skeleton stands in for the select, so the dialog takes first focus until it arrives.
+                <div role="status" aria-busy="true">
+                  <span className="sr-only">Freigaben werden geladen.</span>
+                  <Skeleton className="h-9 w-full" />
+                </div>
               ) : (
                 <SearchableSelect
                   options={options}

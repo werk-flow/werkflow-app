@@ -285,6 +285,11 @@ export function parkplatzDispatchButton(card: Locator): Locator {
   return card.getByRole('button', { name: DISPATCH_COPY.sendFromParkplatz });
 }
 
+/** The Parkplatz card's action that opens the context dialog of a parked job with a context. */
+export function parkplatzEditContextButton(card: Locator, title: string): Locator {
+  return card.getByRole('button', { name: `Parkplatz-Kontext für ${title} bearbeiten`, exact: true });
+}
+
 export async function dispatchParkedJobFromParkplatz(
   page: Page,
   options: { jobTitle: string; recipientName: string },
@@ -380,6 +385,11 @@ export function batchSelectionCount(panel: Locator, count: number): Locator {
 
 export function checkBatchImpactButton(panel: Locator): Locator {
   return panel.getByRole('button', { name: DISPATCH_COPY.checkImpact });
+}
+
+/** The batch form's reason field. */
+export function batchReasonField(panel: Locator): Locator {
+  return panel.locator('#batch-reason');
 }
 
 export function batchShiftMissingError(panel: Locator): Locator {

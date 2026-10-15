@@ -1,14 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-
 import { useOrganization } from '@/components/organization/organization-context';
+import { useClientRead, type ReadFailure } from '@/hooks/use-client-read';
 import { readInBackground } from '@/lib/data/background-read-client';
 import type { EquipmentSourceOption } from '@/lib/installed-equipment/types';
 
-type Loaded = { key: string; options: EquipmentSourceOption[] | null };
-
-const LOAD_ERROR = 'Die Nachweise konnten nicht geladen werden.';
 const NO_OPTIONS: EquipmentSourceOption[] = [];
 
 /**
@@ -25,41 +21,30 @@ export function useEquipmentSourceOptions(
 ): {
   options: EquipmentSourceOption[];
   loading: boolean;
-  /** Set when the read failed; the picker offers „Erneut laden“ through `retry`. */
-  error: string | undefined;
-  retry: () => void;
+  /** The failed read with its retry; the picker offers „Erneut laden“. */
+  loadFailure: ReadFailure | null;
 } {
   const { activeOrgId } = useOrganization();
-  const [loaded, setLoaded] = useState<Loaded | null>(null);
   const workType = work?.type ?? null;
   const workId = work?.id ?? null;
-  const key = `${activeOrgId}:${equipmentId}:${workType}:${workId}`;
-  const needsRead = enabled && loaded?.key !== key;
-
-  useEffect(() => {
-    if (!needsRead || !activeOrgId) return;
-    const controller = new AbortController();
-    void readInBackground(
-      'equipment-sources',
-      {
-        organizationId: activeOrgId,
-        equipmentId,
-        work: workType && workId ? { type: workType, id: workId } : null,
-      },
-      controller.signal,
-    ).then((result) => {
-      if (controller.signal.aborted) return;
-      setLoaded({ key, options: result.success ? result.options : null });
-    });
-    return () => controller.abort();
-  }, [activeOrgId, equipmentId, key, needsRead, workId, workType]);
-
-  const retry = useCallback(() => setLoaded(null), []);
-  const current = enabled && loaded?.key === key ? loaded : null;
+  const sources = useClientRead({
+    read: (signal) =>
+      readInBackground(
+        'equipment-sources',
+        {
+          organizationId: activeOrgId ?? '',
+          equipmentId,
+          work: workType && workId ? { type: workType, id: workId } : null,
+        },
+        signal,
+      ),
+    deps: [activeOrgId, equipmentId, workType, workId],
+    enabled: enabled && Boolean(activeOrgId),
+    failureMessage: 'Die Nachweise konnten nicht geladen werden.',
+  });
   return {
-    options: current?.options ?? NO_OPTIONS,
-    loading: needsRead,
-    error: current && current.options === null ? LOAD_ERROR : undefined,
-    retry,
+    options: sources.data?.options ?? NO_OPTIONS,
+    loading: sources.loading,
+    loadFailure: sources.failure,
   };
 }

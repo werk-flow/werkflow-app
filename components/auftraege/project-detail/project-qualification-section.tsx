@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, type ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 import { Award, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import { SectionError } from '@/components/ui/section-error';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useBusyIds } from '@/hooks/use-busy-id';
+import { useClientRead } from '@/hooks/use-client-read';
 import {
   getProjectCapabilityRequirements,
   setProjectCapabilityRequirements,
@@ -26,41 +27,28 @@ type Requirement = { id: string; capability_id: string; require_confirmation: bo
 const ADD_BUSY_ID = 'add';
 const CAPABILITY_FIELD_ID = 'project-capability';
 const CAPABILITY_REQUIRED_MESSAGE = 'Bitte wähle eine Qualifikation aus.';
+const NO_CAPABILITIES: CapabilityDefinition[] = [];
+const NO_REQUIREMENTS: Requirement[] = [];
 
 function toRequirementInput(item: Requirement): { capabilityId: string; requireConfirmation: boolean } {
   return { capabilityId: item.capability_id, requireConfirmation: item.require_confirmation };
 }
 
 export function ProjectQualificationSection({ projectId }: { projectId: string }): ReactElement {
-  const [capabilities, setCapabilities] = useState<CapabilityDefinition[]>([]);
-  const [requirements, setRequirements] = useState<Requirement[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [attempted, setAttempted] = useState(false);
   const [requireConfirmation, setRequireConfirmation] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const { run: runSave, isBusy, anyBusy } = useBusyIds();
-  const load = useCallback(async () => {
-    try {
-      const result = await getProjectCapabilityRequirements(projectId);
-      if (result.success) {
-        setCapabilities(result.data.capabilities);
-        setRequirements(result.data.requirements);
-        setLoadError(null);
-      } else {
-        setLoadError('Die Qualifikationen konnten nicht geladen werden.');
-      }
-    } catch {
-      setLoadError('Die Qualifikationen konnten nicht geladen werden.');
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId]);
-  useEffect(() => {
-    const timer = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(timer);
-  }, [load]);
+  const { run: runSave, isBusy, anyBusy: saving } = useBusyIds();
+  const planned = useClientRead({
+    read: () => getProjectCapabilityRequirements(projectId),
+    deps: [projectId],
+    failureMessage: 'Die Qualifikationen konnten nicht geladen werden.',
+  });
+  // The next save sends the shown list as its expectation, so the controls wait for the reload too.
+  const anyBusy = saving || planned.loading;
+  const capabilities = planned.data?.data.capabilities ?? NO_CAPABILITIES;
+  const requirements = planned.data?.data.requirements ?? NO_REQUIREMENTS;
   // Every save replaces the whole requirement list, so saves stay mutually
   // exclusive (`anyBusy` disables the controls); `busyId` only chooses where
   // the spinner shows. Never rejects: every failure lands in `saveError`.
@@ -85,14 +73,18 @@ export function ProjectQualificationSection({ projectId }: { projectId: string }
         );
         return false;
       }
-      await load();
+      // The section keeps the saved list on screen while the reload runs.
+      planned.reload();
       return true;
     } catch {
       setSaveError('Die Qualifikationsanforderungen konnten nicht gespeichert werden.');
       return false;
     }
   }
-  if (loading) {
+  if (planned.failure) {
+    return <SectionError title="Geplante Qualifikationen" failure={planned.failure} />;
+  }
+  if (!planned.data) {
     return (
       <Card className="gap-4 p-4" role="status" aria-busy="true">
         <span className="sr-only">Qualifikationen werden geladen.</span>
@@ -103,19 +95,6 @@ export function ProjectQualificationSection({ projectId }: { projectId: string }
         <Skeleton className="h-9 w-full" />
         <Skeleton className="h-10 w-full rounded-md" />
       </Card>
-    );
-  }
-  if (loadError) {
-    return (
-      <SectionError
-        title="Geplante Qualifikationen"
-        onRetry={() => {
-          setLoading(true);
-          void load();
-        }}
-      >
-        {loadError}
-      </SectionError>
     );
   }
   const byId = new Map(capabilities.map((capability) => [capability.id, capability]));

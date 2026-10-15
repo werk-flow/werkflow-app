@@ -120,8 +120,7 @@ export function MaintenanceCoverageDialog({
                     .map((site) => ({ value: site.id, label: site.name, description: site.address }))}
                   disabled={!clientId}
                   loading={clientOption.loading}
-                  loadError={clientOption.error}
-                  onRetryLoad={clientOption.retry}
+                  loadFailure={clientOption.loadFailure}
                   placeholder="Einsatzort wählen"
                   searchPlaceholder="Einsatzort suchen…"
                   emptyMessage="Kein Einsatzort gefunden"

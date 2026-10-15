@@ -38,7 +38,7 @@ export function SortableTableHead<Column extends string>({
             <ArrowDown className="size-3.5" />
           )
         ) : (
-          <ArrowUpDown className="size-3.5 text-muted-foreground/50" />
+          <ArrowUpDown className="size-3.5 text-muted-foreground" />
         )}
       </PlainButton>
     </TableHead>

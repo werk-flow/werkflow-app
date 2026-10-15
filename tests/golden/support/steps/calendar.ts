@@ -54,6 +54,7 @@ const PLANNING_COPY = {
   staleAssessment: 'Die Planungslage hat sich geändert. Bitte Hinweise erneut prüfen.',
   manualEntrySaved: 'Eintrag erfolgreich erstellt!',
   entryDetails: 'Eintrag Details',
+  deleteWorkBlock: 'Arbeitsblock löschen?',
 } as const;
 
 /** The tabs of the calendar's entry dialog; the job tab is the work area's creation form. */
@@ -424,6 +425,13 @@ export function plannedCalendarEvent(page: Page, title: string, index = 0): Loca
   return confirmed(page.locator('[data-calendar-card]').filter({ hasText: title }).nth(index));
 }
 
+/** The day view's row of one person, by the name its row carries; a personnel record without a login has one too. */
+export function dayRowOfPerson(page: Page, personName: string): Locator {
+  return confirmed(
+    page.getByRole('main').locator('[data-day-view]').getByRole('row', { name: personName, exact: true }),
+  );
+}
+
 /** The month grid keys one day's items by data-month-day; the run-scoped title narrows the visit. */
 export function occurrenceInDateCell(page: Page, dateIso: string, title: string): Locator {
   return confirmed(
@@ -555,7 +563,7 @@ export function occurrenceEditButton(scope: Page | Locator): Locator {
   return scope.getByRole('button', { name: PLANNING_COPY.editEntry });
 }
 
-function occurrenceEditDialog(page: Page): Locator {
+export function occurrenceEditDialog(page: Page): Locator {
   return page.getByRole('dialog').filter({
     has: page.getByRole('heading', { name: PLANNING_COPY.editDialog }),
   });
@@ -734,4 +742,19 @@ export function timeEntryDetailsDialog(page: Page): Locator {
 /** The heading of the details dialog. */
 export function timeEntryDetailsHeading(dialog: Locator): Locator {
   return dialog.getByRole('heading', { name: PLANNING_COPY.entryDetails, exact: true });
+}
+
+/** The details dialog's action that asks before it deletes the work block. */
+export function timeEntryDeleteButton(dialog: Locator): Locator {
+  return dialog.getByRole('button', { name: SHARED_COPY.action.delete, exact: true });
+}
+
+/** The confirmation that the details dialog's delete action opens. */
+export function timeEntryDeleteConfirmation(page: Page): Locator {
+  return page.getByRole('alertdialog', { name: PLANNING_COPY.deleteWorkBlock });
+}
+
+/** Types the new date into the card popover's move form (YYYY-MM-DD). */
+export async function typeCardMoveDate(popover: Locator, dateIso: string): Promise<void> {
+  await typeIntoDatePickerById(popover, 'popover-move-date', dateIso);
 }

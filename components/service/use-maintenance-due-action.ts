@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
 
+import { useClientRead, type ReadFailure } from '@/hooks/use-client-read';
 import { useServerAction } from '@/hooks/use-server-action';
 import { readInBackground } from '@/lib/data/background-read-client';
 import type {
@@ -20,6 +21,8 @@ import {
   type MaintenanceDueActionValues,
   type MaintenanceDueRequiredField,
 } from './maintenance-due-action-state';
+
+const NO_EVIDENCE: MaintenanceEvidenceOption[] = [];
 
 type UseMaintenanceDueActionOptions = {
   open: boolean;
@@ -42,8 +45,7 @@ export type MaintenanceDueActionController = MaintenanceDueActionValues & {
   setServiceCaseId: (serviceCaseId: string) => void;
   evidence: MaintenanceEvidenceOption[];
   isEvidenceLoading: boolean;
-  evidenceLoadFailed: boolean;
-  retryEvidence: () => void;
+  evidenceFailure: ReadFailure | null;
   error: string | null;
   fieldErrors: Partial<Record<MaintenanceDueRequiredField, string>>;
   isPending: boolean;
@@ -68,38 +70,18 @@ export function useMaintenanceDueAction({
   const [durationHours, setDurationHours] = useState(formatMinutesAsHoursInput(plannedDurationMinutes));
   const [scopeOutcome, setScopeOutcome] = useState<MaintenanceScopeOutcome>('complete');
   const [completedOn, setCompletedOn] = useState(formatBerlinLocalDate(new Date()));
-  const [evidence, setEvidence] = useState<MaintenanceEvidenceOption[]>([]);
   const [evidenceIds, setEvidenceIds] = useState<string[]>([]);
-  const [isEvidenceLoading, setIsEvidenceLoading] = useState(true);
-  const [evidenceLoadFailed, setEvidenceLoadFailed] = useState(false);
-  const [evidenceReloadCount, setEvidenceReloadCount] = useState(0);
   const [serviceCaseId, setServiceCaseId] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [attempted, setAttempted] = useState(false);
   const idempotencyKey = useRef(crypto.randomUUID());
-  useEffect(() => {
-    if (!open || !due.jobId) return;
-    const controller = new AbortController();
-    void readInBackground('maintenance-evidence-options', { jobId: due.jobId }, controller.signal).then(
-      (result) => {
-        if (controller.signal.aborted) return;
-        if (result.success) {
-          setEvidence(result.options);
-        } else {
-          setEvidence([]);
-          setEvidenceLoadFailed(true);
-        }
-        setIsEvidenceLoading(false);
-      },
-    );
-    return () => controller.abort();
-  }, [due.jobId, open, evidenceReloadCount]);
-
-  function retryEvidence(): void {
-    setEvidenceLoadFailed(false);
-    setIsEvidenceLoading(true);
-    setEvidenceReloadCount((count) => count + 1);
-  }
+  const jobId = due.jobId;
+  const evidenceRead = useClientRead({
+    read: (signal) => readInBackground('maintenance-evidence-options', { jobId: jobId ?? '' }, signal),
+    deps: [jobId],
+    enabled: open && Boolean(jobId),
+    failureMessage: 'Die Arbeitsnachweise konnten nicht geladen werden.',
+  });
   const values: MaintenanceDueActionValues = {
     action,
     reason,
@@ -150,10 +132,10 @@ export function useMaintenanceDueAction({
     setCompletedOn,
     setEvidenceIds,
     setServiceCaseId,
-    evidence,
-    isEvidenceLoading,
-    evidenceLoadFailed,
-    retryEvidence,
+    evidence: evidenceRead.data?.options ?? NO_EVIDENCE,
+    // Without a job no evidence can load, so completing stays held as before the read.
+    isEvidenceLoading: !jobId || evidenceRead.loading,
+    evidenceFailure: evidenceRead.failure,
     error,
     fieldErrors,
     isPending,

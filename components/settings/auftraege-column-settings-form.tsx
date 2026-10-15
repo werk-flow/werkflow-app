@@ -126,9 +126,7 @@ export function AuftraegeColumnSettingsForm({
                               disabled={isSaving}
                               onCheckedChange={(checked) => toggleColumn(column.id, checked === true)}
                             />
-                            <div>
-                              <p className="text-sm font-medium leading-none">{column.label}</p>
-                            </div>
+                            <span className="text-sm font-medium leading-none">{column.label}</span>
                           </label>
                         );
                       })}

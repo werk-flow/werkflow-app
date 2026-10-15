@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { CalendarBoardDay } from './board';
 import type { CalendarWorkBlock } from '@/lib/time-tracking/calendar-blocks';
 import type { TimeEntry } from '@/lib/time-tracking/types';
-import { canManageBlock, dayRowLabel, isDayRowOff } from './day-row-status';
+import { canManageBlock, dayRowLabel, isBlockInClosedPeriod, isDayRowOff } from './day-row-status';
 
 function boardDay(overrides: Partial<CalendarBoardDay> = {}): CalendarBoardDay {
   return {
@@ -88,14 +88,22 @@ describe('dayRowLabel and isDayRowOff', () => {
 
 describe('canManageBlock', () => {
   test('admins manage every block, Büro own and employee blocks, employees none', () => {
-    expect(canManageBlock(block(), 'admin', 'me', 'admin')).toBe(true);
-    expect(canManageBlock(block(), 'buero', 'me', 'employee')).toBe(true);
-    expect(canManageBlock(block(), 'buero', 'owner', 'buero')).toBe(true);
-    expect(canManageBlock(block(), 'buero', 'me', 'admin')).toBe(false);
-    expect(canManageBlock(block(), 'employee', 'owner', 'employee')).toBe(false);
+    expect(canManageBlock(block(), 'admin', 'me', 'admin', [])).toBe(true);
+    expect(canManageBlock(block(), 'buero', 'me', 'employee', [])).toBe(true);
+    expect(canManageBlock(block(), 'buero', 'owner', 'buero', [])).toBe(true);
+    expect(canManageBlock(block(), 'buero', 'me', 'admin', [])).toBe(false);
+    expect(canManageBlock(block(), 'employee', 'owner', 'employee', [])).toBe(false);
   });
 
   test('a block with a pending deletion stays locked for everyone', () => {
-    expect(canManageBlock(block('pending_delete'), 'admin', 'me', 'employee')).toBe(false);
+    expect(canManageBlock(block('pending_delete'), 'admin', 'me', 'employee', [])).toBe(false);
+  });
+
+  test('a block of a closed period stays locked for everyone, the month after it does not', () => {
+    const october = [{ startDate: '2026-10-01', endDate: '2026-10-31' }];
+    const september = [{ startDate: '2026-09-01', endDate: '2026-09-30' }];
+    expect(canManageBlock(block(), 'admin', 'me', 'employee', october)).toBe(false);
+    expect(isBlockInClosedPeriod(block(), october)).toBe(true);
+    expect(canManageBlock(block(), 'admin', 'me', 'employee', september)).toBe(true);
   });
 });

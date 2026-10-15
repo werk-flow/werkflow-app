@@ -176,7 +176,11 @@ export function PlanningOccurrenceScheduleFields({
           />
         </Field>
       )}
-      <Field label="Mitarbeiter" htmlFor="planning-edit-employees" error={employeeSelect.loadError}>
+      <Field
+        label="Mitarbeiter"
+        htmlFor="planning-edit-employees"
+        error={employeeSelect.loadFailure?.message}
+      >
         <SearchableMultiSelect
           {...employeeSelect}
           selectedIds={employeeRecordIds}

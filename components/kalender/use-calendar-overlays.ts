@@ -4,6 +4,8 @@ import { useCallback, useMemo, useState } from 'react';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { OrgRole } from '@/lib/members/actions';
 import type { InteractiveCalendarSession, WorkSession } from '@/lib/time-tracking/types';
+import { useOrganization } from '@/components/organization/organization-context';
+import { useClosedTimePeriods } from '@/components/zeiterfassung/use-closed-time-periods';
 import type { CalendarSurfaceActions } from './board/types';
 import type { OpenCard } from './job-event-popover';
 import { memberDisplayName, type CalendarMember } from './members';
@@ -57,14 +59,18 @@ export function useCalendarSurfaceActions({
   members: CalendarMember[];
 }): { surfaceActions: CalendarSurfaceActions; handleSessionClick: (session: WorkSession) => void } {
   const { setOpenCard, setAddEntry, setSelectedSession } = overlays;
+  // The calendar is scoped to the active organization, so its closed periods are that organization's.
+  const { activeOrgId } = useOrganization();
+  const closedPeriods = useClosedTimePeriods(activeOrgId);
   const surfaceActions = useMemo<CalendarSurfaceActions>(
     () => ({
       isManager: isAdminOrManager,
       onOpenCard: (job, element, row) => setOpenCard({ job, anchor: element, row }),
       onAddEntry: (input) => setAddEntry(input),
       onPark,
+      closedPeriods,
     }),
-    [onPark, isAdminOrManager, setOpenCard, setAddEntry],
+    [onPark, isAdminOrManager, setOpenCard, setAddEntry, closedPeriods],
   );
 
   const handleSessionClick = useCallback(

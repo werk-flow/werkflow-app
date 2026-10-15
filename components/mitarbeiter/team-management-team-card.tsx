@@ -11,6 +11,7 @@ import { Field } from '@/components/ui/field';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import type { QualificationWorkspace, Team } from '@/lib/qualifications/types';
 import { toLocalDateString, parseIsoLocalDate } from '@/lib/utils';
+import { focusOnMount } from '@/lib/ui/focus-on-mount';
 import type { TeamManagementController } from './use-team-management';
 import { teamNameFieldId } from './use-team-management-team-edits';
 
@@ -50,7 +51,7 @@ function TeamManagementCardHeader({
               className="max-w-72 flex-1"
             >
               <Input
-                autoFocus
+                ref={focusOnMount}
                 value={editingTeamName}
                 onChange={(event) => setEditingTeamName(event.target.value)}
                 className="h-8"

@@ -3,7 +3,7 @@
 import { useCallback, useRef } from 'react';
 import { MIN_ITEM_MINUTES } from '@/lib/calendar/day-layout';
 import { formatMinutesOfDay, snapMinutes } from '@/lib/calendar/drag-math';
-import { UNASSIGNED_USER, type CalendarSurfaceActions } from '../board/types';
+import type { CalendarSurfaceActions } from '../board/types';
 
 /**
  * Drag-to-create on empty time: DOM-only tracking on the timeline's overlay,
@@ -22,14 +22,15 @@ export function useDayCreateDrag({
   actions: CalendarSurfaceActions;
 }) {
   const createRef = useRef<{
-    userId: string;
+    /** The row's login; null presets nobody (the „Ohne Zuweisung" row or a record without a login). */
+    userId: string | null;
     startMinutes: number;
     endMinutes: number;
     overlay: HTMLElement;
     pointerId: number;
   } | null>(null);
   const handleCreatePointerDown = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>, userId: string) => {
+    (event: React.PointerEvent<HTMLDivElement>, userId: string | null) => {
       if (!canCreate || event.button !== 0 || event.pointerType === 'touch') return;
       if ((event.target as HTMLElement).closest('[data-calendar-card], [data-time-block], button')) return;
       const timeline = event.currentTarget;
@@ -87,7 +88,7 @@ export function useDayCreateDrag({
         date: dateIso,
         time: formatMinutesOfDay(start),
         endTime: formatMinutesOfDay(end),
-        userId: create.userId === UNASSIGNED_USER ? undefined : create.userId,
+        userId: create.userId ?? undefined,
       });
     },
     [actions, dateIso],

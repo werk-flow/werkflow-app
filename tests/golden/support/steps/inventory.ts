@@ -54,8 +54,32 @@ const INVENTORY_DIALOGS = {
   createLocation: 'Lager anlegen',
   adjustStock: 'Bestand ändern',
   importCsv: INVENTORY_LABELS.importCsv,
+  quickCreateLocation: 'Lager erstellen',
+  quickCreateSupplier: INVENTORY_LABELS.newSupplier,
 } as const;
 type InventoryDialog = keyof typeof INVENTORY_DIALOGS;
+
+/** An /inventar dialog as an open layer, named by its title. */
+export function inventoryDialogLayer(page: Page, dialog: InventoryDialog): Locator {
+  return page.getByRole('dialog', { name: INVENTORY_DIALOGS[dialog], exact: true });
+}
+
+/** The pickers of the item dialog with their inline create action (select-with-create). */
+const ITEM_DIALOG_PICKERS = {
+  location: { field: 'Lager', create: 'Neues Lager erstellen' },
+  supplier: { field: 'Lieferant', create: INVENTORY_LABELS.newSupplier },
+} as const;
+type ItemDialogPicker = keyof typeof ITEM_DIALOG_PICKERS;
+
+/** The picker trigger in the open item dialog, named by its field label. */
+export function itemDialogPicker(dialog: Locator, picker: ItemDialogPicker): Locator {
+  return dialog.getByRole('combobox', { name: ITEM_DIALOG_PICKERS[picker].field, exact: true });
+}
+
+/** The create action of the open picker; the picker list is portaled to the page. */
+export function itemDialogPickerCreateAction(page: Page, picker: ItemDialogPicker): Locator {
+  return page.getByRole('button', { name: ITEM_DIALOG_PICKERS[picker].create, exact: true });
+}
 
 const INVENTORY_TABS = {
   items: 'Alle Artikel',
@@ -173,6 +197,16 @@ export async function renameInventoryItem(page: Page, oldName: string, newName: 
   await expect(page.getByText(ITEM_LIST_COPY.itemSaved, { exact: true })).toBeVisible();
 }
 
+/** The „Aktionen“ menu button of an item row. */
+export function inventoryRowActionsButton(row: Locator): Locator {
+  return row.getByRole('button', { name: INVENTORY_COPY.rowActions, exact: true });
+}
+
+/** One item of the open item row menu. */
+export function inventoryRowActionItem(page: Page, action: keyof typeof INVENTORY_ROW_ACTIONS): Locator {
+  return page.getByRole('menuitem', { name: INVENTORY_ROW_ACTIONS[action], exact: true });
+}
+
 /** Opens one action of an item row's „Aktionen“ menu. */
 export async function openItemRowAction(
   page: Page,
@@ -233,8 +267,13 @@ export function jobMaterialLineAction(line: Locator, action: JobMaterialAction):
   return line.getByRole('button', { name: JOB_MATERIAL_ACTIONS[action].trigger });
 }
 
-function materialPlanButton(page: Page): Locator {
+export function materialPlanButton(page: Page): Locator {
   return page.getByRole('button', { name: INVENTORY_LABELS.planMaterial });
+}
+
+/** The material plan dialog as an open layer, named by its title. */
+export function materialPlanLayer(page: Page): Locator {
+  return page.getByRole('dialog', { name: INVENTORY_LABELS.planMaterial, exact: true });
 }
 
 function materialPlanDialog(page: Page): Locator {

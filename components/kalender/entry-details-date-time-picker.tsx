@@ -65,7 +65,7 @@ export function EntryDetailsDateTimePicker({
           )}
         </div>
         <div className="relative w-28">
-          <Clock className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-foreground/80" />
+          <Clock className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <TimeInput value={timeValue} onChange={handleTimeChange} className="pl-10 pr-2" />
         </div>
       </div>

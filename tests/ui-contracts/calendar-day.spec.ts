@@ -49,7 +49,7 @@ test('desktop rows grow with the available height and keep readable cards', asyn
   await expect
     .poll(async () => (await dayTimeline(page, 'worker').boundingBox())?.width ?? 0)
     .toBeGreaterThanOrEqual(((viewportWidth - 160) / 13) * 24 - 1);
-  const employeeRow = region.locator('[data-day-row="worker"]');
+  const employeeRow = region.locator('[data-day-row-user="worker"]');
   const before = await employeeRow.boundingBox();
   if (!before) throw new Error('Missing employee row');
   expect(before.height).toBeGreaterThanOrEqual(96);
@@ -76,7 +76,7 @@ test('a visit without a time stays readable beside the sticky name column', asyn
   const scroller = region.locator('[data-calendar-scroll-container]');
   // The day opens at the working hours, so the timeline is scrolled away from midnight.
   await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
-  const row = region.locator('[data-day-row="worker-2"]');
+  const row = region.locator('[data-day-row-user="worker-2"]');
   const names = await row.getByRole('rowheader').boundingBox();
   const allDay = await card(page, 'Ganztägige Baustelle').boundingBox();
   if (!names || !allDay) throw new Error('Missing row header or all-day card');

@@ -86,7 +86,11 @@ function liveViewReads(node: ts.Node, found: ts.Node[] = []): ts.Node[] {
   return found;
 }
 
-/** The first argument of every `useEffect` and `useLayoutEffect` call: what runs on mount and on a dependency change. */
+/**
+ * What runs on mount and on a dependency change: the first argument of every
+ * `useEffect` and `useLayoutEffect` call, and the `read` of every
+ * `useClientRead` call, which hooks/use-client-read.ts starts from an effect.
+ */
 function effectCallbacks(node: ts.Node, found: ts.Node[] = []): ts.Node[] {
   if (
     ts.isCallExpression(node) &&
@@ -95,6 +99,18 @@ function effectCallbacks(node: ts.Node, found: ts.Node[] = []): ts.Node[] {
     node.arguments[0]
   )
     found.push(node.arguments[0]);
+  if (
+    ts.isCallExpression(node) &&
+    ts.isIdentifier(node.expression) &&
+    node.expression.text === 'useClientRead' &&
+    node.arguments[0] &&
+    ts.isObjectLiteralExpression(node.arguments[0])
+  ) {
+    for (const property of node.arguments[0].properties) {
+      if (property.name && ts.isIdentifier(property.name) && property.name.text === 'read')
+        found.push(property);
+    }
+  }
   ts.forEachChild(node, (child) => void effectCallbacks(child, found));
   return found;
 }
@@ -190,6 +206,21 @@ const EFFECT_STARTED_ACTIONS: Readonly<Record<string, string>> = {
     'a write: the upload the user started creates its folders, one queue owned by the dialog',
   'components/organization/organization-context.tsx setActiveOrgCookie':
     'a write: stores the active organization once after the server resolved it from a fallback',
+  // These reads ran from an effect behind a useCallback or useServerAction
+  // wrapper the scan could not follow; useClientRead made them visible. Each
+  // one is a candidate for the background-read registry.
+  'components/auftraege/forms/use-edit-job-form.ts getJobDetails':
+    'reads the current crew of the job whose edit dialog the user opened',
+  'components/auftraege/forms/use-edit-project-form.ts getProjectDetails':
+    'reads the linked jobs of the project whose edit dialog the user opened',
+  'components/auftraege/project-detail/project-qualification-section.tsx getProjectCapabilityRequirements':
+    'reads the planned qualifications of the open project, and again after the user saved them',
+  'components/dokumente/use-document-link-employees.ts getDocumentLinkEmployees':
+    'reads the staff list once while the link dialog shows a document',
+  'components/auftraege/lifecycle/use-work-lifecycle-dependency-form.ts searchWorkPredecessors':
+    'searches the predecessors for the text the user typed, after a short pause',
+  'components/auftraege/forms/use-create-job-project-link.ts getProjectDetails':
+    'reads the defaults of the project the user just chose; the change handler started it before useClientRead',
 };
 
 test('no effect starts a Server Action outside the reviewed list', () => {

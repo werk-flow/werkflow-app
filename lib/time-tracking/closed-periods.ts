@@ -4,6 +4,7 @@ import type { ActionFailure } from '@/lib/action-result';
 import { logError } from '@/lib/logging';
 import type { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
+import { isDateInClosedPeriod } from './closed-period-dates';
 import { getLocalDayKey } from './day-utils';
 
 /**
@@ -85,9 +86,12 @@ export async function touchesClosedTimePeriod(
     LIST_ROW_CAP,
   );
   if (error) throw new Error('closed_period_read_failed');
-  return dates.some((date) =>
-    data.some((period) => period.period_start_date <= date && date <= period.period_end_date),
-  );
+  // The client surfaces ask the same predicate before they offer an edit.
+  const closedPeriods = data.map((period) => ({
+    startDate: period.period_start_date,
+    endDate: period.period_end_date,
+  }));
+  return dates.some((date) => isDateInClosedPeriod(date, closedPeriods));
 }
 
 /**

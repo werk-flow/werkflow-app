@@ -78,7 +78,6 @@ export function CustomerFollowUpDialog({
                 value={followUpDraft.title}
                 onChange={(event) => onDraftChange({ ...followUpDraft, title: event.target.value })}
                 maxLength={160}
-                autoFocus
               />
             </Field>
             <Field label="Zuständig" htmlFor="follow-up-owner" required error={followUpOwnerError}>

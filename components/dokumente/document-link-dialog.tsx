@@ -254,8 +254,7 @@ export function DocumentLinkDialog({
   const projectSearch = useJobEntityOptions({ kind: 'projects' }, linked.project);
   const clientSearch = useJobEntityOptions({ kind: 'clients' }, linked.client);
   const equipmentSearch = useJobEntityOptions({ kind: 'equipment' }, linked.equipment);
-  const { employees, employeesFailed, isLoadingEmployees, needsEmployees, retryEmployees } =
-    useDocumentLinkEmployees(open && !!document);
+  const { employees, isLoadingEmployees, employeesFailure } = useDocumentLinkEmployees(open && !!document);
 
   const searches = {
     job: jobSearch,
@@ -287,14 +286,9 @@ export function DocumentLinkDialog({
       return option ? [option] : [];
     }),
   ];
-  const listError = activeSearch
-    ? activeSearch.loadError
-    : employeesFailed
-      ? 'Die Mitarbeiter konnten nicht geladen werden.'
-      : undefined;
+  const listFailure = activeSearch ? activeSearch.loadFailure : employeesFailure;
   const isLoadingList =
-    visibleTargets.length === 0 &&
-    (activeSearch ? activeSearch.loading : isLoadingEmployees || needsEmployees);
+    visibleTargets.length === 0 && (activeSearch ? activeSearch.loading : isLoadingEmployees);
 
   const additions = (type: LinkTargetType) => [...selected[type]].filter((id) => !linked[type].includes(id));
   const removeLinkIds = collectRemovedLinkIds(document, selected);
@@ -382,8 +376,7 @@ export function DocumentLinkDialog({
           />
 
           <DocumentLinkTargetList
-            listError={listError}
-            onRetryList={() => (activeSearch ? activeSearch.onSearchChange(searchQuery) : retryEmployees())}
+            listFailure={listFailure}
             isLoadingList={isLoadingList}
             visibleTargets={visibleTargets}
             selectedIds={selected[targetType]}

@@ -34,12 +34,12 @@ export function WorkDependencyDialog(props: WorkDependencyDialogProps) {
     description,
     setDescription,
     remoteOptions,
-    setRemoteOptions,
     search,
     setSearch,
     error,
     pending,
     searching,
+    searchFailure,
     attempted,
     fieldErrors,
     submit,
@@ -67,7 +67,6 @@ export function WorkDependencyDialog(props: WorkDependencyDialogProps) {
                 onValueChange={(value) => {
                   setType(value as typeof type);
                   setPredecessor('');
-                  setRemoteOptions(null);
                   setSearch('');
                 }}
               >
@@ -98,10 +97,8 @@ export function WorkDependencyDialog(props: WorkDependencyDialogProps) {
                 }
                 value={predecessor}
                 onChange={setPredecessor}
-                onSearchChange={(value) => {
-                  setSearch(value);
-                  if (value.trim().length < 2) setRemoteOptions(null);
-                }}
+                onSearchChange={setSearch}
+                loadFailure={searchFailure}
                 placeholder="Voraussetzung auswählen"
                 searchPlaceholder="Voraussetzung suchen…"
                 emptyMessage={searching ? 'Suche läuft…' : 'Keine passende Voraussetzung'}

@@ -56,7 +56,7 @@ function EmbeddedAuftraegeCollapsibleSection({
         <span className="text-sm font-semibold text-muted-foreground transition-colors group-hover:text-foreground">
           {title}
         </span>
-        <span className="text-xs tabular-nums text-muted-foreground/70">({count})</span>
+        <span className="text-xs tabular-nums text-muted-foreground">({count})</span>
       </PlainButton>
 
       {expanded && (
@@ -125,7 +125,7 @@ export function EmbeddedAuftraegeLists({
                 <span
                   className={cn(
                     'tabular-nums',
-                    activeStatusFilter === opt.value ? 'text-primary-text' : 'text-muted-foreground/70',
+                    activeStatusFilter === opt.value ? 'text-primary-text' : 'text-muted-foreground',
                   )}
                 >
                   {activeStatusCounts[opt.value] || 0}

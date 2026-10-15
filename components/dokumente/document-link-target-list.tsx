@@ -9,11 +9,11 @@ import { SectionError } from '@/components/ui/section-error';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { JobEntityOption } from '@/lib/jobs/option-types';
 import { cn } from '@/lib/utils';
+import type { ReadFailure } from '@/hooks/use-client-read';
 import type { JobEntityOptionsState } from '@/hooks/use-job-entity-options';
 
 type DocumentLinkTargetListProps = {
-  listError: string | undefined;
-  onRetryList: () => void;
+  listFailure: ReadFailure | null;
   isLoadingList: boolean;
   visibleTargets: JobEntityOption[];
   selectedIds: Set<string>;
@@ -25,8 +25,7 @@ type DocumentLinkTargetListProps = {
 };
 
 export function DocumentLinkTargetList({
-  listError,
-  onRetryList,
+  listFailure,
   isLoadingList,
   visibleTargets,
   selectedIds,
@@ -37,11 +36,9 @@ export function DocumentLinkTargetList({
   activeSearch,
 }: DocumentLinkTargetListProps): ReactElement {
   return (
-    <div className="max-h-80 overflow-auto rounded-md border">
-      {listError ? (
-        <SectionError className="m-3" onRetry={onRetryList} retryPending={isLoadingList}>
-          {listError}
-        </SectionError>
+    <div className="max-h-80 overflow-y-auto rounded-md border">
+      {listFailure ? (
+        <SectionError className="m-3" failure={listFailure} />
       ) : isLoadingList ? (
         <div className="divide-y" role="status" aria-busy="true">
           <span className="sr-only">Einträge werden geladen.</span>

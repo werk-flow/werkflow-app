@@ -1,10 +1,10 @@
 import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { AuthFlashCleanup } from '@/components/auth/auth-flash-cleanup';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { TextLink } from '@/components/ui/text-link';
 import { getSupabaseServerSession } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { RegionLoadError } from '@/components/shared/region-load-error';
@@ -130,12 +130,9 @@ export default async function LoginPage({
       <CardFooter className="flex justify-center">
         <p className="text-sm text-muted-foreground">
           Noch kein Konto?{' '}
-          <Link
-            href={inviteCode ? `/signup?invite_code=${encodeURIComponent(inviteCode)}` : '/signup'}
-            className="text-primary-text underline-offset-4 hover:underline"
-          >
+          <TextLink href={inviteCode ? `/signup?invite_code=${encodeURIComponent(inviteCode)}` : '/signup'}>
             Registrieren
-          </Link>
+          </TextLink>
         </p>
       </CardFooter>
     </Card>

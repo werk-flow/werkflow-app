@@ -90,7 +90,6 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               disabled={isLoading}
-              autoFocus
               autoComplete="organization"
             />
           </Field>

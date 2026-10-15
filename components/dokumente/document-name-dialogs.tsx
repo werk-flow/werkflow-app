@@ -63,7 +63,6 @@ export function DocumentRenameDialog({ rename }: { rename: DocumentRename }) {
               value={rename.renameValue}
               onChange={(event) => rename.setRenameValue(event.target.value)}
               placeholder="Name"
-              autoFocus
             />
           </Field>
           <DialogFooter>

@@ -1031,6 +1031,57 @@ const noDerivedStateEffectRule = {
   },
 };
 
+/**
+ * A destructive confirmation (werkflow-design, "Destructive confirmations")
+ * holds AlertDialogCancel and AlertDialogAction in its footer and no form:
+ * a plain footer button skips the pending guard of the primitives and does
+ * not close the confirmation, and a nested form lets Enter submit the
+ * destructive step. A button inside AlertDialogAction or AlertDialogCancel
+ * (`asChild`) is theirs and passes. Known blind spot: a child component that
+ * renders a button inside the footer is not followed.
+ */
+const ALERT_FOOTER_OWNERS = new Set(['AlertDialogFooter', 'AlertDialogAction', 'AlertDialogCancel']);
+const RAW_ACTIONS = new Set(['Button', 'PlainButton', 'button']);
+
+const alertDialogFooterActionsRule = {
+  meta: {
+    type: 'problem',
+    schema: [],
+    messages: {
+      rawFooterAction:
+        'An AlertDialog footer holds AlertDialogCancel and AlertDialogAction only (werkflow-design: Destructive confirmations); wrap <{{name}}> in one of them with asChild or use them directly.',
+      formInConfirmation:
+        'An AlertDialog holds no form: Enter must not submit a destructive step (werkflow-design: Destructive confirmations).',
+    },
+  },
+  create(context) {
+    return {
+      JSXElement(node) {
+        const name = jsxElementName(node);
+        if (RAW_ACTIONS.has(name)) {
+          for (let ancestor = node.parent; ancestor; ancestor = ancestor.parent) {
+            const ancestorName = jsxElementName(ancestor);
+            if (!ancestorName || !ALERT_FOOTER_OWNERS.has(ancestorName)) continue;
+            if (ancestorName === 'AlertDialogFooter')
+              context.report({ node, messageId: 'rawFooterAction', data: { name } });
+            return;
+          }
+        }
+        if (name === 'form') {
+          for (let ancestor = node.parent; ancestor; ancestor = ancestor.parent) {
+            const ancestorName = jsxElementName(ancestor);
+            if (ancestorName === 'DialogContent' || ancestorName === 'SheetContent') return;
+            if (ancestorName === 'AlertDialogContent') {
+              context.report({ node, messageId: 'formInConfirmation' });
+              return;
+            }
+          }
+        }
+      },
+    };
+  },
+};
+
 export const uiRules = {
   rules: {
     'label-in-spaced-container': labelInSpacedContainerRule,
@@ -1044,5 +1095,6 @@ export const uiRules = {
     'global-key-handler-respects-consumed': globalKeyHandlerRespectsConsumedRule,
     'dialog-pending-while-waiting': dialogPendingWhileWaitingRule,
     'no-derived-state-effect': noDerivedStateEffectRule,
+    'alert-dialog-footer-actions': alertDialogFooterActionsRule,
   },
 };

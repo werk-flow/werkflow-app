@@ -4,11 +4,12 @@
 // unknown per dimension — unknown is never styled as success) before the
 // manager sends the work instruction. Issuing sends NO customer message.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { AlertTriangle, CircleCheck, CircleHelp } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { SearchableMultiSelect } from '@/components/ui/searchable-select';
+import { useClientRead } from '@/hooks/use-client-read';
 import { usePlanningOptions } from '@/hooks/use-planning-options';
 import { useServerAction } from '@/hooks/use-server-action';
 import {
@@ -26,7 +27,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { issueDispatch } from '@/lib/dispatch/actions';
-import { dispatchErrorMessage, type ReadinessResult } from '@/lib/dispatch/types';
+import { dispatchErrorMessage } from '@/lib/dispatch/types';
 
 export function DispatchIssueDialog({
   target,
@@ -43,9 +44,17 @@ export function DispatchIssueDialog({
   const occurrenceId = 'occurrenceId' in target ? target.occurrenceId : null;
   const jobId = 'jobId' in target ? target.jobId : null;
   const isJobTarget = jobId !== null;
-  const [readiness, setReadiness] = useState<ReadinessResult | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [readinessReloadCount, setReadinessReloadCount] = useState(0);
+  const readinessCheck = useClientRead({
+    read: (signal) =>
+      readInBackground(
+        'dispatch-readiness',
+        'jobId' in target ? { jobId: target.jobId } : { occurrenceId: target.occurrenceId },
+        signal,
+      ),
+    deps: [occurrenceId, jobId],
+    failureMessage: (code) => dispatchErrorMessage(code === 'background_read_failed' ? 'load_failed' : code),
+  });
+  const readiness = readinessCheck.data?.readiness ?? null;
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [note, setNote] = useState('');
   // Null until the user changes the recipients; before that the resolved defaults apply.
@@ -59,28 +68,6 @@ export function DispatchIssueDialog({
   const selectedRecordIds = employeeSearch.selectedIds;
   const { run: runIssue, isPending: isSubmitting } = useServerAction(issueDispatch);
   const [requestId] = useState(() => crypto.randomUUID());
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void readInBackground(
-      'dispatch-readiness',
-      'jobId' in target ? { jobId: target.jobId } : { occurrenceId: target.occurrenceId },
-      controller.signal,
-    ).then((readinessResult) => {
-      if (controller.signal.aborted) return;
-      if (!readinessResult.success) {
-        setLoadError(
-          dispatchErrorMessage(
-            readinessResult.error === 'background_read_failed' ? 'load_failed' : readinessResult.error,
-          ),
-        );
-        return;
-      }
-      setReadiness(readinessResult.readiness);
-    });
-    return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one readiness load when the dialog mounts and one per retry; later changes go through its own actions
-  }, [readinessReloadCount]);
 
   // Disabled only while the readiness check or the send is in flight; a
   // missing recipient is reported on submit, not by greying the button.
@@ -125,15 +112,8 @@ export function DispatchIssueDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {loadError ? (
-          <SectionError
-            onRetry={() => {
-              setLoadError(null);
-              setReadinessReloadCount((count) => count + 1);
-            }}
-          >
-            {loadError}
-          </SectionError>
+        {readinessCheck.failure ? (
+          <SectionError failure={readinessCheck.failure} />
         ) : !readiness ? (
           <div className="space-y-2" role="status" aria-busy="true">
             <span className="sr-only">Bereitschaft wird geprüft.</span>
@@ -146,7 +126,7 @@ export function DispatchIssueDialog({
           </div>
         ) : (
           <>
-            <ul className="max-h-64 space-y-2 overflow-y-auto text-sm">
+            <ul className="space-y-2 text-sm">
               {readiness.dimensions.map((dimension) => (
                 <li
                   key={dimension.key}
@@ -191,7 +171,11 @@ export function DispatchIssueDialog({
             </ul>
 
             {isJobTarget && (
-              <Field label="Empfänger" htmlFor="dispatch-recipients" error={employeeSearch.select.loadError}>
+              <Field
+                label="Empfänger"
+                htmlFor="dispatch-recipients"
+                error={employeeSearch.select.loadFailure?.message}
+              >
                 <SearchableMultiSelect
                   {...employeeSearch.select}
                   selectedIds={selectedRecordIds}

@@ -52,4 +52,31 @@ export const PHONE_REDIRECTS = [
   { route: '/einstellungen', destination: '/einstellungen/profil' },
 ] as const;
 
+/**
+ * The pages a field worker opens, audited with the employee session at 375 px
+ * (the sidebar shows them to every role). The work pack is the employee view
+ * of the job detail patterns above.
+ */
+export const EMPLOYEE_PHONE_ROUTES = [
+  '/dashboard',
+  '/aufgaben',
+  '/kalender',
+  '/zeiterfassung',
+  '/auftraege',
+  '/qualifikationen',
+  '/einstellungen/profil',
+] as const satisfies readonly (typeof MANAGER_PHONE_ROUTES)[number][];
+
+/** The detail patterns a field worker opens as the work pack. */
+export const EMPLOYEE_WORK_PACKS = [
+  '/auftraege/[jobNumber]',
+  '/auftraege/projekt/[projectNumber]/[jobNumber]',
+] as const satisfies readonly (typeof DYNAMIC_PHONE_ROUTES)[number][];
+
 export type DynamicPhoneRoute = (typeof DYNAMIC_PHONE_ROUTES)[number];
+
+/** A page of the inventory: a static route or a detail pattern. */
+export type InventoriedRoute = (typeof MANAGER_PHONE_ROUTES)[number] | DynamicPhoneRoute;
+
+/** The sessions the rendered audit opens pages with. */
+export type SurfaceRole = 'admin' | 'employee';

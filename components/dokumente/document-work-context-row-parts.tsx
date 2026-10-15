@@ -19,7 +19,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { InlinePending } from '@/components/ui/inline-pending';
-import { ListRow } from '@/components/ui/list-row';
+import { ListRow, ListRowActions } from '@/components/ui/list-row';
 import { TableCell, TableRow } from '@/components/ui/table';
 import { DOCUMENT_CATEGORY_LABELS, type OrganizationDocument } from '@/lib/documents/types';
 import { cn } from '@/lib/utils';
@@ -187,14 +187,14 @@ export function MobileDocumentCard({
               </p>
             </div>
           </div>
-          <div onClick={(event) => event.stopPropagation()}>
+          <ListRowActions>
             <DocumentActionsMenu
               document={document}
               isTrashView={false}
               disabled={isPending}
               handlers={handlers}
             />
-          </div>
+          </ListRowActions>
         </ListRow>
       </ContextMenuTrigger>
       <DocumentContextMenuContent document={document} isTrashView={false} handlers={handlers} />

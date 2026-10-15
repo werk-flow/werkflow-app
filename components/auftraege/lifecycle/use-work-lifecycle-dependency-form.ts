@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 
-import { usePendingTask, useServerAction } from '@/hooks/use-server-action';
+import { useClientRead, type ReadFailure } from '@/hooks/use-client-read';
+import { usePendingTask } from '@/hooks/use-server-action';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { saveWorkDependency, searchWorkPredecessors } from '@/lib/work-lifecycle/actions';
 import type {
@@ -21,6 +22,8 @@ export type WorkDependencyDialogProps = {
 
 type WorkDependencyPredecessorType = 'job' | 'project' | 'instruction' | 'declared';
 
+const PREDECESSOR_SEARCH_DELAY_MS = 200;
+
 type WorkLifecycleDependencyForm = {
   type: WorkDependencyPredecessorType;
   setType: (type: WorkDependencyPredecessorType) => void;
@@ -30,13 +33,14 @@ type WorkLifecycleDependencyForm = {
   setEffect: (effect: WorkDependencyEffect) => void;
   description: string;
   setDescription: (description: string) => void;
+  /** The server's answer from two typed characters on; null below that. */
   remoteOptions: WorkEntityOption[] | null;
-  setRemoteOptions: (options: WorkEntityOption[] | null) => void;
   search: string;
   setSearch: (search: string) => void;
   error: string | null;
   pending: boolean;
   searching: boolean;
+  searchFailure: ReadFailure | null;
   attempted: boolean;
   fieldErrors: {
     'dependency-target': string | undefined;
@@ -55,35 +59,29 @@ export function useWorkLifecycleDependencyForm({
   const [predecessor, setPredecessor] = useState('');
   const [effect, setEffect] = useState<WorkDependencyEffect>('blocks_start');
   const [description, setDescription] = useState('');
-  const [remoteOptions, setRemoteOptions] = useState<WorkEntityOption[] | null>(null);
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
   const { run: runDependencyTask, isPending: pending } = usePendingTask();
-  const { run: runSearch, isPending: searching } = useServerAction(searchWorkPredecessors);
-  useEffect(() => {
-    if (type === 'declared' || search.trim().length < 2) return;
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      void runSearch({ type, query: search })
-        .then((result) => {
-          if (cancelled) return;
-          if (!result.success) {
-            setError(PREDECESSOR_SEARCH_FAILED_MESSAGE);
-            return;
-          }
-          setRemoteOptions(result.options);
-          // A successful search retires an earlier search failure, never a save failure.
-          setError((current) => (current === PREDECESSOR_SEARCH_FAILED_MESSAGE ? null : current));
-        })
-        .catch(() => {
-          if (!cancelled) setError(PREDECESSOR_SEARCH_FAILED_MESSAGE);
+  // From two characters the server searches; a newer keystroke cancels the waiting read.
+  const predecessorSearch = useClientRead({
+    read: async (signal) => {
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, PREDECESSOR_SEARCH_DELAY_MS);
+        signal.addEventListener('abort', () => {
+          clearTimeout(timer);
+          resolve();
         });
-    }, 200);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [runSearch, search, type]);
+      });
+      // A declared condition is never searched; `enabled` keeps the read off for it.
+      if (signal.aborted || type === 'declared') return { success: false as const, error: 'superseded' };
+      return searchWorkPredecessors({ type, query: search });
+    },
+    deps: [type, search],
+    enabled: type !== 'declared' && search.trim().length >= 2,
+    failureMessage: PREDECESSOR_SEARCH_FAILED_MESSAGE,
+    // The last answer stays listed while the next search runs.
+    keepPreviousData: true,
+  });
   const [attempted, setAttempted] = useState(false);
   const fieldErrors = {
     'dependency-target': predecessor ? undefined : 'Bitte wähle eine Voraussetzung.',
@@ -124,13 +122,13 @@ export function useWorkLifecycleDependencyForm({
     setEffect,
     description,
     setDescription,
-    remoteOptions,
-    setRemoteOptions,
+    remoteOptions: predecessorSearch.data?.options ?? null,
     search,
     setSearch,
     error,
     pending,
-    searching,
+    searching: predecessorSearch.loading,
+    searchFailure: predecessorSearch.failure,
     attempted,
     fieldErrors,
     submit,

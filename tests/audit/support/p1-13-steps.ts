@@ -86,6 +86,19 @@ export function templateQuickCreateDialog(page: Page, kind: 'item' | 'location' 
   return dialogWithHeading(page, heading);
 }
 
+/** The inline-create action of a template picker popup: a new article, location or capability. */
+export function templateQuickCreateButton(page: Page, kind: 'item' | 'location' | 'capability'): Locator {
+  const labels = TEMPLATE_AUDIT_COPY.quickCreate;
+  const name =
+    kind === 'item' ? labels.newItem : kind === 'location' ? labels.newLocation : labels.newCapability;
+  return page.getByRole('button', { name, exact: true });
+}
+
+/** The job detail's button that opens the apply dialog. */
+export function applyTemplateButton(page: Page): Locator {
+  return page.getByRole('button', { name: TEMPLATE_AUDIT_COPY.apply.open, exact: true });
+}
+
 export function applyTemplateDialog(page: Page): Locator {
   return dialogWithHeading(page, TEMPLATE_AUDIT_COPY.apply.dialog);
 }

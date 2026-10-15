@@ -1,5 +1,6 @@
 import type { CalendarBoardRow } from '@/lib/calendar/board';
 import type { CalendarJob } from '@/lib/jobs/types';
+import type { ClosedTimePeriod } from '@/lib/time-tracking/closed-period-dates';
 
 /** What a view needs from the container to open, create and park things. */
 export type CalendarSurfaceActions = {
@@ -15,10 +16,10 @@ export type CalendarSurfaceActions = {
   }) => void;
   /** Starts the park flow (the card leaves the grid, the context dialog opens). */
   onPark: (job: CalendarJob) => void;
+  /** The organization's closed periods: recorded time in them is locked. */
+  closedPeriods: readonly ClosedTimePeriod[];
 };
 
-/** The day view's row for visits without a person; never a user id. */
-export const UNASSIGNED_USER = 'unassigned';
 export const BOARD_NAME_COLUMN_PX = 160;
 export const BOARD_COLUMN_MIN_PX = 140;
 export const BOARD_LANE_HEIGHT = { comfortable: 46, compact: 26 } as const;

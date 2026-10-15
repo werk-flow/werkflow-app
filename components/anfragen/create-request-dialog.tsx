@@ -70,7 +70,7 @@ export function CreateRequestDialog({ assignees }: CreateRequestDialogProps) {
           </span>
         </Button>
       </DialogTrigger>
-      <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Neue Anfrage erfassen</DialogTitle>
           <DialogDescription>
@@ -98,7 +98,6 @@ export function CreateRequestDialog({ assignees }: CreateRequestDialogProps) {
                 value={summary}
                 onChange={(e) => setSummary(e.target.value)}
                 disabled={isLoading}
-                autoFocus
               />
             </Field>
 

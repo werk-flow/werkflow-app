@@ -122,8 +122,7 @@ export function RelationDialog({
                   options={caseOptions}
                   onSearchChange={caseSearch.onSearchChange}
                   loading={caseSearch.loading}
-                  loadError={caseSearch.loadError}
-                  onRetryLoad={caseSearch.onRetryLoad}
+                  loadFailure={caseSearch.loadFailure}
                   onLoadMore={caseSearch.onLoadMore}
                   placeholder="Servicefall suchen"
                   searchPlaceholder="Fallnummer oder Kurzbeschreibung…"
@@ -328,12 +327,7 @@ export function FollowUpDialog({
         >
           <p className="rounded-md bg-muted px-3 py-2 text-sm">Quelle: {workspace.serviceCase.caseNumber}</p>
           <Field label="Titel" htmlFor="service-follow-up-title" required error={titleError}>
-            <Input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              maxLength={160}
-              autoFocus
-            />
+            <Input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={160} />
           </Field>
           <Field label="Zuständig" htmlFor="service-follow-up-owner" required error={ownerError}>
             <SearchableSelect

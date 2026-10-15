@@ -71,7 +71,7 @@ export function PlanningEntryKindFields({
           htmlFor="planning-job"
           required
           description="Mehrere Besuche bleiben mit demselben Auftrag verbunden."
-          error={jobError ?? jobSelect.loadError}
+          error={jobError ?? jobSelect.loadFailure?.message}
         >
           <SearchableSelect
             {...jobSelect}
@@ -132,7 +132,7 @@ export function PlanningEntryAssignmentFields({
 }: PlanningEntryAssignmentFieldsProps) {
   return (
     <>
-      <Field label="Mitarbeiter" htmlFor="planning-employees" error={employeeSelect.loadError}>
+      <Field label="Mitarbeiter" htmlFor="planning-employees" error={employeeSelect.loadFailure?.message}>
         <SearchableMultiSelect
           {...employeeSelect}
           selectedIds={employeeRecordIds}
@@ -147,7 +147,7 @@ export function PlanningEntryAssignmentFields({
         />
       </Field>
 
-      <Field label="Teams" htmlFor="planning-teams" error={teamSelect.loadError}>
+      <Field label="Teams" htmlFor="planning-teams" error={teamSelect.loadFailure?.message}>
         <SearchableMultiSelect
           {...teamSelect}
           selectedIds={teamIds}

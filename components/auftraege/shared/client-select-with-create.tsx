@@ -66,8 +66,7 @@ export function ClientSelectWithCreate({
       getOption={(option) => option}
       onSearchChange={search.onSearchChange}
       loading={search.loading}
-      loadError={search.loadError}
-      onRetryLoad={search.onRetryLoad}
+      loadFailure={search.loadFailure}
       onLoadMore={search.onLoadMore}
       value={value}
       onValueChange={handleValueChange}

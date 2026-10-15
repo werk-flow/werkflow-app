@@ -45,6 +45,9 @@ const REQUEST_COPY = {
   closeTitle: 'Anfrage ohne Auftrag schließen',
   closeReasonLabel: 'Grund *',
   closeSubmit: 'Anfrage schließen',
+  editTitle: 'Anfrage bearbeiten',
+  convertToService: 'Als Servicefall übernehmen',
+  convertToServiceTitle: 'Anfrage als Servicefall übernehmen?',
 } as const;
 
 /** The row actions of the request's contextual „Dokumente & Bilder“ frame. */
@@ -163,6 +166,41 @@ export function requestCloseButton(page: Page): Locator {
 /** The close dialog's required reason label. */
 export function requestCloseReasonLabel(dialog: Locator): Locator {
   return dialog.getByText(REQUEST_COPY.closeReasonLabel, { exact: true });
+}
+
+/** The close dialog, named by its title. */
+export function requestCloseDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: REQUEST_COPY.closeTitle, exact: true });
+}
+
+/** The detail header's edit action. */
+export function requestEditButton(page: Page): Locator {
+  return page.getByRole('button', { name: SHARED_COPY.action.edit, exact: true });
+}
+
+/** The edit dialog, named by its title. */
+export function requestEditDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: REQUEST_COPY.editTitle, exact: true });
+}
+
+/** The detail header's action that takes a request with customer and site over as a service case. */
+export function requestConvertToServiceButton(page: Page): Locator {
+  return page.getByRole('button', { name: REQUEST_COPY.convertToService, exact: true });
+}
+
+/** The confirmation of the service-case takeover, named by its title. */
+export function requestConvertToServiceDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: REQUEST_COPY.convertToServiceTitle, exact: true });
+}
+
+/** The customer card's action that matches an unknown caller to an existing customer. */
+export function requestMatchCustomerButton(page: Page): Locator {
+  return page.getByRole('button', { name: REQUEST_COPY.matchCustomer, exact: true });
+}
+
+/** The dialog that matches a request to an existing customer, named by its title. */
+export function requestMatchCustomerDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: REQUEST_COPY.matchTitle, exact: true });
 }
 
 export function requestCloseSubmit(dialog: Locator): Locator {

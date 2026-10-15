@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createAdminClient, persisted, type Persisted } from './shared';
 
 export type EmployeeRecordState = {
@@ -145,6 +145,47 @@ export async function seedEmploymentCondition(input: {
     { onConflict: 'employee_record_id,valid_from' },
   );
   if (error) throw new Error(`Employment condition setup failed: ${error.message}`);
+}
+
+/**
+ * Stores an onboarding plan with one open, non-blocking requirement, so the person's own
+ * personnel tasks show on /aufgaben. Setup only; returns the requirement id.
+ */
+export async function seedOpenOnboardingRequirement(input: {
+  organizationId: string;
+  employeeRecordId: string;
+  actorUserId: string;
+  planName: string;
+  requirementTitle: string;
+}): Promise<string> {
+  const admin = createAdminClient();
+  const { data: plan, error: planError } = await admin
+    .from('personnel_onboarding_plans')
+    .insert({
+      organization_id: input.organizationId,
+      employee_record_id: input.employeeRecordId,
+      name: input.planName,
+      created_by: input.actorUserId,
+    })
+    .select('id')
+    .single();
+  if (planError || !plan) throw new Error(`Onboarding plan setup failed: ${planError?.message}`);
+  const { data: requirement, error: requirementError } = await admin
+    .from('personnel_onboarding_requirements')
+    .insert({
+      organization_id: input.organizationId,
+      plan_id: plan.id,
+      employee_record_id: input.employeeRecordId,
+      requirement_type: 'document',
+      title: input.requirementTitle,
+      sort_order: 0,
+      created_by: input.actorUserId,
+    })
+    .select('id')
+    .single();
+  if (requirementError || !requirement)
+    throw new Error(`Onboarding requirement setup failed: ${requirementError?.message}`);
+  return requirement.id;
 }
 
 /**
@@ -475,6 +516,82 @@ export async function seedNoLoginPersonnelRecord(input: {
   });
   if (eventError) throw new Error(`No-login personnel event setup failed: ${eventError.message}`);
   return data.id;
+}
+
+/** One work schedule version of one personnel record, full days Monday to Friday. Setup only. */
+export async function seedWorkSchedule(input: {
+  organizationId: string;
+  employeeRecordId: string;
+  actorUserId: string;
+  validFrom: string;
+  weekdayMinutes: number;
+  note: string;
+}): Promise<void> {
+  const { error } = await createAdminClient().from('work_schedules').upsert(
+    {
+      organization_id: input.organizationId,
+      employee_record_id: input.employeeRecordId,
+      valid_from: input.validFrom,
+      monday_minutes: input.weekdayMinutes,
+      tuesday_minutes: input.weekdayMinutes,
+      wednesday_minutes: input.weekdayMinutes,
+      thursday_minutes: input.weekdayMinutes,
+      friday_minutes: input.weekdayMinutes,
+      saturday_minutes: 0,
+      sunday_minutes: 0,
+      note: input.note,
+      created_by: input.actorUserId,
+    },
+    { onConflict: 'employee_record_id,valid_from' },
+  );
+  if (error) throw new Error(`Work schedule setup failed: ${error.message}`);
+}
+
+/** An invitation in a given state, written without sending an email. Setup only. */
+export async function seedOrganizationInvite(input: {
+  organizationId: string;
+  email: string;
+  status: 'pending' | 'cancelled';
+}): Promise<string> {
+  const { data, error } = await createAdminClient()
+    .from('organization_invites')
+    .insert({
+      organization_id: input.organizationId,
+      email: input.email.toLowerCase(),
+      invite_code: randomUUID().replaceAll('-', ''),
+      invited_role: 'employee',
+      status: input.status,
+    })
+    .select('id')
+    .single();
+  if (error) throw new Error(`Invitation setup failed: ${error.message}`);
+  return data.id;
+}
+
+/** An onboarding plan, created through the product's own function like the plan dialog. Setup only. */
+export async function seedPersonnelOnboardingPlan(input: {
+  organizationId: string;
+  employeeRecordId: string;
+  actorUserId: string;
+  name: string;
+  templateVersionId: string | null;
+  targetStartDate: string | null;
+}): Promise<string> {
+  const request = { employeeRecordId: input.employeeRecordId, name: input.name, operationId: randomUUID() };
+  const { data, error } = await createAdminClient().rpc('create_personnel_onboarding_plan', {
+    p_actor_id: input.actorUserId,
+    p_organization_id: input.organizationId,
+    p_employee_record_id: input.employeeRecordId,
+    // The function takes null for a plan without a template or a start date;
+    // the generated types name both arguments as text (as in the plan action).
+    p_template_version_id: input.templateVersionId as string,
+    p_name: input.name,
+    p_target_start_date: input.targetStartDate as string,
+    p_operation_id: request.operationId,
+    p_request_hash: createHash('sha256').update(JSON.stringify(request)).digest('hex'),
+  });
+  if (error || !data) throw new Error(`Onboarding plan setup failed: ${error?.message}`);
+  return data;
 }
 
 export type PersistedEmployeeRecord = Persisted<{

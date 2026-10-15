@@ -1,6 +1,13 @@
 'use client';
 
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 /**
  * Every line holds in every view unless it names one; the container owns the
@@ -39,16 +46,18 @@ export function ShortcutsHelp({
             Die Kürzel gelten im Kalender außerhalb von Eingabefeldern und Dialogen.
           </DialogDescription>
         </DialogHeader>
-        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-          {SHORTCUTS.map(([keys, description]) => (
-            <div key={keys} className="contents">
-              <dt>
-                <kbd className="rounded-sm border bg-muted px-1.5 py-0.5 font-mono text-xs">{keys}</kbd>
-              </dt>
-              <dd className="text-muted-foreground">{description}</dd>
-            </div>
-          ))}
-        </dl>
+        <DialogBody>
+          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
+            {SHORTCUTS.map(([keys, description]) => (
+              <div key={keys} className="contents">
+                <dt>
+                  <kbd className="rounded-sm border bg-muted px-1.5 py-0.5 font-mono text-xs">{keys}</kbd>
+                </dt>
+                <dd className="text-muted-foreground">{description}</dd>
+              </div>
+            ))}
+          </dl>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

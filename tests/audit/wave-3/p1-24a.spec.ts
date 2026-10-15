@@ -9,7 +9,11 @@ import {
   getCalendarPreferencesFor,
 } from '../../golden/support/db/calendar';
 import { getDispatchState, getParkingState } from '../../golden/support/db/dispatch';
-import { getEmployeeRecordStateByUser, giveEmployeesWorkSchedules } from '../../golden/support/db/personnel';
+import {
+  getEmployeeRecordStateByUser,
+  giveEmployeesWorkSchedules,
+  seedNoLoginPersonnelRecord,
+} from '../../golden/support/db/personnel';
 import { seedSicknessReport } from '../../golden/support/db/sickness';
 import { getOrganizationTimeEntryCount } from '../../golden/support/db/time-tracking';
 import { ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
@@ -42,6 +46,7 @@ import {
   dayCard,
   dayRow,
   dayTimeline,
+  dayViewCards,
   densityToggle,
   DRAG_REFUSALS,
   dragCardTo,
@@ -73,6 +78,7 @@ import { seedPlanningVisit } from '../../golden/support/planning-fixture';
 import {
   calendarEntryDialog,
   createPlannedCalendarEntry,
+  dayRowOfPerson,
   occurrenceEditButton,
   planningAllDayOption,
   planningCheckAndSave,
@@ -470,6 +476,18 @@ test.describe('P1-24a Plantafel, day and month audit @AUDIT-W3-P1-24A @AUDIT-W3'
   }) => {
     const thursday = shiftIsoDate(firstAuditMonday(), 3);
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
+    const recordPerson = { firstName: 'Kai', lastName: `Ohnezugang ${world.runId}` };
+    const recordId = await seedNoLoginPersonnelRecord({
+      organizationId: world.orgId,
+      actorUserId: world.users.admin.id,
+      ...recordPerson,
+      entryDate: firstAuditMonday(),
+    });
+    const recordVisit = await seedPlanningVisit(world, {
+      date: thursday,
+      hour: 9,
+      assignee: { employeeRecordId: recordId },
+    });
     const visit = await seedPlanningVisit(world, { date: thursday, hour: 13 });
     const seededEnd = expectDefined(
       resolveBerlinWallTime(`${thursday}T14:00`),
@@ -480,6 +498,13 @@ test.describe('P1-24a Plantafel, day and month audit @AUDIT-W3-P1-24A @AUDIT-W3'
     await expect(row).toBeVisible();
     const visitCard = dayCard(row, visit.title);
     await expect(visitCard).toBeVisible();
+
+    await test.step('A visit for a personnel record without a login lists in that person’s row', async () => {
+      const recordRow = dayRowOfPerson(adminPage, `${recordPerson.firstName} ${recordPerson.lastName}`);
+      await expect(dayCard(recordRow, recordVisit.title)).toBeVisible();
+      // One card in the whole day: the visit is not also under „Ohne Zuweisung“.
+      await expect(dayViewCards(adminPage, recordVisit.title)).toHaveCount(1);
+    });
 
     await test.step('Drag-to-create on empty time opens the dialog with the person preset', async () => {
       await dragToCreateOnDayRow(adminPage, dayTimeline(row), 15.1, 16.6);

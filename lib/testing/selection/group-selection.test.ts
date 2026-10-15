@@ -1,5 +1,6 @@
 // Rule test: a change selects the groups that can expose its failure.
 import { expect, test } from 'bun:test';
+import { resolve } from 'node:path';
 import {
   CORE_SELECTION,
   changedTestTier,
@@ -8,6 +9,7 @@ import {
   passedSinceSelection,
   selectionBaseline,
 } from './group-selection';
+import { getTestGroups } from './test-groups';
 
 const browser = (id: string, scopes: string[], executionInputs: string[] = []) => ({
   id,
@@ -30,6 +32,8 @@ const groups = [
   browser('audit:wave-3:p1-24a', ['planning', 'time'], ['tests/audit/wave-3/p1-24a.spec.ts']),
   browser('audit:wave-2:p1-13', ['work', 'inventory'], ['tests/audit/wave-2/p1-13.spec.ts']),
   browser('audit:layout', ['*'], ['tests/audit/layout/mobile-viewport.spec.ts']),
+  browser('audit:layout:viewports', ['*'], ['tests/audit/layout/viewport-details.spec.ts']),
+  browser('audit:layout:work', ['work', 'customers'], ['tests/audit/layout/surfaces-work.spec.ts']),
   browser('audit:security:account', ['*'], ['tests/audit/security/account.spec.ts']),
   {
     ...browser('audit:performance:calendar', ['planning'], ['tests/audit/performance/calendar.spec.ts']),
@@ -80,14 +84,22 @@ test('an owned product file selects the browser groups that declare its scope, a
 
 test('the core table is the whole answer for product code no scope owns', () => {
   const expectations: readonly (readonly [string, string[]])[] = [
-    ['components/ui/button.tsx', ['golden:gg-00', 'audit:layout']],
-    ['app/globals.css', ['golden:gg-00', 'audit:layout']],
+    ['components/ui/button.tsx', ['golden:gg-00', 'audit:layout', 'audit:layout:viewports']],
+    [
+      'components/ui/dialog.tsx',
+      ['golden:gg-00', 'audit:layout', 'audit:layout:viewports', 'audit:layout:work'],
+    ],
+    [
+      'components/shared/area-nav.tsx',
+      ['golden:gg-00', 'audit:layout', 'audit:layout:viewports', 'audit:layout:work'],
+    ],
+    ['app/globals.css', ['golden:gg-00', 'audit:layout', 'audit:layout:viewports']],
     ['proxy.ts', ['golden:gg-00', 'audit:security:account']],
     ['lib/auth/actions.ts', ['golden:gg-00', 'audit:security:account']],
     ['app/(auth)/login/page.tsx', ['golden:gg-00', 'audit:security:account']],
     ['lib/data/cached.ts', ['golden:gg-00', 'audit:security:account']],
-    ['package.json', ['golden:gg-00', 'audit:layout', 'audit:security:account']],
-    ['<environment>', ['golden:gg-00', 'audit:layout', 'audit:security:account']],
+    ['package.json', ['golden:gg-00', 'audit:layout', 'audit:layout:viewports', 'audit:security:account']],
+    ['<environment>', ['golden:gg-00', 'audit:layout', 'audit:layout:viewports', 'audit:security:account']],
     ['hooks/use-live-view.ts', ['golden:gg-00']],
     ['lib/data/background-reads.ts', ['golden:gg-00']],
     ['lib/supabase/database.types.ts', ['golden:gg-00']],
@@ -98,9 +110,8 @@ test('the core table is the whole answer for product code no scope owns', () => 
   for (const [file, expected] of expectations)
     expect([file, browserOnly(select([file]))]).toEqual([file, expected]);
   // The table names registered groups only, so a renamed group cannot silently leave the core set.
-  expect(
-    CORE_SELECTION.flatMap((row) => row.groups).every((id) => groups.some((group) => group.id === id)),
-  ).toBe(true);
+  const registered = new Set(getTestGroups(resolve(import.meta.dir, '../../..')).map((group) => group.id));
+  expect(CORE_SELECTION.flatMap((row) => row.groups).filter((id) => !registered.has(id))).toEqual([]);
 });
 
 test('test code selects the groups that execute it; scripts, documentation tooling and unit tests select no browser group', () => {

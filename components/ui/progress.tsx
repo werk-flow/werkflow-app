@@ -5,14 +5,21 @@ import * as ProgressPrimitive from '@radix-ui/react-progress';
 
 import { cn } from '@/lib/utils';
 
-interface ProgressProps extends React.ComponentProps<typeof ProgressPrimitive.Root> {
+interface ProgressProps extends Omit<React.ComponentProps<typeof ProgressPrimitive.Root>, 'aria-label'> {
+  /**
+   * What the bar measures, in German („Tagesfortschritt: 80 %“): a progress
+   * bar without a name tells a screen reader a number without its meaning
+   * (axe `aria-progressbar-name`), so the name is required.
+   */
+  label: string;
   indicatorClassName?: string;
 }
 
-function Progress({ className, indicatorClassName, value, ...props }: ProgressProps) {
+function Progress({ className, indicatorClassName, value, label, ...props }: ProgressProps) {
   return (
     <ProgressPrimitive.Root
       data-slot="progress"
+      aria-label={label}
       value={value}
       className={cn('bg-primary/20 relative h-2 w-full overflow-hidden rounded-full', className)}
       {...props}

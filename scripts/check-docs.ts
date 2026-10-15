@@ -43,7 +43,9 @@
 // 26. Workspace — the sibling clones are present, links between them and the app resolve both ways,
 //     each sibling's AGENTS.md links back, and shared skill copies equal their canonical copy
 //     (lib/docs/workspace-links.ts). A missing clone is one problem, never a pass.
-// The checks appear below in the order 1 to 9, 9a, 9b, 11, 10, 12 to 14, 14b, 15 to 26.
+// 27. Acceptance captures — a capture an open plan record cites belongs to a passed test of a run on this
+//     workstation and still has its captured bytes (lib/docs/acceptance-captures.ts).
+// The checks appear below in the order 1 to 9, 9a, 9b, 11, 10, 12 to 14, 14b, 15 to 27.
 
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { join, dirname, isAbsolute, resolve, relative, sep } from 'node:path';
@@ -79,6 +81,7 @@ import {
   CLOSED_RECORD_BANNER_LINE,
   hasClosedRecordBanner,
 } from '../lib/docs/closed-records';
+import { findCaptureCitationProblems } from '../lib/docs/acceptance-captures';
 import {
   findNumberedRuleReferences,
   findRepositoryPathReferences,
@@ -92,6 +95,7 @@ import {
   findStandardProblems,
   findUnreferencedMechanisms,
   isRuleTest,
+  jsxA11yNameExists,
   TEST_FILE_PATTERN,
   type MechanismResolver,
 } from '../lib/docs/virtue-standards';
@@ -712,13 +716,22 @@ const presetRulesPath = join(
   'node_modules/@typescript-eslint/eslint-plugin/dist/configs/eslintrc/recommended.js',
 );
 const presetRules = existsSync(presetRulesPath) ? readFileSync(presetRulesPath, 'utf8') : '';
+// Rules of eslint-plugin-jsx-a11y, whose recommended set eslint.config.mjs spreads.
+const jsxA11yRulesPath = join(repoRoot, 'node_modules/eslint-plugin-jsx-a11y/lib/rules');
+const jsxA11yRuleNames = existsSync(jsxA11yRulesPath)
+  ? readdirSync(jsxA11yRulesPath)
+      .filter((file) => file.endsWith('.js'))
+      .map((file) => file.slice(0, -'.js'.length))
+  : [];
 const packageScripts = new Set(
   Object.keys((JSON.parse(packageJsonContent) as { scripts?: Record<string, string> }).scripts ?? {}),
 );
 const groupIds = getTestGroups(repoRoot).map((group) => group.id);
 const mechanismResolver: MechanismResolver = {
   lintNameExists: (name) =>
-    lintCorpus.includes(name) || (name.startsWith('@typescript-eslint/') && presetRules.includes(name)),
+    lintCorpus.includes(name) ||
+    (name.startsWith('@typescript-eslint/') && presetRules.includes(name)) ||
+    jsxA11yNameExists(name, lintCorpus, jsxA11yRuleNames),
   pathExists: (path) => existsSync(join(repoRoot, path)),
   groupExists: (id) => {
     const wildcard = id.search(/[*<]/);
@@ -952,6 +965,20 @@ if (!missingSiblings.has('werkflow-business')) {
     problems.push(...findSkillCopyDifferences(copies).map((difference) => `workspace: ${difference}`));
   }
 }
+
+// 27. Rendered acceptance evidence (docs/technical/standards-audit.md): a capture an open plan record
+//     cites must be the image of a passed test, unchanged since the capture. A closed record is history.
+problems.push(
+  ...findCaptureCitationProblems(
+    repoRoot,
+    docFiles
+      .filter((file) => relative(docsRoot, file).split(sep).join('/').startsWith('plans/'))
+      .map((file) => ({
+        file: `docs/${relative(docsRoot, file).split(sep).join('/')}`,
+        markdown: readFileSync(file, 'utf8'),
+      })),
+  ),
+);
 
 if (problems.length > 0) {
   console.error(`docs:check failed with ${problems.length} problem(s):\n`);

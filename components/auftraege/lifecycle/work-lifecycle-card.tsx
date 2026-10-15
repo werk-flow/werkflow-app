@@ -17,6 +17,7 @@ import { loadDocument } from '@/lib/navigation/document-load';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { transitionWorkExecution } from '@/lib/work-lifecycle/actions';
 import {
+  getAllowedWorkTransitions,
   getWorkNextAction,
   type WorkExecutionState,
   type WorkLifecycleSnapshot,
@@ -253,6 +254,7 @@ export function WorkLifecycleCard({
       <StaleRegion stale={view.isStale} onRetry={refresh} className="flex flex-col gap-4">
         <WorkLifecycleTransitionActions
           snapshot={snapshot}
+          transitions={getAllowedWorkTransitions(snapshot.executionState, isManager)}
           isManager={isManager}
           fieldMode={fieldMode}
           hasPendingDispatch={hasPendingDispatch}

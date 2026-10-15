@@ -1,6 +1,7 @@
 import type { CalendarBoardDay } from './board';
 import type { OrgRole } from '@/lib/members/actions';
 import type { CalendarWorkBlock } from '@/lib/time-tracking/calendar-blocks';
+import { isEntryInClosedPeriod, type ClosedTimePeriod } from '@/lib/time-tracking/closed-period-dates';
 
 /**
  * A person's day in the day view: why it is not an ordinary working day, and
@@ -30,14 +31,27 @@ export function isDayRowOff(boardDay: CalendarBoardDay | undefined): boolean {
   );
 }
 
-/** Who may move or resize a recorded block: admins everything, Büro their own and employees' blocks, employees nothing. */
+/** True when one of the block's entries lies in a closed period, so the server refuses every change to it. */
+export function isBlockInClosedPeriod(
+  block: Pick<CalendarWorkBlock, 'sourceEntries'>,
+  closedPeriods: readonly ClosedTimePeriod[],
+): boolean {
+  return block.sourceEntries.some((entry) => isEntryInClosedPeriod(entry, closedPeriods));
+}
+
+/**
+ * Who may move or resize a recorded block: admins everything, Büro their own
+ * and employees' blocks, employees nothing; nobody a block of a closed period.
+ */
 export function canManageBlock(
   block: CalendarWorkBlock,
   currentUserRole: OrgRole,
   currentUserId: string,
   entryUserRole: string | undefined,
+  closedPeriods: readonly ClosedTimePeriod[],
 ): boolean {
   if (block.sourceEntries.some((entry) => entry.status === 'pending_delete')) return false;
+  if (isBlockInClosedPeriod(block, closedPeriods)) return false;
   if (currentUserRole === 'admin') return true;
   if (currentUserRole === 'buero') return entryUserRole === 'employee' || block.userId === currentUserId;
   return false;

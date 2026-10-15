@@ -25,7 +25,7 @@ export function ProjectDetailProgressCard({
           <TrafficLight status={liveDerivedStatus.trafficLight} />
         </div>
       </div>
-      <Progress value={liveDerivedStatus.progress} className="mt-4 h-2.5" />
+      <Progress value={liveDerivedStatus.progress} label="Fortschritt des Projekts" className="mt-4 h-2.5" />
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
         <span>
           {completedCount} von {jobCount} Aufträgen abgeschlossen

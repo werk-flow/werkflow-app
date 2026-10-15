@@ -353,6 +353,20 @@ begin
     p_request_hash => repeat('f', 64), p_action => 'end',
     p_expected_session_id => v_session_id, p_expected_version => v_version
   );
+  -- The clock offers only what deriveClockActions derives (lib/ui/action-prechecks.ts):
+  -- no switch without an open session.
+  begin
+    perform public.transition_time_activity(
+      p_organization_id => '21000000-0000-0000-0000-000000000002',
+      p_actor_id => '21000000-0000-0000-0000-000000000001',
+      p_operation_id => '21000000-0000-0000-0000-000000000041',
+      p_request_hash => repeat('c', 64), p_action => 'switch',
+      p_segment_kind => 'work', p_allocation_kind => 'unallocated'
+    );
+    raise exception 'a switch was accepted without an open session';
+  exception when others then
+    if sqlerrm not like '%time_transition_not_open%' then raise; end if;
+  end;
 
   insert into public.organization_settings (organization_id, break_mode)
   values ('21000000-0000-0000-0000-000000000002', 'automatic')
@@ -393,6 +407,20 @@ begin
     p_segment_kind => 'work', p_allocation_kind => 'unallocated'
   );
   v_session_id := (v_result->>'sessionId')::uuid;
+  -- No second start while the session is open, even with its current version.
+  begin
+    perform public.transition_time_activity(
+      p_organization_id => '21000000-0000-0000-0000-000000000002',
+      p_actor_id => '21000000-0000-0000-0000-000000000003',
+      p_operation_id => '21000000-0000-0000-0000-000000000042',
+      p_request_hash => repeat('d', 64), p_action => 'start',
+      p_expected_session_id => v_session_id, p_expected_version => (v_result->>'version')::bigint,
+      p_segment_kind => 'work', p_allocation_kind => 'unallocated'
+    );
+    raise exception 'a second start was accepted while a session was open';
+  exception when others then
+    if sqlerrm not like '%time_transition_already_open%' then raise; end if;
+  end;
   -- Authorization is tested against a history-free target so SI-006's earlier
   -- history refusal does not hide the authorization boundary.
   begin

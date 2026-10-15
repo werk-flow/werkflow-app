@@ -541,6 +541,59 @@ test(
   },
 );
 
+test(
+  'a dialog, a confirmation and a sheet opened from state keep Tab inside and return focus to their opener on Escape',
+  { annotation: { type: 'fixture', description: 'dialog-pending' } },
+  async ({ page }) => {
+    const section = page.getByRole('region', { name: 'Laufende Anfrage' });
+    const layers = [
+      { opener: 'Formular öffnen', layer: page.getByRole('dialog', { name: 'Formular mit Anfrage' }) },
+      {
+        opener: 'Bestätigung öffnen',
+        layer: page.getByRole('alertdialog', { name: 'Bestätigung mit Anfrage' }),
+      },
+      { opener: 'Filter öffnen', layer: page.getByRole('dialog', { name: 'Filter' }) },
+    ];
+    for (const { opener, layer } of layers) {
+      const trigger = section.getByRole('button', { name: opener });
+      await trigger.focus();
+      await page.keyboard.press('Enter');
+      await expect(layer).toBeVisible();
+      await expect.poll(() => layer.evaluate((root) => root.contains(document.activeElement))).toBe(true);
+      for (let press = 0; press < 6; press += 1) {
+        await page.keyboard.press('Tab');
+        expect(
+          await layer.evaluate((root) => root.contains(document.activeElement)),
+          `${opener}: Tab ${press + 1}`,
+        ).toBe(true);
+      }
+      await page.keyboard.press('Escape');
+      await expect(layer).toBeHidden();
+      // Radix returns focus only to its own trigger; the registry returns it to the opening control.
+      await expect(trigger).toBeFocused();
+    }
+  },
+);
+
+test(
+  'a warning that opens after a save returns focus to the save button on Escape',
+  { annotation: { type: 'fixture', description: 'dialog-pending' } },
+  async ({ page }) => {
+    const section = page.getByRole('region', { name: 'Laufende Anfrage' });
+    await section.getByRole('button', { name: 'Zuweisung öffnen' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Zuweisung', exact: true });
+    const save = dialog.getByRole('button', { name: 'Speichern' });
+    await save.focus();
+    await page.keyboard.press('Enter');
+    const warning = page.getByRole('dialog', { name: 'Zuweisung prüfen' });
+    await expect(warning).toBeVisible();
+    await expect.poll(() => warning.evaluate((root) => root.contains(document.activeElement))).toBe(true);
+    await page.keyboard.press('Escape');
+    await expect(warning).toBeHidden();
+    await expect(save).toBeFocused();
+  },
+);
+
 test('Tab and ShiftTab leave a row menu at the adjacent page control', async ({ page }) => {
   const section = page.getByRole('region', { name: 'Zeilenaktionen' });
   const trigger = section.getByRole('button', { name: 'Aktionen öffnen' });

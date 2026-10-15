@@ -139,6 +139,16 @@ export function workArtifactDialog(page: Page): Locator {
   return page.getByRole('dialog');
 }
 
+/** The empty Arbeitsnachweis dialog that „Neu“ opens, named by its title. */
+/** The „Arbeitsnachweise“ section's button that starts a new Arbeitsnachweis. */
+export function workArtifactCreateButton(page: Page): Locator {
+  return workArtifactsSection(page).getByRole('button', { name: SHARED_COPY.action.new, exact: true });
+}
+
+export function workArtifactCreateDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: ARTIFACT_COPY.createHeading, exact: true });
+}
+
 /** The section entry that opens an existing Arbeitsnachweis; its name starts with the title. */
 export function workArtifactEntry(page: Page, title: string): Locator {
   return confirmed(

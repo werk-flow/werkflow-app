@@ -94,7 +94,7 @@ export function MitarbeiterDetailTimeCards({
               </div>
               <Progress
                 value={dailyPercentage}
-                aria-label="Tagesfortschritt"
+                label="Tagesfortschritt"
                 className="h-2"
                 indicatorClassName={cn('bg-success', status?.status === 'working' && 'opacity-80')}
               />

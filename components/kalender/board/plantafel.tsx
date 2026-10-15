@@ -159,6 +159,7 @@ export function Plantafel(props: PlantafelProps): React.JSX.Element {
 
   let rowCounter = 0;
   return (
+    // eslint-disable-next-line jsx-a11y/interactive-supports-focus -- APG grid with roving focus: the cells take tabIndex (board-cell.tsx), the grid itself is no tab stop
     <div
       ref={rootRef}
       role="grid"

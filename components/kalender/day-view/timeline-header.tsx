@@ -47,7 +47,7 @@ export const TimelineHeader = memo(function TimelineHeader({
             </span>
             {showHalves && (
               <span
-                className="absolute top-2.5 whitespace-nowrap text-[10px] tabular-nums text-muted-foreground/70"
+                className="absolute top-2.5 whitespace-nowrap text-[10px] tabular-nums text-muted-foreground"
                 style={{ left: hourWidth / 2 + 2 }}
               >
                 :30
@@ -56,13 +56,13 @@ export const TimelineHeader = memo(function TimelineHeader({
             {showQuarters && (
               <>
                 <span
-                  className="absolute top-2.5 whitespace-nowrap text-[10px] tabular-nums text-muted-foreground/60"
+                  className="absolute top-2.5 whitespace-nowrap text-[10px] tabular-nums text-muted-foreground"
                   style={{ left: hourWidth / 4 + 2 }}
                 >
                   :15
                 </span>
                 <span
-                  className="absolute top-2.5 whitespace-nowrap text-[10px] tabular-nums text-muted-foreground/60"
+                  className="absolute top-2.5 whitespace-nowrap text-[10px] tabular-nums text-muted-foreground"
                   style={{ left: (hourWidth * 3) / 4 + 2 }}
                 >
                   :45

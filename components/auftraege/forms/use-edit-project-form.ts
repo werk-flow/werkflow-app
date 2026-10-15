@@ -1,8 +1,9 @@
 'use client';
 
+import { useClientRead } from '@/hooks/use-client-read';
 import { usePendingTask } from '@/hooks/use-server-action';
 import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { describeFailure } from '@/lib/action-messages';
 import { getProjectDetails } from '@/lib/projects/actions';
 import type { Job, ProjectWithDetails } from '@/lib/jobs/types';
@@ -35,13 +36,28 @@ export function useEditProjectForm({ project, open, jobs }: EditProjectFormInput
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
   const [originalJobIds, setOriginalJobIds] = useState<string[]>([]);
   const { run: runSubmit, isPending: isLoading } = usePendingTask();
-  const [isLoadingJobs, setIsLoadingJobs] = useState(false);
-  const [jobsLoadError, setJobsLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [contentError, setContentError] = useState<string | null>(null);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
   const initializedProjectIdRef = useRef<string | null>(null);
-  const projectDetailsGenerationRef = useRef(0);
+
+  // The linked jobs are read each time the dialog opens; a closed dialog drops the read.
+  const projectJobs = useClientRead({
+    read: () => getProjectDetails(project.id),
+    deps: [project.id],
+    enabled: open,
+    failureMessage: (code) =>
+      describeFailure(code, ERROR_MESSAGES, 'Die Projektaufträge konnten nicht geladen werden.'),
+  });
+  // Adopted during render: an answer, or its absence after a failure or a close, sets both lists.
+  const [adoptedJobs, setAdoptedJobs] = useState(projectJobs.data);
+  if (projectJobs.data !== adoptedJobs) {
+    setAdoptedJobs(projectJobs.data);
+    const ids = projectJobs.data?.details.jobs.map((job) => job.id) ?? [];
+    setSelectedJobIds(ids);
+    setOriginalJobIds(ids);
+  }
+  const isLoadingJobs = projectJobs.loading;
 
   const jobSearch = useJobEntityOptions(
     { kind: 'jobs', purpose: 'project-jobs', clientId: clientId || undefined, projectId: project.id },
@@ -85,53 +101,15 @@ export function useEditProjectForm({ project, open, jobs }: EditProjectFormInput
     }
   };
 
-  const loadProjectJobs = useCallback((projectId: string) => {
-    const generation = ++projectDetailsGenerationRef.current;
-    setIsLoadingJobs(true);
-    setJobsLoadError(null);
-    void getProjectDetails(projectId)
-      .then((result) => {
-        if (projectDetailsGenerationRef.current !== generation) return;
-        if (!result.success) {
-          setSelectedJobIds([]);
-          setOriginalJobIds([]);
-          setJobsLoadError(
-            describeFailure(
-              result.error,
-              ERROR_MESSAGES,
-              'Die Projektaufträge konnten nicht geladen werden.',
-            ),
-          );
-          return;
-        }
-        const ids = result.details.jobs.map((job) => job.id);
-        setSelectedJobIds(ids);
-        setOriginalJobIds(ids);
-      })
-      .catch(() => {
-        if (projectDetailsGenerationRef.current !== generation) return;
-        setSelectedJobIds([]);
-        setOriginalJobIds([]);
-        setJobsLoadError('Die Projektaufträge konnten nicht geladen werden.');
-      })
-      .finally(() => {
-        if (projectDetailsGenerationRef.current === generation) {
-          setIsLoadingJobs(false);
-        }
-      });
-  }, []);
-
   useEffect(() => {
     if (!open) {
       initializedProjectIdRef.current = null;
-      projectDetailsGenerationRef.current += 1;
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- a closed dialog drops its pending job load; reopening refills the draft from the project
-      setIsLoadingJobs(false);
       return;
     }
     if (initializedProjectIdRef.current === project.id) return;
     initializedProjectIdRef.current = project.id;
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the draft is refilled from the project each time the dialog opens
     setName(project.name);
     setDescription(project.description ?? '');
     setClientId(project.clientId ?? '');
@@ -145,12 +123,11 @@ export function useEditProjectForm({ project, open, jobs }: EditProjectFormInput
     setError(null);
     setContentError(null);
     setHasAttemptedSubmit(false);
-
-    loadProjectJobs(project.id);
-  }, [open, project, loadProjectJobs]);
+  }, [open, project]);
 
   const showContentError = hasAttemptedSubmit && contentError;
-  const formDisabled = isLoading || isLoadingJobs;
+  // The fields stay editable while the project's jobs load; only the job picker and the save wait for them.
+  const formDisabled = isLoading;
 
   return {
     name,
@@ -176,8 +153,7 @@ export function useEditProjectForm({ project, open, jobs }: EditProjectFormInput
     isLoading,
     runSubmit,
     isLoadingJobs,
-    jobsLoadError,
-    retryJobs: () => loadProjectJobs(project.id),
+    jobsFailure: projectJobs.failure,
     error,
     setError,
     contentError,

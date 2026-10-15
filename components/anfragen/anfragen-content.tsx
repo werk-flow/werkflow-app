@@ -150,6 +150,7 @@ export function AnfragenContent({ entries, total, hasAnyRequest, query }: Anfrag
             under the refresh icon and tapping "refresh" opened the keyboard. */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <Tabs
+            panels={false}
             value={shownStatus}
             onValueChange={(value) => {
               // Both echoes describe the same pending URL.
@@ -159,7 +160,7 @@ export function AnfragenContent({ entries, total, hasAnyRequest, query }: Anfrag
             }}
             className="min-w-0"
           >
-            <TabsList className="h-9 max-w-full justify-start overflow-x-auto">
+            <TabsList className="h-9 justify-start">
               {FILTER_TABS.map((tab) => (
                 <TabsTrigger key={tab.value} value={tab.value} className="shrink-0">
                   {tab.label}
@@ -219,9 +220,9 @@ export function AnfragenContent({ entries, total, hasAnyRequest, query }: Anfrag
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
                       <span className="truncate">{requestCallerLabel(entry)}</span>
-                      <span className="text-muted-foreground/60">&middot;</span>
+                      <span className="text-muted-foreground">&middot;</span>
                       <span>{REQUEST_CATEGORY_LABELS[entry.request.category]}</span>
-                      <span className="text-muted-foreground/60">&middot;</span>
+                      <span className="text-muted-foreground">&middot;</span>
                       <span>{formatReceivedAt(entry.request.receivedAt)}</span>
                     </div>
                     <div className="mt-1.5 flex items-center gap-2">
