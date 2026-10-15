@@ -30,7 +30,6 @@ mock.module('next/navigation', () => ({
 mock.module('@/lib/data/cached', () => ({
   getCachedUser: async () => ({ data: { user: { id: 'caller', email: 'synthetic@example.invalid' } } }),
   getCachedMemberships: async () => [{ orgId: organizationId, role: 'admin' }],
-  getCachedSubscriptionStatus: async () => true,
   getCachedUserProfile: async () => ({}),
 }));
 mock.module('@/lib/org/cookies', () => ({

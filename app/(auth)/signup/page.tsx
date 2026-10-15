@@ -26,10 +26,9 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
   const prefillEmail = params.email || '';
   const inviteCode = params.invite_code || '';
 
-  // If user is already logged in and there's an invite code,
-  // redirect to auth/callback to process the invite
+  // A signed-in person with an invite accepts it on the login page.
   if (session && inviteCode) {
-    redirect(`/auth/callback?invite_code=${encodeURIComponent(inviteCode)}`);
+    redirect(`/login?invite_code=${encodeURIComponent(inviteCode)}`);
   }
 
   if (session) {

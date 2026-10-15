@@ -62,6 +62,8 @@ $$;
 create function pg_temp.berlin_time(instant timestamptz) returns time language sql as $$
   select (instant at time zone 'Europe/Berlin')::time;
 $$;
+-- New functions are closed by default (migration 20261015100100).
+grant execute on all functions in schema pg_temp to service_role, authenticated;
 
 set local role service_role;
 

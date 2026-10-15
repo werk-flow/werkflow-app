@@ -67,6 +67,8 @@ returns jsonb language sql as $$
     'endAt', (local_day + local_time + interval '1 hour') at time zone 'Europe/Berlin'
   );
 $$;
+-- New functions are closed by default (migration 20261015100100).
+grant execute on all functions in schema pg_temp to service_role, authenticated;
 
 set local role service_role;
 

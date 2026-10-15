@@ -41,7 +41,6 @@ const failing = new Set<string>();
 const reads = new Map<string, number>();
 const failure = { code: 'XX000', message: 'private row detail', details: 'customer@example.invalid' };
 const rowsByTable: Record<string, { single: unknown; many: unknown[]; count?: number }> = {
-  subscriptions: { single: { status: 'active' }, many: [] },
   organization_settings: {
     single: {
       organization_id: organizationId,
@@ -150,12 +149,6 @@ async function expectNoCachedFailure(input: {
   assert.equal(reads.get(input.table), afterRecovery, `${input.code}: a successful read is cached`);
 }
 
-await expectNoCachedFailure({
-  table: 'subscriptions',
-  code: 'subscription_read_failed',
-  read: () => cached.getCachedSubscriptionStatus(userId),
-  check: (value) => assert.equal(value, true),
-});
 await expectNoCachedFailure({
   table: 'organization_members',
   code: 'member_count_read_failed',

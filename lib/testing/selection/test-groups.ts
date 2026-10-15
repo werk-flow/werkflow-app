@@ -346,6 +346,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
     'security',
     [
       'security_boundaries.sql',
+      'client_read_boundaries.sql',
       'email_change_boundaries.sql',
       'event_ledger_boundaries.sql',
       'realtime_deletions.sql',

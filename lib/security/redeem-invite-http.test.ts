@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { resolve } from 'node:path';
 
-test('invite redemption requires a same-origin JSON request before it redeems or sets the organization cookie', async () => {
+test('invite redemption requires a same-origin JSON request and a completed identity check before it redeems or sets a cookie', async () => {
   const child = Bun.spawn(
     [process.execPath, resolve(import.meta.dir, '../testing/fixtures/redeem-invite-http.ts')],
     { cwd: resolve(import.meta.dir, '../..'), stdout: 'pipe', stderr: 'pipe' },

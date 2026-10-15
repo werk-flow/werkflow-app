@@ -336,8 +336,9 @@ export async function inviteMember(page: Page, email: string, role: InvitedRole)
 }
 
 // Simulates the invited existing user clicking the email's invite link:
-// /auth/callback?invite_code=... bounces to /login, and a successful login
-// redeems the invite and lands on /dashboard?joined=<orgId>.
+// /auth/callback?invite_code=... bounces to /login, and a successful login, or
+// for a signed-in user the accept button, redeems the invite and lands on
+// /dashboard?joined=<orgId>.
 export async function joinOrganizationViaInviteLink(
   page: Page,
   inviteCode: string,
@@ -350,20 +351,25 @@ export async function joinOrganizationViaInviteLink(
 
   let joined = false;
   for (let attempt = 1; attempt <= 3 && !joined; attempt++) {
-    // The invite link itself is idempotent: logged-out users bounce to
-    // /login?invite_code=..., logged-in users are redeemed server-side and
-    // land directly on the dashboard confirmation URL.
+    // The invite link redeems nothing by itself: every user lands on
+    // /login?invite_code=..., where a signed-in user accepts with a click
+    // and a signed-out user signs in.
     await page.goto(`/auth/callback?invite_code=${inviteCode}`);
-    if (confirmationUrl.test(page.url())) {
-      joined = true;
-      break;
-    }
     if (!page.url().includes('/login')) {
       continue;
     }
 
     // Same pre-hydration caution as the global setup's login helper.
     await page.waitForLoadState('networkidle');
+    const acceptButton = page.getByRole('button', { name: 'Einladung annehmen', exact: true });
+    if (await acceptButton.isVisible()) {
+      await acceptButton.click();
+      joined = await page
+        .waitForURL(confirmationUrl, { timeout: 30_000 })
+        .then(() => true)
+        .catch(() => false);
+      continue;
+    }
     await page.locator('input[autocomplete="email"]').fill(credentials.email);
     await page.locator('input[autocomplete="current-password"]').fill(credentials.password);
     await loginSubmitButton(page).click();

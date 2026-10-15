@@ -12,7 +12,9 @@ import { logReadFailure } from '@/lib/data/read-request-cache';
 import { AUTH_FLASH_COOKIE, getAuthFlashMessage, isAuthFlashKey } from '@/lib/auth/flash';
 import { getCachedUser } from '@/lib/data/cached';
 import { getAuthenticatedRedirectPath } from '@/lib/auth/redirects';
+import { isUuid } from '@/lib/validation/uuid';
 
+import { AcceptInviteButton } from './accept-invite-button';
 import { LoginForm } from './login-form';
 
 export const metadata: Metadata = {
@@ -34,19 +36,22 @@ export default async function LoginPage({
   const params = await searchParams;
   const inviteCode = params.invite_code || '';
 
-  // If user is already logged in and there's an invite code,
-  // redirect to auth/callback to process the invite
-  if (session && inviteCode) {
-    redirect(`/auth/callback?invite_code=${encodeURIComponent(inviteCode)}`);
+  // Invite codes are generated UUIDs; anything else is neither looked up nor echoed.
+  if (inviteCode && !isUuid(inviteCode)) {
+    redirect('/invite-error?error=invalid_invite');
   }
 
+  // A signed-in person with an invite accepts it below with a click; without
+  // an invite the login page is not theirs.
+  let signedInForInvite = false;
   if (session) {
     const {
       data: { user },
     } = await getCachedUser();
-    if (user) {
+    if (user && !inviteCode) {
       redirect(await getAuthenticatedRedirectPath(user.id));
     }
+    signedInForInvite = user !== null;
   }
 
   const cookieStore = await cookies();
@@ -109,6 +114,26 @@ export default async function LoginPage({
 
     // Get org name for display
     organizationName = invite.org_name || null;
+  }
+
+  if (signedInForInvite) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-2xl font-semibold tracking-tight">
+            {organizationName ? `Tritt ${organizationName} bei` : 'Einladung annehmen'}
+          </CardTitle>
+          <CardDescription>
+            {organizationName
+              ? `Du bist schon angemeldet. Nimm die Einladung an, um der Organisation ${organizationName} beizutreten.`
+              : 'Du bist schon angemeldet. Nimm die Einladung an, um der Organisation beizutreten.'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AcceptInviteButton inviteCode={inviteCode} />
+        </CardContent>
+      </Card>
+    );
   }
 
   return (

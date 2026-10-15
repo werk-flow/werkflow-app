@@ -404,11 +404,7 @@ function ContractFixture(): React.JSX.Element {
           <SignOutFixture />
         </section>
         <section aria-label="Einladungswechsel">
-          <SignOutAndRedirectButton
-            inviteCode="fixture-invite"
-            invitedEmail="fixture@example.invalid"
-            isExistingUser
-          />
+          <SignOutAndRedirectButton inviteCode="20000000-0000-4000-8000-000000000001" />
         </section>
         <section aria-label="Einzelauswahl">
           <Field label="Verantwortliche Person" htmlFor="single" required>

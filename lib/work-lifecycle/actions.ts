@@ -692,6 +692,7 @@ export async function unparkJobIntoSchedule(input: unknown): Promise<UpdateJobRe
     },
   });
   if (!prepared.success) return prepared;
+  // tenant-scope: built-from-context — prepareJobUpdate sets p_organization_id from the orgId passed above, which authenticateAndAuthorize resolved.
   const { data, error } = await admin.rpc('unpark_job_into_schedule', {
     ...prepared.arguments,
     p_expected_blocker_version: parsed.data.blockerVersion,

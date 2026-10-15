@@ -28,7 +28,7 @@ export function untilPageLeaves(): Promise<never> {
 }
 
 /**
- * Pending-state helper for server actions (client freshness contract rule 6).
+ * Pending-state helper for server actions (docs/technical/realtime-and-caching.md#add-a-mutation).
  * `isPending` binds to the awaited server call and nothing else — never to a
  * router transition: a router-entangled `useTransition` keeps controls
  * disabled after unrelated Realtime refreshes. ESLint bans async

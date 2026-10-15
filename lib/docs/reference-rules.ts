@@ -33,6 +33,56 @@ export function findNumberedRuleReferences(text: string): LineReference[] {
   }));
 }
 
+/** A document that numbers its rules: the phrase that names it right before "rule N", and its numbers. */
+export type NumberedRuleSource = { document: string; phrase: RegExp; numbers: ReadonlySet<number> };
+
+/** The item numbers of the ordered list in the section under a `##` heading. */
+export function numberedItemsUnder(text: string, heading: string): Set<number> {
+  const markdown = text.replace(/\r\n/g, '\n');
+  const start = markdown.indexOf(`\n## ${heading}\n`);
+  if (start === -1) return new Set();
+  const rest = markdown.slice(start + heading.length + 5);
+  const end = rest.search(/\n## /);
+  const section = end === -1 ? rest : rest.slice(0, end);
+  return new Set([...section.matchAll(/^(\d+)\. /gm)].map((match) => Number(match[1])));
+}
+
+// "rule 3", "rules 1 and 2", "Rules 8 to 13": every number the pointer names.
+const RULE_POINTER_PATTERN = /\brules?\s+(\d+(?:\s*(?:,|and|or|to)\s*\d+)*)/gi;
+// A file that numbers its own rules in a comment ("//   3. A spec ...") may point at them bare.
+const OWN_NUMBERED_ITEM = /^\s*(?:\/\/|\*|--|#)\s*(\d+)\.\s/gm;
+
+/**
+ * Every "rule N" pointer in code or a comment that does not resolve: the
+ * phrase before it names a source whose list lacks the number, or it names no
+ * source and the file numbers no such rule itself.
+ */
+export function findUnresolvedRulePointers(
+  text: string,
+  sources: readonly NumberedRuleSource[],
+): LineReference[] {
+  const ownNumbers = new Set([...text.matchAll(OWN_NUMBERED_ITEM)].map((match) => Number(match[1])));
+  const unresolved: LineReference[] = [];
+  for (const match of text.matchAll(RULE_POINTER_PATTERN)) {
+    const numbers = [...(match[1] ?? '').matchAll(/\d+/g)].map((number) => Number(number[0]));
+    // The words before the pointer, without comment markers and line breaks.
+    const before = text
+      .slice(Math.max(0, match.index - 80), match.index)
+      .replace(/\/\/|\/\*|\*|--|#/g, ' ')
+      .replace(/\s+/g, ' ');
+    const source = sources.find((candidate) => candidate.phrase.test(before));
+    const known = source ? source.numbers : ownNumbers;
+    if (numbers.every((number) => known.has(number))) continue;
+    unresolved.push({
+      line: lineOf(text, match.index),
+      name: source
+        ? `${match[0]} (${source.document} has no such numbered rule)`
+        : `${match[0]} (names no document that numbers it)`,
+    });
+  }
+  return unresolved;
+}
+
 const REPOSITORY_ROOTS = [
   'app',
   'components',

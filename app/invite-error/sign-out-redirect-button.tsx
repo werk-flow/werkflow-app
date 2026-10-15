@@ -11,16 +11,16 @@ import { loadDocument } from '@/lib/navigation/document-load';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
 interface SignOutAndRedirectButtonProps {
-  inviteCode: string;
-  invitedEmail: string;
-  isExistingUser: boolean;
+  /** The validated invite code, or null when it is no longer known. */
+  inviteCode: string | null;
 }
 
-export function SignOutAndRedirectButton({
-  inviteCode,
-  invitedEmail,
-  isExistingUser,
-}: SignOutAndRedirectButtonProps) {
+/**
+ * Signs out and opens the login page with the invite. The login page links
+ * to the sign-up with the same invite, so the page never has to know whether
+ * the invited address already has an account.
+ */
+export function SignOutAndRedirectButton({ inviteCode }: SignOutAndRedirectButtonProps) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const { run: runSignOut, isPending: isLoading } = usePendingTask();
   const [error, setError] = useState<string | null>(null);
@@ -38,16 +38,7 @@ export function SignOutAndRedirectButton({
         if (signOutError) throw signOutError;
 
         // A full load so the next page starts without the old session in client state.
-        // The code comes from the URL unvalidated; encoding keeps it one parameter.
-        const encodedInviteCode = encodeURIComponent(inviteCode);
-        if (isExistingUser) {
-          loadDocument(`/login?invite_code=${encodedInviteCode}`);
-        } else {
-          const signupUrl = invitedEmail
-            ? `/signup?email=${encodeURIComponent(invitedEmail)}&invite_code=${encodedInviteCode}`
-            : `/signup?invite_code=${encodedInviteCode}`;
-          loadDocument(signupUrl);
-        }
+        loadDocument(inviteCode === null ? '/login' : `/login?invite_code=${encodeURIComponent(inviteCode)}`);
         return untilPageLeaves();
       } catch {
         setError('Die Abmeldung konnte nicht abgeschlossen werden. Bitte versuche es erneut.');
@@ -55,14 +46,11 @@ export function SignOutAndRedirectButton({
     });
   };
 
-  // Button text changes based on whether user needs to log in or sign up
-  const buttonText = isExistingUser ? 'Abmelden & anmelden' : 'Abmelden & registrieren';
-
   return (
     <div className="grid gap-2">
       <Button onClick={handleSignOutAndRedirect} disabled={isLoading}>
         <LogOut className="mr-2 size-4" />
-        {isLoading ? 'Wird abgemeldet…' : buttonText}
+        {isLoading ? 'Wird abgemeldet…' : 'Abmelden & anmelden'}
       </Button>
       <ErrorText>{error}</ErrorText>
     </div>

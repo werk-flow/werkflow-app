@@ -85,7 +85,7 @@ A `[judgment]` item is a Tier 3 default: diverge only with the note that `AGENTS
 - An invalidation names a `CACHE_TAGS` entry that a cached reader carries. [test `lib/conventions/cache-tags.test.ts`]
 - A read that starts on mount, in an effect or beside a save goes through the background-read registry or comes with the server props, never the Server Action queue. [test `lib/data/background-read-http.test.ts`, test `lib/conventions/live-view-reads.test.ts`]
 - Client state adopts new server props during render, never in an effect: inside a hydrated Suspense boundary such an effect can starve behind a route transition and then commit forever. After a page settles, its main thread goes idle. [lint `ui/no-derived-state-effect`, test `tests/ui-contracts/hydration-settle.spec.ts`, group `audit:layout`, judgment]
-- The authenticated layout waits for identity, organization, profile and subscription only. Optional shell reads load in their own providers. [test `lib/ui/app-layout-runtime.test.ts`]
+- The authenticated layout waits for identity, organization and profile only. Optional shell reads load in their own providers. [test `lib/ui/app-layout-runtime.test.ts`]
 - A reader that runs on every event of every session pins its queries per role, and a page runs one derivation. [test `lib/attention/count-reads.test.ts`]
 - Sidebar links prefetch on intent only ([performance](performance.md#prefetch)). [test `lib/ui/sidebar-prefetch.test.ts`, group `ui:contracts`]
 - A step that people repeat many times a day is a journey with a lab step ([performance](performance.md#checklist)); a view switch over a large window or a change another session waits for gets a measured scenario. [test `lib/testing/journeys.test.ts`, judgment]
@@ -227,7 +227,7 @@ Correctness and responsiveness are separate results. A correct value that appear
 
 ### Shared layout and clock readiness
 
-The authenticated layout waits for identity, organization, profile and subscription checks only. Optional shell reads, such as the clock, active jobs and attention counts, belong to their own providers and never block page content or a route refresh. An absent clock response is unknown state, not a clocked-out session. The clock provider is ready only after a successful read for the current organization, and its controls stay disabled with retry until then.
+The authenticated layout waits for identity, organization and profile checks only. Optional shell reads, such as the clock, active jobs and attention counts, belong to their own providers and never block page content or a route refresh. An absent clock response is unknown state, not a clocked-out session. The clock provider is ready only after a successful read for the current organization, and its controls stay disabled with retry until then.
 
 ## Organization switch confirmation
 

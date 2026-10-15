@@ -1,14 +1,13 @@
 import Link from 'next/link';
+import { cookies } from 'next/headers';
 import { AlertCircle } from 'lucide-react';
 
-import { maskEmail } from '@/components/auth/mask-email';
-import { RegionLoadError } from '@/components/shared/region-load-error';
 import { StandaloneScreen } from '@/components/shared/standalone-screen';
 import { Button } from '@/components/ui/button';
 import { SignOutAndRedirectButton } from './sign-out-redirect-button';
 import { describeFailure } from '@/lib/action-messages';
-import { logError } from '@/lib/logging';
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { INVITE_MISMATCH_COOKIE } from '@/lib/invites/redemption-refusal';
+import { isUuid } from '@/lib/validation/uuid';
 
 // The codes of the invite redemption, named by the login and verification flows in the URL.
 const INVITE_ERROR_TITLES: Readonly<Partial<Record<string, string>>> = {
@@ -22,6 +21,8 @@ const INVITE_ERROR_TITLES: Readonly<Partial<Record<string, string>>> = {
   redeem_failed: 'Einladung nicht eingelöst',
 };
 
+// The email_mismatch sentence names no address and does not say whether the
+// invited address has an account: the page is reachable without a session.
 const INVITE_ERROR_DESCRIPTIONS: Readonly<Partial<Record<string, string>>> = {
   admin_mismatch:
     'Du kannst dieser Organisation nicht beitreten, da sie einem anderen Administrator gehört als deine bestehenden Organisationen.',
@@ -34,7 +35,7 @@ const INVITE_ERROR_DESCRIPTIONS: Readonly<Partial<Record<string, string>>> = {
   too_many_attempts:
     'Du hast Einladungen zu oft in kurzer Zeit geöffnet. Bitte warte etwas und öffne den Einladungslink dann erneut.',
   email_mismatch:
-    'Diese Einladung ist für eine andere E-Mail-Adresse bestimmt. Bitte melde dich ab und melde dich mit der richtigen E-Mail-Adresse an.',
+    'Diese Einladung ist für eine andere E-Mail-Adresse bestimmt. Melde dich ab und mit der E-Mail-Adresse an, an die die Einladung ging. Hast du mit dieser Adresse noch kein Konto, registriere dich auf der Anmeldeseite.',
   redeem_failed:
     'Du bist angemeldet, aber deine Einladung konnte gerade nicht eingelöst werden. Öffne den Einladungslink in einem Moment erneut.',
 };
@@ -42,58 +43,24 @@ const INVITE_ERROR_DESCRIPTIONS: Readonly<Partial<Record<string, string>>> = {
 export default async function InviteErrorPage({
   searchParams,
 }: {
-  searchParams: Promise<{
-    error?: string;
-    email?: string;
-    invite_code?: string;
-  }>;
+  searchParams: Promise<{ error?: string }>;
 }) {
-  const params = await searchParams;
-  const error = params.error || '';
-  const invitedEmail = params.email || '';
-  const inviteCode = params.invite_code || '';
-
+  const error = (await searchParams).error ?? '';
   const isEmailMismatch = error === 'email_mismatch';
 
-  // Whether the invited address already has an account decides between login
-  // and sign-up. The RPC bypasses RLS to check auth.users. Null: the check
-  // failed, the page says so with a retry and offers the login.
-  let isExistingUser: boolean | null = false;
-  if (isEmailMismatch && invitedEmail) {
-    const { data: userCheckResult, error: userCheckError } = await createSupabaseAdminClient().rpc(
-      'check_user_exists_by_email',
-      { p_email: invitedEmail.toLowerCase() },
-    );
-    if (userCheckError) {
-      logError('invite_error.user_check_failed', userCheckError);
-      isExistingUser = null;
-    } else {
-      // The RPC returns an array, get the first result
-      const userCheck = Array.isArray(userCheckResult) ? userCheckResult[0] : userCheckResult;
-      isExistingUser = userCheck?.user_exists === true;
-    }
-  }
+  // The redemption handler left the invite code in a short-lived cookie. Once
+  // it has expired, the person opens the invite link again after signing in.
+  const storedCode = isEmailMismatch ? (await cookies()).get(INVITE_MISMATCH_COOKIE)?.value : undefined;
+  const inviteCode = storedCode !== undefined && isUuid(storedCode) ? storedCode : null;
 
-  let errorInfo = {
-    title:
-      (Object.hasOwn(INVITE_ERROR_TITLES, error) ? INVITE_ERROR_TITLES[error] : undefined) ??
-      'Fehler bei der Einladung',
-    description: describeFailure(error, INVITE_ERROR_DESCRIPTIONS, 'Ein unbekannter Fehler ist aufgetreten.'),
-  };
-
-  // Customize the description for email mismatch to include the invited email
-  if (isEmailMismatch && invitedEmail) {
-    const actionText =
-      isExistingUser === false
-        ? 'erstelle ein Konto mit der richtigen E-Mail-Adresse'
-        : 'melde dich mit der richtigen E-Mail-Adresse an';
-    errorInfo = {
-      ...errorInfo,
-      description: `Diese Einladung ist für ${maskEmail(
-        invitedEmail,
-      )} bestimmt. Du bist aktuell mit einer anderen E-Mail-Adresse angemeldet. Bitte melde dich ab und ${actionText}.`,
-    };
-  }
+  const title =
+    (Object.hasOwn(INVITE_ERROR_TITLES, error) ? INVITE_ERROR_TITLES[error] : undefined) ??
+    'Fehler bei der Einladung';
+  const description = describeFailure(
+    error,
+    INVITE_ERROR_DESCRIPTIONS,
+    'Ein unbekannter Fehler ist aufgetreten.',
+  );
 
   return (
     <StandaloneScreen>
@@ -103,22 +70,17 @@ export default async function InviteErrorPage({
             <AlertCircle className="size-12 text-destructive" />
           </div>
         </div>
-        <h1 className="mb-2 text-2xl font-bold">{errorInfo.title}</h1>
-        <p className="mb-8 text-muted-foreground">{errorInfo.description}</p>
-        {isEmailMismatch && isExistingUser === null ? (
-          <RegionLoadError className="mb-6 text-left">
-            Wir konnten gerade nicht prüfen, ob es für diese E-Mail-Adresse schon ein Konto gibt. Hast du noch
-            keins, wähle auf der Anmeldeseite „Registrieren“.
-          </RegionLoadError>
-        ) : null}
+        <h1 className="mb-2 text-2xl font-bold">{title}</h1>
+        <p className="mb-8 text-muted-foreground">
+          {description}
+          {isEmailMismatch && inviteCode === null
+            ? ' Öffne danach den Einladungslink aus deiner E-Mail erneut.'
+            : null}
+        </p>
 
         {isEmailMismatch ? (
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-            <SignOutAndRedirectButton
-              inviteCode={inviteCode}
-              invitedEmail={invitedEmail}
-              isExistingUser={isExistingUser !== false}
-            />
+            <SignOutAndRedirectButton inviteCode={inviteCode} />
             <Button variant="outline" asChild>
               <Link href="/dashboard">Zum Dashboard</Link>
             </Button>

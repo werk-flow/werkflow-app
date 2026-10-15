@@ -213,22 +213,9 @@ export function SignupForm({ prefillEmail = '', inviteCode = '', invitedEmail = 
           return;
         }
 
-        if (data.session && data.user) {
-          const { error: profileError } = await supabase.from('profiles').upsert(
-            {
-              id: data.user.id,
-              first_name: values.firstName,
-              last_name: values.lastName,
-            },
-            { onConflict: 'id' },
-          );
-
-          if (profileError) {
-            setFormError('Dein Profil konnte nicht gespeichert werden. Bitte versuche es erneut.');
-            return;
-          }
-        }
-
+        // The profile row, with the names from the metadata above, comes from
+        // the Auth insert trigger (public.handle_new_user); the browser has no
+        // profile INSERT grant.
         if (data.session) {
           await fetch('/auth/callback', {
             method: 'POST',

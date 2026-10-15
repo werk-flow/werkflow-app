@@ -6,6 +6,7 @@ type SupabaseBrowserClient = ReturnType<typeof createSupabaseBrowserClient>;
 
 /** Refusals the invite error page explains with their own sentence. */
 const EXPLAINED_REFUSALS = new Set([
+  'email_mismatch',
   'admin_mismatch',
   'invite_expired',
   'invite_cancelled',
@@ -45,15 +46,7 @@ export async function redeemOtpInvite(
 
     if (!response.ok) {
       logError('redeemOtpInvite: redemption refused', { code: result.error, status: response.status });
-      if (result.error === 'email_mismatch') {
-        const invitedEmail = result.invitedEmail || '';
-        loadDocument(
-          `/invite-error?error=email_mismatch&email=${encodeURIComponent(
-            invitedEmail,
-          )}&invite_code=${effectiveInviteCode}`,
-        );
-        return true;
-      }
+      // For email_mismatch the handler keeps the invite code in a cookie for the error page.
       loadDocument(inviteErrorPath(result.error));
       return true;
     }

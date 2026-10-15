@@ -228,6 +228,7 @@ export async function updateJob(rawJobId: string, rawInput: UpdateJobInput): Pro
     const admin = createSupabaseAdminClient();
     const prepared = await prepareJobUpdate({ admin, orgId, actorId: auth.context.userId, jobId, input });
     if (!prepared.success) return prepared;
+    // tenant-scope: built-from-context — prepareJobUpdate sets p_organization_id from the orgId passed above, which authenticateAndAuthorize resolved.
     const { data, error } = await admin.rpc('update_job_with_assignments', prepared.arguments);
 
     if (error) {

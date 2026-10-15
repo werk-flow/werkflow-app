@@ -5,6 +5,11 @@
 // storage and are transferred directly between the browser and the bucket via
 // short-lived signed URLs. Server code authorizes and signs; it must never
 // stream file bytes itself (Vercel Functions cap request bodies at ~4.5 MB).
+//
+// The Bun scripts and the browser-test seed import this module, so it cannot
+// import 'server-only' (that package throws outside the React server build).
+// lib/security/storage-import-boundary.test.ts keeps it out of every browser
+// bundle instead.
 
 import {
   CopyObjectCommand,

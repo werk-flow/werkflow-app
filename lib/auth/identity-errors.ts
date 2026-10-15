@@ -35,3 +35,20 @@ export function isRejectedIdentity(error: AuthError): boolean {
   if (isAuthSessionMissingError(error)) return true;
   return error.code !== undefined && REJECTED_IDENTITY_CODES.has(error.code);
 }
+
+// Codes with which Auth refuses an emailed sign-in link itself: the code or
+// token is used, expired, malformed, or was requested in another browser
+// (the PKCE verifier is missing).
+const REJECTED_LINK_CODES: ReadonlySet<string> = new Set([
+  'flow_state_not_found',
+  'flow_state_expired',
+  'bad_code_verifier',
+  'otp_expired',
+  'validation_failed',
+]);
+
+/** True when Auth refused the link of an auth callback. Any other error means Auth is unavailable. */
+export function isRejectedSignInLink(error: AuthError): boolean {
+  if (isRejectedIdentity(error)) return true;
+  return error.code !== undefined && REJECTED_LINK_CODES.has(error.code);
+}

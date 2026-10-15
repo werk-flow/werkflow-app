@@ -86,6 +86,9 @@ import {
   findNumberedRuleReferences,
   findRepositoryPathReferences,
   findRouteHandlerReferences,
+  findUnresolvedRulePointers,
+  numberedItemsUnder,
+  type NumberedRuleSource,
   repositoryPathCandidates,
 } from '../lib/docs/reference-rules';
 import {
@@ -864,10 +867,36 @@ for (const file of livingGuidance) {
     );
   }
 }
-// The rule's own module and test spell the phrase as fixtures; Markdown outside docs/ was read above.
+// 23b. A "rule N" pointer in code or a comment resolves to a numbered item of the document it
+//     names; only the docs index and the client freshness contract number their rules. A
+//     document named by area numbers nothing, and a bare pointer resolves only to a numbered
+//     list in the file's own comments. The rule's own module and test spell the phrases as
+//     fixtures; Markdown outside docs/ was read above; migrations are history (trackedFiles).
 const numberedRuleFixtures = new Set(['lib/docs/reference-rules.ts', 'lib/docs/reference-rules.test.ts']);
+const numberedRuleSources: NumberedRuleSource[] = [
+  {
+    document: 'docs/technical/realtime-and-caching.md#client-freshness-contract',
+    phrase: /freshness contract\s*$/i,
+    numbers: numberedItemsUnder(
+      readFileSync(join(repoRoot, 'docs/technical/realtime-and-caching.md'), 'utf8'),
+      'Client freshness contract',
+    ),
+  },
+  {
+    document: 'docs/README.md#maintenance-rules',
+    phrase: /maintenance\s*$/i,
+    numbers: numberedItemsUnder(readFileSync(join(repoRoot, 'docs/README.md'), 'utf8'), 'Maintenance rules'),
+  },
+  {
+    document: 'an area guide without numbered rules',
+    phrase:
+      /\b(?:testing|security|quality|code-quality|review|design|ui|performance|realtime|protocol|docs)(?:\.md)?,?\s*$/i,
+    numbers: new Set(),
+  },
+];
 for (const file of trackedFiles.filter((path) => !path.endsWith('.md') && !numberedRuleFixtures.has(path))) {
-  for (const reference of findNumberedRuleReferences(readFileSync(join(repoRoot, file), 'utf8'))) {
+  const text = readFileSync(join(repoRoot, file), 'utf8');
+  for (const reference of findUnresolvedRulePointers(text, numberedRuleSources)) {
     problems.push(
       `numbered-rule: ${file}:${reference.line} cites "${reference.name}"; name the rule or cite its doc heading instead`,
     );

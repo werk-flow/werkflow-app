@@ -22,6 +22,16 @@ Record each failed acceptance group and any focused failure that changes shared 
 
 `bun run test:runs classify` stores the classification, cause and prevention in the run manifest and, for a failed run of the verification lane, writes the dated entry below with the run, the failure point, the cause and the prevention (`lib/testing/runs/incident-record.ts`). It refuses a prevention without its tier. Add the evidence, the correction and the focused proof under that entry when the repair lands. Write a focused failure that changes shared testing behavior by hand. Do not call an unexplained retry a transient.
 
+## 2026-10-15: audit:layout:work transient failure
+
+<!-- incident-run: 2026-10-15T190815412Z-f15eed -->
+
+- Run: run `2026-10-15T190815412Z-f15eed`, group `audit:layout:work`, target local, fingerprint `c6cf8a0cb4c5`, world `0a5da77d3c97490b90c7f67f7c008573`.
+- Failure point:  >  > layout\surfaces-work.spec.ts > @AUDIT-LAYOUT-SURFACES work: tabs and dialogs fit, pass axe and keep their keyboard path > admin /auftraege: Error: the trigger is on screen
+- Root cause: The row actions menu of the project row on /auftraege was closed when the Löschen item was awaited (snapshot: no menu in the tree, row present); the list surface, its openers and the admin read path are unchanged by this change, and the same group passed on the previous plan.
+- Prevention: no prevention claim: a single closed-menu observation on an unchanged surface; a recurrence makes openListRowMenu wait for aria-expanded (Tier 2 harness).
+- Evidence: the next change plan ran the group on a rebuilt server as run `2026-10-15T211341900Z-d8de4c` and it passed; no product or harness file of the surface changed in between.
+
 ## 2026-10-15: audit:wave-2:p1-15 product failure
 
 <!-- incident-run: 2026-10-15T131542126Z-7ac336 -->

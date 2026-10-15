@@ -31,7 +31,6 @@ export type OrgContextValue = {
   setActiveOrg: (orgId: string) => Promise<void>;
   refreshMemberships: () => Promise<void>;
   isLoading: boolean;
-  isSubscribed: boolean;
   isSwitchingOrg: boolean;
 };
 
@@ -69,7 +68,6 @@ type OrganizationProviderProps = {
   initialMemberships: UserOrg[];
   initialActiveOrgId: string | null;
   initialActiveOrgCookieNeedsSync: boolean;
-  initialIsSubscribed: boolean;
 };
 
 export function OrganizationProvider({
@@ -77,7 +75,6 @@ export function OrganizationProvider({
   initialMemberships,
   initialActiveOrgId,
   initialActiveOrgCookieNeedsSync,
-  initialIsSubscribed,
 }: OrganizationProviderProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -85,7 +82,6 @@ export function OrganizationProvider({
   const [, startTransition] = useTransition();
   const [memberships, setMemberships] = useState<UserOrg[]>(initialMemberships);
   const [activeOrgId, setActiveOrgId] = useState<string | null>(initialActiveOrgId);
-  const [isSubscribed, setIsSubscribed] = useState(initialIsSubscribed);
   const [isSwitchingOrg, setIsSwitchingOrg] = useState(false);
   const pendingOrgIdRef = useRef<string | null>(null);
   // Background membership reconciliation keeps the last-known sidebar in
@@ -98,17 +94,14 @@ export function OrganizationProvider({
   const [adoptedProps, setAdoptedProps] = useState({
     initialMemberships,
     initialActiveOrgId,
-    initialIsSubscribed,
   });
   if (
     initialMemberships !== adoptedProps.initialMemberships ||
-    initialActiveOrgId !== adoptedProps.initialActiveOrgId ||
-    initialIsSubscribed !== adoptedProps.initialIsSubscribed
+    initialActiveOrgId !== adoptedProps.initialActiveOrgId
   ) {
-    setAdoptedProps({ initialMemberships, initialActiveOrgId, initialIsSubscribed });
+    setAdoptedProps({ initialMemberships, initialActiveOrgId });
     if (initialMemberships !== adoptedProps.initialMemberships) setMemberships(initialMemberships);
     if (initialActiveOrgId !== adoptedProps.initialActiveOrgId) setActiveOrgId(initialActiveOrgId);
-    if (initialIsSubscribed !== adoptedProps.initialIsSubscribed) setIsSubscribed(initialIsSubscribed);
   }
 
   // Proactively set the cookie when the active org is resolved from fallback
@@ -278,19 +271,9 @@ export function OrganizationProvider({
       setActiveOrg,
       refreshMemberships,
       isLoading,
-      isSubscribed,
       isSwitchingOrg,
     }),
-    [
-      memberships,
-      activeOrgId,
-      activeOrg,
-      setActiveOrg,
-      refreshMemberships,
-      isLoading,
-      isSubscribed,
-      isSwitchingOrg,
-    ],
+    [memberships, activeOrgId, activeOrg, setActiveOrg, refreshMemberships, isLoading, isSwitchingOrg],
   );
 
   return <OrganizationContext.Provider value={value}>{children}</OrganizationContext.Provider>;
@@ -319,7 +302,6 @@ export function RequestedOrganizationScope({
       setActiveOrg: noOrganizationSwitch,
       refreshMemberships: noOrganizationSwitch,
       isLoading: false,
-      isSubscribed: false,
       isSwitchingOrg: false,
     }),
     [organizationId],

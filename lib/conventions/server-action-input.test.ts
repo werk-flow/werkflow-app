@@ -8,10 +8,12 @@ import { listProductSources, repositoryRoot } from './product-sources';
 // "3. Security": never trust an id, an organization or a role that the client
 // sent). Every export of a 'use server' module is a public POST endpoint whose
 // arguments arrive from the network with the declared TypeScript types
-// unchecked. Each exported function therefore takes no parameter, or every
-// parameter's first use sits inside the arguments of
-//   1. a `.parse(` or `.safeParse(` call (a zod schema), or
-//   2. a named validator: a function called `parse…` or `validate…`, or `isUuid`.
+// unchecked. Each exported function, and each inline function with its own
+// 'use server' directive, therefore takes no parameter, or every parameter's
+// first use sits inside the arguments of
+//   1. `.parse`, `.safeParse`, `.parseAsync` or `.safeParseAsync` on a Zod
+//      schema (`isSchemaExpression`; `JSON.parse` never counts), or
+//   2. a reviewed validator from NAMED_VALIDATORS.
 // A parameter that is never used passes; destructuring in the signature is a
 // use before validation. REVIEWED_INPUTS holds the reasoned exceptions; an
 // entry that matches no parameter fails, so the list only describes the code.
@@ -19,7 +21,17 @@ import { listProductSources, repositoryRoot } from './product-sources';
 /** "file#function#parameter" -> why the raw argument is safe without a schema. */
 const REVIEWED_INPUTS: Readonly<Record<string, string>> = {};
 
-const VALIDATOR_NAME = /^(parse|validate)[A-Z]\w*$|^isUuid$/;
+// Validators that parse their whole argument with a Zod schema or an
+// equivalent exhaustive check. A name here is reviewed; a lookalike
+// `parse…` or `validate…` function is not validation.
+const NAMED_VALIDATORS = new Set([
+  // lib/validation/uuid.ts: the uuid format check.
+  'isUuid',
+  // lib/documents/action-schemas.ts: `schema.safeParse(value)`, null on a mismatch.
+  'parseActionInput',
+  // lib/validation/form-data.ts: refuses a repeated field, then `schema.safeParse(fields)`.
+  'parseFormData',
+]);
 
 function hasServerDirective(statements: readonly ts.Statement[]): boolean {
   for (const statement of statements) {
@@ -39,22 +51,85 @@ function isExported(statement: ts.Statement): boolean {
 type ExportedFunction = { name: string; node: ts.SignatureDeclaration & { body?: ts.Node | undefined } };
 
 function exportedFunctions(source: ts.SourceFile): ExportedFunction[] {
-  if (!hasServerDirective(source.statements)) return [];
   const functions: ExportedFunction[] = [];
-  for (const statement of source.statements) {
-    if (!isExported(statement)) continue;
-    if (ts.isFunctionDeclaration(statement)) {
-      functions.push({ name: statement.name?.text ?? 'default', node: statement });
-    } else if (ts.isVariableStatement(statement)) {
-      for (const declaration of statement.declarationList.declarations) {
-        const initializer = declaration.initializer;
-        if (initializer && (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer))) {
-          functions.push({ name: declaration.name.getText(source), node: initializer });
+  if (hasServerDirective(source.statements)) {
+    for (const statement of source.statements) {
+      if (!isExported(statement)) continue;
+      if (ts.isFunctionDeclaration(statement)) {
+        functions.push({ name: statement.name?.text ?? 'default', node: statement });
+      } else if (ts.isVariableStatement(statement)) {
+        for (const declaration of statement.declarationList.declarations) {
+          const initializer = declaration.initializer;
+          if (initializer && (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer))) {
+            functions.push({ name: declaration.name.getText(source), node: initializer });
+          }
         }
       }
     }
   }
+  // An inline 'use server' function inside a component or an ordinary module
+  // is a public POST endpoint too.
+  ts.forEachChild(source, function visit(node) {
+    if (
+      ts.isFunctionLike(node) &&
+      'body' in node &&
+      node.body &&
+      ts.isBlock(node.body) &&
+      hasServerDirective(node.body.statements) &&
+      !functions.some((exported) => exported.node === node)
+    ) {
+      const line = source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+      functions.push({ name: `inline:${line}`, node });
+    }
+    ts.forEachChild(node, visit);
+  });
   return functions;
+}
+
+const SCHEMA_METHODS = new Set(['parse', 'safeParse', 'parseAsync', 'safeParseAsync']);
+const SCHEMA_NAME = /(^s|S)chema$/;
+
+/** The const initializer `name` is bound to in the file, searched from the innermost scope out. */
+function declaredInitializer(name: ts.Identifier): ts.Expression | undefined {
+  let found: ts.Expression | undefined;
+  ts.forEachChild(name.getSourceFile(), function visit(node) {
+    if (found) return;
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === name.text &&
+      node.initializer &&
+      node.name !== name
+    ) {
+      found = node.initializer;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  });
+  return found;
+}
+
+/**
+ * True when the receiver of `.parse(...)` is a Zod schema: a `…Schema` name,
+ * a member or a refinement of one, a chain built from the `z` of lib/zod.ts,
+ * or a const bound to one of these. `JSON.parse` and `Date.parse` never count.
+ */
+function isSchemaExpression(node: ts.Expression, depth = 0): boolean {
+  // Bounds a const cycle; a refinement chain like z.string().trim().min(1).max(9) stays well inside.
+  if (depth > 40) return false;
+  if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isNonNullExpression(node)) {
+    return isSchemaExpression(node.expression, depth + 1);
+  }
+  if (ts.isIdentifier(node)) {
+    if (node.text === 'z' || SCHEMA_NAME.test(node.text)) return true;
+    const initializer = declaredInitializer(node);
+    return initializer !== undefined && isSchemaExpression(initializer, depth + 1);
+  }
+  if (ts.isPropertyAccessExpression(node)) {
+    return SCHEMA_NAME.test(node.name.text) || isSchemaExpression(node.expression, depth + 1);
+  }
+  if (ts.isCallExpression(node)) return isSchemaExpression(node.expression, depth + 1);
+  return false;
 }
 
 /** True when `node` sits inside the arguments of a schema parse or a named validator call. */
@@ -69,11 +144,12 @@ function isInsideValidation(node: ts.Node, boundary: ts.Node): boolean {
     const callee = current.expression;
     if (
       ts.isPropertyAccessExpression(callee) &&
-      (callee.name.text === 'parse' || callee.name.text === 'safeParse')
+      SCHEMA_METHODS.has(callee.name.text) &&
+      isSchemaExpression(callee.expression)
     ) {
       return true;
     }
-    if (ts.isIdentifier(callee) && VALIDATOR_NAME.test(callee.text)) return true;
+    if (ts.isIdentifier(callee) && NAMED_VALIDATORS.has(callee.text)) return true;
   }
   return false;
 }
@@ -135,7 +211,7 @@ function unvalidatedParameters(file: string, text: string): string[] {
 
 test('every Server Action parses its arguments before their first use', () => {
   const problems: string[] = [];
-  for (const file of listProductSources(['lib', 'app'])) {
+  for (const file of listProductSources()) {
     const text = readFileSync(resolve(repositoryRoot, file), 'utf8');
     if (!text.includes('use server')) continue;
     problems.push(...unvalidatedParameters(file, text));
@@ -168,7 +244,19 @@ test('the scan accepts schema parses and named validators and rejects raw use', 
     ),
   ).toEqual([]);
   expect(
-    fixture(`export async function save(input: Input) { const value = parseSaveInput(input); }`),
+    fixture(
+      `export async function save(input: Input) { const value = parseActionInput(saveSchema, input); }`,
+    ),
+  ).toEqual([]);
+  expect(
+    fixture(
+      `export async function save(reason: string) { const parsed = z.string().trim().min(3).max(1000).safeParse(reason); }`,
+    ),
+  ).toEqual([]);
+  expect(
+    fixture(
+      `const reasonInput = z.string().max(9); export async function save(reason: string) { return reasonInput.parse(reason); }`,
+    ),
   ).toEqual([]);
   expect(
     fixture(`export async function save(id: string) { if (!isUuid(id)) return; await remove(id); }`),
@@ -190,4 +278,29 @@ test('the scan accepts schema parses and named validators and rejects raw use', 
       `export const save = async (input: Input) => { await log(input.id); return schema.parse(input); };`,
     ),
   ).toEqual(['lib/fixture.ts#save#input']);
+});
+
+test('planted violations: JSON.parse, lookalike validators and inline use-server functions', () => {
+  expect(fixture(`export async function save(raw: string) { const value = JSON.parse(raw); }`)).toEqual([
+    'lib/fixture.ts#save#raw',
+  ]);
+  expect(fixture(`export async function save(raw: string) { const at = Date.parse(raw); }`)).toEqual([
+    'lib/fixture.ts#save#raw',
+  ]);
+  expect(
+    fixture(`export async function save(input: Input) { const value = parseSaveInput(input); }`),
+  ).toEqual(['lib/fixture.ts#save#input']);
+  expect(fixture(`export async function save(id: string) { if (!validateId(id)) return; }`)).toEqual([
+    'lib/fixture.ts#save#id',
+  ]);
+  expect(fixture(`export async function save(raw: string) { return parser.parse(raw); }`)).toEqual([
+    'lib/fixture.ts#save#raw',
+  ]);
+  const inline = (body: string): string[] =>
+    unvalidatedParameters(
+      'app/page.tsx',
+      `export default function Page() { async function save(formData: FormData) { 'use server'; ${body} } return null; }`,
+    );
+  expect(inline(`await remove(formData.get('id'));`)).toEqual(['app/page.tsx#inline:1#formData']);
+  expect(inline(`const parsed = removeSchema.safeParse({ id: formData.get('id') });`)).toEqual([]);
 });

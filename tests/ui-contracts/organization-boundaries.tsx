@@ -44,7 +44,6 @@ export function OrganizationContractFixture(): React.JSX.Element {
         initialMemberships={memberships}
         initialActiveOrgId={serverOrganization}
         initialActiveOrgCookieNeedsSync={false}
-        initialIsSubscribed
       >
         <Consumer />
         <Button onClick={() => setServerOrganization(window.organizationContract.cookie)}>

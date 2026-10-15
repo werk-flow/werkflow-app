@@ -45,7 +45,7 @@ const signedInClient = {
     // The code exchange writes the new session through the route's cookie adapter.
     exchangeCodeForSession: async () => {
       cookieAdapter?.set('sb-session', 'fixture-session', { path: '/', httpOnly: true });
-      return { error: null };
+      return { data: { user: { id: callerId }, session: {} }, error: null };
     },
   },
 };
@@ -92,8 +92,9 @@ function redeemRequest(headers: Record<string, string> = {}): NextRequest {
     body: JSON.stringify({ inviteCode }),
   });
 }
+// The callback redeems only after a code exchange; a bare invite link redeems nothing.
 function callbackRequest(): NextRequest {
-  return new NextRequest(`http://localhost/auth/callback?invite_code=${inviteCode}`, {
+  return new NextRequest(`http://localhost/auth/callback?code=fixture-code&invite_code=${inviteCode}`, {
     headers: { 'x-forwarded-for': clientIp },
   });
 }
@@ -154,25 +155,16 @@ for (const answer of [
   assert.deepEqual(cookiesSet, []);
 }
 
-// The invite link of a signed-in user: a reached limit leads to the invite error page.
+// After a code exchange a reached limit leads to the invite error page.
 reset(limitedAction('invite_redeem_per_ip'));
 const limitedLink = await GET(callbackRequest());
 assert.equal(limitedLink.headers.get('location'), 'http://localhost/invite-error?error=too_many_attempts');
 assert.equal(redemptions(), 0);
 
-// A limiter outage redeems nothing and shows the failed redemption instead of a silent dashboard.
+// A limiter outage redeems nothing, shows the failed redemption instead of a
+// silent dashboard and keeps the new session with its options.
 reset(() => ({ data: null, error: { code: '08006', message: 'connection failure' } }));
-const unavailableLink = await GET(callbackRequest());
-assert.equal(unavailableLink.headers.get('location'), 'http://localhost/invite-error?error=redeem_failed');
-assert.equal(redemptions(), 0);
-
-// After a code exchange the same outage shows the failed redemption and keeps the new session with its options.
-reset(() => ({ data: null, error: { code: '08006', message: 'connection failure' } }));
-const unavailableExchange = await GET(
-  new NextRequest(`http://localhost/auth/callback?code=fixture-code&invite_code=${inviteCode}`, {
-    headers: { 'x-forwarded-for': clientIp },
-  }),
-);
+const unavailableExchange = await GET(callbackRequest());
 assert.equal(
   unavailableExchange.headers.get('location'),
   'http://localhost/invite-error?error=redeem_failed',

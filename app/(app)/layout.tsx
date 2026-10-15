@@ -16,7 +16,6 @@ import { AppShellSkeleton } from '@/components/sidebar/app-shell-skeleton';
 import {
   getCachedUser,
   getCachedMemberships,
-  getCachedSubscriptionStatus,
   getCachedUserProfile,
   type UserProfile,
 } from '@/lib/data/cached';
@@ -41,11 +40,8 @@ async function AppProviders({ children }: { children: React.ReactNode }) {
 
   if (!user) redirect('/login');
 
-  // A failed subscription read rejects the render into app/error.tsx with its
-  // retry, like an unavailable identity check: it is never "not subscribed".
-  const [memberships, isSubscribed, activeOrgId, profile] = await Promise.all([
+  const [memberships, activeOrgId, profile] = await Promise.all([
     getCachedMemberships(user.id),
-    getCachedSubscriptionStatus(user.id),
     resolveActiveOrgId(cookieStore, user.id),
     readShellProfile(user.id, user.email ?? ''),
   ]);
@@ -63,7 +59,6 @@ async function AppProviders({ children }: { children: React.ReactNode }) {
         initialMemberships={memberships}
         initialActiveOrgId={activeOrgId}
         initialActiveOrgCookieNeedsSync={activeOrgCookieNeedsSync}
-        initialIsSubscribed={isSubscribed}
       >
         <RealtimeProvider>
           <UserProfileProvider initialProfile={profile}>

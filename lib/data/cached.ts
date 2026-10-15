@@ -24,7 +24,6 @@ import { getMembershipAccessMode } from '@/lib/personnel/lifecycle';
 
 // Tag helpers for cache invalidation in server actions
 export const CACHE_TAGS = {
-  subscription: (userId: string) => `subscription-${userId}`,
   profile: (userId: string) => `profile-${userId}`,
   memberCount: (orgId: string) => `member-count-${orgId}`,
   organizationSettings: (orgId: string) => `organization-settings-${orgId}`,
@@ -220,35 +219,6 @@ export const getCachedPrestartMemberships = memoizeRequestRead(async (userId: st
   return candidates
     .filter((membership) => getMembershipAccessMode(membership, now) === 'prestart')
     .map(toUserOrg);
-});
-
-/**
- * Cross-request cached subscription status. A missing row is "not
- * subscribed"; a failed read throws `CachedReadError`, never `false`.
- */
-export const getCachedSubscriptionStatus = cache(async (userId: string): Promise<boolean> => {
-  const fetchSubscription = unstable_cache(
-    async (uid: string): Promise<boolean> => {
-      const admin = createSupabaseAdminClient();
-
-      const { data, error } = await admin
-        .from('subscriptions')
-        .select('status')
-        .eq('user_id', uid)
-        .maybeSingle();
-
-      if (error) failCachedRead('subscription_read_failed', error);
-
-      return data?.status === 'active';
-    },
-    [`subscription-${userId}`],
-    {
-      tags: [CACHE_TAGS.subscription(userId)],
-      revalidate: REVALIDATE_SECONDS,
-    },
-  );
-
-  return fetchSubscription(userId);
 });
 
 /**

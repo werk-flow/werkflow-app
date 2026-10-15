@@ -2,6 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import {
   findNumberedRuleReferences,
   findRepositoryPathReferences,
+  findUnresolvedRulePointers,
+  numberedItemsUnder,
   findRouteHandlerReferences,
   repositoryPathCandidates,
 } from './reference-rules';
@@ -41,6 +43,55 @@ describe('numbered rules', () => {
     expect(
       findNumberedRuleReferences('See maintenance rule 6, the migration rule, item 8, and the testing rule.'),
     ).toEqual([]);
+  });
+});
+
+describe('rule pointers in code', () => {
+  const freshness = {
+    document: 'realtime-and-caching.md#client-freshness-contract',
+    phrase: /freshness contract\s*$/i,
+    numbers: numberedItemsUnder(
+      '# T\n\n## Client freshness contract\n\n1. **A.** x\n2. **B.** y\n\n## Next\n\n3. z\n',
+      'Client freshness contract',
+    ),
+  };
+  const sources = [
+    freshness,
+    { document: 'security.md', phrase: /\bsecurity(?:\.md)?,?\s*$/i, numbers: new Set<number>() },
+  ];
+
+  test('reads the list of one section only', () => {
+    expect([...freshness.numbers]).toEqual([1, 2]);
+  });
+
+  test('reports a number the named list lacks, a document without numbers and a bare pointer', () => {
+    const text = [
+      '// keeps the data (freshness contract rule 2).',
+      '// pending state (client freshness contract rule 3).',
+      "  message: 'see security.md, rule 2',",
+      '-- (docs/technical/security.md,',
+      '-- rule 9 and the residual list)',
+      '/** Rules 1 and 2 apply. */',
+    ].join('\n');
+    expect(findUnresolvedRulePointers(text, sources).map(({ line, name }) => `${line} ${name}`)).toEqual([
+      '2 rule 3 (realtime-and-caching.md#client-freshness-contract has no such numbered rule)',
+      '3 rule 2 (security.md has no such numbered rule)',
+      '5 rule 9 (security.md has no such numbered rule)',
+      '6 Rules 1 and 2 (names no document that numbers it)',
+    ]);
+  });
+
+  test('a bare pointer resolves to the numbered rules the file states itself', () => {
+    const text = [
+      '// The rules:',
+      '//   1. One.',
+      '//   2. Two.',
+      '/** Rules 1 and 2 for one module. */',
+    ].join('\n');
+    expect(findUnresolvedRulePointers(text, sources)).toEqual([]);
+    expect(findUnresolvedRulePointers(`${text}\n// Rule 3: absence.`, sources)).toEqual([
+      { line: 5, name: 'Rule 3 (names no document that numbers it)' },
+    ]);
   });
 });
 

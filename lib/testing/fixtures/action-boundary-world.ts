@@ -22,6 +22,8 @@ export type ActionWorld = {
   callerId: string | null;
   /** The caller's current memberships as the membership read returns them. */
   memberships: Array<{ orgId: string; role: FixtureRole }>;
+  /** Organizations where the caller is an employee whose access has not started yet. */
+  prestartOrganizationIds: string[];
   /** Value of the active-organization cookie; `null` is a missing cookie. */
   activeOrganizationCookie: string | null;
   tables: InMemoryTables;
@@ -43,6 +45,7 @@ export type ActionWorld = {
 export function signInAs(world: ActionWorld, role: FixtureRole | null, orgId: string = ORGANIZATION_A): void {
   world.callerId = CALLER_ID;
   world.memberships = role === null ? [] : [{ orgId, role }];
+  world.prestartOrganizationIds = [];
   world.activeOrganizationCookie = role === null ? null : orgId;
 }
 
@@ -57,6 +60,7 @@ export function installActionWorld(
   const world: ActionWorld = {
     callerId: CALLER_ID,
     memberships: [],
+    prestartOrganizationIds: [],
     activeOrganizationCookie: null,
     tables,
     rpc: () => ({ data: null, error: null }),
@@ -133,21 +137,21 @@ export function installActionWorld(
   }));
   // The caller-scoped client reads the same rows; row-level security is SQL-tested.
   mock.module('@/lib/supabase/server', () => ({ createSupabaseServerClient: async () => database() }));
+  const asMembership = (membership: { orgId: string; role: FixtureRole }) => ({
+    ...membership,
+    name: 'Fixture company',
+    uniqueCode: 'ABCDEF',
+    joinedAt: '2026-01-01T00:00:00.000Z',
+  });
   mock.module('@/lib/data/cached', () => ({
     // Any tag name resolves to a string; invalidation itself is replaced above.
     CACHE_TAGS: new Proxy({}, { get: (_target, tag) => () => String(tag) }),
     getAuthenticatedUser: async () =>
       world.callerId === null ? null : { id: world.callerId, email: 'caller@example.test' },
-    getCachedMemberships: async () =>
-      world.memberships.map((membership) => ({
-        ...membership,
-        name: 'Fixture company',
-        uniqueCode: 'ABCDEF',
-        joinedAt: '2026-01-01T00:00:00.000Z',
-      })),
+    getCachedMemberships: async () => world.memberships.map(asMembership),
     getCachedUser: unusedRead('getCachedUser'),
-    getCachedPrestartMemberships: unusedRead('getCachedPrestartMemberships'),
-    getCachedSubscriptionStatus: unusedRead('getCachedSubscriptionStatus'),
+    getCachedPrestartMemberships: async () =>
+      world.prestartOrganizationIds.map((orgId) => asMembership({ orgId, role: 'employee' })),
     getCachedMemberCount: unusedRead('getCachedMemberCount'),
     getCachedOrganizationSettings: unusedRead('getCachedOrganizationSettings'),
     getCachedOrganizationCalendar: unusedRead('getCachedOrganizationCalendar'),

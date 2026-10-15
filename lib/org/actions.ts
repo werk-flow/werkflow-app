@@ -8,7 +8,8 @@ import { logError } from '@/lib/logging';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { generateUniqueOrgCode } from './generate-code';
 import { CURRENT_ORG_COOKIE, CURRENT_ORG_MAX_AGE } from './cookies';
-import { getAuthenticatedUser, getCachedMemberships } from '@/lib/data/cached';
+import { getAuthenticatedUser } from '@/lib/data/cached';
+import { resolveActionContextFor } from '@/lib/org/action-context';
 import { getOrganizationNameValidationError, normalizeOrganizationName } from '@/lib/org/schemas';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 
@@ -19,12 +20,9 @@ import { rpcArgs } from '@/lib/supabase/rpc-args';
  */
 export async function setActiveOrgCookie(orgId: string): Promise<void> {
   const parsedOrgId = uuidSchema.safeParse(orgId);
-  const user = await getAuthenticatedUser();
-  if (!user) throw new Error('not_authenticated');
   if (!parsedOrgId.success) throw new Error('not_a_member');
-  const memberships = await getCachedMemberships(user.id);
-  if (!memberships.some((membership) => membership.orgId === parsedOrgId.data))
-    throw new Error('not_a_member');
+  const caller = await resolveActionContextFor(parsedOrgId.data);
+  if (!caller.success) throw new Error(caller.error);
 
   const cookieStore = await cookies();
   cookieStore.set(CURRENT_ORG_COOKIE, parsedOrgId.data, {

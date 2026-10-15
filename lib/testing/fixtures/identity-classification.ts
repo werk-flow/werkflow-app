@@ -1,5 +1,5 @@
 // The proxy's session refresh and the server's identity check classify every
-// Auth error the same way (security.md, rule 8): a rejection signs the
+// Auth error the same way (security.md#trust-boundaries, "Page routing"): a rejection signs the
 // visitor out in both, anything else is an availability failure in both.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';

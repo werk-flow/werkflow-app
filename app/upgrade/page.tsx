@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { CreditCard, Check } from 'lucide-react';
 
-import { getCachedSubscriptionStatus, getCachedUser } from '@/lib/data/cached';
-import { userHasOrganizations } from '@/lib/subscription/helpers';
+import { getCachedUser } from '@/lib/data/cached';
+import { isUserSubscribed, userHasOrganizations } from '@/lib/subscription/helpers';
 import { StandaloneScreen } from '@/components/shared/standalone-screen';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -31,8 +31,8 @@ export default async function UpgradePage() {
     redirect('/dashboard');
   }
 
-  // If user is already subscribed, redirect to create organization
-  const subscribed = await getCachedSubscriptionStatus(user.id);
+  // Read per request: an entitlement is never cached across requests.
+  const subscribed = await isUserSubscribed(user.id);
   if (subscribed) {
     redirect('/onboarding/create-organization');
   }

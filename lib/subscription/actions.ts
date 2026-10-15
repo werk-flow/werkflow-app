@@ -1,10 +1,9 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { updateTag } from 'next/cache';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { userHasOrganizations } from './helpers';
-import { getAuthenticatedUser, CACHE_TAGS } from '@/lib/data/cached';
+import { getAuthenticatedUser } from '@/lib/data/cached';
 import { logError } from '@/lib/logging';
 import { consumeRateLimit } from '@/lib/security/rate-limit';
 
@@ -63,8 +62,6 @@ export async function simulatePayment(): Promise<SimulatePaymentResult> {
     logError('simulatePayment: subscription upsert failed', error);
     return { success: false, error: 'subscription_activation_failed' };
   }
-
-  updateTag(CACHE_TAGS.subscription(user.id));
 
   // Redirect to organization creation page
   redirect('/onboarding/create-organization');

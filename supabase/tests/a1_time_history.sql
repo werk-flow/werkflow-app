@@ -7,6 +7,8 @@ create function pg_temp.timeline_fence() returns jsonb language sql as $$
   select jsonb_build_object('timelineRevision', coalesce((select revision from public.time_timeline_revisions
     where organization_id = 'a1000000-0000-0000-0000-000000000010'), 0));
 $$;
+-- New functions are closed by default (migration 20261015100100).
+grant execute on all functions in schema pg_temp to service_role, authenticated;
 
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,

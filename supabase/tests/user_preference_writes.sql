@@ -50,6 +50,8 @@ create function pg_temp.preferences_of(p_user_id uuid) returns jsonb language sq
   select stored.preferences from public.organization_user_preferences stored
   where stored.organization_id = 'c5000000-0000-4000-8000-000000000010' and stored.user_id = p_user_id;
 $$;
+-- New functions are closed by default (migration 20261015100100).
+grant execute on all functions in schema pg_temp to service_role, authenticated;
 
 set local role service_role;
 
@@ -151,18 +153,20 @@ select pg_temp.expect_refusal('a member writing into an organization they do not
 $sql$, 'not_a_member');
 reset role;
 
--- A signed-in client cannot call the function, and its own table policies keep
--- it out of a colleague's row.
+-- A signed-in client can neither call the function nor write the table
+-- (client roles write no public table, migration 20261015100100).
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'c5000000-0000-4000-8000-000000000003', true);
 select pg_temp.expect_refusal('a direct client call', $sql$
   select public.set_organization_user_preference('c5000000-0000-4000-8000-000000000010',
     'c5000000-0000-4000-8000-000000000002', '{calendar}', '{"view":"week"}')
 $sql$, 'permission denied for function set_organization_user_preference');
-update public.organization_user_preferences stored
-set preferences = '{"calendar":{"view":"week"}}'
-where stored.organization_id = 'c5000000-0000-4000-8000-000000000010'
-  and stored.user_id = 'c5000000-0000-4000-8000-000000000002';
+select pg_temp.expect_refusal('a direct client write', $sql$
+  update public.organization_user_preferences stored
+  set preferences = '{"calendar":{"view":"week"}}'
+  where stored.organization_id = 'c5000000-0000-4000-8000-000000000010'
+    and stored.user_id = 'c5000000-0000-4000-8000-000000000002'
+$sql$, 'permission denied for table organization_user_preferences');
 reset role;
 
 do $$

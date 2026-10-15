@@ -4,10 +4,19 @@ import { requireEnv } from '../../../tests/golden/support/env';
 // Keep this read-only query aligned with sql:security. It detects dashboard-only
 // grant drift, which local migration replay cannot observe.
 export const CLOUD_SECURITY_QUERY = `
-select n.nspname || '.' || p.proname || ': client definer grant' as problem
+select n.nspname || '.' || p.proname || ': client function grant' as problem
 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-where p.prosecdef and n.nspname='public'
+where n.nspname='public'
 and (has_function_privilege('anon',p.oid,'execute') or has_function_privilege('authenticated',p.oid,'execute'))
+union all
+select c.relname || ': client table write grant'
+from pg_class c join pg_namespace n on n.oid=c.relnamespace
+where n.nspname='public' and c.relkind in ('r','p')
+and (has_table_privilege('anon',c.oid,'INSERT,UPDATE,DELETE') or has_table_privilege('authenticated',c.oid,'INSERT,UPDATE,DELETE'))
+union all
+select 'profiles: client email or id update grant'
+where has_column_privilege('authenticated','public.profiles','email','UPDATE')
+or has_column_privilege('authenticated','public.profiles','id','UPDATE')
 union all
 select routine || ': list reader grant drift' from unnest(array[
  'public.list_customer_page(uuid,text,integer,integer)',

@@ -123,15 +123,66 @@ export function continuationCalls(top: ts.Expression): ChainCall[] {
   return calls;
 }
 
-/** Tables and views of the public schema whose rows carry `organization_id`. */
-export function organizationTables(): Set<string> {
+const ORGANIZATION_ARGUMENTS = ['p_organization_id', 'p_org_id', 'organization_id', 'org_id'];
+
+/** The members of a union type node, or the node itself; none for a missing node. */
+function unionMembers(type: ts.TypeNode | undefined): readonly ts.TypeNode[] {
+  if (!type) return [];
+  const inner = ts.isParenthesizedTypeNode(type) ? type.type : type;
+  return ts.isUnionTypeNode(inner) ? inner.types.flatMap(unionMembers) : [inner];
+}
+
+function generatedTypes(): ts.SourceFile {
   const file = 'lib/supabase/database.types.ts';
-  const source = ts.createSourceFile(
+  return ts.createSourceFile(
     file,
     readFileSync(resolve(repositoryRoot, file), 'utf8'),
     ts.ScriptTarget.Latest,
     true,
   );
+}
+
+/**
+ * Every function of the public schema, mapped to the name of its organization
+ * argument, or to null when no overload takes one. An overloaded function is
+ * generated as a union of whole `{ Args; Returns }` variants, and its `Args`
+ * may itself be a union; every variant counts.
+ */
+export function functionOrganizationArguments(
+  source: ts.SourceFile = generatedTypes(),
+): Map<string, string | null> {
+  const functions = new Map<string, string | null>();
+  const nameOf = (member: ts.TypeElement): string => member.name?.getText(source).replace(/['"]/g, '') ?? '';
+  const memberType = (type: ts.TypeNode | undefined, name: string): ts.TypeNode | undefined => {
+    if (!type || !ts.isTypeLiteralNode(type)) return undefined;
+    const member = type.members.find((candidate) => nameOf(candidate) === name);
+    return member && ts.isPropertySignature(member) ? member.type : undefined;
+  };
+  ts.forEachChild(source, function visit(node) {
+    if (!ts.isTypeAliasDeclaration(node) || node.name.text !== 'Database') {
+      ts.forEachChild(node, visit);
+      return;
+    }
+    const declared = memberType(memberType(node.type, 'public'), 'Functions');
+    if (!declared || !ts.isTypeLiteralNode(declared)) return;
+    for (const entry of declared.members) {
+      const variants = unionMembers(ts.isPropertySignature(entry) ? entry.type : undefined);
+      const overloads = variants.flatMap((variant) => unionMembers(memberType(variant, 'Args')));
+      const names = overloads.flatMap((overload) =>
+        ts.isTypeLiteralNode(overload) ? overload.members.map(nameOf) : [],
+      );
+      functions.set(
+        nameOf(entry),
+        ORGANIZATION_ARGUMENTS.find((argument) => names.includes(argument)) ?? null,
+      );
+    }
+  });
+  return functions;
+}
+
+/** Tables and views of the public schema whose rows carry `organization_id`. */
+export function organizationTables(): Set<string> {
+  const source = generatedTypes();
   const memberName = (member: ts.TypeElement): string =>
     member.name?.getText(source).replace(/['"]/g, '') ?? '';
   const memberType = (

@@ -120,22 +120,150 @@ begin
 end;
 $$;
 
--- Foundational reads and writes must survive a replay without legacy defaults.
--- RLS still owns which records these roles can access.
+-- Foundational access must survive a replay without legacy defaults: the
+-- server writes through the service role, a signed-in user only reads, and
+-- RLS still owns which records the user sees.
 do $$
-declare relation_name text; api_role text; operation_name text;
+declare relation_name text; operation_name text;
 begin
   foreach relation_name in array array['organizations', 'organization_members', 'profiles', 'clients', 'jobs'] loop
-    foreach api_role in array array['authenticated', 'service_role'] loop
-      foreach operation_name in array array['SELECT', 'INSERT', 'UPDATE', 'DELETE'] loop
-        if not has_table_privilege(api_role, 'public.' || relation_name, operation_name) then
-          raise exception 'Missing explicit foundation privilege: % % %', api_role, relation_name, operation_name;
-        end if;
-      end loop;
+    foreach operation_name in array array['SELECT', 'INSERT', 'UPDATE', 'DELETE'] loop
+      if not has_table_privilege('service_role', 'public.' || relation_name, operation_name) then
+        raise exception 'Missing explicit foundation privilege: service_role % %', relation_name, operation_name;
+      end if;
     end loop;
+    if not has_table_privilege('authenticated', 'public.' || relation_name, 'SELECT') then
+      raise exception 'Missing explicit foundation privilege: authenticated % SELECT', relation_name;
+    end if;
   end loop;
 end;
 $$;
+
+-- A client grant exists only together with the policy that limits it: for
+-- every public table and command, a table or column privilege of anon or
+-- authenticated needs a permissive policy for that command that applies to
+-- the role. The check is a temporary function so that the probe below runs
+-- the same query against a table that violates it.
+create function pg_temp.client_grants_without_policy() returns text language sql as $$
+  select string_agg(c.relname || ' ' || grantee.role || ' ' || command.name, ', '
+    order by c.relname, grantee.role, command.name)
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  cross join (values ('anon'), ('authenticated')) as grantee(role)
+  cross join (values ('SELECT', 'r'), ('INSERT', 'a'), ('UPDATE', 'w'), ('DELETE', 'd')) as command(name, code)
+  where n.nspname = 'public' and c.relkind in ('r', 'p')
+    and (has_table_privilege(grantee.role, c.oid, command.name)
+      or (command.name <> 'DELETE' and has_any_column_privilege(grantee.role, c.oid, command.name)))
+    and not exists (
+      select 1 from pg_policy p
+      where p.polrelid = c.oid and p.polpermissive
+        and p.polcmd in ('*', command.code)
+        and (0::oid = any (p.polroles) or grantee.role::regrole::oid = any (p.polroles))
+    );
+$$;
+
+do $$
+declare offender text := pg_temp.client_grants_without_policy();
+begin
+  if offender is not null then
+    raise exception 'Client grant without a matching policy: %', offender;
+  end if;
+end;
+$$;
+
+-- Probe: a table with only a SELECT policy and an INSERT grant must be reported.
+create table public.werkflow_policy_probe (id bigint primary key);
+alter table public.werkflow_policy_probe enable row level security;
+create policy "probe reads" on public.werkflow_policy_probe for select to authenticated using (true);
+grant select, insert on table public.werkflow_policy_probe to authenticated;
+do $$
+begin
+  if coalesce(pg_temp.client_grants_without_policy(), '') <> 'werkflow_policy_probe authenticated INSERT' then
+    raise exception 'Grant-without-policy check missed the probe: %', pg_temp.client_grants_without_policy();
+  end if;
+end;
+$$;
+drop table public.werkflow_policy_probe;
+
+-- Client roles write no public table directly (migration 20261015100100).
+-- Every client write privilege is in this reviewed inventory with its caller;
+-- a new one fails until it is listed, and a listed one that disappears fails
+-- until the list shrinks.
+do $$
+declare
+  reviewed constant text[] := array[
+    -- updateProfileSettings and the avatar actions in lib/settings/actions.ts (own row only)
+    'profiles.avatar_path UPDATE',
+    'profiles.first_name UPDATE',
+    'profiles.last_name UPDATE',
+    'profiles.updated_at UPDATE'
+  ];
+  unreviewed text; missing text;
+begin
+  select string_agg(c.relname || ' ' || command.name, ', ' order by c.relname, command.name) into unreviewed
+  from pg_class c join pg_namespace n on n.oid = c.relnamespace
+  cross join (values ('INSERT'), ('UPDATE'), ('DELETE')) as command(name)
+  where n.nspname = 'public' and c.relkind in ('r', 'p', 'v', 'm', 'f')
+    and (has_table_privilege('authenticated', c.oid, command.name)
+      or has_table_privilege('anon', c.oid, command.name));
+  if unreviewed is not null then
+    raise exception 'Table-level client write privilege on: %', unreviewed;
+  end if;
+
+  with granted as (
+    select privilege.table_name || '.' || privilege.column_name || ' ' || privilege.privilege_type as entry
+    from information_schema.column_privileges privilege
+    where privilege.table_schema = 'public'
+      and privilege.grantee in ('anon', 'authenticated', 'PUBLIC')
+      and privilege.privilege_type in ('INSERT', 'UPDATE', 'REFERENCES')
+  )
+  select string_agg(entry, ', ' order by entry) into unreviewed
+  from granted where entry <> all (reviewed);
+  if unreviewed is not null then
+    raise exception 'Unreviewed client column write privilege: %', unreviewed;
+  end if;
+
+  select string_agg(entry, ', ' order by entry) into missing
+  from unnest(reviewed) as entry
+  where not has_column_privilege('authenticated', 'public.' || split_part(split_part(entry, ' ', 1), '.', 1),
+    split_part(split_part(entry, ' ', 1), '.', 2), split_part(entry, ' ', 2));
+  if missing is not null then
+    raise exception 'Client write inventory lists missing privileges: %', missing;
+  end if;
+end;
+$$;
+
+-- No function in the exposed schema is executable by a client role unless
+-- reviewed here: PostgREST would serve it as an RPC. The definer functions
+-- have their own inventory below, and today no invoker function is listed
+-- either. Migration 20261015100100 closed the creation default, and the
+-- probe proves that a new function inherits no client execution.
+do $$
+declare
+  reviewed constant text[] := array[]::text[];
+  unreviewed text;
+begin
+  select string_agg(p.oid::regprocedure::text, ', ' order by p.oid::regprocedure::text) into unreviewed
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and not p.prosecdef
+    and (has_function_privilege('anon', p.oid, 'EXECUTE')
+      or has_function_privilege('authenticated', p.oid, 'EXECUTE'))
+    and p.oid::regprocedure::text <> all (reviewed);
+  if unreviewed is not null then
+    raise exception 'Unreviewed client execution of public functions: %', unreviewed;
+  end if;
+end;
+$$;
+create function public.werkflow_function_probe() returns integer language sql as 'select 1';
+do $$
+begin
+  if has_function_privilege('anon', 'public.werkflow_function_probe()', 'EXECUTE')
+    or has_function_privilege('authenticated', 'public.werkflow_function_probe()', 'EXECUTE') then
+    raise exception 'A new public function inherited client execution';
+  end if;
+end;
+$$;
+drop function public.werkflow_function_probe();
 
 -- Transactional probe of the migration role's actual defaults, not their prose.
 create table public.werkflow_privilege_probe (id bigint generated by default as identity primary key);
@@ -232,8 +360,12 @@ declare
     'app_private.current_user_can_access_personnel_document_history(uuid)',
     -- document_versions (personnel documents)
     'app_private.current_user_can_access_personnel_document_version(uuid, integer)',
-    -- manager visibility across clients, planning, time, teams and templates
+    -- manager visibility across clients, planning, time, teams, templates, jobs, projects and job_assignments
     'app_private.get_user_admin_or_manager_org_ids(uuid)',
+    -- an employee's own work in jobs and job_assignments
+    'app_private.get_user_assigned_job_ids(uuid)',
+    -- the projects that hold an employee's own work
+    'app_private.get_user_assigned_project_ids(uuid)',
     -- organization_capabilities
     'app_private.get_user_capability_ids(uuid)',
     -- own rows in dispatches, absences, schedules, teams and responsibilities

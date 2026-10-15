@@ -3,16 +3,15 @@
 import { loggedRead } from '@/lib/data/read-request-cache';
 import { logError } from '@/lib/logging';
 import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
-import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { z } from '@/lib/zod';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { isManagerRole } from '@/lib/roles';
 
-import { getAuthenticatedUser, getCachedMemberships, getCachedPrestartMemberships } from '@/lib/data/cached';
+import { getAuthenticatedUser } from '@/lib/data/cached';
 import type { ActionFailure } from '@/lib/action-result';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
-import { CURRENT_ORG_COOKIE } from '@/lib/org/cookies';
+import { resolveSelfServiceContext, resolveSelfServiceContextFor } from '@/lib/org/self-service-context';
 import { getResponsibilitiesStrandedByMemberRemoval } from '@/lib/responsibilities/server';
 import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
@@ -792,29 +791,17 @@ async function getSelfContext(): Promise<
     }
   | ActionFailure
 > {
-  const user = await getAuthenticatedUser();
-  if (!user) return { success: false, error: 'not_authenticated' };
-  const cookieStore = await cookies();
-  const [activeMemberships, prestartMemberships] = await Promise.all([
-    getCachedMemberships(user.id),
-    getCachedPrestartMemberships(user.id),
-  ]);
-  const candidates = [
-    ...activeMemberships.map((membership) => ({ ...membership, prestart: false })),
-    ...prestartMemberships.map((membership) => ({ ...membership, prestart: true })),
-  ];
-  const stored = cookieStore.get(CURRENT_ORG_COOKIE)?.value;
-  const storedMembership = stored ? candidates.find((candidate) => candidate.orgId === stored) : undefined;
-  const membership = stored ? storedMembership : candidates.length === 1 ? candidates[0] : undefined;
-  if (!membership) return { success: false, error: 'not_a_member' };
+  const caller = await resolveSelfServiceContext();
+  if (!caller.success) return caller;
+  const { orgId, userId, prestart } = caller.context;
   const admin = createSupabaseAdminClient();
   const { data: employee, error: employeeError } = await loggedRead(
     'getSelfContext: employee_records read failed',
     admin
       .from('employee_records')
       .select('id')
-      .eq('organization_id', membership.orgId)
-      .eq('user_id', user.id)
+      .eq('organization_id', orgId)
+      .eq('user_id', userId)
       .maybeSingle(),
   );
   if (employeeError) return { success: false, error: 'load_failed' };
@@ -822,11 +809,47 @@ async function getSelfContext(): Promise<
   return {
     success: true,
     admin,
-    organizationId: membership.orgId,
-    actorId: user.id,
+    organizationId: orgId,
+    actorId: userId,
     employeeRecordId: employee.id,
-    prestart: membership.prestart,
+    prestart,
   };
+}
+
+type PersonnelUploadActor = {
+  success: true;
+  admin: AdminClient;
+  organizationId: string;
+  actorId: string;
+  affectedUserId: string | null;
+};
+
+/**
+ * Who may upload a personnel document: an Admin for any access class, Büro
+ * for standard files, and the employee for their own health evidence.
+ */
+async function requirePersonnelUploadActor(request: {
+  employeeRecordId: string;
+  accessClass: PersonnelDocumentAccessClass;
+}): Promise<PersonnelUploadActor | ActionFailure> {
+  const manager = await requireManagerRecord(request.employeeRecordId);
+  if (manager.success) {
+    if (request.accessClass !== 'personnel_standard' && manager.role !== 'admin') {
+      return { success: false, error: 'not_authorized' };
+    }
+    const { admin, organizationId, actorId, userId } = manager;
+    return { success: true, admin, organizationId, actorId, affectedUserId: userId };
+  }
+  const self = await getSelfContext();
+  if (
+    !self.success ||
+    self.employeeRecordId !== request.employeeRecordId ||
+    request.accessClass !== 'health_evidence'
+  ) {
+    return { success: false, error: 'not_authorized' };
+  }
+  const { admin, organizationId, actorId } = self;
+  return { success: true, admin, organizationId, actorId, affectedUserId: actorId };
 }
 
 export type OwnPersonnelActions = {
@@ -1028,27 +1051,9 @@ export async function createPersonnelDocumentUploadTicket(input: {
   const request = parsed.data;
   if (request.fileSizeBytes > DOCUMENT_MAX_FILE_SIZE_BYTES)
     return { success: false, error: 'file_too_large' };
-  const manager = await requireManagerRecord(request.employeeRecordId);
-  let organizationId: string;
-  let actorId: string;
-  if (manager.success) {
-    if (request.accessClass !== 'personnel_standard' && manager.role !== 'admin') {
-      return { success: false, error: 'not_authorized' };
-    }
-    organizationId = manager.organizationId;
-    actorId = manager.actorId;
-  } else {
-    const self = await getSelfContext();
-    if (
-      !self.success ||
-      self.employeeRecordId !== request.employeeRecordId ||
-      request.accessClass !== 'health_evidence'
-    ) {
-      return { success: false, error: 'not_authorized' };
-    }
-    organizationId = self.organizationId;
-    actorId = self.actorId;
-  }
+  const actor = await requirePersonnelUploadActor(request);
+  if (!actor.success) return actor;
+  const { organizationId, actorId } = actor;
   const documentId = randomUUID();
   const storagePath = buildDocumentStoragePath({ organizationId, documentId, fileName: request.fileName });
   try {
@@ -1077,24 +1082,8 @@ export async function cleanupPersonnelDocumentUpload(input: unknown): Promise<Li
   const parsed = personnelDocumentUploadCleanupInputSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const request = parsed.data;
-  const manager = await requireManagerRecord(request.employeeRecordId);
-  let context: { admin: AdminClient; organizationId: string; actorId: string };
-  if (manager.success) {
-    if (request.accessClass !== 'personnel_standard' && manager.role !== 'admin') {
-      return { success: false, error: 'not_authorized' };
-    }
-    context = manager;
-  } else {
-    const self = await getSelfContext();
-    if (
-      !self.success ||
-      self.employeeRecordId !== request.employeeRecordId ||
-      request.accessClass !== 'health_evidence'
-    ) {
-      return { success: false, error: 'not_authorized' };
-    }
-    context = self;
-  }
+  const context = await requirePersonnelUploadActor(request);
+  if (!context.success) return context;
   const storagePath = buildDocumentStoragePath({
     organizationId: context.organizationId,
     documentId: request.documentId,
@@ -1146,29 +1135,8 @@ export async function finalizePersonnelDocumentUpload(
   const parsed = personnelDocumentUploadInputSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const request = parsed.data;
-  const manager = await requireManagerRecord(request.employeeRecordId);
-  let context: {
-    admin: AdminClient;
-    organizationId: string;
-    actorId: string;
-    affectedUserId: string | null;
-  };
-  if (manager.success) {
-    if (request.accessClass !== 'personnel_standard' && manager.role !== 'admin') {
-      return { success: false, error: 'not_authorized' };
-    }
-    context = { ...manager, affectedUserId: manager.userId };
-  } else {
-    const self = await getSelfContext();
-    if (
-      !self.success ||
-      self.employeeRecordId !== request.employeeRecordId ||
-      request.accessClass !== 'health_evidence'
-    ) {
-      return { success: false, error: 'not_authorized' };
-    }
-    context = { ...self, affectedUserId: self.actorId };
-  }
+  const context = await requirePersonnelUploadActor(request);
+  if (!context.success) return context;
   const storagePath = buildDocumentStoragePath({
     organizationId: context.organizationId,
     documentId: request.documentId,
@@ -1260,13 +1228,11 @@ export async function getPersonnelDocumentSignedUrl(
   if (!parsedFile.success || parsedFile.data.deleted_at)
     return { success: false, error: 'document_not_found' };
   const file = parsedFile.data;
-  const [memberships, prestartMemberships] = await Promise.all([
-    getCachedMemberships(user.id),
-    getCachedPrestartMemberships(user.id),
-  ]);
-  const membership = memberships.find((item) => item.orgId === file.organization_id);
-  const hasOwnLifecycleAccess =
-    Boolean(membership) || prestartMemberships.some((item) => item.orgId === file.organization_id);
+  // A prestart employee may open their own released document; only an
+  // operational membership carries the manager role.
+  const caller = await resolveSelfServiceContextFor(file.organization_id);
+  if (!caller.success) return { success: false, error: 'not_authorized' };
+  const { role } = caller.context;
   const { data: employee, error: employeeError } = await loggedRead(
     'getPersonnelDocumentSignedUrl: employee_records read failed',
     admin
@@ -1282,15 +1248,13 @@ export async function getPersonnelDocumentSignedUrl(
     revoked_at: string | null;
   }>;
   const ownReleased =
-    hasOwnLifecycleAccess &&
-    employee?.user_id === user.id &&
+    employee?.user_id === caller.context.userId &&
     releases.some(
       (release) =>
         release.document_version_number === file.current_version_number && release.revoked_at === null,
     );
   const managerAllowed =
-    membership?.role === 'admin' ||
-    (membership?.role === 'buero' && document.access_class === 'personnel_standard');
+    role === 'admin' || (role === 'buero' && document.access_class === 'personnel_standard');
   if (!ownReleased && !managerAllowed) return { success: false, error: 'not_authorized' };
   try {
     const signedUrl = await createSignedDownloadUrl({

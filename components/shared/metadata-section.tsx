@@ -79,7 +79,7 @@ export function MetadataSection({ title, fields, isEditable }: MetadataSectionPr
   const [saveError, setSaveError] = useState<string | null>(null);
   const titleId = useId();
   // Pending state binds to the awaited server call and nothing else
-  // (freshness contract rule 6 — the P1-16 defect this section fixed).
+  // (docs/technical/realtime-and-caching.md#add-a-mutation; the P1-16 defect this section fixed).
   const { run: runSave, isPending } = useServerAction(
     async (value: string, onSave: (newValue: string) => Promise<void>) => {
       await onSave(value);

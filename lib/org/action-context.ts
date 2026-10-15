@@ -12,6 +12,7 @@ import { isManagerRole } from '@/lib/roles';
 // the role from the current operational membership read of this request.
 // lib/security/server-action-authorization.test.ts accepts these two
 // functions and the named wrappers built on them as an organization check.
+// lib/org/self-service-context.ts adds the prestart-aware self-service caller.
 
 export type ActionContext = {
   userId: string;

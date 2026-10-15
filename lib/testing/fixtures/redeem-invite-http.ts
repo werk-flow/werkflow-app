@@ -3,6 +3,7 @@
 // cookie, and the log carries the error code only.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
+import { AuthApiError, AuthRetryableFetchError, type AuthError } from '@supabase/supabase-js';
 import { NextRequest } from 'next/server';
 
 const organizationId = '10000000-0000-4000-8000-000000000001';
@@ -32,10 +33,12 @@ mock.module('@/lib/data/cached', () => ({
   CACHE_TAGS: { memberships: () => 'memberships', memberCount: () => 'member-count' },
 }));
 mock.module('@/lib/org/cookies', () => ({ CURRENT_ORG_COOKIE: 'current_org', CURRENT_ORG_MAX_AGE: 60 }));
+type IdentityAnswer = { data: { user: { id: string } | null }; error: AuthError | null };
+let identityAnswer: IdentityAnswer = { data: { user: { id: 'caller' } }, error: null };
 mock.module('@/lib/supabase/server', () => ({
   createSupabaseServerClient: async () => ({
     auth: {
-      getUser: async () => ({ data: { user: { id: 'caller' } }, error: null }),
+      getUser: async () => identityAnswer,
     },
   }),
 }));
@@ -95,13 +98,44 @@ assert.deepEqual(await redeemed.json(), {
 });
 assert.deepEqual(cookiesSet, ['current_org']);
 
-// An RPC failure is logged by code; the invited address goes to the caller
-// (the invite-error page needs it) but never into the log.
+// An RPC failure is logged by code. The refusal reaches the caller as its
+// stable code; the invited address in the RPC message reaches neither the
+// response nor the log, and the invite code goes to the error page in a cookie.
+cookiesSet.length = 0;
 rpcAnswer = { data: null, error: { code: 'P0001', message: 'email_mismatch::invited.person@example.com' } };
 const mismatch = await POST(request(sameOrigin));
 assert.equal(mismatch.status, 400);
-assert.deepEqual(await mismatch.json(), {
-  error: 'email_mismatch',
-  invitedEmail: 'invited.person@example.com',
-});
+const mismatchBody = await mismatch.text();
+assert.deepEqual(JSON.parse(mismatchBody), { error: 'email_mismatch' });
+assert.ok(!mismatchBody.includes('invited.person'));
+assert.deepEqual(cookiesSet, ['invite_mismatch']);
 assert.deepEqual(logged, ['"RPC error redeeming invite:" {"code":"P0001"}']);
+
+// An identity check that cannot complete is a retryable 503, never
+// not_authenticated, and it redeems nothing and sets no cookie.
+rpcAnswer = {
+  data: [{ org_id: organizationId, org_name: 'Fixture company', already_member: false }],
+  error: null,
+};
+for (const unavailable of [
+  new AuthRetryableFetchError('gateway', 503),
+  new AuthApiError('server', 500, 'unexpected_failure'),
+  new AuthApiError('gateway without code', 401, undefined),
+]) {
+  rpcCalls = 0;
+  cookiesSet.length = 0;
+  identityAnswer = { data: { user: null }, error: unavailable };
+  const response = await POST(request(sameOrigin));
+  assert.equal(response.status, 503, `${unavailable.name}/${String(unavailable.status)}`);
+  assert.deepEqual(await response.json(), { error: 'auth_unavailable' });
+  assert.equal(rpcCalls, 0);
+  assert.deepEqual(cookiesSet, []);
+}
+
+// A rejected identity is a signed-out caller.
+rpcCalls = 0;
+identityAnswer = { data: { user: null }, error: new AuthApiError('expired', 403, 'session_expired') };
+const rejected = await POST(request(sameOrigin));
+assert.equal(rejected.status, 401);
+assert.deepEqual(await rejected.json(), { error: 'not_authenticated' });
+assert.equal(rpcCalls, 0);
