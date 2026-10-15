@@ -2,6 +2,7 @@ import { defineConfig, globalIgnores } from 'eslint/config';
 import nextVitals from 'eslint-config-next/core-web-vitals';
 import nextTs from 'eslint-config-next/typescript';
 import eslintComments from '@eslint-community/eslint-plugin-eslint-comments/configs';
+import jsxA11y from 'eslint-plugin-jsx-a11y';
 import {
   MEASUREMENT_DIGEST_SUPPORT_FILES,
   playwrightSpecRules,
@@ -373,6 +374,78 @@ const dialogSizeSelectors = [
   },
 ];
 
+// A dialog's first focus goes to its first control or to the dialog itself.
+// A handler that only prevents the default leaves focus on the page's trigger,
+// so Tab never enters the dialog (rendered dialog audit). A dialog that must
+// not focus its first control passes `initialFocus="dialog"` to DialogContent.
+const dialogFocusMessage =
+  'An onOpenAutoFocus handler that only calls preventDefault leaves focus outside the dialog. Keep the default (first control) or pass initialFocus="dialog" to DialogContent (werkflow-design skill: Long forms in dialogs).';
+const dialogFocusSelectors = [
+  {
+    selector:
+      'JSXAttribute[name.name="onOpenAutoFocus"] > JSXExpressionContainer > :function[body.type="CallExpression"][body.callee.property.name="preventDefault"]',
+    message: dialogFocusMessage,
+  },
+  {
+    selector:
+      'JSXAttribute[name.name="onOpenAutoFocus"] > JSXExpressionContainer > :function[body.body.length=1][body.body.0.expression.callee.property.name="preventDefault"]',
+    message: dialogFocusMessage,
+  },
+];
+
+// A link inside running text is a TextLink (components/ui/text-link), which is
+// always underlined: next to muted text the link color alone is not told
+// apart in every theme (axe link-in-text-block, rendered audit). The selector
+// finds a raw `Link` or `a` whose parent element also holds visible text.
+const textLinkSelectors = [
+  {
+    selector:
+      ':matches(JSXElement, JSXFragment):has(> JSXText[value=/\\S/]) > JSXElement > JSXOpeningElement[name.name=/^(Link|a)$/]',
+    message:
+      'A link inside running text is a TextLink (components/ui/text-link): it stays underlined, so it is told apart from the text without color (werkflow-design skill: Component registry).',
+  },
+];
+
+// The token pairs of app/globals.css meet 4.5:1 (lib/ui/contrast-contracts.test.ts);
+// a token text color at reduced opacity does not, and the rendered axe pass
+// found it on muted labels, counts and separators. `text-sm/6` (size with
+// line height) and the viewer's white-on-black stay allowed.
+// esquery reads a regex up to its next slash, so `\x2f` stands for the slash.
+const textOpacityPattern =
+  '/(^| )([a-z0-9-]+:)*!?text-(?!(xs|sm|base|lg|[0-9]?xl|white|black)\\x2f)[a-z-]+\\x2f[0-9]+( |$)/';
+const textOpacitySelectors = [
+  {
+    selector: `Literal[value=${textOpacityPattern}]`,
+    message:
+      'A token text color at reduced opacity falls below the contrast of its token pair (axe color-contrast). Use the token itself, such as text-muted-foreground (werkflow-design skill: Color).',
+  },
+  {
+    selector: `TemplateElement[value.raw=${textOpacityPattern}]`,
+    message:
+      'A token text color at reduced opacity falls below the contrast of its token pair (axe color-contrast). Use the token itself, such as text-muted-foreground (werkflow-design skill: Color).',
+  },
+];
+
+// Sideways scrolling belongs to the named scroll regions of the registry
+// (components/ui/scroll-region): the calendar surfaces, tab strips, area navs
+// and tables from the tablet breakpoint. A page that scrolls sideways anywhere
+// else hides what it cuts off, and the layout audit fails on an unnamed
+// scroller. `overflow-auto` sets both axes, so a vertical list says
+// `overflow-y-auto`; the marker itself is set by the registry, never by a page.
+const scrollMessage =
+  'A sideways scroller is a ScrollRegion with a canon name (components/ui/scroll-region); a vertical list uses overflow-y-auto (werkflow-design skill: Density and layout).';
+const scrollClassPattern = '/(^| )([a-z0-9-]+:)*!?overflow(-x)?-(auto|scroll)( |$)/';
+const scrollSelectors = [
+  { selector: `Literal[value=${scrollClassPattern}]`, message: scrollMessage },
+  { selector: `TemplateElement[value.raw=${scrollClassPattern}]`, message: scrollMessage },
+  { selector: 'JSXAttribute[name.name="data-scroll-region"]', message: scrollMessage },
+  { selector: 'CallExpression[callee.name="scrollRegion"]', message: scrollMessage },
+  {
+    selector: 'Property[key.name=/^overflow(X)?$/][value.value=/^(auto|scroll)$/]',
+    message: scrollMessage,
+  },
+];
+
 const stylingSelectors = [
   {
     selector: 'Literal[value=/h-screen/]',
@@ -687,7 +760,15 @@ const libToComponentsPattern = {
   message:
     'lib/ must not import from components/: move the shared type or logic into lib/ and let the component import it (AGENTS.md 4. Code quality and maintainability).',
 };
-function importRestrictions({ realtimeHooks = true, libLayer = false } = {}) {
+// Every Radix primitive is wrapped once in components/ui: the wrapper owns the
+// refresh suspension of open layers, the pending guard, focus restoration and
+// dialog-aware portaling. A direct import elsewhere skips all of them.
+const radixPrimitivesPattern = {
+  group: ['@radix-ui/*', 'radix-ui', 'radix-ui/*'],
+  message:
+    'Radix primitives are wrapped once in components/ui (refresh suspension, pending guard, focus restoration). Import the registry component; see the werkflow-design component registry.',
+};
+function importRestrictions({ realtimeHooks = true, libLayer = false, radixPrimitives = true } = {}) {
   return [
     'error',
     {
@@ -716,6 +797,7 @@ function importRestrictions({ realtimeHooks = true, libLayer = false } = {}) {
             ]
           : []),
         ...(libLayer ? [libToComponentsPattern] : []),
+        ...(radixPrimitives ? [radixPrimitivesPattern] : []),
       ],
     },
   ];
@@ -801,6 +883,10 @@ function productRestrictions({ jsx = false, allow = [] } = {}) {
             ...paletteSelectors,
             ...headingSelectors,
             ...dialogSizeSelectors,
+            ...dialogFocusSelectors,
+            ...textLinkSelectors,
+            ...textOpacitySelectors,
+            ...scrollSelectors,
             ...floatingSelectors,
             ...dateTextSelectors,
           ]
@@ -1047,7 +1133,27 @@ const eslintConfig = defineConfig([
       'ui/no-raw-controls': 'error',
       'ui/no-block-in-paragraph': 'error',
       'ui/dialog-pending-while-waiting': 'error',
+      'ui/alert-dialog-footer-actions': 'error',
       'no-restricted-syntax': productRestrictions({ jsx: true }),
+    },
+  },
+  // Accessibility of the rendered markup, registry included (the primitives
+  // render it): jsx-a11y's recommended set as errors. Rules only: Next's
+  // preset already registers the plugin under `jsx-a11y`, and this block
+  // replaces the preset's six warnings. Every option stays strict; the two
+  // options below make a rule check more, never less:
+  // - alt-text: Next's `Image` is an image too (kept from Next's preset).
+  // - label-has-associated-control: `Checkbox` is a control, so
+  //   `<label><Checkbox />Text</label>` counts as an associated label.
+  // Where axe is stricter, axe wins: a scrollable region must be focusable
+  // (scrollable-region-focusable), so such a region keeps `tabIndex={0}` with
+  // a reasoned disable of jsx-a11y/no-noninteractive-tabindex.
+  {
+    files: ['app/**/*.tsx', 'components/**/*.tsx'],
+    rules: {
+      ...jsxA11y.flatConfigs.recommended.rules,
+      'jsx-a11y/alt-text': ['error', { img: ['Image'] }],
+      'jsx-a11y/label-has-associated-control': ['error', { controlComponents: ['Checkbox'] }],
     },
   },
   // Client state in components and hooks, registry included: a pending flag
@@ -1164,6 +1270,13 @@ const eslintConfig = defineConfig([
     ignores: ['lib/ui/*.test.*', 'lib/conventions/*.test.*'],
     rules: {
       'no-restricted-imports': importRestrictions({ libLayer: true }),
+    },
+  },
+  // The registry wraps the Radix primitives; it keeps every other import ban.
+  {
+    files: ['components/ui/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': importRestrictions({ radixPrimitives: false }),
     },
   },
 ]);

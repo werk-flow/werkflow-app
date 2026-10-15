@@ -116,7 +116,6 @@ export function OTPForm({ email, inviteCode, className, ...props }: OTPFormProps
             >
               <InputOTP
                 id="otp"
-                autoFocus
                 value={code}
                 onChange={setCode}
                 maxLength={6}

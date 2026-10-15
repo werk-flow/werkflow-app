@@ -6,6 +6,7 @@ import { usePendingTask } from '@/hooks/use-server-action';
 import { useBanner } from '@/components/ui/banner';
 import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import { addManualEntry, getTimeEntries } from '@/lib/time-tracking/actions';
+import { isDateInClosedPeriod, type ClosedTimePeriod } from '@/lib/time-tracking/closed-period-dates';
 import { validateManualEntries } from '@/lib/time-tracking/validation';
 import type { ManualEntryInput, TimeEntry } from '@/lib/time-tracking/types';
 import { toLocalDateString } from '@/lib/utils';
@@ -30,6 +31,7 @@ export function useManualEntrySubmit({
   selectedUserId,
   canAssignJob,
   selectedJobId,
+  closedPeriods,
   onSuccess,
 }: {
   activeOrgId: string | null;
@@ -43,6 +45,8 @@ export function useManualEntrySubmit({
   selectedUserId: string;
   canAssignJob: boolean;
   selectedJobId: string;
+  /** A date in a closed period is refused with `period_closed`; the form marks it first. */
+  closedPeriods: readonly ClosedTimePeriod[];
   onSuccess: ((entries: TimeEntry[]) => void | Promise<void>) | undefined;
 }): {
   handleSubmit: (e: React.FormEvent) => Promise<void>;
@@ -84,6 +88,11 @@ export function useManualEntrySubmit({
     }
 
     const dateIso = toLocalDateString(selectedDate);
+    if (isDateInClosedPeriod(dateIso, closedPeriods)) {
+      setFieldErrors({ date: SHARED_FAILURE_MESSAGES.period_closed });
+      document.getElementById('manual-entry-date')?.focus();
+      return;
+    }
     const entries: ManualEntryInput[] = [];
 
     if (entryMode === 'clock_in' || entryMode === 'both') {

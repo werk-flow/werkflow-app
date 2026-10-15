@@ -5,7 +5,7 @@ import { useReportPending } from '@/hooks/use-report-pending';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
-import { OptionsLoadError } from '@/components/auftraege/shared/options-load-error';
+import { SectionError } from '@/components/ui/section-error';
 import { DialogBody, DialogFooter } from '@/components/ui/dialog';
 import { useOrganization } from '@/components/organization/organization-context';
 import type { CalendarEntryDialogJobOption, CalendarEntryDialogMember } from '@/lib/jobs/types';
@@ -19,6 +19,7 @@ import {
 } from '@/components/manual-entry-form-content-fields';
 import { useManualEntryMembers } from '@/components/use-manual-entry-form-members';
 import { useManualEntrySubmit } from '@/components/use-manual-entry-form-submit';
+import { useClosedTimePeriods } from '@/components/zeiterfassung/use-closed-time-periods';
 import { Spinner } from '@/components/ui/spinner';
 
 type OrgMember = CalendarEntryDialogMember;
@@ -68,6 +69,7 @@ export function ManualEntryFormContent({
   );
   const [selectedJobId, setSelectedJobId] = useState<string>('');
   const canAssignJob = entryMode === 'clock_in' || entryMode === 'both';
+  const closedPeriods = useClosedTimePeriods(activeOrgId, isActive);
 
   const { handleSubmit, isPending, error, fieldErrors } = useManualEntrySubmit({
     activeOrgId,
@@ -81,10 +83,11 @@ export function ManualEntryFormContent({
     selectedUserId,
     canAssignJob,
     selectedJobId,
+    closedPeriods,
     onSuccess,
   });
   useReportPending(isPending, onPendingChange);
-  const { memberOptions, isLoadingMembers, loadError, retryLoadMembers } = useManualEntryMembers({
+  const { memberOptions, isLoadingMembers, membersFailure } = useManualEntryMembers({
     isActive,
     isAdminOrManager,
     activeOrgId,
@@ -125,7 +128,7 @@ export function ManualEntryFormContent({
   return (
     <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
       <DialogBody className="space-y-4">
-        <OptionsLoadError error={loadError} onRetry={retryLoadMembers} retrying={isLoadingMembers} />
+        {membersFailure && <SectionError failure={membersFailure} />}
         <ManualEntryAssignmentFields
           lockEntryMode={lockEntryMode}
           entryMode={entryMode}

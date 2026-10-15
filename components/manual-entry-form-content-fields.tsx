@@ -132,7 +132,7 @@ export function ManualEntryTimeFields({
         {(entryMode === 'clock_in' || entryMode === 'both') && (
           <Field label="Einstempeln" htmlFor="clockInTime" required>
             <div className="relative">
-              <Clock className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-foreground/80" />
+              <Clock className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <TimeInput value={clockInTime} onChange={setClockInTime} className="pl-10 pr-3" />
             </div>
           </Field>
@@ -140,7 +140,7 @@ export function ManualEntryTimeFields({
         {(entryMode === 'clock_out' || entryMode === 'both') && (
           <Field label="Ausstempeln" htmlFor="clockOutTime" required>
             <div className="relative">
-              <Clock className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-foreground/80" />
+              <Clock className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <TimeInput value={clockOutTime} onChange={setClockOutTime} className="pl-10 pr-3" />
             </div>
           </Field>

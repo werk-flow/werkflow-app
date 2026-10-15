@@ -90,6 +90,7 @@
     "last 2 Firefox versions"
   ],
   "devDependencies": {
+    "@axe-core/playwright": "4.11.0",
     "@eslint-community/eslint-plugin-eslint-comments": "^4.8.1",
     "@playwright/test": "^1.62.1",
     "@tailwindcss/node": "4.1.17",
@@ -102,6 +103,7 @@
     "@typescript-eslint/parser": "8.47.0",
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
+    "eslint-plugin-jsx-a11y": "6.10.2",
     "knip": "^6.35.1",
     "prettier": "3.6.2",
     "supabase": "2.116.0",

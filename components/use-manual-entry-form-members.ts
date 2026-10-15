@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
+import { useClientRead, type ReadFailure } from '@/hooks/use-client-read';
 import { readInBackground } from '@/lib/data/background-read-client';
 import type { CalendarEntryDialogMember } from '@/lib/jobs/types';
 
@@ -21,82 +22,42 @@ export function useManualEntryMembers({
 }): {
   memberOptions: Array<{ value: string; label: string; description: string }>;
   isLoadingMembers: boolean;
-  loadError: string | null;
-  retryLoadMembers: () => void;
+  /** A failed option load leaves the select empty; the reason and its retry must be visible. */
+  membersFailure: ReadFailure | null;
 } {
-  const [members, setMembers] = useState<OrgMember[]>(prefetchedMembers ?? []);
-  const [isLoadingMembers, setIsLoadingMembers] = useState(false);
-  // A failed option load leaves a select empty; the reason must be visible.
-  const [loadError, setLoadError] = useState<string | null>(null);
-  // Bumped by the retry so the load effect runs again.
-  const [reloadCount, setReloadCount] = useState(0);
+  // The list loads when the form is first shown and stays while its tab is hidden.
+  const [wasActive, setWasActive] = useState(isActive);
+  if (isActive && !wasActive) setWasActive(true);
+  // Loaded members belong to one organization: a switch reads fresh and never shows the previous one's.
+  const membersRead = useClientRead({
+    read: (signal) =>
+      readInBackground('organization-member-options', { organizationId: activeOrgId ?? '' }, signal),
+    deps: [activeOrgId],
+    enabled: wasActive && isAdminOrManager && Boolean(activeOrgId) && !prefetchedMembers,
+    failureMessage: 'Die Mitarbeiterliste konnte nicht geladen werden.',
+  });
+  const loadedMembers = membersRead.data?.members;
 
-  // Adopted during render, never in an effect (realtime-and-caching checklist).
-  const [adoptedMembers, setAdoptedMembers] = useState(prefetchedMembers);
-  if (prefetchedMembers !== adoptedMembers) {
-    setAdoptedMembers(prefetchedMembers);
-    if (prefetchedMembers) {
-      setMembers(prefetchedMembers);
-      setIsLoadingMembers(false);
-      setLoadError(null);
-    }
-  }
-  // Loaded members belong to one organization; a switch never shows the previous one's.
-  const [membersOrgId, setMembersOrgId] = useState(activeOrgId);
-  if (activeOrgId !== membersOrgId) {
-    setMembersOrgId(activeOrgId);
-    if (!prefetchedMembers) setMembers([]);
-  }
-
-  useEffect(() => {
-    if (!isActive || !isAdminOrManager || !activeOrgId || prefetchedMembers) return;
-    // An answer for an organization the user has switched away from is dropped.
-    const controller = new AbortController();
-    const fetchMembers = async () => {
-      setIsLoadingMembers(true);
-      setLoadError(null);
-      try {
-        const result = await readInBackground(
-          'organization-member-options',
-          { organizationId: activeOrgId },
-          controller.signal,
-        );
-        if (controller.signal.aborted) return;
-        if (result.success) {
-          setMembers(
-            (result.members || []).map((member) => ({
-              userId: member.user_id,
-              firstName: member.first_name ?? '',
-              lastName: member.last_name ?? '',
-              email: member.email,
-              role: member.role,
-            })),
-          );
-        } else {
-          setLoadError('Die Mitarbeiterliste konnte nicht geladen werden.');
-        }
-      } finally {
-        if (!controller.signal.aborted) setIsLoadingMembers(false);
-      }
-    };
-    void fetchMembers();
-    return () => controller.abort();
-  }, [isActive, isAdminOrManager, activeOrgId, prefetchedMembers, reloadCount]);
-
-  const memberOptions = useMemo(
-    () =>
-      members.map((m) => ({
-        value: m.userId,
-        label: m.firstName || m.lastName ? `${m.firstName || ''} ${m.lastName || ''}`.trim() : m.email,
-        description: m.email,
-      })),
-    [members],
-  );
+  const memberOptions = useMemo(() => {
+    const members: OrgMember[] =
+      prefetchedMembers ??
+      (loadedMembers ?? []).map((member) => ({
+        userId: member.user_id,
+        firstName: member.first_name ?? '',
+        lastName: member.last_name ?? '',
+        email: member.email,
+        role: member.role,
+      }));
+    return members.map((m) => ({
+      value: m.userId,
+      label: m.firstName || m.lastName ? `${m.firstName || ''} ${m.lastName || ''}`.trim() : m.email,
+      description: m.email,
+    }));
+  }, [prefetchedMembers, loadedMembers]);
 
   return {
     memberOptions,
-    isLoadingMembers,
-    loadError,
-    retryLoadMembers: () => setReloadCount((count) => count + 1),
+    isLoadingMembers: membersRead.loading,
+    membersFailure: membersRead.failure,
   };
 }
