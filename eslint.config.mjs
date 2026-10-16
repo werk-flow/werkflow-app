@@ -10,6 +10,7 @@ import {
   playwrightSpecRules,
 } from './eslint-rules/playwright-spec-rules.mjs';
 import { qualityRules } from './eslint-rules/quality-rules.mjs';
+import { realtimeRules } from './eslint-rules/realtime-rules.mjs';
 import { uiRules } from './eslint-rules/ui-rules.mjs';
 import {
   COMPONENT_FILE_LINE_LIMIT,
@@ -132,31 +133,14 @@ const asyncTransitionSelectors = [
   },
 ];
 
-// No polling: live data comes from Realtime through the live-view primitive.
-// Config-level exception: hooks/use-business-day-refresh.ts (a local Berlin
-// date comparison on an interval — wall-clock, not server polling). Pure
-// render ticks (elapsed counters, calendar now-lines) carry reasoned inline
-// disables instead of config entries.
-const pollingSelectors = [
-  {
-    selector: 'CallExpression[callee.name="setInterval"]',
-    message:
-      'No polling — live data comes from Realtime via useLiveView (docs/technical/realtime-and-caching.md). The only named exception is the wall-clock tick in hooks/use-business-day-refresh.ts.',
-  },
-  {
-    selector: 'CallExpression[callee.property.name="setInterval"]',
-    message:
-      'No polling — live data comes from Realtime via useLiveView (docs/technical/realtime-and-caching.md). The only named exception is the wall-clock tick in hooks/use-business-day-refresh.ts.',
-  },
-];
-
+// No polling: setInterval is its own rule, realtime/no-interval
+// (eslint-rules/realtime-rules.mjs), with its allow list below.
 const realtimeSelectors = [
   channelSelector,
   authListenerSelector,
   visibilitySelector,
   focusSelector,
   ...asyncTransitionSelectors,
-  ...pollingSelectors,
 ];
 
 // UI/UX consolidation canon (werkflow-design skill): registry components own
@@ -838,10 +822,13 @@ function importRestrictions({ realtimeHooks = true, libLayer = false, radixPrimi
 // Pending state binds to the awaited server call (useServerAction) or to a
 // list's live read, never to a router transition: a router-entangled pending
 // flag turns a loaded table into a skeleton after the user's own refresh
-// click. The transition primitive lives in components/ui/refresh-button.tsx;
-// the named exceptions below are the organization switch and the document
-// library's folder navigation, both of which track a route change rather than
-// a mutation.
+// click. The transition primitive lives in components/ui/refresh-button.tsx.
+// The one other exception is the document library's folder and search
+// navigation: its pending flag tracks a router.push/replace, not a mutation,
+// and gates the library's controls until the new route props commit (the
+// router offers no other signal for a navigation's end). The organization
+// switch needs no exception: its overlay reads isSwitchingOrg, and it starts
+// the navigation with React's plain startTransition.
 const transitionMessage =
   'useTransition is banned in product code: pending state comes from useServerAction / useBusyIds, and a route refresh spins through RefreshButton or useRouterRefresh (components/ui/refresh-button). See the feedback canon in the werkflow-design skill.';
 const transitionSelectors = [
@@ -856,7 +843,6 @@ const transitionSelectors = [
 ];
 const transitionExemptFiles = [
   'components/ui/refresh-button.tsx',
-  'components/organization/organization-context.tsx',
   'components/dokumente/document-library-content.tsx',
 ];
 
@@ -940,6 +926,36 @@ const ratchetedAssertionFiles = new Set(Object.keys(typeAssertionRatchet));
 // A function matcher: the listed paths hold glob characters such as (app) and [jobId].
 const isRatchetedAssertionFile = (filePath) =>
   ratchetedAssertionFiles.has(relative(import.meta.dirname, filePath).replaceAll('\\', '/'));
+
+// The files that may start an interval (realtime/no-interval). Shrink-only:
+// the rule reports a listed file that starts none.
+const intervalAllowList = [
+  {
+    file: 'hooks/use-wall-clock-tick.ts',
+    reason:
+      'The one wall-clock primitive: render ticks and the business-day refresh read the clock through it, never the server.',
+  },
+];
+
+// Effects that ui/no-derived-state-effect reports and that cannot change yet,
+// by file and setters. Shrink-only: the rule reports an entry that no longer
+// matches an effect.
+const derivedStateEffectExceptions = [
+  {
+    file: 'components/kalender/use-entry-details-draft.ts',
+    setters: [
+      'setIsEditing',
+      'setError',
+      'setEditedClockIn',
+      'setEditedClockOut',
+      'setEditedBreaks',
+      'setRemovedBreaks',
+      'setEditedBlockDate',
+    ],
+    reason:
+      'Calendar render behaviour is recorded: the open-keyed draft reset moves into render (a tracked previous `open`) only together with a recalibration run, because removing the effect changes the hook order.',
+  },
+];
 
 const eslintConfig = defineConfig([
   // `bun run lint` fails on any warning (--max-warnings 0), so a preset
@@ -1278,7 +1294,7 @@ const eslintConfig = defineConfig([
     rules: {
       'ui/pending-reset-on-failure': 'error',
       'ui/global-key-handler-respects-consumed': 'error',
-      'ui/no-derived-state-effect': 'error',
+      'ui/no-derived-state-effect': ['error', { exceptions: derivedStateEffectExceptions }],
     },
   },
   // The page title's one home, the calendar header (it stays inside its data
@@ -1338,12 +1354,15 @@ const eslintConfig = defineConfig([
       'no-restricted-syntax': productRestrictions({ allow: timeOfDaySelectors }),
     },
   },
-  // No product surface registers its own catch-up listeners. Named
-  // exception: the wall-clock day-rollover tick.
+  // No polling (realtime-and-caching.md, Never): product code starts no
+  // interval except the one wall-clock primitive, and no inline disable can
+  // switch the rule off.
   {
-    files: ['hooks/use-business-day-refresh.ts'],
+    files: productFiles,
+    plugins: { realtime: realtimeRules },
     rules: {
-      'no-restricted-syntax': productRestrictions({ allow: pollingSelectors }),
+      'realtime/no-interval': ['error', { allow: intervalAllowList }],
+      '@eslint-community/eslint-comments/no-restricted-disable': ['error', 'realtime/no-interval'],
     },
   },
   // The provider itself owns channels, auth listeners, and catch-up.
